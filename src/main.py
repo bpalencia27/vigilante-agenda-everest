@@ -25,7 +25,22 @@ def main():
     # Modo utilitario de captura (para el equipo de la empresa, con sesión iniciada).
     if args.capturar:
         from capturar_dom import capturar
-        capturar()
+        path = capturar()
+        # Feedback visible incluso en el .exe sin consola.
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+            r = tk.Tk(); r.withdraw()
+            if path:
+                messagebox.showinfo("Vigilante — Captura", f"Captura guardada en:\n{path}")
+            else:
+                messagebox.showwarning(
+                    "Vigilante — Captura",
+                    "No se pudo capturar.\nAbra Chrome con 'Iniciar_Vigilante.bat', inicie "
+                    "sesión en Everest y entre a 'Citas del día' antes de capturar.")
+            r.destroy()
+        except Exception:
+            pass
         return
 
     # Validar intervalo (evita busy-loop en 0 o sleep negativo que mataría el hilo).

@@ -69,6 +69,14 @@ JS_FIRST_CARD = """
 """
 
 
+def _say(msg):
+    """Imprime sin romper si el .exe corre sin consola (modo --windowed)."""
+    try:
+        print(msg)
+    except Exception:
+        pass
+
+
 def _report_dir():
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
     root = desktop if os.path.isdir(desktop) else os.path.expanduser("~")
@@ -82,15 +90,15 @@ def capturar():
         try:
             browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
         except Exception as e:
-            print(f"No se pudo adjuntar a Chrome en el puerto {CDP_PORT}.")
-            print("Abra Chrome con 'Iniciar_Vigilante.bat' (deja el puerto de depuración activo)")
-            print(f"e inicie sesión en Everest antes de ejecutar esta captura. Detalle: {e}")
-            return
+            _say(f"No se pudo adjuntar a Chrome en el puerto {CDP_PORT}.")
+            _say("Abra Chrome con 'Iniciar_Vigilante.bat' (deja el puerto de depuración activo)")
+            _say(f"e inicie sesión en Everest antes de ejecutar esta captura. Detalle: {e}")
+            return None
 
         context = browser.contexts[0] if browser.contexts else None
         if context is None:
-            print("Chrome no tiene contextos abiertos.")
-            return
+            _say("Chrome no tiene contextos abiertos.")
+            return None
 
         # Elegir la pestaña con la agenda; si no hay, la primera de Everest.
         target = None
@@ -111,8 +119,8 @@ def capturar():
                     pass
         target = target or everest
         if target is None:
-            print("No se encontró ninguna pestaña de Everest abierta.")
-            return
+            _say("No se encontró ninguna pestaña de Everest abierta.")
+            return None
 
         def safe_eval(js, default):
             try:
@@ -145,8 +153,9 @@ def capturar():
             f.write("----- HTML DE LA PRIMERA TARJETA DE CITA -----\n")
             f.write(str(first_card) + "\n")
 
-        print(f"Captura guardada en:\n  {out_path}")
-        print("Envíe ese archivo para afinar selectores y la auto-navegación de la pestaña-clon.")
+        _say(f"Captura guardada en:\n  {out_path}")
+        _say("Envíe ese archivo para afinar selectores y la auto-navegación de la pestaña-clon.")
+        return out_path
 
 
 if __name__ == "__main__":
