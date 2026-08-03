@@ -1,14 +1,18 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.8.1
-// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
+// @version      3.9.0
+// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
+// @match        *://viva1aips-my.sharepoint.com/*
 // @run-at       document-start
 // @noframes
-// @grant        none
+// @connect      viva1aips-my.sharepoint.com
+// @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 /*
@@ -27,7 +31,8 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "3.8.1"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "3.9.0"; // fuente única de la versión (título + diagnóstico)
+  const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
     POLL_MS: 5000,
@@ -39,6 +44,12 @@
     // conserva VIH). Coincidencia por texto sin acentos/minúsculas contra encabezado+etiqueta.
     // VIH SIEMPRE se conserva. Edita esta lista si cambian las metas.
     EXCLUDE_PYM: ["vdrl", "sifilis", "hepatitis", "hepb", "hepc"],
+    // SharePoint: carpeta del PyM diario (se elige el archivo cuyo nombre lleve la fecha de hoy).
+    SP: {
+      host: "viva1aips-my.sharepoint.com",
+      web: "/personal/director_bello_viva1a_com_co",
+      folder: "/personal/director_bello_viva1a_com_co/Documents/INTRANET/ACTIVIDADES DE PYM",
+    },
     SEL: {
       hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
       documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
@@ -63,7 +74,23 @@
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", events: [], minimized: false, lastSnapshot: null, netlog: [],
     notified: new Map(), summarized: false, osNotif: false,
+    leader: false, shared: null,
   };
+  // ---- Coordinación entre pestañas: SOLO UNA vigila y notifica (evita avisos repetidos) ----
+  const TABID = String(Math.random()).slice(2) + Date.now();
+  const LEADER_KEY = "vgl_leader", LEADER_TTL = 14000;
+  let chan = null;
+  try { chan = new BroadcastChannel("vgl"); chan.onmessage = (e) => { if (e.data && e.data.t) state.shared = e.data; }; } catch (e) {}
+  function heartbeat() {
+    try {
+      const now = Date.now(), raw = localStorage.getItem(LEADER_KEY), o = raw ? JSON.parse(raw) : null;
+      if (!o || o.id === TABID || now - (o.t || 0) > LEADER_TTL) { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: now })); state.leader = true; }
+      else state.leader = false;
+    } catch (e) { state.leader = true; }
+    return state.leader;
+  }
+  function share(list) { try { if (chan) chan.postMessage({ t: Date.now(), list }); } catch (e) {} }
+  try { window.addEventListener("beforeunload", () => { try { const o = JSON.parse(localStorage.getItem(LEADER_KEY) || "{}"); if (o.id === TABID) localStorage.removeItem(LEADER_KEY); } catch (e) {} }); } catch (e) {}
   const CLONE = { frame: null, url: null };
 
   const limpio = (s) => (s || "").replace(/\s+/g, " ").trim();
@@ -134,11 +161,106 @@
     return rows;
   }
 
-  function applyPym(headers, rows, fileName) {
-    state.pym = indexRows(headers, rows); state.pymFile = fileName;
+  function afterPymLoaded(fileName) {
+    state.pymFile = fileName;
     if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
-    state.lastSignature = ""; tick(); setSummary(`PyM cargado: ${state.pym.size} paciente(s) — ${fileName}`);
+    state.lastSignature = ""; tick();
+    setSummary(`PyM cargado: ${state.pym.size} paciente(s) — ${fileName}`);
   }
+  function applyPym(headers, rows, fileName) {
+    state.pym = indexRows(headers, rows);
+    afterPymLoaded(fileName);
+    try { if (typeof GM_setValue !== "undefined") GM_setValue("vgl_pym", JSON.stringify({ date: todayStamp(), name: fileName, map: Array.from(state.pym.entries()) })); } catch (e) {}
+  }
+
+  // ================== SharePoint: PyM del día automático ==================
+  function todayStamp() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function normName(s) { return String(s || "").replace(/[.\s_\-\/]/g, "").toLowerCase(); }
+  function todayTokens() {
+    const d = new Date(), p = (n) => String(n).padStart(2, "0");
+    const Y = d.getFullYear(), M = p(d.getMonth() + 1), D = p(d.getDate()), m = d.getMonth() + 1, day = d.getDate();
+    return [`${Y}${M}${D}`, `${Y}-${M}-${D}`, `${Y}_${M}_${D}`, `${D}${M}${Y}`, `${D}-${M}-${Y}`, `${D}_${M}_${Y}`, `${day}-${m}-${Y}`, `${day}/${m}/${Y}`];
+  }
+  // Elige el archivo de HOY (soporta 20260803, 03-08-2026, 3-8-2026, 2026-08-03…).
+  // Si hay varios del día, prefiere el que diga PYM/ACTIVIDAD. Si no hay ninguno de hoy,
+  // cae al más reciente pero marca exact=false para avisar al usuario.
+  function pickTodaysFile(files) {
+    const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || ""));
+    if (!xls.length) return null;
+    const toks = todayTokens().map(normName);
+    const isToday = (f) => { const n = normName(f.Name); return toks.some((t) => n.includes(t)); };
+    const isPym = (f) => /pym|actividad/i.test(f.Name || "");
+    const hoy = xls.filter(isToday);
+    const hit = hoy.filter(isPym)[0] || hoy[0];
+    if (hit) return { file: hit, exact: true };
+    const rec = xls.filter(isPym).concat(xls).sort((a, b) => new Date(b.TimeLastModified || 0) - new Date(a.TimeLastModified || 0))[0];
+    return rec ? { file: rec, exact: false } : null;
+  }
+  function spBase() { return "https://" + CONFIG.SP.host + CONFIG.SP.web; }
+  function spListUrl() { return spBase() + "/_api/web/GetFolderByServerRelativeUrl('" + encodeURIComponent(CONFIG.SP.folder) + "')/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$top=500"; }
+  function spDownloadUrl(sru) { return spBase() + "/_api/web/GetFileByServerRelativeUrl('" + encodeURIComponent(sru) + "')/$value"; }
+  async function bufferToPym(name, buffer) {
+    if (/\.csv$/i.test(name)) { const all = parseCSV(new TextDecoder().decode(new Uint8Array(buffer))); return { headers: all[0] || [], rows: all.slice(1) }; }
+    const r = await readXlsx(buffer); return { headers: r[0] || [], rows: r.slice(1) };
+  }
+  function gmGet(url, responseType, accept) {
+    return new Promise((resolve, reject) => {
+      if (typeof GM_xmlhttpRequest === "undefined") { reject(new Error("permiso GM_xmlhttpRequest no concedido")); return; }
+      GM_xmlhttpRequest({ method: "GET", url, responseType: responseType || "", headers: accept ? { Accept: accept } : {}, timeout: 60000,
+        onload: (r) => (r.status >= 200 && r.status < 300) ? resolve(r) : reject(new Error("HTTP " + r.status)),
+        onerror: () => reject(new Error("error de red/permiso")), ontimeout: () => reject(new Error("timeout")) });
+    });
+  }
+  function cacheIsToday() { try { if (typeof GM_getValue === "undefined") return false; const raw = GM_getValue("vgl_pym", ""); return !!raw && JSON.parse(raw).date === todayStamp(); } catch (e) { return false; } }
+  function loadPymFromCache() {
+    try {
+      if (typeof GM_getValue === "undefined") return false;
+      const raw = GM_getValue("vgl_pym", ""); if (!raw) return false;
+      const o = JSON.parse(raw);
+      // Purga de días anteriores: no conservamos datos de pacientes de jornadas pasadas.
+      if (o.date !== todayStamp()) { try { GM_setValue("vgl_pym", ""); } catch (e2) {} return false; }
+      if (!o.map) return false;
+      state.pym = new Map(o.map); afterPymLoaded((o.name || "PyM") + " (auto)"); return true;
+    } catch (e) { return false; } }
+  // Desde Everest (cross-origin) con GM_xmlhttpRequest + tus cookies de SharePoint.
+  async function autoPymFromSharepoint(silent) {
+    try {
+      if (!silent) setSummary("Buscando PyM del día en SharePoint…");
+      const listR = await gmGet(spListUrl(), "json", "application/json;odata=nometadata");
+      const j = listR.response || (listR.responseText ? JSON.parse(listR.responseText) : {});
+      const sel = pickTodaysFile(j.value || (j.d && j.d.results) || []);
+      if (!sel) throw new Error("la carpeta no tiene .xlsx/.csv");
+      const dl = await gmGet(spDownloadUrl(sel.file.ServerRelativeUrl), "arraybuffer");
+      const { headers, rows } = await bufferToPym(sel.file.Name, dl.response);
+      applyPym(headers, rows, sel.file.Name + (sel.exact ? " (SharePoint)" : " (SharePoint · NO es de hoy)"));
+      if (!sel.exact) setSummary("⚠ No encontré el PyM de HOY; cargué el más reciente: " + sel.file.Name, "warn");
+    } catch (e) {
+      if (!silent) setSummary("PyM auto no disponible (" + e.message + "). Abre la carpeta de SharePoint una vez, o usa 📂.", "warn");
+    }
+  }
+  // En la pestaña de SharePoint (same-origin): descarga y cachea el PyM del día para que Everest lo use.
+  function spToast(msg) {
+    try { let t = document.getElementById("vgl-sp"); if (!t) { t = document.createElement("div"); t.id = "vgl-sp"; t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:430px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:8px;padding:12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)"; (document.body || document.documentElement).appendChild(t); } t.textContent = "🛡️ Vigilante PyM · " + msg; } catch (e) {}
+  }
+  async function runSharepointHarvester() {
+    try {
+      if (cacheIsToday()) { spToast("El PyM del día ya está capturado. Puedes volver a Everest."); return; }
+      spToast("Buscando el PyM del día…");
+      const listR = await fetch(spListUrl(), { credentials: "include", headers: { Accept: "application/json;odata=nometadata" } });
+      if (!listR.ok) throw new Error("listar HTTP " + listR.status);
+      const j = await listR.json();
+      const sel = pickTodaysFile(j.value || (j.d && j.d.results) || []);
+      if (!sel) { spToast("No encontré ningún .xlsx/.csv en la carpeta."); return; }
+      const dlR = await fetch(spDownloadUrl(sel.file.ServerRelativeUrl), { credentials: "include" });
+      if (!dlR.ok) throw new Error("descargar HTTP " + dlR.status);
+      const { headers, rows } = await bufferToPym(sel.file.Name, await dlR.arrayBuffer());
+      const map = indexRows(headers, rows);
+      if (typeof GM_setValue !== "undefined") GM_setValue("vgl_pym", JSON.stringify({ date: todayStamp(), name: sel.file.Name, map: Array.from(map.entries()) }));
+      spToast((sel.exact ? "✓ PyM de hoy capturado: " : "⚠ No hay archivo de HOY; tomé el más reciente: ") + sel.file.Name + " (" + map.size + " pacientes). Ya está disponible en Everest.");
+    } catch (e) { spToast("No pude capturar el PyM: " + e.message + ". ¿Estás con sesión iniciada en SharePoint?"); }
+  }
+  // ================== fin SharePoint ==================
+
   function loadPymFile(file) {
     const name = file.name.toLowerCase(); const reader = new FileReader();
     reader.onerror = () => setSummary("No se pudo leer el archivo PyM.", "error");
@@ -193,7 +315,7 @@
   }
 
   let audioCtx = null;
-  function beep(freq, ms, off) { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
+  function beep(freq, ms, off) { try { audioCtx = audioCtx || new (PAGEWIN.AudioContext || PAGEWIN.webkitAudioContext || window.AudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
   function fraudSound() { beep(1000, 400, 0); beep(1200, 400, 0.45); }
 
   // ---- NOTIFICACIONES POR COLORES (recuperado de la v2.5): toast en Windows + respaldo en la página ----
@@ -236,7 +358,22 @@
     notify(a.color, `${cfg.icon} ${a.hora_texto} · ${a.estado}`, `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`, cfg.persist);
     if (cfg.sound) fraudSound();
   }
-  function updateBell() { const b = document.getElementById("vgl-bell"); if (!b) return; const g = (typeof Notification !== "undefined" && Notification.permission === "granted"); b.textContent = g ? "🔔" : "🔕"; b.title = g ? "Notificaciones de Windows activas" : "Activar notificaciones de Windows"; }
+  function updateBell() {
+    const b = document.getElementById("vgl-bell"); if (!b) return;
+    const perm = (typeof Notification !== "undefined") ? Notification.permission : "unsupported";
+    b.textContent = perm === "granted" ? "🔔" : "🔕";
+    b.title = perm === "granted" ? "Notificaciones de Windows activas" : perm === "denied" ? "BLOQUEADAS: candado de la barra de direcciones → Notificaciones → Permitir" : "Activar notificaciones de Windows";
+    if (perm === "denied") b.style.background = "#B91C1C";
+  }
+  // Prueba manual: dispara una de cada color para verificar que Windows las muestra.
+  function testNotifications() {
+    if (typeof Notification !== "undefined" && Notification.permission === "denied") { setSummary("Notificaciones BLOQUEADAS en este sitio: candado de la barra de direcciones → Notificaciones → Permitir.", "error"); return; }
+    if (typeof Notification !== "undefined" && Notification.permission !== "granted") { enableOsNotifications(); return; }
+    notify("MORADO", "⏳ PRUEBA · 09:20 AM · Sin presentarse", "PACIENTE DE PRUEBA\nÚltima llamada: ~1 min para confirmar o pierde la cita", true);
+    setTimeout(() => notify("AMBAR", "⚠ PRUEBA · 09:00 AM · Sin presentarse", "PACIENTE DE PRUEBA\nInasistencia registrada", true), 1200);
+    setTimeout(() => { notify("ROJO", "⛔ PRUEBA · 08:40 AM · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)", true); fraudSound(); }, 2400);
+    setSummary("Prueba enviada: deben salir 3 avisos (morado, ámbar y rojo con sonido).");
+  }
   function enableOsNotifications() {
     try {
       if (typeof Notification === "undefined") { setSummary("Este navegador no soporta notificaciones de escritorio.", "warn"); return; }
@@ -265,8 +402,9 @@
     console.log("[Vigilante] clon invisible creado ->", f.src);
   }
   function cloneDoc() { try { const d = CLONE.frame && CLONE.frame.contentWindow && CLONE.frame.contentWindow.document; return (d && d.querySelectorAll(CONFIG.SEL.hora).length) ? d : null; } catch (e) { return null; } }
-  function reloadClone() { try { if (CLONE.frame) CLONE.frame.src = citasUrl(); } catch (e) {} }
-  function healClone() { if (!cloneDoc()) reloadClone(); }
+  function destroyClone() { try { if (CLONE.frame) { CLONE.frame.remove(); CLONE.frame = null; } } catch (e) {} }
+  function reloadClone() { try { if (state.leader && CLONE.frame) CLONE.frame.src = citasUrl(); } catch (e) {} }
+  function healClone() { if (state.leader && !cloneDoc()) reloadClone(); }
 
   // ---- Captura de red (para posible polling directo del API) ----
   function redact(v, depth) {
@@ -301,7 +439,7 @@
   function buildOverlay() {
     const style = document.createElement("style");
     style.textContent = `
-      #vgl-root{position:fixed;bottom:20px;right:20px;width:452px;max-height:72vh;z-index:2147483647;
+      #vgl-root{position:fixed;bottom:20px;right:20px;width:500px;max-height:72vh;z-index:2147483647;
         background:#0B1220;border:1px solid #3B4B63;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.55);
         font-family:'Segoe UI',system-ui,sans-serif;color:#F1F5F9;display:flex;flex-direction:column;overflow:hidden}
       #vgl-root *{box-sizing:border-box}
@@ -340,8 +478,10 @@
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
         <span id="vgl-title">Vigilante PyM v${VERSION}</span>
-        <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
+        <button class="vgl-btn" id="vgl-sp" title="Traer el PyM de hoy desde SharePoint">PyM hoy</button>
+        <button class="vgl-btn sec" id="vgl-load" title="Cargar PyM desde un archivo">📂</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
+        <button class="vgl-btn sec" id="vgl-test" title="Probar las notificaciones">Probar</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
         <button class="vgl-btn sec" id="vgl-min">_</button>
       </div>
@@ -356,6 +496,8 @@
     root.querySelector("#vgl-min").addEventListener("click", () => { state.minimized = !state.minimized; root.classList.toggle("min", state.minimized); });
     el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
     root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
+    root.querySelector("#vgl-sp").addEventListener("click", () => autoPymFromSharepoint(false));
+    root.querySelector("#vgl-test").addEventListener("click", testNotifications);
     const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
     makeDraggable(root, root.querySelector("#vgl-head"));
     updateBell();
@@ -371,9 +513,10 @@
 
   function render(list, source, at) {
     const pymTxt = state.pymFile ? `PyM: ${state.pym.size}` : "PyM sin cargar";
-    if (el.dot) el.dot.className = source === "clon" ? "bg" : source === "pagina" ? "page" : "stale";
-    if (source === "clon") setSummary(`Clon en 2.º plano · ${list.length} cita(s) · refresca ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
+    if (el.dot) el.dot.className = source === "clon" ? "bg" : source === "pagina" ? "page" : source === "compartido" ? "page" : "stale";
+    if (source === "clon") setSummary(`Vigilando (2.º plano) · ${list.length} cita(s) · ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
     else if (source === "pagina") setSummary(`En Citas del día · ${list.length} cita(s) · refresca ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
+    else if (source === "compartido") setSummary(`Espejo de la pestaña principal · ${list.length} cita(s) · ${pymTxt}`);
     else if (list.length) setSummary(`Última lectura ${at ? at.toLocaleTimeString() : "—"} · reconectando copia… · ${pymTxt}`, "warn");
     else setSummary(`Preparando copia en segundo plano… · ${pymTxt}`);
     el.root.classList.toggle("stale", !source && list.length > 0);
@@ -398,26 +541,34 @@
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
+  // Saludo AZUL: UNA sola vez al día en todo el navegador (antes salía en cada pestaña/recarga).
+  function helloOncePerDay(total, conf) {
+    try { if (localStorage.getItem("vgl_hello") === todayStamp()) return; localStorage.setItem("vgl_hello", todayStamp()); } catch (e) {}
+    notify("AZUL", "ℹ Vigilante activo", `${total} cita(s) en agenda · ${conf} ya confirmada(s)`, false);
+  }
   function tick() {
     try {
       const now = new Date();
+      const leader = heartbeat();
+      if (leader) ensureClone(); else destroyClone(); // una sola copia de fondo en todo el navegador
       let data = null, source = null;
-      const cd = cloneDoc();
-      if (cd) { data = extractAgenda(cd); source = "clon"; }
+      if (leader) { const cd = cloneDoc(); if (cd) { data = extractAgenda(cd); source = "clon"; } }
       if (!data || !data.citas.length) { const d2 = extractAgenda(document); if (d2.visible && d2.citas.length) { data = d2; source = "pagina"; CLONE.url = location.href; } }
       if (data && data.citas.length) {
         const processed = data.citas.map((a) => colorAndAlert(a, now));
         if (!state.summarized) {
-          // Estado inicial: se SIEMBRA sin notificar (política de no-inferencia de la v2.5;
-          // solo se alerta de eventos que ocurran EN DIRECTO tras la activación).
+          // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
           state.summarized = true;
           processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          const conf = processed.filter((a) => /en sala|atendido/.test((a.estado || "").toLowerCase())).length;
-          notify("AZUL", "ℹ Vigilante activo", `${processed.length} cita(s) en agenda · ${conf} ya confirmada(s)`, false);
-        } else {
+          if (leader) helloOncePerDay(processed.length, processed.filter((a) => /en sala|atendido/.test((a.estado || "").toLowerCase())).length);
+        } else if (leader) {
           processed.forEach(maybeNotify);
         }
-        state.lastSnapshot = { at: now, list: processed, source }; render(processed, source, now);
+        state.lastSnapshot = { at: now, list: processed, source };
+        if (leader) share(processed);
+        render(processed, source, now);
+      } else if (state.shared && Date.now() - state.shared.t < 60000) {
+        render(state.shared.list, "compartido", new Date(state.shared.t));
       } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
       else { render([], null, null); }
     } catch (e) { console.error("[Vigilante] tick:", e); }
@@ -440,17 +591,26 @@
     setSummary("Diagnóstico descargado. Revisa Descargas.");
   }
 
+  function bootSharepoint() { runSharepointHarvester(); }
+
   function boot() {
     if (document.getElementById("vgl-root")) return;
     installNetHooks(window);
     buildOverlay();
-    ensureClone();
+    heartbeat();
     tick();
     setInterval(tick, CONFIG.POLL_MS);
     setInterval(healClone, CONFIG.CLONE_HEAL_MS);
     setInterval(reloadClone, CONFIG.CLONE_REFRESH_MS);
-    console.log("[Vigilante] userscript v" + VERSION + " activo (clon 2.º plano + recarga periódica + captura temprana de red).");
+    // PyM del día: primero la caché de hoy; si no hay, se intenta traer de SharePoint en silencio.
+    if (!loadPymFromCache()) autoPymFromSharepoint(true);
+    // Re-chequeo: si cambia el día (turno que cruza medianoche) o aún no hay PyM, reintenta.
+    setInterval(() => { if (!cacheIsToday() || !state.pymFile) { if (!loadPymFromCache()) autoPymFromSharepoint(true); } }, 15 * 60 * 1000);
+    console.log("[Vigilante] userscript v" + VERSION + " activo (líder único + clon 2.º plano + PyM automático).");
   }
-  installNetHooks(window); // document-start: capturar endpoints JSON desde el arranque de la app
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+
+  const IS_SP = /sharepoint\.com$/i.test(location.hostname);
+  if (!IS_SP) installNetHooks(window); // document-start: capturar endpoints JSON desde el arranque
+  const start = IS_SP ? bootSharepoint : boot;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
