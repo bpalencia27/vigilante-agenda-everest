@@ -41,7 +41,7 @@ if not exist ".venv\Scripts\python.exe" (
 
 echo  [2/2] Instalando dependencias (3-10 minutos segun el internet)...
 echo.
-".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --timeout 120 --retries 10 -r requirements.txt
 if errorlevel 1 (
   echo.
   echo  [ERROR] Fallo la instalacion de dependencias. Revise el mensaje de arriba.
