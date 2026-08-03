@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.9.1
+// @version      3.9.2
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "3.9.1"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "3.9.2"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -518,11 +518,12 @@
 
   function render(list, source, at) {
     const pymTxt = state.pymFile ? `PyM: ${state.pym.size}` : "PyM sin cargar";
+    const hora = at ? at.toLocaleTimeString() : "—";
     if (el.dot) el.dot.className = source === "clon" ? "bg" : source === "pagina" ? "page" : source === "compartido" ? "page" : "stale";
-    if (source === "clon") setSummary(`Vigilando (2.º plano) · ${list.length} cita(s) · ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
-    else if (source === "pagina") setSummary(`En Citas del día · ${list.length} cita(s) · refresca ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
-    else if (source === "compartido") setSummary(`Espejo de la pestaña principal · ${list.length} cita(s) · ${pymTxt}`);
-    else if (list.length) setSummary(`Última lectura ${at ? at.toLocaleTimeString() : "—"} · reconectando copia… · ${pymTxt}`, "warn");
+    if (source === "clon") setSummary(`Vigilando (2.º plano) · ${list.length} cita(s) · act. ${hora} · ${pymTxt}`);
+    else if (source === "pagina") setSummary(`En Citas del día · ${list.length} cita(s) · act. ${hora} · ${pymTxt}`);
+    else if (source === "compartido") setSummary(`Espejo · ${list.length} cita(s) · act. ${hora} · ${pymTxt}`);
+    else if (list.length) setSummary(`Última lectura ${hora} · reconectando copia… · ${pymTxt}`, "warn");
     else setSummary(`Preparando copia en segundo plano… · ${pymTxt}`);
     el.root.classList.toggle("stale", !source && list.length > 0);
 

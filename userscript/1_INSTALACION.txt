@@ -1,0 +1,107 @@
+============================================================
+ VIGILANTE DE AGENDA — Copiloto Everest PyM  (v3.9.2)
+ GUIA DE INSTALACION EN UN COMPUTADOR NUEVO
+============================================================
+
+QUE ES
+------
+Un asistente que vigila la agenda de "Citas del dia" de Everest y avisa
+por NOTIFICACIONES DE WINDOWS (aunque estes escribiendo una historia
+clinica) segun el estado de cada paciente:
+  ROJO   = FRAUDE: paciente que estuvo "Sin presentarse" y lo activan a
+           "En Sala" fuera de tiempo (suena una alerta).
+  MORADO = Ultima llamada: quedan ~1 minuto para confirmar o se pierde la cita.
+  AMBAR  = Inasistencia registrada.
+  VERDE  = Ingreso a tiempo.   AZUL = estado normal / resumen.
+
+Ademas muestra, por paciente, las actividades de PyM susceptibles (entre
+las de transmision sexual, solo VIH), tomando el archivo del dia de forma
+automatica desde SharePoint.
+
+Corre DENTRO del navegador (NO es un programa .exe), por eso el antivirus
+no lo bloquea.
+
+REQUISITOS
+----------
+  - Microsoft Edge (o Google Chrome).
+  - Acceso a Everest con su usuario.
+  - Acceso a la carpeta de SharePoint "ACTIVIDADES DE PYM"
+    (para la carga automatica del archivo del dia).
+
+------------------------------------------------------------
+PASO 1 - Instalar Tampermonkey (una sola vez)
+------------------------------------------------------------
+  Edge:   abra  edge://extensions  -> "Obtener extensiones de Microsoft Edge"
+          -> busque "Tampermonkey" -> Obtener.
+  Chrome: abra  https://chrome.google.com/webstore -> "Tampermonkey" -> Anadir.
+
+------------------------------------------------------------
+PASO 2 - Activar "Modo de desarrollador"   (IMPORTANTE)
+------------------------------------------------------------
+  Sin esto, el script se instala pero NO se ejecuta.
+  Edge:   abra  edge://extensions   y active el interruptor
+          "Modo de desarrollador".
+  Chrome: abra  chrome://extensions  y active "Modo de desarrollador".
+
+------------------------------------------------------------
+PASO 3 - Instalar el script
+------------------------------------------------------------
+  1. Clic en el icono de Tampermonkey -> "Panel de control".
+  2. Pestana "Utilidades".
+  3. En "Importar desde archivo", seleccione el archivo:
+        vigilante_agenda.user.js   (viene en esta misma carpeta)
+  4. Confirme la instalacion y verifique que quede HABILITADO.
+
+  IMPORTANTE: para ACTUALIZAR a una version nueva, use SIEMPRE
+  "Importar desde archivo" (no "crear script nuevo / pegar"), asi no se
+  crean copias duplicadas.
+
+------------------------------------------------------------
+PASO 4 - Aceptar los permisos que pide Tampermonkey
+------------------------------------------------------------
+  La primera vez, Tampermonkey pedira permiso para:
+    - Conectarse a viva1aips-my.sharepoint.com  (bajar el PyM del dia).
+    - Guardar datos                              (recordar el PyM del dia).
+  Elija "Siempre permitir".
+
+------------------------------------------------------------
+PASO 5 - Activar las notificaciones de Windows
+------------------------------------------------------------
+  1. Entre a Everest e inicie sesion.
+  2. Abajo a la derecha aparece el recuadro "Vigilante PyM".
+  3. Pulse el boton de CAMPANA. El navegador preguntara: elija "Permitir".
+  4. En Windows, revise que el "Asistente de concentracion / No molestar"
+     este APAGADO (Configuracion -> Sistema -> Notificaciones), o los
+     avisos no se veran.
+  5. Pulse el boton "Probar": deben salir 3 notificaciones de Windows
+     (morada, ambar y roja con sonido). Si salen, la instalacion quedo lista.
+
+------------------------------------------------------------
+PASO 6 - Cargar el PyM del dia
+------------------------------------------------------------
+  AUTOMATICO: pulse "PyM hoy". Trae el archivo del dia actual desde
+     SharePoint (requiere tener sesion iniciada en SharePoint/Office).
+     Si falla, abra UNA vez la carpeta de SharePoint "ACTIVIDADES DE PYM"
+     en otra pestana: el asistente la detecta, toma el archivo del dia y lo
+     deja listo; al volver a Everest ya estara cargado.
+  MANUAL: pulse el boton de carpeta y elija el archivo .xlsx o .csv.
+
+------------------------------------------------------------
+PROBLEMAS FRECUENTES
+------------------------------------------------------------
+  * No aparece el recuadro:
+      - Revise el PASO 2 (Modo de desarrollador activado).
+      - Verifique que el script este habilitado en Tampermonkey.
+  * No llegan notificaciones de Windows:
+      - Si la campana esta en ROJO = estan bloqueadas para el sitio.
+        Clic en el candado de la barra de direcciones -> Notificaciones
+        -> Permitir. Recargue la pagina.
+      - Apague el "Asistente de concentracion" de Windows.
+  * "PyM hoy" no carga:
+      - Abra la carpeta de SharePoint una vez (ver PASO 6), o use la
+        carga manual con el boton de carpeta.
+
+RECOMENDACION: trabaje con UNA sola pestana de Everest. Si abre varias,
+solo una vigila y notifica (para no repetir avisos); las demas son espejo.
+
+Soporte: Brandon Palencia.

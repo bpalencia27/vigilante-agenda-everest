@@ -1,0 +1,54 @@
+============================================================
+ VIGILANTE DE AGENDA — USO DIARIO
+============================================================
+
+AL INICIAR EL TURNO
+-------------------
+  1. Abra Everest, inicie sesion y entre a "Citas del dia".
+  2. En el recuadro "Vigilante PyM" pulse "PyM hoy" (o cargue el archivo
+     con el boton de carpeta si lo tiene descargado).
+  3. Deje Everest abierto. Puede entrar a las historias clinicas con
+     tranquilidad: el asistente sigue vigilando en segundo plano y le
+     avisara por notificacion de Windows cuando pase algo importante.
+
+  Trabaje con UNA sola pestana de Everest.
+
+QUE SIGNIFICAN LOS AVISOS (por color)
+-------------------------------------
+  ROJO   : FRAUDE. Un paciente que estaba "Sin presentarse" fue activado a
+           "En Sala" fuera de tiempo. Suena una alerta.
+  MORADO : Ultima llamada. Quedan ~1 minuto para confirmar o el paciente
+           pierde la cita.
+  AMBAR  : Inasistencia registrada (paso la tolerancia sin presentarse).
+  VERDE  : Ingreso a tiempo.
+  AZUL   : Estado normal / resumen del inicio del dia.
+
+  Solo el ROJO suena. Los avisos quedan fijos hasta que usted los cierre,
+  para no perder ninguno.
+
+INDICADOR DE ESTADO (punto de color del recuadro)
+-------------------------------------------------
+  Verde : esta pestana esta vigilando en 2.o plano (la principal).
+  Azul  : leyendo la pagina / espejo de la principal.
+  Ambar : reconectando la copia (muestra la ultima lectura).
+  El texto muestra siempre la hora de la ultima actualizacion (act. HH:MM:SS).
+
+PyM POR PACIENTE
+----------------
+  Debajo de cada cita se listan las actividades de PyM susceptibles.
+  Entre las de transmision sexual solo se muestra VIH (VDRL, sifilis y
+  hepatitis se ocultan porque ya se cumplio la meta en la IPS).
+
+BOTONES DEL RECUADRO
+--------------------
+  PyM hoy : trae el PyM del dia desde SharePoint.
+  Carpeta : cargar un archivo de PyM manual (.xlsx / .csv).
+  Campana : activar / probar las notificaciones de Windows.
+  Probar  : dispara avisos de prueba (morado, ambar, rojo).
+  Diag    : descarga un diagnostico tecnico (sin datos de pacientes).
+  _       : minimizar el recuadro (se puede arrastrar por la barra superior).
+
+PRIVACIDAD
+----------
+  Ningun dato de pacientes sale del navegador. El PyM se procesa en su
+  equipo y se borra al cambiar de dia.
