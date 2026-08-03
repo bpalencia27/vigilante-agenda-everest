@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.6.1
+// @version      3.6.2
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -241,6 +241,9 @@
     if (CLONE.frame || !document.body) return;
     const f = document.createElement("iframe");
     f.id = "vgl-clone"; f.setAttribute("aria-hidden", "true"); f.setAttribute("tabindex", "-1");
+    // sandbox SIN allow-top-navigation: la copia puede renderizar y leerse (allow-same-origin),
+    // pero NO puede redirigir tu ventana de trabajo aunque la app intente "romper" el iframe.
+    f.setAttribute("sandbox", "allow-same-origin allow-scripts allow-forms");
     f.style.cssText = "position:fixed;left:-10000px;top:0;width:1366px;height:900px;opacity:0;pointer-events:none;border:0;";
     f.addEventListener("load", () => { try { installNetHooks(f.contentWindow); } catch (e) {} });
     f.src = citasUrl();
@@ -321,7 +324,7 @@
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.6.1</span>
+        <span id="vgl-title">Vigilante PyM v3.6.2</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
