@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.8.0
+// @version      3.8.1
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -27,6 +27,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
+  const VERSION = "3.8.1"; // fuente única de la versión (título + diagnóstico)
 
   const CONFIG = {
     POLL_MS: 5000,
@@ -338,7 +339,7 @@
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.8</span>
+        <span id="vgl-title">Vigilante PyM v${VERSION}</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
@@ -430,7 +431,7 @@
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 120);
     const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
     let card = ""; try { const h = ddoc.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
-    out.push("===== DIAGNÓSTICO — VIGILANTE v3.5 =====", "Fecha: " + new Date().toISOString(), "Origen: " + (cloneDoc() ? "CLON" : "página"), "URL: " + location.href, "Título: " + document.title,
+    out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "Origen: " + (cloneDoc() ? "CLON" : "página"), "URL: " + location.href, "Título: " + document.title,
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
       "\n--- CLASES MÁS FRECUENTES (top 120) ---", top.map(([c, n]) => n + "  ." + c).join("\n"),
       "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card,
@@ -448,7 +449,7 @@
     setInterval(tick, CONFIG.POLL_MS);
     setInterval(healClone, CONFIG.CLONE_HEAL_MS);
     setInterval(reloadClone, CONFIG.CLONE_REFRESH_MS);
-    console.log("[Vigilante] userscript v3.7 activo (clon 2.º plano + recarga periódica + captura temprana de red).");
+    console.log("[Vigilante] userscript v" + VERSION + " activo (clon 2.º plano + recarga periódica + captura temprana de red).");
   }
   installNetHooks(window); // document-start: capturar endpoints JSON desde el arranque de la app
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
