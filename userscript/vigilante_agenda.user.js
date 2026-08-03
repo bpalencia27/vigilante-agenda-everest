@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      4.1.1
+// @version      4.1.2
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "4.1.1"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.1.2"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -331,7 +331,16 @@
   // Anti-duplicado entre pestañas: si otra pestaña de Everest ya lanzó este aviso hace <12s, no repetir.
   function crossTabDup(id) { try { const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0); if (now - prev < 12000) return true; localStorage.setItem(k, String(now)); return false; } catch (e) { return false; } }
   function osNotify(color, title, body, persist) {
-    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; if (crossTabDup("os|" + title)) return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: true, tag: title, renotify: true }); } catch (e) {}
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") { showToast(color, title, body, persist); return; }
+    if (crossTabDup("os|" + title)) return;
+    let done = false; const fb = () => { if (done) return; done = true; showToast(color, title, body, persist); };
+    try {
+      const n = new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: true, tag: title, renotify: true });
+      try { n.onshow = () => { done = true; }; n.onerror = fb; } catch (e) {}
+      // Si Windows suprime el aviso (Asistente de concentración / política / Edge sin permiso),
+      // 'show' no se dispara: a los 1.6s mostramos el aviso DENTRO del navegador como respaldo.
+      setTimeout(fb, 1600);
+    } catch (e) { fb(); }
   }
   function showToast(color, title, body, persist) {
     try {
