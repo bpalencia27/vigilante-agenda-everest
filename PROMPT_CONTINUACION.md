@@ -4,6 +4,32 @@
 
 ---
 
+## ⚡ ACTUALIZACIÓN 2026-08-03 (v3.2) — pivote a userscript de navegador
+
+El `.exe`/`.bat` fue puesto en cuarentena por **Sophos** (antivirus gestionado de la empresa):
+la combinación de "Chrome con `--remote-debugging-port` + lectura de DOM ajeno + extracción de
+cookies con DPAPI (`session_manager.py`)" es la huella típica de un *infostealer*. No se debe
+evadir el antivirus.
+
+**Nueva arquitectura (definitiva):** el Vigilante ahora corre como **userscript de Tampermonkey**
+dentro del propio Chrome del médico (`userscript/vigilante_agenda.user.js`). Lee la agenda con
+acceso nativo al DOM (sin CDP, sin cookies), muestra el overlay flotante inyectado y carga el
+PyM con un selector de archivo. No hay `.exe` ni puerto de depuración → Sophos no tiene nada que
+bloquear. Toda la lógica de colores/fraude/PyM se portó fiel desde `src/`.
+
+**Estado / pendientes de la v3.2:**
+- Confirmar en el equipo real que los selectores (`CONFIG.SEL` en el userscript) detectan las citas.
+  Si detecta 0 citas, usar el botón **"Diag"** del overlay → descarga `diagnostico_dom_SANITIZADO.txt`
+  (sin datos de pacientes) → con eso se ajusta `CONFIG.SEL`.
+- El `.xlsx` de PyM se parsea con SheetJS (`@require` a cdnjs). Si la red bloquea el CDN, guardar
+  el PyM como `.csv` (se parsea sin librería).
+- La rama de trabajo es `feat/userscript-vigilante` (PR abierto contra `main`).
+
+El código Python en `src/` se conserva como referencia de la lógica, pero la vía de entrega al
+médico es el userscript.
+
+---
+
 Eres un ingeniero de software senior (Python, automatización de navegadores con Playwright/CDP,
 Tkinter, PyInstaller). Continúas el desarrollo del **Vigilante de Agenda — Copiloto Everest RCV & PyM v3.1**,
 una herramienta **personal** de un médico para vigilar su agenda de "Citas del día" en Everest EverHealth
