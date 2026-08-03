@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.5.0
-// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión) y muestra PyM susceptibles. Corre dentro del navegador, sin .exe ni dependencias de internet: no dispara antivirus.
+// @version      3.6.0
+// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
@@ -56,6 +56,7 @@
     pym: new Map(), pymFile: "", historical: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", events: [], minimized: false, lastSnapshot: null, netlog: [],
+    notified: new Map(), summarized: false, osNotif: false,
   };
   const CLONE = { frame: null, url: null };
 
@@ -183,6 +184,50 @@
   function beep(freq, ms, off) { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
   function fraudSound() { beep(1000, 400, 0); beep(1200, 400, 0.45); }
 
+  // ---- NOTIFICACIONES POR COLORES (recuperado de la v2.5): toast en Windows + respaldo en la página ----
+  function colorDot(color) {
+    const c = COLORS[color] || COLORS.AZUL;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="${c}"/></svg>`;
+    return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+  }
+  function osNotify(color, title, body, persist) {
+    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: !!persist, tag: title, renotify: true }); } catch (e) {}
+  }
+  function showToast(color, title, body, persist) {
+    try {
+      const wrap = document.getElementById("vgl-toasts"); if (!wrap) return;
+      const c = COLORS[color] || COLORS.AZUL;
+      const t = document.createElement("div"); t.className = "vgl-toast"; t.style.borderLeftColor = c;
+      t.innerHTML = `<div class="vgl-toast-h"><span class="vgl-toast-dot" style="background:${c}"></span><span class="vgl-toast-title"></span><span class="vgl-toast-x">×</span></div><div class="vgl-toast-b"></div>`;
+      t.querySelector(".vgl-toast-title").textContent = title;
+      t.querySelector(".vgl-toast-b").textContent = body;
+      t.querySelector(".vgl-toast-x").addEventListener("click", () => t.remove());
+      wrap.appendChild(t);
+      while (wrap.children.length > 6) wrap.removeChild(wrap.firstChild);
+      if (!persist) setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 8000);
+    } catch (e) {}
+  }
+  function notify(color, title, body, persist) { showToast(color, title, body, persist); osNotify(color, title, body, persist); }
+  const NOTIFY = { ROJO: { icon: "⛔", label: "Confirmación extemporánea (FRAUDE)", sound: true, persist: true }, AMBAR: { icon: "⚠", label: "Inasistencia registrada", persist: true } };
+  function maybeNotify(a) {
+    const prev = state.notified.get(a.key); if (prev === a.color) return; state.notified.set(a.key, a.color);
+    const cfg = NOTIFY[a.color]; if (!cfg) return;
+    notify(a.color, `${cfg.icon} ${a.hora_texto} · ${a.estado}`, `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`, cfg.persist);
+    if (cfg.sound) fraudSound();
+  }
+  function updateBell() { const b = document.getElementById("vgl-bell"); if (!b) return; const g = (typeof Notification !== "undefined" && Notification.permission === "granted"); b.textContent = g ? "🔔" : "🔕"; b.title = g ? "Notificaciones de Windows activas" : "Activar notificaciones de Windows"; }
+  function enableOsNotifications() {
+    try {
+      if (typeof Notification === "undefined") { setSummary("Este navegador no soporta notificaciones de escritorio.", "warn"); return; }
+      Notification.requestPermission().then((p) => {
+        state.osNotif = (p === "granted");
+        if (p === "granted") notify("AZUL", "🔔 Avisos activados", "Recibirás fraude e inasistencia como notificación de Windows, aunque estés en otra ventana.", false);
+        else setSummary("Permiso denegado: los avisos saldrán dentro del navegador.", "warn");
+        updateBell();
+      });
+    } catch (e) {}
+  }
+
   // ---- CLON INVISIBLE: iframe fijado en "Citas del día", misma sesión (cookies compartidas) ----
   function citasUrl() { return CLONE.url || (location.origin + CONFIG.AGENDA_PATH); }
   function ensureClone() {
@@ -256,14 +301,22 @@
       .vgl-pym.none{color:#8CA0B8!important;font-weight:500;font-style:italic}
       #vgl-empty{color:#94A3B8;font-style:italic;text-align:center;padding:24px 8px;font-size:12px}
       #vgl-root.min #vgl-sum,#vgl-root.min #vgl-list{display:none}
+      #vgl-toasts{position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;max-width:370px;font-family:'Segoe UI',system-ui,sans-serif;pointer-events:none}
+      .vgl-toast{background:#0B1220;border:1px solid #3B4B63;border-left:6px solid #3B82F6;border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.55);transition:opacity .35s;pointer-events:auto}
+      .vgl-toast-h{display:flex;align-items:center;gap:8px}
+      .vgl-toast-dot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+      .vgl-toast-title{font-weight:800;font-size:13px;color:#FFFFFF!important;flex:1}
+      .vgl-toast-x{cursor:pointer;color:#94A3B8;font-size:18px;line-height:1;padding:0 2px}
+      .vgl-toast-b{margin-top:5px;font-size:12px;color:#E2E8F0!important;white-space:pre-line;line-height:1.35}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.5</span>
+        <span id="vgl-title">Vigilante PyM v3.6</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
+        <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
         <button class="vgl-btn sec" id="vgl-min">_</button>
       </div>
@@ -277,7 +330,10 @@
     root.querySelector("#vgl-diag").addEventListener("click", downloadDiagnostic);
     root.querySelector("#vgl-min").addEventListener("click", () => { state.minimized = !state.minimized; root.classList.toggle("min", state.minimized); });
     el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
+    root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
+    const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
     makeDraggable(root, root.querySelector("#vgl-head"));
+    updateBell();
   }
   function makeDraggable(root, handle) {
     let dx = 0, dy = 0, dragging = false;
@@ -326,7 +382,16 @@
       if (!data || !data.citas.length) { const d2 = extractAgenda(document); if (d2.visible && d2.citas.length) { data = d2; source = "pagina"; CLONE.url = location.href; } }
       if (data && data.citas.length) {
         const processed = data.citas.map((a) => colorAndAlert(a, now));
-        if (processed.some((a) => a.sound)) fraudSound();
+        if (!state.summarized) {
+          // Estado inicial: se SIEMBRA sin notificar (política de no-inferencia de la v2.5;
+          // solo se alerta de eventos que ocurran EN DIRECTO tras la activación).
+          state.summarized = true;
+          processed.forEach((a) => state.notified.set(a.key, a.color));
+          const conf = processed.filter((a) => /en sala|atendido/.test((a.estado || "").toLowerCase())).length;
+          notify("AZUL", "ℹ Vigilante activo", `${processed.length} cita(s) en agenda · ${conf} ya confirmada(s)`, false);
+        } else {
+          processed.forEach(maybeNotify);
+        }
         state.lastSnapshot = { at: now, list: processed, source }; render(processed, source, now);
       } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
       else { render([], null, null); }
