@@ -1,12 +1,12 @@
 ============================================================
- VIGILANTE DE AGENDA — USO DIARIO
+ VIGILANTE DE AGENDA — USO DIARIO  (v4.0)
 ============================================================
 
 AL INICIAR EL TURNO
 -------------------
   1. Abra Everest, inicie sesion y entre a "Citas del dia".
   2. En el recuadro "Vigilante PyM" pulse "PyM hoy" (o cargue el archivo
-     con el boton de carpeta si lo tiene descargado).
+     con "Abrir" si lo tiene descargado).
   3. Deje Everest abierto. Puede entrar a las historias clinicas con
      tranquilidad: el asistente sigue vigilando en segundo plano y le
      avisara por notificacion de Windows cuando pase algo importante.
@@ -34,27 +34,32 @@ QUE SIGNIFICAN LOS AVISOS (por color)
   las aplicaciones como lo haria un programa .exe; Windows puede moverlas
   al Centro de Notificaciones si no las cierra, pero no desaparecen solas.
 
-INDICADOR DE ESTADO (punto de color del recuadro)
--------------------------------------------------
-  Verde : esta pestana esta vigilando en 2.o plano (la principal).
-  Azul  : leyendo la pagina / espejo de la principal.
-  Ambar : reconectando la copia (muestra la ultima lectura).
+EL RECUADRO (estilo macOS)
+--------------------------
+  Arriba a la izquierda tiene el "semaforo" de ventana:
+    ROJO      = ocultar (se colapsa a una pastilla; clic en ella para volver).
+    AMARILLO  = minimizar (deja solo la barra de titulo).
+    VERDE     = restaurar el tamano completo.
+  Se puede arrastrar tomandolo por la barra de titulo.
+  El punto de la derecha indica el origen de datos:
+    verde = vigilando en 2.o plano · azul = leyendo la pagina ·
+    ambar = reconectando (muestra la ultima lectura).
   El texto muestra siempre la hora de la ultima actualizacion (act. HH:MM:SS).
 
 PyM POR PACIENTE
 ----------------
-  Debajo de cada cita se listan las actividades de PyM susceptibles.
-  Entre las de transmision sexual solo se muestra VIH (VDRL, sifilis y
-  hepatitis se ocultan porque ya se cumplio la meta en la IPS).
+  Debajo de cada cita aparecen, como etiquetas, las actividades de PyM
+  susceptibles. Entre las de transmision sexual solo se muestra VIH
+  (VDRL, sifilis y hepatitis se ocultan porque ya se cumplio la meta).
 
-BOTONES DEL RECUADRO
---------------------
+BOTONES
+-------
   PyM hoy : trae el PyM del dia desde SharePoint.
-  Carpeta : cargar un archivo de PyM manual (.xlsx / .csv).
-  Campana : activar / probar las notificaciones de Windows.
+  Abrir   : cargar un archivo de PyM manual (.xlsx / .csv).
+  Alertas : activar / probar las notificaciones de Windows
+            (muestra "Alertas ✓" cuando estan activas).
   Probar  : dispara avisos de prueba (morado, ambar, rojo).
   Diag    : descarga un diagnostico tecnico (sin datos de pacientes).
-  _       : minimizar el recuadro (se puede arrastrar por la barra superior).
 
 PRIVACIDAD
 ----------

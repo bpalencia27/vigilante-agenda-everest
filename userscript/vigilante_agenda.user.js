@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.10.0
+// @version      4.0.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "3.10.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.0.0"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -56,8 +56,9 @@
       modalidad: ".fw-bold.mb-0", fecha: ".fecha",
     },
   };
-  const COLORS = { VERDE: "#10B981", AMBAR: "#F59E0B", ROJO: "#EF4444", AZUL: "#3B82F6", MORADO: "#8B5CF6" };
-  const BADGE = { VERDE: "#047857", AMBAR: "#B45309", ROJO: "#B91C1C", AZUL: "#1D4ED8", MORADO: "#6D28D9" };
+  // Paleta del sistema (estilo macOS, modo oscuro).
+  const COLORS = { VERDE: "#30D158", AMBAR: "#FF9F0A", ROJO: "#FF453A", AZUL: "#0A84FF", MORADO: "#BF5AF2" };
+  const TINT = { VERDE: "rgba(48,209,88,.20)", AMBAR: "rgba(255,159,10,.20)", ROJO: "rgba(255,69,58,.22)", AZUL: "rgba(10,132,255,.20)", MORADO: "rgba(191,90,242,.20)" };
   const FRIENDLY = {
     VALORACION_INTEGRAL: "Valoración integral", TAMIZACION_CMB: "Tamización CMB",
     CITA_PF: "Cita Planificación Familiar", CITA_AV: "Cita Agudeza Visual", CITA_OD: "Cita Odontología",
@@ -335,9 +336,11 @@
   function showToast(color, title, body, persist) {
     try {
       const wrap = document.getElementById("vgl-toasts"); if (!wrap) return;
-      const c = COLORS[color] || COLORS.AZUL;
-      const t = document.createElement("div"); t.className = "vgl-toast"; t.style.borderLeftColor = c;
-      t.innerHTML = `<div class="vgl-toast-h"><span class="vgl-toast-dot" style="background:${c}"></span><span class="vgl-toast-title"></span><span class="vgl-toast-x">×</span></div><div class="vgl-toast-b"></div>`;
+      const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
+      const icon = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" }[color] || "🛡️";
+      const t = document.createElement("div"); t.className = "vgl-toast";
+      t.innerHTML = `<div class="vgl-toast-ic" style="background:${tint};color:${col}"></div><div class="vgl-toast-main"><div class="vgl-toast-title"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
       t.querySelector(".vgl-toast-x").addEventListener("click", () => t.remove());
@@ -371,9 +374,10 @@
   function updateBell() {
     const b = document.getElementById("vgl-bell"); if (!b) return;
     const perm = (typeof Notification !== "undefined") ? Notification.permission : "unsupported";
-    b.textContent = perm === "granted" ? "🔔" : "🔕";
+    b.classList.toggle("on", perm === "granted");
+    b.classList.toggle("off", perm === "denied");
+    b.textContent = perm === "granted" ? "Alertas ✓" : perm === "denied" ? "Alertas ✕" : "Alertas";
     b.title = perm === "granted" ? "Notificaciones de Windows activas" : perm === "denied" ? "BLOQUEADAS: candado de la barra de direcciones → Notificaciones → Permitir" : "Activar notificaciones de Windows";
-    if (perm === "denied") b.style.background = "#B91C1C";
   }
   // Prueba manual: dispara una de cada color para verificar que Windows las muestra.
   function testNotifications() {
@@ -446,56 +450,95 @@
 
   // ---- Overlay ----
   let el = {};
+  let winState = "full";
+  // Controles de ventana estilo macOS: full / min (solo barra) / dock (pastilla flotante).
+  function setWinState(s) { winState = s; if (!el.root) return; el.root.classList.toggle("min", s === "min"); el.root.style.display = (s === "dock") ? "none" : "flex"; if (el.dock) el.dock.style.display = (s === "dock") ? "flex" : "none"; }
   function buildOverlay() {
     const style = document.createElement("style");
     style.textContent = `
-      #vgl-root{position:fixed;bottom:20px;right:20px;width:500px;max-height:72vh;z-index:2147483647;
-        background:#0B1220;border:1px solid #3B4B63;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.55);
-        font-family:'Segoe UI',system-ui,sans-serif;color:#F1F5F9;display:flex;flex-direction:column;overflow:hidden}
+      #vgl-root{position:fixed;bottom:22px;right:22px;width:460px;max-height:74vh;z-index:2147483647;display:flex;flex-direction:column;overflow:hidden;border-radius:18px;
+        background:rgba(28,28,30,.72);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);
+        border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 70px rgba(0,0,0,.55),0 2px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
+        color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px}
       #vgl-root *{box-sizing:border-box}
-      #vgl-head{background:#182338;padding:8px 10px;display:flex;align-items:center;gap:6px;cursor:move;user-select:none}
-      #vgl-title{font-weight:800;font-size:13px;flex:1;color:#FFFFFF!important}
-      #vgl-dot{width:9px;height:9px;border-radius:50%;background:#64748B;flex:0 0 auto}
-      #vgl-dot.bg{background:#22C55E;box-shadow:0 0 6px #22C55E}
-      #vgl-dot.page{background:#38BDF8}
-      #vgl-dot.stale{background:#F59E0B}
-      .vgl-btn{background:#0284C7;color:#fff!important;border:none;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer}
-      .vgl-btn:hover{background:#0369A1}.vgl-btn.sec{background:#3B4B63}.vgl-btn.sec:hover{background:#4B5E7A}
-      #vgl-sum{font-size:11px;color:#CBD5E1!important;padding:7px 10px;border-bottom:1px solid #1E293B;font-weight:600}
-      #vgl-sum.warn{color:#FCD34D!important;background:#3a2e0a}#vgl-sum.error{color:#FCA5A5!important;background:#3a1414}
-      #vgl-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;background:#0B1220}
-      #vgl-root.stale #vgl-list{opacity:.8}
-      .vgl-card{background:#1B2740;border-left:5px solid #3B82F6;border-radius:6px;padding:8px 10px}
-      .vgl-row{display:flex;align-items:center;gap:8px}
-      .vgl-time{font-weight:800;font-size:13px;color:#FFFFFF!important;white-space:nowrap}
-      .vgl-name{font-size:12.5px;color:#F1F5F9!important;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
-      .vgl-badge{font-size:10.5px;font-weight:800;color:#FFFFFF!important;padding:3px 8px;border-radius:5px;white-space:nowrap;letter-spacing:.2px}
-      .vgl-pym{font-size:11.5px;margin-top:5px;color:#93E0FF!important;font-weight:700;line-height:1.35}
-      .vgl-pym.none{color:#8CA0B8!important;font-weight:500;font-style:italic}
-      #vgl-empty{color:#94A3B8;font-style:italic;text-align:center;padding:24px 8px;font-size:12px}
-      #vgl-root.min #vgl-sum,#vgl-root.min #vgl-list{display:none}
-      #vgl-toasts{position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:8px;max-width:370px;font-family:'Segoe UI',system-ui,sans-serif;pointer-events:none}
-      .vgl-toast{background:#0B1220;border:1px solid #3B4B63;border-left:6px solid #3B82F6;border-radius:8px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.55);transition:opacity .35s;pointer-events:auto}
-      .vgl-toast-h{display:flex;align-items:center;gap:8px}
-      .vgl-toast-dot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
-      .vgl-toast-title{font-weight:800;font-size:13px;color:#FFFFFF!important;flex:1}
-      .vgl-toast-x{cursor:pointer;color:#94A3B8;font-size:18px;line-height:1;padding:0 2px}
-      .vgl-toast-b{margin-top:5px;font-size:12px;color:#E2E8F0!important;white-space:pre-line;line-height:1.35}
+      #vgl-head{height:42px;display:flex;align-items:center;gap:10px;padding:0 14px;cursor:move;user-select:none;border-bottom:1px solid rgba(255,255,255,.07)}
+      #vgl-tls{display:flex;align-items:center;gap:8px}
+      .vgl-tl{width:12px;height:12px;border-radius:50%;cursor:pointer;border:0;padding:0;transition:filter .15s}
+      .vgl-tl:hover{filter:brightness(1.15)}
+      .vgl-tl.close{background:#ff5f57}.vgl-tl.min{background:#febc2e}.vgl-tl.zoom{background:#28c840}
+      #vgl-title{flex:1;text-align:center;font-weight:600;font-size:13px;letter-spacing:.2px;color:#f5f5f7;opacity:.95}
+      #vgl-title small{opacity:.5;font-weight:500;margin-left:5px;font-size:11px}
+      #vgl-dot{width:8px;height:8px;border-radius:50%;background:#8e8e93;flex:0 0 auto;transition:background .3s,box-shadow .3s}
+      #vgl-dot.bg{background:#30d158;box-shadow:0 0 8px rgba(48,209,88,.85)}
+      #vgl-dot.page{background:#0a84ff;box-shadow:0 0 8px rgba(10,132,255,.75)}
+      #vgl-dot.stale{background:#ff9f0a;box-shadow:0 0 8px rgba(255,159,10,.75)}
+      #vgl-tools{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.07);flex-wrap:wrap}
+      .vgl-btn{appearance:none;border:0;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;color:#f5f5f7;background:rgba(255,255,255,.08);transition:background .15s,transform .1s;font-family:inherit;white-space:nowrap}
+      .vgl-btn:hover{background:rgba(255,255,255,.15)}
+      .vgl-btn:active{transform:scale(.96)}
+      .vgl-btn.primary{background:#0a84ff;color:#fff;font-weight:600}
+      .vgl-btn.primary:hover{background:#3a9bff}
+      .vgl-btn.on{background:rgba(48,209,88,.22);color:#30d158;font-weight:600}
+      .vgl-btn.off{background:rgba(255,69,58,.20);color:#ff453a;font-weight:600}
+      #vgl-sum{font-size:11.5px;color:rgba(245,245,247,.72);padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.06);font-weight:500;letter-spacing:.1px}
+      #vgl-sum.warn{color:#ffd60a}#vgl-sum.error{color:#ff6961}
+      #vgl-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
+      #vgl-list::-webkit-scrollbar{width:9px}
+      #vgl-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:6px;border:2px solid transparent;background-clip:content-box}
+      #vgl-list::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);background-clip:content-box}
+      #vgl-root.stale #vgl-list{opacity:.75}
+      .vgl-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);border-radius:13px;padding:9px 11px;transition:background .15s}
+      .vgl-card:hover{background:rgba(255,255,255,.09)}
+      .vgl-card.rojo{background:rgba(255,69,58,.10);border-color:rgba(255,69,58,.35);box-shadow:0 0 0 1px rgba(255,69,58,.15)}
+      .vgl-row{display:flex;align-items:center;gap:9px}
+      .vgl-cdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+      .vgl-time{font-weight:600;font-size:13px;color:#f5f5f7;white-space:nowrap;font-variant-numeric:tabular-nums}
+      .vgl-name{font-size:12.5px;color:rgba(245,245,247,.9);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+      .vgl-name b{font-weight:600;color:#fff}
+      .vgl-doc{color:rgba(245,245,247,.45);font-weight:400}
+      .vgl-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;white-space:nowrap;letter-spacing:.2px}
+      .vgl-pyms{margin-top:7px;display:flex;flex-wrap:wrap;gap:4px}
+      .vgl-chip{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:rgba(10,132,255,.16);color:#5aa9ff;white-space:nowrap}
+      .vgl-none{margin-top:6px;font-size:11px;color:rgba(245,245,247,.4);font-style:italic}
+      #vgl-empty{color:rgba(245,245,247,.5);text-align:center;padding:26px 10px;font-size:12px;line-height:1.5}
+      #vgl-root.min #vgl-tools,#vgl-root.min #vgl-sum,#vgl-root.min #vgl-list{display:none}
+      #vgl-dock{position:fixed;bottom:22px;right:22px;z-index:2147483647;display:none;align-items:center;gap:8px;cursor:pointer;padding:9px 14px;border-radius:14px;
+        background:rgba(28,28,30,.72);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);
+        border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 34px rgba(0,0,0,.5);color:#f5f5f7;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;font-size:12.5px;font-weight:600;transition:transform .12s}
+      #vgl-dock:hover{transform:translateY(-1px)}
+      #vgl-dock-dot{width:9px;height:9px;border-radius:50%;background:#30d158;box-shadow:0 0 8px rgba(48,209,88,.85)}
+      #vgl-toasts{position:fixed;top:16px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:10px;max-width:390px;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;pointer-events:none}
+      .vgl-toast{display:flex;gap:11px;align-items:flex-start;padding:13px 14px;border-radius:16px;pointer-events:auto;
+        background:rgba(40,40,44,.82);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);
+        border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 44px rgba(0,0,0,.5);animation:vglIn .32s cubic-bezier(.2,.9,.3,1)}
+      @keyframes vglIn{from{opacity:0;transform:translateX(24px) scale(.98)}to{opacity:1;transform:none}}
+      .vgl-toast-ic{width:34px;height:34px;border-radius:9px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:18px}
+      .vgl-toast-main{flex:1;min-width:0}
+      .vgl-toast-title{font-weight:600;font-size:13px;color:#fff;letter-spacing:.1px}
+      .vgl-toast-b{margin-top:3px;font-size:12px;color:rgba(245,245,247,.75);white-space:pre-line;line-height:1.4}
+      .vgl-toast-x{cursor:pointer;color:rgba(245,245,247,.5);font-size:16px;line-height:1;padding:2px 5px;border-radius:6px}
+      .vgl-toast-x:hover{background:rgba(255,255,255,.12);color:#fff}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
     root.innerHTML = `
       <div id="vgl-head">
+        <div id="vgl-tls">
+          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar"></button>
+          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar"></button>
+          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar"></button>
+        </div>
+        <div id="vgl-title">Vigilante PyM<small>v${VERSION}</small></div>
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v${VERSION}</span>
-        <button class="vgl-btn" id="vgl-sp" title="Traer el PyM de hoy desde SharePoint">PyM hoy</button>
-        <button class="vgl-btn sec" id="vgl-load" title="Cargar PyM desde un archivo">📂</button>
-        <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
-        <button class="vgl-btn sec" id="vgl-test" title="Probar las notificaciones">Probar</button>
-        <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
-        <button class="vgl-btn sec" id="vgl-min">_</button>
       </div>
-      <div id="vgl-sum">● Iniciando monitoreo…</div>
+      <div id="vgl-tools">
+        <button class="vgl-btn primary" id="vgl-sp" title="Traer el PyM de hoy desde SharePoint">PyM hoy</button>
+        <button class="vgl-btn" id="vgl-load" title="Cargar PyM desde un archivo">Abrir</button>
+        <button class="vgl-btn" id="vgl-bell" title="Activar notificaciones de Windows">Alertas</button>
+        <button class="vgl-btn" id="vgl-test" title="Probar las notificaciones">Probar</button>
+        <button class="vgl-btn" id="vgl-diag" title="Diagnóstico (sin datos de pacientes)">Diag</button>
+      </div>
+      <div id="vgl-sum">Iniciando monitoreo…</div>
       <div id="vgl-list"><div id="vgl-empty">Preparando copia en segundo plano…</div></div>
       <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" style="display:none">
     `;
@@ -503,22 +546,28 @@
     el = { root, sum: root.querySelector("#vgl-sum"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot") };
     root.querySelector("#vgl-load").addEventListener("click", () => el.file.click());
     root.querySelector("#vgl-diag").addEventListener("click", downloadDiagnostic);
-    root.querySelector("#vgl-min").addEventListener("click", () => { state.minimized = !state.minimized; root.classList.toggle("min", state.minimized); });
-    el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
     root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
     root.querySelector("#vgl-sp").addEventListener("click", () => autoPymFromSharepoint(false));
     root.querySelector("#vgl-test").addEventListener("click", testNotifications);
+    el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
+    root.querySelector("#vgl-tl-close").addEventListener("click", () => setWinState("dock"));
+    root.querySelector("#vgl-tl-min").addEventListener("click", () => setWinState(winState === "min" ? "full" : "min"));
+    root.querySelector("#vgl-tl-zoom").addEventListener("click", () => setWinState("full"));
+    const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Vigilante PyM";
+    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Vigilante PyM</span>`;
+    dock.addEventListener("click", () => setWinState("full"));
+    document.body.appendChild(dock); el.dock = dock;
     const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
     makeDraggable(root, root.querySelector("#vgl-head"));
     updateBell();
   }
   function makeDraggable(root, handle) {
     let dx = 0, dy = 0, dragging = false;
-    handle.addEventListener("mousedown", (e) => { dragging = true; const r = root.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; root.style.bottom = "auto"; root.style.right = "auto"; e.preventDefault(); });
+    handle.addEventListener("mousedown", (e) => { if (e.target.closest("button")) return; dragging = true; const r = root.getBoundingClientRect(); dx = e.clientX - r.left; dy = e.clientY - r.top; root.style.bottom = "auto"; root.style.right = "auto"; e.preventDefault(); });
     document.addEventListener("mousemove", (e) => { if (!dragging) return; root.style.left = Math.max(0, e.clientX - dx) + "px"; root.style.top = Math.max(0, e.clientY - dy) + "px"; });
     document.addEventListener("mouseup", () => { dragging = false; });
   }
-  function setSummary(text, level) { if (!el.sum) return; el.sum.className = level || ""; el.sum.textContent = (level === "error" ? "⚠ " : level === "warn" ? "⏸ " : "● ") + text; }
+  function setSummary(text, level) { if (!el.sum) return; el.sum.className = level || ""; el.sum.textContent = (level === "error" ? "⚠ " : level === "warn" ? "⏸ " : "") + text; }
   function signatureOf(list) { return list.map((a) => `${a.key}~${a.estado}~${a.color}~${a.pym.join("·")}`).join("||"); }
 
   function render(list, source, at) {
@@ -537,16 +586,18 @@
     if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">Aún sin citas.<br>Entra una vez a "Citas del día" para inicializar la copia.</div>`; return; }
     el.list.innerHTML = "";
     for (const a of list) {
-      const border = COLORS[a.color] || COLORS.AZUL, badge = BADGE[a.color] || BADGE.AZUL;
-      const card = document.createElement("div"); card.className = "vgl-card"; card.style.borderLeftColor = border;
-      const pymTxt2 = a.pym.length ? a.pym.join(" · ") : "Sin actividades PyM pendientes";
+      const col = COLORS[a.color] || COLORS.AZUL, tint = TINT[a.color] || TINT.AZUL;
+      const card = document.createElement("div"); card.className = "vgl-card" + (a.color === "ROJO" ? " rojo" : "");
+      const pyms = a.pym.length
+        ? `<div class="vgl-pyms">${a.pym.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}</div>`
+        : `<div class="vgl-none">Sin PyM pendiente</div>`;
       card.innerHTML = `
         <div class="vgl-row">
+          <span class="vgl-cdot" style="background:${col}"></span>
           <span class="vgl-time">${escapeHtml(a.hora_texto)}</span>
-          <span class="vgl-name">${escapeHtml(a.nombre)} ${a.doc_id ? "(" + escapeHtml(a.doc_id) + ")" : ""}</span>
-          <span class="vgl-badge" style="background:${badge}">${escapeHtml(a.estado)}</span>
-        </div>
-        <div class="vgl-pym ${a.pym.length ? "" : "none"}">📋 ${escapeHtml(pymTxt2)}</div>`;
+          <span class="vgl-name"><b>${escapeHtml(a.nombre)}</b>${a.doc_id ? ` <span class="vgl-doc">${escapeHtml(a.doc_id)}</span>` : ""}</span>
+          <span class="vgl-badge" style="background:${tint};color:${col}">${escapeHtml(a.estado)}</span>
+        </div>${pyms}`;
       el.list.appendChild(card);
     }
   }
