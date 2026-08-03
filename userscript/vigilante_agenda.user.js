@@ -1,46 +1,46 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.3.0
-// @description  Overlay que vigila "Citas del día" en Everest y muestra las actividades de PyM susceptibles por paciente. Corre DENTRO del navegador (sin .exe, sin puerto de depuración, SIN dependencias de internet): no dispara antivirus.
+// @version      3.5.0
+// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión) y muestra PyM susceptibles. Corre dentro del navegador, sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
 // @run-at       document-idle
+// @noframes
 // @grant        none
 // ==/UserScript==
 
 /*
-  v3.3 — SIN @require (autónomo): el .xlsx se lee con las APIs nativas del navegador
-  (DecompressionStream + DOMParser), así que funciona aunque la red bloquee CDNs.
-  También acepta .csv. Toda la lógica de colores/fraude/PyM es un puerto fiel de src/.
-  PRIVACIDAD: nada sale del navegador; el PyM se procesa en memoria; la captura de
-  diagnóstico va con nombres/cédulas enmascarados.
+  v3.5 — MONITOREO ASÍNCRONO EN SEGUNDO PLANO
+  - Crea un iframe OCULTO fijado en "Citas del día" (misma sesión/cookies). El overlay
+    lo lee cada 5 s, así SIGUE REFRESCANDO aunque estés dentro de una Historia Clínica.
+  - Si por algo el clon no está listo, usa la página actual y, en último caso, conserva
+    la última lectura (nunca se queda en blanco).
+  - Colores de alto contraste. Lector de PyM (.xlsx/.csv) sin librerías externas.
+  - Botón "Diag": diagnóstico DOM + endpoints de red (VALORES REDACTADOS) por si luego
+    conviene pasar a polling directo del API.
+  @noframes evita que el script se ejecute dentro del propio clon (sin recursión).
+  PRIVACIDAD: nada sale del navegador; PyM en memoria; diagnóstico enmascarado.
 */
 
 (function () {
   "use strict";
+  if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
 
   const CONFIG = {
     POLL_MS: 5000,
-    TOLERANCIA_MIN: 6.0, // ÁMBAR desde 6:00; MORADO 5:00–5:59
-    // Selectores CONFIRMADos contra el DOM real de Everest (HC | EverHealth) el
-    // 2026-08-03: 21/21 citas detectadas. Estructura de la tarjeta:
-    //   .card-body > .labelHora (hora) | .fw-bold.mb-0 (modalidad) |
-    //   .text-muted (documento) | .text-uppercase.fw-bold (nombre) | .status-label (estado)
+    CLONE_HEAL_MS: 60000,   // si el clon pierde la agenda, intenta recargarlo
+    TOLERANCIA_MIN: 6.0,
+    AGENDA_PATH: "/viva/HCHealth/",
     SEL: {
-      hora: ".labelHora",
-      estado: ".status-label",
-      contenedor: [".card-body", ".card"],
-      documento: ".text-muted",
-      nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
-      modalidad: ".fw-bold.mb-0",
-      fecha: ".fecha",
+      hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
+      documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
+      modalidad: ".fw-bold.mb-0", fecha: ".fecha",
     },
   };
-
   const COLORS = { VERDE: "#10B981", AMBAR: "#F59E0B", ROJO: "#EF4444", AZUL: "#3B82F6", MORADO: "#8B5CF6" };
-
+  const BADGE = { VERDE: "#047857", AMBAR: "#B45309", ROJO: "#B91C1C", AZUL: "#1D4ED8", MORADO: "#6D28D9" };
   const FRIENDLY = {
     VALORACION_INTEGRAL: "Valoración integral", TAMIZACION_CMB: "Tamización CMB",
     CITA_PF: "Cita Planificación Familiar", CITA_AV: "Cita Agudeza Visual", CITA_OD: "Cita Odontología",
@@ -55,41 +55,16 @@
   const state = {
     pym: new Map(), pymFile: "", historical: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
-    lastSignature: "", events: [], minimized: false,
+    lastSignature: "", events: [], minimized: false, lastSnapshot: null, netlog: [],
   };
+  const CLONE = { frame: null, url: null };
 
   const limpio = (s) => (s || "").replace(/\s+/g, " ").trim();
-
-  function normalizeKey(val) {
-    if (val === null || val === undefined) return "";
-    let s = String(val).trim();
-    if (s.endsWith(".0")) s = s.slice(0, -2);
-    return s.replace(/\D/g, "");
-  }
-  function extractDoc(t) {
-    if (!t) return "";
-    const first = t.split(",")[0].replace(/[.\s]/g, "");
-    let m = /^(\d{5,15})$/.exec(first);
-    if (m) return m[1];
-    m = /(\d{5,15})/.exec(t.replace(/[.\s]/g, ""));
-    return m ? m[1] : "";
-  }
-  function isPending(val) {
-    if (val === null || val === undefined) return false;
-    const s = String(val).trim().toLowerCase();
-    return s === "susceptible" || s === "pendiente" || s.startsWith("tamizar");
-  }
-  function friendly(h) {
-    if (FRIENDLY[h]) return FRIENDLY[h];
-    const t = h.replace(/_/g, " ").trim().toLowerCase();
-    return t.charAt(0).toUpperCase() + t.slice(1);
-  }
-  function activityLabel(header, val) {
-    const f = friendly(header);
-    const s = String(val).trim().toLowerCase();
-    if (s === "susceptible" || s === "pendiente") return f;
-    return `${f} — ${String(val).trim()}`;
-  }
+  function normalizeKey(val) { if (val === null || val === undefined) return ""; let s = String(val).trim(); if (s.endsWith(".0")) s = s.slice(0, -2); return s.replace(/\D/g, ""); }
+  function extractDoc(t) { if (!t) return ""; const first = t.split(",")[0].replace(/[.\s]/g, ""); let m = /^(\d{5,15})$/.exec(first); if (m) return m[1]; m = /(\d{5,15})/.exec(t.replace(/[.\s]/g, "")); return m ? m[1] : ""; }
+  function isPending(val) { if (val === null || val === undefined) return false; const s = String(val).trim().toLowerCase(); return s === "susceptible" || s === "pendiente" || s.startsWith("tamizar"); }
+  function friendly(h) { if (FRIENDLY[h]) return FRIENDLY[h]; const t = h.replace(/_/g, " ").trim().toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); }
+  function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
 
   function indexRows(headersRaw, rows) {
@@ -100,45 +75,21 @@
     if (docIdx < 0) throw new Error("No se encontró columna de documento/cédula. Columnas: " + headers.join(", "));
     const map = new Map();
     for (const row of rows) {
-      const docKey = normalizeKey(row[docIdx]);
-      if (!docKey) continue;
+      const docKey = normalizeKey(row[docIdx]); if (!docKey) continue;
       const bucket = map.get(docKey) || [];
-      for (let i = 0; i < headers.length; i++) {
-        if (i === docIdx) continue;
-        if (isPending(row[i])) {
-          const label = activityLabel(headers[i], row[i]);
-          if (!bucket.includes(label)) bucket.push(label);
-        }
-      }
+      for (let i = 0; i < headers.length; i++) { if (i === docIdx) continue; if (isPending(row[i])) { const label = activityLabel(headers[i], row[i]); if (!bucket.includes(label)) bucket.push(label); } }
       map.set(docKey, bucket);
     }
     return map;
   }
+  function parseCSV(text) { return text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length).map((l) => l.split(",")); }
 
-  function parseCSV(text) {
-    const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length);
-    return lines.map((l) => l.split(","));
-  }
-
-  // ---- Lector .xlsx AUTÓNOMO (ZIP + DEFLATE nativo + DOMParser). Sin librerías. ----
-  async function inflateRaw(bytes) {
-    const ds = new DecompressionStream("deflate-raw");
-    const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
-    return new Uint8Array(ab);
-  }
-  function colToIdx(ref) {
-    const m = /^([A-Z]+)\d+$/.exec(ref || "");
-    if (!m) return -1;
-    let c = 0; for (const ch of m[1]) c = c * 26 + (ch.charCodeAt(0) - 64);
-    return c - 1;
-  }
+  async function inflateRaw(bytes) { const ds = new DecompressionStream("deflate-raw"); const ab = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer(); return new Uint8Array(ab); }
+  function colToIdx(ref) { const m = /^([A-Z]+)\d+$/.exec(ref || ""); if (!m) return -1; let c = 0; for (const ch of m[1]) c = c * 26 + (ch.charCodeAt(0) - 64); return c - 1; }
   async function readXlsx(arrayBuffer) {
     const dv = new DataView(arrayBuffer), bytes = new Uint8Array(arrayBuffer), td = new TextDecoder();
-    let eocd = -1;
-    for (let i = bytes.length - 22; i >= 0 && i >= bytes.length - 22 - 65536; i--) {
-      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-    }
-    if (eocd < 0) throw new Error("xlsx inválido (EOCD no encontrado)");
+    let eocd = -1; for (let i = bytes.length - 22; i >= 0 && i >= bytes.length - 22 - 65536; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+    if (eocd < 0) throw new Error("xlsx inválido (EOCD)");
     const cdCount = dv.getUint16(eocd + 10, true), cdOffset = dv.getUint32(eocd + 16, true);
     const files = {}; let p = cdOffset;
     for (let n = 0; n < cdCount; n++) {
@@ -149,55 +100,20 @@
       files[td.decode(bytes.subarray(p + 46, p + 46 + nameLen))] = { method, compSize, localOff };
       p += 46 + nameLen + extraLen + commentLen;
     }
-    async function readEntry(name) {
-      const f = files[name]; if (!f) return null;
-      const lh = f.localOff;
-      const start = lh + 30 + dv.getUint16(lh + 26, true) + dv.getUint16(lh + 28, true);
-      const comp = bytes.subarray(start, start + f.compSize);
-      const raw = f.method === 0 ? comp : await inflateRaw(comp);
-      return new TextDecoder("utf-8").decode(raw);
-    }
+    async function readEntry(name) { const f = files[name]; if (!f) return null; const lh = f.localOff; const start = lh + 30 + dv.getUint16(lh + 26, true) + dv.getUint16(lh + 28, true); const comp = bytes.subarray(start, start + f.compSize); const raw = f.method === 0 ? comp : await inflateRaw(comp); return new TextDecoder("utf-8").decode(raw); }
     const sharedXml = await readEntry("xl/sharedStrings.xml");
-    let sheetKey = "xl/worksheets/sheet1.xml";
-    if (!files[sheetKey]) {
-      const k = Object.keys(files).find((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n));
-      if (k) sheetKey = k;
-    }
-    const sheetXml = await readEntry(sheetKey);
-    if (!sheetXml) throw new Error("xlsx: no se encontró la hoja de datos");
-
+    let sheetKey = "xl/worksheets/sheet1.xml"; if (!files[sheetKey]) { const k = Object.keys(files).find((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)); if (k) sheetKey = k; }
+    const sheetXml = await readEntry(sheetKey); if (!sheetXml) throw new Error("xlsx: no se encontró la hoja");
     const shared = [];
-    if (sharedXml) {
-      const sdoc = new DOMParser().parseFromString(sharedXml, "application/xml");
-      const sis = sdoc.getElementsByTagNameNS("*", "si");
-      for (let i = 0; i < sis.length; i++) {
-        const ts = sis[i].getElementsByTagNameNS("*", "t");
-        let s = ""; for (let j = 0; j < ts.length; j++) s += ts[j].textContent;
-        shared.push(s);
-      }
-    }
-    const doc = new DOMParser().parseFromString(sheetXml, "application/xml");
-    const rowsEl = doc.getElementsByTagNameNS("*", "row");
-    const rows = [];
+    if (sharedXml) { const sdoc = new DOMParser().parseFromString(sharedXml, "application/xml"); const sis = sdoc.getElementsByTagNameNS("*", "si"); for (let i = 0; i < sis.length; i++) { const ts = sis[i].getElementsByTagNameNS("*", "t"); let s = ""; for (let j = 0; j < ts.length; j++) s += ts[j].textContent; shared.push(s); } }
+    const doc = new DOMParser().parseFromString(sheetXml, "application/xml"); const rowsEl = doc.getElementsByTagNameNS("*", "row"); const rows = [];
     for (let r = 0; r < rowsEl.length; r++) {
-      const cells = rowsEl[r].getElementsByTagNameNS("*", "c");
-      const arr = [];
+      const cells = rowsEl[r].getElementsByTagNameNS("*", "c"); const arr = [];
       for (let c = 0; c < cells.length; c++) {
-        const cell = cells[c];
-        let idx = colToIdx(cell.getAttribute("r"));
-        if (idx < 0) idx = arr.length;
-        const t = cell.getAttribute("t");
-        let val = "";
-        if (t === "s") {
-          const v = cell.getElementsByTagNameNS("*", "v")[0];
-          val = v ? (shared[parseInt(v.textContent, 10)] || "") : "";
-        } else if (t === "inlineStr") {
-          const is = cell.getElementsByTagNameNS("*", "is")[0];
-          val = is ? is.textContent : "";
-        } else {
-          const v = cell.getElementsByTagNameNS("*", "v")[0];
-          val = v ? v.textContent : "";
-        }
+        const cell = cells[c]; let idx = colToIdx(cell.getAttribute("r")); if (idx < 0) idx = arr.length; const t = cell.getAttribute("t"); let val = "";
+        if (t === "s") { const v = cell.getElementsByTagNameNS("*", "v")[0]; val = v ? (shared[parseInt(v.textContent, 10)] || "") : ""; }
+        else if (t === "inlineStr") { const is = cell.getElementsByTagNameNS("*", "is")[0]; val = is ? is.textContent : ""; }
+        else { const v = cell.getElementsByTagNameNS("*", "v")[0]; val = v ? v.textContent : ""; }
         arr[idx] = val;
       }
       rows.push(arr);
@@ -206,57 +122,31 @@
   }
 
   function applyPym(headers, rows, fileName) {
-    state.pym = indexRows(headers, rows);
-    state.pymFile = fileName;
-    state.lastSignature = "";
-    setSummary(`PyM cargado: ${state.pym.size} paciente(s) — ${fileName}`);
-    tick();
+    state.pym = indexRows(headers, rows); state.pymFile = fileName;
+    if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
+    state.lastSignature = ""; tick(); setSummary(`PyM cargado: ${state.pym.size} paciente(s) — ${fileName}`);
   }
-
   function loadPymFile(file) {
-    const name = file.name.toLowerCase();
-    const reader = new FileReader();
-    reader.onerror = () => setSummary("No se pudo leer el archivo PyM.", true);
-    if (name.endsWith(".csv")) {
-      reader.onload = (e) => {
-        try { const all = parseCSV(String(e.target.result)); applyPym(all[0] || [], all.slice(1), file.name); }
-        catch (err) { setSummary("Error cargando CSV: " + err.message, true); }
-      };
-      reader.readAsText(file, "UTF-8");
-    } else {
-      reader.onload = async (e) => {
-        try {
-          if (typeof DecompressionStream === "undefined")
-            throw new Error("Este navegador no soporta lectura de .xlsx; guarda el PyM como .csv.");
-          const rows = await readXlsx(e.target.result);
-          applyPym(rows[0] || [], rows.slice(1), file.name);
-        } catch (err) { setSummary("Error cargando .xlsx (" + err.message + "). Prueba guardándolo como .csv.", true); }
-      };
-      reader.readAsArrayBuffer(file);
-    }
+    const name = file.name.toLowerCase(); const reader = new FileReader();
+    reader.onerror = () => setSummary("No se pudo leer el archivo PyM.", "error");
+    if (name.endsWith(".csv")) { reader.onload = (e) => { try { const all = parseCSV(String(e.target.result)); applyPym(all[0] || [], all.slice(1), file.name); } catch (err) { setSummary("Error CSV: " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
+    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const rows = await readXlsx(e.target.result); applyPym(rows[0] || [], rows.slice(1), file.name); } catch (err) { setSummary("Error .xlsx (" + err.message + "). Prueba .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
   }
 
-  // ---- Extracción del DOM ----
-  function firstMatch(root, selList) {
-    const arr = Array.isArray(selList) ? selList : [selList];
-    for (const s of arr) { const el = root.querySelector(s); if (el) return el; }
-    return null;
-  }
+  // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
+  function firstMatch(root, selList) { const arr = Array.isArray(selList) ? selList : [selList]; for (const s of arr) { const el = root.querySelector(s); if (el) return el; } return null; }
   function containerOf(elHora) {
     for (const s of CONFIG.SEL.contenedor) { const c = elHora.closest(s); if (c) return c; }
-    let n = elHora.parentElement, saltos = 0;
-    while (n && n !== document.body && saltos < 8) {
-      if (n.querySelector(CONFIG.SEL.estado)) return n;
-      n = n.parentElement; saltos++;
-    }
+    const body = elHora.ownerDocument.body; let n = elHora.parentElement, saltos = 0;
+    while (n && n !== body && saltos < 8) { if (n.querySelector(CONFIG.SEL.estado)) return n; n = n.parentElement; saltos++; }
     return null;
   }
-  function extractAgenda() {
-    const horas = Array.from(document.querySelectorAll(CONFIG.SEL.hora));
+  function extractAgenda(doc) {
+    doc = doc || document;
+    const horas = Array.from(doc.querySelectorAll(CONFIG.SEL.hora));
     if (horas.length === 0) return { visible: false, citas: [] };
     const citas = horas.map((h, i) => {
-      const cont = containerOf(h);
-      let estado = "", documento = "", nombre = "", modalidad = "";
+      const cont = containerOf(h); let estado = "", documento = "", nombre = "", modalidad = "";
       if (cont) {
         estado = limpio((cont.querySelector(CONFIG.SEL.estado) || {}).textContent);
         documento = limpio((firstMatch(cont, CONFIG.SEL.documento) || {}).textContent);
@@ -268,34 +158,20 @@
     return { visible: true, citas };
   }
 
-  // ---- Lógica de color / alerta (puerto fiel de agenda_monitor.py) ----
+  // ---- Color / alerta ----
   function elapsedMin(ts, now) {
     const m = /^(\d{1,2}):(\d{2})\s*([AaPp])[.\sMm]*$/.exec((ts || "").trim());
     if (!m) { if (!state.warnedTimes.has(ts)) { state.warnedTimes.add(ts); console.warn("[Vigilante] hora no interpretable:", ts); } return 0; }
-    let h = parseInt(m[1], 10) % 12; if (/[Pp]/.test(m[3])) h += 12;
-    const apt = new Date(now); apt.setHours(h, parseInt(m[2], 10), 0, 0);
-    return (now - apt) / 60000;
+    let h = parseInt(m[1], 10) % 12; if (/[Pp]/.test(m[3])) h += 12; const apt = new Date(now); apt.setHours(h, parseInt(m[2], 10), 0, 0); return (now - apt) / 60000;
   }
   function apptKey(a) { return a.doc_id ? a.doc_id : `${a.hora_texto}|${a.nombre}|${a.index}`; }
   function colorAndAlert(a, now) {
-    const st = (a.estado || "").toLowerCase();
-    const key = apptKey(a);
-    const elapsed = elapsedMin(a.hora_texto, now);
-    const pym = getActivities(a.doc_id);
-    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0;
-    let color = "AZUL", sound = false;
-    if (st.includes("en sala")) {
-      if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } }
-      else color = "VERDE";
-    } else if (st.includes("atendido")) {
-      color = state.alertedFraud.has(key) ? "ROJO" : "VERDE";
-    } else if (st.includes("sin presentarse")) {
-      if (elapsed >= grace) { color = "AMBAR"; state.fraudWatch.add(key); }
-      else if (elapsed >= prealert) color = "MORADO";
-      else color = "AZUL";
-    } else {
-      color = (elapsed >= prealert || pym.length >= 3) ? "MORADO" : "AZUL";
-    }
+    const st = (a.estado || "").toLowerCase(); const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
+    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0; let color = "AZUL", sound = false;
+    if (st.includes("en sala")) { if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } } else color = "VERDE"; }
+    else if (st.includes("atendido")) { color = state.alertedFraud.has(key) ? "ROJO" : "VERDE"; }
+    else if (st.includes("sin presentarse")) { if (elapsed >= grace) { color = "AMBAR"; state.fraudWatch.add(key); } else if (elapsed >= prealert) color = "MORADO"; else color = "AZUL"; }
+    else { color = (elapsed >= prealert || pym.length >= 3) ? "MORADO" : "AZUL"; }
     const prev = state.historical.get(key) || "";
     if (sound) state.events.push({ t: new Date().toLocaleString(), ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado });
     else if (st !== prev && prev !== "") state.events.push({ t: new Date().toLocaleString(), ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, previo: prev });
@@ -304,58 +180,99 @@
   }
 
   let audioCtx = null;
-  function beep(freq, ms, whenOffset) {
-    try {
-      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.connect(g); g.connect(audioCtx.destination);
-      o.frequency.value = freq; o.type = "square";
-      const t0 = audioCtx.currentTime + whenOffset;
-      g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000);
-    } catch (e) { /* algunos navegadores exigen interacción previa */ }
-  }
+  function beep(freq, ms, off) { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
   function fraudSound() { beep(1000, 400, 0); beep(1200, 400, 0.45); }
 
+  // ---- CLON INVISIBLE: iframe fijado en "Citas del día", misma sesión (cookies compartidas) ----
+  function citasUrl() { return CLONE.url || (location.origin + CONFIG.AGENDA_PATH); }
+  function ensureClone() {
+    if (CLONE.frame || !document.body) return;
+    const f = document.createElement("iframe");
+    f.id = "vgl-clone"; f.setAttribute("aria-hidden", "true"); f.setAttribute("tabindex", "-1");
+    f.style.cssText = "position:fixed;left:-10000px;top:0;width:1366px;height:900px;opacity:0;pointer-events:none;border:0;";
+    f.addEventListener("load", () => { try { installNetHooks(f.contentWindow); } catch (e) {} });
+    f.src = citasUrl();
+    document.body.appendChild(f); CLONE.frame = f;
+    console.log("[Vigilante] clon invisible creado ->", f.src);
+  }
+  function cloneDoc() { try { const d = CLONE.frame && CLONE.frame.contentWindow && CLONE.frame.contentWindow.document; return (d && d.querySelectorAll(CONFIG.SEL.hora).length) ? d : null; } catch (e) { return null; } }
+  function healClone() { const d = cloneDoc(); if (d) return; try { if (CLONE.frame && CLONE.frame.contentWindow) CLONE.frame.contentWindow.location.replace(citasUrl()); } catch (e) {} }
+
+  // ---- Captura de red (para posible polling directo del API) ----
+  function redact(v, depth) {
+    if (depth > 4) return "…"; if (v === null) return null;
+    if (Array.isArray(v)) return v.slice(0, 2).map((x) => redact(x, depth + 1));
+    if (typeof v === "object") { const o = {}; let i = 0; for (const k in v) { if (i++ > 40) break; o[k] = redact(v[k], depth + 1); } return o; }
+    if (typeof v === "string") return "···"; if (typeof v === "number") return 0; if (typeof v === "boolean") return false; return typeof v;
+  }
+  function logNet(method, url, status, ct, text) {
+    try { if (state.netlog.length > 40 || !ct || !ct.includes("json") || !text) return; let shape = null; try { shape = redact(JSON.parse(text), 0); } catch (e) { return; } const base = (url || "").split("?")[0]; const hasQ = (url || "").includes("?"); state.netlog.push({ method: method || "GET", url: base + (hasQ ? "?…" : ""), status, muestra: shape }); } catch (e) {}
+  }
+  function installNetHooks(win) {
+    win = win || window;
+    try {
+      const of = win.fetch;
+      if (typeof of === "function" && !of.__vgl) {
+        win.fetch = function (...a) { return of.apply(this, a).then((r) => { try { const ct = r.headers.get("content-type") || ""; if (ct.includes("json")) r.clone().text().then((t) => logNet((a[1] && a[1].method) || "GET", (typeof a[0] === "string" ? a[0] : a[0] && a[0].url) || "", r.status, ct, t)).catch(() => {}); } catch (e) {} return r; }); };
+        win.fetch.__vgl = true;
+      }
+      const XHR = win.XMLHttpRequest && win.XMLHttpRequest.prototype;
+      if (XHR && !XHR.__vgl) {
+        const oo = XHR.open, os = XHR.send;
+        XHR.open = function (m, u) { this.__vgl = { m, u }; return oo.apply(this, arguments); };
+        XHR.send = function () { this.addEventListener("load", () => { try { const ct = this.getResponseHeader("content-type") || ""; if (ct.includes("json")) logNet(this.__vgl ? this.__vgl.m : "GET", this.__vgl ? this.__vgl.u : "", this.status, ct, this.responseText); } catch (e) {} }); return os.apply(this, arguments); };
+        XHR.__vgl = true;
+      }
+    } catch (e) {}
+  }
+
+  // ---- Overlay ----
   let el = {};
   function buildOverlay() {
     const style = document.createElement("style");
     style.textContent = `
-      #vgl-root{position:fixed;bottom:20px;right:20px;width:440px;max-height:70vh;z-index:2147483647;
-        background:#0F172A;border:1px solid #334155;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);
-        font-family:'Segoe UI',system-ui,sans-serif;color:#F8FAFC;display:flex;flex-direction:column;overflow:hidden}
-      #vgl-head{background:#1E293B;padding:8px 10px;display:flex;align-items:center;gap:6px;cursor:move;user-select:none}
-      #vgl-title{font-weight:700;font-size:13px;flex:1}
-      .vgl-btn{background:#0284C7;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
-      .vgl-btn:hover{background:#0369A1}
-      .vgl-btn.sec{background:#334155}.vgl-btn.sec:hover{background:#475569}
-      #vgl-sum{font-size:11px;color:#94A3B8;padding:6px 10px;border-bottom:1px solid #1E293B}
-      #vgl-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
-      .vgl-card{background:#1E293B;border-left:4px solid #3B82F6;border-radius:6px;padding:7px 9px}
-      .vgl-row{display:flex;align-items:center;gap:6px}
-      .vgl-time{font-weight:700;font-size:12px}
-      .vgl-name{font-size:12px;color:#E2E8F0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .vgl-badge{font-size:10px;font-weight:700;color:#fff;padding:2px 6px;border-radius:4px}
-      .vgl-pym{font-size:11px;margin-top:4px;color:#38BDF8;font-weight:700}
-      .vgl-pym.none{color:#64748B;font-weight:400;font-style:italic}
-      #vgl-empty{color:#64748B;font-style:italic;text-align:center;padding:24px 8px;font-size:12px}
+      #vgl-root{position:fixed;bottom:20px;right:20px;width:452px;max-height:72vh;z-index:2147483647;
+        background:#0B1220;border:1px solid #3B4B63;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.55);
+        font-family:'Segoe UI',system-ui,sans-serif;color:#F1F5F9;display:flex;flex-direction:column;overflow:hidden}
+      #vgl-root *{box-sizing:border-box}
+      #vgl-head{background:#182338;padding:8px 10px;display:flex;align-items:center;gap:6px;cursor:move;user-select:none}
+      #vgl-title{font-weight:800;font-size:13px;flex:1;color:#FFFFFF!important}
+      #vgl-dot{width:9px;height:9px;border-radius:50%;background:#64748B;flex:0 0 auto}
+      #vgl-dot.bg{background:#22C55E;box-shadow:0 0 6px #22C55E}
+      #vgl-dot.page{background:#38BDF8}
+      #vgl-dot.stale{background:#F59E0B}
+      .vgl-btn{background:#0284C7;color:#fff!important;border:none;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer}
+      .vgl-btn:hover{background:#0369A1}.vgl-btn.sec{background:#3B4B63}.vgl-btn.sec:hover{background:#4B5E7A}
+      #vgl-sum{font-size:11px;color:#CBD5E1!important;padding:7px 10px;border-bottom:1px solid #1E293B;font-weight:600}
+      #vgl-sum.warn{color:#FCD34D!important;background:#3a2e0a}#vgl-sum.error{color:#FCA5A5!important;background:#3a1414}
+      #vgl-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px;background:#0B1220}
+      #vgl-root.stale #vgl-list{opacity:.8}
+      .vgl-card{background:#1B2740;border-left:5px solid #3B82F6;border-radius:6px;padding:8px 10px}
+      .vgl-row{display:flex;align-items:center;gap:8px}
+      .vgl-time{font-weight:800;font-size:13px;color:#FFFFFF!important;white-space:nowrap}
+      .vgl-name{font-size:12.5px;color:#F1F5F9!important;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+      .vgl-badge{font-size:10.5px;font-weight:800;color:#FFFFFF!important;padding:3px 8px;border-radius:5px;white-space:nowrap;letter-spacing:.2px}
+      .vgl-pym{font-size:11.5px;margin-top:5px;color:#93E0FF!important;font-weight:700;line-height:1.35}
+      .vgl-pym.none{color:#8CA0B8!important;font-weight:500;font-style:italic}
+      #vgl-empty{color:#94A3B8;font-style:italic;text-align:center;padding:24px 8px;font-size:12px}
       #vgl-root.min #vgl-sum,#vgl-root.min #vgl-list{display:none}
     `;
     document.head.appendChild(style);
-    const root = document.createElement("div");
-    root.id = "vgl-root";
+    const root = document.createElement("div"); root.id = "vgl-root";
     root.innerHTML = `
       <div id="vgl-head">
-        <span id="vgl-title">🛡️ Vigilante PyM v3.3</span>
+        <span id="vgl-dot" title="origen de datos"></span>
+        <span id="vgl-title">Vigilante PyM v3.5</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
-        <button class="vgl-btn sec" id="vgl-diag" title="Descarga una captura del DOM sanitizada">Diag</button>
+        <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
         <button class="vgl-btn sec" id="vgl-min">_</button>
       </div>
       <div id="vgl-sum">● Iniciando monitoreo…</div>
-      <div id="vgl-list"><div id="vgl-empty">Esperando "Citas del día"…</div></div>
+      <div id="vgl-list"><div id="vgl-empty">Preparando copia en segundo plano…</div></div>
       <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" style="display:none">
     `;
     document.body.appendChild(root);
-    el = { root, sum: root.querySelector("#vgl-sum"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file") };
+    el = { root, sum: root.querySelector("#vgl-sum"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot") };
     root.querySelector("#vgl-load").addEventListener("click", () => el.file.click());
     root.querySelector("#vgl-diag").addEventListener("click", downloadDiagnostic);
     root.querySelector("#vgl-min").addEventListener("click", () => { state.minimized = !state.minimized; root.classList.toggle("min", state.minimized); });
@@ -368,30 +285,33 @@
     document.addEventListener("mousemove", (e) => { if (!dragging) return; root.style.left = Math.max(0, e.clientX - dx) + "px"; root.style.top = Math.max(0, e.clientY - dy) + "px"; });
     document.addEventListener("mouseup", () => { dragging = false; });
   }
-  function setSummary(text, isError) {
-    if (el.sum) { el.sum.textContent = (isError ? "⚠ " : "● ") + text; el.sum.style.color = isError ? "#FCA5A5" : "#94A3B8"; }
-  }
+  function setSummary(text, level) { if (!el.sum) return; el.sum.className = level || ""; el.sum.textContent = (level === "error" ? "⚠ " : level === "warn" ? "⏸ " : "● ") + text; }
   function signatureOf(list) { return list.map((a) => `${a.key}~${a.estado}~${a.color}~${a.pym.join("·")}`).join("||"); }
-  function render(list) {
-    const sig = signatureOf(list);
-    if (sig === state.lastSignature) return;
-    state.lastSignature = sig;
-    const pymFile = state.pymFile ? ` | PyM: ${state.pym.size}` : " | PyM sin cargar";
-    setSummary(`Monitoreo activo (${CONFIG.POLL_MS / 1000}s) | ${list.length} cita(s)${pymFile}`);
-    if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">No se detectan citas aún.<br>El vigilante reintenta automáticamente.</div>`; return; }
+
+  function render(list, source, at) {
+    const pymTxt = state.pymFile ? `PyM: ${state.pym.size}` : "PyM sin cargar";
+    if (el.dot) el.dot.className = source === "clon" ? "bg" : source === "pagina" ? "page" : "stale";
+    if (source === "clon") setSummary(`Clon en 2.º plano · ${list.length} cita(s) · refresca ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
+    else if (source === "pagina") setSummary(`En Citas del día · ${list.length} cita(s) · refresca ${CONFIG.POLL_MS / 1000}s · ${pymTxt}`);
+    else if (list.length) setSummary(`Última lectura ${at ? at.toLocaleTimeString() : "—"} · reconectando copia… · ${pymTxt}`, "warn");
+    else setSummary(`Preparando copia en segundo plano… · ${pymTxt}`);
+    el.root.classList.toggle("stale", !source && list.length > 0);
+
+    const sig = (source || "C") + signatureOf(list);
+    if (sig === state.lastSignature) return; state.lastSignature = sig;
+    if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">Aún sin citas.<br>Entra una vez a "Citas del día" para inicializar la copia.</div>`; return; }
     el.list.innerHTML = "";
     for (const a of list) {
-      const hex = COLORS[a.color] || COLORS.AZUL;
-      const card = document.createElement("div");
-      card.className = "vgl-card"; card.style.borderLeftColor = hex;
-      const pymTxt = a.pym.length ? a.pym.join(" | ") : "Sin actividades PyM pendientes";
+      const border = COLORS[a.color] || COLORS.AZUL, badge = BADGE[a.color] || BADGE.AZUL;
+      const card = document.createElement("div"); card.className = "vgl-card"; card.style.borderLeftColor = border;
+      const pymTxt2 = a.pym.length ? a.pym.join(" · ") : "Sin actividades PyM pendientes";
       card.innerHTML = `
         <div class="vgl-row">
           <span class="vgl-time">${escapeHtml(a.hora_texto)}</span>
           <span class="vgl-name">${escapeHtml(a.nombre)} ${a.doc_id ? "(" + escapeHtml(a.doc_id) + ")" : ""}</span>
-          <span class="vgl-badge" style="background:${hex}">${escapeHtml(a.estado)}</span>
+          <span class="vgl-badge" style="background:${badge}">${escapeHtml(a.estado)}</span>
         </div>
-        <div class="vgl-pym ${a.pym.length ? "" : "none"}">📋 ${escapeHtml(pymTxt)}</div>`;
+        <div class="vgl-pym ${a.pym.length ? "" : "none"}">📋 ${escapeHtml(pymTxt2)}</div>`;
       el.list.appendChild(card);
     }
   }
@@ -399,62 +319,46 @@
 
   function tick() {
     try {
-      const data = extractAgenda();
-      if (!data.visible) { render([]); return; }
       const now = new Date();
-      const processed = data.citas.map((a) => colorAndAlert(a, now));
-      if (processed.some((a) => a.sound)) fraudSound();
-      render(processed);
-    } catch (e) { console.error("[Vigilante] error en tick:", e); }
+      let data = null, source = null;
+      const cd = cloneDoc();
+      if (cd) { data = extractAgenda(cd); source = "clon"; }
+      if (!data || !data.citas.length) { const d2 = extractAgenda(document); if (d2.visible && d2.citas.length) { data = d2; source = "pagina"; CLONE.url = location.href; } }
+      if (data && data.citas.length) {
+        const processed = data.citas.map((a) => colorAndAlert(a, now));
+        if (processed.some((a) => a.sound)) fraudSound();
+        state.lastSnapshot = { at: now, list: processed, source }; render(processed, source, now);
+      } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
+      else { render([], null, null); }
+    } catch (e) { console.error("[Vigilante] tick:", e); }
   }
 
   function downloadDiagnostic() {
-    const KEEP = new Set(["class", "role", "routerlink", "type", "name"]);
-    const out = [];
+    const ddoc = cloneDoc() || document; const KEEP = new Set(["class", "role", "routerlink", "type", "name"]); const out = [];
     const sels = [".labelHora", ".status-label", ".card", ".card-body", ".text-muted", ".text-uppercase", ".fw-bold.mb-0", ".fecha", ".text-uppercase.fw-bold"];
-    const counts = {}; sels.forEach((s) => { try { counts[s] = document.querySelectorAll(s).length; } catch (e) { counts[s] = "err"; } });
-    const freq = {}; document.querySelectorAll("*").forEach((n) => (n.classList ? [...n.classList] : []).forEach((c) => (freq[c] = (freq[c] || 0) + 1)));
+    const counts = {}; sels.forEach((s) => { try { counts[s] = ddoc.querySelectorAll(s).length; } catch (e) { counts[s] = "err"; } });
+    const freq = {}; ddoc.querySelectorAll("*").forEach((n) => (n.classList ? [...n.classList] : []).forEach((c) => (freq[c] = (freq[c] || 0) + 1)));
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 120);
-    const nav = [], seen = new Set();
-    document.querySelectorAll('nav,header,aside,[role="navigation"],.sidebar,.menu,.nav,[routerlink]').forEach((r) => {
-      [r, ...r.querySelectorAll('a,button,[role="button"],li,span,.nav-link')].forEach((e2) => {
-        const t = limpio(e2.textContent); if (!t || t.length > 40) return;
-        const k = e2.tagName + "|" + t; if (seen.has(k)) return; seen.add(k);
-        nav.push({ tag: e2.tagName, text: t, routerlink: (e2.getAttribute && e2.getAttribute("routerlink")) || "" });
-      });
-    });
-    const san = (node) => {
-      const c = node.cloneNode(true);
-      const w = (x) => {
-        if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; }
-        if (x.nodeType !== 1) return;
-        [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); });
-        [...x.childNodes].forEach(w);
-      };
-      w(c); return c.outerHTML;
-    };
-    let card = "";
-    try { const h = document.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
-    out.push("===== DIAGNÓSTICO DOM SANITIZADO — VIGILANTE v3.3 =====",
-      "Fecha: " + new Date().toISOString(), "URL: " + location.href, "Título: " + document.title,
+    const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
+    let card = ""; try { const h = ddoc.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
+    out.push("===== DIAGNÓSTICO — VIGILANTE v3.5 =====", "Fecha: " + new Date().toISOString(), "Origen: " + (cloneDoc() ? "CLON" : "página"), "URL: " + location.href, "Título: " + document.title,
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
       "\n--- CLASES MÁS FRECUENTES (top 120) ---", top.map(([c, n]) => n + "  ." + c).join("\n"),
-      "\n--- NAVEGACIÓN ---", JSON.stringify(nav, null, 2),
-      "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card);
-    const blob = new Blob([out.join("\n")], { type: "text/plain" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "diagnostico_dom_SANITIZADO.txt";
-    document.body.appendChild(a); a.click(); a.remove();
-    setSummary("Diagnóstico descargado (revisa Descargas).");
+      "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card,
+      "\n--- RED: endpoints JSON vistos (VALORES REDACTADOS) ---", JSON.stringify(state.netlog.slice(0, 15), null, 2));
+    const blob = new Blob([out.join("\n")], { type: "text/plain" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "diagnostico_vigilante_SANITIZADO.txt"; document.body.appendChild(a); a.click(); a.remove();
+    setSummary("Diagnóstico descargado. Revisa Descargas.");
   }
 
   function boot() {
     if (document.getElementById("vgl-root")) return;
+    installNetHooks(window);
     buildOverlay();
+    ensureClone();
     tick();
     setInterval(tick, CONFIG.POLL_MS);
-    console.log("[Vigilante] userscript v3.3 activo (autónomo, sin dependencias).");
+    setInterval(healClone, CONFIG.CLONE_HEAL_MS);
+    console.log("[Vigilante] userscript v3.5 activo (clon en 2.º plano + persistencia).");
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
-  else boot();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
