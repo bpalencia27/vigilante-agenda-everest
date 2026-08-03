@@ -24,6 +24,10 @@
   const CONFIG = {
     POLL_MS: 5000,
     TOLERANCIA_MIN: 6.0, // ÁMBAR desde 6:00; MORADO 5:00–5:59
+    // Selectores CONFIRMADos contra el DOM real de Everest (HC | EverHealth) el
+    // 2026-08-03: 21/21 citas detectadas. Estructura de la tarjeta:
+    //   .card-body > .labelHora (hora) | .fw-bold.mb-0 (modalidad) |
+    //   .text-muted (documento) | .text-uppercase.fw-bold (nombre) | .status-label (estado)
     SEL: {
       hora: ".labelHora",
       estado: ".status-label",
