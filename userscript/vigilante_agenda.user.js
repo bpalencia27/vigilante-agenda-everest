@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      4.0.0
+// @version      4.1.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "4.0.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.1.0"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -461,10 +461,11 @@
         border:1px solid rgba(255,255,255,.12);box-shadow:0 24px 70px rgba(0,0,0,.55),0 2px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08);
         color:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px}
       #vgl-root *{box-sizing:border-box}
-      #vgl-head{height:42px;display:flex;align-items:center;gap:10px;padding:0 14px;cursor:move;user-select:none;border-bottom:1px solid rgba(255,255,255,.07)}
+      #vgl-head{height:42px;display:flex;align-items:center;gap:10px;padding:0 14px;cursor:move;user-select:none;border-bottom:1px solid rgba(255,255,255,.07);background:linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,0))}
       #vgl-tls{display:flex;align-items:center;gap:8px}
-      .vgl-tl{width:12px;height:12px;border-radius:50%;cursor:pointer;border:0;padding:0;transition:filter .15s}
-      .vgl-tl:hover{filter:brightness(1.15)}
+      .vgl-tl{width:13px;height:13px;border-radius:50%;cursor:pointer;border:0;padding:0;transition:filter .15s;font-size:10px;line-height:13px;text-align:center;color:transparent;font-weight:700;font-family:-apple-system,'Segoe UI',sans-serif}
+      #vgl-tls:hover .vgl-tl{color:rgba(0,0,0,.55)}
+      .vgl-tl:hover{filter:brightness(1.12)}
       .vgl-tl.close{background:#ff5f57}.vgl-tl.min{background:#febc2e}.vgl-tl.zoom{background:#28c840}
       #vgl-title{flex:1;text-align:center;font-weight:600;font-size:13px;letter-spacing:.2px;color:#f5f5f7;opacity:.95}
       #vgl-title small{opacity:.5;font-weight:500;margin-left:5px;font-size:11px}
@@ -476,12 +477,21 @@
       .vgl-btn{appearance:none;border:0;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:500;cursor:pointer;color:#f5f5f7;background:rgba(255,255,255,.08);transition:background .15s,transform .1s;font-family:inherit;white-space:nowrap}
       .vgl-btn:hover{background:rgba(255,255,255,.15)}
       .vgl-btn:active{transform:scale(.96)}
-      .vgl-btn.primary{background:#0a84ff;color:#fff;font-weight:600}
+      .vgl-btn.primary{background:#0a84ff;color:#fff;font-weight:600;box-shadow:0 2px 8px rgba(10,132,255,.4)}
       .vgl-btn.primary:hover{background:#3a9bff}
       .vgl-btn.on{background:rgba(48,209,88,.22);color:#30d158;font-weight:600}
       .vgl-btn.off{background:rgba(255,69,58,.20);color:#ff453a;font-weight:600}
       #vgl-sum{font-size:11.5px;color:rgba(245,245,247,.72);padding:8px 14px;border-bottom:1px solid rgba(255,255,255,.06);font-weight:500;letter-spacing:.1px}
       #vgl-sum.warn{color:#ffd60a}#vgl-sum.error{color:#ff6961}
+      #vgl-stats{display:flex;gap:6px;padding:0 12px 9px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.06)}
+      #vgl-stats:empty{display:none}
+      .vgl-stat{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:500;color:rgba(245,245,247,.62);background:rgba(255,255,255,.05);padding:3px 9px;border-radius:8px}
+      .vgl-stat b{font-weight:700;color:#f5f5f7;font-variant-numeric:tabular-nums}
+      .vgl-stat .d{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+      @keyframes vglPulse{0%,100%{box-shadow:0 0 8px rgba(48,209,88,.85),0 0 0 0 rgba(48,209,88,.45)}50%{box-shadow:0 0 8px rgba(48,209,88,.85),0 0 0 6px rgba(48,209,88,0)}}
+      #vgl-dot.bg{animation:vglPulse 2.4s ease-out infinite}
+      @keyframes vglCardIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+      .vgl-card{animation:vglCardIn .26s ease both}
       #vgl-list{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:6px}
       #vgl-list::-webkit-scrollbar{width:9px}
       #vgl-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:6px;border:2px solid transparent;background-clip:content-box}
@@ -501,7 +511,7 @@
       .vgl-chip{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:6px;background:rgba(10,132,255,.16);color:#5aa9ff;white-space:nowrap}
       .vgl-none{margin-top:6px;font-size:11px;color:rgba(245,245,247,.4);font-style:italic}
       #vgl-empty{color:rgba(245,245,247,.5);text-align:center;padding:26px 10px;font-size:12px;line-height:1.5}
-      #vgl-root.min #vgl-tools,#vgl-root.min #vgl-sum,#vgl-root.min #vgl-list{display:none}
+      #vgl-root.min #vgl-tools,#vgl-root.min #vgl-sum,#vgl-root.min #vgl-stats,#vgl-root.min #vgl-list{display:none}
       #vgl-dock{position:fixed;bottom:22px;right:22px;z-index:2147483647;display:none;align-items:center;gap:8px;cursor:pointer;padding:9px 14px;border-radius:14px;
         background:rgba(28,28,30,.72);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);
         border:1px solid rgba(255,255,255,.12);box-shadow:0 12px 34px rgba(0,0,0,.5);color:#f5f5f7;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;font-size:12.5px;font-weight:600;transition:transform .12s}
@@ -524,9 +534,9 @@
     root.innerHTML = `
       <div id="vgl-head">
         <div id="vgl-tls">
-          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar"></button>
-          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar"></button>
-          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar"></button>
+          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)">×</button>
+          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)">−</button>
+          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo">+</button>
         </div>
         <div id="vgl-title">Vigilante PyM<small>v${VERSION}</small></div>
         <span id="vgl-dot" title="origen de datos"></span>
@@ -539,11 +549,12 @@
         <button class="vgl-btn" id="vgl-diag" title="Diagnóstico (sin datos de pacientes)">Diag</button>
       </div>
       <div id="vgl-sum">Iniciando monitoreo…</div>
+      <div id="vgl-stats"></div>
       <div id="vgl-list"><div id="vgl-empty">Preparando copia en segundo plano…</div></div>
       <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" style="display:none">
     `;
     document.body.appendChild(root);
-    el = { root, sum: root.querySelector("#vgl-sum"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot") };
+    el = { root, sum: root.querySelector("#vgl-sum"), stats: root.querySelector("#vgl-stats"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot") };
     root.querySelector("#vgl-load").addEventListener("click", () => el.file.click());
     root.querySelector("#vgl-diag").addEventListener("click", downloadDiagnostic);
     root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
@@ -553,6 +564,7 @@
     root.querySelector("#vgl-tl-close").addEventListener("click", () => setWinState("dock"));
     root.querySelector("#vgl-tl-min").addEventListener("click", () => setWinState(winState === "min" ? "full" : "min"));
     root.querySelector("#vgl-tl-zoom").addEventListener("click", () => setWinState("full"));
+    root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Vigilante PyM";
     dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Vigilante PyM</span>`;
     dock.addEventListener("click", () => setWinState("full"));
@@ -569,6 +581,17 @@
   }
   function setSummary(text, level) { if (!el.sum) return; el.sum.className = level || ""; el.sum.textContent = (level === "error" ? "⚠ " : level === "warn" ? "⏸ " : "") + text; }
   function signatureOf(list) { return list.map((a) => `${a.key}~${a.estado}~${a.color}~${a.pym.join("·")}`).join("||"); }
+  // Barra de estadísticas: "En sala" = confirmadas del momento; "Atendidas" ya culminaron (no cuentan como actuales).
+  function renderStats(list) {
+    if (!el.stats) return;
+    if (!list.length) { el.stats.innerHTML = ""; return; }
+    let ensala = 0, pend = 0, atend = 0;
+    for (const a of list) { const s = (a.estado || "").toLowerCase(); if (s.includes("en sala")) ensala++; else if (s.includes("sin presentarse")) pend++; else if (s.includes("atendido")) atend++; }
+    el.stats.innerHTML =
+      `<span class="vgl-stat"><span class="d" style="background:#30d158"></span>En sala <b>${ensala}</b></span>` +
+      `<span class="vgl-stat"><span class="d" style="background:#ff9f0a"></span>Sin presentarse <b>${pend}</b></span>` +
+      `<span class="vgl-stat"><span class="d" style="background:rgba(245,245,247,.4)"></span>Atendidas <b>${atend}</b></span>`;
+  }
 
   function render(list, source, at) {
     const pymTxt = state.pymFile ? `PyM: ${state.pym.size}` : "PyM sin cargar";
@@ -580,6 +603,7 @@
     else if (list.length) setSummary(`Última lectura ${hora} · reconectando copia… · ${pymTxt}`, "warn");
     else setSummary(`Preparando copia en segundo plano… · ${pymTxt}`);
     el.root.classList.toggle("stale", !source && list.length > 0);
+    renderStats(list);
 
     const sig = (source || "C") + signatureOf(list);
     if (sig === state.lastSignature) return; state.lastSignature = sig;
@@ -606,7 +630,7 @@
   // Saludo AZUL: UNA sola vez al día en todo el navegador (antes salía en cada pestaña/recarga).
   function helloOncePerDay(total, conf) {
     try { if (localStorage.getItem("vgl_hello") === todayStamp()) return; localStorage.setItem("vgl_hello", todayStamp()); } catch (e) {}
-    notify("AZUL", "ℹ Vigilante activo", `${total} cita(s) en agenda · ${conf} ya confirmada(s)`, false);
+    notify("AZUL", "ℹ Vigilante activo", `${total} cita(s) en agenda · ${conf} en sala ahora`, false);
   }
   function tick() {
     try {
@@ -622,7 +646,7 @@
           // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
           state.summarized = true;
           processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          if (leader) helloOncePerDay(processed.length, processed.filter((a) => /en sala|atendido/.test((a.estado || "").toLowerCase())).length);
+          if (leader) helloOncePerDay(processed.length, processed.filter((a) => /en sala/.test((a.estado || "").toLowerCase())).length);
         } else if (leader) {
           processed.forEach(maybeNotify);
         }
