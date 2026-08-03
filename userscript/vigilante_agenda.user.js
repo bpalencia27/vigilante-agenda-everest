@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.7.0
+// @version      3.8.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -34,6 +34,10 @@
     CLONE_REFRESH_MS: 30000,  // recarga periódica del clon: asegura datos frescos (stopgap hasta polling directo)
     TOLERANCIA_MIN: 6.0,
     AGENDA_PATH: "/viva/HCHealth/",
+    // Actividades PyM a OCULTAR porque la meta ya está cumplida en la IPS (ETS: solo se
+    // conserva VIH). Coincidencia por texto sin acentos/minúsculas contra encabezado+etiqueta.
+    // VIH SIEMPRE se conserva. Edita esta lista si cambian las metas.
+    EXCLUDE_PYM: ["vdrl", "sifilis", "hepatitis", "hepb", "hepc"],
     SEL: {
       hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
       documento: ".text-muted", nombre: [".text-uppercase.fw-bold", ".text-uppercase"],
@@ -67,6 +71,12 @@
   function isPending(val) { if (val === null || val === undefined) return false; const s = String(val).trim().toLowerCase(); return s === "susceptible" || s === "pendiente" || s.startsWith("tamizar"); }
   function friendly(h) { if (FRIENDLY[h]) return FRIENDLY[h]; const t = h.replace(/_/g, " ").trim().toLowerCase(); return t.charAt(0).toUpperCase() + t.slice(1); }
   function activityLabel(header, val) { const f = friendly(header); const s = String(val).trim().toLowerCase(); if (s === "susceptible" || s === "pendiente") return f; return `${f} — ${String(val).trim()}`; }
+  function stripAccents(s) { return (s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+  function isExcludedActivity(header, label) {
+    const hay = stripAccents((header + " " + label).toLowerCase());
+    if (hay.includes("vih")) return false; // VIH siempre se conserva
+    return CONFIG.EXCLUDE_PYM.some((k) => hay.includes(k));
+  }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
 
   function indexRows(headersRaw, rows) {
@@ -79,7 +89,7 @@
     for (const row of rows) {
       const docKey = normalizeKey(row[docIdx]); if (!docKey) continue;
       const bucket = map.get(docKey) || [];
-      for (let i = 0; i < headers.length; i++) { if (i === docIdx) continue; if (isPending(row[i])) { const label = activityLabel(headers[i], row[i]); if (!bucket.includes(label)) bucket.push(label); } }
+      for (let i = 0; i < headers.length; i++) { if (i === docIdx) continue; if (isPending(row[i])) { const label = activityLabel(headers[i], row[i]); if (isExcludedActivity(headers[i], label)) continue; if (!bucket.includes(label)) bucket.push(label); } }
       map.set(docKey, bucket);
     }
     return map;
@@ -328,7 +338,7 @@
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.7</span>
+        <span id="vgl-title">Vigilante PyM v3.8</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
