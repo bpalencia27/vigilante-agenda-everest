@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.6.0
+// @version      3.6.1
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -168,16 +168,16 @@
   function apptKey(a) { return a.doc_id ? a.doc_id : `${a.hora_texto}|${a.nombre}|${a.index}`; }
   function colorAndAlert(a, now) {
     const st = (a.estado || "").toLowerCase(); const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
-    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0; let color = "AZUL", sound = false;
+    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0; let color = "AZUL", sound = false, reason = "";
     if (st.includes("en sala")) { if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } } else color = "VERDE"; }
     else if (st.includes("atendido")) { color = state.alertedFraud.has(key) ? "ROJO" : "VERDE"; }
-    else if (st.includes("sin presentarse")) { if (elapsed >= grace) { color = "AMBAR"; state.fraudWatch.add(key); } else if (elapsed >= prealert) color = "MORADO"; else color = "AZUL"; }
-    else { color = (elapsed >= prealert || pym.length >= 3) ? "MORADO" : "AZUL"; }
+    else if (st.includes("sin presentarse")) { if (elapsed >= grace) { color = "AMBAR"; state.fraudWatch.add(key); } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL"; }
+    else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
     const prev = state.historical.get(key) || "";
     if (sound) state.events.push({ t: new Date().toLocaleString(), ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado });
     else if (st !== prev && prev !== "") state.events.push({ t: new Date().toLocaleString(), ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, previo: prev });
     state.historical.set(key, st);
-    return { ...a, key, color, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
+    return { ...a, key, color, reason, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
   }
 
   let audioCtx = null;
@@ -208,9 +208,16 @@
     } catch (e) {}
   }
   function notify(color, title, body, persist) { showToast(color, title, body, persist); osNotify(color, title, body, persist); }
-  const NOTIFY = { ROJO: { icon: "⛔", label: "Confirmación extemporánea (FRAUDE)", sound: true, persist: true }, AMBAR: { icon: "⚠", label: "Inasistencia registrada", persist: true } };
+  const NOTIFY = {
+    ROJO: { icon: "⛔", label: "Confirmación extemporánea (FRAUDE)", sound: true, persist: true },
+    MORADO: { icon: "⏳", label: "Última llamada: ~1 min para confirmar o pierde la cita", persist: true },
+    AMBAR: { icon: "⚠", label: "Inasistencia registrada", persist: true },
+  };
+  // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
+  function nkey(a) { return a.color === "MORADO" ? "MORADO:" + (a.reason || "") : a.color; }
   function maybeNotify(a) {
-    const prev = state.notified.get(a.key); if (prev === a.color) return; state.notified.set(a.key, a.color);
+    const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
+    if (a.color === "MORADO" && a.reason !== "tiempo") return; // el morado por "3+ PyM" no es urgente: no se notifica
     const cfg = NOTIFY[a.color]; if (!cfg) return;
     notify(a.color, `${cfg.icon} ${a.hora_texto} · ${a.estado}`, `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`, cfg.persist);
     if (cfg.sound) fraudSound();
@@ -314,7 +321,7 @@
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.6</span>
+        <span id="vgl-title">Vigilante PyM v3.6.1</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
@@ -386,7 +393,7 @@
           // Estado inicial: se SIEMBRA sin notificar (política de no-inferencia de la v2.5;
           // solo se alerta de eventos que ocurran EN DIRECTO tras la activación).
           state.summarized = true;
-          processed.forEach((a) => state.notified.set(a.key, a.color));
+          processed.forEach((a) => state.notified.set(a.key, nkey(a)));
           const conf = processed.filter((a) => /en sala|atendido/.test((a.estado || "").toLowerCase())).length;
           notify("AZUL", "ℹ Vigilante activo", `${processed.length} cita(s) en agenda · ${conf} ya confirmada(s)`, false);
         } else {
