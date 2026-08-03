@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.6.2
+// @version      3.7.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO (copia invisible que comparte la sesión), muestra PyM susceptibles y lanza notificaciones de Windows por colores (VERDE/ÁMBAR/ROJO/AZUL) que salen por encima de cualquier ventana. Sin .exe ni dependencias de internet: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
 // @match        *://*.everestintelligent.com/*
-// @run-at       document-idle
+// @run-at       document-start
 // @noframes
 // @grant        none
 // ==/UserScript==
@@ -30,7 +30,8 @@
 
   const CONFIG = {
     POLL_MS: 5000,
-    CLONE_HEAL_MS: 60000,   // si el clon pierde la agenda, intenta recargarlo
+    CLONE_HEAL_MS: 60000,     // si el clon pierde la agenda, intenta recargarlo
+    CLONE_REFRESH_MS: 30000,  // recarga periódica del clon: asegura datos frescos (stopgap hasta polling directo)
     TOLERANCIA_MIN: 6.0,
     AGENDA_PATH: "/viva/HCHealth/",
     SEL: {
@@ -190,8 +191,10 @@
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="${c}"/></svg>`;
     return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
   }
+  // Anti-duplicado entre pestañas: si otra pestaña de Everest ya lanzó este aviso hace <12s, no repetir.
+  function crossTabDup(id) { try { const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0); if (now - prev < 12000) return true; localStorage.setItem(k, String(now)); return false; } catch (e) { return false; } }
   function osNotify(color, title, body, persist) {
-    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: !!persist, tag: title, renotify: true }); } catch (e) {}
+    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; if (crossTabDup("os|" + title)) return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: !!persist, tag: title, renotify: true }); } catch (e) {}
   }
   function showToast(color, title, body, persist) {
     try {
@@ -251,7 +254,8 @@
     console.log("[Vigilante] clon invisible creado ->", f.src);
   }
   function cloneDoc() { try { const d = CLONE.frame && CLONE.frame.contentWindow && CLONE.frame.contentWindow.document; return (d && d.querySelectorAll(CONFIG.SEL.hora).length) ? d : null; } catch (e) { return null; } }
-  function healClone() { const d = cloneDoc(); if (d) return; try { if (CLONE.frame && CLONE.frame.contentWindow) CLONE.frame.contentWindow.location.replace(citasUrl()); } catch (e) {} }
+  function reloadClone() { try { if (CLONE.frame) CLONE.frame.src = citasUrl(); } catch (e) {} }
+  function healClone() { if (!cloneDoc()) reloadClone(); }
 
   // ---- Captura de red (para posible polling directo del API) ----
   function redact(v, depth) {
@@ -324,7 +328,7 @@
     root.innerHTML = `
       <div id="vgl-head">
         <span id="vgl-dot" title="origen de datos"></span>
-        <span id="vgl-title">Vigilante PyM v3.6.2</span>
+        <span id="vgl-title">Vigilante PyM v3.7</span>
         <button class="vgl-btn" id="vgl-load">Cargar PyM</button>
         <button class="vgl-btn sec" id="vgl-bell" title="Activar notificaciones de Windows">🔕</button>
         <button class="vgl-btn sec" id="vgl-diag" title="Diagnóstico DOM + red (redactado)">Diag</button>
@@ -433,7 +437,9 @@
     tick();
     setInterval(tick, CONFIG.POLL_MS);
     setInterval(healClone, CONFIG.CLONE_HEAL_MS);
-    console.log("[Vigilante] userscript v3.5 activo (clon en 2.º plano + persistencia).");
+    setInterval(reloadClone, CONFIG.CLONE_REFRESH_MS);
+    console.log("[Vigilante] userscript v3.7 activo (clon 2.º plano + recarga periódica + captura temprana de red).");
   }
+  installNetHooks(window); // document-start: capturar endpoints JSON desde el arranque de la app
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
