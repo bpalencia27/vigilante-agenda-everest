@@ -1,0 +1,34 @@
+===========================================================================
+  VIGILANTE DE AGENDA — Cómo usarlo (guía rápida)
+===========================================================================
+
+PASO 1.  Haga doble clic en:  Iniciar_Vigilante.bat
+         (Se abrirá una ventana de Chrome del Vigilante.)
+
+PASO 2.  En esa ventana de Chrome, inicie sesión en Everest con su usuario
+         y contraseña, como lo hace normalmente.
+
+PASO 3.  Entre a "Citas del día" (su agenda).
+         El Vigilante empezará a mostrar sus citas en el recuadro flotante,
+         siempre visible sobre las demás ventanas.
+
+LISTO. Puede seguir su trabajo normal (entrar a Historias Clínicas, etc.);
+el recuadro del Vigilante seguirá vigilando la agenda por usted.
+
+---------------------------------------------------------------------------
+COLORES DEL RECUADRO
+  VERDE   = Paciente ingresó a tiempo.
+  MORADO  = Faltando 1 minuto para vencerse la tolerancia (aviso previo).
+  ÁMBAR   = "Sin presentarse": pasó la tolerancia sin ingresar.
+  ROJO    = ALERTA: ingresó DESPUÉS de figurar como inasistente
+            (activación extemporánea). Suena una vez.
+  AZUL    = Espera normal / información general.
+
+REPORTES
+  Al cerrar el Vigilante se guarda un registro del día en:
+  Escritorio\Reportes_Vigilante_Copiloto\
+
+NOTA
+  Use SIEMPRE la ventana de Chrome que abre el Vigilante para entrar a
+  Everest. Si cierra esa ventana, vuelva a hacer doble clic en el .bat.
+===========================================================================

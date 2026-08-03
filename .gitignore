@@ -1,0 +1,50 @@
+# ==========================================================================
+#  DATOS DE PACIENTES / PHI — NUNCA subir al repositorio
+# ==========================================================================
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+Agenda_Dia_*.xlsx
+*PyM*.xlsx
+
+# Reportes, logs y capturas (contienen datos de citas/pacientes)
+Reportes_Vigilante_Copiloto/
+*.log
+eventos_*.csv
+eventos_*.json
+captura_dom_*.txt
+estado_vigilante_*.json
+
+# Perfiles de navegador / sesión / cookies
+VigilanteEverestProfile/
+everest_cookies_temp.db
+cookies*
+*.db
+
+# ==========================================================================
+#  Entornos y artefactos de build
+# ==========================================================================
+.venv/
+venv/
+env/
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ejecutable/paquete legacy (v2.5) y binarios pesados
+Vigilante_Agenda/
+original_source/
+*.exe
+
+# ==========================================================================
+#  OS / editores
+# ==========================================================================
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+*.swp
