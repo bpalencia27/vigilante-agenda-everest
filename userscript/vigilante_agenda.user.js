@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      4.1.0
+// @version      4.1.1
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "4.1.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.1.1"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -381,12 +381,20 @@
   }
   // Prueba manual: dispara una de cada color para verificar que Windows las muestra.
   function testNotifications() {
-    if (typeof Notification !== "undefined" && Notification.permission === "denied") { setSummary("Notificaciones BLOQUEADAS en este sitio: candado de la barra de direcciones → Notificaciones → Permitir.", "error"); return; }
-    if (typeof Notification !== "undefined" && Notification.permission !== "granted") { enableOsNotifications(); return; }
-    notify("MORADO", "⏳ PRUEBA · 09:20 AM · Sin presentarse", "PACIENTE DE PRUEBA\nÚltima llamada: ~1 min para confirmar o pierde la cita", true);
-    setTimeout(() => notify("AMBAR", "⚠ PRUEBA · 09:00 AM · Sin presentarse", "PACIENTE DE PRUEBA\nInasistencia registrada", true), 1200);
-    setTimeout(() => { notify("ROJO", "⛔ PRUEBA · 08:40 AM · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)", true); fraudSound(); }, 2400);
-    setSummary("Prueba enviada: deben salir 3 avisos (morado, ámbar y rojo con sonido).");
+    if (typeof Notification === "undefined") { setSummary("Este navegador no soporta notificaciones de escritorio.", "error"); return; }
+    if (Notification.permission === "denied") {
+      setSummary("Notificaciones BLOQUEADAS: clic en el candado de la barra de direcciones → Notificaciones → Permitir, y recarga.", "error");
+      showToast("ROJO", "⛔ Prueba (solo navegador)", "Windows está bloqueado para este sitio. Actívalo en el candado de la barra de direcciones.", true);
+      return;
+    }
+    if (Notification.permission !== "granted") { setSummary("Pulsa «Permitir» en el aviso del navegador…"); enableOsNotifications(); return; }
+    // Permiso concedido: dispara en Windows Y muestra un aviso dentro del navegador (para comparar).
+    const t = new Date().toLocaleTimeString();
+    osNotify("ROJO", "⛔ Prueba " + t + " · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)", true);
+    osNotify("MORADO", "⏳ Prueba " + t + " · Sin presentarse", "PACIENTE DE PRUEBA\nÚltima llamada: ~1 min para confirmar", true);
+    showToast("ROJO", "⛔ Prueba dentro del navegador", "Si ves ESTE aviso pero no el de Windows: revisa el «Asistente de concentración» y que Edge tenga permiso de notificaciones en Configuración de Windows.", true);
+    fraudSound();
+    setSummary("Prueba enviada. Deben salir avisos de Windows; abajo verás también uno dentro del navegador para comparar.");
   }
   function enableOsNotifications() {
     try {
@@ -672,6 +680,10 @@
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
       "\n--- CLASES MÁS FRECUENTES (top 120) ---", top.map(([c, n]) => n + "  ." + c).join("\n"),
       "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card,
+      "\n--- NOTIFICACIONES ---",
+      "Soporte Notification: " + (typeof Notification !== "undefined"),
+      "Permiso actual: " + (typeof Notification !== "undefined" ? Notification.permission : "n/a"),
+      "Visibilidad de la pestaña: " + document.visibilityState,
       "\n--- RED: endpoints JSON vistos (VALORES REDACTADOS) ---", JSON.stringify(state.netlog.slice(0, 15), null, 2));
     const blob = new Blob([out.join("\n")], { type: "text/plain" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "diagnostico_vigilante_SANITIZADO.txt"; document.body.appendChild(a); a.click(); a.remove();
     setSummary("Diagnóstico descargado. Revisa Descargas.");
