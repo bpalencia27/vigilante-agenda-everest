@@ -4,8 +4,8 @@ REM ===========================================================================
 REM  VIGILANTE DE AGENDA - Lanzador (un solo clic)
 REM  1) Abre Chrome (perfil propio del Vigilante, con puerto de depuracion).
 REM  2) Abre Everest para que el medico inicie sesion y entre a "Citas del dia".
-REM  3) Inicia el Vigilante, que se conecta solo a ese Chrome.
-REM  Coloque este archivo en la MISMA carpeta que 'vigilante_agenda_pym.exe'.
+REM  3) Inicia el Vigilante: usa el .exe si existe; si no, el entorno .venv
+REM     del repositorio (creado por PREPARAR_VIGILANTE.bat).
 REM ===========================================================================
 setlocal
 title Vigilante de Agenda - Iniciando...
@@ -35,18 +35,26 @@ if "%CHROME%"=="" (
 REM --- 2) Abrir Chrome del Vigilante (perfil propio + puerto de depuracion) en Everest ---
 start "" "%CHROME%" --remote-debugging-port=%PORT% --user-data-dir="%PERFIL%" --new-window "%EVEREST%"
 
-REM --- 3) Ubicar e iniciar el Vigilante (busca junto a este .bat y en dist\) ---
+REM --- 3) Iniciar el Vigilante: .exe si existe; si no, entorno .venv ---
 set "APP="
 if exist "%~dp0vigilante_agenda_pym.exe" set "APP=%~dp0vigilante_agenda_pym.exe"
 if not defined APP if exist "%~dp0dist\vigilante_agenda_pym\vigilante_agenda_pym.exe" set "APP=%~dp0dist\vigilante_agenda_pym\vigilante_agenda_pym.exe"
 
 if defined APP (
   start "" "%APP%" --refresco 5
-) else (
-  echo  [AVISO] No se encontro 'vigilante_agenda_pym.exe' junto a este archivo.
-  echo  Coloque este .bat en la misma carpeta que el ejecutable del Vigilante.
-  echo.
-  pause
+  goto :fin
 )
 
+if exist "%~dp0.venv\Scripts\pythonw.exe" (
+  start "" "%~dp0.venv\Scripts\pythonw.exe" "%~dp0src\main.py" --refresco 5
+  goto :fin
+)
+
+echo  [AVISO] No se encontro el ejecutable ni el entorno .venv.
+echo  Si solo va a CAPTURAR el DOM: deje esta ventana de Chrome abierta,
+echo  ejecute PREPARAR_VIGILANTE.bat y luego Capturar_DOM.bat.
+echo.
+pause
+
+:fin
 endlocal
