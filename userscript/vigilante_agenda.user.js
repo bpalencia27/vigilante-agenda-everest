@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.9.2
+// @version      3.10.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "3.9.2"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "3.10.0"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -302,16 +302,19 @@
   function apptKey(a) { return a.doc_id ? a.doc_id : `${a.hora_texto}|${a.nombre}|${a.index}`; }
   function colorAndAlert(a, now) {
     const st = (a.estado || "").toLowerCase(); const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
-    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0; let color = "AZUL", sound = false, reason = "";
-    if (st.includes("en sala")) { if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } } else color = "VERDE"; }
+    const prev = state.historical.get(key) || "";
+    const grace = CONFIG.TOLERANCIA_MIN, prealert = CONFIG.TOLERANCIA_MIN - 1.0; let color = "AZUL", sound = false, reason = "", arrival = false;
+    if (st.includes("en sala")) {
+      if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } }
+      else { color = "VERDE"; if (prev.includes("sin presentarse")) arrival = true; } // llegada a tiempo tras estar "Sin presentarse"
+    }
     else if (st.includes("atendido")) { color = state.alertedFraud.has(key) ? "ROJO" : "VERDE"; }
     else if (st.includes("sin presentarse")) { if (elapsed >= grace) { color = "AMBAR"; state.fraudWatch.add(key); } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL"; }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
-    const prev = state.historical.get(key) || "";
     if (sound) state.events.push({ t: new Date().toLocaleString(), ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado });
     else if (st !== prev && prev !== "") state.events.push({ t: new Date().toLocaleString(), ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, previo: prev });
     state.historical.set(key, st);
-    return { ...a, key, color, reason, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
+    return { ...a, key, color, reason, arrival, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
   }
 
   let audioCtx = null;
@@ -327,7 +330,7 @@
   // Anti-duplicado entre pestañas: si otra pestaña de Everest ya lanzó este aviso hace <12s, no repetir.
   function crossTabDup(id) { try { const k = "vgl_n_" + id, now = Date.now(), prev = +(localStorage.getItem(k) || 0); if (now - prev < 12000) return true; localStorage.setItem(k, String(now)); return false; } catch (e) { return false; } }
   function osNotify(color, title, body, persist) {
-    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; if (crossTabDup("os|" + title)) return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: !!persist, tag: title, renotify: true }); } catch (e) {}
+    try { if (typeof Notification === "undefined" || Notification.permission !== "granted") return; if (crossTabDup("os|" + title)) return; new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: true, tag: title, renotify: true }); } catch (e) {}
   }
   function showToast(color, title, body, persist) {
     try {
@@ -340,7 +343,7 @@
       t.querySelector(".vgl-toast-x").addEventListener("click", () => t.remove());
       wrap.appendChild(t);
       while (wrap.children.length > 6) wrap.removeChild(wrap.firstChild);
-      if (!persist) setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 8000);
+      // Sin auto-cierre: toda notificación permanece hasta cerrarla manualmente (× ).
     } catch (e) {}
   }
   // Solo Windows. El toast dentro de la página queda como RESPALDO únicamente si Windows
@@ -353,12 +356,14 @@
     ROJO: { icon: "⛔", label: "Confirmación extemporánea (FRAUDE)", sound: true, persist: true },
     MORADO: { icon: "⏳", label: "Última llamada: ~1 min para confirmar o pierde la cita", persist: true },
     AMBAR: { icon: "⚠", label: "Inasistencia registrada", persist: true },
+    VERDE: { icon: "✅", label: "Confirmado a tiempo (pasó a En Sala)", persist: true },
   };
   // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
   function nkey(a) { return a.color === "MORADO" ? "MORADO:" + (a.reason || "") : a.color; }
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
     if (a.color === "MORADO" && a.reason !== "tiempo") return; // el morado por "3+ PyM" no es urgente: no se notifica
+    if (a.color === "VERDE" && !a.arrival) return; // solo la transición "Sin presentarse" -> "En Sala" (llegada a tiempo)
     const cfg = NOTIFY[a.color]; if (!cfg) return;
     notify(a.color, `${cfg.icon} ${a.hora_texto} · ${a.estado}`, `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`, cfg.persist);
     if (cfg.sound) fraudSound();

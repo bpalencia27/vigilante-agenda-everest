@@ -20,11 +20,19 @@ QUE SIGNIFICAN LOS AVISOS (por color)
   MORADO : Ultima llamada. Quedan ~1 minuto para confirmar o el paciente
            pierde la cita.
   AMBAR  : Inasistencia registrada (paso la tolerancia sin presentarse).
-  VERDE  : Ingreso a tiempo.
-  AZUL   : Estado normal / resumen del inicio del dia.
+  VERDE  : Confirmado a tiempo. Avisa cuando un paciente que estaba
+           "Sin presentarse" pasa a "En Sala" DENTRO del tiempo.
+  AZUL   : Resumen del inicio del dia (una vez).
 
-  Solo el ROJO suena. Los avisos quedan fijos hasta que usted los cierre,
-  para no perder ninguno.
+  Todos los avisos quedan FIJOS en pantalla hasta que usted los cierre a
+  mano (para no perder ninguno). Solo el ROJO suena.
+  Cada evento avisa UNA sola vez, aunque tenga varias pestanas abiertas.
+
+  NOTA: los avisos son notificaciones de Windows; aparecen sobre lo que
+  este haciendo cuando se disparan y permanecen hasta que las cierre. Un
+  navegador no puede "clavar" una ventana permanentemente encima de todas
+  las aplicaciones como lo haria un programa .exe; Windows puede moverlas
+  al Centro de Notificaciones si no las cierra, pero no desaparecen solas.
 
 INDICADOR DE ESTADO (punto de color del recuadro)
 -------------------------------------------------
