@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      3.9.0
+// @version      3.9.1
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "3.9.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "3.9.1"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
   const CONFIG = {
@@ -343,7 +343,12 @@
       if (!persist) setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 400); }, 8000);
     } catch (e) {}
   }
-  function notify(color, title, body, persist) { showToast(color, title, body, persist); osNotify(color, title, body, persist); }
+  // Solo Windows. El toast dentro de la página queda como RESPALDO únicamente si Windows
+  // no está disponible (permiso no concedido/denegado), para no perder un aviso de fraude.
+  function notify(color, title, body, persist) {
+    if (typeof Notification !== "undefined" && Notification.permission === "granted") { osNotify(color, title, body, persist); }
+    else { showToast(color, title, body, persist); }
+  }
   const NOTIFY = {
     ROJO: { icon: "⛔", label: "Confirmación extemporánea (FRAUDE)", sound: true, persist: true },
     MORADO: { icon: "⏳", label: "Última llamada: ~1 min para confirmar o pierde la cita", persist: true },
