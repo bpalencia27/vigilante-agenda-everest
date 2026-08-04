@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      4.1.2
+// @version      4.1.3
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,8 +31,17 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "4.1.2"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.1.3"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
+  // Nombre del navegador, para dar instrucciones correctas (Chrome / Edge / Brave / Opera).
+  const BROWSER_NAME = (function () {
+    const u = navigator.userAgent;
+    if (/Edg\//.test(u)) return "Microsoft Edge";
+    if (/OPR\//.test(u)) return "Opera";
+    if (/Brave/.test(u) || (navigator.brave && navigator.brave.isBrave)) return "Brave";
+    if (/Chrome\//.test(u)) return "Google Chrome";
+    return "su navegador";
+  })();
 
   const CONFIG = {
     POLL_MS: 5000,
@@ -337,7 +346,7 @@
     try {
       const n = new Notification(title, { body, icon: colorDot(color), badge: colorDot(color), requireInteraction: true, tag: title, renotify: true });
       try { n.onshow = () => { done = true; }; n.onerror = fb; } catch (e) {}
-      // Si Windows suprime el aviso (Asistente de concentración / política / Edge sin permiso),
+      // Si Windows suprime el aviso (No molestar / política / navegador sin permiso en Windows),
       // 'show' no se dispara: a los 1.6s mostramos el aviso DENTRO del navegador como respaldo.
       setTimeout(fb, 1600);
     } catch (e) { fb(); }
@@ -401,7 +410,7 @@
     const t = new Date().toLocaleTimeString();
     osNotify("ROJO", "⛔ Prueba " + t + " · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)", true);
     osNotify("MORADO", "⏳ Prueba " + t + " · Sin presentarse", "PACIENTE DE PRUEBA\nÚltima llamada: ~1 min para confirmar", true);
-    showToast("ROJO", "⛔ Prueba dentro del navegador", "Si ves ESTE aviso pero no el de Windows: revisa el «Asistente de concentración» y que Edge tenga permiso de notificaciones en Configuración de Windows.", true);
+    showToast("AZUL", "🛡️ Respaldo activo (dentro del navegador)", "Si ves ESTE aviso pero no el de Windows, no pasa nada: seguirás recibiendo todas las alertas aquí.\n\nPara activar además las de Windows: Configuración → Sistema → Notificaciones → activa «No molestar: desactivado» y busca " + BROWSER_NAME + " en la lista de aplicaciones.", true);
     fraudSound();
     setSummary("Prueba enviada. Deben salir avisos de Windows; abajo verás también uno dentro del navegador para comparar.");
   }
