@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      4.1.3
+// @version      4.2.0
 // @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
-  const VERSION = "4.1.3"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "4.2.0"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
   // Nombre del navegador, para dar instrucciones correctas (Chrome / Edge / Brave / Opera).
   const BROWSER_NAME = (function () {
@@ -331,6 +331,100 @@
   function beep(freq, ms, off) { try { audioCtx = audioCtx || new (PAGEWIN.AudioContext || PAGEWIN.webkitAudioContext || window.AudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.value = freq; o.type = "square"; const t0 = audioCtx.currentTime + off; g.gain.setValueAtTime(0.15, t0); o.start(t0); o.stop(t0 + ms / 1000); } catch (e) {} }
   function fraudSound() { beep(1000, 400, 0); beep(1200, 400, 0.45); }
 
+  // =====================================================================
+  //  CANALES DE AVISO QUE **NO** DEPENDEN DE WINDOWS
+  //  (para equipos donde la política de la empresa bloquea las
+  //   notificaciones del sistema). Todos se apagan al "reconocer".
+  // =====================================================================
+  const TONE = { ROJO: [1000, 1240], MORADO: [900, 680], AMBAR: [760, 620], VERDE: [680, 1020], AZUL: [620, 820] };
+  function playTone(color) { const t = TONE[color] || TONE.AZUL; beep(t[0], 380, 0); beep(t[1], 380, 0.42); }
+
+  // (1) SONIDO INSISTENTE: el audio suena aunque el navegador esté minimizado o
+  //     estés en Word. Se repite hasta que reconozcas la alerta.
+  let nagTimer = null, nagLeft = 0, nagColor = "ROJO";
+  function startNag(color) { stopNag(); nagColor = color; nagLeft = 40; playTone(color); nagTimer = setInterval(() => { if (nagLeft-- <= 0) { stopNag(); return; } playTone(nagColor); }, 9000); }
+  function stopNag() { if (nagTimer) clearInterval(nagTimer); nagTimer = null; }
+
+  // (2) PESTAÑA QUE PARPADEA: título + favicon. Visible en la barra de pestañas
+  //     aunque estés en otra pestaña del navegador.
+  let flashTimer = null, origTitle = null, origIcon = null, flashOn = false;
+  function faviconUrl(color) {
+    const c = COLORS[color] || COLORS.AZUL;
+    return "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="30" fill="${c}"/></svg>`);
+  }
+  function setFavicon(href) {
+    try {
+      let l = document.querySelector("link[rel~='icon'][data-vgl]");
+      if (!l) { l = document.createElement("link"); l.rel = "icon"; l.setAttribute("data-vgl", "1"); document.head.appendChild(l); }
+      if (href) l.href = href; else l.remove();
+    } catch (e) {}
+  }
+  function startFlash(text, color) {
+    stopFlash();
+    if (origTitle === null) origTitle = document.title;
+    try { const cur = document.querySelector("link[rel~='icon']:not([data-vgl])"); origIcon = cur ? cur.href : null; } catch (e) {}
+    flashTimer = setInterval(() => {
+      flashOn = !flashOn;
+      try { document.title = flashOn ? text : (origTitle || "Everest"); } catch (e) {}
+      setFavicon(flashOn ? faviconUrl(color) : (origIcon || faviconUrl("AZUL")));
+    }, 900);
+  }
+  function stopFlash() {
+    if (flashTimer) clearInterval(flashTimer); flashTimer = null;
+    try { if (origTitle !== null) document.title = origTitle; } catch (e) {}
+    setFavicon(null);
+  }
+
+  // (3) VENTANA EMERGENTE REAL: es una ventana del navegador, así que aparece en la
+  //     BARRA DE TAREAS de Windows y parpadea — se nota aunque estés en otra app.
+  //     Requiere permitir ventanas emergentes para el sitio (permiso del sitio, no del SO).
+  let popupWarned = false;
+  function popupAlert(color, title, body) {
+    if (localStorage.getItem("vgl_popup") !== "1") return;
+    try {
+      const w = window.open("", "vglAlerta", "width=470,height=290,menubar=no,toolbar=no,location=no,status=no");
+      if (!w) {
+        if (!popupWarned) { popupWarned = true; setSummary("Para la ventana emergente: permite «Ventanas emergentes» en el candado de la barra de direcciones.", "warn"); }
+        return;
+      }
+      const c = COLORS[color] || COLORS.AZUL;
+      w.document.open();
+      w.document.write(`<!doctype html><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+        <body style="margin:0;font-family:-apple-system,'Segoe UI',sans-serif;background:#0B1220;color:#f5f5f7;display:flex;align-items:center;justify-content:center;height:100vh">
+        <div style="padding:24px;text-align:center;max-width:420px">
+          <div style="width:16px;height:16px;border-radius:50%;background:${c};margin:0 auto 14px;box-shadow:0 0 16px ${c}"></div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:8px">${escapeHtml(title)}</div>
+          <div style="font-size:14px;opacity:.85;white-space:pre-line;line-height:1.45">${escapeHtml(body)}</div>
+          <button onclick="window.close()" style="margin-top:18px;background:${c};color:#001;border:0;border-radius:9px;padding:9px 20px;font-size:14px;font-weight:700;cursor:pointer">Entendido</button>
+        </div></body>`);
+      w.document.close();
+      try { w.focus(); } catch (e) {}
+    } catch (e) {}
+  }
+
+  // (4) CARTEL GRANDE dentro de Everest para el FRAUDE: imposible de ignorar
+  //     cuando el navegador está a la vista.
+  function bigAlert(color, title, body) {
+    try {
+      let ov = document.getElementById("vgl-modal");
+      if (ov) ov.remove();
+      const c = COLORS[color] || COLORS.AZUL;
+      ov = document.createElement("div"); ov.id = "vgl-modal";
+      ov.innerHTML = `<div class="vgl-modal-card" style="border-color:${c}">
+          <div class="vgl-modal-dot" style="background:${c};box-shadow:0 0 22px ${c}"></div>
+          <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
+          <button class="vgl-modal-ok" style="background:${c}">Entendido</button>
+        </div>`;
+      ov.querySelector(".vgl-modal-t").textContent = title;
+      ov.querySelector(".vgl-modal-b").textContent = body;
+      ov.querySelector(".vgl-modal-ok").addEventListener("click", () => { ov.remove(); acknowledge(); });
+      document.body.appendChild(ov);
+    } catch (e) {}
+  }
+
+  // Reconocer: apaga sonido insistente, parpadeo y cartel.
+  function acknowledge() { stopNag(); stopFlash(); const m = document.getElementById("vgl-modal"); if (m) m.remove(); }
+
   // ---- NOTIFICACIONES POR COLORES (recuperado de la v2.5): toast en Windows + respaldo en la página ----
   function colorDot(color) {
     const c = COLORS[color] || COLORS.AZUL;
@@ -386,8 +480,14 @@
     if (a.color === "MORADO" && a.reason !== "tiempo") return; // el morado por "3+ PyM" no es urgente: no se notifica
     if (a.color === "VERDE" && !a.arrival) return; // solo la transición "Sin presentarse" -> "En Sala" (llegada a tiempo)
     const cfg = NOTIFY[a.color]; if (!cfg) return;
-    notify(a.color, `${cfg.icon} ${a.hora_texto} · ${a.estado}`, `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`, cfg.persist);
-    if (cfg.sound) fraudSound();
+    const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
+    const body = `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`;
+    notify(a.color, title, body, cfg.persist);
+    // Canales que no dependen de Windows (siempre activos):
+    if (a.color === "ROJO") { startNag("ROJO"); bigAlert("ROJO", title, body); }   // fraude: insiste hasta reconocer
+    else playTone(a.color);                                                        // resto: un tono propio por color
+    startFlash(`${cfg.icon} ${a.estado} · ${a.hora_texto}`, a.color);              // pestaña parpadeando
+    popupAlert(a.color, title, body);                                              // ventana en la barra de tareas (si está activada)
   }
   function updateBell() {
     const b = document.getElementById("vgl-bell"); if (!b) return;
@@ -411,8 +511,10 @@
     osNotify("ROJO", "⛔ Prueba " + t + " · En Sala", "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)", true);
     osNotify("MORADO", "⏳ Prueba " + t + " · Sin presentarse", "PACIENTE DE PRUEBA\nÚltima llamada: ~1 min para confirmar", true);
     showToast("AZUL", "🛡️ Respaldo activo (dentro del navegador)", "Si ves ESTE aviso pero no el de Windows, no pasa nada: seguirás recibiendo todas las alertas aquí.\n\nPara activar además las de Windows: Configuración → Sistema → Notificaciones → activa «No molestar: desactivado» y busca " + BROWSER_NAME + " en la lista de aplicaciones.", true);
-    fraudSound();
-    setSummary("Prueba enviada. Deben salir avisos de Windows; abajo verás también uno dentro del navegador para comparar.");
+    // Ejercita los canales que NO dependen de Windows.
+    const pt = "⛔ PRUEBA " + t + " · En Sala", pb = "PACIENTE DE PRUEBA\nConfirmación extemporánea (FRAUDE)";
+    startNag("ROJO"); bigAlert("ROJO", pt, pb); startFlash("⛔ PRUEBA de alerta", "ROJO"); popupAlert("ROJO", pt, pb);
+    setSummary("Prueba enviada: cartel + sonido insistente + pestaña parpadeando. Pulsa «Entendido» para reconocer.");
   }
   function enableOsNotifications() {
     try {
@@ -554,6 +656,12 @@
       .vgl-toast-b{margin-top:3px;font-size:12px;color:rgba(245,245,247,.75);white-space:pre-line;line-height:1.4}
       .vgl-toast-x{cursor:pointer;color:rgba(245,245,247,.5);font-size:16px;line-height:1;padding:2px 5px;border-radius:6px}
       .vgl-toast-x:hover{background:rgba(255,255,255,.12);color:#fff}
+      #vgl-modal{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:vglIn .25s ease}
+      .vgl-modal-card{background:rgba(32,32,36,.96);border:2px solid #ff453a;border-radius:20px;padding:28px 32px;max-width:460px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6);font-family:-apple-system,'Segoe UI',system-ui,sans-serif}
+      .vgl-modal-dot{width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
+      .vgl-modal-t{font-size:18px;font-weight:700;color:#fff;margin-bottom:8px}
+      .vgl-modal-b{font-size:14px;color:rgba(245,245,247,.82);white-space:pre-line;line-height:1.5}
+      .vgl-modal-ok{margin-top:20px;border:0;border-radius:10px;padding:10px 26px;font-size:14px;font-weight:700;color:#001;cursor:pointer;font-family:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -571,6 +679,7 @@
         <button class="vgl-btn primary" id="vgl-sp" title="Traer el PyM de hoy desde SharePoint">PyM hoy</button>
         <button class="vgl-btn" id="vgl-load" title="Cargar PyM desde un archivo">Abrir</button>
         <button class="vgl-btn" id="vgl-bell" title="Activar notificaciones de Windows">Alertas</button>
+        <button class="vgl-btn" id="vgl-pop" title="Ventana emergente de alerta (aparece en la barra de tareas de Windows)">Ventana</button>
         <button class="vgl-btn" id="vgl-test" title="Probar las notificaciones">Probar</button>
         <button class="vgl-btn" id="vgl-diag" title="Diagnóstico (sin datos de pacientes)">Diag</button>
       </div>
@@ -586,6 +695,18 @@
     root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
     root.querySelector("#vgl-sp").addEventListener("click", () => autoPymFromSharepoint(false));
     root.querySelector("#vgl-test").addEventListener("click", testNotifications);
+    const pop = root.querySelector("#vgl-pop");
+    const paintPop = () => { const on = localStorage.getItem("vgl_popup") === "1"; pop.classList.toggle("on", on); pop.textContent = on ? "Ventana ✓" : "Ventana"; };
+    pop.addEventListener("click", () => {
+      const on = localStorage.getItem("vgl_popup") === "1";
+      localStorage.setItem("vgl_popup", on ? "0" : "1"); paintPop();
+      if (!on) { popupAlert("AZUL", "🛡️ Ventana de alerta activada", "Así se verá una alerta.\nAparece en la barra de tareas de Windows."); setSummary("Ventana emergente activada. Si no apareció, permite «Ventanas emergentes» en el candado de la barra."); }
+      else setSummary("Ventana emergente desactivada.");
+    });
+    paintPop();
+    // Al volver a la pestaña o hacer clic en el panel: reconocer (apaga sonido y parpadeo).
+    root.addEventListener("click", acknowledge);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") stopFlash(); });
     el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
     root.querySelector("#vgl-tl-close").addEventListener("click", () => setWinState("dock"));
     root.querySelector("#vgl-tl-min").addEventListener("click", () => setWinState(winState === "min" ? "full" : "min"));
