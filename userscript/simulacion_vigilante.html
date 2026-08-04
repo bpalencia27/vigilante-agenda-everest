@@ -1,28 +1,151 @@
-// ==UserScript==
-// @name         Vigilante de Agenda — Copiloto Everest PyM
-// @namespace    vigilante-agenda-everest
-// @version      5.1.0
-// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
-// @author       bpalencia27
-// @match        *://neps.everestintelligent.com/*
-// @match        *://*.everestintelligent.com/*
-// @match        *://viva1aips-my.sharepoint.com/*
-// @run-at       document-start
-// @noframes
-// @connect      viva1aips-my.sharepoint.com
-// @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
-//
-// --- AUTOACTUALIZACIÓN (opcional) -------------------------------------------
-// Tampermonkey puede actualizar solo el script si estas dos líneas apuntan a una
-// URL PÚBLICA del archivo .user.js. El repositorio es privado, así que hay que
-// publicarlo antes (ver README: "Gist secreto"). Cuando tengas la URL, borra los
-// dos guiones "--" del principio de las dos líneas siguientes y pon tu enlace:
-// -- @updateURL    https://gist.githubusercontent.com/USUARIO/ID/raw/vigilante_agenda.user.js
-// -- @downloadURL  https://gist.githubusercontent.com/USUARIO/ID/raw/vigilante_agenda.user.js
-// ----------------------------------------------------------------------------
-// ==/UserScript==
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Simulación · Vigilante de Agenda v5.1.0</title>
+<style>
+  :root{--ink:#12324f}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#eef2f7 0%,#dfe7f1 45%,#cbdaeb 100%);color:var(--ink);padding:26px 30px 90px}
+  .ever{max-width:780px}
+  .ever h1{font-size:20px;margin:0 0 4px}
+  .ever .sub{font-size:12.5px;color:#5b7691;margin-bottom:18px}
+  .card{background:#fff;border-radius:11px;padding:13px 17px;margin:9px 0;box-shadow:0 2px 10px rgba(20,50,80,.08);display:flex;align-items:center;gap:16px}
+  .card .labelHora{font-weight:700;font-size:15px;min-width:86px}
+  .card .who{flex:1;min-width:0}
+  .card .text-uppercase.fw-bold{font-weight:700;font-size:13.5px;letter-spacing:.2px}
+  .card .text-muted{color:#7a90a6;font-size:12px}
+  .card .fw-bold.mb-0{font-size:11px;color:#8aa0b5;font-weight:600}
+  .card .status-label{font-weight:700;font-size:12.5px;padding:4px 11px;border-radius:20px;background:#eef3f8;white-space:nowrap}
+
+  /* ---- Consola de la simulación (NO es parte del programa) ---- */
+  #sim{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#0d1b2a;color:#dbe7f3;
+       font-family:'Segoe UI',system-ui,sans-serif;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:11px 16px}
+  #sim .tag{display:inline-block;background:#ffd60a;color:#3a2f00;font-size:10px;font-weight:800;border-radius:5px;padding:2px 7px;letter-spacing:.6px;margin-right:10px}
+  #sim .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  #sim b{font-size:12.5px;font-weight:600;margin-right:6px}
+  #sim button{cursor:pointer;border:0;border-radius:9px;padding:7px 12px;font-size:12px;font-weight:600;font-family:inherit;color:#0d1b2a;background:#dbe7f3;transition:transform .1s,filter .15s}
+  #sim button:hover{filter:brightness(1.08)} #sim button:active{transform:scale(.96)}
+  #sim button.v{background:#30D158}#sim button.a{background:#FF9F0A}#sim button.r{background:#FF453A;color:#fff}
+  #sim button.m{background:#BF5AF2;color:#fff}#sim button.z{background:#2b4a68;color:#dbe7f3}
+  #sim .msg{margin-top:7px;font-size:11.5px;color:#8fb3d3;min-height:15px}
+  .simhint{max-width:780px;background:rgba(255,255,255,.6);border-left:4px solid #0a84ff;border-radius:8px;padding:11px 14px;font-size:12.5px;line-height:1.5;margin-bottom:16px;color:#28455f}
+</style></head><body>
+
+<div class="simhint"><b>Simulación del Vigilante de Agenda v5.1.0.</b> Esto de atrás imita la pantalla "Citas del día" de Everest;
+el recuadro oscuro de la derecha es el asistente <b>real</b>, con su código tal cual. Usa la barra de abajo para provocar
+las situaciones del día y mira cómo reacciona. Prueba también el buscador, los filtros, <b>Resumen</b> y <b>Ajustes</b>.</div>
+
+<div class="ever">
+  <h1>Citas del día — Everest EverHealth</h1>
+  <div class="sub">Consultorio 3 · Medicina General · agenda de hoy</div>
+  <div class="card" id="p1"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">06:40 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">CARLOS MEJIA SOTO</div><div class="text-muted">44556677</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">Atendido</span></div></div>
+  <div class="card" id="p2"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">07:00 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">MARIA GOMEZ TORO</div><div class="text-muted">12345678</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">En Sala</span></div></div>
+  <div class="card" id="p3"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">07:20 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">JUAN ALONSO PEREZ</div><div class="text-muted">87654321</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">Sin presentarse</span></div></div>
+  <div class="card" id="p4"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">07:40 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">LUIS TAPIAS RIVERA</div><div class="text-muted">11223344</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">Sin presentarse</span></div></div>
+  <div class="card" id="p5"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">08:00 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">ANA MARIA RUIZ</div><div class="text-muted">99887766</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">Sin presentarse</span></div></div>
+  <div class="card" id="p6"><div class="card-body" style="display:flex;align-items:center;gap:16px;width:100%">
+    <span class="labelHora">08:20 AM</span>
+    <div class="who"><div class="text-uppercase fw-bold">PEDRO NEL OSPINA</div><div class="text-muted">55667788</div><div class="fw-bold mb-0">PRESENCIAL</div></div>
+    <span class="status-label">Pendiente</span></div></div>
+</div>
+<div id="sim">
+  <div class="row"><span class="tag">SIMULACIÓN</span>
+    <b>Provocar:</b>
+    <button class="m" onclick="SIM.morado()">⏳ Última llamada</button>
+    <button class="a" onclick="SIM.ambar()">⚠ Inasistencia</button>
+    <button class="r" onclick="SIM.fraude()">⛔ FRAUDE</button>
+    <button class="v" onclick="SIM.verde()">✅ Llega a tiempo</button>
+    <button class="z" onclick="SIM.pym()">📋 Cargar PyM de ejemplo</button>
+    <button class="z" onclick="SIM.reset()">↻ Reiniciar</button>
+  </div>
+  <div class="msg" id="sim-msg">Listo. El asistente lee la agenda cada 2 segundos en esta simulación.</div>
+</div>
+
+<script>
+/* ====== SOPORTE DE LA SIMULACIÓN (nada de esto va en el programa real) ====== */
+(function () {
+  // 1) localStorage a prueba de file:// (Chrome lo bloquea en algunos casos)
+  try { localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); }
+  catch (e) {
+    const m = new Map();
+    Object.defineProperty(window, "localStorage", { value: {
+      getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)),
+      removeItem: (k) => m.delete(k), clear: () => m.clear(), key: (i) => [...m.keys()][i],
+      get length() { return m.size; } } });
+  }
+  // 2) Stubs de Tampermonkey para que el script se sienta "en casa"
+  window.GM_getValue = (k, d) => { const v = localStorage.getItem("GM_" + k); return v === null ? d : v; };
+  window.GM_setValue = (k, v) => localStorage.setItem("GM_" + k, String(v));
+
+  const hoy = new Date(), stamp = hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
+
+  // 3) Refresco corto y datos sembrados para que la demo se sienta viva
+  localStorage.setItem("vgl_cfg", JSON.stringify({ refresco: 2, tolerancia: 6 }));
+  const dia = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+  localStorage.setItem("vgl_stats", JSON.stringify({
+    [dia(6)]: { fraude: 1, inasistencia: 4, atiempo: 14 }, [dia(5)]: { fraude: 0, inasistencia: 6, atiempo: 12 },
+    [dia(4)]: { fraude: 3, inasistencia: 5, atiempo: 15 }, [dia(3)]: { fraude: 2, inasistencia: 3, atiempo: 18 },
+    [dia(2)]: { fraude: 0, inasistencia: 2, atiempo: 16 }, [dia(1)]: { fraude: 1, inasistencia: 7, atiempo: 11 },
+    [stamp]: { fraude: 0, inasistencia: 0, atiempo: 0, ultima: 0 } }));
+  localStorage.setItem("vgl_events", JSON.stringify({ [stamp]: [] }));
+  // En la simulación colocamos el panel arriba para que no lo tape la barra de abajo.
+  localStorage.setItem("vgl_pos", JSON.stringify({ left: Math.max(20, innerWidth - 500), top: 150, win: "full" }));
+
+  const msg = (t) => { const n = document.getElementById("sim-msg"); if (n) n.textContent = t; };
+  const card = (id) => document.getElementById(id);
+  const setEstado = (id, v) => { card(id).querySelector(".status-label").textContent = v; };
+  const setHora = (id, minAtras) => {
+    const d = new Date(); d.setMinutes(d.getMinutes() - minAtras);
+    let h = d.getHours(); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+    card(id).querySelector(".labelHora").textContent = String(h).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0") + " " + ap;
+  };
+
+  window.SIM = {
+    morado() { setHora("p5", 5.2); setEstado("p5", "Sin presentarse"); msg("ANA MARÍA RUIZ: le queda ~1 minuto para confirmar → debe salir el aviso MORADO en unos segundos."); },
+    ambar() { setHora("p3", 8); setEstado("p3", "Sin presentarse"); msg("JUAN ALONSO PÉREZ: pasó la tolerancia de 6 minutos → aviso ÁMBAR de inasistencia."); },
+    fraude() {
+      setHora("p4", 14); setEstado("p4", "Sin presentarse");
+      msg("Paso 1/2 — LUIS TAPIAS RIVERA quedó marcado como inasistencia (14 min tarde)…");
+      setTimeout(() => { setEstado("p4", "En Sala"); msg("Paso 2/2 — lo reactivaron a «En Sala» fuera de tiempo: eso es la CONFIRMACIÓN EXTEMPORÁNEA. Debe salir el cartel rojo, el sonido insistente y sumar 1 al contador de fraudes."); }, 3200);
+    },
+    verde() {
+      setHora("p6", 2); setEstado("p6", "Sin presentarse");
+      msg("Paso 1/2 — PEDRO NEL OSPINA aún está dentro de la tolerancia…");
+      setTimeout(() => { setEstado("p6", "En Sala"); msg("Paso 2/2 — llegó a tiempo: aviso VERDE de ingreso correcto."); }, 3200);
+    },
+    pym() {
+      const map = [
+        ["12345678", ["Tamización cérvix", "Cita Odontología"]],
+        ["87654321", ["Tamización VIH"]],
+        ["11223344", ["Tamización VIH", "Tamización colon"]],
+        ["99887766", ["Valoración integral", "Cita Agudeza Visual", "Tamización mama"]],
+        ["55667788", ["Tamización próstata"]]];
+      GM_setValue("vgl_pym", JSON.stringify({ date: stamp, name: "PYM_" + stamp + ".xlsx", mtime: new Date().toISOString(), map }));
+      msg("PyM de ejemplo guardado. Recargando para que el asistente lo tome como si viniera de SharePoint o de la carpeta local…");
+      setTimeout(() => location.reload(), 900);
+    },
+    reset() { localStorage.clear(); location.reload(); },
+  };
+})();
+</script>
+<script>
+/* ====== A PARTIR DE AQUÍ: EL CÓDIGO REAL DEL USERSCRIPT, SIN MODIFICAR ====== */
+
 
 /*
   v5.0 — NOVEDADES
@@ -1430,3 +1553,5 @@
   const start = IS_SP ? bootSharepoint : boot;
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
 })();
+
+</script></body></html>
