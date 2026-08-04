@@ -1,28 +1,4 @@
-// ==UserScript==
-// @name         Vigilante de Agenda — Copiloto Everest PyM
-// @namespace    vigilante-agenda-everest
-// @version      5.0.0
-// @description  Vigila "Citas del día" de Everest EN SEGUNDO PLANO, notifica por colores en Windows y trae automáticamente el PyM del día desde SharePoint. Sin .exe: no dispara antivirus.
-// @author       bpalencia27
-// @match        *://neps.everestintelligent.com/*
-// @match        *://*.everestintelligent.com/*
-// @match        *://viva1aips-my.sharepoint.com/*
-// @run-at       document-start
-// @noframes
-// @connect      viva1aips-my.sharepoint.com
-// @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
-//
-// --- AUTOACTUALIZACIÓN (opcional) -------------------------------------------
-// Tampermonkey puede actualizar solo el script si estas dos líneas apuntan a una
-// URL PÚBLICA del archivo .user.js. El repositorio es privado, así que hay que
-// publicarlo antes (ver README: "Gist secreto"). Cuando tengas la URL, borra los
-// dos guiones "--" del principio de las dos líneas siguientes y pon tu enlace:
-// -- @updateURL    https://gist.githubusercontent.com/USUARIO/ID/raw/vigilante_agenda.user.js
-// -- @downloadURL  https://gist.githubusercontent.com/USUARIO/ID/raw/vigilante_agenda.user.js
-// ----------------------------------------------------------------------------
-// ==/UserScript==
+
 
 /*
   v5.0 — NOVEDADES
