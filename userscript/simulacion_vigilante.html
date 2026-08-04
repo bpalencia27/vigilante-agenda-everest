@@ -173,7 +173,7 @@ las situaciones del día y mira cómo reacciona. Prueba también el buscador, lo
 
 (function () {
   "use strict";
-  if (window.top !== window.self) return; // nunca correr dentro de un frame (incl. el clon)
+  if (false) return; // [SIMULACIÓN] en el script real aquí se bloquea la ejecución dentro de un frame
   const VERSION = "5.1.0"; // fuente única de la versión (título + diagnóstico)
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
   // Nombre del navegador, para dar instrucciones correctas (Chrome / Edge / Brave / Opera).
@@ -926,6 +926,9 @@ las situaciones del día y mira cómo reacciona. Prueba también el buscador, lo
   // ---- CLON INVISIBLE: iframe fijado en "Citas del día", misma sesión (cookies compartidas) ----
   function citasUrl() { return CLONE.url || (location.origin + CONFIG.AGENDA_PATH); }
   function ensureClone() {
+    return; // [SIMULACIÓN] sin clon: la demo lee la agenda de esta misma página
+  }
+  function ensureCloneReal() {
     if (CLONE.frame || !document.body) return;
     const f = document.createElement("iframe");
     f.id = "vgl-clone"; f.setAttribute("aria-hidden", "true"); f.setAttribute("tabindex", "-1");
