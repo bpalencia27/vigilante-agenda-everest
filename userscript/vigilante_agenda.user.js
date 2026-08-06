@@ -199,6 +199,7 @@
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
     recordatorioPym: true,    // recordatorio (calmado) de PyM pendiente al abrir la historia
+    abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
   };
   function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
   function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
@@ -265,19 +266,37 @@
   // Paleta del sistema (estilo macOS, modo oscuro).
   const COLORS = { VERDE: "#30D158", AMBAR: "#FF9F0A", ROJO: "#FF453A", AZUL: "#0A84FF", MORADO: "#BF5AF2" };
   const TINT = { VERDE: "rgba(48,209,88,.20)", AMBAR: "rgba(255,159,10,.20)", ROJO: "rgba(255,69,58,.22)", AZUL: "rgba(10,132,255,.20)", MORADO: "rgba(191,90,242,.20)" };
+  // v7.8.1: etiquetas ACCIONABLES, confirmadas por el médico del programa (no adivinadas):
+  //  - Tamización CMB = riesgo cardiometabólico según Resolución 3280/2018 (el nombre del
+  //    archivo "Agenda_Dia_CMB" es la sede/contrato, NO la prueba — se aclaró a propósito).
+  //  - Tamización mama = examen clínico de mama Y mamografía juntos bajo un solo estado.
+  //  - Tamización colon = Sangre Oculta en Materia Fecal (SOMF), no una colonoscopia.
+  //  - Cita_AV/OD/PF pasan de nombrar la cita a decir la remisión concreta.
+  //  - Tamización cérvix: el TIPO de prueba (VPH / citología-CCU) se funde en el mismo
+  //    chip cuando el dato lo trae — ver PRUEBA_CERVIX y detalleTipoCervix() más abajo.
   const FRIENDLY = {
-    VALORACION_INTEGRAL: "Valoración integral", TAMIZACION_CMB: "Tamización CMB",
-    CITA_PF: "Cita Planificación Familiar", CITA_AV: "Cita Agudeza Visual", CITA_OD: "Cita Odontología",
-    TAMIZACION_CERVIX: "Tamización cérvix", TAMIZACION_PROSTATA: "Tamización próstata",
-    PRUEBA_CERVIX: "Prueba cérvix", TAMIZACION_MAMA: "Tamización mama", TAMIZACION_COLON: "Tamización colon",
+    VALORACION_INTEGRAL: "Valoración integral", TAMIZACION_CMB: "Tamización riesgo cardiometabólico (Res. 3280)",
+    CITA_PF: "Remitir a Planificación Familiar", CITA_AV: "Remitir a Optometría", CITA_OD: "Remitir a Odontología",
+    TAMIZACION_CERVIX: "Tamización cérvix", TAMIZACION_PROSTATA: "Tamización próstata (PSA)",
+    PRUEBA_CERVIX: "Tamización cérvix", TAMIZACION_MAMA: "Tamización mama (examen clínico + mamografía)",
+    TAMIZACION_COLON: "Sangre oculta en materia fecal (SOMF)",
     TAMIZACION_HEPC: "Tamización Hepatitis C", TAMIZACION_HEPB: "Tamización Hepatitis B",
     TAMIZACION_VDRL: "Tamización VDRL (Sífilis)", TAMIZACION_HB: "Tamización Hemoglobina",
     TAMIZACION_VIH: "Tamización VIH", TAMIZACION_HTO: "Tamización Hematocrito",
   };
+  // Tipo de prueba de cérvix a partir del valor crudo de PRUEBA_CERVIX ("Tamizar con
+  // VPH" / "Tamizar con CCU" en la base real) — se muestra dentro del chip de
+  // Tamización cérvix en vez de como un chip "Prueba cérvix" aparte y genérico.
+  function detalleTipoCervix(valorCrudo) {
+    const s = stripAccents(String(valorCrudo || "").toLowerCase());
+    if (s.includes("vph")) return "VPH";
+    if (s.includes("ccu") || s.includes("citolog")) return "citología (CCU)";
+    return String(valorCrudo || "").trim();               // valor tal cual si no se reconoce
+  }
   const DOC_EXACT = ["IDENTIFICACION", "DOCUMENTO", "CEDULA", "NUMERO_DOCUMENTO", "NRO_DOCUMENTO", "NUMERO_IDENTIFICACION"];
 
   const state = {
-    pym: new Map(), pymTodos: null, pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", historical: new Map(),
+    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", historical: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", minimized: false, lastSnapshot: null,
     notified: new Map(), summarized: false, osNotif: false,
@@ -337,6 +356,13 @@
     const t = s.trim().toLowerCase();
     return t === "susceptible" || t === "pendiente" || t.startsWith("tamizar");
   }
+  // v7.8.1: exacto "Si"/"Sí" (sin acento insensible, sin distinguir mayúsculas) para
+  // ABANDONADOS_PES — a propósito NO usa .includes() para no confundir con "Sin dato"
+  // u otros valores que casualmente empiecen distinto. Un "No" (o vacío) nunca cuenta.
+  function esSi(val) {
+    if (val === null || val === undefined) return false;
+    return stripAccents(String(val).trim().toLowerCase()) === "si";
+  }
   function friendly(h) {
     if (FRIENDLY[h]) return FRIENDLY[h];
     const bruto = String(h == null ? "" : h).replace(/_/g, " ").trim();
@@ -373,27 +399,62 @@
     // que es carísimo. Como el vocabulario de valores es diminuto ("Susceptible", "Tamizar
     // con CCU"…), se calcula una vez por columna+valor en lugar de por celda.
     const memo = [];
+    // v7.8.1: PRUEBA_CERVIX se funde dentro del chip de TAMIZACION_CERVIX (VPH/citología)
+    // en vez de salir como un chip "Prueba cérvix" aparte y genérico — confirmado con el
+    // médico del programa. Se resuelven los índices UNA vez, no en cada fila.
+    const cervixTamIdx = headers.indexOf("TAMIZACION_CERVIX");
+    const cervixPruebaIdx = headers.indexOf("PRUEBA_CERVIX");
+    // v7.8.1: ABANDONADOS_PES (o ABANDONADO_PES en la base vieja) — "Si" significa que el
+    // paciente tiene abandono en el Programa de riesgo cardiovascular (PES) y su atención
+    // de hoy debe PRIORIZAR el control de riesgo cardiovascular. No es una "actividad
+    // pendiente" más (su vocabulario es Si/No, no Susceptible/Tamizar), así que se rastrea
+    // aparte para poder darle color propio en la agenda y una alarma al abrir la historia.
+    const abandonoIdx = headers.indexOf("ABANDONADOS_PES") >= 0 ? headers.indexOf("ABANDONADOS_PES") : headers.indexOf("ABANDONADO_PES");
+    const abandono = new Set();
     return {
-      map, todos,
+      map, todos, abandono,
       push(row) {
         const docKey = normalizeKey(row[docIdx]); if (!docKey) return;
         todos.add(docKey);
+        if (abandonoIdx >= 0 && esSi(row[abandonoIdx])) abandono.add(docKey);
         const bucket = map.get(docKey) || [];
+        let detalleCervix = "", cervixYaAgregado = false;
+        if (cervixPruebaIdx >= 0) {
+          const pv = row[cervixPruebaIdx];
+          if (isPending(pv)) detalleCervix = detalleTipoCervix(pv);
+        }
         for (let i = 0; i < headers.length; i++) {
-          if (i === docIdx) continue;
+          if (i === docIdx || i === cervixPruebaIdx || i === abandonoIdx) continue;
           const celda = row[i];
           if (!isPending(celda)) continue;
-          const clave = String(celda);
-          let cm = memo[i] || (memo[i] = new Map());
-          let label = cm.get(clave);
-          if (label === undefined) {
-            // Etiqueta con el encabezado ORIGINAL (conserva tildes y mayúsculas);
-            // la decisión de ocultar usa la versión en mayúsculas.
-            const l = activityLabel((crudos && crudos[i]) || headers[i], celda);
-            label = isExcludedActivity(headers[i], l) ? null : l;
-            cm.set(clave, label);
+          let label;
+          if (i === cervixTamIdx && detalleCervix) {
+            // Con el TIPO de prueba disponible, ese detalle manda sobre el valor crudo
+            // de Tamizacion_cervix (que normalmente es solo "Susceptible"/"Pendiente"
+            // y no aporta nada que el médico no sepa ya).
+            label = "Tamización cérvix — " + detalleCervix;
+            cervixYaAgregado = true;
+          } else {
+            const clave = String(celda);
+            let cm = memo[i] || (memo[i] = new Map());
+            label = cm.get(clave);
+            if (label === undefined) {
+              // Etiqueta con el encabezado ORIGINAL (conserva tildes y mayúsculas);
+              // la decisión de ocultar usa la versión en mayúsculas.
+              const l = activityLabel((crudos && crudos[i]) || headers[i], celda);
+              label = isExcludedActivity(headers[i], l) ? null : l;
+              cm.set(clave, label);
+            }
+            if (label === null) continue;
+            if (i === cervixTamIdx) cervixYaAgregado = true;
           }
-          if (label === null) continue;
+          if (!bucket.includes(label)) bucket.push(label);
+        }
+        // Caso raro pero posible: Prueba_cervix trae un tipo de prueba pendiente pero
+        // Tamizacion_cervix NO estaba pendiente en esa fila (p. ej. datos inconsistentes
+        // entre columnas). No se pierde la información: se agrega igual.
+        if (detalleCervix && !cervixYaAgregado) {
+          const label = "Tamización cérvix — " + detalleCervix;
           if (!bucket.includes(label)) bucket.push(label);
         }
         // Solo se guardan los pacientes que SÍ tienen algo pendiente. Así el número que
@@ -410,7 +471,7 @@
       ix.push(rows[i]);
       if (maybeYield && (i & 1023) === 0) await maybeYield();
     }
-    return { map: ix.map, todos: ix.todos };
+    return { map: ix.map, todos: ix.todos, abandono: ix.abandono };
   }
   function parseCSV(text) { return text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length).map((l) => l.split(",")); }
 
@@ -707,7 +768,7 @@
       if (buf.length > XLSX_LIMITS.maxBufChars) throw new Error("la hoja «" + elegida.h.name + "» no se puede leer por filas");
     }
     if (!indexer) throw new Error("no encontré la fila de encabezados en «" + elegida.h.name + "»");
-    return { headers, map: indexer.map, todos: indexer.todos, sheetName: elegida.h.name, rowCount: nRow, sheets: hojas.map((x) => x.name) };
+    return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, sheetName: elegida.h.name, rowCount: nRow, sheets: hojas.map((x) => x.name) };
   }
   function afterPymLoaded(fileName) {
     state.pymFile = fileName;
@@ -726,7 +787,7 @@
   //  (medido con la réplica de la base piloto). Empaquetar y desempaquetar
   //  ceden el hilo por tandas: ninguna pestaña se congela por la caché.
   // =====================================================================
-  async function packPym(map, todos, meta, maybeYield) {
+  async function packPym(map, todos, abandono, meta, maybeYield) {
     const labels = []; const lidx = new Map();
     const parts = new Array(map.size); let n = 0;
     for (const [k, arr] of map) {
@@ -743,7 +804,10 @@
     if (maybeYield) await maybeYield();
     const t = Array.from(todos || []).join(",");
     if (maybeYield) await maybeYield();
-    return JSON.stringify(Object.assign({ v: 3, labels, p, t }, meta || {}));
+    // v7.8.1: cédulas con Abandonados_PES="Si" (riesgo cardiovascular) — clave "ab".
+    const ab = Array.from(abandono || []).join(",");
+    if (maybeYield) await maybeYield();
+    return JSON.stringify(Object.assign({ v: 3, labels, p, t, ab }, meta || {}));
   }
   async function unpackPym(txt, maybeYield) {
     const o = JSON.parse(txt);
@@ -762,13 +826,18 @@
     const todos = new Set();
     const t = o.t ? o.t.split(",") : [];
     for (let i = 0; i < t.length; i++) { if (t[i]) todos.add(t[i]); if (maybeYield && (i & 8191) === 0) await maybeYield(); }
-    return { map, todos, meta: o };
+    // Caché de una versión anterior a v7.8.1 sin "ab": abandono vacío, no un error.
+    const abandono = new Set();
+    const ab = o.ab ? o.ab.split(",") : [];
+    for (let i = 0; i < ab.length; i++) { if (ab[i]) abandono.add(ab[i]); if (maybeYield && (i & 8191) === 0) await maybeYield(); }
+    return { map, todos, abandono, meta: o };
   }
 
-  // v7.8: se aplica un ÍNDICE ya construido ({map, todos}) — el lector en streaming
-  // lo entrega directo, sin pasar por una tabla intermedia de filas.
+  // v7.8: se aplica un ÍNDICE ya construido ({map, todos, abandono}) — el lector en
+  // streaming lo entrega directo, sin pasar por una tabla intermedia de filas.
   function applyPymIdx(idx, fileName, mtime, nombreReal) {
     state.pym = idx.map; state.pymTodos = idx.todos;
+    state.pymAbandono = idx.abandono || new Set();
     state.pymMTime = mtime || "";
     // La huella usa el nombre CRUDO del archivo (sin las etiquetas que se le añaden para
     // mostrar), para que coincida con lo que devuelve SharePoint en la siguiente ronda.
@@ -785,7 +854,7 @@
   async function savePymCache(fileName) {
     try {
       if (typeof GM_setValue === "undefined") return;
-      const txt = await packPym(state.pym, state.pymTodos, { date: todayStamp(), name: fileName, mtime: state.pymMTime, fp: state.pymFP, fb: !!state.pymFallback }, makeYielder(15));
+      const txt = await packPym(state.pym, state.pymTodos, state.pymAbandono, { date: todayStamp(), name: fileName, mtime: state.pymMTime, fp: state.pymFP, fb: !!state.pymFallback }, makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", state.pymFallback ? "1" : ""); }
       else {
         // Ya NO es un fallo silencioso (v7.8): con el formato compacto esto exigiría una
@@ -1039,7 +1108,7 @@
     }
     const r = await readPymWorkbookStream(buffer);
     state.pymHoja = r.sheetName || "";
-    return { map: r.map, todos: r.todos };
+    return { map: r.map, todos: r.todos, abandono: r.abandono };
   }
   // Tiempo de espera POR LLAMADA: los listados deben rendirse rápido (si SharePoint no
   // responde en 12 s, no va a responder) para no dejar al usuario mirando un panel quieto;
@@ -1079,7 +1148,7 @@
       if (!u) { purgar(); return false; }               // formato v2 u otro: se re-indexa
       if (u.meta.date !== todayStamp()) { purgar(); return false; }
       if (state.pymFile) return true;                    // algo se cargó mientras se desempaquetaba
-      state.pym = u.map; state.pymTodos = u.todos; state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)"); return true;
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)"); return true;
     } catch (e) { return false; } finally { cacheCargando = false; } }
   // ¿La respuesta es de verdad un Excel? (.xlsx = ZIP, empieza por "PK"). Si SharePoint
   // devuelve la página de inicio de sesión con estado 200, aquí se cae la careta.
@@ -1119,7 +1188,7 @@
       const u = await unpackPym(raw, makeYielder(15));
       if (!u || (u.meta.id || "") !== pilotoId()) return false;   // cambió el enlace configurado en Ajustes
       if (state.pymFile) return true;
-      state.pym = u.map; state.pymTodos = u.todos; state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymFallback = true;
       afterPymLoaded((u.meta.name || "Base piloto") + " (BASE PILOTO — copia guardada)");
       return true;
@@ -1128,7 +1197,7 @@
   async function pilotoGuardar(idx, meta) {
     try {
       if (typeof GM_setValue === "undefined") return;
-      const txt = await packPym(idx.map, idx.todos, Object.assign({ date: todayStamp(), fb: true, id: pilotoId() }, meta || {}), makeYielder(15));
+      const txt = await packPym(idx.map, idx.todos, idx.abandono, Object.assign({ date: todayStamp(), fb: true, id: pilotoId() }, meta || {}), makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) GM_setValue(PILOTO_KEY, txt);
     } catch (e) {}
   }
@@ -1316,7 +1385,7 @@
         if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábrelo una vez con tu usuario y recarga esta página."); return; }
       }
       const idx = await readPym(nombre, buf);
-      const txt = await packPym(idx.map, idx.todos, { date: todayStamp(), name: nombre + (esFallback ? " (BASE PILOTO — respaldo)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
+      const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (BASE PILOTO — respaldo)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", esFallback ? "1" : ""); }
       spToast((esFallback ? "⚠ Usando base piloto (respaldo): " : "✓ PyM de hoy capturado: ") + nombre + " — " + idx.map.size + " paciente(s). Ya está disponible en Everest.");
     } catch (e) { try { spToast("No pude capturar el PyM: " + ((e && e.message) || e)); } catch (x) {} }
@@ -1346,7 +1415,7 @@
     const name = file.name.toLowerCase(); const reader = new FileReader();
     reader.onerror = () => setSummary("No se pudo leer el archivo PyM.", "error");
     if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); state.pymFallback = false; applyPymIdx(idx, file.name); } catch (err) { setSummary("Error CSV: " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
-    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : "")); } catch (err) { setSummary("Error .xlsx (" + err.message + "). Prueba .csv.", "error"); telError("xlsx", (err && err.message) || String(err)); } }; reader.readAsArrayBuffer(file); }
+    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : "")); } catch (err) { setSummary("Error .xlsx (" + err.message + "). Prueba .csv.", "error"); telError("xlsx", (err && err.message) || String(err)); } }; reader.readAsArrayBuffer(file); }
   }
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
@@ -1535,7 +1604,7 @@
   //  (para equipos donde la política de la empresa bloquea las
   //   notificaciones del sistema). Todos se apagan al "reconocer".
   // =====================================================================
-  const TONE = { ROJO: [1000, 1240], MORADO: [900, 680], AMBAR: [760, 620], VERDE: [680, 1020], AZUL: [620, 820] };
+  const TONE = { ROJO: [1000, 1240], MORADO: [900, 680], AMBAR: [760, 620], VERDE: [680, 1020], AZUL: [620, 820], PES: [520, 780] };
   function playTone(color) { const t = TONE[color] || TONE.AZUL; beep(t[0], 380, 0); beep(t[1], 380, 0.42); }
 
   // (1) SONIDO INSISTENTE: el audio suena aunque el navegador esté minimizado o
@@ -1658,6 +1727,51 @@
       document.body.appendChild(ov);
       try { ok.focus(); } catch (e2) {}
       ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
+    } catch (e) {}
+  }
+
+  // v7.8.1: ALARMA de abandono PES al abrir la historia clínica. A diferencia del
+  // recordatorio de PyM (calmado, teal, sin sonido), esta SÍ suena una vez — el médico
+  // pidió explícitamente "avisar" con algo que se note, porque implica reorientar la
+  // atención de HOY hacia el control de riesgo cardiovascular. Sigue sin insistir
+  // (un tono, no un bucle) y se reconoce con un clic; no repite hoy para este paciente.
+  function abandonoPESAlert(nombre) {
+    try {
+      let ov = document.getElementById("vgl-pes-modal");
+      if (ov) ov.remove();
+      ov = document.createElement("div"); ov.id = "vgl-pes-modal";
+      if (isLight()) ov.classList.add("light");
+      ov.innerHTML = `<div class="vgl-pes-card">
+          <div class="vgl-pes-ic">🫀</div>
+          <div class="vgl-pes-t">Prioridad de hoy: riesgo cardiovascular</div>
+          <div class="vgl-pes-n"></div>
+          <div class="vgl-pes-lead">Este paciente tiene <b>abandono registrado</b> en el Programa de riesgo cardiovascular (PES). Priorice el control de riesgo cardiovascular en la atención de hoy.</div>
+          <div class="vgl-pes-foot">Esta alarma no vuelve a salir hoy para este paciente.</div>
+          <button class="vgl-pes-ok">Entendido</button>
+        </div>`;
+      ov.querySelector(".vgl-pes-n").textContent = nombre || "Paciente";
+      const ok = ov.querySelector(".vgl-pes-ok");
+      ok.addEventListener("click", () => ov.remove());
+      document.body.appendChild(ov);
+      try { ok.focus(); } catch (e2) {}
+      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
+      playTone("PES");
+    } catch (e) {}
+  }
+  // Una vez por paciente por día, con el mismo registro de "vistos" que ya usan los
+  // demás avisos — nada nuevo que mantener. Independiente del recordatorio de PyM: un
+  // paciente puede tener ambas cosas (o solo una) y ambos avisos salen por separado.
+  function checkAbandonoPES() {
+    try {
+      if (!S.abandonoPES) return;
+      const doc = extractPacienteAbierto(); if (!doc) return;
+      const key = normalizeKey(doc); if (!key) return;
+      if (!state.pymAbandono || !state.pymAbandono.has(key)) return;
+      const uid = "pes|" + key;
+      if (avisoYaVisto(uid)) return;
+      avisoMarcarVisto(uid);
+      const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
+      abandonoPESAlert(cita ? cita.nombre : "");
     } catch (e) {}
   }
 
@@ -2066,7 +2180,7 @@
     const style = document.createElement("style");
     style.textContent = `
       /* ---- Tema: todo el panel usa variables, así el modo claro es un solo interruptor ---- */
-      #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal{
+      #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal{
         /* v7.4: --bg sube de .72 a .90 de opacidad. Auditoría de contraste: como Everest
            SIEMPRE tiene fondo claro detrás, un panel oscuro al 72% se ve en pantalla como
            gris medio (no casi-negro), y eso arrastraba a varios textos por debajo de 4.5:1
@@ -2076,12 +2190,16 @@
            antes cada uno se repetía como literal en 8-11 sitios distintos; un cambio
            de tono había que buscarlo a mano por toda la hoja. */
         --c-rojo:#ff453a;--c-morado:#bf5af2;--c-ambar:#ff9f0a;--c-verde:#30d158;--c-azul:#0a84ff;--c-recordatorio:#20c9b5;
+        /* v7.8.1: abandono en el Programa de riesgo cardiovascular (PES) — color PROPIO,
+           distinto del rojo de fraude, para no confundir dos alertas de naturaleza
+           distinta. #c2255c con texto blanco: 5.7:1 de contraste, pasa WCAG AA. */
+        --c-pes:#c2255c;
         --r-chip:8px;--r-card:14px;--r-surface:18px;
         /* --fg3 pasa de blanco con alpha a un gris OPACO fijo: el alpha heredaba el mismo
            problema de "se compone con lo que hay detrás" que --bg (ver arriba). */
         --fg:#ffffff;--fg2:rgba(245,245,247,.86);--fg3:#c7c7cc;--line:rgba(255,255,255,.07);
         --edge:rgba(255,255,255,.12);--toast:rgba(40,40,44,.94);--shadow:0 24px 70px rgba(0,0,0,.55),0 2px 10px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.08)}
-      #vgl-root.light,#vgl-dock.light,#vgl-toasts.light,#vgl-modal.light,#vgl-pym-modal.light{
+      #vgl-root.light,#vgl-dock.light,#vgl-toasts.light,#vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light{
         --bg:rgba(248,248,250,.86);--bg2:rgba(0,0,0,.04);--bg3:rgba(0,0,0,.06);--bg4:rgba(0,0,0,.11);
         --fg:#111112;--fg2:rgba(29,29,31,.82);--fg3:#5b5b5e;--line:rgba(0,0,0,.08);
         --edge:rgba(0,0,0,.10);--toast:rgba(252,252,254,.96);--shadow:0 24px 70px rgba(0,0,0,.22),0 2px 10px rgba(0,0,0,.10),inset 0 1px 0 rgba(255,255,255,.7)}
@@ -2178,10 +2296,18 @@
       .vgl-card.morado:hover{background:rgba(191,90,242,.20)}
       .vgl-card.ambar{background:rgba(255,159,10,.12);border-color:rgba(255,159,10,.4);border-left-color:var(--c-ambar)}
       .vgl-card.ambar:hover{background:rgba(255,159,10,.18)}
+      /* v7.8.1: abandono PES — SIEMPRE por encima del color de asistencia (mismo peso
+         visual que el refuerzo de fraude), va DESPUÉS en la hoja para ganar el empate de
+         especificidad si un paciente cae en dos categorías a la vez (p. ej. sin
+         presentarse Y con abandono PES: ambas banderas de texto conviven, el borde manda
+         el de mayor prioridad clínica). */
+      .vgl-card.pes{background:rgba(194,37,92,.14);border-color:rgba(194,37,92,.45);border-left-color:var(--c-pes)}
+      .vgl-card.pes:hover{background:rgba(194,37,92,.20)}
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(255,214,10,.55)}
       /* Bandera de fraude explícita: texto, no solo color — para daltonismo y para que no
          se "olvide" el motivo de la alerta al volver a mirar la tarjeta más tarde. */
       .vgl-flag{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:var(--r-chip);background:var(--c-rojo);color:#fff;white-space:nowrap;letter-spacing:.3px}
+      .vgl-flag.pes{background:var(--c-pes)}
       .vgl-row{display:flex;align-items:center;gap:9px}
       .vgl-cdot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
       .vgl-time{font-weight:600;font-size:13px;color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -2292,6 +2418,17 @@
       .vgl-pym-chip{font-size:12px;font-weight:600;padding:5px 12px;border-radius:var(--r-chip);background:rgba(32,201,181,.14);color:var(--fg);border:1px solid rgba(32,201,181,.35)}
       .vgl-pym-foot{font-size:10.5px;color:var(--fg3);margin-bottom:4px}
       .vgl-pym-ok{border:0;border-radius:10px;padding:9px 24px;font-size:13px;font-weight:700;color:#001;cursor:pointer;font-family:inherit;background:var(--c-recordatorio)}
+      /* v7.8.1: alarma de abandono PES — misma estructura del recordatorio de PyM, pero
+         con acento --c-pes (carmesí) para que se distinga a simple vista de la ayuda
+         calmada teal: esta SÍ es una alarma de prioridad clínica, no una sugerencia. */
+      #vgl-pes-modal{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);animation:vglIn .25s ease}
+      .vgl-pes-card{background:var(--bg);border:2px solid var(--c-pes);border-radius:var(--r-surface);padding:26px 30px;max-width:420px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.5);font-family:-apple-system,'Segoe UI',system-ui,sans-serif}
+      .vgl-pes-ic{width:44px;height:44px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(194,37,92,.16);border:1px solid rgba(194,37,92,.4)}
+      .vgl-pes-t{font-size:16px;font-weight:700;color:var(--fg);margin-bottom:2px}
+      .vgl-pes-n{font-size:13px;font-weight:600;color:var(--c-pes);margin-bottom:14px}
+      .vgl-pes-lead{font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.5}
+      .vgl-pes-foot{font-size:10.5px;color:var(--fg3);margin-bottom:4px}
+      .vgl-pes-ok{border:0;border-radius:10px;padding:9px 24px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;background:var(--c-pes)}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -2457,6 +2594,8 @@
         <div class="vgl-fld"><label>Recordar cargar el PyM<span class="vgl-hint">Si a esta hora no hay PyM, avisa. Vacío = nunca.</span></label><input type="time" id="c-rec" value="${escapeHtml(S.recordatorio)}"></div>
         <div class="vgl-fld"><label>Recordatorio al abrir la historia<span class="vgl-hint">Si el paciente tiene PyM pendiente, sale un aviso (que hay que cerrar a mano) recordando qué ordenar. Una vez por paciente al día.</span></label>${sw("c-pymrem", S.recordatorioPym)}</div>
         <div class="vgl-fld"><label>Probar el recordatorio<span class="vgl-hint">Muestra un ejemplo con datos de prueba, sin esperar a un paciente real.</span></label><button class="vgl-btn" id="c-pymtest">Probar</button></div>
+        <div class="vgl-fld"><label>Alarma de abandono PES<span class="vgl-hint">Si el paciente tiene abandono registrado en el Programa de riesgo cardiovascular (Abandonados_PES = "Si"), resalta su tarjeta en la agenda y suena una alarma al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
+        <div class="vgl-fld"><label>Probar la alarma PES<span class="vgl-hint">Muestra un ejemplo con datos de prueba, sin esperar a un paciente real.</span></label><button class="vgl-btn" id="c-pestest">Probar</button></div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-fld"><label>PyM automático<span class="vgl-hint">PRIMERO busca el PyM real de HOY en SharePoint (carpeta ACTIVIDADES DE PYM, revisa cada 10 min); si aún no aparece, usa la base piloto de respaldo y la reemplaza sola en cuanto encuentre la de hoy. «Abrir PyM» siempre puede reemplazar cualquiera de las dos a mano.</span></label>${sw("c-base", S.baseAuto)}</div>
@@ -2489,6 +2628,8 @@
     bind("#c-rec", "recordatorio", (n) => n.value);
     bind("#c-pymrem", "recordatorioPym", (n) => n.checked);
     q("#c-pymtest").addEventListener("click", () => pymAlert("Paciente de prueba", ["Tamización VIH", "Tamización de mama"]));
+    bind("#c-pes", "abandonoPES", (n) => n.checked);
+    q("#c-pestest").addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-base", "baseAuto", (n) => n.checked);
     bind("#c-rep", "reporte", (n) => n.checked);
     bind("#c-eq", "equipo", (n) => n.value.slice(0, 40));
@@ -2602,6 +2743,9 @@
     if (el.dockB) { el.dockB.style.display = fr ? "inline-block" : "none"; el.dockB.textContent = String(fr); }
   }
 
+  // v7.8.1: ¿tiene abandono registrado en el Programa de riesgo cardiovascular (PES)?
+  // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
+  function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
   function matchesSearch(a) {
     const q = state.busqueda; if (!q) return true;
@@ -2612,7 +2756,9 @@
   function matchesFilter(a) {
     const s = (a.estado || "").toLowerCase();
     switch (state.filtro) {
-      case "riesgo": return a.color === "ROJO" || a.color === "AMBAR" || (a.color === "MORADO" && a.reason === "tiempo");
+      // v7.8.1: abandono PES entra también a "Riesgo" — es exactamente eso, un paciente
+      // que hoy debe priorizar el control de riesgo cardiovascular.
+      case "riesgo": return a.color === "ROJO" || a.color === "AMBAR" || (a.color === "MORADO" && a.reason === "tiempo") || tieneAbandonoPES(a);
       case "sinpres": return s.includes("sin presentarse");
       case "ensala": return s.includes("en sala");
       case "pym": return a.pym && a.pym.length > 0;
@@ -2677,7 +2823,8 @@
       // v7.4: refuerzo de tarjeta completa para ROJO/MORADO/AMBAR (antes solo ROJO tenía
       // clase propia). Verde/azul se quedan sin tinte: son estados resueltos/informativos.
       const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
-      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "");
+      const esPes = tieneAbandonoPES(a);
+      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "");
       // Tres lecturas distintas y honestas: tiene pendientes / está al día / NO cruza
       // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
@@ -2690,13 +2837,16 @@
       // Bandera de fraude EXPLÍCITA en texto (no solo color): así no depende de memorizar
       // el código de color, y sigue diciendo "fraude" aunque el estado cambie más tarde.
       const flag = a.color === "ROJO" ? `<span class="vgl-flag">⛔ FRAUDE</span>` : "";
+      // v7.8.1: bandera de abandono PES, en texto — igual de explícita que la de fraude,
+      // convive con ella si un paciente cayera en ambas categorías a la vez.
+      const pesFlag = esPes ? `<span class="vgl-flag pes">❤ ABANDONO PES</span>` : "";
       card.innerHTML = `
         <div class="vgl-row">
           <span class="vgl-cdot" style="background:${col}"></span>
           <span class="vgl-time">${escapeHtml(a.hora_texto)}</span>
           <span class="vgl-name" title="${escapeHtml(a.nombre)}"><b>${highlight(a.nombre)}</b>${a.doc_id ? ` <span class="vgl-doc">${highlight(String(a.doc_id))}</span>` : ""}</span>
           ${countdown(a)}
-          ${flag}
+          ${flag}${pesFlag}
           <span class="vgl-badge" style="background:${tint}">${escapeHtml(a.estado)}</span>
         </div>${pyms}`;
       card.__vglKey = a.key;
@@ -2795,6 +2945,7 @@
         if (!API.url) apiSniffPerf(window);
         tickApi();
         checkRecordatorioPym();
+        checkAbandonoPES();
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }
   }
@@ -2964,7 +3115,7 @@
           if (raw && raw.lastIndexOf('{"v":3', 0) === 0) {
             unpackPym(raw, makeYielder(15)).then((u) => {
               if (u && u.meta.date === todayStamp() && !u.meta.fb && state.pymFallback) {
-                state.pym = u.map; state.pymTodos = u.todos; state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = false;
+                state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = false;
                 afterPymLoaded((u.meta.name || "PyM") + " (auto)");
                 notify("AZUL", "📋 Ya llegó el PyM real de hoy", (u.meta.name || "PyM") + "\n" + state.pym.size + " paciente(s). Se reemplazó la base piloto.", false, "pymreal|" + todayStamp());
               }
