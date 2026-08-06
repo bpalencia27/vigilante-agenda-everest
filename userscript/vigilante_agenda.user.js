@@ -980,11 +980,21 @@
     while ((i = n.indexOf(t, i + 1)) >= 0) { const prev = n[i - 1]; if (!(prev >= "0" && prev <= "9")) return true; }
     return false;
   }
+  function esNombreDeHoy(name) {
+    const toks = todayTokens().map(normName);
+    const n = normName(name);
+    return toks.some((t) => (/[a-z]/.test(t) ? nameHasToken(n, t) : n.includes(t)));
+  }
   function pickTodaysFile(files) {
     const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
     if (!xls.length) return null;
-    const toks = todayTokens().map(normName);
-    return xls.find((f) => { const n = normName(f.Name); return toks.some((t) => (/[a-z]/.test(t) ? nameHasToken(n, t) : n.includes(t))); }) || null;
+    return xls.find((f) => esNombreDeHoy(f.Name)) || null;
+  }
+  // v7.8: si el PyM de HOY subió en formato .xls ANTIGUO (binario de Excel 97-2003),
+  // no se puede leer desde el navegador — pero callarlo sería peor: se detecta y se
+  // avisa UNA vez al día, para que pidan re-guardarlo como .xlsx.
+  function xlsViejoDeHoy(files) {
+    return (files || []).find((f) => /\.xls$/i.test(f.Name || "") && !/^~\$/.test(f.Name || "") && esNombreDeHoy(f.Name)) || null;
   }
   // encodeURI (no encodeURIComponent): las barras del camino deben quedar como barras.
   function spListUrl(folder) { return spBase() + "/_api/web/GetFolderByServerRelativeUrl('" + encodeURI(folder || CONFIG.SP.folder) + "')/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$orderby=TimeLastModified%20desc&$top=60"; }
@@ -1134,6 +1144,9 @@
       const filas = spRows(await gmJson(spListUrl()).catch(() => null));
       const sel = pickTodaysFile(filas);
       if (!sel) {
+        // ¿Subieron el de hoy pero en .xls antiguo? Avisar claro en vez de quedarse mudo.
+        const viejo = xlsViejoDeHoy(filas);
+        if (viejo && state.leader) notify("AMBAR", "📋 El PyM de hoy está en formato .xls antiguo", viejo.Name + "\nEse formato no se puede leer desde el navegador. Pide que lo guarden como .xlsx (Excel: Guardar como → Libro de Excel) y se cargará solo en el siguiente chequeo.", false, "xlsviejo|" + todayStamp());
         if (!silent) setSummary("Aún no aparece el PyM de hoy en SharePoint. " + (state.pymFile ? "Sigo con lo que hay cargado." : "Buscando también la base piloto mientras tanto."), "warn");
         return false;
       }
