@@ -1389,7 +1389,15 @@
   function seccionActiva() {
     try {
       if (document.getElementById("anamesis")) return "historia";
-      if (document.querySelector(CONFIG.SEL.hora)) return "agenda";
+      // v7.8.1: exige HORA + ESTADO juntos (no solo .labelHora) — un médico puede tener
+      // a la vez la agenda y una pantalla de "Asignación de citas" (que probablemente
+      // también muestre horas, para reservar turnos) en pestañas distintas; con un solo
+      // marcador esa pantalla podría confundirse con la lista de "Citas del día" y abrir
+      // el panel donde no corresponde. Exigir el PAR completo (hora Y el chip de estado
+      // "En Sala"/"Sin presentarse"/"Atendido", que una pantalla de RESERVA de turnos no
+      // tendría — ahí no hay estados de asistencia, solo horarios disponibles) es mucho
+      // más específico de la vista real que vigila el script.
+      if (document.querySelector(CONFIG.SEL.hora) && document.querySelector(CONFIG.SEL.estado)) return "agenda";
       return "otra";
     } catch (e) { return "agenda"; }              // ante la duda, no apagar la vigilancia
   }
