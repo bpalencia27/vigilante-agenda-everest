@@ -300,6 +300,7 @@
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", minimized: false, lastSnapshot: null,
     notified: new Map(), summarized: false, osNotif: false,
+    lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/usercontent", // reemplazar con URL real del Apps Script
     leader: false, shared: null,
     // v5.0
     filtro: "todas", busqueda: "", muteUntil: 0, sheet: null, lastRefresh: null,
@@ -3052,6 +3053,51 @@
     } catch (e) {}
   }
 
+  // v7.8.1: chequea versión mínima requerida contra Google Apps Script público
+  // Si la versión actual es menor y NO hay historia clínica abierta, fuerza reload + limpia caché
+  function checkVersionMinimum() {
+    try {
+      if (Date.now() - (state.lastVersionCheck || 0) < 300000) return; // chequea max 1 vez cada 5 min
+      state.lastVersionCheck = Date.now();
+
+      if (!state.versionCheckUrl || state.versionCheckUrl.includes("YOUR_DEPLOYMENT_ID")) return;
+
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: state.versionCheckUrl,
+        timeout: 5000,
+        onload: (res) => {
+          try {
+            const data = JSON.parse(res.responseText);
+            const minVer = String(data.minVersion || "").trim();
+            if (!minVer) return;
+
+            // Comparar versiones: "7.8.1" vs "7.8.0" — parsea como [major, minor, patch]
+            const parse = (v) => String(v).split(".").map(x => parseInt(x, 10) || 0);
+            const [maj, min, pat] = parse(VERSION);
+            const [minMaj, minMin, minPat] = parse(minVer);
+
+            const needsUpdate = (minMaj > maj) || (minMaj === maj && minMin > min) ||
+                                (minMaj === maj && minMin === min && minPat > pat);
+            const forceReload = data.force === true;
+
+            if (needsUpdate || forceReload) {
+              // v7.8.1: SOLO reload si NO hay historia clínica abierta (evita pérdida de datos)
+              if (seccionActiva() === "historia") {
+                setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
+                return;
+              }
+              localStorage.clear();
+              setSummary(`🔄 Vigilante se actualiza a v${minVer}...`, "info");
+              setTimeout(() => location.reload(true), 2000);
+            }
+          } catch (e) { console.error("[Vigilante] version check parse:", e); }
+        },
+        onerror: () => { /* silencio si falla */ }
+      });
+    } catch (e) { console.error("[Vigilante] checkVersionMinimum:", e); }
+  }
+
   function boot() {
     if (document.getElementById("vgl-root")) return;
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
@@ -3061,6 +3107,8 @@
     setTimeout(chequearAutoUpdateLento, 6000);
     heartbeat();
     tick();
+    checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
+    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
     setInterval(paintMute, 15000);
     setInterval(pymReminderCheck, 60000);
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
