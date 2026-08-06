@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      7.8.1
+// @version      7.8.2
 // @description  MODO LIGERO: vigila la agenda de Everest por la vía directa del API (unos kB por consulta, sin copia de fondo), baja la base PyM de la sede UNA vez al día y avisa por notificaciones de Windows. Reporte MÍNIMO al tablero (resumen diario + fraudes, sin datos de pacientes). Sin rondas periódicas ni interceptación de red.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -33,6 +33,16 @@
 // ----------------------------------------------------------------------------
 
 /*
+  v7.8.2 — ACCESO AUTOMÁTICO A SHAREPOINT SIN LOGIN MANUAL (pedido explícito: varios PCs,
+  sin credenciales de administrador de Microsoft 365 disponibles para automatizar por
+  Azure AD/Graph API). Se usa el enlace de "Compartir" que SharePoint ya genera para la
+  carpeta del PyM (CONFIG.SP.shareLink): visitarlo le da al navegador acceso de lectura
+  a esa carpeta sin que nadie escriba usuario/contraseña. El script "recarga" ese enlace
+  solo (primeShareAccess) cada ~25 min y, si el listado falla (401/403), reintenta una
+  vez forzando la recarga antes de avisar que la sesión pudo vencer. El botón manual
+  «Abrir SharePoint» de Ajustes sigue existiendo como respaldo si el enlace compartido
+  llegara a caducar o a revocarse. NINGUNA credencial viaja en el script ni en el Gist.
+
   v7.8.0 — RENDIMIENTO DE FONDO PARA EQUIPOS LENTOS (medido con réplicas reales, no estimado)
   El congelamiento de pestañas al cargar venía de la tubería del PyM, que corría entera
   en el hilo de la página. Banco de pruebas con una réplica exacta de la base piloto
@@ -126,7 +136,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame
-  const VERSION = "7.8.1"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "7.8.2"; // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
   // Vigilante envuelvan el de la página). Las consultas al API van por aquí: así no
@@ -256,6 +266,12 @@
         id: "809a098b-69d1-44fe-9e51-b01f07290807",
         name: "BASE PILOTO DE CONSULTA  BELLO MAYO.xlsx",
       },
+      // v7.8.2: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
+      // → "Cualquier persona con el vínculo" / "Personas de la organización"). Visitarlo
+      // le da a ESTE navegador una cookie de acceso anónimo válida para esa carpeta, sin
+      // que el médico tenga que iniciar sesión en SharePoint con su usuario. Se "recarga"
+      // cada cierto tiempo (primeShareAccess) antes de listar/descargar.
+      shareLink: "https://viva1aips-my.sharepoint.com/:f:/g/personal/director_bello_viva1a_com_co/IgCsGP_chaHvTKYH9v-QZ2Q1AQuJo3umR5gDLjKlkUqgPS4?e=jscdBl",
     },
     SEL: {
       hora: ".labelHora", estado: ".status-label", contenedor: [".card-body", ".card"],
@@ -1084,6 +1100,21 @@
   // Listado (JSON), vía Everest con GM_xmlhttpRequest + cookies de SharePoint. Corto:
   // si la carpeta no responde en 12 s, no va a responder — mejor no dejar el panel quieto.
   const gmJson = async (url) => { const r = await gmGet(url, "json", "application/json;odata=nometadata", 12000); return r.response || (r.responseText ? JSON.parse(r.responseText) : {}); };
+
+  // v7.8.2: "PRIME" del enlace compartido de la carpeta — sin login manual. Visitar el
+  // enlace de "Compartir" de SharePoint le da a ESTE navegador (mismo dominio, mismas
+  // cookies que ya usan spListUrl/spDownloadUrl) acceso de solo lectura a esa carpeta,
+  // SIN que nadie tenga que iniciar sesión con su usuario. Se repite cada ~25 min (la
+  // cookie de acceso anónimo de SharePoint expira; "recargar" el enlace la renueva) y
+  // SIEMPRE antes de listar/descargar si la última vez falló con 401/403.
+  let shareAccessAt = 0;
+  async function primeShareAccess(force) {
+    const link = CONFIG.SP.shareLink;
+    if (!link || typeof GM_xmlhttpRequest === "undefined") return false;
+    if (!force && Date.now() - shareAccessAt < 25 * 60 * 1000) return true;
+    try { await gmGet(link, "", "", 15000); shareAccessAt = Date.now(); return true; }
+    catch (e) { return false; }
+  }
   // Del enlace de un ARCHIVO de SharePoint saca su identificador único (sourcedoc).
   // Acepta el enlace completo, el GUID con llaves o el GUID pelado.
   function parseSpDocId(u) {
@@ -1304,15 +1335,23 @@
     if (diarioEnCurso || typeof GM_xmlhttpRequest === "undefined") return false;
     diarioEnCurso = true;
     try {
+      // v7.8.2: renueva el acceso por el enlace compartido ANTES de listar — así la
+      // gran mayoría de los equipos nunca ven un 401/403 en primer lugar.
+      await primeShareAccess();
       let filas;
       try {
         filas = spRows(await gmJson(spListUrl()));
         diarioFallosSesion = 0;                          // listó bien: la sesión está viva
       } catch (eList) {
-        diarioFallosSesion++;
-        filas = [];
-        if (diarioFallosSesion === 3 && state.leader) {
-          notify("AMBAR", "🔒 Posible sesión de SharePoint vencida", "Llevo media hora sin poder revisar la carpeta del PyM — si el archivo de hoy ya está subido, no lo estoy viendo.\nAbre SharePoint una vez (Ajustes → «Abrir SharePoint») para renovar la sesión.", false, "sesionvencida|" + todayStamp());
+        // Un solo reintento: fuerza refrescar el enlace compartido (por si la cookie
+        // ya había expirado) y vuelve a listar antes de darse por vencido.
+        try { await primeShareAccess(true); filas = spRows(await gmJson(spListUrl())); diarioFallosSesion = 0; }
+        catch (eList2) {
+          diarioFallosSesion++;
+          filas = [];
+          if (diarioFallosSesion === 3 && state.leader) {
+            notify("AMBAR", "🔒 Posible sesión de SharePoint vencida", "Llevo media hora sin poder revisar la carpeta del PyM — si el archivo de hoy ya está subido, no lo estoy viendo.\nAbre SharePoint una vez (Ajustes → «Abrir SharePoint») para renovar la sesión.", false, "sesionvencida|" + todayStamp());
+          }
         }
       }
       const sel = pickTodaysFile(filas);
