@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      7.8.3
+// @version      7.8.4
 // @description  MODO LIGERO: vigila la agenda de Everest por la vía directa del API (unos kB por consulta, sin copia de fondo), baja la base PyM de la sede UNA vez al día y avisa por notificaciones de Windows. Reporte MÍNIMO al tablero (resumen diario + fraudes, sin datos de pacientes). Sin rondas periódicas ni interceptación de red.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -33,6 +33,13 @@
 // ----------------------------------------------------------------------------
 
 /*
+  v7.8.4 — ETIQUETAS DE LA BASE PILOTO ("Último VIH" / "Última SOMF"): confirmado con
+  captura real de la hoja "CONSULTA" de la base piloto que esas dos columnas son las
+  MISMAS actividades que ya se traducen en el PyM diario ("Aplica para VIH (Tamizacion
+  anual)" y "SOMF (Tamizacion de cancer de colon)"), solo que la base piloto usa un
+  nombre de columna distinto. Se agregaron ambos encabezados (con/sin tilde) al
+  diccionario FRIENDLY para que salgan igual de claros que en el PyM real de hoy.
+
   v7.8.3 — ACCESO AUTOMÁTICO A SHAREPOINT SIN LOGIN MANUAL (pedido explícito: varios PCs,
   sin credenciales de administrador de Microsoft 365 disponibles para automatizar por
   Azure AD/Graph API). Se usa el enlace de "Compartir" que SharePoint ya genera para la
@@ -136,7 +143,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame
-  const VERSION = "7.8.3"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "7.8.4"; // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
   // Vigilante envuelvan el de la página). Las consultas al API van por aquí: así no
@@ -299,6 +306,14 @@
     TAMIZACION_HEPC: "Tamización Hepatitis C", TAMIZACION_HEPB: "Tamización Hepatitis B",
     TAMIZACION_VDRL: "Tamización VDRL (Sífilis)", TAMIZACION_HB: "Tamización Hemoglobina",
     TAMIZACION_VIH: "Tamización VIH", TAMIZACION_HTO: "Tamización Hematocrito",
+    // v7.8.4: la BASE PILOTO (respaldo, distinta al PyM diario) usa otros nombres de
+    // columna para las MISMAS actividades — confirmado comparando su propia hoja
+    // "CONSULTA" ("Aplica para VIH (Tamizacion anual)" y "SOMF (Tamizacion de cancer
+    // de colon)" son la misma tamización que ya traducimos arriba). Se agregan ambas
+    // grafías (con/sin tilde) porque el encabezado crudo del Excel puede traer
+    // cualquiera de las dos según cómo se guardó el archivo.
+    "Último VIH": "Tamización VIH", "Ultimo VIH": "Tamización VIH",
+    "Última SOMF": "Sangre oculta en materia fecal (SOMF)", "Ultima SOMF": "Sangre oculta en materia fecal (SOMF)",
   };
   // Tipo de prueba de cérvix a partir del valor crudo de PRUEBA_CERVIX ("Tamizar con
   // VPH" / "Tamizar con CCU" en la base real) — se muestra dentro del chip de
