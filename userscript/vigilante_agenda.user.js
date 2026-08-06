@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      7.8.2
+// @version      7.8.3
 // @description  MODO LIGERO: vigila la agenda de Everest por la vía directa del API (unos kB por consulta, sin copia de fondo), baja la base PyM de la sede UNA vez al día y avisa por notificaciones de Windows. Reporte MÍNIMO al tablero (resumen diario + fraudes, sin datos de pacientes). Sin rondas periódicas ni interceptación de red.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -33,7 +33,7 @@
 // ----------------------------------------------------------------------------
 
 /*
-  v7.8.2 — ACCESO AUTOMÁTICO A SHAREPOINT SIN LOGIN MANUAL (pedido explícito: varios PCs,
+  v7.8.3 — ACCESO AUTOMÁTICO A SHAREPOINT SIN LOGIN MANUAL (pedido explícito: varios PCs,
   sin credenciales de administrador de Microsoft 365 disponibles para automatizar por
   Azure AD/Graph API). Se usa el enlace de "Compartir" que SharePoint ya genera para la
   carpeta del PyM (CONFIG.SP.shareLink): visitarlo le da al navegador acceso de lectura
@@ -136,7 +136,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame
-  const VERSION = "7.8.2"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "7.8.3"; // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
   // Vigilante envuelvan el de la página). Las consultas al API van por aquí: así no
@@ -266,7 +266,7 @@
         id: "809a098b-69d1-44fe-9e51-b01f07290807",
         name: "BASE PILOTO DE CONSULTA  BELLO MAYO.xlsx",
       },
-      // v7.8.2: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
+      // v7.8.3: enlace de compartir de la carpeta (generado desde SharePoint: "Compartir"
       // → "Cualquier persona con el vínculo" / "Personas de la organización"). Visitarlo
       // le da a ESTE navegador una cookie de acceso anónimo válida para esa carpeta, sin
       // que el médico tenga que iniciar sesión en SharePoint con su usuario. Se "recarga"
@@ -1101,7 +1101,7 @@
   // si la carpeta no responde en 12 s, no va a responder — mejor no dejar el panel quieto.
   const gmJson = async (url) => { const r = await gmGet(url, "json", "application/json;odata=nometadata", 12000); return r.response || (r.responseText ? JSON.parse(r.responseText) : {}); };
 
-  // v7.8.2: "PRIME" del enlace compartido de la carpeta — sin login manual. Visitar el
+  // v7.8.3: "PRIME" del enlace compartido de la carpeta — sin login manual. Visitar el
   // enlace de "Compartir" de SharePoint le da a ESTE navegador (mismo dominio, mismas
   // cookies que ya usan spListUrl/spDownloadUrl) acceso de solo lectura a esa carpeta,
   // SIN que nadie tenga que iniciar sesión con su usuario. Se repite cada ~25 min (la
@@ -1222,7 +1222,7 @@
       if (state.pymFile) return true;
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymFallback = true;
-      afterPymLoaded((u.meta.name || "Base piloto") + " (BASE PILOTO — copia guardada)");
+      afterPymLoaded((u.meta.name || "Base piloto") + " (base piloto — aún no llega la de hoy)");
       return true;
     } catch (e) { return false; }
   }
@@ -1313,8 +1313,8 @@
     // y el panel nunca alcanzaba a avisar "⚠ RESPALDO". Ahora sí marca correctamente que
     // NO es el PyM real del día, para que loadPymDiario() sepa que puede reemplazarla.
     state.pymFallback = true;
-    applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (BASE PILOTO — respaldo)", (meta && meta.mtime) || "", fb.name);
-    notify("AMBAR", "📋 Usando la base piloto (respaldo)", fb.name + "\n" + state.pym.size + " paciente(s). Aún no aparece el PyM real de hoy en SharePoint; se reemplaza solo en cuanto aparezca.", false);
+    applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (base piloto — aún no llega la de hoy)", (meta && meta.mtime) || "", fb.name);
+    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca el PyM real de hoy en SharePoint.", false);
     return true;
   }
   // v7.7: PyM DEL DÍA — primera opción. Busca en la carpeta de SharePoint (confirmada
@@ -1335,7 +1335,7 @@
     if (diarioEnCurso || typeof GM_xmlhttpRequest === "undefined") return false;
     diarioEnCurso = true;
     try {
-      // v7.8.2: renueva el acceso por el enlace compartido ANTES de listar — así la
+      // v7.8.3: renueva el acceso por el enlace compartido ANTES de listar — así la
       // gran mayoría de los equipos nunca ven un 401/403 en primer lugar.
       await primeShareAccess();
       let filas;
@@ -1425,9 +1425,9 @@
         if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábrelo una vez con tu usuario y recarga esta página."); return; }
       }
       const idx = await readPym(nombre, buf);
-      const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (BASE PILOTO — respaldo)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
+      const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (base piloto — aún no llega la de hoy)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
       if (txt.length <= 12 * 1024 * 1024) { GM_setValue("vgl_pym", txt); GM_setValue("vgl_pym_dia", todayStamp()); GM_setValue("vgl_pym_esfallback", esFallback ? "1" : ""); }
-      spToast((esFallback ? "⚠ Usando base piloto (respaldo): " : "✓ PyM de hoy capturado: ") + nombre + " — " + idx.map.size + " paciente(s). Ya está disponible en Everest.");
+      spToast((esFallback ? "⚠ Sin PyM de hoy — se usará la base piloto (referencia): " : "✓ PyM de hoy capturado: ") + nombre + " — " + idx.map.size + " paciente(s). Ya está disponible en Everest.");
     } catch (e) { try { spToast("No pude capturar el PyM: " + ((e && e.message) || e)); } catch (x) {} }
   }
 
@@ -2699,7 +2699,7 @@
       if (!ok) { n.textContent = "No está el de hoy; probando la base piloto…"; ok = await loadPymBase(false).catch(() => false); }
       if (!ok) state.pymFile = prev;
       b.disabled = false;
-      n.textContent = ok ? (state.pymFallback ? "⚠ Cargada la base PILOTO (respaldo): " : "✓ PyM de HOY cargado: ") + state.pym.size + " paciente(s)."
+      n.textContent = ok ? (state.pymFallback ? "⚠ No apareció el PyM de hoy — se cargó la base piloto (referencia, puede estar desactualizada): " : "✓ PyM de HOY cargado: ") + state.pym.size + " paciente(s)."
         : "No se pudo. Usa «Abrir SharePoint» (abajo), inicia sesión si lo pide y espera el aviso de captura — o usa «Abrir PyM».";
     });
     // v7.8: reactivar la sesión de SharePoint con un clic. El captador que ya corre en
@@ -2833,7 +2833,11 @@
 
   function render(list, source, at) {
     const sinCruce = state.pymFile && state.pym.size > 0 && list.length > 0 && list.every((a) => !a.pym || !a.pym.length);
-    const pymTxt = state.pymFile ? (`PyM: ${state.pym.size}` + (state.pymFallback ? " ⚠ RESPALDO" : "") + (sinCruce ? " ⚠ SIN CRUCE (Ajustes→Diag)" : "")) : "PyM sin cargar";
+    // v7.8.3: texto más claro cuando se está usando la base PILOTO (no la de hoy) — antes
+    // decía solo "⚠ RESPALDO", una palabra que no explica QUÉ significa ni QUÉ hacer.
+    const pymTxt = state.pymFile
+      ? (`PyM: ${state.pym.size}` + (state.pymFallback ? " · ⚠ base piloto (aún no llega la de hoy)" : "") + (sinCruce ? " ⚠ SIN CRUCE (Ajustes→Diag)" : ""))
+      : "PyM sin cargar";
     const hora = at ? at.toLocaleTimeString() : "—";
     const mute = muted() ? " · 🔕" : "";
     if (el.dot) el.dot.className = source === "api" ? "bg" : source === "pagina" ? "page" : source === "compartido" ? "page" : "stale";
