@@ -285,6 +285,13 @@
     // v5.0
     filtro: "todas", busqueda: "", muteUntil: 0, sheet: null, lastRefresh: null,
     apiCitas: null, apiEn: 0,
+    // v7.8.1: true SOLO si el propio script recogió el panel a la pastilla por estar
+    // fuera de agenda/historia clínica — para no pelear con un "×" que el médico haya
+    // pulsado a propósito (ese no se auto-restaura al volver a una vista permitida).
+    autoDocked: false,
+    // Última ventana elegida DE VERDAD por el médico (×/−/+, doble clic, o restaurada
+    // al abrir la página). El auto-recogido/auto-restaurado por sección nunca la toca.
+    userWinState: "full",
   };
   let pollTimer = null;
   function restartPolling() { if (!el || !el.root) return; if (pollTimer) clearInterval(pollTimer); pollTimer = setInterval(tick, CONFIG.POLL_MS); }
@@ -1217,11 +1224,27 @@
   // REEMPLAZA lo que hubiera (incluida la base piloto, vía el mismo applyPymIdx() que ya
   // sustituye todo el mapa de PyM, no lo mezcla).
   let diarioEnCurso = false;
+  // v7.8.1: contador de chequeos SEGUIDOS en los que ni siquiera se pudo LISTAR la
+  // carpeta (la sesión de SharePoint murió a media jornada — el caso más peligroso,
+  // porque antes fallaba en silencio total y el médico seguía con la piloto sin
+  // enterarse de que el PyM real podía llevar horas subido). A los 30 min (3
+  // chequeos de 10 min) se avisa UNA sola vez al día.
+  let diarioFallosSesion = 0;
   async function loadPymDiario(silent) {
     if (diarioEnCurso || typeof GM_xmlhttpRequest === "undefined") return false;
     diarioEnCurso = true;
     try {
-      const filas = spRows(await gmJson(spListUrl()).catch(() => null));
+      let filas;
+      try {
+        filas = spRows(await gmJson(spListUrl()));
+        diarioFallosSesion = 0;                          // listó bien: la sesión está viva
+      } catch (eList) {
+        diarioFallosSesion++;
+        filas = [];
+        if (diarioFallosSesion === 3 && state.leader) {
+          notify("AMBAR", "🔒 Posible sesión de SharePoint vencida", "Llevo media hora sin poder revisar la carpeta del PyM — si el archivo de hoy ya está subido, no lo estoy viendo.\nAbre SharePoint una vez (Ajustes → «Abrir SharePoint») para renovar la sesión.", false, "sesionvencida|" + todayStamp());
+        }
+      }
       const sel = pickTodaysFile(filas);
       if (!sel) {
         // ¿Subieron el de hoy pero en .xls antiguo? Avisar claro en vez de quedarse mudo.
@@ -1349,6 +1372,26 @@
       return { hora_texto: limpio(h.textContent), doc_id: extractDoc(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
     });
     return { visible: true, citas };
+  }
+
+  // =====================================================================
+  //  SECCIÓN ACTIVA (v7.8.1) — Everest es una SPA Angular: la página NO recarga al
+  //  cambiar de pantalla (Angular solo reemplaza el DOM interno), así que el script,
+  //  inyectado UNA sola vez por Tampermonkey al abrir Everest, seguía vigilando (leer
+  //  el DOM, sondear el API, mostrar el panel) en CUALQUIER sección, no solo en las
+  //  dos donde tiene sentido: agenda del día e historia clínica.
+  //  Detección por LISTA BLANCA (no hace falta conocer todas las demás pantallas de
+  //  Everest): los MISMOS marcadores de DOM que el script ya usaba para leer la
+  //  agenda (.labelHora, CONFIG.SEL.hora) y el recordatorio de PyM (#anamesis).
+  //  Fuera de las dos, tick() se apaga entero (DOM, API, panel) y se recoge a la
+  //  pastilla flotante; al volver, se restaura sola.
+  // =====================================================================
+  function seccionActiva() {
+    try {
+      if (document.getElementById("anamesis")) return "historia";
+      if (document.querySelector(CONFIG.SEL.hora)) return "agenda";
+      return "otra";
+    } catch (e) { return "agenda"; }              // ante la duda, no apagar la vigilancia
   }
 
   // =====================================================================
@@ -2000,12 +2043,16 @@
   let el = {};
   let winState = "full";
   // Controles de ventana estilo macOS: full / min (solo barra) / dock (pastilla flotante).
-  function setWinState(s) {
+  // v7.8.1: "auto" distingue un cambio de ventana DECIDIDO POR EL MÉDICO (clic en ×/−/+,
+  // doble clic, restaurar al abrir la página) de uno hecho por el propio script al entrar
+  // o salir de una sección permitida. Solo el primero se GUARDA (persiste entre recargas);
+  // el segundo es puramente visual y nunca pisa la preferencia real del médico.
+  function setWinState(s, auto) {
     winState = s; if (!el.root) return;
     el.root.classList.toggle("min", s === "min");
     el.root.style.display = (s === "dock") ? "none" : "flex";
     if (el.dock) el.dock.style.display = (s === "dock") ? "flex" : "none";
-    savePos();
+    if (!auto) { state.userWinState = s; savePos(); }
   }
   function buildOverlay() {
     const style = document.createElement("style");
@@ -2688,9 +2735,24 @@
   }
   function tick() {
     try {
-      const now = new Date();
       const leader = heartbeat();
       diaNuevo();                                    // reinicio limpio si el turno cruzó la medianoche
+      // v7.8.1: fuera de agenda del día / historia clínica, NO se vigila — ni lectura
+      // de DOM, ni sondeo del API, ni panel abierto. Se recoge sola a la pastilla
+      // flotante (el "×" real del usuario NO se toca: autoDocked distingue uno de otro)
+      // y se restaura sola al volver a una de las dos vistas permitidas. heartbeat() y
+      // diaNuevo() SIEMPRE corren primero (baratos, importantes: continuidad del
+      // liderazgo entre pestañas y limpieza de medianoche aunque el médico esté en
+      // otra pantalla en ese instante).
+      if (seccionActiva() === "otra") {
+        if (el.root && winState !== "dock") { state.autoDocked = true; setWinState("dock", true); }
+        return;
+      }
+      // Al volver a una sección permitida, se restaura la ÚLTIMA ventana que el médico
+      // eligió de verdad (state.userWinState) — no siempre "full": si la había dejado
+      // minimizada, sigue minimizada; si la había cerrado a mano, ver más abajo.
+      if (state.autoDocked) { state.autoDocked = false; setWinState(state.userWinState, true); }
+      const now = new Date();
       // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
       // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
       // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
@@ -2858,16 +2920,25 @@
       if (heartbeat()) { const ok = await loadPymDiario(true).catch(() => false); if (!ok) schedulePymBase(); }
       else schedulePymBase();
     }, 4000);
-    // v7.7.1: una vez se tiene el PyM REAL de hoy (no el piloto), deja de revisar —
-    // no hay nada nuevo que buscar hasta mañana. Si algo borra la caché o cambia el
-    // día, esto se nota solo (GM_getValue ya no coincide con hoy) y retoma la
-    // búsqueda sin que haga falta reiniciar nada a mano.
+    // v7.8.1: SIEMPRE se vuelve a listar la carpeta (una consulta de ~60 filas, unos KB —
+    // barato) aunque el PyM real de hoy ya esté cargado. Antes ("v7.7.1: deja de revisar")
+    // el chequeo se APAGABA por completo en cuanto cargaba el de hoy — así que una
+    // corrección subida a mediodía con el MISMO nombre (mtime nuevo), o un archivo
+    // equivocado cargado a mano con «Abrir PyM», quedaban pegados el resto del turno SIN
+    // ninguna forma de corregirse solos (hallazgo de la auditoría adversarial). La huella
+    // nombre+fecha-de-modificación (pymFP, dentro de loadPymDiario) sigue siendo la que
+    // decide si hace falta VOLVER A DESCARGAR — solo cambia que ahora sí se vuelve a mirar.
     setInterval(() => {
       if (!heartbeat()) return;
-      const yaListoHoy = state.pymFile && !state.pymFallback && GM_getValue("vgl_pym_dia", "") === todayStamp();
-      if (!yaListoHoy) loadPymDiario(true);
-      // v7.8.1: revisión de frescura de la PILOTO (máx. 1 vez por franja mañana/tarde;
-      // se autolimita adentro, así que colgarla de este mismo intervalo no cuesta nada).
+      loadPymDiario(true);
+      // v7.8.1: si después de todo esto sigue sin haber NADA cargado (ni PyM de hoy ni
+      // piloto — p. ej. los 3 intentos del arranque se agotaron por una falla pasajera de
+      // red a las 6 a.m.), se reintenta la piloto aquí. Sin esto, la promesa de "si no
+      // está el de hoy, usa la piloto mientras tanto" solo regía los primeros ~4 minutos
+      // de vida de la pestaña (hallazgo de la auditoría adversarial).
+      if (!state.pymFile) loadPymBase(true);
+      // Revisión de frescura de la PILOTO (máx. 1 vez por franja mañana/tarde; se
+      // autolimita adentro, así que colgarla de este mismo intervalo no cuesta nada).
       pilotoFreshCheck();
     }, 10 * 60 * 1000);
     // Enganche del captador: si la base se capturó en la pestaña de SharePoint DESPUÉS
