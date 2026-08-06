@@ -300,7 +300,7 @@
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", minimized: false, lastSnapshot: null,
     notified: new Map(), summarized: false, osNotif: false,
-    lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/usercontent", // reemplazar con URL real del Apps Script
+    lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/AKfycbwXwwQdSGGMyt4X6Wf5YbJVRZjB_z_cYEVVpRoebO_VrobIhtHKD3nAJs689kq3R7tC/exec",
     leader: false, shared: null,
     // v5.0
     filtro: "todas", busqueda: "", muteUntil: 0, sheet: null, lastRefresh: null,
