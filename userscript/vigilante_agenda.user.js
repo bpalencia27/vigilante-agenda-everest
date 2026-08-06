@@ -1032,6 +1032,9 @@
       // OJO: se borra TAMBIÉN la marca "vgl_pym_dia"; si queda puesta, el captador de la
       // pestaña de SharePoint cree que la base de hoy ya está y no vuelve a capturarla.
       const purgar = () => { try { GM_setValue("vgl_pym", ""); GM_setValue("vgl_pym_dia", ""); } catch (e2) {} };
+      // Un paquete que no sea v3 (p. ej. la caché v2 del día de la actualización) se
+      // descarta por el PREFIJO, sin pagar el JSON.parse de varios MB solo para tirarlo.
+      if (raw.lastIndexOf('{"v":3', 0) !== 0) { purgar(); return false; }
       // La fecha viaja al FINAL del paquete (los metadatos van tras los datos): mirar la
       // cola evita desempaquetar varios MB solo para descubrir que es de ayer.
       const rapida = /"date":"(\d{4}-\d{2}-\d{2})"/.exec(raw.slice(-800));
