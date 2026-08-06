@@ -962,14 +962,29 @@
   function todayTokens() {
     const d = new Date(), p = (n) => String(n).padStart(2, "0");
     const Y = d.getFullYear(), M = p(d.getMonth() + 1), D = p(d.getDate()), m = d.getMonth() + 1, day = d.getDate();
-    return [`${Y}${M}${D}`, `${Y}-${M}-${D}`, `${Y}_${M}_${D}`, `${D}${M}${Y}`, `${D}-${M}-${Y}`, `${D}_${M}_${Y}`, `${day}-${m}-${Y}`, `${day}/${m}/${Y}`];
+    // v7.8: también el mes EN LETRAS ("6 de agosto", "06 agosto"), por si algún día
+    // suben el archivo con el nombre escrito así en vez de con la fecha numérica.
+    const MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][d.getMonth()];
+    return [`${Y}${M}${D}`, `${Y}-${M}-${D}`, `${Y}_${M}_${D}`, `${D}${M}${Y}`, `${D}-${M}-${Y}`, `${D}_${M}_${Y}`, `${day}-${m}-${Y}`, `${day}/${m}/${Y}`,
+      `${day} de ${MES}`, `${D} de ${MES}`, `${day} ${MES}`, `${D} ${MES}`];
   }
   function normName(s) { return String(s || "").replace(/[.\s_\-\/]/g, "").toLowerCase(); }
+  // ¿El nombre contiene el token SIN que sea cola de otro número? Evita que el día 6
+  // acepte un archivo del "26 de agosto" (el "6deagosto" vive dentro de "26deagosto").
+  // OJO: esta guarda SOLO aplica a los tokens con mes en letras. A los numéricos NO:
+  // un "Agenda_v2_20260806.xlsx" real quedaría rechazado porque al normalizar la "2"
+  // de "v2" queda pegada a la fecha (medido en el banco de pruebas) — esos conservan
+  // la coincidencia simple de siempre.
+  function nameHasToken(n, t) {
+    let i = -1;
+    while ((i = n.indexOf(t, i + 1)) >= 0) { const prev = n[i - 1]; if (!(prev >= "0" && prev <= "9")) return true; }
+    return false;
+  }
   function pickTodaysFile(files) {
     const xls = (files || []).filter((f) => /\.(xlsx|xlsm|csv)$/i.test(f.Name || "") && !/^~\$/.test(f.Name || ""));
     if (!xls.length) return null;
     const toks = todayTokens().map(normName);
-    return xls.find((f) => { const n = normName(f.Name); return toks.some((t) => n.includes(t)); }) || null;
+    return xls.find((f) => { const n = normName(f.Name); return toks.some((t) => (/[a-z]/.test(t) ? nameHasToken(n, t) : n.includes(t))); }) || null;
   }
   // encodeURI (no encodeURIComponent): las barras del camino deben quedar como barras.
   function spListUrl(folder) { return spBase() + "/_api/web/GetFolderByServerRelativeUrl('" + encodeURI(folder || CONFIG.SP.folder) + "')/Files?$select=Name,ServerRelativeUrl,TimeLastModified&$orderby=TimeLastModified%20desc&$top=60"; }
@@ -2757,7 +2772,27 @@
     // Enganche del captador: si la base se capturó en la pestaña de SharePoint DESPUÉS
     // de arrancar Everest, se toma sola. Solo mira mientras no haya nada cargado; en
     // cuanto hay PyM, esta revisión no cuesta nada (sale de una).
-    setInterval(() => { try { if (!state.pymFile) loadPymFromCache(); } catch (e) {} }, 60000);
+    // v7.8: además, si aquí quedó la base PILOTO pero el captador ya consiguió el PyM
+    // REAL de hoy, se adopta el real desde la caché compartida — sin depender de que la
+    // descarga directa desde Everest (que pudo ser justo la que falló) lo reintente.
+    setInterval(() => {
+      try {
+        if (!state.pymFile) { loadPymFromCache(); return; }
+        if (state.pymFallback && typeof GM_getValue !== "undefined" &&
+            GM_getValue("vgl_pym_dia", "") === todayStamp() && GM_getValue("vgl_pym_esfallback", "1") === "") {
+          const raw = GM_getValue("vgl_pym", "");
+          if (raw && raw.lastIndexOf('{"v":3', 0) === 0) {
+            unpackPym(raw, makeYielder(15)).then((u) => {
+              if (u && u.meta.date === todayStamp() && !u.meta.fb && state.pymFallback) {
+                state.pym = u.map; state.pymTodos = u.todos; state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = false;
+                afterPymLoaded((u.meta.name || "PyM") + " (auto)");
+                notify("AZUL", "📋 Ya llegó el PyM real de hoy", (u.meta.name || "PyM") + "\n" + state.pym.size + " paciente(s). Se reemplazó la base piloto.", false, "pymreal|" + todayStamp());
+              }
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {}
+    }, 60000);
     console.log("[Vigilante] userscript v" + VERSION + " activo (MODO LIGERO: lectura de la página + PyM manual).");
   }
 
