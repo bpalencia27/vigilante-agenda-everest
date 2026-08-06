@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      7.8.0
+// @version      7.8.1
 // @description  MODO LIGERO: vigila la agenda de Everest por la vía directa del API (unos kB por consulta, sin copia de fondo), baja la base PyM de la sede UNA vez al día y avisa por notificaciones de Windows. Reporte MÍNIMO al tablero (resumen diario + fraudes, sin datos de pacientes). Sin rondas periódicas ni interceptación de red.
 // @author       bpalencia27
 // @match        *://neps.everestintelligent.com/*
@@ -126,7 +126,7 @@
 (function () {
   "use strict";
   if (window.top !== window.self) return; // nunca correr dentro de un frame
-  const VERSION = "7.8.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "7.8.1"; // fuente única de la versión (título + diagnóstico)
 
   // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
   // Vigilante envuelvan el de la página). Las consultas al API van por aquí: así no
