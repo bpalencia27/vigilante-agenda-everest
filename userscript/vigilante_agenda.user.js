@@ -148,10 +148,14 @@
   //  él solo — es autoadaptativo, sin números mágicos por modelo de PC.
   // =====================================================================
   const YIELD_MC = (typeof MessageChannel !== "undefined") ? new MessageChannel() : null;
-  let yieldResolve = null;
-  if (YIELD_MC) YIELD_MC.port1.onmessage = () => { const r = yieldResolve; yieldResolve = null; if (r) r(); };
+  // COLA (no ranura única): cada cesión pendiente guarda SU resolución y cada mensaje
+  // del canal despierta exactamente a una, en orden. Con una ranura única, dos tareas
+  // cediendo a la vez (lector de la base + sondeo de caché de 60 s) se pisaban y una
+  // quedaba colgada para siempre — lo cazó la auditoría adversarial, reproducido 5/5.
+  const yieldQueue = [];
+  if (YIELD_MC) YIELD_MC.port1.onmessage = () => { const r = yieldQueue.shift(); if (r) r(); };
   function yieldNow() {
-    if (YIELD_MC) return new Promise((r) => { yieldResolve = r; YIELD_MC.port2.postMessage(0); });
+    if (YIELD_MC) return new Promise((r) => { yieldQueue.push(r); YIELD_MC.port2.postMessage(0); });
     return new Promise((r) => setTimeout(r, 0));
   }
   function makeYielder(budgetMs) {
@@ -1075,22 +1079,90 @@
   function esLibroValido(buf, nombre) {
     if (!buf || !buf.byteLength) return false;
     if (/\.csv$/i.test(nombre || "")) return true;
-    const u8 = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    const u8 = new Uint8Array(buf, 0, Math.min(8, buf.byteLength));
     return u8[0] === 0x50 && u8[1] === 0x4B;
+  }
+  // v7.8.1: un .xlsx PROTEGIDO CON CONTRASEÑA no es un ZIP — es un contenedor OLE/CFB
+  // cifrado (firma D0 CF 11 E0). esLibroValido() ya lo rechaza (no empieza por "PK"),
+  // pero antes caía en el mismo error genérico "no es un Excel" que una sesión vencida.
+  // Se distingue para que el aviso diga la verdad, en vez de mandar a reabrir SharePoint
+  // sin motivo cuando el problema real es que hay que quitarle la contraseña al archivo.
+  function esXlsxCifrado(buf) {
+    if (!buf || buf.byteLength < 8) return false;
+    const u8 = new Uint8Array(buf, 0, 8);
+    return u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
   }
   // Avisos de progreso: que nunca parezca colgado mientras trabaja.
   function progreso(txt) { try { if (!state.pymFile) setSummary("⏳ " + txt); } catch (e) {} }
 
-  // ---- BASE PyM DE LA SEDE (v7.3.2) — la única conexión externa del modo ligero ----
-  // Descarga DIRECTA por identificador (sourcedoc): ni lista carpetas, ni busca por
-  // nombre, ni repite rondas. UNA descarga por jornada; el resultado queda en caché
-  // hasta medianoche y «Abrir PyM» siempre puede reemplazarla a mano.
+  // ---- BASE PILOTO PERSISTENTE (v7.8.1, pedido explícito del programa) ----
+  // La copia INDEXADA de la piloto queda GUARDADA entre días en el almacén de
+  // Tampermonkey. Al necesitarla se muestra AL INSTANTE (sin red, sin releer 14 MB) y
+  // solo se comprueba 1-2 VECES AL DÍA (mañana/tarde, una consulta de metadatos de
+  // ~1 KB) si cambió en SharePoint. Sin red, o sin cambios: se usa SIEMPRE la última
+  // copia guardada — nunca se vuelve a pagar la descarga completa solo por rutina.
+  // El PyM del DÍA conserva su ciclo propio (cada 10 min); «Abrir PyM» manda siempre.
   let baseIntentos = 0;
+  const PILOTO_KEY = "vgl_piloto", PILOTO_CHK = "vgl_piloto_chk";
+  function pilotoId() { const fb = CONFIG.SP.respaldo; return (fb && fb.id ? String(fb.id) : "").replace(/[{}]/g, "").toLowerCase(); }
+  async function pilotoDesdeCache() {
+    try {
+      if (typeof GM_getValue === "undefined") return false;
+      const raw = GM_getValue(PILOTO_KEY, ""); if (!raw || raw.lastIndexOf('{"v":3', 0) !== 0) return false;
+      const u = await unpackPym(raw, makeYielder(15));
+      if (!u || (u.meta.id || "") !== pilotoId()) return false;   // cambió el enlace configurado en Ajustes
+      if (state.pymFile) return true;
+      state.pym = u.map; state.pymTodos = u.todos; state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
+      state.pymFallback = true;
+      afterPymLoaded((u.meta.name || "Base piloto") + " (BASE PILOTO — copia guardada)");
+      return true;
+    } catch (e) { return false; }
+  }
+  async function pilotoGuardar(idx, meta) {
+    try {
+      if (typeof GM_setValue === "undefined") return;
+      const txt = await packPym(idx.map, idx.todos, Object.assign({ date: todayStamp(), fb: true, id: pilotoId() }, meta || {}), makeYielder(15));
+      if (txt.length <= 12 * 1024 * 1024) GM_setValue(PILOTO_KEY, txt);
+    } catch (e) {}
+  }
+  // Metadatos del archivo piloto (unos bytes): saber si cambió SIN bajarlo entero.
+  async function pilotoMeta() {
+    try {
+      const j = await gmJson(spBase() + "/_api/web/GetFileById('" + pilotoId() + "')?$select=Name,TimeLastModified");
+      const o = (j && j.d) ? j.d : j;
+      return (o && o.TimeLastModified) ? { name: o.Name || "", mtime: o.TimeLastModified } : null;
+    } catch (e) { return null; }
+  }
+  // Revisión de frescura: como máximo UNA vez por franja (mañana / tarde) por día, y
+  // solo mientras se esté usando la piloto (si ya llegó el PyM real, no aplica).
+  let pilotoChkEnCurso = false;
+  async function pilotoFreshCheck() {
+    try {
+      if (pilotoChkEnCurso || !S.baseAuto || !state.pymFallback || typeof GM_getValue === "undefined") return;
+      if (!heartbeat()) return;
+      const franja = todayStamp() + "|" + (new Date().getHours() < 12 ? "am" : "pm");
+      if (GM_getValue(PILOTO_CHK, "") === franja) return;
+      pilotoChkEnCurso = true;
+      GM_setValue(PILOTO_CHK, franja);
+      const m = await pilotoMeta();
+      if (!m || (m.mtime && m.mtime === state.pymMTime)) return;  // sin metadatos o sin cambios: sigue la copia
+      const ok = await loadPymBaseDescarga(true, m);
+      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe bajó la versión nueva desde SharePoint.", false, "pilotoupd|" + franja);
+    } catch (e) {} finally { pilotoChkEnCurso = false; }
+  }
   async function loadPymBase(silent) {
     if (!S.baseAuto) return false;
     const fb = CONFIG.SP.respaldo;
     if (!fb || !fb.id || typeof GM_xmlhttpRequest === "undefined") return false;
     if (state.pymFile) return true;                    // ya hay algo cargado (caché o manual)
+    // v7.8.1: PRIMERO la copia guardada (cero red, instantánea). La frescura se
+    // revisa aparte, 1-2 veces al día, sin bloquear el arranque.
+    if (await pilotoDesdeCache()) { pilotoFreshCheck(); return true; }
+    return loadPymBaseDescarga(silent, await pilotoMeta());
+  }
+  async function loadPymBaseDescarga(silent, meta) {
+    const fb = CONFIG.SP.respaldo;
+    if (!fb || !fb.id || typeof GM_xmlhttpRequest === "undefined") return false;
     progreso("Bajando la base PyM de la sede… (pesa ~14 MB, puede tardar medio minuto)");
     // Las dos rutas del mismo archivo se prueban UNA TRAS OTRA, no a la vez: en
     // paralelo serían dos descargas de ~14 MB el mismo día. Medido en la red de la
@@ -1100,7 +1172,7 @@
     for (const url of spFallbackUrls(fb.id)) {
       try {
         const dl = await gmGet(url, "arraybuffer", "", T_DESCARGA);
-        if (!esLibroValido(dl.response, fb.name)) throw new Error("no es un Excel");
+        if (!esLibroValido(dl.response, fb.name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña" : "no es un Excel");
         buf = dl.response; break;
       } catch (e) { errores.push((e && e.message) || "error"); }
     }
@@ -1109,7 +1181,10 @@
       // v7.8: el caso /red|permiso/ casi siempre era la SESIÓN de SharePoint vencida:
       // la petición redirige a login.microsoftonline.com y Tampermonkey la cortaba ahí
       // (esos dominios ya están en @connect, pero sin sesión igual no hay archivo).
-      const razon = errores.find((x) => /red|permiso/i.test(x)) ? "la conexión no salió (permiso de Tampermonkey, o sesión de SharePoint vencida que redirige al login)"
+      // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
+      // sesión, es que hay que quitarle la protección antes de subirlo.
+      const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo de SharePoint tiene CONTRASEÑA — pide que lo guarden sin protección (Excel: Archivo → Información → Proteger libro → Quitar contraseña)"
+        : errores.find((x) => /red|permiso/i.test(x)) ? "la conexión no salió (permiso de Tampermonkey, o sesión de SharePoint vencida que redirige al login)"
         : errores.find((x) => /401|403/.test(x)) ? "SharePoint rechazó la sesión (401/403)"
         : errores.find((x) => /no es un Excel/i.test(x)) ? "SharePoint contestó su página de inicio de sesión en vez del archivo"
         : (errores[0] || "sin respuesta");
@@ -1117,15 +1192,20 @@
       console.warn("[Vigilante] base PyM:", errores.join(" · "));
       return false;
     }
-    if (state.pymFile) return true;                    // se cargó a mano mientras bajaba
+    // En la revisión de frescura, state.pymFile YA está puesto (es la copia vieja de la
+    // piloto): solo se aborta si lo cargado NO es la piloto (PyM real o carga manual).
+    if (state.pymFile && !state.pymFallback) return true;
     progreso("Leyendo la base…");
     const idx = await readPym(fb.name, buf);
-    if (state.pymFile) return true;                    // se cargó otra cosa mientras se leía
+    if (state.pymFile && !state.pymFallback) return true;
+    // La copia persistente se guarda ANTES de aplicar (orden determinista) y con los
+    // metadatos reales del archivo, para que la próxima revisión de frescura compare bien.
+    await pilotoGuardar(idx, { name: (meta && meta.name) || fb.name, mtime: (meta && meta.mtime) || "", fp: pymFP(fb.name, (meta && meta.mtime) || "") });
     // v7.7: esta es la base PILOTO (respaldo) — antes esta línea decía "false" por error
     // y el panel nunca alcanzaba a avisar "⚠ RESPALDO". Ahora sí marca correctamente que
     // NO es el PyM real del día, para que loadPymDiario() sepa que puede reemplazarla.
     state.pymFallback = true;
-    applyPymIdx(idx, fb.name + " (BASE PILOTO — respaldo)", "", fb.name);
+    applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (BASE PILOTO — respaldo)", (meta && meta.mtime) || "", fb.name);
     notify("AMBAR", "📋 Usando la base piloto (respaldo)", fb.name + "\n" + state.pym.size + " paciente(s). Aún no aparece el PyM real de hoy en SharePoint; se reemplaza solo en cuanto aparezca.", false);
     return true;
   }
@@ -1155,7 +1235,7 @@
       if (state.pymFP === pymFP(sel.Name, sel.TimeLastModified)) return true;
       progreso("Descargando el PyM de hoy (" + sel.Name + ")…");
       const dl = await gmGet(spDownloadUrl(sel.ServerRelativeUrl), "arraybuffer", "", T_DESCARGA);
-      if (!esLibroValido(dl.response, sel.Name)) throw new Error("no es un Excel (¿sesión caída?)");
+      if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
       const idx = await readPym(sel.Name, dl.response);
       const eraRespaldo = state.pymFallback;
       state.pymFallback = false;
@@ -1355,6 +1435,12 @@
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
     setSummary("Nuevo día: se reinició el seguimiento.");
+    // v7.8.1: si la pestaña quedó abierta toda la noche (turno que cruza medianoche), el
+    // PyM que tiene cargado es el de AYER. Antes se seguía mostrando "al día"/"sin
+    // pendiente" cruzado contra la base vieja hasta el siguiente tick del intervalo de
+    // 10 min — una ventana en la que el cruce PyM podía leerse como de hoy sin serlo.
+    // Ahora se dispara YA la búsqueda del PyM real de hoy (la líder; el resto espera).
+    if (heartbeat() && typeof GM_xmlhttpRequest !== "undefined") loadPymDiario(true).catch(() => {});
   }
   function colorAndAlert(a, now) {
     const st = (a.estado || "").toLowerCase(); const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
@@ -2779,8 +2865,10 @@
     setInterval(() => {
       if (!heartbeat()) return;
       const yaListoHoy = state.pymFile && !state.pymFallback && GM_getValue("vgl_pym_dia", "") === todayStamp();
-      if (yaListoHoy) return;
-      loadPymDiario(true);
+      if (!yaListoHoy) loadPymDiario(true);
+      // v7.8.1: revisión de frescura de la PILOTO (máx. 1 vez por franja mañana/tarde;
+      // se autolimita adentro, así que colgarla de este mismo intervalo no cuesta nada).
+      pilotoFreshCheck();
     }, 10 * 60 * 1000);
     // Enganche del captador: si la base se capturó en la pestaña de SharePoint DESPUÉS
     // de arrancar Everest, se toma sola. Solo mira mientras no haya nada cargado; en
