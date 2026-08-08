@@ -4975,6 +4975,139 @@
     return null;
   }
 
+  // =====================================================================
+  //  ORDENAMIENTO RÁPIDO DENTRO DE LA HISTORIA CLÍNICA (GuardarJsonHC)
+  // =====================================================================
+  // A diferencia del módulo de Ordenamiento (arriba), este camino NO envía una petición
+  // propia: Everest exige el objeto "paciente" completo (~80 campos) que solo existe en
+  // memoria mientras el médico tiene la historia clínica de ese paciente abierta, y no hay
+  // forma segura de reconstruirlo desde afuera. En vez de eso, el botón 🩸 solo "arma" los
+  // exámenes elegidos; cuando el médico guarda su propia Conducta (clic real en "Enviar"
+  // dentro de Everest), un interceptor le agrega esas líneas al arreglo `ordenes` que
+  // Everest YA armó correctamente, y deja que se envíe con todo lo demás intacto. Everest
+  // sigue siendo el único que construye paciente/diagnosticoId/citaId — nunca los inventamos.
+  const PENDING_EXAM_ORDERS = {}; // { docIdLimpio: { patientName, entries: [...], armedAt } }
+  const PENDING_EXAM_TTL_MS = 2 * 60 * 60 * 1000; // 2h: evita inyectar en una consulta distinta días después
+
+  // Convierte un cup resuelto ({Id,Codigo,Descripcion,...}) a la forma exacta que usa
+  // GuardarJsonHC dentro de `ordenes` (confirmada con la telemetría real #1325).
+  function buildHcOrdenEntry(cupObj) {
+    return {
+      cantidad: 1,
+      listadoCupsTableSeleccionados: [],
+      listadoDiagnosticoTableSeleccionados: [],
+      check: false,
+      cup: {
+        cupAgregar: false,
+        swCirugia: false,
+        cantidad: 1,
+        id: cupObj.Id,
+        descripcion: cupObj.Descripcion,
+        codigo: cupObj.Codigo,
+        nota_Tecnica: "LABORATORIO"
+      },
+      tipo: "",
+      nota: ""
+    };
+  }
+
+  function quitarBadgeExamenArmado(docId) {
+    const el = document.getElementById("vgl-examgen-armed-" + docId);
+    if (el) el.remove();
+  }
+
+  function mostrarBadgeExamenArmado(docId, patientName, entries) {
+    quitarBadgeExamenArmado(docId);
+    const badge = document.createElement("div");
+    badge.id = "vgl-examgen-armed-" + docId;
+    badge.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:2147483647;background:#7c2d12;color:#fff7ed;padding:10px 14px;border-radius:8px;font:12px sans-serif;box-shadow:0 4px 12px rgba(0,0,0,.4);max-width:340px;display:flex;flex-direction:column;gap:6px";
+    const nombres = entries.map((e) => e.cup.descripcion).join(", ");
+    badge.innerHTML = `
+      <div>🩸 <b>${entries.length} examen(es) en cola</b> para <b>${escapeHtml(patientName)}</b></div>
+      <div style="opacity:.85">${escapeHtml(nombres)}</div>
+      <div style="opacity:.7">Se agregarán solos cuando guardes la Conducta de este paciente en Everest.</div>
+      <button id="vgl-examgen-cancel-${docId}" style="all:unset;cursor:pointer;text-decoration:underline;font-size:11px;align-self:flex-start">Cancelar</button>
+    `;
+    document.body.appendChild(badge);
+    const cancelBtn = document.getElementById(`vgl-examgen-cancel-${docId}`);
+    if (cancelBtn) cancelBtn.addEventListener("click", () => desarmarExamenGeneral(docId));
+  }
+
+  function armarExamenGeneral(docId, patientName, entries) {
+    const key = String(docId).replace(/\D/g, "");
+    if (!key || !entries.length) return;
+    PENDING_EXAM_ORDERS[key] = { patientName, entries, armedAt: Date.now() };
+    mostrarBadgeExamenArmado(key, patientName, entries);
+  }
+
+  function desarmarExamenGeneral(docId, motivo) {
+    const key = String(docId).replace(/\D/g, "");
+    if (PENDING_EXAM_ORDERS[key]) {
+      console.log(`[Vigilante ExamenGeneral] Cancelado para ${key}` + (motivo ? ` (${motivo})` : ""));
+      delete PENDING_EXAM_ORDERS[key];
+    }
+    quitarBadgeExamenArmado(key);
+  }
+
+  // Instala UNA VEZ el interceptor de XHR nativo de la página que agrega los exámenes
+  // armados a la llamada REAL que Everest hace a GuardarJsonHC cuando el médico guarda su
+  // Conducta. Confirmado por telemetría: Everest usa XMLHttpRequest (no fetch) para esto.
+  function instalarInterceptorGuardarJsonHC() {
+    if (window.__vglXhrHcPatched) return;
+    window.__vglXhrHcPatched = true;
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      this.__vglUrl = url;
+      this.__vglMethod = method;
+      return originalOpen.apply(this, [method, url, ...rest]);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+      try {
+        const url = this.__vglUrl || "";
+        const isGuardarHc = typeof url === "string" && url.includes("/api/Morbilidad/GuardarJsonHC")
+          && String(this.__vglMethod || "").toUpperCase() === "POST"
+          && typeof body === "string";
+
+        if (isGuardarHc && Object.keys(PENDING_EXAM_ORDERS).length) {
+          const outer = JSON.parse(body);
+          const inner = JSON.parse(outer.json);
+          const docInner = String((inner.paciente && (inner.paciente.identificacion || inner.paciente.Identificacion)) || "").replace(/\D/g, "");
+          const pend = docInner && PENDING_EXAM_ORDERS[docInner];
+
+          if (Array.isArray(inner.ordenes) && pend) {
+            if (Date.now() - pend.armedAt > PENDING_EXAM_TTL_MS) {
+              console.warn(`[Vigilante ExamenGeneral] Solicitud armada para ${docInner} expiró (>2h); no se inyecta.`);
+              desarmarExamenGeneral(docInner, "expirado");
+            } else {
+              inner.ordenes = inner.ordenes.concat(pend.entries);
+              outer.json = JSON.stringify(inner);
+              body = JSON.stringify(outer);
+              console.log(`[Vigilante ExamenGeneral] ${pend.entries.length} examen(es) agregados a la Conducta de ${docInner} antes de enviar.`);
+              this.addEventListener("load", function() {
+                if (this.status >= 200 && this.status < 300) {
+                  desarmarExamenGeneral(docInner, "enviado");
+                  if (typeof notify === "function") {
+                    notify("VERDE", "✅ Exámenes Generales Incluidos", `${pend.entries.length} examen(es) agregados a la Conducta de ${pend.patientName}.`, true);
+                  }
+                }
+                // Si falla (status >= 300), se deja armado a propósito para reintentar
+                // en el próximo guardado, en vez de perder silenciosamente la solicitud.
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[Vigilante ExamenGeneral] Error en interceptor GuardarJsonHC (se envía sin modificar):", e);
+      }
+      return originalSend.call(this, body);
+    };
+  }
+  instalarInterceptorGuardarJsonHC();
+
   // Buscar Paciente en APIOrdenamientoHealth
   async function apiOrdenamientoBuscarPaciente(docId) {
     const cleanDoc = String(docId || "").replace(/\D/g, "");
@@ -5054,26 +5187,6 @@
       }))
     };
     return pageFetchJson(path, { method: "POST", body: JSON.stringify(payload) });
-  }
-
-  // Ordenamiento Rápido de Exámenes Generales: dado un diagnosticoId ya resuelto (CIE-10 ->
-  // id, vía apiOrdenamientoObtenerDx) y opcionalmente un citaId, resuelve cada examen del
-  // catálogo (por código exacto o por búsqueda de texto) y los guarda en un solo POST.
-  // Nunca envía un cup que no se haya podido resolver con certeza (ver resolverCupCatalogo).
-  async function ordenarExamenGeneral(pacienteId, diagnosticoId, cupsEntries, citaId) {
-    const resueltos = [];
-    const noResueltos = [];
-    for (const cupInfo of cupsEntries) {
-      const cObj = await resolverCupCatalogo(pacienteId, cupInfo);
-      if (cObj) resueltos.push(cObj);
-      else noResueltos.push(cupInfo.desc || cupInfo.codigo || cupInfo.textoBusqueda);
-    }
-    if (!resueltos.length) {
-      return { ok: false, creados: 0, noResueltos, resultado: null };
-    }
-    const resultado = await apiOrdenamientoGuardar(pacienteId, diagnosticoId, resueltos, citaId);
-    const ok = !!(resultado && (resultado.agrupador || resultado.data || !resultado.error));
-    return { ok, creados: ok ? resueltos.length : 0, noResueltos, resultado };
   }
 
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
@@ -5258,14 +5371,19 @@
         </div>
 
         <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">Seleccione los exámenes a solicitar para el paciente:</label>
+          <div class="vgl-agm-dinfo" style="margin-bottom:8px">
+            ℹ Esto NO envía nada todavía. Marca los exámenes y, cuando abras la historia
+            clínica de este paciente y guardes tu Conducta como siempre, se agregarán solos
+            a lo que Everest ya va a enviar.
+          </div>
+          <label class="vgl-agm-lbl">Seleccione los exámenes a incluir en la próxima Conducta:</label>
           <div id="vgl-ord-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px">
             ${EXAMEN_GENERAL_CATALOG.map((pkg, idx) => `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
                   <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}" checked>
                   <div class="vgl-ord-content">
-                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">[CIE-10: ${escapeHtml(pkg.cie10)}]</span></div>
+                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)}</div>
                     <div class="vgl-ord-cups">
                       ${pkg.cups.map((c) => escapeHtml(c.desc)).join(" · ")}
                     </div>
@@ -5278,7 +5396,7 @@
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri">✓ Generar exámenes seleccionados (${EXAMEN_GENERAL_CATALOG.length})</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri">✓ Marcar exámenes seleccionados (${EXAMEN_GENERAL_CATALOG.length})</button>
         </div>
       </div>
     `;
@@ -5297,7 +5415,7 @@
     const updateCount = () => {
       const count = Array.from(chks).filter((c) => c.checked).length;
       confirmBtn.disabled = count === 0;
-      confirmBtn.textContent = count > 0 ? `✓ Sí, Generar Exámenes (${count})` : "Selecciona al menos un examen";
+      confirmBtn.textContent = count > 0 ? `✓ Marcar Exámenes (${count})` : "Selecciona al menos un examen";
     };
     chks.forEach((c) => c.addEventListener("change", updateCount));
 
@@ -5306,55 +5424,45 @@
       if (!selectedBoxes.length) return;
 
       confirmBtn.disabled = true;
-      confirmBtn.textContent = "⏳ Obteniendo datos del paciente en el sistema de órdenes...";
+      confirmBtn.textContent = "⏳ Identificando exámenes en el catálogo de Everest...";
 
-      const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
-      if (!pacienteIdOrd) {
-        alert("No se pudo localizar al paciente en el sistema de órdenes con la cédula " + apt.doc_id);
+      // Mismo catálogo de CUPS que usa el módulo de Ordenamiento (confirmado por el médico) —
+      // se usa solo como fuente de búsqueda de solo lectura, no para enviar nada por ahí.
+      const pacienteIdCat = await apiOrdenamientoBuscarPaciente(apt.doc_id);
+      if (!pacienteIdCat) {
+        alert("No se pudo localizar al paciente en el catálogo de exámenes con la cédula " + apt.doc_id);
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar";
         return;
       }
 
-      let creadasCount = 0;
-      let fallidasCount = 0;
+      const entries = [];
       let noResueltosTotal = [];
 
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = EXAMEN_GENERAL_CATALOG[i];
-        confirmBtn.textContent = `⏳ Generando ${pkg.titulo}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
+        confirmBtn.textContent = `⏳ Identificando ${pkg.titulo}...`;
 
-        const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
-        if (!dxId) { console.warn("[Vigilante ExamenGeneral] No Dx para", pkg.cie10); fallidasCount++; continue; }
-
-        const res = await ordenarExamenGeneral(pacienteIdOrd, dxId, pkg.cups, apt.citaId);
-        if (res.noResueltos && res.noResueltos.length) noResueltosTotal = noResueltosTotal.concat(res.noResueltos);
-
-        if (res.ok) {
-          creadasCount++;
-          c.checked = false;
-          c.disabled = true;
-          c.closest("label").style.opacity = "0.5";
-          c.closest("label").style.textDecoration = "line-through";
-        } else {
-          fallidasCount++;
-          c.closest("label").style.border = "1px solid #e54d42";
+        for (const cupInfo of pkg.cups) {
+          const cObj = await resolverCupCatalogo(pacienteIdCat, cupInfo);
+          if (cObj) entries.push(buildHcOrdenEntry(cObj));
+          else noResueltosTotal.push(cupInfo.desc || cupInfo.codigo || cupInfo.textoBusqueda);
         }
       }
 
-      if (creadasCount > 0 && fallidasCount === 0 && !noResueltosTotal.length) {
+      if (entries.length) {
+        armarExamenGeneral(apt.doc_id, patientName, entries);
         confirmBtn.style.background = "#10b981";
-        confirmBtn.textContent = `✅ ¡${creadasCount} Examen(es) Generado(s)!`;
-        notify("VERDE", "✅ Exámenes Generados", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas.`, true);
+        confirmBtn.textContent = `✅ ${entries.length} examen(es) marcado(s)`;
+        let msg = `✅ Se agregarán a la Conducta de ${patientName} cuando la guardes en Everest.`;
+        if (noResueltosTotal.length) msg += `\n⚠ No se pudo identificar con certeza: ${noResueltosTotal.join(", ")}. Agrégalo manualmente.`;
+        notify("VERDE", "🩸 Exámenes Marcados", msg, true);
         setTimeout(() => closeMod(), 2600);
       } else {
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar";
-        let msg = "";
-        if (fallidasCount) msg += `${fallidasCount} paquete(s) fallaron al guardar.\n`;
-        if (noResueltosTotal.length) msg += `No se pudo identificar con certeza: ${noResueltosTotal.join(", ")}. Verifícalo manualmente en Everest.`;
-        alert(msg || "No se pudieron generar los exámenes.");
+        alert(`No se pudo identificar con certeza ningún examen seleccionado: ${noResueltosTotal.join(", ")}. Verifícalo manualmente en Everest.`);
       }
     });
   }
