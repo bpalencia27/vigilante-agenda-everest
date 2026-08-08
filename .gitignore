@@ -28,6 +28,10 @@ cookies*
 .venv/
 venv/
 env/
+.agents/
+scratch/
+__pycache__/
+*.pyc
 build/
 dist/
 __pycache__/
