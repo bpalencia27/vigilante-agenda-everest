@@ -22,6 +22,9 @@ everest_cookies_temp.db
 cookies*
 *.db
 
+# Credenciales del bridge de Athenea — NUNCA subir (usar config.py.example como plantilla)
+athenea_api_bridge/config.py
+
 # ==========================================================================
 #  Entornos y artefactos de build
 # ==========================================================================
