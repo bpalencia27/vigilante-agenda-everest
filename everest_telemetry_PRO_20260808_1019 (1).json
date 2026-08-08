@@ -1,0 +1,1531 @@
+{
+  "sessionStart": "2026-08-08T14:49:46.212Z",
+  "navigation": [],
+  "network": [
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.170Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerEstadoCita?TurnoId=NDM0MDYwMw%3D%3D",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.268Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/ObtenerOrigenAgendaturnoId?AgendaTurno_Id=4340603&Paciente_Id=309",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.282Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/obtenerEspecialidadCita?citaId=4340603",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParMetodosAnticonceptivos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParOcupaciones",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParDiscapacidades",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParEtnias",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParIdentidadGenero",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerPeriodoIntergenesico",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerRaza",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerCupsAlerta",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParPresentacionesFetales",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/ObtenerGestionDeRiesgoObligatoriedad",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParEscolaridades",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParGrupoPoblacional",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParReligiones",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerPlanEmbarazo",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.287Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiOrdenamientoHealth/api/ordenamiento/ValidarSedeGeneraRadicacion?citaId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerMetodosAnticonceptivos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.296Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParTipoDocumento",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.290Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/PreguntasRiesgoDiabetes",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParPaquetePrograma",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/ObtenerTipoDeFinalidades?citaId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Graficas/AIE3?categoriaId=2",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/ObtenerEpsConfiguracionIntegraciones",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.368Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/GetPestaniasByEspecialidadId?Especialidad_Id=12",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.269Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Seguimiento/ObtenerOrigenSeguimiento?AgendaTurno_Id=4340603",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.269Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/guardarHoraApertura?CitaId=4340603",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParTipoDiagnosticoPpales",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParParentesco",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParCategoriaResponsables",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParMetodoPlanificacion",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParMetodoPlanificacionObstetricos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParOrientacionSexual",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerInfeccionesSexuales",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.285Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerInfecciones",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParCiudades",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIPacienteV2/api/Paciente/CargarDatosPacienteByCitaId/NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/CargarAntecedentesByCita/NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.287Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiOrdenamientoHealth/api/Combo/ObtenerListadoCupsByCitaIdComplete?citaID=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.282Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Seguimiento/ObtenerOrigenSeguimiento?AgendaTurno_Id=4340603",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.284Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParTipoDiagnosticoPpales",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.154Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/TipoPlanFeatureEnabled?epsId=2&pacienteId=445164&citaId=NDM0MDYwMw&",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.292Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/ConfirmarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=515&EverestId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerHcDataPrevRenalByPacienteId?paciente_id=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ConsultasPorPacienteId?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.287Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerUltimaDiscapacidad?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.288Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerResultadosLaboratorioAnnar?pacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.288Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerResultadosLaboratorioCiti?pacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.288Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/obtenerUltimaCitaOdontologia?pacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.288Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.293Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/ConfirmarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=515&EverestId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:53.283Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParDiagnosticos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/ValidarAccesoProgramas?citaId=NDM0MDYwMw&Especialidad=MORBILIDAD",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.286Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParDiagnosticos/GetParDiagnosticoByCitaId?citaId=4340603",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:54.287Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParMedicamentos/MedicamentoPorPaciente?pacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:57.364Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerUltimaHCPes?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:57.364Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSeguimientoPrograma?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:57.364Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoPes?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:11:57.560Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerProgramaPes?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:12:18.219Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/HistoricoAtencionPrimaria?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:12:33.190Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:14:29.678Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:15:22.246Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:00.877Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/ObtenerRetriccionesDiagnostico?pacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:04.342Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParFinalidadConsultas/GetFinalidadByEspecialidadDx?especialidadId=12&CodigoDx=N189&swIsHistoriaProcedimiento=false",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:14.690Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParCausasExternas/GetCausasByFinalidad?especialidadId=12&finalidadCodigo=16",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:19.482Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/HistoricoImpresionDiagnosticaAnalisisPlan?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:22.259Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionHealth/apiparametrizacion/ParMedicamento/GetViasAdministracionMedicamentos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:22.259Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionHealth/apiparametrizacion/ParMedicamento/GetPresentacionMedicamentos",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:29.167Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiOrdenamientoHealth/api/Combo/ObtenerPaqueteProgramasCupsByCitaId?citaID=NDM0MDYwMw&paqueteProgramaId=1",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:16:41.772Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Historicos/HistoricoMedicamentoHCM?PacienteId=445164",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:21.610Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:50.230Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerEstadoCita?TurnoId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:53.493Z",
+      "method": "POST",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/GuardarJsonHC",
+      "reqBody": "{\"UsuarioId\":515,\"json\":\"{\\\"swIncapacidad\\\":false,\\\"seguimiento\\\":false,\\\"swFinalizacionCrecimientoYDesarrollo\\\":false,\\\"swFinalizacionJoven\\\":false,\\\"swFinalizacionAdulto\\\":false,\\\"swFinalizacionPrenatal\\\":false,\\\"swFinalizacionHTA\\\":false,\\\"swFinalizacionDM\\\":false,\\\"swFinalizacionHTADM\\\":false,\\\"swFinalizacionERC12\\\":false,\\\"swFinalizacionERC3AB\\\":false,\\\"swFinalizacionERC4\\\":false,\\\"swFinalizacionERC5\\\":false,\\\"swFinalizacionNefro\\\":false,\\\"acompanante\\\":{\\\"parentesco\\\":{},\\\"categoria\\\":{}},\\\"quirurgicos\\\":[],\\\"traumaticos\\\":[],\\\"transfusiones\\\":[],\\\"alergicos\\\":[],\\\"farmacologicos\\\":[],\\\"antecedenteGinecoObstetrico\\\":{\\\"menarca\\\":false,\\\"observacionMenarca\\\":null,\\\"fechaMenarca\\\":null,\\\"ciclosMenstruales\\\":null,\\\"fum\\\":null,\\\"menopausia\\\":false,\\\"observacionMenopausia\\\":null,\\\"fechanMenopausia\\\":null,\\\"ets\\\":false,\\\"observacionETS\\\":null,\\\"autoExamenMama\\\":false,\\\"inicioRelacionesSexuales\\\":false,\\\"observacionInicioRelacionesSexuales\\\":null,\\\"actividadSexual\\\":null,\\\"tieneActividadSexual\\\":false,\\\"observacionActividadSexual\\\":null,\\\"numeroCompaneros\\\":0,\\\"ninguno\\\":false,\\\"oral\\\":false,\\\"inyectable\\\":false,\\\"subdermico\\\":false,\\\"d_I_U\\\":false,\\\"condon\\\":false,\\\"esterilizacionFemenina\\\":false,\\\"vasectomia\\\":false,\\\"otros\\\":false,\\\"gravidez\\\":0,\\\"partos\\\":0,\\\"abortos\\\":0,\\\"vaginales\\\":0,\\\"cesareas\\\":0,\\\"nacidosVivos\\\":0,\\\"nacidosMuertos\\\":0,\\\"ectopicos\\\":0,\\\"fup\\\":null,\\\"gemelar\\\":0,\\\"hemorragia_1\\\":false,\\\"hemorragia_2\\\":false,\\\"hemorragia_3\\\":false,\\\"preeclampsia\\\":false,\\\"eclampsia\\\":false,\\\"otrosPat\\\":false,\\\"observacionOtrosPat\\\":null,\\\"observacion\\\":null},\\\"antecedenteFamiliar\\\":{\\\"hipertension\\\":false,\\\"fechaHipertension\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionHipertension\\\":null,\\\"diabetes\\\":false,\\\"fechaDiabetes\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionDiabetes\\\":null,\\\"cardiovasculares\\\":false,\\\"fechaCardiovasculares\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionCardiovasculares\\\":null,\\\"cancerMama\\\":false,\\\"fechaCancerMama\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionCancerMama\\\":null,\\\"cancerProstata\\\":false,\\\"fechaCancerProstata\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionCancerProstata\\\":null,\\\"cancerColon\\\":false,\\\"fechaCancerColon\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionCancerColon\\\":null,\\\"cancerPulmon\\\":false,\\\"fechaCancerPulmon\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionCancerPulmon\\\":null,\\\"otroTipoCancer\\\":false,\\\"fechaOtroTipoCancer\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"observacionOtroTipoCancer\\\":null,\\\"observacionOtro\\\":null},\\\"antecedentePatologicos\\\":{\\\"infartoMiocardio\\\":false,\\\"obsinfartoMiocardio\\\":null,\\\"emergenciaHipertensiva\\\":false,\\\"obsEmergenciaHipertensiva\\\":null,\\\"tromboembolismoPulmunar\\\":false,\\\"obsTromboembolismoPulmunar\\\":null,\\\"sindromeAortico\\\":false,\\\"obsSindromeAortico\\\":null,\\\"sincope\\\":false,\\\"obsSincope\\\":null,\\\"isquemiaCerebralTransitoria\\\":false,\\\"obsIsquemiaCerebralTransitoria\\\":null,\\\"accidenteCerebrovascularIsquemico\\\":false,\\\"obsAccidenteCerebrovascularIsquemico\\\":null,\\\"accidenteCerebrovascularHemorragico\\\":false,\\\"obsAccidenteCerebrovascularHemorragico\\\":null,\\\"anginaDePecho\\\":false,\\\"obsAnginaDePecho\\\":null,\\\"revascularizacion\\\":false,\\\"obsRevascularizacion\\\":null,\\\"cardiomiopatia\\\":false,\\\"obsCardiomiopatia\\\":null,\\\"cataratas\\\":false,\\\"obscataratas\\\":null,\\\"desprendimientoRetina\\\":false,\\\"obsdesprendimientoRetina\\\":null,\\\"glaucoma\\\":false,\\\"obsGlaucoma\\\":null,\\\"retinopatiaDiabetica\\\":false,\\\"obsretinopatiaDiabetica\\\":null,\\\"ojoSeco\\\":false,\\\"obsojoSeco\\\":null,\\\"enfermedadVision\\\":false,\\\"obsEnfermedadVision\\\":null,\\\"enfermedadCerebroVascular\\\":false,\\\"obsenfermedadCerebroVascular\\\":null,\\\"eventoTrombotio\\\":false,\\\"obsEventoTrombotio\\\":null,\\\"eventoembolico\\\":false,\\\"obseventoembolico\\\":null,\\\"eventoHemorragico\\\":false,\\\"obseventoHemorragic\\\":null,\\\"eventoVascular\\\":false,\\\"obseventoVascular\\\":null,\\\"obstruccionesArteriales\\\":false,\\\"obsObstruccionesArteriales\\\":null,\\\"aneurismasaorticos\\\":false,\\\"obsaneurismasaorticos\\\":null,\\\"enfermedadBuerger\\\":false,\\\"obsenfermedadBuerger\\\":null,\\\"fenomenoRaynaud\\\":false,\\\"obsfenomenoRaynaud\\\":null,\\\"coagulosSanguineos\\\":false,\\\"obscoagulosSanguineos\\\":null,\\\"emboliaPulmonar\\\":false,\\\"obsemboliaPulmonar\\\":null,\\\"flebitis\\\":false,\\\"obsflebitis\\\":null,\\\"enfermedadRenal\\\":false,\\\"obsenfermedadRenal\\\":null,\\\"insuficienciaRenalAguda\\\":false,\\\"obsinsuficienciaRenalAguda\\\":null,\\\"danorenalAgudo\\\":false,\\\"obsdanorenalAgudo\\\":null,\\\"insuficienciaRenalcronica\\\":false,\\\"obsinsuficienciaRenalcronica\\\":null,\\\"epoc\\\":false,\\\"obsEPOC\\\":null,\\\"artritisReumatoide\\\":false,\\\"obsartritisReumatoide\\\":null,\\\"pruebaVIH\\\":false,\\\"observacionPruebaVIH\\\":null,\\\"pruebaTBC\\\":false,\\\"observacionPruebaTBC\\\":null,\\\"arritmias\\\":false,\\\"observacionArritmias\\\":null,\\\"historicoObservacionArritmias\\\":null,\\\"autoinmunes\\\":false,\\\"observacionAutoinmunes\\\":null,\\\"lepra\\\":false,\\\"observacionLepra\\\":null,\\\"historicoAutoinmunes\\\":null,\\\"cancer\\\":false,\\\"observacionCancer\\\":null,\\\"historicoCancer\\\":null,\\\"ecv\\\":false,\\\"observacionECV\\\":null,\\\"historicoECV\\\":null,\\\"diabetes\\\":false,\\\"observacionDiabetes\\\":null,\\\"historicoDiabetes\\\":null,\\\"dislipidemia\\\":true,\\\"observacionDislipidemia\\\":null,\\\"historicoDislipidemia\\\":null,\\\"hipoglicemia\\\":false,\\\"observacionHipoglicemia\\\":null,\\\"historicoHipoglicemia\\\":null,\\\"hipertension\\\":true,\\\"observacionHipertension\\\":null,\\\"historicoHipertension\\\":null,\\\"internaciones\\\":false,\\\"observacionInternaciones\\\":null,\\\"historicoInternaciones\\\":null,\\\"insuficienciaCardiaca\\\":false,\\\"observacionInsuficienciaCardiaca\\\":null,\\\"historicoInsuficienciaCardiaca\\\":null,\\\"infeccioso\\\":false,\\\"observacionInfeccioso\\\":null,\\\"historicoInfeccioso\\\":null,\\\"valvulopatias\\\":false,\\\"observacionValvulopatias\\\":null,\\\"historicoValvulopatias\\\":null,\\\"transtornosHormonales\\\":false,\\\"observacionTranstornosHormonales\\\":null,\\\"historicoTranstornosHormonales\\\":null,\\\"transtornosGastrointestinales\\\":false,\\\"observacionTranstornosGastrointestinales\\\":null,\\\"historicoTranstornosGastrointestinales\\\":null,\\\"transtornosNeuronales\\\":false,\\\"observacionTranstornosNeuronales\\\":null,\\\"historicoTranstornosNeuronales\\\":null,\\\"otros\\\":true,\\\"observacionOtros\\\":\\\"PREDIABETES\\\",\\\"historicoOtros\\\":null,\\\"histerectomia\\\":false,\\\"observacionHisterectomia\\\":null,\\\"fechaHisterectomia\\\":null,\\\"historicoHisterectomia\\\":null,\\\"vacectomia\\\":false,\\\"observacionVacectomia\\\":null,\\\"fechaVacectomia\\\":null,\\\"historicoVacectomia\\\":null},\\\"ListadoOrdenamiento\\\":[{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":18759,\\\"codigo\\\":\\\"890307\\\",\\\"descripcion\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"CONSULTA\\\",\\\"descripcionBusqueda\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRIA\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":51,\\\"swCirugia\\\":true},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19562,\\\"descripcion\\\":\\\"GLUCOSA EN SUERO U OTRO FLUIDO DIFERENTE A ORINA\\\",\\\"codigo\\\":\\\"903841\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19540,\\\"descripcion\\\":\\\"COLESTEROL TOTAL\\\",\\\"codigo\\\":\\\"903818\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19539,\\\"descripcion\\\":\\\"COLESTEROL DE BAJA DENSIDAD [LDL] AUTOMATIZADO\\\",\\\"codigo\\\":\\\"903817\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19537,\\\"descripcion\\\":\\\"COLESTEROL DE ALTA DENSIDAD HDL\\\",\\\"codigo\\\":\\\"903815\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19589,\\\"descripcion\\\":\\\"TRIGLICERIDOS\\\",\\\"codigo\\\":\\\"903868\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":20348,\\\"descripcion\\\":\\\"UROANÁLISIS\\\",\\\"codigo\\\":\\\"907106\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19616,\\\"descripcion\\\":\\\"CREATININA EN SUERO U OTROS FLUIDOS\\\",\\\"codigo\\\":\\\"903895\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19597,\\\"descripcion\\\":\\\"CREATININA EN ORINA PARCIAL\\\",\\\"codigo\\\":\\\"903876\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":19390,\\\"codigo\\\":\\\"903026\\\",\\\"descripcion\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\",\\\"descripcionBusqueda\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":968,\\\"swCirugia\\\":true}],\\\"esPlanificacionFamiliar\\\":false,\\\"esSaludMental\\\":false,\\\"esMama\\\":false,\\\"joven\\\":false,\\\"planificacionFamiliar\\\":false,\\\"adulto\\\":false,\\\"esAdulto\\\":false,\\\"esJoven\\\":false,\\\"adolescencia\\\":false,\\\"esPreconcepcional\\\":false,\\\"agudezaVisual\\\":false,\\\"ojoDerechoPrimerValorCercano\\\":null,\\\"ojoIzquierdoPrimerValorCercano\\\":null,\\\"ojoDerechoPrimerValorLejano\\\":null,\\\"ojoIzquierdoPrimerValorLejano\\\":null,\\\"prenatal\\\":false,\\\"pes\\\":true,\\\"crecimientoDesarrollo\\\":false,\\\"primeraInfancia\\\":false,\\\"infancia\\\":false,\\\"crecimientoDesarrolloDiagnosticoId\\\":1,\\\"gestante\\\":false,\\\"esVacunacion\\\":false,\\\"cervix\\\":false,\\\"swCertificadoAislamiento\\\":false,\\\"swCertificadoReintegro\\\":false,\\\"citaId\\\":\\\"NDM0MDYwMw\\\",\\\"medicamento\\\":{\\\"seEntregaronMedicamentos\\\":null,\\\"medicamentosPendientesEntrega\\\":\\\"\\\",\\\"medicamentos\\\":[{\\\"pf\\\":true,\\\"swInsumo\\\":0,\\\"swMl\\\":0,\\\"medicamento\\\":{\\\"id\\\":3044,\\\"consulta_Id\\\":1528740,\\\"codigo\\\":\\\"22304\\\",\\\"descripcion\\\":\\\"METFORMINA 850 mg (TABLETA)\\\",\\\"dosificacion\\\":\\\"1\\\",\\\"fechaCreacion\\\":\\\"20/05/2026\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"frecuenciaNumero\\\":1,\\\"cantidad\\\":30,\\\"dias\\\":30,\\\"pf\\\":\\\"Si\\\",\\\"profesional\\\":\\\"BRANDON JESUS PALENCIA MARTINEZ\\\",\\\"especialidad\\\":\\\"MEDICINA GENERAL\\\"},\\\"cantidad\\\":30,\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"frecuenciaNumero\\\":1,\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"dosificacion\\\":1,\\\"dias\\\":30,\\\"mlPorFrasco\\\":null,\\\"indicaciones\\\":\\\"UNA TABLETA DIARIA\\\",\\\"swCalcular\\\":0,\\\"contenido\\\":null,\\\"PF\\\":true,\\\"MesesPostFechado\\\":3,\\\"fechaInicial\\\":\\\"2026-08-08\\\",\\\"fechaFinal\\\":\\\"2026-11-08\\\"},{\\\"pf\\\":true,\\\"swInsumo\\\":0,\\\"swMl\\\":0,\\\"medicamento\\\":{\\\"id\\\":1641,\\\"consulta_Id\\\":1528740,\\\"codigo\\\":\\\"60125\\\",\\\"descripcion\\\":\\\"ATORVASTATINA 40 MG (TABLETA)\\\",\\\"dosificacion\\\":\\\"1\\\",\\\"fechaCreacion\\\":\\\"20/05/2026\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"frecuenciaNumero\\\":1,\\\"cantidad\\\":30,\\\"dias\\\":30,\\\"pf\\\":\\\"Si\\\",\\\"profesional\\\":\\\"BRANDON JESUS PALENCIA MARTINEZ\\\",\\\"especialidad\\\":\\\"MEDICINA GENERAL\\\"},\\\"cantidad\\\":30,\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"frecuenciaNumero\\\":1,\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"dosificacion\\\":1,\\\"dias\\\":30,\\\"mlPorFrasco\\\":null,\\\"indicaciones\\\":\\\"UNA TABLETA DIARIA\\\",\\\"swCalcular\\\":0,\\\"contenido\\\":null,\\\"PF\\\":true,\\\"MesesPostFechado\\\":3,\\\"fechaInicial\\\":\\\"2026-08-08\\\",\\\"fechaFinal\\\":\\\"2026-11-08\\\"},{\\\"pf\\\":true,\\\"swInsumo\\\":0,\\\"swMl\\\":0,\\\"medicamento\\\":{\\\"id\\\":2956,\\\"consulta_Id\\\":1528740,\\\"codigo\\\":\\\"60036\\\",\\\"descripcion\\\":\\\"LOSARTAN 50 mg (TABLETA) \\\",\\\"dosificacion\\\":\\\"1\\\",\\\"fechaCreacion\\\":\\\"20/05/2026\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"frecuenciaNumero\\\":12,\\\"cantidad\\\":60,\\\"dias\\\":30,\\\"pf\\\":\\\"Si\\\",\\\"profesional\\\":\\\"BRANDON JESUS PALENCIA MARTINEZ\\\",\\\"especialidad\\\":\\\"MEDICINA GENERAL\\\"},\\\"cantidad\\\":60,\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"frecuenciaNumero\\\":12,\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"dosificacion\\\":1,\\\"dias\\\":30,\\\"mlPorFrasco\\\":null,\\\"indicaciones\\\":\\\"UNA TABLETA CADA 12 HORAS\\\",\\\"swCalcular\\\":0,\\\"contenido\\\":null,\\\"PF\\\":true,\\\"MesesPostFechado\\\":3,\\\"fechaInicial\\\":\\\"2026-08-08\\\",\\\"fechaFinal\\\":\\\"2026-11-08\\\"},{\\\"pf\\\":true,\\\"swInsumo\\\":0,\\\"swMl\\\":0,\\\"medicamento\\\":{\\\"id\\\":1572,\\\"consulta_Id\\\":1528740,\\\"codigo\\\":\\\"60297\\\",\\\"descripcion\\\":\\\"AMLODIPINO 10 MG (TABLETA)\\\",\\\"dosificacion\\\":\\\"1\\\",\\\"fechaCreacion\\\":\\\"20/05/2026\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"frecuenciaNumero\\\":1,\\\"cantidad\\\":30,\\\"dias\\\":30,\\\"pf\\\":\\\"Si\\\",\\\"profesional\\\":\\\"BRANDON JESUS PALENCIA MARTINEZ\\\",\\\"especialidad\\\":\\\"MEDICINA GENERAL\\\"},\\\"cantidad\\\":30,\\\"viaAdministracion\\\":\\\"ORAL\\\",\\\"concentracion\\\":\\\"\\\",\\\"presentacion\\\":\\\"TABLETA\\\",\\\"frecuenciaNumero\\\":1,\\\"frecuenciaUnidad\\\":\\\"dias\\\",\\\"dosificacion\\\":1,\\\"dias\\\":30,\\\"mlPorFrasco\\\":null,\\\"indicaciones\\\":\\\"UNA TABLETA DIARIA\\\",\\\"swCalcular\\\":0,\\\"contenido\\\":null,\\\"PF\\\":true,\\\"MesesPostFechado\\\":3,\\\"fechaInicial\\\":\\\"2026-08-08\\\",\\\"fechaFinal\\\":\\\"2026-11-08\\\"}]},\\\"incapacidad\\\":{\\\"swIncapacidad\\\":false,\\\"desDiagnostico\\\":\\\"\\\",\\\"tipoDiagnostico\\\":\\\"\\\",\\\"incapacidadPorEstetica\\\":false,\\\"prorroga\\\":false,\\\"swRetroactiva\\\":false,\\\"fechaIncapacidad\\\":\\\"2026-08-08\\\",\\\"numeroDias\\\":0},\\\"segNoPresencial\\\":{\\\"observacion\\\":\\\"\\\",\\\"tipoAccesoId\\\":0,\\\"fechaSeguimiento\\\":\\\"2026-08-08T15:17:53.492Z\\\"},\\\"esVejez\\\":false,\\\"preconcepcional\\\":null,\\\"swRecienNacido\\\":false,\\\"swLactanciaMaterna\\\":false,\\\"swObesidad\\\":false,\\\"swFallaCardiaca\\\":false,\\\"swTuberculosis\\\":false,\\\"swAiepi\\\":false,\\\"swPuerperio\\\":false,\\\"datosUsuario\\\":{\\\"rangoEdad\\\":-1,\\\"id\\\":445164,\\\"primer_Apellido\\\":\\\"BRAN\\\",\\\"segundo_Apellido\\\":\\\"ANGEL\\\",\\\"primerApellido\\\":null,\\\"segundoApellido\\\":null,\\\"nombre\\\":\\\"JESUSMARIA\\\",\\\"nombreCompleto\\\":null,\\\"tipo_Identificacion\\\":\\\"CC\\\",\\\"identificacion\\\":\\\"8388129\\\",\\\"fecha_Nacimiento\\\":\\\"1948-12-28T00:00:00\\\",\\\"edad\\\":77,\\\"edadAnos\\\":77,\\\"edadMeses\\\":932,\\\"edadSemanas\\\":3728,\\\"edadDias\\\":28347,\\\"sexo\\\":\\\"M\\\",\\\"genero_Id\\\":0,\\\"genero\\\":\\\"\\\",\\\"isPac\\\":null,\\\"orientacion_Id\\\":0,\\\"orientacion\\\":\\\"\\\",\\\"estadoCivil_Id\\\":null,\\\"estadoCivil\\\":\\\"\\\",\\\"municipioResidenciad_Id\\\":null,\\\"municipioResidenciad\\\":\\\"\\\",\\\"direccion\\\":\\\"CL 62A 62A 48\\\",\\\"telefono\\\":null,\\\"celular\\\":\\\"3022813246\\\",\\\"correo\\\":\\\"jesusbran779@gmail.com\\\",\\\"escolaridad_Id\\\":null,\\\"escolaridad\\\":\\\"\\\",\\\"ocupacion\\\":\\\"\\\",\\\"ocupacion_Id\\\":null,\\\"eps\\\":{\\\"id\\\":2,\\\"nombre\\\":\\\"NUEVA EPS \\\",\\\"contratoId\\\":9,\\\"contratoNombre\\\":\\\"VIVA 1A IPS BELLO\\\",\\\"epsCiudades\\\":null},\\\"religion_Id\\\":null,\\\"religion\\\":\\\"\\\",\\\"etnia_Id\\\":null,\\\"etnia\\\":\\\"\\\",\\\"desplazado\\\":false,\\\"familiasAccion\\\":false,\\\"riesgo_Segmentacion\\\":null,\\\"riesgo_Enfermedad\\\":null,\\\"riesgo_Atencion\\\":null,\\\"sw_Tratamiento_Datos\\\":false,\\\"sw_Acepto_Contacto\\\":true,\\\"nivelSisben\\\":null,\\\"tipoPlan\\\":\\\"COTIZANTE\\\",\\\"regimen\\\":\\\"CONTRIBUTIVO\\\",\\\"rango\\\":\\\"A\\\",\\\"estado\\\":\\\"ACT\\\",\\\"cuotaMod\\\":0,\\\"exentoPago\\\":false,\\\"paisResidencia_Id\\\":null,\\\"paisNacimiento_Id\\\":null,\\\"municipioNacimiento_Id\\\":null,\\\"municipioNacimiento\\\":\\\"\\\",\\\"estrato_Id\\\":null,\\\"estrato\\\":\\\"\\\",\\\"discapacidad_Id\\\":null,\\\"discapacidad\\\":\\\"\\\",\\\"swAcepto\\\":false,\\\"salario\\\":null,\\\"medicoCabecera\\\":null,\\\"swGrupoFamiliar\\\":false,\\\"cuotaModeradora\\\":0,\\\"contratos\\\":[],\\\"programasPaciente\\\":[{\\\"id\\\":207353,\\\"descripcion\\\":\\\"Nefroprotección\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null},{\\\"id\\\":362325,\\\"descripcion\\\":\\\"Hipertensión\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null}],\\\"sedes\\\":[],\\\"listParentesco\\\":[],\\\"cohorte\\\":null,\\\"discapacidadNeps\\\":null,\\\"puntosReferenciaResidencia\\\":null,\\\"puntosReferenciaUbicacionHabitual\\\":null,\\\"mediosTransporte\\\":null,\\\"ubicacionesBOT\\\":null,\\\"reside\\\":null,\\\"barrio\\\":null,\\\"departamentoResidencia\\\":null,\\\"departamentoResidencia_Id\\\":null,\\\"nombreLugarUbica\\\":null,\\\"municipioUbica\\\":null,\\\"direccionUbica\\\":null,\\\"departamentoUbica\\\":null,\\\"barrioVeredaUbica\\\":null,\\\"nombreEdificioUrbanizacion\\\":null,\\\"grupoSanguineo\\\":null,\\\"rh\\\":null,\\\"tipoPlan_Id\\\":null,\\\"tipoPlan_Descripcion\\\":\\\"\\\"},\\\"Especialidad\\\":{\\\"id\\\":12,\\\"nombre\\\":\\\"MEDICINA GENERAL\\\"},\\\"motivo\\\":\\\"CONTROL DE RIESGO CARDIOVASCULAR\\\",\\\"ultimaEnfermedad\\\":\\\"PACIENTE MASCULINO DE 77 AÑOS, ADULTO MAYOR, CON ANTECEDENTE DE PREDIABETES, HIPERTENSIÓN ARTERIAL, ENFERMEDAD RENAL CRÓNICA Y DISLIPIDEMIA, VINCULADO AL PROGRAMA DE RIESGO CARDIOVASCULAR :: ACUDE A CONSULTA DE SEGUIMIENTO :: AL INTERROGATORIO DIRIGIDO SE ENCUENTRA ASINTOMÁTICO EN LA ESFERA CARDIOVASCULAR :: NIEGA DOLOR PRECORDIAL, DISNEA DE ESFUERZO, ORTOPNEA O DISNEA PAROXÍSTICA NOCTURNA :: NIEGA PALPITACIONES, SÍNCOPE O EDEMAS EN MIEMBROS INFERIORES :: NIEGA FATIGA DESPROPORCIONADA AL ESFUERZO, LIPOTIMIA O DISNEA EN REPOSO :: CAPACIDAD FUNCIONAL EVALUADA SEGÚN CONDICIÓN DE FRAGILIDAD; SIN DETERIORO AGUDO REFERIDO EN LA PRESENTE CONSULTA :: REFIERE ADHERENCIA AL ESQUEMA FARMACOLÓGICO VIGENTE :: SE DOCUMENTA BARRERA DE ACCESO: PACIENTE REFIERE ADQUISICIÓN PARTICULAR DE MEDICAMENTOS POR FALLA EN LA DISPENSACIÓN INSTITUCIONAL DE SU ASEGURADOR DURANTE LOS ÚLTIMOS 6 MESES :: SE ACLARA QUE POR MIGRACIÓN TECNOLÓGICA DEL SOFTWARE DE HISTORIAS CLÍNICAS NO SE CUENTA CON ACCESO AL HISTORIAL MÉDICO PREVIO EN LA PRESENTE CONSULTA :: SIN REPORTES DE HOSPITALIZACIONES, URGENCIAS O EVENTOS AGUDOS DESDE EL ÚLTIMO CONTROL.\\\",\\\"habitosGestionRiesgo\\\":{\\\"azucarAlta\\\":false,\\\"medicamentoAntiHipertensivos\\\":false,\\\"consumoAlimentosRicosFibra\\\":false,\\\"tomaAgua\\\":false,\\\"bajoConsumoGrasas\\\":false,\\\"bajoConsumoSal\\\":false,\\\"ejercicioPermanente\\\":false,\\\"horasSueñoAdecuadas\\\":false,\\\"horasSuenoAdecuadas\\\":false,\\\"pesoAdecuadoTalla\\\":false,\\\"buenosHabitosAalimenticios\\\":false,\\\"sustanciasPsicoactivas\\\":false,\\\"alcohol\\\":false,\\\"fumador\\\":\\\"No\\\",\\\"indiceTabaquico\\\":\\\"\\\",\\\"estres\\\":false,\\\"habitoOtros\\\":false,\\\"sedentarismo\\\":false,\\\"observSedentarismo\\\":\\\"\\\",\\\"victimaMaltrato\\\":false,\\\"preTestVIH\\\":null,\\\"victimaViolenciaSexual\\\":false,\\\"postTestVIH\\\":null,\\\"sintomaticoRespiratorio\\\":false,\\\"discapacidad\\\":\\\"\\\",\\\"sangreOcultaEnHeces\\\":\\\"\\\",\\\"toceMuchoMayoriaDias\\\":false,\\\"tieneFlemaMayoriaDias\\\":false,\\\"seQuedaSinAliento\\\":false,\\\"mayor40Anios\\\":false,\\\"actualmenteFumaOExfumador\\\":false,\\\"frecuenciaAlcohol\\\":0,\\\"frecuenciaFumador\\\":0},\\\"examenFisico\\\":{\\\"presionSistolica\\\":140,\\\"presionDiastolica\\\":74,\\\"pulso\\\":88,\\\"frecuenciaRespiratoria\\\":null,\\\"temperatura\\\":null,\\\"peso\\\":60,\\\"talla\\\":153,\\\"imc\\\":\\\"25.63\\\",\\\"circunferenciaAbdominal\\\":85,\\\"perimetroCefalico\\\":null,\\\"perimetroBraquial\\\":null,\\\"pliegueCutaneoSubescapular\\\":null,\\\"pliegueCutaneoTriceps\\\":null,\\\"presiones\\\":null,\\\"examenFisicoMamas\\\":null,\\\"piel\\\":null,\\\"cabeza\\\":null,\\\"cuello\\\":null,\\\"ojos\\\":null,\\\"nariz\\\":null,\\\"boca\\\":null,\\\"garganta\\\":null,\\\"corazon\\\":null,\\\"pulmon\\\":null,\\\"pelvis\\\":null,\\\"pelvistexto\\\":null,\\\"sintomasGenerales\\\":null,\\\"oidos\\\":null,\\\"torax\\\":null,\\\"abdomen\\\":null,\\\"genitoUrinario\\\":null,\\\"musculoEsqueletico\\\":null,\\\"neurologico\\\":null,\\\"vascularPeriferico\\\":null,\\\"cinturaPelvica\\\":null,\\\"taSistolicaAcostado\\\":null,\\\"taDiastolicaAcostado\\\":null,\\\"perimetroPantorrilla\\\":null,\\\"saturacionOxigeno\\\":null},\\\"revisionSistema\\\":{\\\"garganta\\\":null,\\\"corazon\\\":null,\\\"pulmon\\\":null,\\\"pelvis\\\":null,\\\"pelvistexto\\\":null},\\\"ListadoResultado\\\":[],\\\"analisisYplan\\\":\\\"===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== MASCULINO DE 77 AÑOS CON ANTECEDENTES DE HIPERTENSIÓN ARTERIAL, DISLIPIDEMIA, PREDIABETES Y ENFERMEDAD RENAL CRÓNICA. ACUDE A CONTROL. REFIERE BARRERA DE ACCESO A MEDICAMENTOS POR FALLA DE DISPENSACIÓN DE LA EAPB DURANTE LOS ÚLTIMOS 6 MESES; ADQUIERE TRATAMIENTO POR CUENTA PROPIA PARA GARANTIZAR CONTINUIDAD. MIGRACIÓN TECNOLÓGICA IMPIDE ACCESO A HISTORIAL CLÍNICO PREVIO; SE REGISTRA ESQUEMA ACTUAL SEGÚN ANAMNESIS. SEDENTARIO, NIEGA TABAQUISMO Y CONSUMO DE ALCOHOL. ===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS: HIPERTENSIÓN ARTERIAL, ENFERMEDAD RENAL CRÓNICA ESTADIO G3A, PREDIABETES, DISLIPIDEMIA. :: CLASIFICACIÓN RCV: RIESGO CARDIOVASCULAR ALTO. :: JUSTIFICACIÓN 2024: PRESENCIA DE ERC G3A Y CONJUNCIÓN DE FACTORES DE RIESGO ADICIONALES (EDAD >75 AÑOS, HIPERTENSIÓN ARTERIAL, PREDIABETES Y SEDENTARISMO). :: META LDL TERAPÉUTICA: MENOR A 70 MG/DL. ===== SECCIÓN: REVISIÓN PARACLÍNICA Y METABÓLICA ===== :: FUNCIÓN RENAL: TFG 53.63 ML/MIN (KDIGO G3A). CREATININA 0.93 MG/DL. RELACIÓN ALBÚMINA/CREATININA EN ORINA 4.83 MG/GR (A1). :: PERFIL LIPÍDICO: LDL 56.1 MG/DL. EN META. :: METABOLISMO GLUCÍDICO: GLUCEMIA EN AYUNAS 101 MG/DL (EN RANGO). :: ANÁLISIS DE METAS: PACIENTE EN META PARA PERFIL LIPÍDICO, GLUCEMIA Y RELACIÓN ALBÚMINA/CREATININA EN ORINA. ===== SECCIÓN: PLAN FARMACOLÓGICO (CONCILIACIÓN) ===== :: ESQUEMA ACTUAL: * ATORVASTATINA 40 MG DÍA. * LOSARTÁN 50 MG CADA 12 HORAS. * METFORMINA 850 MG DÍA. * AMLODIPINO 10 MG DÍA. :: OBSERVACIONES DE CONCILIACIÓN: SE REGISTRA REPORTE DE FALLA DE DISPENSACIÓN INSTITUCIONAL. ===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA: HIPOSÓDICA, BAJA CARGA GLUCÉMICA Y RESTRICCIÓN DE GRASAS SATURADAS. :: ACTIVIDAD FÍSICA: RECOMENDADA SEGÚN PERFIL SENIOR Y TOLERANCIA FUNCIONAL. :: EDUCACIÓN: ÉNFASIS EN ADHERENCIA TERAPÉUTICA, EVITAR MEDICAMENTOS NEFROTÓXICOS Y RIESGOS DE AUTOMEDICACIÓN. ===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA: SEGUIMIENTO POR CONSULTA EXTERNA. SE ORDENA TAMIZAJE PARA INFECCIÓN POR VIH (TAMIZAJE P/S). :: PRÓXIMOS LABORATORIOS (PROGRAMADOS PARA: 2026-07-31): * CREATININA SÉRICA. * ELECTROCARDIOGRAMA. * HEMOGLOBINA SÉRICA. * HORMONA PARATIROIDEA [PTH]. :: TRÁMITES: CITA CONTROL RCV EL 2026-08-07. ===== SECCIÓN: SIGNOS DE ALARMA Y SEGURIDAD ===== :: URGENCIAS: CONSULTAR ANTE DOLOR TORÁCICO, DISNEA DE REPOSO, DÉFICIT NEUROLÓGICO FOCAL O PALPITACIONES. :: ALERTA MÉDICO-LEGAL: SE DEJA CONSTANCIA EN HISTORIA CLÍNICA DE BARRERA DE ACCESO A MEDICAMENTOS REPORTADA POR EL PACIENTE. ESTA SITUACIÓN CONFIGURA UN RIESGO REAL DE INTERRUPCIÓN TERAPÉUTICA EN UN PACIENTE DE ALTO RIESGO CARDIOVASCULAR, LO QUE INCREMENTA SIGNIFICATIVAMENTE LA PROBABILIDAD DE EVENTOS CARDIOVASCULARES MAYORES Y MUERTE. LA GARANTÍA DE CONTINUIDAD DEL TRATAMIENTO ES RESPONSABILIDAD DIRECTA DEL ASEGURADOR (EAPB).\\\\n\\\",\\\"diagnosticoPrincipal\\\":{\\\"causaExterna\\\":{\\\"nombre\\\":\\\"ENFERMEDAD GENERAL\\\",\\\"codigo\\\":\\\"38\\\",\\\"id\\\":32},\\\"finalidadConsulta\\\":{\\\"id\\\":27,\\\"codigo\\\":\\\"16\\\",\\\"descripcion\\\":\\\"TRATAMIENTO\\\",\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"estado\\\":\\\"ACT\\\"},\\\"tipoDiagnosticoPpal\\\":{\\\"id\\\":2,\\\"descripcion\\\":\\\"CONFIRMADO REPETIDO\\\",\\\"fechaCreacion\\\":\\\"2019-02-21T10:30:00.637\\\",\\\"estado\\\":\\\"ACT\\\",\\\"codigo\\\":\\\"\\\"}},\\\"diagnosticos\\\":[{\\\"id\\\":17620,\\\"codigo\\\":\\\"N189\\\",\\\"simbolo\\\":\\\"\\\",\\\"descripcion\\\":\\\"INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\\\",\\\"sexoId\\\":0,\\\"diasIncapacidad\\\":25,\\\"swCertAislamiento\\\":false,\\\"swCertReintegro\\\":false,\\\"sexo\\\":null,\\\"dx\\\":true,\\\"nombreBusqueda\\\":\\\"N189 | INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\\\"},{\\\"id\\\":15618,\\\"codigo\\\":\\\"I10X\\\",\\\"simbolo\\\":\\\"\\\",\\\"descripcion\\\":\\\"HIPERTENSION ESENCIAL (PRIMARIA)\\\",\\\"sexoId\\\":0,\\\"diasIncapacidad\\\":5,\\\"swCertAislamiento\\\":false,\\\"swCertReintegro\\\":false,\\\"sexo\\\":null,\\\"dx\\\":false,\\\"nombreBusqueda\\\":\\\"I10X | HIPERTENSION ESENCIAL (PRIMARIA)\\\"}],\\\"planDeManejoPostCovid\\\":{\\\"tipoTerapias\\\":{}},\\\"recomendacionesMedicas\\\":\\\"\\\",\\\"listadoPYP\\\":[{\\\"id\\\":23,\\\"descripcion\\\":\\\"Vejez\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":7,\\\"descripcion\\\":\\\"Agudeza Visual y Auditiva\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":9,\\\"descripcion\\\":\\\"Ruta Crónicos\\\",\\\"advertencia\\\":\\\"Ya el paciente tuvo una cita cercana hace 2 Meses\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":true},{\\\"id\\\":37,\\\"descripcion\\\":\\\"Obesidad\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":36,\\\"descripcion\\\":\\\"Falla Cardiaca\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":31,\\\"descripcion\\\":\\\"Tuberculosis\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":3,\\\"descripcion\\\":\\\"Salud Mental\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false},{\\\"id\\\":11,\\\"descripcion\\\":\\\"Vacunacion\\\",\\\"advertencia\\\":\\\"\\\",\\\"pacienteAplica\\\":true,\\\"value\\\":false}],\\\"crecimientoYDesarrollo\\\":null,\\\"SaludMentalHC\\\":null,\\\"jovenHC\\\":null,\\\"adultoHC\\\":null,\\\"fallaCardiacaHC\\\":null,\\\"recienNacidoHC\\\":null,\\\"lactanciaMaternaHC\\\":null,\\\"planificacionFamiliarHC\\\":null,\\\"ojoDerechoSegundoValorCercano\\\":null,\\\"ojoIzquierdoSegundoValorCercano\\\":null,\\\"resultadoCercano\\\":null,\\\"ojoDerechoSegundoValorLejano\\\":null,\\\"ojoIzquierdoSegundoValorLejano\\\":null,\\\"resultadoAgudezaVisualLejanaOjoDerecho\\\":null,\\\"resultadoAgudezaVisualLejanaOjoIzquierdo\\\":null,\\\"observacionesGeneralesLejano\\\":null,\\\"oidoDiagnosticoId\\\":0,\\\"otoscopia\\\":false,\\\"otoscopiaOidoDerecho\\\":\\\"\\\",\\\"otoscopiaOidoIzquierdo\\\":\\\"\\\",\\\"observacionesAlteracionesOido\\\":\\\"\\\",\\\"PrenatalHC\\\":null,\\\"pesHC\\\":{\\\"riesgoCardiovascular\\\":\\\"\\\",\\\"esHipotiroidismo\\\":false,\\\"esEPOC\\\":false,\\\"clinicaPaciente\\\":{\\\"tristeza\\\":false,\\\"depresion\\\":false,\\\"ansiedad\\\":false,\\\"estres\\\":false,\\\"bajaAutoestima\\\":false,\\\"palpitaciones\\\":false,\\\"suenoInquieto\\\":false,\\\"reflujo\\\":false,\\\"calculosRenales\\\":false,\\\"incontinenciaUrinaria\\\":false,\\\"dificultadMiccion\\\":false,\\\"disfuncionErectil\\\":false,\\\"ronca\\\":false,\\\"cansancio\\\":false,\\\"somnoliencia\\\":false,\\\"artralgias\\\":false,\\\"sarpullidos\\\":false,\\\"ulcerasMiembrosInferiores\\\":false,\\\"deportes\\\":false,\\\"deportesDescripcion\\\":\\\"\\\",\\\"deportesFrecuencia\\\":\\\"\\\"},\\\"escalaGlasglow\\\":{\\\"respuestaOcular\\\":\\\"\\\",\\\"respuestaOcularPuntaje\\\":0,\\\"respuestaVerbal\\\":\\\"\\\",\\\"respuestaVerbalPuntaje\\\":0,\\\"respuestaMotora\\\":\\\"\\\",\\\"respuestaMotoraPuntaje\\\":0,\\\"nivelTrauma\\\":\\\"\\\",\\\"total\\\":0},\\\"planDeCuidado\\\":{\\\"conducta\\\":\\\"Control\\\",\\\"proximaConsulta\\\":\\\"3 meses\\\",\\\"remisionPrograma\\\":\\\"\\\",\\\"estadio5desistimiento\\\":\\\"\\\",\\\"requiereDialitica\\\":\\\"\\\"},\\\"clasificacionEdmonto\\\":{\\\"estadoGeneral\\\":null,\\\"independenciaFuncional\\\":null,\\\"apoyoSocial\\\":null,\\\"usoMedicamentos\\\":null,\\\"nutricion\\\":null,\\\"estadoAnimo\\\":null,\\\"continenciaUrinaria\\\":null,\\\"marcha\\\":null,\\\"equilibrio\\\":null,\\\"puntajeTotal\\\":0,\\\"interpretacion\\\":\\\"\\\",\\\"cognicion\\\":{\\\"palabrasIniciales\\\":{\\\"palabra1\\\":\\\"\\\",\\\"palabra2\\\":\\\"\\\",\\\"palabra3\\\":\\\"\\\"},\\\"dibujoReloj\\\":{\\\"hizoReloj\\\":false,\\\"numerosCorrectos\\\":false,\\\"horaCorrecta\\\":false},\\\"palabrasFinales\\\":{\\\"palabra1\\\":\\\"\\\",\\\"palabra2\\\":\\\"\\\",\\\"palabra3\\\":\\\"\\\"},\\\"puntaje\\\":0,\\\"interpretacion\\\":\\\"\\\"}},\\\"escalaKFREE\\\":{\\\"edad\\\":77,\\\"sexo\\\":\\\"M\\\",\\\"tfg\\\":\\\"46.87\\\",\\\"albuminaCreatinina\\\":null,\\\"resultado\\\":\\\"\\\",\\\"riesgo\\\":\\\"\\\",\\\"puntaje\\\":0},\\\"factoresDeriesgoParaOrigenDiabetes\\\":{},\\\"datosReferenciaTFG\\\":{\\\"sexo\\\":1,\\\"edad\\\":77,\\\"peso\\\":60,\\\"talla\\\":153,\\\"afroAmericano\\\":false,\\\"creatinine\\\":1.12,\\\"creatinineUnidad\\\":\\\"mg/dL\\\",\\\"resultadoCG\\\":\\\"46.87\\\",\\\"resultadoCkdEpi\\\":\\\"67.66\\\",\\\"resultadoMDRD\\\":\\\"67.57\\\"},\\\"testMoriskGreen\\\":{\\\"olvidoTomarMedicamentos\\\":false,\\\"tomaMedicamentoHoraIndicada\\\":false,\\\"sienteBienDejaTomarMedicacion\\\":false,\\\"sienteMalDejaTomarMedicacion\\\":false,\\\"olvidoTomarMedicamentosVal\\\":0,\\\"tomaMedicamentoHoraIndicadaVal\\\":0,\\\"sienteBienDejaTomarMedicacionVal\\\":0,\\\"sienteMalDejaTomarMedicacionVal\\\":0},\\\"planificacionFamiliar\\\":{\\\"planifica\\\":false,\\\"planificaObser\\\":\\\"\\\",\\\"usoMetodosAnticonceptivos\\\":false,\\\"metodosAnticonceptivos\\\":{\\\"ninguno\\\":false,\\\"oral\\\":false,\\\"inyectable\\\":false,\\\"subdermico\\\":false,\\\"d_I_U\\\":false,\\\"condon\\\":false,\\\"esterilizacionFemenina\\\":false,\\\"vasectomia\\\":false,\\\"otros\\\":false},\\\"cualesMetodosAnticonceptivos\\\":\\\"\\\",\\\"vidaSexualActiva\\\":false,\\\"metodoPlanificacionFamiliar\\\":null,\\\"fechaInicioPlanificacionFamiliar\\\":null,\\\"gestante\\\":null,\\\"edadGestacional\\\":null,\\\"observacionPlanificacion\\\":\\\"\\\"},\\\"antecedentesRelacionados\\\":{\\\"esIECA\\\":false,\\\"esIECAConoceFecha\\\":false,\\\"esIECAFecha\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"esARAII\\\":false,\\\"esARAIIConoceFecha\\\":false,\\\"esARAIIFecha\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"esTerapiaNoDialiticaEstadioRenal5\\\":false,\\\"esTerapiaNoDialiticaEstadioRenal5ConoceFecha\\\":false,\\\"esTerapiaNoDialiticaEstadioRenal5Fecha\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"esTransplanteRenal\\\":false,\\\"esTransplanteRenalConoceFecha\\\":false,\\\"esTransplanteRenalFecha\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"esHemodialisisAntecedentes\\\":false,\\\"esHemodialisisAntecedentesConoceFecha\\\":false,\\\"esHemodialisisAntecedentesFecha\\\":\\\"0001-01-01T00:00:00Z\\\"},\\\"esSindromeMetabolico\\\":false,\\\"sindromeMetabolico\\\":{\\\"fechaIngreso\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"diagConfirmatorio\\\":null,\\\"diagnosticoConfirmatorio\\\":{\\\"id\\\":0,\\\"codigo\\\":null,\\\"descripcion\\\":null},\\\"fechaConfirmacionDx\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"tipoDiagnostico\\\":null,\\\"tipoSindrome\\\":{\\\"id\\\":0,\\\"descripcion\\\":\\\"\\\"},\\\"edadIngreso\\\":0,\\\"tasaFilGlomerular\\\":0,\\\"factores\\\":{\\\"obesidadAbdominal\\\":false,\\\"hipertrigliceridemia\\\":false,\\\"colesterolHDLBajo\\\":false,\\\"presionSanguineaAlta\\\":false,\\\"glucosaAlta\\\":false}},\\\"esHipertension\\\":true,\\\"hipertension\\\":{\\\"fechaIngreso\\\":\\\"2026-05-20T15:24:40.133Z\\\",\\\"diagConfirmatorio\\\":\\\"I10X\\\",\\\"diagnosticoConfirmatorio\\\":{\\\"id\\\":15618,\\\"codigo\\\":\\\"I10X\\\",\\\"descripcion\\\":\\\"HIPERTENSION ESENCIAL (PRIMARIA)\\\"},\\\"fechaConfirmacionDx\\\":\\\"2026-05-20T15:24:40.133Z\\\",\\\"tipoHipertension\\\":{\\\"id\\\":1,\\\"descripcion\\\":\\\"Hipertensión primaria o esencial\\\"},\\\"edadIngreso\\\":77,\\\"tasaFilGlomerular\\\":0},\\\"esDiabetes\\\":false,\\\"diabetes\\\":{\\\"fechaIngreso\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"diagConfirmatorio\\\":null,\\\"diagnosticoConfirmatorio\\\":{\\\"id\\\":0,\\\"codigo\\\":null,\\\"descripcion\\\":null},\\\"fechaConfirmacionDx\\\":\\\"0001-01-01T00:00:00Z\\\",\\\"tipoDiabetes\\\":{\\\"id\\\":0,\\\"descripcion\\\":\\\"\\\"},\\\"clasificacionDiabetes\\\":null,\\\"edadIngreso\\\":0,\\\"tasaFilGlomerular\\\":0},\\\"esNefroproteccion\\\":false,\\\"nefroproteccion\\\":{\\\"fechaIngreso\\\":\\\"2026-05-20T15:24:41.235Z\\\",\\\"diagConfirmatorio\\\":\\\"N189\\\",\\\"diagnosticoConfirmatorio\\\":{\\\"id\\\":17620,\\\"codigo\\\":\\\"N189\\\",\\\"descripcion\\\":\\\"INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\\\"},\\\"fechaConfirmacionDx\\\":\\\"2026-05-20T15:24:41.235Z\\\",\\\"etiologiaERC\\\":{\\\"id\\\":0,\\\"descripcion\\\":\\\"\\\"},\\\"edadIngreso\\\":77,\\\"tasaFilGlomerular\\\":0},\\\"epoc\\\":{\\\"diagConfirmatorio\\\":null,\\\"fechaConfirmacionDx\\\":null,\\\"exposicionOcupacional\\\":false,\\\"contaminacionAmbiental\\\":false,\\\"exposicionahumo\\\":false,\\\"alcohol\\\":false,\\\"infeccionRespiratoriaInfancia\\\":false,\\\"atopia\\\":false,\\\"historiaFamilia\\\":false,\\\"consumeCigarrillos\\\":false,\\\"cuantosCigarrilosAldia\\\":0,\\\"numeroDeAnosFumando\\\":0,\\\"indiceTabaquico\\\":\\\"0\\\",\\\"riesgoEPOC\\\":\\\"Nulo\\\",\\\"espirometrias\\\":false,\\\"resultadoEspirometrias\\\":null,\\\"fechaEspirometrias\\\":null,\\\"vefPost\\\":null,\\\"clasificacionGravedadEPOC\\\":null,\\\"tratamiento\\\":null,\\\"esExacerbaciones\\\":false,\\\"exacerbaciones\\\":null,\\\"observaciones\\\":null},\\\"obesidad\\\":{\\\"imc\\\":\\\"25.63\\\",\\\"clasificacion\\\":\\\"SOBREPESO: ENTRE 25 Y 29.9\\\"},\\\"hipotiroidismo\\\":{\\\"tcuatrolibre\\\":null,\\\"tsh\\\":null,\\\"ttreslibre\\\":null,\\\"tcuatrototal\\\":null},\\\"resultadoPrograma\\\":{\\\"alertresultadoHemoglobina\\\":\\\"#e2e5ec\\\",\\\"alertresultadoCreatinina\\\":\\\"#e2e5ec\\\",\\\"alertresultadoColesterolTotal\\\":\\\"#e2e5ec\\\",\\\"resultadoHemoglobinaHemo\\\":\\\"15\\\",\\\"fechaResultHemoglobinaHemo\\\":\\\"2026-07-31\\\",\\\"resultadoRelacionAlbuminaCreatinina\\\":null,\\\"resultadoCreatinina\\\":1.12,\\\"fechaResultCreatinina\\\":\\\"2026-07-31\\\",\\\"resultadoPTH\\\":21.6,\\\"alertresultadoPTH\\\":\\\"#e2e5ec\\\",\\\"fechaResultPTH\\\":\\\"2026-07-31\\\"},\\\"clasificacion\\\":{\\\"hipertension\\\":null,\\\"sindromemetabolico\\\":null,\\\"diabetes\\\":null,\\\"glucometria\\\":false,\\\"glucometriacual\\\":null,\\\"rcv\\\":\\\"BAJO\\\",\\\"estadio\\\":\\\"46.87\\\",\\\"estadioTFGApellido\\\":\\\"3a\\\",\\\"estadioTFGApellidoInterpretacion\\\":\\\"Ligera a moderadamente disminuido\\\",\\\"estadioNefroproteccion\\\":null,\\\"seguimientoPrograma\\\":\\\"HTA\\\",\\\"rcvFramigham\\\":\\\"18.75\\\",\\\"nivelRiesgo\\\":\\\"MODERADO\\\",\\\"resultadoMDRD\\\":\\\"67.57\\\",\\\"resultadoCkdEpi\\\":\\\"67.66\\\",\\\"tipo_de_Diabetes_Seg\\\":null,\\\"requerimiento_de_insulina\\\":null},\\\"seguimientoResultadoPrograma\\\":{\\\"alertresultadoHemoglobina\\\":\\\"#e2e5ec\\\",\\\"alertresultadoCreatinina\\\":\\\"#e2e5ec\\\",\\\"alertresultadoColesterolTotal\\\":\\\"#e2e5ec\\\",\\\"resultadoHemoglobinaHemo\\\":\\\"15\\\",\\\"fechaResultHemoglobinaHemo\\\":\\\"2026-07-31\\\",\\\"resultadoRelacionAlbuminaCreatinina\\\":null,\\\"resultadoCreatinina\\\":1.12,\\\"fechaResultCreatinina\\\":\\\"2026-07-31\\\",\\\"resultadoPTH\\\":21.6,\\\"alertresultadoPTH\\\":\\\"#e2e5ec\\\",\\\"fechaResultPTH\\\":\\\"2026-07-31\\\"}},\\\"mamaHC\\\":null,\\\"vacunacion\\\":null,\\\"cervixHC\\\":null,\\\"adolescenciaHC\\\":null,\\\"OrdenamientoHC\\\":{\\\"diagnosticoId\\\":17620,\\\"citaId\\\":\\\"NDM0MDYwMw\\\",\\\"usuarioId\\\":0,\\\"perfil\\\":null,\\\"ordenes\\\":[{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":18759,\\\"codigo\\\":\\\"890307\\\",\\\"descripcion\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"CONSULTA\\\",\\\"descripcionBusqueda\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRIA\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":51,\\\"swCirugia\\\":true},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19562,\\\"descripcion\\\":\\\"GLUCOSA EN SUERO U OTRO FLUIDO DIFERENTE A ORINA\\\",\\\"codigo\\\":\\\"903841\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19540,\\\"descripcion\\\":\\\"COLESTEROL TOTAL\\\",\\\"codigo\\\":\\\"903818\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19539,\\\"descripcion\\\":\\\"COLESTEROL DE BAJA DENSIDAD [LDL] AUTOMATIZADO\\\",\\\"codigo\\\":\\\"903817\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19537,\\\"descripcion\\\":\\\"COLESTEROL DE ALTA DENSIDAD HDL\\\",\\\"codigo\\\":\\\"903815\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19589,\\\"descripcion\\\":\\\"TRIGLICERIDOS\\\",\\\"codigo\\\":\\\"903868\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":20348,\\\"descripcion\\\":\\\"UROANÁLISIS\\\",\\\"codigo\\\":\\\"907106\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19616,\\\"descripcion\\\":\\\"CREATININA EN SUERO U OTROS FLUIDOS\\\",\\\"codigo\\\":\\\"903895\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19597,\\\"descripcion\\\":\\\"CREATININA EN ORINA PARCIAL\\\",\\\"codigo\\\":\\\"903876\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":19390,\\\"codigo\\\":\\\"903026\\\",\\\"descripcion\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\",\\\"descripcionBusqueda\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":968,\\\"swCirugia\\\":true}],\\\"paciente\\\":{\\\"rangoEdad\\\":-1,\\\"id\\\":445164,\\\"primer_Apellido\\\":\\\"BRAN\\\",\\\"segundo_Apellido\\\":\\\"ANGEL\\\",\\\"primerApellido\\\":null,\\\"segundoApellido\\\":null,\\\"nombre\\\":\\\"JESUSMARIA\\\",\\\"nombreCompleto\\\":null,\\\"tipo_Identificacion\\\":\\\"CC\\\",\\\"identificacion\\\":\\\"8388129\\\",\\\"fecha_Nacimiento\\\":\\\"1948-12-28T00:00:00\\\",\\\"edad\\\":77,\\\"edadAnos\\\":77,\\\"edadMeses\\\":932,\\\"edadSemanas\\\":3728,\\\"edadDias\\\":28347,\\\"sexo\\\":\\\"M\\\",\\\"genero_Id\\\":0,\\\"genero\\\":\\\"\\\",\\\"isPac\\\":null,\\\"orientacion_Id\\\":0,\\\"orientacion\\\":\\\"\\\",\\\"estadoCivil_Id\\\":null,\\\"estadoCivil\\\":\\\"\\\",\\\"municipioResidenciad_Id\\\":null,\\\"municipioResidenciad\\\":\\\"\\\",\\\"direccion\\\":\\\"CL 62A 62A 48\\\",\\\"telefono\\\":null,\\\"celular\\\":\\\"3022813246\\\",\\\"correo\\\":\\\"jesusbran779@gmail.com\\\",\\\"escolaridad_Id\\\":null,\\\"escolaridad\\\":\\\"\\\",\\\"ocupacion\\\":\\\"\\\",\\\"ocupacion_Id\\\":null,\\\"eps\\\":{\\\"id\\\":2,\\\"nombre\\\":\\\"NUEVA EPS \\\",\\\"contratoId\\\":9,\\\"contratoNombre\\\":\\\"VIVA 1A IPS BELLO\\\",\\\"epsCiudades\\\":null},\\\"religion_Id\\\":null,\\\"religion\\\":\\\"\\\",\\\"etnia_Id\\\":null,\\\"etnia\\\":\\\"\\\",\\\"desplazado\\\":false,\\\"familiasAccion\\\":false,\\\"riesgo_Segmentacion\\\":null,\\\"riesgo_Enfermedad\\\":null,\\\"riesgo_Atencion\\\":null,\\\"sw_Tratamiento_Datos\\\":false,\\\"sw_Acepto_Contacto\\\":true,\\\"nivelSisben\\\":null,\\\"tipoPlan\\\":\\\"COTIZANTE\\\",\\\"regimen\\\":\\\"CONTRIBUTIVO\\\",\\\"rango\\\":\\\"A\\\",\\\"estado\\\":\\\"ACT\\\",\\\"cuotaMod\\\":0,\\\"exentoPago\\\":false,\\\"paisResidencia_Id\\\":null,\\\"paisNacimiento_Id\\\":null,\\\"municipioNacimiento_Id\\\":null,\\\"municipioNacimiento\\\":\\\"\\\",\\\"estrato_Id\\\":null,\\\"estrato\\\":\\\"\\\",\\\"discapacidad_Id\\\":null,\\\"discapacidad\\\":\\\"\\\",\\\"swAcepto\\\":false,\\\"salario\\\":null,\\\"medicoCabecera\\\":null,\\\"swGrupoFamiliar\\\":false,\\\"cuotaModeradora\\\":0,\\\"contratos\\\":[],\\\"programasPaciente\\\":[{\\\"id\\\":207353,\\\"descripcion\\\":\\\"Nefroprotección\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null},{\\\"id\\\":362325,\\\"descripcion\\\":\\\"Hipertensión\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null}],\\\"sedes\\\":[],\\\"listParentesco\\\":[],\\\"cohorte\\\":null,\\\"discapacidadNeps\\\":null,\\\"puntosReferenciaResidencia\\\":null,\\\"puntosReferenciaUbicacionHabitual\\\":null,\\\"mediosTransporte\\\":null,\\\"ubicacionesBOT\\\":null,\\\"reside\\\":null,\\\"barrio\\\":null,\\\"departamentoResidencia\\\":null,\\\"departamentoResidencia_Id\\\":null,\\\"nombreLugarUbica\\\":null,\\\"municipioUbica\\\":null,\\\"direccionUbica\\\":null,\\\"departamentoUbica\\\":null,\\\"barrioVeredaUbica\\\":null,\\\"nombreEdificioUrbanizacion\\\":null,\\\"grupoSanguineo\\\":null,\\\"rh\\\":null,\\\"tipoPlan_Id\\\":null,\\\"tipoPlan_Descripcion\\\":\\\"\\\"},\\\"ordenesCx\\\":[],\\\"swHC\\\":true,\\\"swQuirofano\\\":false},\\\"actividadEducacionHc\\\":null,\\\"TuberculosisHC\\\":null,\\\"nutricionHC\\\":null,\\\"obesidadHC\\\":null,\\\"puerperio\\\":null,\\\"vihHc\\\":null}\",\"tipo\":\"MORBILIDAD\",\"consultaId\":\"NDM0MDYwMw\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:53.554Z",
+      "method": "POST",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/GuardarJsonHC",
+      "reqBody": "{\"UsuarioId\":515,\"json\":\"{\\\"diagnosticoId\\\":17620,\\\"citaId\\\":\\\"NDM0MDYwMw\\\",\\\"usuarioId\\\":0,\\\"perfil\\\":null,\\\"ordenes\\\":[{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":18759,\\\"codigo\\\":\\\"890307\\\",\\\"descripcion\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"CONSULTA\\\",\\\"descripcionBusqueda\\\":\\\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRIA\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":51,\\\"swCirugia\\\":true},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19562,\\\"descripcion\\\":\\\"GLUCOSA EN SUERO U OTRO FLUIDO DIFERENTE A ORINA\\\",\\\"codigo\\\":\\\"903841\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19540,\\\"descripcion\\\":\\\"COLESTEROL TOTAL\\\",\\\"codigo\\\":\\\"903818\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19539,\\\"descripcion\\\":\\\"COLESTEROL DE BAJA DENSIDAD [LDL] AUTOMATIZADO\\\",\\\"codigo\\\":\\\"903817\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19537,\\\"descripcion\\\":\\\"COLESTEROL DE ALTA DENSIDAD HDL\\\",\\\"codigo\\\":\\\"903815\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19589,\\\"descripcion\\\":\\\"TRIGLICERIDOS\\\",\\\"codigo\\\":\\\"903868\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":20348,\\\"descripcion\\\":\\\"UROANÁLISIS\\\",\\\"codigo\\\":\\\"907106\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19616,\\\"descripcion\\\":\\\"CREATININA EN SUERO U OTROS FLUIDOS\\\",\\\"codigo\\\":\\\"903895\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"cupAgregar\\\":false,\\\"swCirugia\\\":false,\\\"cantidad\\\":1,\\\"id\\\":19597,\\\"descripcion\\\":\\\"CREATININA EN ORINA PARCIAL\\\",\\\"codigo\\\":\\\"903876\\\",\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\"},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\"},{\\\"cantidad\\\":1,\\\"listadoCupsTableSeleccionados\\\":[],\\\"listadoDiagnosticoTableSeleccionados\\\":[],\\\"check\\\":false,\\\"cup\\\":{\\\"id\\\":19390,\\\"codigo\\\":\\\"903026\\\",\\\"descripcion\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"swCirugia\\\":true,\\\"nota_Tecnica\\\":\\\"LABORATORIO\\\",\\\"descripcionBusqueda\\\":\\\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\\\",\\\"cantidad\\\":1},\\\"tipo\\\":\\\"\\\",\\\"nota\\\":\\\"\\\",\\\"idRandom\\\":968,\\\"swCirugia\\\":true}],\\\"paciente\\\":{\\\"rangoEdad\\\":-1,\\\"id\\\":445164,\\\"primer_Apellido\\\":\\\"BRAN\\\",\\\"segundo_Apellido\\\":\\\"ANGEL\\\",\\\"primerApellido\\\":null,\\\"segundoApellido\\\":null,\\\"nombre\\\":\\\"JESUSMARIA\\\",\\\"nombreCompleto\\\":null,\\\"tipo_Identificacion\\\":\\\"CC\\\",\\\"identificacion\\\":\\\"8388129\\\",\\\"fecha_Nacimiento\\\":\\\"1948-12-28T00:00:00\\\",\\\"edad\\\":77,\\\"edadAnos\\\":77,\\\"edadMeses\\\":932,\\\"edadSemanas\\\":3728,\\\"edadDias\\\":28347,\\\"sexo\\\":\\\"M\\\",\\\"genero_Id\\\":0,\\\"genero\\\":\\\"\\\",\\\"isPac\\\":null,\\\"orientacion_Id\\\":0,\\\"orientacion\\\":\\\"\\\",\\\"estadoCivil_Id\\\":null,\\\"estadoCivil\\\":\\\"\\\",\\\"municipioResidenciad_Id\\\":null,\\\"municipioResidenciad\\\":\\\"\\\",\\\"direccion\\\":\\\"CL 62A 62A 48\\\",\\\"telefono\\\":null,\\\"celular\\\":\\\"3022813246\\\",\\\"correo\\\":\\\"jesusbran779@gmail.com\\\",\\\"escolaridad_Id\\\":null,\\\"escolaridad\\\":\\\"\\\",\\\"ocupacion\\\":\\\"\\\",\\\"ocupacion_Id\\\":null,\\\"eps\\\":{\\\"id\\\":2,\\\"nombre\\\":\\\"NUEVA EPS \\\",\\\"contratoId\\\":9,\\\"contratoNombre\\\":\\\"VIVA 1A IPS BELLO\\\",\\\"epsCiudades\\\":null},\\\"religion_Id\\\":null,\\\"religion\\\":\\\"\\\",\\\"etnia_Id\\\":null,\\\"etnia\\\":\\\"\\\",\\\"desplazado\\\":false,\\\"familiasAccion\\\":false,\\\"riesgo_Segmentacion\\\":null,\\\"riesgo_Enfermedad\\\":null,\\\"riesgo_Atencion\\\":null,\\\"sw_Tratamiento_Datos\\\":false,\\\"sw_Acepto_Contacto\\\":true,\\\"nivelSisben\\\":null,\\\"tipoPlan\\\":\\\"COTIZANTE\\\",\\\"regimen\\\":\\\"CONTRIBUTIVO\\\",\\\"rango\\\":\\\"A\\\",\\\"estado\\\":\\\"ACT\\\",\\\"cuotaMod\\\":0,\\\"exentoPago\\\":false,\\\"paisResidencia_Id\\\":null,\\\"paisNacimiento_Id\\\":null,\\\"municipioNacimiento_Id\\\":null,\\\"municipioNacimiento\\\":\\\"\\\",\\\"estrato_Id\\\":null,\\\"estrato\\\":\\\"\\\",\\\"discapacidad_Id\\\":null,\\\"discapacidad\\\":\\\"\\\",\\\"swAcepto\\\":false,\\\"salario\\\":null,\\\"medicoCabecera\\\":null,\\\"swGrupoFamiliar\\\":false,\\\"cuotaModeradora\\\":0,\\\"contratos\\\":[],\\\"programasPaciente\\\":[{\\\"id\\\":207353,\\\"descripcion\\\":\\\"Nefroprotección\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null},{\\\"id\\\":362325,\\\"descripcion\\\":\\\"Hipertensión\\\",\\\"edad_Inicial\\\":null,\\\"edad_Final\\\":null,\\\"sexo\\\":null,\\\"sw_Enfermeria\\\":false,\\\"sw_Morbilidad\\\":false,\\\"estado\\\":null,\\\"fechaCreacion\\\":\\\"0001-01-01T00:00:00\\\",\\\"pacRelUsuarioPrograma\\\":null}],\\\"sedes\\\":[],\\\"listParentesco\\\":[],\\\"cohorte\\\":null,\\\"discapacidadNeps\\\":null,\\\"puntosReferenciaResidencia\\\":null,\\\"puntosReferenciaUbicacionHabitual\\\":null,\\\"mediosTransporte\\\":null,\\\"ubicacionesBOT\\\":null,\\\"reside\\\":null,\\\"barrio\\\":null,\\\"departamentoResidencia\\\":null,\\\"departamentoResidencia_Id\\\":null,\\\"nombreLugarUbica\\\":null,\\\"municipioUbica\\\":null,\\\"direccionUbica\\\":null,\\\"departamentoUbica\\\":null,\\\"barrioVeredaUbica\\\":null,\\\"nombreEdificioUrbanizacion\\\":null,\\\"grupoSanguineo\\\":null,\\\"rh\\\":null,\\\"tipoPlan_Id\\\":null,\\\"tipoPlan_Descripcion\\\":\\\"\\\"},\\\"ordenesCx\\\":[]}\",\"tipo\":\"ORDENAMIENTO\",\"consultaId\":\"NDM0MDYwMw\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:53.585Z",
+      "method": "POST",
+      "url": "https://neps.everestintelligent.com/apiviva/APIPacienteV2/api/Paciente/ActualizarDatosPacienteHC/445164",
+      "reqBody": "{\"rangoEdad\":-1,\"id\":445164,\"primer_Apellido\":\"BRAN\",\"segundo_Apellido\":\"ANGEL\",\"primerApellido\":null,\"segundoApellido\":null,\"nombre\":\"JESUSMARIA\",\"nombreCompleto\":null,\"tipo_Identificacion\":\"CC\",\"identificacion\":\"8388129\",\"fecha_Nacimiento\":\"1948-12-28T00:00:00\",\"edad\":77,\"edadAnos\":77,\"edadMeses\":932,\"edadSemanas\":3728,\"edadDias\":28347,\"sexo\":\"M\",\"genero_Id\":0,\"genero\":\"\",\"isPac\":null,\"orientacion_Id\":0,\"orientacion\":\"\",\"estadoCivil_Id\":null,\"estadoCivil\":\"\",\"municipioResidenciad_Id\":null,\"municipioResidenciad\":\"\",\"direccion\":\"CL 62A 62A 48\",\"telefono\":null,\"celular\":\"3022813246\",\"correo\":\"jesusbran779@gmail.com\",\"escolaridad_Id\":null,\"escolaridad\":\"\",\"ocupacion\":\"\",\"ocupacion_Id\":null,\"eps\":{\"id\":2,\"nombre\":\"NUEVA EPS \",\"contratoId\":9,\"contratoNombre\":\"VIVA 1A IPS BELLO\",\"epsCiudades\":null},\"religion_Id\":null,\"religion\":\"\",\"etnia_Id\":null,\"etnia\":\"\",\"desplazado\":false,\"familiasAccion\":false,\"riesgo_Segmentacion\":null,\"riesgo_Enfermedad\":null,\"riesgo_Atencion\":null,\"sw_Tratamiento_Datos\":false,\"sw_Acepto_Contacto\":true,\"nivelSisben\":null,\"tipoPlan\":\"COTIZANTE\",\"regimen\":\"CONTRIBUTIVO\",\"rango\":\"A\",\"estado\":\"ACT\",\"cuotaMod\":0,\"exentoPago\":false,\"paisResidencia_Id\":null,\"paisNacimiento_Id\":null,\"municipioNacimiento_Id\":null,\"municipioNacimiento\":\"\",\"estrato_Id\":null,\"estrato\":\"\",\"discapacidad_Id\":null,\"discapacidad\":\"\",\"swAcepto\":false,\"salario\":null,\"medicoCabecera\":null,\"swGrupoFamiliar\":false,\"cuotaModeradora\":0,\"contratos\":[],\"programasPaciente\":[{\"id\":207353,\"descripcion\":\"Nefroprotección\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null},{\"id\":362325,\"descripcion\":\"Hipertensión\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null}],\"sedes\":[],\"listParentesco\":[],\"cohorte\":null,\"discapacidadNeps\":null,\"puntosReferenciaResidencia\":null,\"puntosReferenciaUbicacionHabitual\":null,\"mediosTransporte\":null,\"ubicacionesBOT\":null,\"reside\":null,\"barrio\":null,\"departamentoResidencia\":null,\"departamentoResidencia_Id\":null,\"nombreLugarUbica\":null,\"municipioUbica\":null,\"direccionUbica\":null,\"departamentoUbica\":null,\"barrioVeredaUbica\":null,\"nombreEdificioUrbanizacion\":null,\"grupoSanguineo\":null,\"rh\":null,\"tipoPlan_Id\":null,\"tipoPlan_Descripcion\":\"\",\"citaId\":\"NDM0MDYwMw\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:53.585Z",
+      "method": "POST",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad?UsuarioId=309",
+      "reqBody": "{\"swIncapacidad\":false,\"seguimiento\":false,\"swFinalizacionCrecimientoYDesarrollo\":false,\"swFinalizacionJoven\":false,\"swFinalizacionAdulto\":false,\"swFinalizacionPrenatal\":false,\"swFinalizacionHTA\":false,\"swFinalizacionDM\":false,\"swFinalizacionHTADM\":false,\"swFinalizacionERC12\":false,\"swFinalizacionERC3AB\":false,\"swFinalizacionERC4\":false,\"swFinalizacionERC5\":false,\"swFinalizacionNefro\":false,\"acompanante\":{\"parentesco\":{},\"categoria\":{}},\"quirurgicos\":[],\"traumaticos\":[],\"transfusiones\":[],\"alergicos\":[],\"farmacologicos\":[],\"antecedenteGinecoObstetrico\":{\"menarca\":false,\"observacionMenarca\":null,\"fechaMenarca\":null,\"ciclosMenstruales\":null,\"fum\":null,\"menopausia\":false,\"observacionMenopausia\":null,\"fechanMenopausia\":null,\"ets\":false,\"observacionETS\":null,\"autoExamenMama\":false,\"inicioRelacionesSexuales\":false,\"observacionInicioRelacionesSexuales\":null,\"actividadSexual\":null,\"tieneActividadSexual\":false,\"observacionActividadSexual\":null,\"numeroCompaneros\":0,\"ninguno\":false,\"oral\":false,\"inyectable\":false,\"subdermico\":false,\"d_I_U\":false,\"condon\":false,\"esterilizacionFemenina\":false,\"vasectomia\":false,\"otros\":false,\"gravidez\":0,\"partos\":0,\"abortos\":0,\"vaginales\":0,\"cesareas\":0,\"nacidosVivos\":0,\"nacidosMuertos\":0,\"ectopicos\":0,\"fup\":null,\"gemelar\":0,\"hemorragia_1\":false,\"hemorragia_2\":false,\"hemorragia_3\":false,\"preeclampsia\":false,\"eclampsia\":false,\"otrosPat\":false,\"observacionOtrosPat\":null,\"observacion\":null},\"antecedenteFamiliar\":{\"hipertension\":false,\"fechaHipertension\":\"0001-01-01T00:00:00Z\",\"observacionHipertension\":null,\"diabetes\":false,\"fechaDiabetes\":\"0001-01-01T00:00:00Z\",\"observacionDiabetes\":null,\"cardiovasculares\":false,\"fechaCardiovasculares\":\"0001-01-01T00:00:00Z\",\"observacionCardiovasculares\":null,\"cancerMama\":false,\"fechaCancerMama\":\"0001-01-01T00:00:00Z\",\"observacionCancerMama\":null,\"cancerProstata\":false,\"fechaCancerProstata\":\"0001-01-01T00:00:00Z\",\"observacionCancerProstata\":null,\"cancerColon\":false,\"fechaCancerColon\":\"0001-01-01T00:00:00Z\",\"observacionCancerColon\":null,\"cancerPulmon\":false,\"fechaCancerPulmon\":\"0001-01-01T00:00:00Z\",\"observacionCancerPulmon\":null,\"otroTipoCancer\":false,\"fechaOtroTipoCancer\":\"0001-01-01T00:00:00Z\",\"observacionOtroTipoCancer\":null,\"observacionOtro\":null},\"antecedentePatologicos\":{\"infartoMiocardio\":false,\"obsinfartoMiocardio\":null,\"emergenciaHipertensiva\":false,\"obsEmergenciaHipertensiva\":null,\"tromboembolismoPulmunar\":false,\"obsTromboembolismoPulmunar\":null,\"sindromeAortico\":false,\"obsSindromeAortico\":null,\"sincope\":false,\"obsSincope\":null,\"isquemiaCerebralTransitoria\":false,\"obsIsquemiaCerebralTransitoria\":null,\"accidenteCerebrovascularIsquemico\":false,\"obsAccidenteCerebrovascularIsquemico\":null,\"accidenteCerebrovascularHemorragico\":false,\"obsAccidenteCerebrovascularHemorragico\":null,\"anginaDePecho\":false,\"obsAnginaDePecho\":null,\"revascularizacion\":false,\"obsRevascularizacion\":null,\"cardiomiopatia\":false,\"obsCardiomiopatia\":null,\"cataratas\":false,\"obscataratas\":null,\"desprendimientoRetina\":false,\"obsdesprendimientoRetina\":null,\"glaucoma\":false,\"obsGlaucoma\":null,\"retinopatiaDiabetica\":false,\"obsretinopatiaDiabetica\":null,\"ojoSeco\":false,\"obsojoSeco\":null,\"enfermedadVision\":false,\"obsEnfermedadVision\":null,\"enfermedadCerebroVascular\":false,\"obsenfermedadCerebroVascular\":null,\"eventoTrombotio\":false,\"obsEventoTrombotio\":null,\"eventoembolico\":false,\"obseventoembolico\":null,\"eventoHemorragico\":false,\"obseventoHemorragic\":null,\"eventoVascular\":false,\"obseventoVascular\":null,\"obstruccionesArteriales\":false,\"obsObstruccionesArteriales\":null,\"aneurismasaorticos\":false,\"obsaneurismasaorticos\":null,\"enfermedadBuerger\":false,\"obsenfermedadBuerger\":null,\"fenomenoRaynaud\":false,\"obsfenomenoRaynaud\":null,\"coagulosSanguineos\":false,\"obscoagulosSanguineos\":null,\"emboliaPulmonar\":false,\"obsemboliaPulmonar\":null,\"flebitis\":false,\"obsflebitis\":null,\"enfermedadRenal\":false,\"obsenfermedadRenal\":null,\"insuficienciaRenalAguda\":false,\"obsinsuficienciaRenalAguda\":null,\"danorenalAgudo\":false,\"obsdanorenalAgudo\":null,\"insuficienciaRenalcronica\":false,\"obsinsuficienciaRenalcronica\":null,\"epoc\":false,\"obsEPOC\":null,\"artritisReumatoide\":false,\"obsartritisReumatoide\":null,\"pruebaVIH\":false,\"observacionPruebaVIH\":null,\"pruebaTBC\":false,\"observacionPruebaTBC\":null,\"arritmias\":false,\"observacionArritmias\":null,\"historicoObservacionArritmias\":null,\"autoinmunes\":false,\"observacionAutoinmunes\":null,\"lepra\":false,\"observacionLepra\":null,\"historicoAutoinmunes\":null,\"cancer\":false,\"observacionCancer\":null,\"historicoCancer\":null,\"ecv\":false,\"observacionECV\":null,\"historicoECV\":null,\"diabetes\":false,\"observacionDiabetes\":null,\"historicoDiabetes\":null,\"dislipidemia\":true,\"observacionDislipidemia\":null,\"historicoDislipidemia\":null,\"hipoglicemia\":false,\"observacionHipoglicemia\":null,\"historicoHipoglicemia\":null,\"hipertension\":true,\"observacionHipertension\":null,\"historicoHipertension\":null,\"internaciones\":false,\"observacionInternaciones\":null,\"historicoInternaciones\":null,\"insuficienciaCardiaca\":false,\"observacionInsuficienciaCardiaca\":null,\"historicoInsuficienciaCardiaca\":null,\"infeccioso\":false,\"observacionInfeccioso\":null,\"historicoInfeccioso\":null,\"valvulopatias\":false,\"observacionValvulopatias\":null,\"historicoValvulopatias\":null,\"transtornosHormonales\":false,\"observacionTranstornosHormonales\":null,\"historicoTranstornosHormonales\":null,\"transtornosGastrointestinales\":false,\"observacionTranstornosGastrointestinales\":null,\"historicoTranstornosGastrointestinales\":null,\"transtornosNeuronales\":false,\"observacionTranstornosNeuronales\":null,\"historicoTranstornosNeuronales\":null,\"otros\":true,\"observacionOtros\":\"PREDIABETES\",\"historicoOtros\":null,\"histerectomia\":false,\"observacionHisterectomia\":null,\"fechaHisterectomia\":null,\"historicoHisterectomia\":null,\"vacectomia\":false,\"observacionVacectomia\":null,\"fechaVacectomia\":null,\"historicoVacectomia\":null},\"ListadoOrdenamiento\":[{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"id\":18759,\"codigo\":\"890307\",\"descripcion\":\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA\",\"swCirugia\":true,\"nota_Tecnica\":\"CONSULTA\",\"descripcionBusqueda\":\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRIA\",\"cantidad\":1},\"tipo\":\"\",\"nota\":\"\",\"idRandom\":51,\"swCirugia\":true},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19562,\"descripcion\":\"GLUCOSA EN SUERO U OTRO FLUIDO DIFERENTE A ORINA\",\"codigo\":\"903841\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19540,\"descripcion\":\"COLESTEROL TOTAL\",\"codigo\":\"903818\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19539,\"descripcion\":\"COLESTEROL DE BAJA DENSIDAD [LDL] AUTOMATIZADO\",\"codigo\":\"903817\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19537,\"descripcion\":\"COLESTEROL DE ALTA DENSIDAD HDL\",\"codigo\":\"903815\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19589,\"descripcion\":\"TRIGLICERIDOS\",\"codigo\":\"903868\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":20348,\"descripcion\":\"UROANÁLISIS\",\"codigo\":\"907106\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19616,\"descripcion\":\"CREATININA EN SUERO U OTROS FLUIDOS\",\"codigo\":\"903895\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19597,\"descripcion\":\"CREATININA EN ORINA PARCIAL\",\"codigo\":\"903876\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"id\":19390,\"codigo\":\"903026\",\"descripcion\":\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\",\"swCirugia\":true,\"nota_Tecnica\":\"LABORATORIO\",\"descripcionBusqueda\":\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\",\"cantidad\":1},\"tipo\":\"\",\"nota\":\"\",\"idRandom\":968,\"swCirugia\":true}],\"esPlanificacionFamiliar\":false,\"esSaludMental\":false,\"esMama\":false,\"joven\":false,\"planificacionFamiliar\":false,\"adulto\":false,\"esAdulto\":false,\"esJoven\":false,\"adolescencia\":false,\"esPreconcepcional\":false,\"agudezaVisual\":false,\"ojoDerechoPrimerValorCercano\":null,\"ojoIzquierdoPrimerValorCercano\":null,\"ojoDerechoPrimerValorLejano\":null,\"ojoIzquierdoPrimerValorLejano\":null,\"prenatal\":false,\"pes\":true,\"crecimientoDesarrollo\":false,\"primeraInfancia\":false,\"infancia\":false,\"crecimientoDesarrolloDiagnosticoId\":1,\"gestante\":false,\"esVacunacion\":false,\"cervix\":false,\"swCertificadoAislamiento\":false,\"swCertificadoReintegro\":false,\"citaId\":\"NDM0MDYwMw\",\"medicamento\":{\"seEntregaronMedicamentos\":null,\"medicamentosPendientesEntrega\":\"\",\"medicamentos\":[{\"pf\":true,\"swInsumo\":0,\"swMl\":0,\"medicamento\":{\"id\":3044,\"consulta_Id\":1528740,\"codigo\":\"22304\",\"descripcion\":\"METFORMINA 850 mg (TABLETA)\",\"dosificacion\":\"1\",\"fechaCreacion\":\"20/05/2026\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"viaAdministracion\":\"ORAL\",\"frecuenciaUnidad\":\"dias\",\"frecuenciaNumero\":1,\"cantidad\":30,\"dias\":30,\"pf\":\"Si\",\"profesional\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"especialidad\":\"MEDICINA GENERAL\"},\"cantidad\":30,\"viaAdministracion\":\"ORAL\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"frecuenciaNumero\":1,\"frecuenciaUnidad\":\"dias\",\"dosificacion\":1,\"dias\":30,\"mlPorFrasco\":null,\"indicaciones\":\"UNA TABLETA DIARIA\",\"swCalcular\":0,\"contenido\":null,\"PF\":true,\"MesesPostFechado\":3,\"fechaInicial\":\"2026-08-08\",\"fechaFinal\":\"2026-11-08\"},{\"pf\":true,\"swInsumo\":0,\"swMl\":0,\"medicamento\":{\"id\":1641,\"consulta_Id\":1528740,\"codigo\":\"60125\",\"descripcion\":\"ATORVASTATINA 40 MG (TABLETA)\",\"dosificacion\":\"1\",\"fechaCreacion\":\"20/05/2026\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"viaAdministracion\":\"ORAL\",\"frecuenciaUnidad\":\"dias\",\"frecuenciaNumero\":1,\"cantidad\":30,\"dias\":30,\"pf\":\"Si\",\"profesional\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"especialidad\":\"MEDICINA GENERAL\"},\"cantidad\":30,\"viaAdministracion\":\"ORAL\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"frecuenciaNumero\":1,\"frecuenciaUnidad\":\"dias\",\"dosificacion\":1,\"dias\":30,\"mlPorFrasco\":null,\"indicaciones\":\"UNA TABLETA DIARIA\",\"swCalcular\":0,\"contenido\":null,\"PF\":true,\"MesesPostFechado\":3,\"fechaInicial\":\"2026-08-08\",\"fechaFinal\":\"2026-11-08\"},{\"pf\":true,\"swInsumo\":0,\"swMl\":0,\"medicamento\":{\"id\":2956,\"consulta_Id\":1528740,\"codigo\":\"60036\",\"descripcion\":\"LOSARTAN 50 mg (TABLETA) \",\"dosificacion\":\"1\",\"fechaCreacion\":\"20/05/2026\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"viaAdministracion\":\"ORAL\",\"frecuenciaUnidad\":\"dias\",\"frecuenciaNumero\":12,\"cantidad\":60,\"dias\":30,\"pf\":\"Si\",\"profesional\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"especialidad\":\"MEDICINA GENERAL\"},\"cantidad\":60,\"viaAdministracion\":\"ORAL\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"frecuenciaNumero\":12,\"frecuenciaUnidad\":\"dias\",\"dosificacion\":1,\"dias\":30,\"mlPorFrasco\":null,\"indicaciones\":\"UNA TABLETA CADA 12 HORAS\",\"swCalcular\":0,\"contenido\":null,\"PF\":true,\"MesesPostFechado\":3,\"fechaInicial\":\"2026-08-08\",\"fechaFinal\":\"2026-11-08\"},{\"pf\":true,\"swInsumo\":0,\"swMl\":0,\"medicamento\":{\"id\":1572,\"consulta_Id\":1528740,\"codigo\":\"60297\",\"descripcion\":\"AMLODIPINO 10 MG (TABLETA)\",\"dosificacion\":\"1\",\"fechaCreacion\":\"20/05/2026\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"viaAdministracion\":\"ORAL\",\"frecuenciaUnidad\":\"dias\",\"frecuenciaNumero\":1,\"cantidad\":30,\"dias\":30,\"pf\":\"Si\",\"profesional\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"especialidad\":\"MEDICINA GENERAL\"},\"cantidad\":30,\"viaAdministracion\":\"ORAL\",\"concentracion\":\"\",\"presentacion\":\"TABLETA\",\"frecuenciaNumero\":1,\"frecuenciaUnidad\":\"dias\",\"dosificacion\":1,\"dias\":30,\"mlPorFrasco\":null,\"indicaciones\":\"UNA TABLETA DIARIA\",\"swCalcular\":0,\"contenido\":null,\"PF\":true,\"MesesPostFechado\":3,\"fechaInicial\":\"2026-08-08\",\"fechaFinal\":\"2026-11-08\"}]},\"incapacidad\":{\"swIncapacidad\":false,\"desDiagnostico\":\"\",\"tipoDiagnostico\":\"\",\"incapacidadPorEstetica\":false,\"prorroga\":false,\"swRetroactiva\":false,\"fechaIncapacidad\":\"2026-08-08\",\"numeroDias\":0},\"segNoPresencial\":{\"observacion\":\"\",\"tipoAccesoId\":0,\"fechaSeguimiento\":\"2026-08-08T15:17:53.492Z\"},\"esVejez\":false,\"preconcepcional\":null,\"swRecienNacido\":false,\"swLactanciaMaterna\":false,\"swObesidad\":false,\"swFallaCardiaca\":false,\"swTuberculosis\":false,\"swAiepi\":false,\"swPuerperio\":false,\"datosUsuario\":{\"rangoEdad\":-1,\"id\":445164,\"primer_Apellido\":\"BRAN\",\"segundo_Apellido\":\"ANGEL\",\"primerApellido\":null,\"segundoApellido\":null,\"nombre\":\"JESUSMARIA\",\"nombreCompleto\":null,\"tipo_Identificacion\":\"CC\",\"identificacion\":\"8388129\",\"fecha_Nacimiento\":\"1948-12-28T00:00:00\",\"edad\":77,\"edadAnos\":77,\"edadMeses\":932,\"edadSemanas\":3728,\"edadDias\":28347,\"sexo\":\"M\",\"genero_Id\":0,\"genero\":\"\",\"isPac\":null,\"orientacion_Id\":0,\"orientacion\":\"\",\"estadoCivil_Id\":null,\"estadoCivil\":\"\",\"municipioResidenciad_Id\":null,\"municipioResidenciad\":\"\",\"direccion\":\"CL 62A 62A 48\",\"telefono\":null,\"celular\":\"3022813246\",\"correo\":\"jesusbran779@gmail.com\",\"escolaridad_Id\":null,\"escolaridad\":\"\",\"ocupacion\":\"\",\"ocupacion_Id\":null,\"eps\":{\"id\":2,\"nombre\":\"NUEVA EPS \",\"contratoId\":9,\"contratoNombre\":\"VIVA 1A IPS BELLO\",\"epsCiudades\":null},\"religion_Id\":null,\"religion\":\"\",\"etnia_Id\":null,\"etnia\":\"\",\"desplazado\":false,\"familiasAccion\":false,\"riesgo_Segmentacion\":null,\"riesgo_Enfermedad\":null,\"riesgo_Atencion\":null,\"sw_Tratamiento_Datos\":false,\"sw_Acepto_Contacto\":true,\"nivelSisben\":null,\"tipoPlan\":\"COTIZANTE\",\"regimen\":\"CONTRIBUTIVO\",\"rango\":\"A\",\"estado\":\"ACT\",\"cuotaMod\":0,\"exentoPago\":false,\"paisResidencia_Id\":null,\"paisNacimiento_Id\":null,\"municipioNacimiento_Id\":null,\"municipioNacimiento\":\"\",\"estrato_Id\":null,\"estrato\":\"\",\"discapacidad_Id\":null,\"discapacidad\":\"\",\"swAcepto\":false,\"salario\":null,\"medicoCabecera\":null,\"swGrupoFamiliar\":false,\"cuotaModeradora\":0,\"contratos\":[],\"programasPaciente\":[{\"id\":207353,\"descripcion\":\"Nefroprotección\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null},{\"id\":362325,\"descripcion\":\"Hipertensión\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null}],\"sedes\":[],\"listParentesco\":[],\"cohorte\":null,\"discapacidadNeps\":null,\"puntosReferenciaResidencia\":null,\"puntosReferenciaUbicacionHabitual\":null,\"mediosTransporte\":null,\"ubicacionesBOT\":null,\"reside\":null,\"barrio\":null,\"departamentoResidencia\":null,\"departamentoResidencia_Id\":null,\"nombreLugarUbica\":null,\"municipioUbica\":null,\"direccionUbica\":null,\"departamentoUbica\":null,\"barrioVeredaUbica\":null,\"nombreEdificioUrbanizacion\":null,\"grupoSanguineo\":null,\"rh\":null,\"tipoPlan_Id\":null,\"tipoPlan_Descripcion\":\"\",\"citaId\":\"NDM0MDYwMw\"},\"Especialidad\":{\"id\":12,\"nombre\":\"MEDICINA GENERAL\"},\"motivo\":\"CONTROL DE RIESGO CARDIOVASCULAR\",\"ultimaEnfermedad\":\"PACIENTE MASCULINO DE 77 AÑOS, ADULTO MAYOR, CON ANTECEDENTE DE PREDIABETES, HIPERTENSIÓN ARTERIAL, ENFERMEDAD RENAL CRÓNICA Y DISLIPIDEMIA, VINCULADO AL PROGRAMA DE RIESGO CARDIOVASCULAR :: ACUDE A CONSULTA DE SEGUIMIENTO :: AL INTERROGATORIO DIRIGIDO SE ENCUENTRA ASINTOMÁTICO EN LA ESFERA CARDIOVASCULAR :: NIEGA DOLOR PRECORDIAL, DISNEA DE ESFUERZO, ORTOPNEA O DISNEA PAROXÍSTICA NOCTURNA :: NIEGA PALPITACIONES, SÍNCOPE O EDEMAS EN MIEMBROS INFERIORES :: NIEGA FATIGA DESPROPORCIONADA AL ESFUERZO, LIPOTIMIA O DISNEA EN REPOSO :: CAPACIDAD FUNCIONAL EVALUADA SEGÚN CONDICIÓN DE FRAGILIDAD; SIN DETERIORO AGUDO REFERIDO EN LA PRESENTE CONSULTA :: REFIERE ADHERENCIA AL ESQUEMA FARMACOLÓGICO VIGENTE :: SE DOCUMENTA BARRERA DE ACCESO: PACIENTE REFIERE ADQUISICIÓN PARTICULAR DE MEDICAMENTOS POR FALLA EN LA DISPENSACIÓN INSTITUCIONAL DE SU ASEGURADOR DURANTE LOS ÚLTIMOS 6 MESES :: SE ACLARA QUE POR MIGRACIÓN TECNOLÓGICA DEL SOFTWARE DE HISTORIAS CLÍNICAS NO SE CUENTA CON ACCESO AL HISTORIAL MÉDICO PREVIO EN LA PRESENTE CONSULTA :: SIN REPORTES DE HOSPITALIZACIONES, URGENCIAS O EVENTOS AGUDOS DESDE EL ÚLTIMO CONTROL.\",\"habitosGestionRiesgo\":{\"azucarAlta\":false,\"medicamentoAntiHipertensivos\":false,\"consumoAlimentosRicosFibra\":false,\"tomaAgua\":false,\"bajoConsumoGrasas\":false,\"bajoConsumoSal\":false,\"ejercicioPermanente\":false,\"horasSueñoAdecuadas\":false,\"horasSuenoAdecuadas\":false,\"pesoAdecuadoTalla\":false,\"buenosHabitosAalimenticios\":false,\"sustanciasPsicoactivas\":false,\"alcohol\":false,\"fumador\":\"No\",\"indiceTabaquico\":\"\",\"estres\":false,\"habitoOtros\":false,\"sedentarismo\":false,\"observSedentarismo\":\"\",\"victimaMaltrato\":false,\"preTestVIH\":null,\"victimaViolenciaSexual\":false,\"postTestVIH\":null,\"sintomaticoRespiratorio\":false,\"discapacidad\":\"\",\"sangreOcultaEnHeces\":\"\",\"toceMuchoMayoriaDias\":false,\"tieneFlemaMayoriaDias\":false,\"seQuedaSinAliento\":false,\"mayor40Anios\":false,\"actualmenteFumaOExfumador\":false,\"frecuenciaAlcohol\":0,\"frecuenciaFumador\":0},\"examenFisico\":{\"presionSistolica\":140,\"presionDiastolica\":74,\"pulso\":88,\"frecuenciaRespiratoria\":null,\"temperatura\":null,\"peso\":60,\"talla\":153,\"imc\":\"25.63\",\"circunferenciaAbdominal\":85,\"perimetroCefalico\":null,\"perimetroBraquial\":null,\"pliegueCutaneoSubescapular\":null,\"pliegueCutaneoTriceps\":null,\"presiones\":null,\"examenFisicoMamas\":null,\"piel\":null,\"cabeza\":null,\"cuello\":null,\"ojos\":null,\"nariz\":null,\"boca\":null,\"garganta\":null,\"corazon\":null,\"pulmon\":null,\"pelvis\":null,\"pelvistexto\":null,\"sintomasGenerales\":null,\"oidos\":null,\"torax\":null,\"abdomen\":null,\"genitoUrinario\":null,\"musculoEsqueletico\":null,\"neurologico\":null,\"vascularPeriferico\":null,\"cinturaPelvica\":null,\"taSistolicaAcostado\":null,\"taDiastolicaAcostado\":null,\"perimetroPantorrilla\":null,\"saturacionOxigeno\":null},\"revisionSistema\":{\"garganta\":null,\"corazon\":null,\"pulmon\":null,\"pelvis\":null,\"pelvistexto\":null},\"ListadoResultado\":[],\"analisisYplan\":\"===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== MASCULINO DE 77 AÑOS CON ANTECEDENTES DE HIPERTENSIÓN ARTERIAL, DISLIPIDEMIA, PREDIABETES Y ENFERMEDAD RENAL CRÓNICA. ACUDE A CONTROL. REFIERE BARRERA DE ACCESO A MEDICAMENTOS POR FALLA DE DISPENSACIÓN DE LA EAPB DURANTE LOS ÚLTIMOS 6 MESES; ADQUIERE TRATAMIENTO POR CUENTA PROPIA PARA GARANTIZAR CONTINUIDAD. MIGRACIÓN TECNOLÓGICA IMPIDE ACCESO A HISTORIAL CLÍNICO PREVIO; SE REGISTRA ESQUEMA ACTUAL SEGÚN ANAMNESIS. SEDENTARIO, NIEGA TABAQUISMO Y CONSUMO DE ALCOHOL. ===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS: HIPERTENSIÓN ARTERIAL, ENFERMEDAD RENAL CRÓNICA ESTADIO G3A, PREDIABETES, DISLIPIDEMIA. :: CLASIFICACIÓN RCV: RIESGO CARDIOVASCULAR ALTO. :: JUSTIFICACIÓN 2024: PRESENCIA DE ERC G3A Y CONJUNCIÓN DE FACTORES DE RIESGO ADICIONALES (EDAD >75 AÑOS, HIPERTENSIÓN ARTERIAL, PREDIABETES Y SEDENTARISMO). :: META LDL TERAPÉUTICA: MENOR A 70 MG/DL. ===== SECCIÓN: REVISIÓN PARACLÍNICA Y METABÓLICA ===== :: FUNCIÓN RENAL: TFG 53.63 ML/MIN (KDIGO G3A). CREATININA 0.93 MG/DL. RELACIÓN ALBÚMINA/CREATININA EN ORINA 4.83 MG/GR (A1). :: PERFIL LIPÍDICO: LDL 56.1 MG/DL. EN META. :: METABOLISMO GLUCÍDICO: GLUCEMIA EN AYUNAS 101 MG/DL (EN RANGO). :: ANÁLISIS DE METAS: PACIENTE EN META PARA PERFIL LIPÍDICO, GLUCEMIA Y RELACIÓN ALBÚMINA/CREATININA EN ORINA. ===== SECCIÓN: PLAN FARMACOLÓGICO (CONCILIACIÓN) ===== :: ESQUEMA ACTUAL: * ATORVASTATINA 40 MG DÍA. * LOSARTÁN 50 MG CADA 12 HORAS. * METFORMINA 850 MG DÍA. * AMLODIPINO 10 MG DÍA. :: OBSERVACIONES DE CONCILIACIÓN: SE REGISTRA REPORTE DE FALLA DE DISPENSACIÓN INSTITUCIONAL. ===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA: HIPOSÓDICA, BAJA CARGA GLUCÉMICA Y RESTRICCIÓN DE GRASAS SATURADAS. :: ACTIVIDAD FÍSICA: RECOMENDADA SEGÚN PERFIL SENIOR Y TOLERANCIA FUNCIONAL. :: EDUCACIÓN: ÉNFASIS EN ADHERENCIA TERAPÉUTICA, EVITAR MEDICAMENTOS NEFROTÓXICOS Y RIESGOS DE AUTOMEDICACIÓN. ===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA: SEGUIMIENTO POR CONSULTA EXTERNA. SE ORDENA TAMIZAJE PARA INFECCIÓN POR VIH (TAMIZAJE P/S). :: PRÓXIMOS LABORATORIOS (PROGRAMADOS PARA: 2026-07-31): * CREATININA SÉRICA. * ELECTROCARDIOGRAMA. * HEMOGLOBINA SÉRICA. * HORMONA PARATIROIDEA [PTH]. :: TRÁMITES: CITA CONTROL RCV EL 2026-08-07. ===== SECCIÓN: SIGNOS DE ALARMA Y SEGURIDAD ===== :: URGENCIAS: CONSULTAR ANTE DOLOR TORÁCICO, DISNEA DE REPOSO, DÉFICIT NEUROLÓGICO FOCAL O PALPITACIONES. :: ALERTA MÉDICO-LEGAL: SE DEJA CONSTANCIA EN HISTORIA CLÍNICA DE BARRERA DE ACCESO A MEDICAMENTOS REPORTADA POR EL PACIENTE. ESTA SITUACIÓN CONFIGURA UN RIESGO REAL DE INTERRUPCIÓN TERAPÉUTICA EN UN PACIENTE DE ALTO RIESGO CARDIOVASCULAR, LO QUE INCREMENTA SIGNIFICATIVAMENTE LA PROBABILIDAD DE EVENTOS CARDIOVASCULARES MAYORES Y MUERTE. LA GARANTÍA DE CONTINUIDAD DEL TRATAMIENTO ES RESPONSABILIDAD DIRECTA DEL ASEGURADOR (EAPB).\\n\",\"diagnosticoPrincipal\":{\"causaExterna\":{\"nombre\":\"ENFERMEDAD GENERAL\",\"codigo\":\"38\",\"id\":32},\"finalidadConsulta\":{\"id\":27,\"codigo\":\"16\",\"descripcion\":\"TRATAMIENTO\",\"fechaCreacion\":\"0001-01-01T00:00:00\",\"estado\":\"ACT\"},\"tipoDiagnosticoPpal\":{\"id\":2,\"descripcion\":\"CONFIRMADO REPETIDO\",\"fechaCreacion\":\"2019-02-21T10:30:00.637\",\"estado\":\"ACT\",\"codigo\":\"\"}},\"diagnosticos\":[{\"id\":17620,\"codigo\":\"N189\",\"simbolo\":\"\",\"descripcion\":\"INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\",\"sexoId\":0,\"diasIncapacidad\":25,\"swCertAislamiento\":false,\"swCertReintegro\":false,\"sexo\":null,\"dx\":true,\"nombreBusqueda\":\"N189 | INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\"},{\"id\":15618,\"codigo\":\"I10X\",\"simbolo\":\"\",\"descripcion\":\"HIPERTENSION ESENCIAL (PRIMARIA)\",\"sexoId\":0,\"diasIncapacidad\":5,\"swCertAislamiento\":false,\"swCertReintegro\":false,\"sexo\":null,\"dx\":false,\"nombreBusqueda\":\"I10X | HIPERTENSION ESENCIAL (PRIMARIA)\"}],\"planDeManejoPostCovid\":{\"tipoTerapias\":{}},\"recomendacionesMedicas\":\"\",\"listadoPYP\":[{\"id\":23,\"descripcion\":\"Vejez\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":7,\"descripcion\":\"Agudeza Visual y Auditiva\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":9,\"descripcion\":\"Ruta Crónicos\",\"advertencia\":\"Ya el paciente tuvo una cita cercana hace 2 Meses\",\"pacienteAplica\":true,\"value\":true},{\"id\":37,\"descripcion\":\"Obesidad\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":36,\"descripcion\":\"Falla Cardiaca\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":31,\"descripcion\":\"Tuberculosis\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":3,\"descripcion\":\"Salud Mental\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false},{\"id\":11,\"descripcion\":\"Vacunacion\",\"advertencia\":\"\",\"pacienteAplica\":true,\"value\":false}],\"crecimientoYDesarrollo\":null,\"SaludMentalHC\":null,\"jovenHC\":null,\"adultoHC\":null,\"fallaCardiacaHC\":null,\"recienNacidoHC\":null,\"lactanciaMaternaHC\":null,\"planificacionFamiliarHC\":null,\"ojoDerechoSegundoValorCercano\":null,\"ojoIzquierdoSegundoValorCercano\":null,\"resultadoCercano\":null,\"ojoDerechoSegundoValorLejano\":null,\"ojoIzquierdoSegundoValorLejano\":null,\"resultadoAgudezaVisualLejanaOjoDerecho\":null,\"resultadoAgudezaVisualLejanaOjoIzquierdo\":null,\"observacionesGeneralesLejano\":null,\"oidoDiagnosticoId\":0,\"otoscopia\":false,\"otoscopiaOidoDerecho\":\"\",\"otoscopiaOidoIzquierdo\":\"\",\"observacionesAlteracionesOido\":\"\",\"PrenatalHC\":null,\"pesHC\":{\"riesgoCardiovascular\":\"\",\"esHipotiroidismo\":false,\"esEPOC\":false,\"clinicaPaciente\":{\"tristeza\":false,\"depresion\":false,\"ansiedad\":false,\"estres\":false,\"bajaAutoestima\":false,\"palpitaciones\":false,\"suenoInquieto\":false,\"reflujo\":false,\"calculosRenales\":false,\"incontinenciaUrinaria\":false,\"dificultadMiccion\":false,\"disfuncionErectil\":false,\"ronca\":false,\"cansancio\":false,\"somnoliencia\":false,\"artralgias\":false,\"sarpullidos\":false,\"ulcerasMiembrosInferiores\":false,\"deportes\":false,\"deportesDescripcion\":\"\",\"deportesFrecuencia\":\"\"},\"escalaGlasglow\":{\"respuestaOcular\":\"\",\"respuestaOcularPuntaje\":0,\"respuestaVerbal\":\"\",\"respuestaVerbalPuntaje\":0,\"respuestaMotora\":\"\",\"respuestaMotoraPuntaje\":0,\"nivelTrauma\":\"\",\"total\":0},\"planDeCuidado\":{\"conducta\":\"Control\",\"proximaConsulta\":\"3 meses\",\"remisionPrograma\":\"\",\"estadio5desistimiento\":\"\",\"requiereDialitica\":\"\"},\"clasificacionEdmonto\":{\"estadoGeneral\":null,\"independenciaFuncional\":null,\"apoyoSocial\":null,\"usoMedicamentos\":null,\"nutricion\":null,\"estadoAnimo\":null,\"continenciaUrinaria\":null,\"marcha\":null,\"equilibrio\":null,\"puntajeTotal\":0,\"interpretacion\":\"\",\"cognicion\":{\"palabrasIniciales\":{\"palabra1\":\"\",\"palabra2\":\"\",\"palabra3\":\"\"},\"dibujoReloj\":{\"hizoReloj\":false,\"numerosCorrectos\":false,\"horaCorrecta\":false},\"palabrasFinales\":{\"palabra1\":\"\",\"palabra2\":\"\",\"palabra3\":\"\"},\"puntaje\":0,\"interpretacion\":\"\"}},\"escalaKFREE\":{\"edad\":77,\"sexo\":\"M\",\"tfg\":\"46.87\",\"albuminaCreatinina\":null,\"resultado\":\"\",\"riesgo\":\"\",\"puntaje\":0},\"factoresDeriesgoParaOrigenDiabetes\":{},\"datosReferenciaTFG\":{\"sexo\":1,\"edad\":77,\"peso\":60,\"talla\":153,\"afroAmericano\":false,\"creatinine\":1.12,\"creatinineUnidad\":\"mg/dL\",\"resultadoCG\":\"46.87\",\"resultadoCkdEpi\":\"67.66\",\"resultadoMDRD\":\"67.57\"},\"testMoriskGreen\":{\"olvidoTomarMedicamentos\":false,\"tomaMedicamentoHoraIndicada\":false,\"sienteBienDejaTomarMedicacion\":false,\"sienteMalDejaTomarMedicacion\":false,\"olvidoTomarMedicamentosVal\":0,\"tomaMedicamentoHoraIndicadaVal\":0,\"sienteBienDejaTomarMedicacionVal\":0,\"sienteMalDejaTomarMedicacionVal\":0},\"planificacionFamiliar\":{\"planifica\":false,\"planificaObser\":\"\",\"usoMetodosAnticonceptivos\":false,\"metodosAnticonceptivos\":{\"ninguno\":false,\"oral\":false,\"inyectable\":false,\"subdermico\":false,\"d_I_U\":false,\"condon\":false,\"esterilizacionFemenina\":false,\"vasectomia\":false,\"otros\":false},\"cualesMetodosAnticonceptivos\":\"\",\"vidaSexualActiva\":false,\"metodoPlanificacionFamiliar\":null,\"fechaInicioPlanificacionFamiliar\":null,\"gestante\":null,\"edadGestacional\":null,\"observacionPlanificacion\":\"\"},\"antecedentesRelacionados\":{\"esIECA\":false,\"esIECAConoceFecha\":false,\"esIECAFecha\":\"0001-01-01T00:00:00Z\",\"esARAII\":false,\"esARAIIConoceFecha\":false,\"esARAIIFecha\":\"0001-01-01T00:00:00Z\",\"esTerapiaNoDialiticaEstadioRenal5\":false,\"esTerapiaNoDialiticaEstadioRenal5ConoceFecha\":false,\"esTerapiaNoDialiticaEstadioRenal5Fecha\":\"0001-01-01T00:00:00Z\",\"esTransplanteRenal\":false,\"esTransplanteRenalConoceFecha\":false,\"esTransplanteRenalFecha\":\"0001-01-01T00:00:00Z\",\"esHemodialisisAntecedentes\":false,\"esHemodialisisAntecedentesConoceFecha\":false,\"esHemodialisisAntecedentesFecha\":\"0001-01-01T00:00:00Z\"},\"esSindromeMetabolico\":false,\"sindromeMetabolico\":{\"fechaIngreso\":\"0001-01-01T00:00:00Z\",\"diagConfirmatorio\":null,\"diagnosticoConfirmatorio\":{\"id\":0,\"codigo\":null,\"descripcion\":null},\"fechaConfirmacionDx\":\"0001-01-01T00:00:00Z\",\"tipoDiagnostico\":null,\"tipoSindrome\":{\"id\":0,\"descripcion\":\"\"},\"edadIngreso\":0,\"tasaFilGlomerular\":0,\"factores\":{\"obesidadAbdominal\":false,\"hipertrigliceridemia\":false,\"colesterolHDLBajo\":false,\"presionSanguineaAlta\":false,\"glucosaAlta\":false}},\"esHipertension\":true,\"hipertension\":{\"fechaIngreso\":\"2026-05-20T15:24:40.133Z\",\"diagConfirmatorio\":\"I10X\",\"diagnosticoConfirmatorio\":{\"id\":15618,\"codigo\":\"I10X\",\"descripcion\":\"HIPERTENSION ESENCIAL (PRIMARIA)\"},\"fechaConfirmacionDx\":\"2026-05-20T15:24:40.133Z\",\"tipoHipertension\":{\"id\":1,\"descripcion\":\"Hipertensión primaria o esencial\"},\"edadIngreso\":77,\"tasaFilGlomerular\":0},\"esDiabetes\":false,\"diabetes\":{\"fechaIngreso\":\"0001-01-01T00:00:00Z\",\"diagConfirmatorio\":null,\"diagnosticoConfirmatorio\":{\"id\":0,\"codigo\":null,\"descripcion\":null},\"fechaConfirmacionDx\":\"0001-01-01T00:00:00Z\",\"tipoDiabetes\":{\"id\":0,\"descripcion\":\"\"},\"clasificacionDiabetes\":null,\"edadIngreso\":0,\"tasaFilGlomerular\":0},\"esNefroproteccion\":false,\"nefroproteccion\":{\"fechaIngreso\":\"2026-05-20T15:24:41.235Z\",\"diagConfirmatorio\":\"N189\",\"diagnosticoConfirmatorio\":{\"id\":17620,\"codigo\":\"N189\",\"descripcion\":\"INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA\"},\"fechaConfirmacionDx\":\"2026-05-20T15:24:41.235Z\",\"etiologiaERC\":{\"id\":0,\"descripcion\":\"\"},\"edadIngreso\":77,\"tasaFilGlomerular\":0},\"epoc\":{\"diagConfirmatorio\":null,\"fechaConfirmacionDx\":null,\"exposicionOcupacional\":false,\"contaminacionAmbiental\":false,\"exposicionahumo\":false,\"alcohol\":false,\"infeccionRespiratoriaInfancia\":false,\"atopia\":false,\"historiaFamilia\":false,\"consumeCigarrillos\":false,\"cuantosCigarrilosAldia\":0,\"numeroDeAnosFumando\":0,\"indiceTabaquico\":\"0\",\"riesgoEPOC\":\"Nulo\",\"espirometrias\":false,\"resultadoEspirometrias\":null,\"fechaEspirometrias\":null,\"vefPost\":null,\"clasificacionGravedadEPOC\":null,\"tratamiento\":null,\"esExacerbaciones\":false,\"exacerbaciones\":null,\"observaciones\":null},\"obesidad\":{\"imc\":\"25.63\",\"clasificacion\":\"SOBREPESO: ENTRE 25 Y 29.9\"},\"hipotiroidismo\":{\"tcuatrolibre\":null,\"tsh\":null,\"ttreslibre\":null,\"tcuatrototal\":null},\"resultadoPrograma\":{\"alertresultadoHemoglobina\":\"#e2e5ec\",\"alertresultadoCreatinina\":\"#e2e5ec\",\"alertresultadoColesterolTotal\":\"#e2e5ec\",\"resultadoHemoglobinaHemo\":\"15\",\"fechaResultHemoglobinaHemo\":\"2026-07-31\",\"resultadoRelacionAlbuminaCreatinina\":null,\"resultadoCreatinina\":1.12,\"fechaResultCreatinina\":\"2026-07-31\",\"resultadoPTH\":21.6,\"alertresultadoPTH\":\"#e2e5ec\",\"fechaResultPTH\":\"2026-07-31\"},\"clasificacion\":{\"hipertension\":null,\"sindromemetabolico\":null,\"diabetes\":null,\"glucometria\":false,\"glucometriacual\":null,\"rcv\":\"BAJO\",\"estadio\":\"46.87\",\"estadioTFGApellido\":\"3a\",\"estadioTFGApellidoInterpretacion\":\"Ligera a moderadamente disminuido\",\"estadioNefroproteccion\":null,\"seguimientoPrograma\":\"HTA\",\"rcvFramigham\":\"18.75\",\"nivelRiesgo\":\"MODERADO\",\"resultadoMDRD\":\"67.57\",\"resultadoCkdEpi\":\"67.66\",\"tipo_de_Diabetes_Seg\":null,\"requerimiento_de_insulina\":null},\"seguimientoResultadoPrograma\":{\"alertresultadoHemoglobina\":\"#e2e5ec\",\"alertresultadoCreatinina\":\"#e2e5ec\",\"alertresultadoColesterolTotal\":\"#e2e5ec\",\"resultadoHemoglobinaHemo\":\"15\",\"fechaResultHemoglobinaHemo\":\"2026-07-31\",\"resultadoRelacionAlbuminaCreatinina\":null,\"resultadoCreatinina\":1.12,\"fechaResultCreatinina\":\"2026-07-31\",\"resultadoPTH\":21.6,\"alertresultadoPTH\":\"#e2e5ec\",\"fechaResultPTH\":\"2026-07-31\"}},\"mamaHC\":null,\"vacunacion\":null,\"cervixHC\":null,\"adolescenciaHC\":null,\"OrdenamientoHC\":{\"diagnosticoId\":17620,\"citaId\":\"NDM0MDYwMw\",\"usuarioId\":0,\"perfil\":null,\"ordenes\":[{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"id\":18759,\"codigo\":\"890307\",\"descripcion\":\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA\",\"swCirugia\":true,\"nota_Tecnica\":\"CONSULTA\",\"descripcionBusqueda\":\"CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRIA\",\"cantidad\":1},\"tipo\":\"\",\"nota\":\"\",\"idRandom\":51,\"swCirugia\":true},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19562,\"descripcion\":\"GLUCOSA EN SUERO U OTRO FLUIDO DIFERENTE A ORINA\",\"codigo\":\"903841\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19540,\"descripcion\":\"COLESTEROL TOTAL\",\"codigo\":\"903818\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19539,\"descripcion\":\"COLESTEROL DE BAJA DENSIDAD [LDL] AUTOMATIZADO\",\"codigo\":\"903817\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19537,\"descripcion\":\"COLESTEROL DE ALTA DENSIDAD HDL\",\"codigo\":\"903815\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19589,\"descripcion\":\"TRIGLICERIDOS\",\"codigo\":\"903868\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":20348,\"descripcion\":\"UROANÁLISIS\",\"codigo\":\"907106\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19616,\"descripcion\":\"CREATININA EN SUERO U OTROS FLUIDOS\",\"codigo\":\"903895\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"cupAgregar\":false,\"swCirugia\":false,\"cantidad\":1,\"id\":19597,\"descripcion\":\"CREATININA EN ORINA PARCIAL\",\"codigo\":\"903876\",\"nota_Tecnica\":\"LABORATORIO\"},\"tipo\":\"\",\"nota\":\"\"},{\"cantidad\":1,\"listadoCupsTableSeleccionados\":[],\"listadoDiagnosticoTableSeleccionados\":[],\"check\":false,\"cup\":{\"id\":19390,\"codigo\":\"903026\",\"descripcion\":\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\",\"swCirugia\":true,\"nota_Tecnica\":\"LABORATORIO\",\"descripcionBusqueda\":\"MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL\",\"cantidad\":1},\"tipo\":\"\",\"nota\":\"\",\"idRandom\":968,\"swCirugia\":true}],\"paciente\":{\"rangoEdad\":-1,\"id\":445164,\"primer_Apellido\":\"BRAN\",\"segundo_Apellido\":\"ANGEL\",\"primerApellido\":null,\"segundoApellido\":null,\"nombre\":\"JESUSMARIA\",\"nombreCompleto\":null,\"tipo_Identificacion\":\"CC\",\"identificacion\":\"8388129\",\"fecha_Nacimiento\":\"1948-12-28T00:00:00\",\"edad\":77,\"edadAnos\":77,\"edadMeses\":932,\"edadSemanas\":3728,\"edadDias\":28347,\"sexo\":\"M\",\"genero_Id\":0,\"genero\":\"\",\"isPac\":null,\"orientacion_Id\":0,\"orientacion\":\"\",\"estadoCivil_Id\":null,\"estadoCivil\":\"\",\"municipioResidenciad_Id\":null,\"municipioResidenciad\":\"\",\"direccion\":\"CL 62A 62A 48\",\"telefono\":null,\"celular\":\"3022813246\",\"correo\":\"jesusbran779@gmail.com\",\"escolaridad_Id\":null,\"escolaridad\":\"\",\"ocupacion\":\"\",\"ocupacion_Id\":null,\"eps\":{\"id\":2,\"nombre\":\"NUEVA EPS \",\"contratoId\":9,\"contratoNombre\":\"VIVA 1A IPS BELLO\",\"epsCiudades\":null},\"religion_Id\":null,\"religion\":\"\",\"etnia_Id\":null,\"etnia\":\"\",\"desplazado\":false,\"familiasAccion\":false,\"riesgo_Segmentacion\":null,\"riesgo_Enfermedad\":null,\"riesgo_Atencion\":null,\"sw_Tratamiento_Datos\":false,\"sw_Acepto_Contacto\":true,\"nivelSisben\":null,\"tipoPlan\":\"COTIZANTE\",\"regimen\":\"CONTRIBUTIVO\",\"rango\":\"A\",\"estado\":\"ACT\",\"cuotaMod\":0,\"exentoPago\":false,\"paisResidencia_Id\":null,\"paisNacimiento_Id\":null,\"municipioNacimiento_Id\":null,\"municipioNacimiento\":\"\",\"estrato_Id\":null,\"estrato\":\"\",\"discapacidad_Id\":null,\"discapacidad\":\"\",\"swAcepto\":false,\"salario\":null,\"medicoCabecera\":null,\"swGrupoFamiliar\":false,\"cuotaModeradora\":0,\"contratos\":[],\"programasPaciente\":[{\"id\":207353,\"descripcion\":\"Nefroprotección\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null},{\"id\":362325,\"descripcion\":\"Hipertensión\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"pacRelUsuarioPrograma\":null}],\"sedes\":[],\"listParentesco\":[],\"cohorte\":null,\"discapacidadNeps\":null,\"puntosReferenciaResidencia\":null,\"puntosReferenciaUbicacionHabitual\":null,\"mediosTransporte\":null,\"ubicacionesBOT\":null,\"reside\":null,\"barrio\":null,\"departamentoResidencia\":null,\"departamentoResidencia_Id\":null,\"nombreLugarUbica\":null,\"municipioUbica\":null,\"direccionUbica\":null,\"departamentoUbica\":null,\"barrioVeredaUbica\":null,\"nombreEdificioUrbanizacion\":null,\"grupoSanguineo\":null,\"rh\":null,\"tipoPlan_Id\":null,\"tipoPlan_Descripcion\":\"\",\"citaId\":\"NDM0MDYwMw\"},\"ordenesCx\":[],\"swHC\":true,\"swQuirofano\":false},\"actividadEducacionHc\":null,\"TuberculosisHC\":null,\"nutricionHC\":null,\"obesidadHC\":null,\"puerperio\":null,\"vihHc\":null}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:55.569Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=445164&Agrupador=1226083347",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:55.570Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Medicamentos/GenerarLinksImpresion?citaId=NDM0MDYwMw&identificador=6a0dd3dee2104cbcf8086216",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:17:55.569Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=515&EverestId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.484Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/ParTipoDiagnosticoPpales",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.476Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIParametrizacionGeneralHealth/api/PreguntasRiesgoDiabetes",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.488Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerDatosLoginByLogin?login=bpalencia",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.484Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerEspecialidadMedico?login=bpalencia",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.541Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIHCHealth/api/Parametrizacion/GetPestaniasByEspecialidadId?Especialidad_Id=12",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.542Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerConsultasAnteriores?especialidadId=12&profesionalId=309",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.541Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/APIMedicoHealth/api/Medico/ObtenerConsultas?especialidadId=12&profesionalId=309",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:19:33.477Z",
+      "method": "GET",
+      "url": "https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/ConfirmarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=515&EverestId=NDM0MDYwMw",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    }
+  ],
+  "clicks": [
+    {
+      "t": "2026-08-08T15:06:11.926Z",
+      "tag": "button#vgl-tl-zoom.vgl-tl.zoom",
+      "text": "Restaurar tamaño completo"
+    },
+    {
+      "t": "2026-08-08T15:06:16.039Z",
+      "tag": "button.vgl-btn-agendar",
+      "text": "🗓️"
+    },
+    {
+      "t": "2026-08-08T15:06:17.406Z",
+      "tag": "button.vgl-agm-pbtn",
+      "text": "3 meses"
+    },
+    {
+      "t": "2026-08-08T15:06:37.000Z",
+      "tag": "button.vgl-agm-pbtn",
+      "text": "Lun 09/11"
+    },
+    {
+      "t": "2026-08-08T15:06:47.887Z",
+      "tag": "button.vgl-agm-sbtn",
+      "text": "✓ 9:00 AM"
+    },
+    {
+      "t": "2026-08-08T15:06:49.463Z",
+      "tag": "textarea#vgl-agm-obs.vgl-agm-input",
+      "text": "Observaciones de la cita (ej. REMISION RCV CON CONTROL)..."
+    },
+    {
+      "t": "2026-08-08T15:06:56.719Z",
+      "tag": "button#vgl-agm-confirm.vgl-agm-btn.pri",
+      "text": "✓ Sí, Crear Cita en Medicina General (Control) (9:00 AM)"
+    },
+    {
+      "t": "2026-08-08T15:10:35.304Z",
+      "tag": "span.vgl-name",
+      "text": "JESUSMARIA BRAN ANGEL 8388129"
+    },
+    {
+      "t": "2026-08-08T15:11:40.549Z",
+      "tag": "div.card-body.d-flex.justify-content-between.align-items-center.flex-wrap",
+      "text": "08:40 AM PRESENCIAL 8386853, 79 años JORGE HUMBERTO HOYOS MORENO Última cita: 08/08/2026, Sin presen"
+    },
+    {
+      "t": "2026-08-08T15:11:42.298Z",
+      "tag": "button#vgl-tl-close.vgl-tl.close",
+      "text": "Ocultar (se colapsa a una pastilla)"
+    },
+    {
+      "t": "2026-08-08T15:11:44.305Z",
+      "tag": "label.text-uppercase.fw-bold.text-dark",
+      "text": "JESUSMARIA BRAN ANGEL"
+    },
+    {
+      "t": "2026-08-08T15:11:44.461Z",
+      "tag": "label.text-uppercase.fw-bold.text-dark",
+      "text": "JESUSMARIA BRAN ANGEL"
+    },
+    {
+      "t": "2026-08-08T15:11:44.573Z",
+      "tag": "label.text-uppercase.fw-bold.text-dark",
+      "text": "JESUSMARIA BRAN ANGEL"
+    },
+    {
+      "t": "2026-08-08T15:11:51.353Z",
+      "tag": "div.card-body.d-flex.justify-content-between.align-items-center.flex-wrap",
+      "text": "10:20 AM PRESENCIAL 43015460, 65 años GLORIA ELENA QUIROS SANCHEZ Última cita: 08/08/2026, En Sala H"
+    },
+    {
+      "t": "2026-08-08T15:11:53.170Z",
+      "tag": "button.btn.btn-primary-medic.ng-star-inserted",
+      "text": "Historias Clínicas"
+    },
+    {
+      "t": "2026-08-08T15:11:57.363Z",
+      "tag": "input.ng-untouched.ng-pristine.ng-valid",
+      "text": "on"
+    },
+    {
+      "t": "2026-08-08T15:11:58.758Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Aceptar"
+    },
+    {
+      "t": "2026-08-08T15:12:18.219Z",
+      "tag": "span.btn.btn-success.BotonOculto.btnFloatTitletabs.ng-star-inserted",
+      "text": "Historial"
+    },
+    {
+      "t": "2026-08-08T15:12:20.607Z",
+      "tag": "td.mat-cell.cdk-column-enfermedad.mat-column-enfermedad.ng-star-inserted",
+      "text": "PACIENTE MASCULINO DE 77 AÑOS, ADULTO MAYOR, CON ANTECEDENTE DE PREDIABETES, HIPERTENSIÓN ARTERIAL, "
+    },
+    {
+      "t": "2026-08-08T15:12:20.771Z",
+      "tag": "td.mat-cell.cdk-column-enfermedad.mat-column-enfermedad.ng-star-inserted",
+      "text": "PACIENTE MASCULINO DE 77 AÑOS, ADULTO MAYOR, CON ANTECEDENTE DE PREDIABETES, HIPERTENSIÓN ARTERIAL, "
+    },
+    {
+      "t": "2026-08-08T15:12:20.912Z",
+      "tag": "td.mat-cell.cdk-column-enfermedad.mat-column-enfermedad.ng-star-inserted",
+      "text": "PACIENTE MASCULINO DE 77 AÑOS, ADULTO MAYOR, CON ANTECEDENTE DE PREDIABETES, HIPERTENSIÓN ARTERIAL, "
+    },
+    {
+      "t": "2026-08-08T15:12:21.215Z",
+      "tag": "ngb-modal-window.modal.fade.show.d-block",
+      "text": "Historico Motivo Buscar: Motivo \t Ultima Enfermedad \t Profesional \t Especialidad \t Fecha Creación  C"
+    },
+    {
+      "t": "2026-08-08T15:12:21.610Z",
+      "tag": "textarea.form-control.ng-untouched.ng-pristine.ng-invalid.obligatorio",
+      "text": "Ingrese la enfermedad actual"
+    },
+    {
+      "t": "2026-08-08T15:12:21.919Z",
+      "tag": "textarea.form-control.ng-untouched.ng-pristine.ng-invalid.obligatorio",
+      "text": "Ingrese el motivo de la consulta"
+    },
+    {
+      "t": "2026-08-08T15:12:28.054Z",
+      "tag": "a#habitos.nav-link",
+      "text": "Hábitos y Gestión de Riesgo"
+    },
+    {
+      "t": "2026-08-08T15:12:29.380Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:29.713Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:30.034Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:30.248Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:30.590Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:30.992Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:31.292Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:31.497Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:31.871Z",
+      "tag": "select.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN NO SI"
+    },
+    {
+      "t": "2026-08-08T15:12:32.949Z",
+      "tag": "div.kt-portlet__body",
+      "text": "Anamnesis Antecedentes Hábitos y Gestión de Riesgo Revision por sistema y Examen fisico Ruta Crónico"
+    },
+    {
+      "t": "2026-08-08T15:12:33.189Z",
+      "tag": "a#ngb-tab-18.nav-link",
+      "text": "Revision por sistema y Examen fisico"
+    },
+    {
+      "t": "2026-08-08T15:14:28.282Z",
+      "tag": "input#alert_message.form-control.input-sm.ng-untouched.ng-pristine.ng-invalid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:14:28.907Z",
+      "tag": "input#alert_message.form-control.input-sm.ng-untouched.ng-pristine.ng-invalid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:14:29.678Z",
+      "tag": "span.btn.btn-success.BotonOculto.btnFloatTitletabs",
+      "text": "Historico"
+    },
+    {
+      "t": "2026-08-08T15:14:32.038Z",
+      "tag": "input#alert_message.form-control.input-sm.ng-untouched.ng-pristine.ng-invalid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:15:19.828Z",
+      "tag": "input#peso.form-control.input-sm.ng-untouched.ng-pristine.ng-invalid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:15:20.912Z",
+      "tag": "input#alert_message.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:15:22.244Z",
+      "tag": "a#pes.nav-link",
+      "text": "Ruta Crónicos"
+    },
+    {
+      "t": "2026-08-08T15:15:23.148Z",
+      "tag": "button.btn.btn-success",
+      "text": "Cerrar"
+    },
+    {
+      "t": "2026-08-08T15:15:24.364Z",
+      "tag": "label.text-muted",
+      "text": "Identificación: CC 8388129, Edad: 77 años y 8 meses"
+    },
+    {
+      "t": "2026-08-08T15:15:24.517Z",
+      "tag": "label.text-muted",
+      "text": "Identificación: CC 8388129, Edad: 77 años y 8 meses"
+    },
+    {
+      "t": "2026-08-08T15:15:42.736Z",
+      "tag": "label",
+      "text": "Hemoglobina"
+    },
+    {
+      "t": "2026-08-08T15:15:42.952Z",
+      "tag": "input#resultadoHemoglobina.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "Resultado"
+    },
+    {
+      "t": "2026-08-08T15:15:46.802Z",
+      "tag": "input#fechaResultHemoglobina.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:15:48.020Z",
+      "tag": "body.notranslate.swal2-shown.swal2-height-auto",
+      "text": "Historia Clínica Sábado, 8 De Agosto De 2026 bpalencia JESUSMARIA BRAN ANGEL Identificación: CC 8388"
+    },
+    {
+      "t": "2026-08-08T15:15:48.481Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Si"
+    },
+    {
+      "t": "2026-08-08T15:15:52.980Z",
+      "tag": "input#resultadoCreatinina.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "Resultado"
+    },
+    {
+      "t": "2026-08-08T15:15:53.848Z",
+      "tag": "div.form-group.col-md-4",
+      "text": "Creatinina (mg/dl)"
+    },
+    {
+      "t": "2026-08-08T15:15:57.988Z",
+      "tag": "input#resultadoPTH.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "2"
+    },
+    {
+      "t": "2026-08-08T15:15:58.912Z",
+      "tag": "div.col-md-12.row",
+      "text": "Ecografía renal ALT AST"
+    },
+    {
+      "t": "2026-08-08T15:16:00.209Z",
+      "tag": "a#paraclinico.nav-link",
+      "text": "Paraclínicos"
+    },
+    {
+      "t": "2026-08-08T15:16:00.877Z",
+      "tag": "a#impDiagnostica.nav-link",
+      "text": "Impresión Diagnostica"
+    },
+    {
+      "t": "2026-08-08T15:16:04.341Z",
+      "tag": "li.pure-checkbox.ng-star-inserted",
+      "text": "INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA"
+    },
+    {
+      "t": "2026-08-08T15:16:04.702Z",
+      "tag": "input.c-input.ng-valid.ng-star-inserted.ng-dirty.ng-touched",
+      "text": "N189"
+    },
+    {
+      "t": "2026-08-08T15:16:04.921Z",
+      "tag": "input.c-input.ng-valid.ng-star-inserted.ng-dirty.ng-touched",
+      "text": "N189"
+    },
+    {
+      "t": "2026-08-08T15:16:11.522Z",
+      "tag": "li.pure-checkbox.ng-star-inserted",
+      "text": "HIPERTENSION ESENCIAL (PRIMARIA)"
+    },
+    {
+      "t": "2026-08-08T15:16:13.099Z",
+      "tag": "select#DiagnosticoPrincipal_TipoDiagnosticoPpal_Nombre.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN CONFIRMADO NUEVO CONFIRMADO REPETIDO IMPRESION DIAGNOSTICA"
+    },
+    {
+      "t": "2026-08-08T15:16:13.508Z",
+      "tag": "select#DiagnosticoPrincipal_TipoDiagnosticoPpal_Nombre.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN CONFIRMADO NUEVO CONFIRMADO REPETIDO IMPRESION DIAGNOSTICA"
+    },
+    {
+      "t": "2026-08-08T15:16:13.826Z",
+      "tag": "div#formFarmacologico",
+      "text": "¿Principal?\tCódigo\tDescripción \tN189\tINSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA \tI10X\tHIPERTENSION"
+    },
+    {
+      "t": "2026-08-08T15:16:14.097Z",
+      "tag": "select#DiagnosticoPrincipal_FinalidadConsulta_Nombre.form-control.input-sm.ng-untouched.ng-pristine.ng-star-inserted.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN DIAGNOSTICO TRATAMIENTO REHABILITACION PALIACION OTRA"
+    },
+    {
+      "t": "2026-08-08T15:16:14.693Z",
+      "tag": "select#DiagnosticoPrincipal_FinalidadConsulta_Nombre.form-control.input-sm.ng-untouched.ng-star-inserted.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN DIAGNOSTICO TRATAMIENTO REHABILITACION PALIACION OTRA"
+    },
+    {
+      "t": "2026-08-08T15:16:15.482Z",
+      "tag": "select#DiagnosticoPrincipal_CausaExterna_Nombre.form-control.input-sm.ng-untouched.ng-pristine.ng-star-inserted.ng-valid",
+      "text": "SELECCIONE UNA OPCIÓN OTRO TIPO DE ACCIDENTE EVENTO ADVERSO EN SALUD ENFERMEDAD GENERAL OTRA VÍCTIMA"
+    },
+    {
+      "t": "2026-08-08T15:16:15.992Z",
+      "tag": "select#DiagnosticoPrincipal_CausaExterna_Nombre.form-control.input-sm.ng-untouched.ng-star-inserted.ng-valid.ng-dirty",
+      "text": "SELECCIONE UNA OPCIÓN OTRO TIPO DE ACCIDENTE EVENTO ADVERSO EN SALUD ENFERMEDAD GENERAL OTRA VÍCTIMA"
+    },
+    {
+      "t": "2026-08-08T15:16:16.547Z",
+      "tag": "div#formFarmacologico",
+      "text": "¿Principal?\tCódigo\tDescripción \tN189\tINSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA \tI10X\tHIPERTENSION"
+    },
+    {
+      "t": "2026-08-08T15:16:17.137Z",
+      "tag": "div.card-body",
+      "text": "INSUFICIENCIA RENAL CRONICA, NO ESPECIFICADA HIPERTENSION ESENCIAL (PRIMARIA) Agregar    ¿Principal?"
+    },
+    {
+      "t": "2026-08-08T15:16:17.406Z",
+      "tag": "select#DiagnosticoPrincipal_CausaExterna_Nombre.form-control.input-sm.ng-star-inserted.ng-valid.ng-dirty.ng-touched",
+      "text": "SELECCIONE UNA OPCIÓN OTRO TIPO DE ACCIDENTE EVENTO ADVERSO EN SALUD ENFERMEDAD GENERAL OTRA VÍCTIMA"
+    },
+    {
+      "t": "2026-08-08T15:16:17.995Z",
+      "tag": "select#DiagnosticoPrincipal_CausaExterna_Nombre.form-control.input-sm.ng-star-inserted.ng-valid.ng-dirty.ng-touched",
+      "text": "SELECCIONE UNA OPCIÓN OTRO TIPO DE ACCIDENTE EVENTO ADVERSO EN SALUD ENFERMEDAD GENERAL OTRA VÍCTIMA"
+    },
+    {
+      "t": "2026-08-08T15:16:19.218Z",
+      "tag": "ngb-tabset.tabset1.tabset-scrollable",
+      "text": "Anamnesis Antecedentes Hábitos y Gestión de Riesgo Revision por sistema y Examen fisico Ruta Crónico"
+    },
+    {
+      "t": "2026-08-08T15:16:19.482Z",
+      "tag": "span.btn.btn-success.BotonOculto.btnFloatTitletabs.ng-star-inserted",
+      "text": "Historial"
+    },
+    {
+      "t": "2026-08-08T15:16:20.663Z",
+      "tag": "td.p-datatable-tbody.mat-cell.cdk-column-analisisYplan.mat-column-analisisYplan.ng-star-inserted",
+      "text": "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== MASCULINO DE 77 AÑOS CON ANTECEDENTES DE HIP"
+    },
+    {
+      "t": "2026-08-08T15:16:20.819Z",
+      "tag": "td.p-datatable-tbody.mat-cell.cdk-column-analisisYplan.mat-column-analisisYplan.ng-star-inserted",
+      "text": "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== MASCULINO DE 77 AÑOS CON ANTECEDENTES DE HIP"
+    },
+    {
+      "t": "2026-08-08T15:16:20.976Z",
+      "tag": "td.p-datatable-tbody.mat-cell.cdk-column-analisisYplan.mat-column-analisisYplan.ng-star-inserted",
+      "text": "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== MASCULINO DE 77 AÑOS CON ANTECEDENTES DE HIP"
+    },
+    {
+      "t": "2026-08-08T15:16:21.309Z",
+      "tag": "ngb-modal-window.modal.fade.show.d-block",
+      "text": "Historial Analisis y plan Buscar ANALISISYPLAN FECHACREACION PROFESIONAL ESPECIALIDAD PACIENTE MASCU"
+    },
+    {
+      "t": "2026-08-08T15:16:21.542Z",
+      "tag": "textarea.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "Ingrese la descripción del análisis y plan"
+    },
+    {
+      "t": "2026-08-08T15:16:22.258Z",
+      "tag": "a#conducta.nav-link",
+      "text": "Conducta"
+    },
+    {
+      "t": "2026-08-08T15:16:26.174Z",
+      "tag": "li.pure-checkbox.ng-star-inserted",
+      "text": "CONSULTA DE CONTROL O DE SEGUIMIENTO POR OPTOMETRÍA"
+    },
+    {
+      "t": "2026-08-08T15:16:27.154Z",
+      "tag": "button.btn.btn-sm.btn-primary",
+      "text": "Agregar"
+    },
+    {
+      "t": "2026-08-08T15:16:28.190Z",
+      "tag": "button.d-inline-block.divFloatTitletabs.BotonOculto.btnFloatTitletabs.mat-menu-trigger.mat-button.mat-button-base.ng-star-inserted.cdk-focused.cdk-mouse-focused",
+      "text": "Paquetes"
+    },
+    {
+      "t": "2026-08-08T15:16:29.167Z",
+      "tag": "button.mat-menu-item.cdk-focused.cdk-mouse-focused",
+      "text": "HTA"
+    },
+    {
+      "t": "2026-08-08T15:16:39.319Z",
+      "tag": "li.pure-checkbox.ng-star-inserted",
+      "text": "MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL"
+    },
+    {
+      "t": "2026-08-08T15:16:40.067Z",
+      "tag": "button.btn.btn-sm.btn-primary",
+      "text": "Agregar"
+    },
+    {
+      "t": "2026-08-08T15:16:41.772Z",
+      "tag": "span.btn.btn-success.BotonOculto.btnFloatTitletabs.ng-star-inserted",
+      "text": "Historial"
+    },
+    {
+      "t": "2026-08-08T15:16:45.872Z",
+      "tag": "button.btn.btn-primary.btn-reformular",
+      "text": "Seleccionar"
+    },
+    {
+      "t": "2026-08-08T15:16:47.364Z",
+      "tag": "div.med-card.ng-star-inserted",
+      "text": "(60125) ATORVASTATINA 40 MG (TABLETA) BRANDON JESUS PALENCIA MARTINEZ MEDICINA GENERAL Fecha: 20/05/"
+    },
+    {
+      "t": "2026-08-08T15:16:47.604Z",
+      "tag": "button.btn.btn-primary.btn-reformular",
+      "text": "Seleccionar"
+    },
+    {
+      "t": "2026-08-08T15:16:48.673Z",
+      "tag": "button.btn.btn-primary.btn-reformular",
+      "text": "Seleccionar"
+    },
+    {
+      "t": "2026-08-08T15:16:49.720Z",
+      "tag": "div.med-card.ng-star-inserted",
+      "text": "(60297) AMLODIPINO 10 MG (TABLETA) BRANDON JESUS PALENCIA MARTINEZ MEDICINA GENERAL Fecha: 20/05/202"
+    },
+    {
+      "t": "2026-08-08T15:16:50.087Z",
+      "tag": "button.btn.btn-primary.btn-reformular",
+      "text": "Seleccionar"
+    },
+    {
+      "t": "2026-08-08T15:16:51.639Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Reformular"
+    },
+    {
+      "t": "2026-08-08T15:16:52.904Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:16:56.933Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:16:57.089Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:16:57.245Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:16:57.672Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:16:58.638Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:17:03.031Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:17:03.261Z",
+      "tag": "td",
+      "text": "Indicaciones *"
+    },
+    {
+      "t": "2026-08-08T15:17:04.241Z",
+      "tag": "button.btn-pf",
+      "text": "Post Fechado"
+    },
+    {
+      "t": "2026-08-08T15:17:05.098Z",
+      "tag": "div.pf-row-top",
+      "text": "¿Requiere Post Fechado? Número Meses 2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:05.297Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-pristine.ng-valid",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:05.775Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-valid.ng-dirty",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:06.110Z",
+      "tag": "div.pf-card__footer",
+      "text": "Cancelar Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:06.437Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:06.926Z",
+      "tag": "div.swal2-popup.swal2-modal.swal2-show",
+      "text": "? ¿Replicar Post-Fechado? ¿Desea aplicar el mismo Post-Fechado a los medicamentos que aún no lo tien"
+    },
+    {
+      "t": "2026-08-08T15:17:07.234Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Sí, replicar"
+    },
+    {
+      "t": "2026-08-08T15:17:08.209Z",
+      "tag": "button.btn-pf",
+      "text": "Post Fechado"
+    },
+    {
+      "t": "2026-08-08T15:17:08.753Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-pristine.ng-valid",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:09.111Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-valid.ng-dirty",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:09.425Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:09.877Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Sí, replicar"
+    },
+    {
+      "t": "2026-08-08T15:17:10.953Z",
+      "tag": "button.btn-pf",
+      "text": "Post Fechado"
+    },
+    {
+      "t": "2026-08-08T15:17:11.494Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-pristine.ng-valid",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:11.840Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-valid.ng-dirty",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:12.141Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:12.662Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Sí, replicar"
+    },
+    {
+      "t": "2026-08-08T15:17:14.105Z",
+      "tag": "button.btn-pf",
+      "text": "Post Fechado"
+    },
+    {
+      "t": "2026-08-08T15:17:15.270Z",
+      "tag": "div.pf-card__body",
+      "text": "¿Requiere Post Fechado? Número Meses 2 3 4 5 6 Fecha inicial Fecha Final"
+    },
+    {
+      "t": "2026-08-08T15:17:15.526Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-pristine.ng-valid",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:16.147Z",
+      "tag": "select.form-control.pill.ng-untouched.ng-valid.ng-dirty",
+      "text": "2 3 4 5 6"
+    },
+    {
+      "t": "2026-08-08T15:17:16.554Z",
+      "tag": "button.btn.btn-primary",
+      "text": "Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:17.081Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Sí, replicar"
+    },
+    {
+      "t": "2026-08-08T15:17:21.609Z",
+      "tag": "a#pes.nav-link",
+      "text": "Ruta Crónicos"
+    },
+    {
+      "t": "2026-08-08T15:17:23.647Z",
+      "tag": "select#proximaConsulta.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "Seleccione una opción 1 mes 2 meses 3 meses 4 meses 5 meses 6 meses 7 meses 8 meses 9 meses 10 meses"
+    },
+    {
+      "t": "2026-08-08T15:17:24.225Z",
+      "tag": "select#proximaConsulta.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "Seleccione una opción 1 mes 2 meses 3 meses 4 meses 5 meses 6 meses 7 meses 8 meses 9 meses 10 meses"
+    },
+    {
+      "t": "2026-08-08T15:17:24.704Z",
+      "tag": "select#conducta.form-control.input-sm.ng-untouched.ng-pristine.ng-valid",
+      "text": "Seleccione una opción Control Alta"
+    },
+    {
+      "t": "2026-08-08T15:17:25.109Z",
+      "tag": "select#conducta.form-control.input-sm.ng-untouched.ng-valid.ng-dirty",
+      "text": "Seleccione una opción Control Alta"
+    },
+    {
+      "t": "2026-08-08T15:17:48.828Z",
+      "tag": "li#kt_demo_panel_toggle.kt-sticky-toolbar__item.kt-sticky-toolbar__item--success",
+      "text": ""
+    },
+    {
+      "t": "2026-08-08T15:17:51.132Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Guardar"
+    },
+    {
+      "t": "2026-08-08T15:17:53.492Z",
+      "tag": "button.btn.btn-success",
+      "text": "Enviar"
+    },
+    {
+      "t": "2026-08-08T15:17:56.524Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "OK"
+    },
+    {
+      "t": "2026-08-08T15:17:57.108Z",
+      "tag": "a.btn.btn-primary",
+      "text": "Imprimir"
+    },
+    {
+      "t": "2026-08-08T15:17:59.229Z",
+      "tag": "a.btn.btn-primary",
+      "text": "Imprimir"
+    },
+    {
+      "t": "2026-08-08T15:18:01.275Z",
+      "tag": "a.btn.btn-primary",
+      "text": "Imprimir"
+    },
+    {
+      "t": "2026-08-08T15:18:03.357Z",
+      "tag": "a.btn.btn-primary",
+      "text": "Imprimir"
+    },
+    {
+      "t": "2026-08-08T15:19:32.839Z",
+      "tag": "button.btn.btn-success",
+      "text": "Cerrar"
+    },
+    {
+      "t": "2026-08-08T15:19:33.472Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Salir"
+    },
+    {
+      "t": "2026-08-08T15:19:35.653Z",
+      "tag": "button",
+      "text": "💾 Bajar Telemetría (Pro)"
+    }
+  ],
+  "logs": [
+    {
+      "t": "2026-08-08T15:12:28.080Z",
+      "type": "window_error",
+      "msg": "ResizeObserver loop completed with undelivered notifications."
+    },
+    {
+      "t": "2026-08-08T15:15:22.305Z",
+      "type": "window_error",
+      "msg": "ResizeObserver loop completed with undelivered notifications."
+    }
+  ]
+}

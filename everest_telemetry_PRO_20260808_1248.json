@@ -1,0 +1,212 @@
+{
+  "sessionStart": "2026-08-08T17:47:39.977Z",
+  "navigation": [
+    {
+      "t": "2026-08-08T17:47:39.978Z",
+      "type": "initial_load",
+      "url": "http://api.digiturno.viva1a.com.co:85/atencion"
+    }
+  ],
+  "network": [
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:41.718Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/LogSesions/ObtenerDatosActualesUsuario?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:41.708Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/LogSesions/ValidarPerfil?usuarioid=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:41.881Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:41.882Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetMonitoreoPorUsuarioTabla?UsuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:47.323Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:52.310Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:47:57.310Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:02.316Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:07.313Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:12.317Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:17.320Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:22.316Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:27.315Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:32.308Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:37.315Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:42.086Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/GetUsuariosTransferidosParaMedico?usuarioId=19631",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:43.389Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/LlamadoPorMedicoManual?UsuarioId=19631&NombreUsuario=ANDRES FELIPE ECHEVERRI GIRALDO",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:48:45.130Z",
+      "method": "GET",
+      "url": "http://api.digiturno.viva1a.com.co:90/api/Tickets/LlamadoPorMedicoManual?UsuarioId=19631&NombreUsuario=ANDRES FELIPE ECHEVERRI GIRALDO",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    }
+  ],
+  "clicks": [
+    {
+      "t": "2026-08-08T17:48:42.636Z",
+      "tag": "button.btn.btn-success",
+      "text": "Llamar Manual"
+    },
+    {
+      "t": "2026-08-08T17:48:43.388Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Buscar"
+    },
+    {
+      "t": "2026-08-08T17:48:43.812Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "OK"
+    },
+    {
+      "t": "2026-08-08T17:48:44.276Z",
+      "tag": "button.btn.btn-success",
+      "text": "Llamar Manual"
+    },
+    {
+      "t": "2026-08-08T17:48:44.796Z",
+      "tag": "div.swal2-popup.swal2-modal.swal2-show",
+      "text": "Nombre del paciente a llamar Buscar Cancelar"
+    },
+    {
+      "t": "2026-08-08T17:48:45.128Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Buscar"
+    },
+    {
+      "t": "2026-08-08T17:48:53.444Z",
+      "tag": "button",
+      "text": "💾 Bajar Telemetría (Pro)"
+    }
+  ],
+  "logs": []
+}

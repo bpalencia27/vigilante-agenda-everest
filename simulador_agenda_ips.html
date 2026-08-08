@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Simulador Agenda IPS — banco de pruebas del Vigilante</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ------------------------------------------------------------------ *
+ * Clonado del CSS real de Everest (app-medico, _ngcontent-wbj-c5).
+ * Solo lo que el Vigilante necesita ver: .labelHora, .status-label,
+ * .text-muted, .text-uppercase, .fw-bold, .card, .card-body, .fecha.
+ * PACIENTES SINTETICOS: aqui no entra ni un dato real de la IPS.
+ * ------------------------------------------------------------------ */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: #fff;
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.my-toolbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 72px; z-index: 1;
+  display: flex; align-items: center; gap: 24px; padding: 0 24px;
+  background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.14);
+}
+.tituloHC { font-size: 20px; font-weight: 700; color: #002c82; letter-spacing: 1pt; }
+.fecha {
+  background: #fff; padding: 5px 41px; text-align: center; border-radius: 4em/5em;
+  font-size: 13px; color: #002b83; border: 1px solid #e3e6ef; text-transform: capitalize;
+}
+.usrMedico { font-size: 18px; color: #001f61; font-weight: 700; margin-left: auto; }
+.main-content { padding: 20px; margin-top: 88px; }
+.header_card_citas {
+  background-color: #001f61; border-radius: 21px; min-height: 45px;
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+}
+.head-title-medic { color: #fff; font-weight: 700; font-size: 20px; letter-spacing: 1pt; }
+.button-medico {
+  border: 0; border-radius: 20px; background: #92bc14; color: #fff;
+  min-height: 44px; padding: 0 22px; font-size: 14px; cursor: pointer;
+}
+.card { border-radius: 30px; border: 0; }
+.card.mb-3.shadow-sm {
+  background: #fff; border-radius: 30px; box-shadow: 9px 10px 10px #999;
+  width: 90%; margin: 16px auto;
+}
+.card-body {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; column-gap: 1.5rem; padding: 18px 28px;
+}
+.labelHora { margin: 0; font-size: 20px; color: #212529; }
+.text-muted { color: #9e9e9e; font-size: 13px; letter-spacing: 1pt; font-weight: 700; }
+.text-uppercase { text-transform: uppercase; }
+.fw-bold { font-weight: 700; }
+.text-dark { color: #424242; font-size: 13px; letter-spacing: 1pt; }
+.status-label {
+  color: #002c82; font-weight: 700; letter-spacing: 1pt; font-size: 15px;
+}
+.flex-grow-1 { flex-grow: 1; }
+.text-center { text-align: center; flex-grow: .4; }
+.btn-primary-medic {
+  background-color: #001f61; border: 0; border-radius: 30px; min-height: 44px;
+  font-size: 13px; color: #fff; padding: 0 18px; margin-left: 8px; cursor: pointer;
+}
+.btn-primary-medic[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ---- Panel de control (NO existe en la web real) ------------------ */
+#panel {
+  position: fixed; top: 88px; left: 20px; width: 300px; z-index: 900;
+  background: #10203f; color: #e8ecf5; border-radius: 14px; padding: 16px;
+  font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+#panel h2 { margin: 0 0 4px; font-size: 14px; letter-spacing: .5px; }
+#panel .sub { color: #9fb0cd; font-size: 11px; margin-bottom: 12px; }
+#panel .reloj {
+  font-size: 26px; font-weight: 700; text-align: center; letter-spacing: 2px;
+  background: #06122b; border-radius: 10px; padding: 8px; margin-bottom: 12px;
+}
+#panel button {
+  width: 100%; min-height: 44px; margin-bottom: 8px; border: 0; border-radius: 9px;
+  background: #1f3b6e; color: #fff; font-size: 13px; cursor: pointer;
+}
+#panel button:hover { background: #2b5296; }
+#panel button.peligro { background: #7a2018; }
+#panel button.peligro:hover { background: #9c2a20; }
+#panel .fila { display: flex; gap: 8px; }
+#panel select {
+  width: 100%; min-height: 44px; border-radius: 9px; border: 0; padding: 0 10px;
+  margin-bottom: 8px; background: #06122b; color: #e8ecf5; font-size: 13px;
+}
+#panel .nota { color: #9fb0cd; font-size: 11px; line-height: 1.45; margin-top: 8px; }
+</style>
+</head>
+<body class="notranslate" translate="no">
+
+<div class="my-toolbar">
+  <div class="tituloHC">Historia Clínica</div>
+  <div class="fecha" id="etiquetaFecha">martes, 28 de julio de 2026</div>
+  <span class="usrMedico">bpalencia</span>
+</div>
+
+<div class="main-content">
+  <div class="header_card_citas">
+    <span class="head-title-medic">Citas del día</span>
+    <button class="button-medico" onclick="repintarComoAngular()">Consultar</button>
+  </div>
+
+  <!-- Envoltorio externo: replica el <div class="card mt-1"> real, que es la
+       trampa donde un closest('.card') ingenuo se lleva TODA la lista. -->
+  <div class="card mt-1" id="listaCitas"></div>
+</div>
+
+<div id="panel">
+  <h2>Panel de pruebas</h2>
+  <div class="sub">No existe en la web real</div>
+  <div class="reloj" id="reloj">--:--:--</div>
+
+  <select id="selCita"></select>
+  <button onclick="marcar('En Sala')">Marcar “En Sala”</button>
+  <button onclick="marcar('Atendido')">Marcar “Atendido”</button>
+  <button onclick="marcar('Cancelada')">Marcar “Cancelada”</button>
+  <button onclick="marcar('Sin presentarse')">Devolver a “Sin presentarse”</button>
+
+  <div class="fila">
+    <button onclick="saltar(1)">+1 min</button>
+    <button onclick="saltar(5)">+5 min</button>
+  </div>
+  <button class="peligro" onclick="escenarioFraude()">Escenario: registro extemporáneo</button>
+  <button onclick="reiniciar()">Reiniciar simulación</button>
+
+  <div class="nota">
+    El reloj es <b>simulado</b>: adelantarlo no mueve el reloj del sistema, así
+    que el Vigilante seguirá usando la hora real. Para probar la regla completa,
+    fije las horas de las citas cerca de la hora real con “Reiniciar”.
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------------------ *
+ * Datos SINTETICOS. Ningun nombre ni documento corresponde a una persona.
+ * ------------------------------------------------------------------------ */
+const PLANTILLA = [
+  { doc: '10000001', edad: 70, nombre: 'PACIENTE DE PRUEBA UNO',    modalidad: 'PRESENCIAL' },
+  { doc: '10000002', edad: 68, nombre: 'PACIENTE DE PRUEBA DOS',    modalidad: 'PRESENCIAL' },
+  { doc: '10000003', edad: 78, nombre: 'PACIENTE DE PRUEBA TRES',   modalidad: 'PRESENCIAL' },
+  { doc: '10000004', edad: 82, nombre: 'PACIENTE DE PRUEBA CUATRO', modalidad: 'PRESENCIAL SEDE' },
+  { doc: '10000005', edad: 71, nombre: 'PACIENTE DE PRUEBA CINCO',  modalidad: 'PRESENCIAL' },
+  /* Misma hora que la anterior a proposito: es el caso que rompia la version
+     antigua del vigilante, que buscaba el texto de la hora en todo el DOM y se
+     quedaba con la primera coincidencia. */
+  { doc: '10000006', edad: 65, nombre: 'PACIENTE DE PRUEBA SEIS',   modalidad: 'PRESENCIAL', mismaHora: true }
+];
+
+let citas = [];
+let desfaseMin = 0;   // minutos que el reloj simulado va por delante
+
+/** Formato 12 h estricto, sin toLocaleTimeString: los locales de Windows
+ *  devuelven "6:00 a. m." y eso es justo lo que rompia el parseo. */
+function hhmm12(fecha) {
+  let h = fecha.getHours();
+  const m = String(fecha.getMinutes()).padStart(2, '0');
+  const suf = h < 12 ? 'AM' : 'PM';
+  h = h % 12 || 12;
+  return `${String(h).padStart(2, '0')}:${m} ${suf}`;
+}
+
+function ahoraSimulada() {
+  return new Date(Date.now() + desfaseMin * 60000);
+}
+
+function reiniciar() {
+  desfaseMin = 0;
+  const base = new Date();
+  base.setSeconds(0, 0);
+  base.setMinutes(base.getMinutes() - 2);   // la 1a cita ya empezo hace 2 min
+
+  citas = PLANTILLA.map((p, i) => {
+    const cuando = new Date(base);
+    if (!p.mismaHora) cuando.setMinutes(cuando.getMinutes() + i * 10);
+    else cuando.setMinutes(cuando.getMinutes() + (i - 1) * 10);
+    return { ...p, hora: hhmm12(cuando), estado: 'Sin presentarse' };
+  });
+  pintar();
+}
+
+/** Repinta desde cero, como hace Angular al responder ObtenerConsultas:
+ *  destruye los nodos y crea otros nuevos. Sirve para comprobar que el
+ *  vigilante no se queda con referencias muertas. */
+function repintarComoAngular() { pintar(); }
+
+function pintar() {
+  const cont = document.getElementById('listaCitas');
+  cont.innerHTML = '';
+
+  citas.forEach((c, i) => {
+    const card = document.createElement('div');
+    card.className = 'card mb-3 shadow-sm';
+    card.innerHTML = `
+      <div class="card-body">
+        <div class="text-center"><label class="labelHora my-0">${c.hora}</label></div>
+        <div class="flex-grow-1">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <label class="fw-bold mb-0">${c.modalidad}</label>
+          </div>
+          <label class="text-muted"> ${c.doc}, ${c.edad} años</label><br>
+          <label class="text-uppercase fw-bold text-dark">${c.nombre}</label><br>
+          <label> Última cita: 28/07/2026, <span>  </span></label>
+        </div>
+        <div class="text-center"><label class="status-label">${c.estado}</label></div>
+        <div>
+          <button type="button" class="btn btn-primary-medic" disabled>Historias Clínicas</button>
+          <button type="button" class="btn btn-primary-medic">Consentimientos</button>
+        </div>
+      </div>`;
+    cont.appendChild(card);
+  });
+
+  const sel = document.getElementById('selCita');
+  const previo = sel.value;
+  sel.innerHTML = citas
+    .map((c, i) => `<option value="${i}">${c.hora} — ${c.nombre.split(' ').slice(-1)[0]} (${c.estado})</option>`)
+    .join('');
+  if (previo && previo < citas.length) sel.value = previo;
+}
+
+function marcar(estado) {
+  const i = Number(document.getElementById('selCita').value);
+  if (Number.isNaN(i) || !citas[i]) return;
+  citas[i].estado = estado;
+  pintar();
+}
+
+function saltar(min) {
+  desfaseMin += min;
+}
+
+/** Deja una cita vencida y sin presentarse; el operador debe marcarla “En Sala”
+ *  cuando el vigilante ya haya emitido la alerta naranja. */
+function escenarioFraude() {
+  const cuando = new Date();
+  cuando.setMinutes(cuando.getMinutes() - 7);   // ya paso el limite de 6:00
+  citas.unshift({
+    doc: '10000099', edad: 74, nombre: 'PACIENTE ESCENARIO FRAUDE',
+    modalidad: 'PRESENCIAL', hora: hhmm12(cuando), estado: 'Sin presentarse'
+  });
+  pintar();
+  document.getElementById('selCita').value = '0';
+}
+
+setInterval(() => {
+  const s = ahoraSimulada();
+  document.getElementById('reloj').textContent =
+    [s.getHours(), s.getMinutes(), s.getSeconds()]
+      .map(n => String(n).padStart(2, '0')).join(':') +
+    (desfaseMin ? `  (+${desfaseMin}m)` : '');
+}, 1000);
+
+/* La fecha del encabezado debe ser la de HOY: el vigilante se niega a auditar
+   una agenda que no sea la del dia en curso, y con la fecha quemada del
+   ejemplo original entraria siempre en modo pausa. */
+document.getElementById('etiquetaFecha').textContent =
+  new Date().toLocaleDateString('es-CO', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  });
+
+reiniciar();
+</script>
+
+<!-- Zona reservada al Modulo 2 (Extension-Safe Zone): abajo-derecha.
+     Ningun elemento del Vigilante puede ocupar este rectangulo. -->
+<div id="everest-panel-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 999999;"></div>
+</body>
+</html>

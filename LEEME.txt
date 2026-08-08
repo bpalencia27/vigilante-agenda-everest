@@ -1,0 +1,101 @@
+===========================================================================
+ VIGILANTE DE AGENDA — Copiloto Everest RCV           Versión 2.5.0
+ Enterprise Medical Workflow & Time-Tracking Assistant
+===========================================================================
+
+1. DESCRIPCIÓN EJECUTIVA & PROPÓSITO
+-----------------------------------
+Vigilante de Agenda es una solución de asistencia inteligente diseñada para el
+monitoreo continuo en tiempo real de la programación de citas en la plataforma
+Everest. 
+
+Opera mediante notificaciones superpuestas (Always on Top) de alta prioridad que
+trascienden el espacio de trabajo activo (MS Word, navegadores web, ventanas de
+historia clínica o cualquier otra aplicación en pantalla). Esto elimina la
+necesidad de verificación manual recurrente o interrupción del flujo médico.
+
+CLASIFICACIÓN DE ALERTAS:
+  [VERDE]   ✔ INGRESO A TIEMPO      
+            Certificación de llegada dentro de la ventana de tolerancia (5:59 min).
+
+  [ÁMBAR]   ⚠ INASISTENCIA REGISTRADA 
+            Superación del límite de tolerancia sin confirmación de ingreso.
+
+  [ROJO]    ⛔ CONFIRMACIÓN EXTEMPORÁNEA 
+            Confirmación posterior a la declaración de ausencia. Emite una alerta 
+            acústica dedicada para requerir atención prioritaria inmediata.
+
+  [AZUL]    ℹ NOTIFICACIÓN DE SISTEMA 
+            Información operativa (inicio/cierre de jornada y sincronización).
+
+POLÍTICA DE SEÑALIZACIÓN AUDITIVA:
+Únicamente las alertas críticas (ROJO) activan señal acústica, garantizando un 
+entorno de trabajo enfocado y previniendo la fatiga por alarmas innecesarias.
+
+GESTIÓN DE ALERTAS Y BALANCE DE TURNO:
+* Las notificaciones permanecen en pantalla hasta su interacción directa (cierre manual),
+  asegurando la trazabilidad de eventos desatendidos durante la atención médica.
+* Al concluir la jornada, el sistema compila un reporte consolidado con opción de 
+  visualización directa de los registros de auditoría.
+
+
+2. ARQUITECTURA DE CERTIFICACIÓN & INTEGRIDAD DE DATOS
+------------------------------------------------------
+Al iniciar el servicio, el sistema evalúa el estado actual de la agenda:
+* Si existen pacientes previamente confirmados antes de la ejecución del Vigilante,
+  se genera un informe sintetizado inicial (AZUL) indicando la cantidad de registros.
+* Garantía de integridad: El sistema aplica una política estricta de no-inferencia;
+  no genera timestamps retrospectivos ni asume horas de arribo no observadas en directo.
+  A partir del momento de activación, cada evento es auditado en tiempo real.
+
+LOGS Y REGISTROS DE AUDITORÍA:
+* Registro detallado de eventos:
+  Escritorio\Reportes_Vigilante_Copiloto\vigilante_AAAA-MM-DD.log
+* Exportación automática al cierre del turno (formatos CSV y JSON) en:
+  Escritorio\Reportes_Vigilante_Copiloto
+
+
+3. REQUISITOS DEL SISTEMA
+-------------------------
+* Sistema Operativo: Windows 64-bits
+* Navegador Web: Google Chrome (Instalación estándar)
+* Entorno autocontenido: No requiere instalación previa de Python, Playwright ni 
+  dependencias adicionales. Todos los binarios se ejecutan dentro del paquete de servicio.
+
+
+4. PROTOCOLO DE DESPLIEGUE Y OPERACIÓN
+--------------------------------------
+1. Descomprima el directorio ejecutable en la ubicación de su preferencia.
+   NOTA: Conserve la estructura relativa entre vigilante_agenda.exe y la carpeta _internal.
+
+2. Ejecute el binario principal: vigilante_agenda.exe
+
+3. Inicialización de sesión: En la primera ejecución, autentíquese en Everest y navegue a 
+   "Citas del día". Las credenciales y sesión quedarán enlazadas para ejecuciones futuras.
+
+4. Estado Operativo: Verifique la presencia del indicador de estado flotante en pantalla 
+   ("Copiloto Everest RCV — Monitoreo activo: N cita(s) auditadas").
+
+5. Finalización de Turno: Finalice la aplicación cerrando la consola de comandos o presione 
+   Ctrl+C para compilar y guardar el reporte diario de auditoría.
+
+
+5. RECOMENDACIÓN DE OPERACIÓN
+------------------------------
+>> Se recomienda iniciar el servicio prioritariamente ANTES del comienzo del primer turno. <<
+
+Los registros iniciados a mitad de jornada otorgarán certificación parcial a los eventos 
+previos a la ejecución, manteniendo el estándar de máxima precisión y veracidad institucional.
+
+
+6. PARÁMETROS Y OPCIONES AVANZADAS
+----------------------------------
+Sintaxis de ejecución desde consola:
+   vigilante_agenda.exe --verboso         Habilita el registro detallado de trazabilidad.
+   vigilante_agenda.exe --refresco 0      Desactiva el ciclo de refresco automático.
+   vigilante_agenda.exe --no-reanudar     Fuerza la inicialización de turno desde cero.
+   vigilante_agenda.exe --gracia <seg>    Ajusta el margen de tolerancia en segundos.
+   vigilante_agenda.exe --salida <ruta>   Define un directorio personalizado para reportes.
+   vigilante_agenda.exe --modo cdp        Enlaza el asistente a una instancia activa de Chrome 
+                                          (requiere debug port 9222).
+

@@ -1,0 +1,34 @@
+{
+  "sessionStart": "2026-08-08T17:21:10.659Z",
+  "navigation": [
+    {
+      "t": "2026-08-08T17:21:10.660Z",
+      "type": "initial_load",
+      "url": "https://medicosviva1a.atheneasoluciones.com/Resultados/BuscarPaciente"
+    },
+    {
+      "t": "2026-08-08T17:21:10.899Z",
+      "type": "pushState",
+      "url": "https://medicosviva1a.atheneasoluciones.com/Resultados/BuscarPaciente"
+    },
+    {
+      "t": "2026-08-08T17:21:10.931Z",
+      "type": "popstate",
+      "url": "https://medicosviva1a.atheneasoluciones.com/Resultados/BuscarPaciente"
+    },
+    {
+      "t": "2026-08-08T17:21:10.940Z",
+      "type": "popstate",
+      "url": "https://medicosviva1a.atheneasoluciones.com/Resultados/BuscarPaciente"
+    }
+  ],
+  "network": [],
+  "clicks": [
+    {
+      "t": "2026-08-08T17:47:50.543Z",
+      "tag": "button",
+      "text": "💾 Bajar Telemetría (Pro)"
+    }
+  ],
+  "logs": []
+}

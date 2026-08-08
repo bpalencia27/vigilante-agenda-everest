@@ -1,0 +1,118 @@
+===========================================================================
+ VIGILANTE DE AGENDA - Copiloto Everest RCV        version 2.1.0
+===========================================================================
+
+QUE HACE
+--------
+Vigila la agenda del dia en Everest y avisa con una ventana de Windows que
+sale POR ENCIMA de lo que este haciendo. No hay que estar mirando la agenda ni
+el navegador: el aviso aparece igual aunque este en Word, en Edge o en otra
+pestana.
+
+   VERDE   ✔  A TIEMPO             llego dentro de los 5:59 de gracia
+   AMBAR   ⚠  INASISTENCIA         vencio el margen sin registro de entrada
+   ROJO    ⛔ CONFIRMACION TARDIA  estaba ausente pasado el limite y lo
+                                    confirmaron despues (suena un pitido)
+   AZUL    ℹ  VIGILANTE            informacion (arranque y cierre del turno)
+
+Solo la ROJA suena. Es la unica que senala a alguien; si sonaran todas, el
+ruido seria constante y se dejaria de hacer caso justo a la que importa.
+
+Al cerrar el turno sale un ultimo aviso azul con el balance y un boton
+"Ver reporte" que abre la carpeta de los archivos. Si quedan alertas rojas sin
+cerrar, ese aviso lo recuerda.
+
+NINGUN aviso se cierra solo: cada uno tiene una X arriba a la derecha y se
+queda ahi hasta que usted la pulse. Es a proposito: si estaba atendiendo, al
+levantar la vista tiene que seguir viendo lo que paso mientras no miraba.
+Se apilan a la derecha sin taparse; si se llena la pantalla siguen en otra
+columna. (Si prefiere que se cierren solos: --duracion-aviso 9000)
+
+AL ABRIR EL VIGILANTE
+---------------------
+Si al abrirlo ya habia pacientes confirmados, NO recibira un aviso por cada
+uno: sale un unico aviso azul diciendo cuantos eran. El vigilante no vio
+llegar a esos pacientes, asi que no puede afirmar a que hora llegaron y no lo
+finge. A partir de ese momento, cada llegada se avisa normalmente.
+
+Ademas queda un registro de todo en:
+   Escritorio\Reportes_Vigilante_Copiloto\vigilante_AAAA-MM-DD.log
+Si algo va mal, ese archivo es lo que hay que mirar.
+
+Al cerrar el turno deja un CSV (se abre en Excel) y un JSON en:
+   Escritorio\Reportes_Vigilante_Copiloto
+
+
+QUE NECESITA EL PC
+------------------
+   * Windows 64 bits
+   * Google Chrome instalado
+
+Nada mas. NO hay que instalar Python, ni Playwright, ni ejecutar ningun
+instalador. Todo lo demas viaja dentro de la carpeta _internal.
+
+Si falta Chrome, el programa lo dice al arrancar y se cierra sin mas.
+
+
+COMO SE USA
+-----------
+1. Descomprimir la carpeta completa donde se quiera (Escritorio, por ejemplo).
+   IMPORTANTE: vigilante_agenda.exe y la carpeta _internal tienen que quedar
+   juntos, en el mismo sitio. Si se separa el .exe, no arranca.
+
+2. Doble clic en  vigilante_agenda.exe
+
+3. Se abre una ventana de Chrome propia del vigilante.
+   La PRIMERA vez hay que iniciar sesion en Everest en esa ventana y entrar a
+   "Citas del dia". Queda recordado: las siguientes veces entra solo.
+
+4. Dejarla abierta durante el turno. Abajo a la izquierda aparece una pastilla
+   azul ("Vigilante activo - N cita(s) en seguimiento"): mientras se vea, esta
+   funcionando.
+
+5. Para terminar: cerrar la ventana negra de consola, o Ctrl+C en ella.
+   Ahi escribe el reporte del turno.
+
+
+LO MAS IMPORTANTE
+-----------------
+   >> Abrirlo ANTES de la primera cita del turno. <<
+
+El vigilante solo puede certificar lo que ve con sus propios ojos. Si se abre
+a media manana, los pacientes que ya estaban en sala quedan registrados "en
+regla" pero con confianza PARCIAL, porque nadie puede saber a que hora
+llegaron de verdad. Avisa de eso en azul al arrancar.
+
+Nunca acusa a nadie por algo que no observo.
+
+
+OPCIONES (solo si hacen falta)
+------------------------------
+Desde la consola, en la carpeta del programa:
+
+   vigilante_agenda.exe --verboso        ver el detalle de lo que hace
+   vigilante_agenda.exe --refresco 0     no tocar la pagina (no pulsa
+                                         "Consultar"; ojo: sin refresco
+                                         Everest no repinta y no se veran
+                                         las llegadas)
+   vigilante_agenda.exe --no-reanudar    empezar el turno de cero
+   vigilante_agenda.exe --gracia 359     cambiar la ventana de gracia (seg)
+   vigilante_agenda.exe --salida "D:\ruta"   otra carpeta de reportes
+   vigilante_agenda.exe --help           todas las opciones
+
+Modo avanzado: --modo cdp engancha el vigilante a la ventana de Chrome que ya
+tiene abierta el medico, en vez de abrir una propia. Exige haber arrancado
+Chrome asi:   chrome.exe --remote-debugging-port=9222
+
+
+SI ALGO NO VA
+-------------
+"Ya hay un vigilante corriendo en este equipo"
+   Hay otra copia abierta. Cerrar la consola de la otra.
+
+"No encuentro Google Chrome en este equipo"
+   Instalar Google Chrome.
+
+No aparece la pastilla azul
+   Es que no encuentra la agenda. Comprobar que en la ventana del vigilante
+   este abierta la pantalla "Citas del dia" de Everest.

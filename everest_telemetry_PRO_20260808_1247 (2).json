@@ -1,0 +1,600 @@
+{
+  "sessionStart": "2026-08-08T15:43:38.903Z",
+  "navigation": [
+    {
+      "t": "2026-08-08T15:43:38.903Z",
+      "type": "initial_load",
+      "url": "https://appcita.viva1a.com.co:8051/laboratorio/agente"
+    }
+  ],
+  "network": [
+    {
+      "type": "fetch",
+      "t": "2026-08-08T15:43:44.656Z",
+      "method": "POST",
+      "url": "https://analytics.google.com/g/collect?v=2&tid=G-H1BV1WXM44&gtm=45je6852v9119031003za20g&_p=1786203818899&gcd=13l3l3l3l1l1&npa=0&dma=0&_eu=EAAIAGQ&are=1&cid=1692911050.1785843306&frm=0&ir=1&pscdl=noapi&rcb=8&sr=1600x900&uaa=x86&uab=64&uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CMicrosoft%2520Edge%3B151.0.4129.59%7CChromium%3B151.0.7922.72&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=es&gaf=2&_s=1&tag_exp=115938466~115938468~118897920~118897930~119527020~119896802&sid=1786202336&sct=9&seg=1&dl=https%3A%2F%2Fappcita.viva1a.com.co%2Flaboratorio%2Fagente&dt=Asignacion%20Citas%20Laboratorio%20Web&en=page_view&tfd=6987",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:43:45.768Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:43:45.767Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=43015460",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:43:49.939Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerAgendasActivas?sedeId=378&fechaBuscar=2026-11-01",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:43:51.530Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=2026-11-03",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:44:06.987Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=43015460&AgendaId=282479&NombrePaciente= &Telefono=3122428904&Correo=&Hora=08:04:00&FechaCita=2026-11-03&generaImpresion=false&LugarCreacion=lfrente",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T15:44:07.032Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=3122428904&Fecha=2026-11-03&Hora=08:04:00&codigoCita=13516146&codigoSede=378",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:21.738Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:21.736Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=43037660",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:25.499Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerAgendasActivas?sedeId=378&fechaBuscar=2026-11-01",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:26.501Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=2026-11-03",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:44.959Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=43037660&AgendaId=282479&NombrePaciente= &Telefono=0&Correo=&Hora=09:56:00&FechaCita=2026-11-03&generaImpresion=false&LugarCreacion=lfrente",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:38:45.004Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=0&Fecha=2026-11-03&Hora=09:56:00&codigoCita=13516550&codigoSede=378",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:54:42.477Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:54:42.476Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=32301532",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:54:45.149Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerAgendasActivas?sedeId=378&fechaBuscar=2026-11-01",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:54:45.776Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=2026-11-03",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:55:15.842Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=32301532&AgendaId=282479&NombrePaciente= &Telefono=0&Correo=&Hora=08:40:00&FechaCita=2026-11-03&generaImpresion=false&LugarCreacion=lfrente",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T16:55:15.888Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=0&Fecha=2026-11-03&Hora=08:40:00&codigoCita=13516658&codigoSede=378",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:15.424Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:15.413Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=43068070",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:18.017Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/CancelarCita?codigo=13511403&NombreSede=undefined&NombreEps=undefined",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:21.949Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerAgendasActivas?sedeId=378&fechaBuscar=2026-08-01",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:26.256Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=2026-08-13",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:37.225Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=43068070&AgendaId=272998&NombrePaciente= &Telefono=0&Correo=&Hora=08:56:00&FechaCita=2026-08-13&generaImpresion=false&LugarCreacion=lfrente",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:28:37.280Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=0&Fecha=2026-08-13&Hora=08:56:00&codigoCita=13516835&codigoSede=378",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:32.062Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:32.039Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=43068070",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:50.886Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/sede/ObtenerListadoSede",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:50.886Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerCitasActivaPacienteV2?identificacion=71211914",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:54.602Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerAgendasActivas?sedeId=378&fechaBuscar=2026-11-01",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:44:55.117Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=2026-11-03",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:45:05.338Z",
+      "method": "POST",
+      "url": "https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=71211914&AgendaId=282479&NombrePaciente= &Telefono=0&Correo=&Hora=06:08:00&FechaCita=2026-11-03&generaImpresion=false&LugarCreacion=lfrente",
+      "reqBody": "{\"responseType\":\"json\"}",
+      "status": 0,
+      "resBody": ""
+    },
+    {
+      "type": "xhr",
+      "t": "2026-08-08T17:45:05.397Z",
+      "method": "GET",
+      "url": "https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=0&Fecha=2026-11-03&Hora=06:08:00&codigoCita=13516917&codigoSede=378",
+      "reqBody": "Blob/FormData",
+      "status": 0,
+      "resBody": ""
+    }
+  ],
+  "clicks": [
+    {
+      "t": "2026-08-08T15:43:45.761Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T15:43:48.548Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T15:43:48.774Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T15:43:49.273Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T15:43:49.941Z",
+      "tag": "select.form-control.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T15:43:51.530Z",
+      "tag": "a.fc-day-grid-event.fc-h-event.fc-event.fc-start.fc-end.fc-allow-mouse-resize",
+      "text": "DISPONIBLE"
+    },
+    {
+      "t": "2026-08-08T15:43:55.714Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "08:04:00"
+    },
+    {
+      "t": "2026-08-08T15:43:59.286Z",
+      "tag": "div.modal-body",
+      "text": "¿Está seguro que desea agendar esta cita?    Se enviará un sms al número registrado notificando la a"
+    },
+    {
+      "t": "2026-08-08T15:44:06.986Z",
+      "tag": "button.btn.btn-success",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T16:38:19.934Z",
+      "tag": "button.btn.btn-success",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T16:38:21.505Z",
+      "tag": "div.row.p-10.pt-3",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T16:38:21.733Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T16:38:23.609Z",
+      "tag": "div.col-lg-12",
+      "text": "Regresar SELECCIONE SEDE SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELE"
+    },
+    {
+      "t": "2026-08-08T16:38:24.541Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T16:38:25.501Z",
+      "tag": "select.form-control.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T16:38:26.501Z",
+      "tag": "a.fc-day-grid-event.fc-h-event.fc-event.fc-start.fc-end.fc-allow-mouse-resize",
+      "text": "DISPONIBLE"
+    },
+    {
+      "t": "2026-08-08T16:38:43.370Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "09:56:00"
+    },
+    {
+      "t": "2026-08-08T16:38:44.958Z",
+      "tag": "button.btn.btn-success",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T16:54:41.112Z",
+      "tag": "button.btn.btn-success",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T16:54:42.475Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T16:54:43.351Z",
+      "tag": "div.col-lg-12",
+      "text": "Regresar SELECCIONE SEDE SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELE"
+    },
+    {
+      "t": "2026-08-08T16:54:44.269Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T16:54:45.151Z",
+      "tag": "select.form-control.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T16:54:45.776Z",
+      "tag": "a.fc-day-grid-event.fc-h-event.fc-event.fc-start.fc-end.fc-allow-mouse-resize",
+      "text": "DISPONIBLE"
+    },
+    {
+      "t": "2026-08-08T16:55:14.656Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "08:40:00"
+    },
+    {
+      "t": "2026-08-08T16:55:15.841Z",
+      "tag": "button.btn.btn-success",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T17:28:13.621Z",
+      "tag": "button.btn.btn-success",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T17:28:15.404Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T17:28:17.111Z",
+      "tag": "button.btn.btn-success",
+      "text": "Cancelar"
+    },
+    {
+      "t": "2026-08-08T17:28:17.773Z",
+      "tag": "div.swal2-actions",
+      "text": "Si No"
+    },
+    {
+      "t": "2026-08-08T17:28:18.016Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "Si"
+    },
+    {
+      "t": "2026-08-08T17:28:18.624Z",
+      "tag": "button.swal2-confirm.swal2-styled",
+      "text": "OK"
+    },
+    {
+      "t": "2026-08-08T17:28:19.390Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:28:19.752Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:28:20.164Z",
+      "tag": "div.col-lg-12",
+      "text": "Regresar SELECCIONE SEDE SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELE"
+    },
+    {
+      "t": "2026-08-08T17:28:20.752Z",
+      "tag": "div.col-md-11",
+      "text": "SELECCIONE SEDE SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A"
+    },
+    {
+      "t": "2026-08-08T17:28:21.075Z",
+      "tag": "select.form-control.ng-pristine.ng-valid.ng-touched",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:28:21.951Z",
+      "tag": "select.form-control.ng-valid.ng-touched.ng-dirty",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:28:26.256Z",
+      "tag": "a.fc-day-grid-event.fc-h-event.fc-event.fc-start.fc-end.fc-allow-mouse-resize",
+      "text": "DISPONIBLE"
+    },
+    {
+      "t": "2026-08-08T17:28:28.581Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "08:56:00"
+    },
+    {
+      "t": "2026-08-08T17:28:29.584Z",
+      "tag": "button.btn.btn-success",
+      "text": "CANCELAR"
+    },
+    {
+      "t": "2026-08-08T17:28:34.492Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "08:56:00"
+    },
+    {
+      "t": "2026-08-08T17:28:36.844Z",
+      "tag": "div.col-md-6",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T17:28:37.224Z",
+      "tag": "button.btn.btn-success",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T17:44:29.992Z",
+      "tag": "div.modal-footer",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T17:44:30.551Z",
+      "tag": "div.modal-footer",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T17:44:30.811Z",
+      "tag": "button.btn.btn-success",
+      "text": "CERRAR"
+    },
+    {
+      "t": "2026-08-08T17:44:32.027Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T17:44:45.011Z",
+      "tag": "button.btn.btn-success",
+      "text": "SALIR"
+    },
+    {
+      "t": "2026-08-08T17:44:50.884Z",
+      "tag": "button.btn.btn-primary.w-100.btnTeclado",
+      "text": "SIGUIENTE"
+    },
+    {
+      "t": "2026-08-08T17:44:53.720Z",
+      "tag": "select.form-control.ng-untouched.ng-pristine.ng-valid",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:44:54.604Z",
+      "tag": "select.form-control.ng-untouched.ng-valid.ng-dirty",
+      "text": "SELECCIONAR SERVICIO DESEADO VIVA 1A CALLE 30 ESPECIALISTAS VIVA 1A LAURELES VIVA 1A PRINCIPAL UT VI"
+    },
+    {
+      "t": "2026-08-08T17:44:55.117Z",
+      "tag": "a.fc-day-grid-event.fc-h-event.fc-event.fc-start.fc-end.fc-allow-mouse-resize",
+      "text": "DISPONIBLE"
+    },
+    {
+      "t": "2026-08-08T17:45:02.980Z",
+      "tag": "button.btn.btn-primary.btn-lg.btn-block.hide",
+      "text": "06:08:00"
+    },
+    {
+      "t": "2026-08-08T17:45:05.337Z",
+      "tag": "button.btn.btn-success",
+      "text": "CONFIRMAR"
+    },
+    {
+      "t": "2026-08-08T17:47:57.203Z",
+      "tag": "button",
+      "text": "💾 Bajar Telemetría (Pro)"
+    }
+  ],
+  "logs": []
+}

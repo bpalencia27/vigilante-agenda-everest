@@ -1,0 +1,209 @@
+{
+  "timestamp": "2026-08-08T19:23:33Z",
+  "test_cases": [
+    {
+      "id": "TC-01",
+      "name": "Health check endpoint",
+      "endpoint": "/ping",
+      "status_code": 200,
+      "expected_statuses": [
+        200
+      ],
+      "elapsed_ms": 5.74,
+      "response": {
+        "status": "ok"
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-02",
+      "name": "Missing documento parameter",
+      "endpoint": "/api/buscar_laboratorios",
+      "status_code": 422,
+      "expected_statuses": [
+        422
+      ],
+      "elapsed_ms": 5.68,
+      "response": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "query",
+              "documento"
+            ],
+            "msg": "Field required",
+            "input": null
+          }
+        ]
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-03",
+      "name": "Empty documento parameter",
+      "endpoint": "/api/buscar_laboratorios?documento=",
+      "status_code": 400,
+      "expected_statuses": [
+        400
+      ],
+      "elapsed_ms": 1.82,
+      "response": {
+        "error": "El parametro 'documento' es requerido y no puede estar vacio."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-04",
+      "name": "Whitespace-only documento parameter",
+      "endpoint": "/api/buscar_laboratorios?documento=%20%20%20",
+      "status_code": 400,
+      "expected_statuses": [
+        400
+      ],
+      "elapsed_ms": 2.71,
+      "response": {
+        "error": "El parametro 'documento' es requerido y no puede estar vacio."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-05",
+      "name": "Non-existent document ID",
+      "endpoint": "/api/buscar_laboratorios?documento=99999999",
+      "status_code": 404,
+      "expected_statuses": [
+        404
+      ],
+      "elapsed_ms": 4533.98,
+      "response": {
+        "error": "Paciente con documento '99999999' no encontrado."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-06",
+      "name": "Special characters input (abc!@#)",
+      "endpoint": "/api/buscar_laboratorios?documento=abc%21%40%23",
+      "status_code": 404,
+      "expected_statuses": [
+        404,
+        400
+      ],
+      "elapsed_ms": 2263.91,
+      "response": {
+        "error": "Paciente con documento 'abc!@#' no encontrado."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-07",
+      "name": "SQL Injection payload input",
+      "endpoint": "/api/buscar_laboratorios?documento=%27%20OR%201%3D1%20--",
+      "status_code": 404,
+      "expected_statuses": [
+        404,
+        400
+      ],
+      "elapsed_ms": 2309.15,
+      "response": {
+        "error": "No se pudo obtener idSolicitud para el documento '' OR 1=1 --'."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-08",
+      "name": "Overflow input (1000 chars)",
+      "endpoint": "/api/buscar_laboratorios?documento=9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+      "status_code": 404,
+      "expected_statuses": [
+        404,
+        400
+      ],
+      "elapsed_ms": 2245.78,
+      "response": {
+        "error": "Paciente con documento '9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999' no encontrado."
+      },
+      "verdict": "PASS"
+    },
+    {
+      "id": "TC-09",
+      "name": "Rapid Sequential Requests (5 calls)",
+      "endpoint": "Multiple /api/buscar_laboratorios",
+      "status_code": [
+        404,
+        400,
+        404,
+        404,
+        404
+      ],
+      "elapsed_ms": 11719.11,
+      "response": "Average latency per request: 2343.82 ms",
+      "verdict": "PASS"
+    }
+  ],
+  "rapid_sequential_metrics": {
+    "total_requests": 5,
+    "total_elapsed_ms": 11719.11,
+    "avg_elapsed_ms": 2343.82,
+    "sub_requests": [
+      {
+        "sub_request": 1,
+        "documento": "00000000",
+        "status_code": 404,
+        "expected": [
+          404
+        ],
+        "elapsed_ms": 3617.19,
+        "passed": true
+      },
+      {
+        "sub_request": 2,
+        "documento": "",
+        "status_code": 400,
+        "expected": [
+          400
+        ],
+        "elapsed_ms": 1.61,
+        "passed": true
+      },
+      {
+        "sub_request": 3,
+        "documento": "99999999",
+        "status_code": 404,
+        "expected": [
+          404
+        ],
+        "elapsed_ms": 3534.6,
+        "passed": true
+      },
+      {
+        "sub_request": 4,
+        "documento": "abc!@#",
+        "status_code": 404,
+        "expected": [
+          404,
+          400
+        ],
+        "elapsed_ms": 2289.9,
+        "passed": true
+      },
+      {
+        "sub_request": 5,
+        "documento": "11111111",
+        "status_code": 404,
+        "expected": [
+          404
+        ],
+        "elapsed_ms": 2275.67,
+        "passed": true
+      }
+    ],
+    "verdict": "PASS"
+  },
+  "summary": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0
+  }
+}
