@@ -285,17 +285,32 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // Códigos Athenea confirmados por telemetría para los ~20-29 sub-analitos del
+  // uroanálisis (Color, Aspecto, Glucosa, Proteínas, pH, Densidad, Leucocitos,
+  // Bacterias, etc.). A diferencia de los demás analitos, Ruta Crónicos solo tiene UN
+  // campo de texto para todo el uroanálisis (id confirmado: resultadoUroanalisis) — así
+  // que estos se acumulan y se escriben juntos al final, no uno por uno (escribirlos
+  // uno por uno los iría sobreescribiendo y solo quedaría el último).
+  const UROANALISIS_CODE_PREFIX = "40";
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
+      const uroanalisisPartes = [];
+
       labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
+          const code = String(lab.CodigoParametro || "");
           const name = (lab.NombreParametro || "").toUpperCase();
           const result = lab.Resultado;
-          
+
           if (!result) return;
-          
+
+          if (code.startsWith(UROANALISIS_CODE_PREFIX) && code.length === 4) {
+              uroanalisisPartes.push(`${lab.NombreParametro || code}: ${result}`);
+              return;
+          }
+
           let everestId = ATHENEA_MAP[code];
-          
+
           // Fallback por nombre si el código no está mapeado.
           // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
           // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
@@ -308,15 +323,8 @@
               else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
               else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
               else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
-              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
-              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
-              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
-              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
-              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
-              // sub-campo en Ruta Crónicos.
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
-          
+
           if (everestId) {
               // Intentar buscar el input por ID
               let inputEl = document.getElementById(everestId);
@@ -333,6 +341,25 @@
               }
           }
       });
+
+      // Uroanálisis: id de campo confirmado por telemetría, pero el FORMATO exacto que
+      // se escribe ahí (separadores, qué incluir) no está confirmado — la telemetría de
+      // clics no capturó el texto realmente tecleado, solo que el campo se usó. Se arma
+      // un resumen legible como mejor esfuerzo; verificar contra el uso real y ajustar
+      // el formato si no es el esperado.
+      if (uroanalisisPartes.length) {
+          const inputEl = document.getElementById("resultadoUroanalisis");
+          if (inputEl) {
+              setNgValue(inputEl, uroanalisisPartes.join(" | "));
+              count++;
+              const dateInput = document.getElementById("fechaResultUroanalisis");
+              if (dateInput) {
+                  const today = new Date().toISOString().split('T')[0];
+                  setNgValue(dateInput, today);
+              }
+          }
+      }
+
       return count;
   }
 
@@ -4582,17 +4609,32 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // Códigos Athenea confirmados por telemetría para los ~20-29 sub-analitos del
+  // uroanálisis (Color, Aspecto, Glucosa, Proteínas, pH, Densidad, Leucocitos,
+  // Bacterias, etc.). A diferencia de los demás analitos, Ruta Crónicos solo tiene UN
+  // campo de texto para todo el uroanálisis (id confirmado: resultadoUroanalisis) — así
+  // que estos se acumulan y se escriben juntos al final, no uno por uno (escribirlos
+  // uno por uno los iría sobreescribiendo y solo quedaría el último).
+  const UROANALISIS_CODE_PREFIX = "40";
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
+      const uroanalisisPartes = [];
+
       labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
+          const code = String(lab.CodigoParametro || "");
           const name = (lab.NombreParametro || "").toUpperCase();
           const result = lab.Resultado;
-          
+
           if (!result) return;
-          
+
+          if (code.startsWith(UROANALISIS_CODE_PREFIX) && code.length === 4) {
+              uroanalisisPartes.push(`${lab.NombreParametro || code}: ${result}`);
+              return;
+          }
+
           let everestId = ATHENEA_MAP[code];
-          
+
           // Fallback por nombre si el código no está mapeado.
           // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
           // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
@@ -4605,15 +4647,8 @@
               else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
               else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
               else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
-              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
-              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
-              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
-              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
-              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
-              // sub-campo en Ruta Crónicos.
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
-          
+
           if (everestId) {
               // Intentar buscar el input por ID
               let inputEl = document.getElementById(everestId);
@@ -4630,6 +4665,25 @@
               }
           }
       });
+
+      // Uroanálisis: id de campo confirmado por telemetría, pero el FORMATO exacto que
+      // se escribe ahí (separadores, qué incluir) no está confirmado — la telemetría de
+      // clics no capturó el texto realmente tecleado, solo que el campo se usó. Se arma
+      // un resumen legible como mejor esfuerzo; verificar contra el uso real y ajustar
+      // el formato si no es el esperado.
+      if (uroanalisisPartes.length) {
+          const inputEl = document.getElementById("resultadoUroanalisis");
+          if (inputEl) {
+              setNgValue(inputEl, uroanalisisPartes.join(" | "));
+              count++;
+              const dateInput = document.getElementById("fechaResultUroanalisis");
+              if (dateInput) {
+                  const today = new Date().toISOString().split('T')[0];
+                  setNgValue(dateInput, today);
+              }
+          }
+      }
+
       return count;
   }
 
@@ -5773,17 +5827,32 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // Códigos Athenea confirmados por telemetría para los ~20-29 sub-analitos del
+  // uroanálisis (Color, Aspecto, Glucosa, Proteínas, pH, Densidad, Leucocitos,
+  // Bacterias, etc.). A diferencia de los demás analitos, Ruta Crónicos solo tiene UN
+  // campo de texto para todo el uroanálisis (id confirmado: resultadoUroanalisis) — así
+  // que estos se acumulan y se escriben juntos al final, no uno por uno (escribirlos
+  // uno por uno los iría sobreescribiendo y solo quedaría el último).
+  const UROANALISIS_CODE_PREFIX = "40";
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
+      const uroanalisisPartes = [];
+
       labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
+          const code = String(lab.CodigoParametro || "");
           const name = (lab.NombreParametro || "").toUpperCase();
           const result = lab.Resultado;
-          
+
           if (!result) return;
-          
+
+          if (code.startsWith(UROANALISIS_CODE_PREFIX) && code.length === 4) {
+              uroanalisisPartes.push(`${lab.NombreParametro || code}: ${result}`);
+              return;
+          }
+
           let everestId = ATHENEA_MAP[code];
-          
+
           // Fallback por nombre si el código no está mapeado.
           // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
           // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
@@ -5796,15 +5865,8 @@
               else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
               else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
               else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
-              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
-              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
-              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
-              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
-              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
-              // sub-campo en Ruta Crónicos.
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
-          
+
           if (everestId) {
               // Intentar buscar el input por ID
               let inputEl = document.getElementById(everestId);
@@ -5821,6 +5883,25 @@
               }
           }
       });
+
+      // Uroanálisis: id de campo confirmado por telemetría, pero el FORMATO exacto que
+      // se escribe ahí (separadores, qué incluir) no está confirmado — la telemetría de
+      // clics no capturó el texto realmente tecleado, solo que el campo se usó. Se arma
+      // un resumen legible como mejor esfuerzo; verificar contra el uso real y ajustar
+      // el formato si no es el esperado.
+      if (uroanalisisPartes.length) {
+          const inputEl = document.getElementById("resultadoUroanalisis");
+          if (inputEl) {
+              setNgValue(inputEl, uroanalisisPartes.join(" | "));
+              count++;
+              const dateInput = document.getElementById("fechaResultUroanalisis");
+              if (dateInput) {
+                  const today = new Date().toISOString().split('T')[0];
+                  setNgValue(dateInput, today);
+              }
+          }
+      }
+
       return count;
   }
 
@@ -6823,17 +6904,32 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // Códigos Athenea confirmados por telemetría para los ~20-29 sub-analitos del
+  // uroanálisis (Color, Aspecto, Glucosa, Proteínas, pH, Densidad, Leucocitos,
+  // Bacterias, etc.). A diferencia de los demás analitos, Ruta Crónicos solo tiene UN
+  // campo de texto para todo el uroanálisis (id confirmado: resultadoUroanalisis) — así
+  // que estos se acumulan y se escriben juntos al final, no uno por uno (escribirlos
+  // uno por uno los iría sobreescribiendo y solo quedaría el último).
+  const UROANALISIS_CODE_PREFIX = "40";
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
+      const uroanalisisPartes = [];
+
       labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
+          const code = String(lab.CodigoParametro || "");
           const name = (lab.NombreParametro || "").toUpperCase();
           const result = lab.Resultado;
-          
+
           if (!result) return;
-          
+
+          if (code.startsWith(UROANALISIS_CODE_PREFIX) && code.length === 4) {
+              uroanalisisPartes.push(`${lab.NombreParametro || code}: ${result}`);
+              return;
+          }
+
           let everestId = ATHENEA_MAP[code];
-          
+
           // Fallback por nombre si el código no está mapeado.
           // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
           // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
@@ -6846,15 +6942,8 @@
               else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
               else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
               else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
-              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
-              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
-              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
-              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
-              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
-              // sub-campo en Ruta Crónicos.
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
-          
+
           if (everestId) {
               // Intentar buscar el input por ID
               let inputEl = document.getElementById(everestId);
@@ -6871,6 +6960,25 @@
               }
           }
       });
+
+      // Uroanálisis: id de campo confirmado por telemetría, pero el FORMATO exacto que
+      // se escribe ahí (separadores, qué incluir) no está confirmado — la telemetría de
+      // clics no capturó el texto realmente tecleado, solo que el campo se usó. Se arma
+      // un resumen legible como mejor esfuerzo; verificar contra el uso real y ajustar
+      // el formato si no es el esperado.
+      if (uroanalisisPartes.length) {
+          const inputEl = document.getElementById("resultadoUroanalisis");
+          if (inputEl) {
+              setNgValue(inputEl, uroanalisisPartes.join(" | "));
+              count++;
+              const dateInput = document.getElementById("fechaResultUroanalisis");
+              if (dateInput) {
+                  const today = new Date().toISOString().split('T')[0];
+                  setNgValue(dateInput, today);
+              }
+          }
+      }
+
       return count;
   }
 
