@@ -5001,12 +5001,12 @@
       cups: [
         // Código real confirmado (telemetría #1325): id 19562, código 903841.
         { codigo: "903841", desc: "Glucosa En Suero U Otro Fluido Diferente A Orina" },
-        // Código CUPS aún no confirmado en ninguna telemetría capturada: se resuelve por
-        // BÚSQUEDA DE TEXTO en vivo contra el catálogo de Everest (ver
-        // apiOrdenamientoBuscarCupPorTexto) en vez de adivinar un id. Si la búsqueda no
-        // encuentra una única coincidencia clara, la orden se marca como fallida — nunca
-        // se envía un cup adivinado.
-        { textoBusqueda: "HEMOGLOBINA GLICOSILADA", desc: "Hemoglobina Glicosilada" }
+        // Confirmado en vivo contra el catálogo real de Everest (paciente de prueba
+        // 32307622): existían DOS variantes ("AUTOMATIZADA" 903426 y "MANUAL O
+        // SEMIAUTOMATIZADA" 903427), por eso la búsqueda de texto las rechazaba por
+        // ambigüedad. El médico confirmó usar la automatizada (estándar del laboratorio,
+        // igual patrón que el resto del catálogo).
+        { codigo: "903426", desc: "Hemoglobina Glicosilada Automatizada" }
       ]
     }
   ];
