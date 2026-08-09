@@ -4,15 +4,16 @@ Puente por Portapapeles (Opcion B) para Athenea API Bridge.
 Reemplaza la comunicacion HTTP en localhost:5050 (bloqueada por Sophos Web Protection
 en el equipo de la empresa) por un canal basado en el portapapeles del sistema:
 
-  1. vigilante_agenda.user.js copia "VGLDOC:<documento>" al portapapeles
+  1. vigilante_agenda.user.js copia "VGLDOC:<reqId>:<documento>" al portapapeles
      (GM_setClipboard). El prefijo VGLDOC: evita que este proceso confunda un numero
      cualquiera que el usuario haya copiado para otra cosa (telefono, radicado) con una
-     solicitud real.
+     solicitud real. El reqId correlaciona la respuesta con ESA solicitud especifica,
+     para que dos búsquedas casi simultáneas (dos pacientes) nunca se crucen.
   2. Este proceso vigila el portapapeles, detecta el prefijo, consulta Athenea via
      AtheneaService (Playwright headless, mismas credenciales de config.py) y escribe
-     {"idSolicitud": N} de vuelta al portapapeles.
-  3. El userscript lee el resultado del portapapeles (boton manual, o lectura automatica
-     si el navegador la permite) y continua el flujo normal.
+     {"idSolicitud": N, "reqId": "<reqId>"} de vuelta al portapapeles.
+  3. El userscript lee el resultado del portapapeles y solo lo acepta si el reqId
+     coincide con el que el mismo generó.
 
 Ejecutar en una consola aparte, dejarlo corriendo durante la jornada:
     python clipboard_watcher.py
@@ -31,7 +32,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 POLL_INTERVAL_SECONDS = 1.0
 DOC_PREFIX = "VGLDOC:"
-DOC_PATTERN = re.compile(re.escape(DOC_PREFIX) + r"(\d{5,15})$")
+DOC_PATTERN = re.compile(re.escape(DOC_PREFIX) + r"([A-Za-z0-9]{4,20}):(\d{5,15})$")
 
 
 def safe_paste():
@@ -53,30 +54,31 @@ def safe_copy(text):
         return False
 
 
-async def procesar_documento(service: AtheneaService, doc: str, content_esperado: str):
-    logger.info(f"Documento detectado en portapapeles: {doc}")
+async def procesar_documento(service: AtheneaService, req_id: str, doc: str, content_esperado: str):
+    logger.info(f"Documento detectado en portapapeles (reqId {req_id}): {doc}")
     try:
         id_solicitud = await service.get_id_solicitud(doc)
-        respuesta = json.dumps({"idSolicitud": id_solicitud})
+        respuesta = json.dumps({"idSolicitud": id_solicitud, "reqId": req_id})
     except PatientNotFoundError as e:
         logger.warning(str(e))
-        respuesta = json.dumps({"error": str(e)})
+        respuesta = json.dumps({"error": str(e), "reqId": req_id})
     except (AtheneaServiceError, TimeoutError) as e:
         logger.error(str(e))
-        respuesta = json.dumps({"error": str(e)})
+        respuesta = json.dumps({"error": str(e), "reqId": req_id})
     except Exception as e:
         # Cualquier otra falla (Playwright no pudo lanzar Chromium, disco lleno,
         # antivirus bloqueando el proceso hijo, etc.) NO debe tumbar el watcher.
         logger.error(f"Error inesperado buscando '{doc}' en Athenea: {e}")
-        respuesta = json.dumps({"error": f"Error inesperado: {e}"})
+        respuesta = json.dumps({"error": f"Error inesperado: {e}", "reqId": req_id})
 
     # Si mientras esperábamos la búsqueda (varios segundos) el navegador ya copió una
-    # solicitud MÁS NUEVA, no la pisamos con esta respuesta vieja — se descarta aquí y
-    # la nueva solicitud sigue su propio ciclo en la siguiente vuelta del loop.
+    # solicitud MÁS NUEVA, no la pisamos con esta respuesta vieja. Devolvemos None para
+    # indicarle a watch() que NO marque ese contenido nuevo como "ya visto" — así se
+    # procesa normalmente en la siguiente vuelta del loop, en vez de perderse.
     actual = safe_paste()
     if actual is not None and actual != content_esperado:
         logger.warning("El portapapeles cambió mientras se procesaba la solicitud; se descarta la respuesta para no pisar una solicitud más nueva.")
-        return actual
+        return None
 
     if safe_copy(respuesta):
         logger.info(f"Respuesta escrita al portapapeles: {respuesta}")
@@ -85,7 +87,7 @@ async def procesar_documento(service: AtheneaService, doc: str, content_esperado
 
 async def watch(service: AtheneaService):
     last_seen = None
-    logger.info("Vigilando el portapapeles. Esperando 'VGLDOC:<documento>' desde Tampermonkey...")
+    logger.info("Vigilando el portapapeles. Esperando 'VGLDOC:<reqId>:<documento>' desde Tampermonkey...")
     while True:
         try:
             content = safe_paste()
@@ -96,8 +98,12 @@ async def watch(service: AtheneaService):
             m = DOC_PATTERN.match(content) if content else None
             if content and content != last_seen and m:
                 last_seen = content
-                doc = m.group(1)
-                last_seen = await procesar_documento(service, doc, content)
+                req_id, doc = m.group(1), m.group(2)
+                resultado = await procesar_documento(service, req_id, doc, content)
+                # Si procesar_documento descartó la respuesta (portapapeles cambió durante
+                # la búsqueda), no dejamos last_seen apuntando al contenido nuevo: eso lo
+                # marcaría como "ya visto" y esa solicitud nunca se procesaría.
+                last_seen = resultado if resultado is not None else None
             else:
                 last_seen = content or last_seen
         except Exception as e:
@@ -111,7 +117,12 @@ async def watch(service: AtheneaService):
 
 async def main():
     service = AtheneaService()
-    await service.start()
+    try:
+        await service.start()
+    except Exception as e:
+        logger.error(f"No se pudo iniciar AtheneaService (Playwright/Chromium): {e}")
+        logger.error("El watcher no puede continuar sin un navegador funcional. Revisa la instalación de Playwright.")
+        return
     try:
         await watch(service)
     except KeyboardInterrupt:

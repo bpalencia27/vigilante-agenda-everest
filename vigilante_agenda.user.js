@@ -349,11 +349,15 @@
               resolve(null);
               return;
           }
+          // reqId: correlaciona la respuesta con ESTA solicitud específica. Sin esto, si
+          // el médico abre laboratorios de dos pacientes casi al mismo tiempo, ambas
+          // esperas podrían aceptar la respuesta del OTRO paciente por error.
+          const reqId = Math.random().toString(36).slice(2, 10);
           // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
           // que el médico haya copiado para otra cosa (teléfono, radicado) con una
           // solicitud real, y no le pise el portapapeles sin darse cuenta.
-          GM_setClipboard("VGLDOC:" + String(doc));
-          console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
+          GM_setClipboard(`VGLDOC:${reqId}:${doc}`);
+          console.log(`[Vigilante] Documento ${doc} (reqId ${reqId}) copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
           badge.textContent = `📋 Buscando idSolicitud en Athenea para ${doc}... (clipboard_watcher.py debe estar corriendo)`;
@@ -370,14 +374,20 @@
               resolve(val);
           };
 
+          // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
+          // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
           const tryParse = (text) => {
               if (!text) return null;
-              const m = /"idSolicitud"\s*:\s*(\d+)/.exec(text);
-              return m ? parseInt(m[1], 10) : null;
+              try {
+                  const obj = JSON.parse(text);
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+              } catch (e) {}
+              return null;
           };
 
           let intentos = 0;
           const pollTimer = setInterval(async () => {
+              if (settled) return;
               intentos++;
               try {
                   const text = await navigator.clipboard.readText();
@@ -387,6 +397,7 @@
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles; se ignora y se ofrece el botón manual más abajo.
               }
+              if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
                   clearInterval(pollTimer);
                   badge.textContent = "";
@@ -398,7 +409,7 @@
                           const text = await navigator.clipboard.readText();
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
-                          alert("El portapapeles no contiene un idSolicitud válido todavía. Verifica que clipboard_watcher.py haya terminado.");
+                          alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
                       }
@@ -3167,7 +3178,7 @@
       .vgl-card-actions{
         display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;
       }
-      .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar,.vgl-btn-examgen{
+      .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar,.vgl-btn-examgen,.vgl-btn-labs{
         all:unset;
         width:28px;height:28px;border-radius:8px;
         border:1px solid var(--edge);
@@ -3178,7 +3189,7 @@
         transition:transform .13s cubic-bezier(0.34,1.56,0.64,1),background .13s;
         flex-shrink:0;box-sizing:border-box;
       }
-      .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover,.vgl-btn-examgen:hover{
+      .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover,.vgl-btn-examgen:hover,.vgl-btn-labs:hover{
         transform:scale(1.12);background:var(--bg4);
         box-shadow:0 2px 8px rgba(0,0,0,.25);
       }
@@ -4569,11 +4580,15 @@
               resolve(null);
               return;
           }
+          // reqId: correlaciona la respuesta con ESTA solicitud específica. Sin esto, si
+          // el médico abre laboratorios de dos pacientes casi al mismo tiempo, ambas
+          // esperas podrían aceptar la respuesta del OTRO paciente por error.
+          const reqId = Math.random().toString(36).slice(2, 10);
           // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
           // que el médico haya copiado para otra cosa (teléfono, radicado) con una
           // solicitud real, y no le pise el portapapeles sin darse cuenta.
-          GM_setClipboard("VGLDOC:" + String(doc));
-          console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
+          GM_setClipboard(`VGLDOC:${reqId}:${doc}`);
+          console.log(`[Vigilante] Documento ${doc} (reqId ${reqId}) copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
           badge.textContent = `📋 Buscando idSolicitud en Athenea para ${doc}... (clipboard_watcher.py debe estar corriendo)`;
@@ -4590,14 +4605,20 @@
               resolve(val);
           };
 
+          // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
+          // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
           const tryParse = (text) => {
               if (!text) return null;
-              const m = /"idSolicitud"\s*:\s*(\d+)/.exec(text);
-              return m ? parseInt(m[1], 10) : null;
+              try {
+                  const obj = JSON.parse(text);
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+              } catch (e) {}
+              return null;
           };
 
           let intentos = 0;
           const pollTimer = setInterval(async () => {
+              if (settled) return;
               intentos++;
               try {
                   const text = await navigator.clipboard.readText();
@@ -4607,6 +4628,7 @@
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles; se ignora y se ofrece el botón manual más abajo.
               }
+              if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
                   clearInterval(pollTimer);
                   badge.textContent = "";
@@ -4618,7 +4640,7 @@
                           const text = await navigator.clipboard.readText();
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
-                          alert("El portapapeles no contiene un idSolicitud válido todavía. Verifica que clipboard_watcher.py haya terminado.");
+                          alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
                       }
@@ -5026,8 +5048,11 @@
   // dentro de Everest), un interceptor le agrega esas líneas al arreglo `ordenes` que
   // Everest YA armó correctamente, y deja que se envíe con todo lo demás intacto. Everest
   // sigue siendo el único que construye paciente/diagnosticoId/citaId — nunca los inventamos.
-  const PENDING_EXAM_ORDERS = {}; // { docIdLimpio: { patientName, entries: [...], armedAt } }
-  const PENDING_EXAM_TTL_MS = 2 * 60 * 60 * 1000; // 2h: evita inyectar en una consulta distinta días después
+  const PENDING_EXAM_ORDERS = {}; // { docIdLimpio: { patientName, entries: [...], citaId, armedAt } }
+  // 20 min (antes 2h): un TTL corto reduce la ventana en la que una marca vieja podría
+  // colarse en una consulta DISTINTA del mismo paciente el mismo día. Si además el
+  // payload trae citaId, se exige que coincida con el de cuando se armó (ver interceptor).
+  const PENDING_EXAM_TTL_MS = 20 * 60 * 1000;
 
   // Convierte un cup resuelto ({Id,Codigo,Descripcion,...}) a la forma exacta que usa
   // GuardarJsonHC dentro de `ordenes` (confirmada con la telemetría real #1325).
@@ -5073,10 +5098,10 @@
     if (cancelBtn) cancelBtn.addEventListener("click", () => desarmarExamenGeneral(docId));
   }
 
-  function armarExamenGeneral(docId, patientName, entries) {
+  function armarExamenGeneral(docId, patientName, entries, citaId) {
     const key = String(docId).replace(/\D/g, "");
     if (!key || !entries.length) return;
-    PENDING_EXAM_ORDERS[key] = { patientName, entries, armedAt: Date.now() };
+    PENDING_EXAM_ORDERS[key] = { patientName, entries, citaId: citaId || null, armedAt: Date.now() };
     mostrarBadgeExamenArmado(key, patientName, entries);
   }
 
@@ -5119,23 +5144,40 @@
           const pend = docInner && PENDING_EXAM_ORDERS[docInner];
 
           if (Array.isArray(inner.ordenes) && pend) {
+            const citaCoincide = !pend.citaId || !inner.citaId || String(pend.citaId) === String(inner.citaId);
+
             if (Date.now() - pend.armedAt > PENDING_EXAM_TTL_MS) {
-              console.warn(`[Vigilante ExamenGeneral] Solicitud armada para ${docInner} expiró (>2h); no se inyecta.`);
+              console.warn(`[Vigilante ExamenGeneral] Solicitud armada para ${docInner} expiró (>20min); no se inyecta.`);
               desarmarExamenGeneral(docInner, "expirado");
+            } else if (!citaCoincide) {
+              // Ambos payloads traen citaId y NO coinciden: es una consulta distinta del
+              // mismo paciente (ej. dos citas el mismo día). No se inyecta aquí; la marca
+              // sigue esperando su propia cita hasta que expire el TTL.
+              console.warn(`[Vigilante ExamenGeneral] citaId no coincide para ${docInner} (armado para ${pend.citaId}, guardando ${inner.citaId}); no se inyecta en esta consulta.`);
             } else {
               inner.ordenes = inner.ordenes.concat(pend.entries);
               outer.json = JSON.stringify(inner);
               body = JSON.stringify(outer);
+              // Se desarma de inmediato, ANTES de enviar (no al recibir la respuesta):
+              // así, si Everest dispara dos guardados casi simultáneos para el mismo
+              // paciente, el segundo ya no encuentra nada pendiente que inyectar de nuevo
+              // — evita duplicar la orden del examen.
+              desarmarExamenGeneral(docInner, "inyectado, esperando confirmación");
               console.log(`[Vigilante ExamenGeneral] ${pend.entries.length} examen(es) agregados a la Conducta de ${docInner} antes de enviar.`);
               this.addEventListener("load", function() {
                 if (this.status >= 200 && this.status < 300) {
-                  desarmarExamenGeneral(docInner, "enviado");
                   if (typeof notify === "function") {
                     notify("VERDE", "✅ Exámenes Generales Incluidos", `${pend.entries.length} examen(es) agregados a la Conducta de ${pend.patientName}.`, true);
                   }
+                } else {
+                  // Everest rechazó el guardado con nuestros exámenes agregados. Ya se
+                  // desarmó al enviar (nunca se reintenta en silencio); se avisa
+                  // claramente al médico para que reintente guardar (ya sin el agregado
+                  // automático) y agregue el examen manualmente si aún lo necesita.
+                  if (typeof notify === "function") {
+                    notify("ROJO", "⚠ No se pudieron incluir los Exámenes Generales", `Everest rechazó el guardado (código ${this.status}) al intentar incluir los exámenes marcados para ${pend.patientName}. Vuelve a guardar la Conducta (ya sin el agregado automático) y agrega el examen manualmente si lo necesitas.`, true);
+                  }
                 }
-                // Si falla (status >= 300), se deja armado a propósito para reintentar
-                // en el próximo guardado, en vez de perder silenciosamente la solicitud.
               });
             }
           }
@@ -5170,7 +5212,9 @@
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase()) || items[0];
+      // Sin fallback a items[0]: si no hay coincidencia EXACTA de CIE-10, es más seguro
+      // no resolver nada que adjuntar un diagnóstico distinto al pedido.
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase());
       if (item) {
         const dxId = item.id || item.Id || item.DiagnosticoId;
         if (dxId) { DX_CACHE[cie10] = dxId; return dxId; }
@@ -5188,7 +5232,9 @@
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim()) || items[0];
+      // Sin fallback a items[0]: si el código exacto no coincide, no se debe ordenar
+      // "lo primero que aparezca" — el mismo estándar que ya aplica la búsqueda por texto.
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim());
       if (item) {
         const cObj = {
           Id: item.id || item.Id || item.cupId,
@@ -5196,7 +5242,7 @@
           Descripcion: item.descripcion || item.Descripcion || "",
           Nivel: item.nivel || item.Nivel || 1
         };
-        if (cObj.Id) { CUP_CACHE[key] = cObj; return cObj; }
+        if (cObj.Id && cObj.Descripcion) { CUP_CACHE[key] = cObj; return cObj; }
       }
     } catch (e) {}
     return null;
@@ -5448,9 +5494,11 @@
     const confirmBtn = modal.querySelector("#vgl-ord-confirm");
     const chks = modal.querySelectorAll(".vgl-ord-chk");
 
+    let cancelado = false;
     const closeMod = () => modal.remove();
-    xBtn.addEventListener("click", closeMod);
-    cancelBtn.addEventListener("click", closeMod);
+    const cancelarYCerrar = () => { cancelado = true; closeMod(); };
+    xBtn.addEventListener("click", cancelarYCerrar);
+    cancelBtn.addEventListener("click", cancelarYCerrar);
 
     const updateCount = () => {
       const count = Array.from(chks).filter((c) => c.checked).length;
@@ -5465,13 +5513,20 @@
 
       confirmBtn.disabled = true;
       confirmBtn.textContent = "⏳ Identificando exámenes en el catálogo de Everest...";
+      // Mientras la búsqueda está en curso, cerrar no debe dejar el efecto secundario
+      // (armarExamenGeneral) ejecutándose después de que el médico creyó haber cancelado.
+      xBtn.disabled = true;
+      cancelBtn.disabled = true;
 
       // Mismo catálogo de CUPS que usa el módulo de Ordenamiento (confirmado por el médico) —
       // se usa solo como fuente de búsqueda de solo lectura, no para enviar nada por ahí.
       const pacienteIdCat = await apiOrdenamientoBuscarPaciente(apt.doc_id);
+      if (cancelado) return;
       if (!pacienteIdCat) {
         alert("No se pudo localizar al paciente en el catálogo de exámenes con la cédula " + apt.doc_id);
         confirmBtn.disabled = false;
+        xBtn.disabled = false;
+        cancelBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar";
         return;
       }
@@ -5486,13 +5541,14 @@
 
         for (const cupInfo of pkg.cups) {
           const cObj = await resolverCupCatalogo(pacienteIdCat, cupInfo);
+          if (cancelado) return;
           if (cObj) entries.push(buildHcOrdenEntry(cObj));
           else noResueltosTotal.push(cupInfo.desc || cupInfo.codigo || cupInfo.textoBusqueda);
         }
       }
 
       if (entries.length) {
-        armarExamenGeneral(apt.doc_id, patientName, entries);
+        armarExamenGeneral(apt.doc_id, patientName, entries, apt.citaId);
         confirmBtn.style.background = "#10b981";
         confirmBtn.textContent = `✅ ${entries.length} examen(es) marcado(s)`;
         let msg = `✅ Se agregarán a la Conducta de ${patientName} cuando la guardes en Everest.`;
@@ -5501,6 +5557,8 @@
         setTimeout(() => closeMod(), 2600);
       } else {
         confirmBtn.disabled = false;
+        xBtn.disabled = false;
+        cancelBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar";
         alert(`No se pudo identificar con certeza ningún examen seleccionado: ${noResueltosTotal.join(", ")}. Verifícalo manualmente en Everest.`);
       }
@@ -5676,11 +5734,15 @@
               resolve(null);
               return;
           }
+          // reqId: correlaciona la respuesta con ESTA solicitud específica. Sin esto, si
+          // el médico abre laboratorios de dos pacientes casi al mismo tiempo, ambas
+          // esperas podrían aceptar la respuesta del OTRO paciente por error.
+          const reqId = Math.random().toString(36).slice(2, 10);
           // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
           // que el médico haya copiado para otra cosa (teléfono, radicado) con una
           // solicitud real, y no le pise el portapapeles sin darse cuenta.
-          GM_setClipboard("VGLDOC:" + String(doc));
-          console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
+          GM_setClipboard(`VGLDOC:${reqId}:${doc}`);
+          console.log(`[Vigilante] Documento ${doc} (reqId ${reqId}) copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
           badge.textContent = `📋 Buscando idSolicitud en Athenea para ${doc}... (clipboard_watcher.py debe estar corriendo)`;
@@ -5697,14 +5759,20 @@
               resolve(val);
           };
 
+          // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
+          // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
           const tryParse = (text) => {
               if (!text) return null;
-              const m = /"idSolicitud"\s*:\s*(\d+)/.exec(text);
-              return m ? parseInt(m[1], 10) : null;
+              try {
+                  const obj = JSON.parse(text);
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+              } catch (e) {}
+              return null;
           };
 
           let intentos = 0;
           const pollTimer = setInterval(async () => {
+              if (settled) return;
               intentos++;
               try {
                   const text = await navigator.clipboard.readText();
@@ -5714,6 +5782,7 @@
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles; se ignora y se ofrece el botón manual más abajo.
               }
+              if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
                   clearInterval(pollTimer);
                   badge.textContent = "";
@@ -5725,7 +5794,7 @@
                           const text = await navigator.clipboard.readText();
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
-                          alert("El portapapeles no contiene un idSolicitud válido todavía. Verifica que clipboard_watcher.py haya terminado.");
+                          alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
                       }
@@ -6678,11 +6747,15 @@
               resolve(null);
               return;
           }
+          // reqId: correlaciona la respuesta con ESTA solicitud específica. Sin esto, si
+          // el médico abre laboratorios de dos pacientes casi al mismo tiempo, ambas
+          // esperas podrían aceptar la respuesta del OTRO paciente por error.
+          const reqId = Math.random().toString(36).slice(2, 10);
           // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
           // que el médico haya copiado para otra cosa (teléfono, radicado) con una
           // solicitud real, y no le pise el portapapeles sin darse cuenta.
-          GM_setClipboard("VGLDOC:" + String(doc));
-          console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
+          GM_setClipboard(`VGLDOC:${reqId}:${doc}`);
+          console.log(`[Vigilante] Documento ${doc} (reqId ${reqId}) copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
           badge.textContent = `📋 Buscando idSolicitud en Athenea para ${doc}... (clipboard_watcher.py debe estar corriendo)`;
@@ -6699,14 +6772,20 @@
               resolve(val);
           };
 
+          // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
+          // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
           const tryParse = (text) => {
               if (!text) return null;
-              const m = /"idSolicitud"\s*:\s*(\d+)/.exec(text);
-              return m ? parseInt(m[1], 10) : null;
+              try {
+                  const obj = JSON.parse(text);
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+              } catch (e) {}
+              return null;
           };
 
           let intentos = 0;
           const pollTimer = setInterval(async () => {
+              if (settled) return;
               intentos++;
               try {
                   const text = await navigator.clipboard.readText();
@@ -6716,6 +6795,7 @@
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles; se ignora y se ofrece el botón manual más abajo.
               }
+              if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
                   clearInterval(pollTimer);
                   badge.textContent = "";
@@ -6727,7 +6807,7 @@
                           const text = await navigator.clipboard.readText();
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
-                          alert("El portapapeles no contiene un idSolicitud válido todavía. Verifica que clipboard_watcher.py haya terminado.");
+                          alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
                       }
