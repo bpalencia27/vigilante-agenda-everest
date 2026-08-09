@@ -349,7 +349,10 @@
               resolve(null);
               return;
           }
-          GM_setClipboard(String(doc));
+          // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
+          // que el médico haya copiado para otra cosa (teléfono, radicado) con una
+          // solicitud real, y no le pise el portapapeles sin darse cuenta.
+          GM_setClipboard("VGLDOC:" + String(doc));
           console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
@@ -4532,7 +4535,10 @@
               resolve(null);
               return;
           }
-          GM_setClipboard(String(doc));
+          // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
+          // que el médico haya copiado para otra cosa (teléfono, radicado) con una
+          // solicitud real, y no le pise el portapapeles sin darse cuenta.
+          GM_setClipboard("VGLDOC:" + String(doc));
           console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
@@ -5636,7 +5642,10 @@
               resolve(null);
               return;
           }
-          GM_setClipboard(String(doc));
+          // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
+          // que el médico haya copiado para otra cosa (teléfono, radicado) con una
+          // solicitud real, y no le pise el portapapeles sin darse cuenta.
+          GM_setClipboard("VGLDOC:" + String(doc));
           console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
@@ -6635,7 +6644,10 @@
               resolve(null);
               return;
           }
-          GM_setClipboard(String(doc));
+          // Prefijo VGLDOC: para que clipboard_watcher.py nunca confunda un número
+          // que el médico haya copiado para otra cosa (teléfono, radicado) con una
+          // solicitud real, y no le pise el portapapeles sin darse cuenta.
+          GM_setClipboard("VGLDOC:" + String(doc));
           console.log(`[Vigilante] Documento ${doc} copiado al portapapeles. Esperando respuesta de clipboard_watcher.py...`);
 
           const badge = document.createElement("div");
