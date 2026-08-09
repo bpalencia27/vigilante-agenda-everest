@@ -4016,7 +4016,12 @@
   }
 
   // Interfaz API: Agendamiento Automático de Citas de Laboratorio (AppCita V2)
-  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada) {
+  // nombrePaciente/telefono/correo son OPCIONALES: si no se conoce el contacto real del
+  // paciente, se deja vacío en vez de usar un número fijo ajeno (bug encontrado en
+  // auditoría: un celular hardcodeado recibía SMS de citas de pacientes reales). Sin
+  // teléfono real no se envía el SMS de confirmación — mejor no enviarlo que enviarlo al
+  // número equivocado.
+  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, nombrePaciente, telefono, correo) {
     try {
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${fechaIso}`;
       const resAg = await gmPostJson(urlTurnos, {});
@@ -4031,14 +4036,20 @@
       }
       const horaFinal = (turnoElegido && turnoElegido.hora) || horaSeleccionada || "07:00:00";
       const agendaId = (turnoElegido && (turnoElegido.agendaId || turnoElegido.id)) || "282531";
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=3022813246&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      const nombreQS = encodeURIComponent(nombrePaciente || "");
+      const telQS = encodeURIComponent(telefono || "");
+      const correoQS = encodeURIComponent(correo || "");
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente=${nombreQS}&Telefono=${telQS}&Correo=${correoQS}&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
       const resBook = await gmPostJson(urlBook, {});
-      
-      // Enviar SMS de confirmación en segundo plano
-      const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=3022813246&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
-      gmGet(urlSms, "", "", 5000).catch(() => {});
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}`);
+      // SMS de confirmación: solo si tenemos un teléfono real del paciente. Antes se
+      // mandaba siempre a un número fijo ajeno — eso es peor que no mandarlo.
+      if (telefono) {
+        const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${telQS}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
+        gmGet(urlSms, "", "", 5000).catch(() => {});
+      }
+
+      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}` + (telefono ? "" : " (sin SMS: no se tiene el teléfono del paciente)"));
     } catch(e) {}
   }
 
@@ -4843,7 +4854,7 @@
         const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
         if (isLabChecked && apt.doc_id) {
           const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
-          apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
+          apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime, apt.nombre || apt.name || "");
         }
       console.log("[Vigilante Agendamiento] Respuesta AsignarTurno:", res);
 
