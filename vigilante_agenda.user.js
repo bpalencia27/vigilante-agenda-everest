@@ -221,15 +221,20 @@
   // =====================================================================
   
   // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
+  // Verificado contra respuestas REALES de Athenea (telemetría) y contra los IDs de
+  // campo REALES capturados mientras el médico escribía resultados a mano en Ruta
+  // Crónicos. Los códigos 2014/2074 estaban MAL (Athenea usa 2018/2050 para LDL y
+  // Triglicéridos) — con eso, esos dos analitos se perdían en silencio al inyectar.
   const ATHENEA_MAP = {
       "2009": "resultadoColesterolTotal",
       "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
+      "2018": "resultadoColesterolLDL",           // antes decía "2014" — código real confirmado: 2018
+      "2050": "resultadoTrigliceridos",            // antes decía "2074" — código real confirmado: 2050
       "2013": "resultadoGlicemia",
       "2028": "resultadoCreatinina",
       "2080": "resultadoCreatinuria",
       "2092": "resultadoMicroAlbuminuria",
+      "8779": "resultadoRelacionAlbuminaCreatinina", // confirmado por telemetría, no existía antes
       // Otros analitos comunes basados en nombres si no tenemos el código exacto:
   };
   
@@ -291,14 +296,25 @@
           
           let everestId = ATHENEA_MAP[code];
           
-          // Fallback por nombre si el código no está mapeado
+          // Fallback por nombre si el código no está mapeado.
+          // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
+          // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
+          // no aparecieron en ninguna captura de telemetría disponible. Si un resultado
+          // de estos no aparece en Ruta Crónicos tras usar Auto-Labs, es la causa más
+          // probable — verificar el id real la próxima vez que se escriba a mano.
           if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
+              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // sin confirmar
+              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH"; // confirmado
+              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
+              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
+              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
+              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
+              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
+              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
+              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
+              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
+              // sub-campo en Ruta Crónicos.
+              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
           
           if (everestId) {
@@ -4502,15 +4518,20 @@
   // =====================================================================
   
   // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
+  // Verificado contra respuestas REALES de Athenea (telemetría) y contra los IDs de
+  // campo REALES capturados mientras el médico escribía resultados a mano en Ruta
+  // Crónicos. Los códigos 2014/2074 estaban MAL (Athenea usa 2018/2050 para LDL y
+  // Triglicéridos) — con eso, esos dos analitos se perdían en silencio al inyectar.
   const ATHENEA_MAP = {
       "2009": "resultadoColesterolTotal",
       "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
+      "2018": "resultadoColesterolLDL",           // antes decía "2014" — código real confirmado: 2018
+      "2050": "resultadoTrigliceridos",            // antes decía "2074" — código real confirmado: 2050
       "2013": "resultadoGlicemia",
       "2028": "resultadoCreatinina",
       "2080": "resultadoCreatinuria",
       "2092": "resultadoMicroAlbuminuria",
+      "8779": "resultadoRelacionAlbuminaCreatinina", // confirmado por telemetría, no existía antes
       // Otros analitos comunes basados en nombres si no tenemos el código exacto:
   };
   
@@ -4572,14 +4593,25 @@
           
           let everestId = ATHENEA_MAP[code];
           
-          // Fallback por nombre si el código no está mapeado
+          // Fallback por nombre si el código no está mapeado.
+          // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
+          // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
+          // no aparecieron en ninguna captura de telemetría disponible. Si un resultado
+          // de estos no aparece en Ruta Crónicos tras usar Auto-Labs, es la causa más
+          // probable — verificar el id real la próxima vez que se escriba a mano.
           if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
+              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // sin confirmar
+              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH"; // confirmado
+              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
+              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
+              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
+              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
+              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
+              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
+              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
+              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
+              // sub-campo en Ruta Crónicos.
+              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
           
           if (everestId) {
@@ -5677,15 +5709,20 @@
   // =====================================================================
   
   // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
+  // Verificado contra respuestas REALES de Athenea (telemetría) y contra los IDs de
+  // campo REALES capturados mientras el médico escribía resultados a mano en Ruta
+  // Crónicos. Los códigos 2014/2074 estaban MAL (Athenea usa 2018/2050 para LDL y
+  // Triglicéridos) — con eso, esos dos analitos se perdían en silencio al inyectar.
   const ATHENEA_MAP = {
       "2009": "resultadoColesterolTotal",
       "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
+      "2018": "resultadoColesterolLDL",           // antes decía "2014" — código real confirmado: 2018
+      "2050": "resultadoTrigliceridos",            // antes decía "2074" — código real confirmado: 2050
       "2013": "resultadoGlicemia",
       "2028": "resultadoCreatinina",
       "2080": "resultadoCreatinuria",
       "2092": "resultadoMicroAlbuminuria",
+      "8779": "resultadoRelacionAlbuminaCreatinina", // confirmado por telemetría, no existía antes
       // Otros analitos comunes basados en nombres si no tenemos el código exacto:
   };
   
@@ -5747,14 +5784,25 @@
           
           let everestId = ATHENEA_MAP[code];
           
-          // Fallback por nombre si el código no está mapeado
+          // Fallback por nombre si el código no está mapeado.
+          // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
+          // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
+          // no aparecieron en ninguna captura de telemetría disponible. Si un resultado
+          // de estos no aparece en Ruta Crónicos tras usar Auto-Labs, es la causa más
+          // probable — verificar el id real la próxima vez que se escriba a mano.
           if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
+              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // sin confirmar
+              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH"; // confirmado
+              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
+              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
+              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
+              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
+              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
+              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
+              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
+              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
+              // sub-campo en Ruta Crónicos.
+              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
           
           if (everestId) {
@@ -6711,15 +6759,20 @@
   // =====================================================================
   
   // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
+  // Verificado contra respuestas REALES de Athenea (telemetría) y contra los IDs de
+  // campo REALES capturados mientras el médico escribía resultados a mano en Ruta
+  // Crónicos. Los códigos 2014/2074 estaban MAL (Athenea usa 2018/2050 para LDL y
+  // Triglicéridos) — con eso, esos dos analitos se perdían en silencio al inyectar.
   const ATHENEA_MAP = {
       "2009": "resultadoColesterolTotal",
       "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
+      "2018": "resultadoColesterolLDL",           // antes decía "2014" — código real confirmado: 2018
+      "2050": "resultadoTrigliceridos",            // antes decía "2074" — código real confirmado: 2050
       "2013": "resultadoGlicemia",
       "2028": "resultadoCreatinina",
       "2080": "resultadoCreatinuria",
       "2092": "resultadoMicroAlbuminuria",
+      "8779": "resultadoRelacionAlbuminaCreatinina", // confirmado por telemetría, no existía antes
       // Otros analitos comunes basados en nombres si no tenemos el código exacto:
   };
   
@@ -6781,14 +6834,25 @@
           
           let everestId = ATHENEA_MAP[code];
           
-          // Fallback por nombre si el código no está mapeado
+          // Fallback por nombre si el código no está mapeado.
+          // resultadoPTH y resultadoHemoglobina: IDs confirmados por telemetría real.
+          // resultadoHBA1C/resultadoFosforo/resultadoAlbumina: SIN confirmar todavía —
+          // no aparecieron en ninguna captura de telemetría disponible. Si un resultado
+          // de estos no aparece en Ruta Crónicos tras usar Auto-Labs, es la causa más
+          // probable — verificar el id real la próxima vez que se escriba a mano.
           if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
+              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // sin confirmar
+              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH"; // confirmado
+              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo"; // sin confirmar
+              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina"; // sin confirmar
+              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina"; // confirmado
+              // Uroanálisis: Athenea lo reporta como ~20-29 analitos SEPARADOS (color,
+              // aspecto, glucosa, proteínas, ph, leucocitos, bacterias, etc. — códigos
+              // 4001-4029 confirmados en telemetría), no como un solo resultado. Mapear
+              // todo a un único campo "resultadoUroanalisis" casi seguro está incompleto
+              // o equivocado; se deja así por ahora a falta de los IDs reales de cada
+              // sub-campo en Ruta Crónicos.
+              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis"; // sin confirmar, probablemente incompleto
           }
           
           if (everestId) {
