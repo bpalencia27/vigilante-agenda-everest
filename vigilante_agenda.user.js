@@ -376,11 +376,17 @@
 
           // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
           // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
+          // Resuelve {idSolicitud, labs} — labs viene directo del puente (clipboard_watcher.py
+          // ya trae los analitos junto con el idSolicitud), evitando una segunda llamada
+          // fetchAtheneaLabs desde el navegador que Athenea rechaza (401 confirmado en vivo:
+          // exige más que la cookie de sesión para esa acción específica).
           const tryParse = (text) => {
               if (!text) return null;
               try {
                   const obj = JSON.parse(text);
-                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") {
+                      return { idSolicitud: obj.idSolicitud, labs: Array.isArray(obj.labs) ? obj.labs : null };
+                  }
               } catch (e) {}
               return null;
           };
@@ -401,8 +407,8 @@
               intentos++;
               try {
                   const text = await readClipboardConTimeout(1200);
-                  const idSolicitud = tryParse(text);
-                  if (idSolicitud) { finish(idSolicitud); return; }
+                  const parsed = tryParse(text);
+                  if (parsed) { finish(parsed); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles (o si el intento se colgó); se ignora y se ofrece el
@@ -418,8 +424,8 @@
                   btn.onclick = async () => {
                       try {
                           const text = await readClipboardConTimeout(5000);
-                          const idSolicitud = tryParse(text);
-                          if (idSolicitud) { finish(idSolicitud); return; }
+                          const parsed = tryParse(text);
+                          if (parsed) { finish(parsed); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
@@ -445,9 +451,11 @@
       
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
+          btn.innerHTML = "⏳ Buscando resultados en Athenea...";
+
+          const resuelto = await getAtheneaIdSolicitudAuto(docId);
+          let idSolicitud = resuelto ? resuelto.idSolicitud : null;
+          let labs = resuelto ? resuelto.labs : null;
           if (idSolicitud) {
               btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
           } else {
@@ -457,10 +465,12 @@
                   return;
               }
           }
-          
+
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
+              // El puente ya trae los analitos junto con el idSolicitud; fetchAtheneaLabs
+              // solo se usa de respaldo si no vinieron (ej. ID ingresado a mano).
+              if (!labs) labs = await fetchAtheneaLabs(idSolicitud);
               if (labs && labs.length > 0) {
                   const injectedCount = injectLabsIntoCronicos(labs);
                   alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
@@ -4299,8 +4309,11 @@
     contentEl.innerHTML = `<div class="vgl-agm-loading">🔎 Nada en Annar/Citi. Buscando automáticamente en Athenea Soluciones... (si aparece un botón "Pegar resultado" en la esquina inferior, haz clic ahí)</div>`;
 
     let idSolicitud = null;
+    let atheneaLabs = null;
     try {
-      idSolicitud = await getAtheneaIdSolicitudAuto(apt.doc_id);
+      const resuelto = await getAtheneaIdSolicitudAuto(apt.doc_id);
+      idSolicitud = resuelto ? resuelto.idSolicitud : null;
+      atheneaLabs = resuelto ? resuelto.labs : null;
     } catch (e) {
       console.warn("[Vigilante Labs] Error buscando idSolicitud en Athenea:", e);
     }
@@ -4310,13 +4323,18 @@
       return;
     }
 
-    let atheneaLabs = null;
     let atheneaError = null;
-    try {
-      atheneaLabs = await fetchAtheneaLabs(idSolicitud);
-    } catch (e) {
-      console.warn("[Vigilante Labs] Error consultando detalle de Athenea:", e);
-      atheneaError = e;
+    if (!atheneaLabs) {
+      // Respaldo: el puente no trajo los analitos junto con el idSolicitud (versión
+      // antigua de clipboard_watcher.py). fetchAtheneaLabs suele fallar con 401 desde
+      // el navegador (confirmado en vivo: Athenea exige más que la cookie de sesión
+      // para esa acción), pero se intenta igual como último recurso.
+      try {
+        atheneaLabs = await fetchAtheneaLabs(idSolicitud);
+      } catch (e) {
+        console.warn("[Vigilante Labs] Error consultando detalle de Athenea:", e);
+        atheneaError = e;
+      }
     }
 
     if (atheneaError) {
@@ -4639,11 +4657,17 @@
 
           // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
           // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
+          // Resuelve {idSolicitud, labs} — labs viene directo del puente (clipboard_watcher.py
+          // ya trae los analitos junto con el idSolicitud), evitando una segunda llamada
+          // fetchAtheneaLabs desde el navegador que Athenea rechaza (401 confirmado en vivo:
+          // exige más que la cookie de sesión para esa acción específica).
           const tryParse = (text) => {
               if (!text) return null;
               try {
                   const obj = JSON.parse(text);
-                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") {
+                      return { idSolicitud: obj.idSolicitud, labs: Array.isArray(obj.labs) ? obj.labs : null };
+                  }
               } catch (e) {}
               return null;
           };
@@ -4664,8 +4688,8 @@
               intentos++;
               try {
                   const text = await readClipboardConTimeout(1200);
-                  const idSolicitud = tryParse(text);
-                  if (idSolicitud) { finish(idSolicitud); return; }
+                  const parsed = tryParse(text);
+                  if (parsed) { finish(parsed); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles (o si el intento se colgó); se ignora y se ofrece el
@@ -4681,8 +4705,8 @@
                   btn.onclick = async () => {
                       try {
                           const text = await readClipboardConTimeout(5000);
-                          const idSolicitud = tryParse(text);
-                          if (idSolicitud) { finish(idSolicitud); return; }
+                          const parsed = tryParse(text);
+                          if (parsed) { finish(parsed); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
@@ -4708,9 +4732,11 @@
       
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
+          btn.innerHTML = "⏳ Buscando resultados en Athenea...";
+
+          const resuelto = await getAtheneaIdSolicitudAuto(docId);
+          let idSolicitud = resuelto ? resuelto.idSolicitud : null;
+          let labs = resuelto ? resuelto.labs : null;
           if (idSolicitud) {
               btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
           } else {
@@ -4720,10 +4746,12 @@
                   return;
               }
           }
-          
+
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
+              // El puente ya trae los analitos junto con el idSolicitud; fetchAtheneaLabs
+              // solo se usa de respaldo si no vinieron (ej. ID ingresado a mano).
+              if (!labs) labs = await fetchAtheneaLabs(idSolicitud);
               if (labs && labs.length > 0) {
                   const injectedCount = injectLabsIntoCronicos(labs);
                   alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
@@ -5804,11 +5832,17 @@
 
           // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
           // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
+          // Resuelve {idSolicitud, labs} — labs viene directo del puente (clipboard_watcher.py
+          // ya trae los analitos junto con el idSolicitud), evitando una segunda llamada
+          // fetchAtheneaLabs desde el navegador que Athenea rechaza (401 confirmado en vivo:
+          // exige más que la cookie de sesión para esa acción específica).
           const tryParse = (text) => {
               if (!text) return null;
               try {
                   const obj = JSON.parse(text);
-                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") {
+                      return { idSolicitud: obj.idSolicitud, labs: Array.isArray(obj.labs) ? obj.labs : null };
+                  }
               } catch (e) {}
               return null;
           };
@@ -5829,8 +5863,8 @@
               intentos++;
               try {
                   const text = await readClipboardConTimeout(1200);
-                  const idSolicitud = tryParse(text);
-                  if (idSolicitud) { finish(idSolicitud); return; }
+                  const parsed = tryParse(text);
+                  if (parsed) { finish(parsed); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles (o si el intento se colgó); se ignora y se ofrece el
@@ -5846,8 +5880,8 @@
                   btn.onclick = async () => {
                       try {
                           const text = await readClipboardConTimeout(5000);
-                          const idSolicitud = tryParse(text);
-                          if (idSolicitud) { finish(idSolicitud); return; }
+                          const parsed = tryParse(text);
+                          if (parsed) { finish(parsed); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
@@ -5873,9 +5907,11 @@
       
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
+          btn.innerHTML = "⏳ Buscando resultados en Athenea...";
+
+          const resuelto = await getAtheneaIdSolicitudAuto(docId);
+          let idSolicitud = resuelto ? resuelto.idSolicitud : null;
+          let labs = resuelto ? resuelto.labs : null;
           if (idSolicitud) {
               btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
           } else {
@@ -5885,10 +5921,12 @@
                   return;
               }
           }
-          
+
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
+              // El puente ya trae los analitos junto con el idSolicitud; fetchAtheneaLabs
+              // solo se usa de respaldo si no vinieron (ej. ID ingresado a mano).
+              if (!labs) labs = await fetchAtheneaLabs(idSolicitud);
               if (labs && labs.length > 0) {
                   const injectedCount = injectLabsIntoCronicos(labs);
                   alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
@@ -6828,11 +6866,17 @@
 
           // Exige JSON válido con el MISMO reqId que generamos arriba — una respuesta de
           // otro paciente (u otro texto que casualmente contenga "idSolicitud") nunca pasa.
+          // Resuelve {idSolicitud, labs} — labs viene directo del puente (clipboard_watcher.py
+          // ya trae los analitos junto con el idSolicitud), evitando una segunda llamada
+          // fetchAtheneaLabs desde el navegador que Athenea rechaza (401 confirmado en vivo:
+          // exige más que la cookie de sesión para esa acción específica).
           const tryParse = (text) => {
               if (!text) return null;
               try {
                   const obj = JSON.parse(text);
-                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") return obj.idSolicitud;
+                  if (obj && obj.reqId === reqId && typeof obj.idSolicitud === "number") {
+                      return { idSolicitud: obj.idSolicitud, labs: Array.isArray(obj.labs) ? obj.labs : null };
+                  }
               } catch (e) {}
               return null;
           };
@@ -6853,8 +6897,8 @@
               intentos++;
               try {
                   const text = await readClipboardConTimeout(1200);
-                  const idSolicitud = tryParse(text);
-                  if (idSolicitud) { finish(idSolicitud); return; }
+                  const parsed = tryParse(text);
+                  if (parsed) { finish(parsed); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
                   // portapapeles (o si el intento se colgó); se ignora y se ofrece el
@@ -6870,8 +6914,8 @@
                   btn.onclick = async () => {
                       try {
                           const text = await readClipboardConTimeout(5000);
-                          const idSolicitud = tryParse(text);
-                          if (idSolicitud) { finish(idSolicitud); return; }
+                          const parsed = tryParse(text);
+                          if (parsed) { finish(parsed); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
                       } catch (e) {
                           alert("No se pudo leer el portapapeles: " + e);
@@ -6897,9 +6941,11 @@
       
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
+          btn.innerHTML = "⏳ Buscando resultados en Athenea...";
+
+          const resuelto = await getAtheneaIdSolicitudAuto(docId);
+          let idSolicitud = resuelto ? resuelto.idSolicitud : null;
+          let labs = resuelto ? resuelto.labs : null;
           if (idSolicitud) {
               btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
           } else {
@@ -6909,10 +6955,12 @@
                   return;
               }
           }
-          
+
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
+              // El puente ya trae los analitos junto con el idSolicitud; fetchAtheneaLabs
+              // solo se usa de respaldo si no vinieron (ej. ID ingresado a mano).
+              if (!labs) labs = await fetchAtheneaLabs(idSolicitud);
               if (labs && labs.length > 0) {
                   const injectedCount = injectLabsIntoCronicos(labs);
                   alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);

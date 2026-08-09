@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from typing import Optional
@@ -369,7 +370,163 @@ class AtheneaService:
                         except Exception:
                             pass
 
+    async def get_lab_details(self, documento: str):
+        """
+        Busca resultados de laboratorio por documento y retorna (idSolicitud, [analitos]).
 
+        A diferencia de get_id_solicitud (que solo extrae el idSolicitud de la pagina
+        estatica via regex, sin disparar ninguna peticion), esta funcion hace CLIC REAL
+        sobre el elemento de la propia pagina de Athenea que abre el detalle — dentro de
+        la misma sesion ya autenticada — y captura la respuesta real de
+        /Resultados/consultaDetalleSolicitud. Se confirmo en vivo que reconstruir esa
+        peticion manualmente (mismo payload exacto) devuelve 401: Athenea exige algo mas
+        que la cookie de sesion (probablemente un token anti-CSRF propio de esa pagina)
+        que solo se aplica correctamente cuando la peticion la dispara la página misma.
+
+        :return: (idSolicitud, analitos) donde analitos es una lista de dicts con
+                 CodigoParametro/NombreParametro/Resultado (o (0, []) si no hay datos).
+        """
+        doc_clean = str(documento).strip()
+        if not doc_clean:
+            raise ValueError("El numero de documento no puede estar vacio.")
+
+        async with self._lock:
+            is_context_closed = self._context and (hasattr(self._context, "is_closed") and self._context.is_closed())
+            is_browser_closed = not self._browser or not self._browser.is_connected()
+
+            if self._is_initialized and (is_context_closed or is_browser_closed):
+                logger.warning("Browser or context was closed unexpectedly. Marking uninitialized for recovery.")
+                self._is_initialized = False
+                self._recovered_from_crash = True
+                raise AtheneaServiceError("Target page, context or browser has been closed unexpectedly.")
+
+            for attempt in range(2):
+                if (
+                    not self._is_initialized
+                    or not self._context
+                    or not self._browser
+                    or not self._browser.is_connected()
+                    or (hasattr(self._context, "is_closed") and self._context.is_closed())
+                ):
+                    await self._start_unlocked()
+
+                page = None
+                captured_detail = {}
+
+                def handle_response(response):
+                    if "/Resultados/consultaDetalleSolicitud" in response.url:
+                        async def _capture():
+                            try:
+                                captured_detail["data"] = await response.json()
+                                logger.info("Intercepted consultaDetalleSolicitud response body.")
+                            except Exception as e:
+                                logger.warning(f"No se pudo parsear la respuesta de detalle: {e}")
+                        asyncio.ensure_future(_capture())
+
+                try:
+                    page = await self._context.new_page()
+                    page.on("response", handle_response)
+
+                    await self._ensure_logged_in(page)
+
+                    doc_selector = "#NumeroIdentificacion, #txtNumIdentificacion, input[name='numId'], input[name='NumeroIdentificacion'], #Documento"
+                    doc_input = await page.query_selector(doc_selector)
+                    if not doc_input:
+                        raise AtheneaServiceError("Document identification field '#NumeroIdentificacion' not found.")
+                    await doc_input.fill(doc_clean)
+
+                    search_btn = await page.query_selector(
+                        "#frmDatosPaciente button, #frmDatosPaciente input[type='submit'], button:has-text('Buscar')"
+                    )
+                    if search_btn:
+                        await search_btn.click()
+                    else:
+                        form = await page.query_selector("#frmDatosPaciente")
+                        if form:
+                            await form.evaluate("f => f.submit()")
+                        else:
+                            raise AtheneaServiceError("Search submit form/button not found.")
+
+                    await page.wait_for_load_state("networkidle", timeout=settings.SEARCH_TIMEOUT)
+                    await page.wait_for_timeout(500)
+
+                    ver_estado_btn = await page.query_selector(
+                        "button:has-text('Ver Estado de Resultados'), "
+                        "input[value*='Estado de Resultados'], "
+                        "input[value*='Ver Estado'], "
+                        "a:has-text('Ver Estado de Resultados'), "
+                        "button.btn-primary:has-text('Estado'), "
+                        "button:has-text('Estado de Resultados'), "
+                        "form[action*='DatosPaciente'] button, "
+                        "form[action*='DatosPaciente'] input[type='submit']"
+                    )
+                    if ver_estado_btn:
+                        logger.info("Clicking 'Ver Estado de Resultados' to navigate to patient details...")
+                        await ver_estado_btn.click()
+                        await page.wait_for_load_state("networkidle", timeout=settings.SEARCH_TIMEOUT)
+                        await page.wait_for_timeout(300)
+
+                    page_content = await page.content()
+                    if "No se encontraron datos" in page_content or "no se encontraron datos" in page_content.lower():
+                        if self._recovered_from_crash:
+                            self._recovered_from_crash = False
+                            return (0, [])
+                        raise PatientNotFoundError(f"Paciente con documento '{doc_clean}' no encontrado.")
+
+                    spans = await page.query_selector_all(
+                        "*[onclick*='getDetalleSolicitud'], *[onclick*='consultaDetalleSolicitud'], *[onclick*='detalleSolicitud'], "
+                        "span.cursor-pointer, a.cursor-pointer, .cursor-pointer, "
+                        "span:has-text('Ver Resumen'), a:has-text('Ver Resumen'), button:has-text('Ver Resumen')"
+                    )
+                    if not spans:
+                        if self._recovered_from_crash:
+                            self._recovered_from_crash = False
+                            return (0, [])
+                        raise PatientNotFoundError(f"No se encontro un resultado de laboratorio reciente para '{doc_clean}'.")
+
+                    # Clic REAL sobre el elemento de la página: dispara la petición
+                    # autenticada tal como lo haría el médico, en vez de reconstruirla.
+                    await spans[0].click()
+                    await page.wait_for_timeout(1500)
+
+                    data = captured_detail.get("data")
+                    if data is None:
+                        raise AtheneaServiceError("No se pudo interceptar la respuesta de detalle de Athenea (¿cambió la página?).")
+
+                    if data.get("bolValido") is False:
+                        raise AtheneaServiceError(data.get("strMensaje") or "Athenea respondió con un error al consultar el detalle.")
+
+                    data_raw = data.get("dataObject")
+                    analitos = json.loads(data_raw) if isinstance(data_raw, str) else (data_raw or [])
+
+                    id_solicitud = 0
+                    if analitos:
+                        id_solicitud = analitos[0].get("IdSolicitud", 0)
+
+                    return (id_solicitud, analitos)
+
+                except PlaywrightTimeoutError as e:
+                    logger.error(f"Timeout error during Athenea lab detail fetch: {e}")
+                    raise TimeoutError(f"Tiempo de espera agotado buscando el detalle de laboratorios para '{doc_clean}'.") from e
+                except (PatientNotFoundError, ValueError, AtheneaServiceError, TimeoutError):
+                    raise
+                except Exception as e:
+                    err_str = str(e).lower()
+                    err_type = type(e).__name__.lower()
+                    if attempt == 0 and ("closed" in err_str or "targetclosederror" in err_type):
+                        logger.warning(f"Target/context/browser closed unexpectedly: {e}. Re-initializing and retrying once...")
+                        self._is_initialized = False
+                        self._recovered_from_crash = True
+                        await self._start_unlocked()
+                        continue
+                    logger.error(f"Unexpected error in get_lab_details: {e}")
+                    raise AtheneaServiceError(f"Error procesando el detalle en Athenea: {str(e)}") from e
+                finally:
+                    if page:
+                        try:
+                            await page.close()
+                        except Exception:
+                            pass
 
 
 

@@ -57,8 +57,11 @@ def safe_copy(text):
 async def procesar_documento(service: AtheneaService, req_id: str, doc: str, content_esperado: str):
     logger.info(f"Documento detectado en portapapeles (reqId {req_id}): {doc}")
     try:
-        id_solicitud = await service.get_id_solicitud(doc)
-        respuesta = json.dumps({"idSolicitud": id_solicitud, "reqId": req_id})
+        # get_lab_details dispara el clic real en la página de Athenea (dentro de la
+        # sesión ya autenticada) en vez de reconstruir la petición de detalle a mano —
+        # así trae también los analitos, no solo el idSolicitud.
+        id_solicitud, analitos = await service.get_lab_details(doc)
+        respuesta = json.dumps({"idSolicitud": id_solicitud, "labs": analitos, "reqId": req_id})
     except PatientNotFoundError as e:
         logger.warning(str(e))
         respuesta = json.dumps({"error": str(e), "reqId": req_id})
