@@ -4218,44 +4218,78 @@
     if (annarList && annarList.length) annarList.forEach(item => todosLabs.push({ origen: "Annar", ...item }));
     if (citiList && citiList.length) citiList.forEach(item => todosLabs.push({ origen: "Citi", ...item }));
 
-    if (!todosLabs.length) {
-      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ No se registraron paraclínicos recientes en Annar o Citi para este paciente. Utilice el botón azul de Athenea Soluciones para verificar en la plataforma externa.</div>`;
+    const renderTablaLabs = (labs) => {
+      const rowsHtml = labs.map(lab => {
+        const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || lab.FechaResultado || "Sin fecha";
+        const examen = lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.Prueba || lab.NombreParametro || "Paraclínico";
+        const resultado = lab.resultado || lab.Resultado || lab.valor || lab.Valor || "Registrado";
+        const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || lab.ValorReferencia || "";
+
+        return `
+          <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
+            <td style="padding:8px;font-size:12px;opacity:.85">${escapeHtml(String(fecha))}</td>
+            <td style="padding:8px;font-size:12.5px;font-weight:600">${escapeHtml(String(examen))}</td>
+            <td style="padding:8px;font-size:12.5px;color:#10b981;font-weight:700">${escapeHtml(String(resultado))}</td>
+            <td style="padding:8px;font-size:11.5px;opacity:.7">${escapeHtml(String(referencia))}</td>
+            <td style="padding:8px;font-size:11px"><span style="background:rgba(37,99,235,.3);color:#60a5fa;padding:2px 6px;border-radius:4px">${escapeHtml(lab.origen)}</span></td>
+          </tr>
+        `;
+      }).join("");
+
+      return `
+        <table style="width:100%;border-collapse:collapse;text-align:left">
+          <thead>
+            <tr style="border-bottom:2px solid rgba(255,255,255,.15);font-size:12px;opacity:.7">
+              <th style="padding:6px">Fecha</th>
+              <th style="padding:6px">Examen / Prueba</th>
+              <th style="padding:6px">Resultado</th>
+              <th style="padding:6px">Referencia</th>
+              <th style="padding:6px">Origen</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      `;
+    };
+
+    if (todosLabs.length) {
+      contentEl.innerHTML = renderTablaLabs(todosLabs);
       return;
     }
 
-    let rowsHtml = todosLabs.map(lab => {
-      const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || "Sin fecha";
-      const examen = lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.Prueba || "Paraclínico";
-      const resultado = lab.resultado || lab.Resultado || lab.valor || lab.Valor || "Registrado";
-      const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || "";
+    // Nada en Annar/Citi: en vez de solo ofrecer el link manual, la PRIMERA opción es
+    // que el script mismo busque automáticamente en Athenea (vía el puente por
+    // portapapeles) y muestre los resultados aquí mismo. El link manual de arriba queda
+    // como respaldo si la búsqueda automática no encuentra nada o falla.
+    contentEl.innerHTML = `<div class="vgl-agm-loading">🔎 Nada en Annar/Citi. Buscando automáticamente en Athenea Soluciones... (si aparece un botón "Pegar resultado" en la esquina inferior, haz clic ahí)</div>`;
 
-      return `
-        <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
-          <td style="padding:8px;font-size:12px;opacity:.85">${escapeHtml(String(fecha))}</td>
-          <td style="padding:8px;font-size:12.5px;font-weight:600">${escapeHtml(String(examen))}</td>
-          <td style="padding:8px;font-size:12.5px;color:#10b981;font-weight:700">${escapeHtml(String(resultado))}</td>
-          <td style="padding:8px;font-size:11.5px;opacity:.7">${escapeHtml(String(referencia))}</td>
-          <td style="padding:8px;font-size:11px"><span style="background:rgba(37,99,235,.3);color:#60a5fa;padding:2px 6px;border-radius:4px">${escapeHtml(lab.origen)}</span></td>
-        </tr>
-      `;
-    }).join("");
+    let idSolicitud = null;
+    try {
+      idSolicitud = await getAtheneaIdSolicitudAuto(apt.doc_id);
+    } catch (e) {
+      console.warn("[Vigilante Labs] Error buscando idSolicitud en Athenea:", e);
+    }
 
-    contentEl.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;text-align:left">
-        <thead>
-          <tr style="border-bottom:2px solid rgba(255,255,255,.15);font-size:12px;opacity:.7">
-            <th style="padding:6px">Fecha</th>
-            <th style="padding:6px">Examen / Prueba</th>
-            <th style="padding:6px">Resultado</th>
-            <th style="padding:6px">Referencia</th>
-            <th style="padding:6px">Origen</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
-    `;
+    if (!idSolicitud) {
+      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ No se registraron paraclínicos recientes en Annar o Citi, y la búsqueda automática en Athenea no encontró resultados (o clipboard_watcher.py no está corriendo). Utilice el botón azul de Athenea Soluciones arriba para verificar manualmente.</div>`;
+      return;
+    }
+
+    let atheneaLabs = null;
+    try {
+      atheneaLabs = await fetchAtheneaLabs(idSolicitud);
+    } catch (e) {
+      console.warn("[Vigilante Labs] Error consultando detalle de Athenea:", e);
+    }
+
+    if (!atheneaLabs || !atheneaLabs.length) {
+      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ Se encontró la solicitud ${escapeHtml(String(idSolicitud))} en Athenea pero sin analitos registrados. Utilice el botón azul de Athenea Soluciones arriba para verificar manualmente.</div>`;
+      return;
+    }
+
+    contentEl.innerHTML = renderTablaLabs(atheneaLabs.map((l) => ({ ...l, origen: "Athenea" })));
   }
 
   // Modal interactivo de Agendamiento Exprés y Remisiones RCV en 1-Clic
