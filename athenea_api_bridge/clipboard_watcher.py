@@ -22,12 +22,31 @@ import asyncio
 import json
 import logging
 import re
+import socket
 
 import pyperclip
 
 from athenea_service import AtheneaService, PatientNotFoundError, AtheneaServiceError
 
 logger = logging.getLogger("clipboard_watcher")
+
+# Puerto usado solo como candado de instancia única (nunca se escucha nada en él).
+# Confirmado en pruebas: dos watchers corriendo a la vez se pisan las respuestas en el
+# portapapeles en silencio (cada uno descarta la respuesta del otro como "ya no vigente"),
+# sin que ninguna solicitud llegue a resolverse. El SO libera el puerto solo si el
+# proceso muere, así que no hay archivo de candado que pueda quedar obsoleto.
+SINGLE_INSTANCE_PORT = 47652
+
+
+def adquirir_candado_instancia_unica():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+    try:
+        sock.bind(("127.0.0.1", SINGLE_INSTANCE_PORT))
+        return sock
+    except OSError:
+        sock.close()
+        return None
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 POLL_INTERVAL_SECONDS = 1.0
@@ -119,6 +138,16 @@ async def watch(service: AtheneaService):
 
 
 async def main():
+    candado = adquirir_candado_instancia_unica()
+    if candado is None:
+        logger.error(
+            "Ya hay otra instancia de clipboard_watcher.py corriendo (puerto "
+            f"{SINGLE_INSTANCE_PORT} ocupado). Ciérrala antes de abrir una nueva — "
+            "dos instancias a la vez se pisan las respuestas en el portapapeles "
+            "en silencio y ninguna solicitud llega a resolverse."
+        )
+        return
+
     service = AtheneaService()
     try:
         await service.start()
@@ -132,6 +161,7 @@ async def main():
         logger.info("Detenido por el usuario.")
     finally:
         await service.stop()
+        candado.close()
 
 
 if __name__ == "__main__":
