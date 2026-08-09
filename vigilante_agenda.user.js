@@ -385,17 +385,28 @@
               return null;
           };
 
+          // navigator.clipboard.readText() sin gesto del usuario no siempre RECHAZA rápido:
+          // en la práctica puede quedarse colgado esperando un permiso que nunca se
+          // resuelve, en vez de lanzar NotAllowedError de inmediato. Sin este timeout, un
+          // intento colgado bloquea el conteo real y el botón manual nunca llega a
+          // aparecer a los ~30s como está pensado — se cae directo al límite duro de 2min.
+          const readClipboardConTimeout = (ms) => Promise.race([
+              navigator.clipboard.readText(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("timeout leyendo portapapeles")), ms))
+          ]);
+
           let intentos = 0;
           const pollTimer = setInterval(async () => {
               if (settled) return;
               intentos++;
               try {
-                  const text = await navigator.clipboard.readText();
+                  const text = await readClipboardConTimeout(1200);
                   const idSolicitud = tryParse(text);
                   if (idSolicitud) { finish(idSolicitud); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
-                  // portapapeles; se ignora y se ofrece el botón manual más abajo.
+                  // portapapeles (o si el intento se colgó); se ignora y se ofrece el
+                  // botón manual más abajo.
               }
               if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
@@ -406,7 +417,7 @@
                   btn.style.cssText = "all:unset;cursor:pointer;background:#2563eb;color:#fff;padding:8px 12px;border-radius:6px;font:12px sans-serif";
                   btn.onclick = async () => {
                       try {
-                          const text = await navigator.clipboard.readText();
+                          const text = await readClipboardConTimeout(5000);
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
@@ -4627,17 +4638,28 @@
               return null;
           };
 
+          // navigator.clipboard.readText() sin gesto del usuario no siempre RECHAZA rápido:
+          // en la práctica puede quedarse colgado esperando un permiso que nunca se
+          // resuelve, en vez de lanzar NotAllowedError de inmediato. Sin este timeout, un
+          // intento colgado bloquea el conteo real y el botón manual nunca llega a
+          // aparecer a los ~30s como está pensado — se cae directo al límite duro de 2min.
+          const readClipboardConTimeout = (ms) => Promise.race([
+              navigator.clipboard.readText(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("timeout leyendo portapapeles")), ms))
+          ]);
+
           let intentos = 0;
           const pollTimer = setInterval(async () => {
               if (settled) return;
               intentos++;
               try {
-                  const text = await navigator.clipboard.readText();
+                  const text = await readClipboardConTimeout(1200);
                   const idSolicitud = tryParse(text);
                   if (idSolicitud) { finish(idSolicitud); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
-                  // portapapeles; se ignora y se ofrece el botón manual más abajo.
+                  // portapapeles (o si el intento se colgó); se ignora y se ofrece el
+                  // botón manual más abajo.
               }
               if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
@@ -4648,7 +4670,7 @@
                   btn.style.cssText = "all:unset;cursor:pointer;background:#2563eb;color:#fff;padding:8px 12px;border-radius:6px;font:12px sans-serif";
                   btn.onclick = async () => {
                       try {
-                          const text = await navigator.clipboard.readText();
+                          const text = await readClipboardConTimeout(5000);
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
@@ -5781,17 +5803,28 @@
               return null;
           };
 
+          // navigator.clipboard.readText() sin gesto del usuario no siempre RECHAZA rápido:
+          // en la práctica puede quedarse colgado esperando un permiso que nunca se
+          // resuelve, en vez de lanzar NotAllowedError de inmediato. Sin este timeout, un
+          // intento colgado bloquea el conteo real y el botón manual nunca llega a
+          // aparecer a los ~30s como está pensado — se cae directo al límite duro de 2min.
+          const readClipboardConTimeout = (ms) => Promise.race([
+              navigator.clipboard.readText(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("timeout leyendo portapapeles")), ms))
+          ]);
+
           let intentos = 0;
           const pollTimer = setInterval(async () => {
               if (settled) return;
               intentos++;
               try {
-                  const text = await navigator.clipboard.readText();
+                  const text = await readClipboardConTimeout(1200);
                   const idSolicitud = tryParse(text);
                   if (idSolicitud) { finish(idSolicitud); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
-                  // portapapeles; se ignora y se ofrece el botón manual más abajo.
+                  // portapapeles (o si el intento se colgó); se ignora y se ofrece el
+                  // botón manual más abajo.
               }
               if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
@@ -5802,7 +5835,7 @@
                   btn.style.cssText = "all:unset;cursor:pointer;background:#2563eb;color:#fff;padding:8px 12px;border-radius:6px;font:12px sans-serif";
                   btn.onclick = async () => {
                       try {
-                          const text = await navigator.clipboard.readText();
+                          const text = await readClipboardConTimeout(5000);
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
@@ -6794,17 +6827,28 @@
               return null;
           };
 
+          // navigator.clipboard.readText() sin gesto del usuario no siempre RECHAZA rápido:
+          // en la práctica puede quedarse colgado esperando un permiso que nunca se
+          // resuelve, en vez de lanzar NotAllowedError de inmediato. Sin este timeout, un
+          // intento colgado bloquea el conteo real y el botón manual nunca llega a
+          // aparecer a los ~30s como está pensado — se cae directo al límite duro de 2min.
+          const readClipboardConTimeout = (ms) => Promise.race([
+              navigator.clipboard.readText(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("timeout leyendo portapapeles")), ms))
+          ]);
+
           let intentos = 0;
           const pollTimer = setInterval(async () => {
               if (settled) return;
               intentos++;
               try {
-                  const text = await navigator.clipboard.readText();
+                  const text = await readClipboardConTimeout(1200);
                   const idSolicitud = tryParse(text);
                   if (idSolicitud) { finish(idSolicitud); return; }
               } catch (e) {
                   // Esperado si el navegador exige gesto del usuario para leer el
-                  // portapapeles; se ignora y se ofrece el botón manual más abajo.
+                  // portapapeles (o si el intento se colgó); se ignora y se ofrece el
+                  // botón manual más abajo.
               }
               if (settled) return;
               if (intentos >= 20) { // ~30s de intento automático antes de pedir el clic manual
@@ -6815,7 +6859,7 @@
                   btn.style.cssText = "all:unset;cursor:pointer;background:#2563eb;color:#fff;padding:8px 12px;border-radius:6px;font:12px sans-serif";
                   btn.onclick = async () => {
                       try {
-                          const text = await navigator.clipboard.readText();
+                          const text = await readClipboardConTimeout(5000);
                           const idSolicitud = tryParse(text);
                           if (idSolicitud) { finish(idSolicitud); return; }
                           alert("El portapapeles no contiene una respuesta válida para esta solicitud todavía. Verifica que clipboard_watcher.py haya terminado.");
