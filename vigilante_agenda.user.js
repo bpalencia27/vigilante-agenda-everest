@@ -4311,10 +4311,20 @@
     }
 
     let atheneaLabs = null;
+    let atheneaError = null;
     try {
       atheneaLabs = await fetchAtheneaLabs(idSolicitud);
     } catch (e) {
       console.warn("[Vigilante Labs] Error consultando detalle de Athenea:", e);
+      atheneaError = e;
+    }
+
+    if (atheneaError) {
+      // Distinto de "sin analitos": la consulta de detalle FALLÓ (ej. sesión de Athenea
+      // expirada, devolvió HTML de login en vez de JSON) — no confundir con un resultado
+      // confirmado de "no hay datos", que es una afirmación distinta y más fuerte.
+      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">⚠ Se encontró la solicitud ${escapeHtml(String(idSolicitud))} en Athenea, pero no se pudo consultar el detalle automáticamente (posible sesión expirada). Utilice el botón azul de Athenea Soluciones arriba para verificar manualmente.</div>`;
+      return;
     }
 
     if (!atheneaLabs || !atheneaLabs.length) {
