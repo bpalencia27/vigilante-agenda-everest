@@ -1,0 +1,248 @@
+{
+ "inicio": "2026-08-10T16:53:44.845Z",
+ "url0": "https://neps.everestintelligent.com/viva/Acceso/",
+ "network": [
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:53:49.589Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=32304889&TipoDocumento=CC&epsId=2&UsuarioId=515",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":\"el paciente encontrado\",\"data\":{\"error\":false,\"mensaje\":null,\"data\":[{\"id\":80856,\"tipo_Identificacion\":\"CC\",\"identificacion\":\"32304889\",\"primer_Apellido\":\"PALACIO\",\"segundo_Apellido\":\"BORJA\",\"nombre\":\"CLARA DE JESUS\",\"genero\":\"\",\"eps\":\"NUEVA EPS \",\"regimen\":\"Contributivo\",\"direccion\":\"VDA POTRERITO\",\"fecha_Nacimiento\":\"1944-02-10T00:00:00\",\"tipoPlan\":\"BENEFICIARIO\",\"edad\":0,\"estado\":\"ACTIVO\",\"celular\":\"3504447019\",\"telefono\":\"4664354\",\"municipio\":\"\",\"planes_Medicos\":[{\"fechaAfiliacion\":\"2014-04-02T00:00:00\",\"programa\":\"Nefroprotección\"},{\"fechaAfiliacion\":\"2026-04-08T00:00:00\",\"programa\":\"Salud Mental\"},{\"fechaAfiliacion\":\"2026-06-13T09:52:03.66\",\"programa\":\"Hipertensión\"}]}],\"imprimir\":false,\"valor\":0,\"link\":null},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:53:49.669Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/ParametrizacionLista/GetLista?tipo=Par_Contrato&pacienteId=80856",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "[{\"id\":9,\"codigo\":null,\"descripcion\":\"VIVA 1A IPS BELLO\",\"estado\":null,\"appId\":0}]"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:53:49.669Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=80856",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":null,\"data\":{\"id\":80856,\"primer_Apellido\":\"PALACIO\",\"segundo_Apellido\":\"BORJA\",\"primerApellido\":\"PALACIO\",\"segundoApellido\":\"BORJA\",\"nombre\":\"CLARA DE JESUS\",\"nombreCompleto\":\"CLARA DE JESUS PALACIO BORJA\",\"tipo_Identificacion\":\"CC\",\"identificacion\":\"32304889\",\"fecha_Nacimiento\":\"0001-01-01T00:00:00\",\"edad\":82,\"edadAnos\":82,\"edadMeses\":991,\"edadSemanas\":3964,\"edadDias\":30132,\"isPac\":false,\"sexo\":\"F\",\"genero_Id\":0,\"genero\":\"\",\"orientacion_Id\":0,\"orientacion\":\"\",\"estadoCivil_Id\":null,\"estadoCivil\":\"\",\"municipioResidenciad_Id\":null,\"municipioResidenciad\":\"\",\"nivelSisben\":\"NA\",\"direccion\":\"VDA POTRERITO\",\"telefono\":null,\"celular\":\"3504447019\",\"correo\":\"clarapalacio402@gmail.com\",\"escolaridad_Id\":null,\"escolaridad\":\"\",\"ocupacion\":\"\",\"ocupacion_Id\":null,\"eps\":{\"id\":2,\"nombre\":\"NUEVA EPS \",\"epsCiudades\":null},\"religion_Id\":null,\"religion\":\"\",\"etnia_Id\":null,\"etnia\":\"\",\"desplazado\":false,\"familiasAccion\":false,\"riesgo_Segmentacion\":null,\"riesgo_Enfermedad\":null,\"riesgo_Atencion\":null,\"sw_Tratamiento_Datos\":false,\"sw_Acepto_Contacto\":true,\"tipoPlan\":\"BENEFICIARIO\",\"regimen\":\"Contributivo\",\"rango\":\"A\",\"estado\":\"ACT\",\"cuotaMod\":5000.00,\"exentoPago\":false,\"municipioNacimiento_Id\":null,\"municipioNacimiento\":\"\",\"estrato_Id\":null,\"estrato\":\"\",\"discapacidad_Id\":null,\"discapacidad\":\"\",\"swAcepto\":false,\"salario\":null,\"medicoCabecera\":null,\"swGrupoFamiliar\":false,\"cuotaModeradora\":0,\"contratos\":[],\"sedes\":[{\"id\":12,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Carrera 50 # 38A-185 CC Parque Fabricato Local 2055\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":13,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Diagonal 40 # 33 Sur - 48\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":14,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Calle 50 # 69  88\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":15,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"CL 9C SUR # 50 FF-116 LC 103-203\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":16,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"CALLE 4 SUR # 43A - 30\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":17,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Calle 58 N° 50 - 40\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":18,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Calle 56 N° 46 - 09\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":27,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"CALLE 27 # 46 – 70 LOCAL 124\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":28,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"CALLE 56 No 41-28\",\"telefono\":\"2042140\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":44,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"0\",\"telefono\":\"3100000\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":18,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"Calle 56 N° 46 - 09\",\"telefono\":\"6046042220\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false},{\"id\":44,\"nombre\":null,\"ciudadID\":0,\"ciudadNombre\":null,\"estado\":null,\"swFactura\":false,\"direccion\":\"0\",\"telefono\":\"3100000\",\"loginApp\":null,\"swImprimirRecibo\":false,\"swEnviarRecibo\":false}],\"programasPaciente\":[{\"id\":184216,\"descripcion\":\"Nefroprotección\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"swProgramaEspecial\":true},{\"id\":252080,\"descripcion\":\"Salud Mental\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"swProgramaEspecial\":false},{\"id\":401413,\"descripcion\":\"Hipertensión\",\"edad_Inicial\":null,\"edad_Final\":null,\"sexo\":null,\"sw_Enfermeria\":false,\"sw_Morbilidad\":false,\"estado\":null,\"fechaCreacion\":\"0001-01-01T00:00:00\",\"swProgramaEspecial\":true}],\"listParentesco\":null,\"cohorte\":null,\"discapacidadNeps\":null,\"puntosReferenciaResidencia\":[],\"puntosReferenciaUbicacionHabitual\":[],\"mediosTransporte\":[],\"ubicacionesBOT\":[],\"reside\":null,\"barrio\":null,\"departamentoResidencia\":null,\"departamentoResidencia_Id\":null,\"nombreLugarUbica\":null,\"municipioUbica\":null,\"direccionUbica\":null,\"departamentoUbica\":null,\"barrioVeredaUbica\":null,\"nombreEdificioUrbanizacion\":null},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:53:49.798Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/ParametrizacionLista/GetLista?tipo=Par_Contrato&pacienteId=80856",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "[{\"id\":9,\"codigo\":null,\"descripcion\":\"VIVA 1A IPS BELLO\",\"estado\":null,\"appId\":0}]"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:54:23.478Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Acceso/ValidarPresupuestosPaciente?PacienteId=80856&EspecialidadId=12&ProgramaId=66",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":\"El paciente no tiene presupuestos pendientes para esta especialidad.\",\"data\":{\"presupuestosVigentes\":[],\"presupuestosNoVigentes\":[]},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:54:23.508Z",
+   "method": "POST",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=80856&EspecialidadId=12&FechaDeseada=2026-11-10&ProgramaId=66&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":\"Registros encontrados\",\"data\":{\"dtCitasDisponibles\":{\"error\":false,\"mensaje\":\"Registros encontrados\",\"data\":[{\"fechaAgenda\":\"10/08/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"JENNY SIRLEY CANO GALLO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":41964,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":true,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/08/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"JENNY SIRLEY CANO GALLO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":41965,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":true,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/08/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"JENNY SIRLEY CANO GALLO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":41966,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":true,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":88654,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88734,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88835,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":88837,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":57797,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":57800,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88408,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88410,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":88329,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional-Staff\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":88544,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":57784,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"JENNY SIRLEY CANO GALLO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":41959,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"MARIA EDINETH PINO MUNOZ\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":13,\"agendaId\":21580,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":16,\"agendaId\":4855,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":17,\"agendaId\":4869,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6890,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6893,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6894,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7244,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7247,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7250,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"SINAI DELVALLE MIJARES SOTO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":2,\"agendaId\":21543,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"10/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":6,\"agendaId\":21569,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":88837,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88835,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88737,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":88654,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":88544,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":88329,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional-Staff\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88411,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"AROLDO AGUSTIN CAMACHO CAMPO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":1,\"agendaId\":88413,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":57800,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":57797,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"YULIANA ESCOBAR BERRIO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":57798,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"BRANDON JESUS PALENCIA MARTINEZ\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":21569,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"SINAI DELVALLE MIJARES SOTO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":3,\"agendaId\":21543,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7250,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7247,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":7244,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6894,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6893,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL SEDE\",\"turnosDisponibles\":1,\"agendaId\":6890,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":6,\"swAgendaDia\":false,\"agenda\":\"Adicional\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"ELISETH MARGARITA ESTRADA MORENO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":16,\"agendaId\":4869,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"EDWARD ARTURO CARRILLO GARCIA\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":4855,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"MARIA EDINETH PINO MUNOZ\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":17,\"agendaId\":21580,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"especialidad\":\"MEDICINA GENERAL\",\"medico\":\"JENNY SIRLEY CANO GALLO\",\"tipoAgenda\":\"PRESENCIAL\",\"turnosDisponibles\":18,\"agendaId\":41959,\"sedeAtencion\":null,\"tipoMarcacion\":\"MORBILIDAD\",\"swObligatorio\":false,\"swModalidadVirtual\":false,\"idTipoAcceso\":1,\"swAgendaDia\":false,\"agenda\":\"Normal\"},{\"fechaAgenda\":\"11/11/2026\",\"sede\":\"VIVA 1A IPS BELLO CARRERA 50\",\"programa\":\"HTA - MEDICO\",\"etiqueta\":\"\",\"esp...[CORTADO]"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:54:32.882Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Acceso/AgdValidarAgenda?agendaId=21569&pacienteId=80856&ordenMongo=null&cup=null&swParticular=false",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":null,\"data\":{\"mensaje\":\"Supero las validaciones\",\"tipo\":\"Success\",\"isError\":false},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:54:32.929Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Acceso/ObtenerTurnos?agendaid=21569&fecha=10/11/2026&pacienteId=80856&ordenMongo=null&cup=null&swParticular=false",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":null,\"data\":{\"error\":false,\"mensaje\":\"Registros encontrados\",\"data\":[{\"id\":4335823,\"hora\":\"9:00 AM\",\"estado\":\"ACT\"},{\"id\":4335816,\"hora\":\"9:20 AM\",\"estado\":\"ACT\"},{\"id\":4335812,\"hora\":\"10:40 AM\",\"estado\":\"ACT\"},{\"id\":4335814,\"hora\":\"11:00 AM\",\"estado\":\"ACT\"},{\"id\":4335813,\"hora\":\"11:20 AM\",\"estado\":\"ACT\"},{\"id\":7748375,\"hora\":\"11:40 AM\",\"estado\":\"ACT\"}],\"imprimir\":false,\"valor\":0,\"link\":null},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:54:40.983Z",
+   "method": "POST",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=4335812&Marcacion=NA&PacienteId=80856&FechaDeseada=2026-11-10&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=515&CodigoCups=null&SwProgramaEspecial=true&swIsPac=false&swIsPyM=true&ObservacionCita=&FechaMinimaConsultaOrden=null&ProgramaId=184216&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0",
+   "reqBody": "{}",
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":null,\"data\":{\"radicado\":4335812,\"swEmail\":false,\"swImprimir\":false,\"swSms\":false,\"motivo\":\"Agendada Correctamente\",\"consultorioAtencion\":0,\"swExtramural\":false},\"imprimir\":false,\"valor\":0,\"link\":null}"
+  },
+  {
+   "v": "xhr",
+   "t": "2026-08-10T16:55:11.188Z",
+   "method": "GET",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=3504447019&AgendaTurnoId=4335812",
+   "reqBody": null,
+   "status": 200,
+   "resBody": "{\"error\":false,\"mensaje\":\"Se ha enviado un SMS con pasos de redirección\",\"data\":null,\"imprimir\":false,\"valor\":0,\"link\":null}"
+  }
+ ],
+ "clicks": [
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:44.845Z",
+   "tag": "span",
+   "text": "Seleccione EPS"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:45.172Z",
+   "tag": "li",
+   "text": "NUEVA EPS"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:45.440Z",
+   "tag": "div",
+   "text": "NUEVA EPS Seleccione Tipo Documento  Buscar"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:45.685Z",
+   "tag": "span",
+   "text": "Seleccione Tipo Documento"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:46.223Z",
+   "tag": "li",
+   "text": "Cédula ciudadanía (CC)"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:53:49.588Z",
+   "tag": "button#BuscarPaciente",
+   "text": "Buscar"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:04.365Z",
+   "tag": "input",
+   "text": "10/08/2026"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:16.041Z",
+   "tag": "td",
+   "text": "10"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:17.002Z",
+   "tag": "span",
+   "text": "Seleccione Especialidad"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:18.788Z",
+   "tag": "li",
+   "text": "MEDICINA GENERAL"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:19.230Z",
+   "tag": "span",
+   "text": "Seleccione Programa"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:20.333Z",
+   "tag": "li",
+   "text": "HTA - MEDICO"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:20.821Z",
+   "tag": "span",
+   "text": "Seleccione Lugar de atención"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:21.402Z",
+   "tag": "li",
+   "text": "VIVA 1A IPS BELLO CARRERA 50"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:23.478Z",
+   "tag": "button",
+   "text": "Buscar"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:32.882Z",
+   "tag": "button",
+   "text": "6"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:36.671Z",
+   "tag": "a",
+   "text": "10:40 AM"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:37.774Z",
+   "tag": "input#controlPrograma",
+   "text": "on"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:38.166Z",
+   "tag": "input#swIsPyM",
+   "text": "on"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:38.490Z",
+   "tag": "select",
+   "text": "Seleccione un programa Nefroprotección Hipertensión"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:39.429Z",
+   "tag": "select",
+   "text": "Seleccione un programa Nefroprotección Hipertensión"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:40.982Z",
+   "tag": "button",
+   "text": "Sí, Crear Cita"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:54:57.408Z",
+   "tag": "button",
+   "text": "OK"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:55:01.720Z",
+   "tag": "button",
+   "text": "Enviar"
+  },
+  {
+   "v": "click",
+   "t": "2026-08-10T16:55:11.188Z",
+   "tag": "button",
+   "text": "Enviar"
+  }
+ ]
+}

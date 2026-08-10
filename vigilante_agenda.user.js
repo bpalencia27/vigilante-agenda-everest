@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      11.0.0
+// @version      12.3.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -36,147 +36,16 @@
 
 
 
-// =====================================================================
-// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
-// =====================================================================
-var VigilanteGC = {
-  intervals: new Set(),
-  observers: new Set(),
-  modals: new Set(),
-
-  registerInterval: function(id) {
-    if(id) this.intervals.add(id);
-    return id;
-  },
-
-  registerObserver: function(obs) {
-    if(obs) this.observers.add(obs);
-    return obs;
-  },
-
-  registerModal: function(modalEl) {
-    if(modalEl) this.modals.add(modalEl);
-    return modalEl;
-  },
-
-  run: function() {
-    // Limpiar intervalos
-    this.intervals.forEach(id => clearInterval(id));
-    this.intervals.clear();
-
-    // Desconectar observers
-    this.observers.forEach(obs => {
-      if(obs && typeof obs.disconnect === 'function') {
-         obs.disconnect();
-      }
-    });
-    this.observers.clear();
-
-    // Remover modales zombis
-    this.modals.forEach(modal => {
-      if(modal && modal.parentNode) {
-         modal.parentNode.removeChild(modal);
-      }
-    });
-    this.modals.clear();
-
-    // Reset variables globales que controlan la reinicializacion
-    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
-  }
-};
-
-// Monkey-patch history API para detectar cambios de ruta en la SPA
-if (typeof window !== 'undefined' && window.history) {
-  (function(history){
-    const pushState = history.pushState;
-    if (pushState) {
-        history.pushState = function() {
-            VigilanteGC.run();
-            return pushState.apply(history, arguments);
-        };
-    }
-    const replaceState = history.replaceState;
-    if (replaceState) {
-        history.replaceState = function() {
-            VigilanteGC.run();
-            return replaceState.apply(history, arguments);
-        };
-    }
-  })(window.history);
-
-  window.addEventListener('popstate', () => VigilanteGC.run());
-}
-
-// =====================================================================
-// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
-// =====================================================================
-var VigilanteGC = {
-  intervals: new Set(),
-  observers: new Set(),
-  modals: new Set(),
-
-  registerInterval: function(id) {
-    if(id) this.intervals.add(id);
-    return id;
-  },
-
-  registerObserver: function(obs) {
-    if(obs) this.observers.add(obs);
-    return obs;
-  },
-
-  registerModal: function(modalEl) {
-    if(modalEl) this.modals.add(modalEl);
-    return modalEl;
-  },
-
-  run: function() {
-    // Limpiar intervalos
-    this.intervals.forEach(id => clearInterval(id));
-    this.intervals.clear();
-
-    // Desconectar observers
-    this.observers.forEach(obs => {
-      if(obs && typeof obs.disconnect === 'function') {
-         obs.disconnect();
-      }
-    });
-    this.observers.clear();
-
-    // Remover modales zombis
-    this.modals.forEach(modal => {
-      if(modal && modal.parentNode) {
-         modal.parentNode.removeChild(modal);
-      }
-    });
-    this.modals.clear();
-
-    // Reset variables globales que controlan la reinicializacion
-    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
-  }
-};
-
-// Monkey-patch history API para detectar cambios de ruta en la SPA
-if (typeof window !== 'undefined' && window.history) {
-  (function(history){
-    const pushState = history.pushState;
-    if (pushState) {
-        history.pushState = function() {
-            VigilanteGC.run();
-            return pushState.apply(history, arguments);
-        };
-    }
-    const replaceState = history.replaceState;
-    if (replaceState) {
-        history.replaceState = function() {
-            VigilanteGC.run();
-            return replaceState.apply(history, arguments);
-        };
-    }
-  })(window.history);
-
-  window.addEventListener('popstate', () => VigilanteGC.run());
-}
+// v12.0.0 — RETIRADO el "GARBAGE COLLECTOR PARA SPA" (estaba pegado DOS veces, líneas 39-108
+// y 110-179 de la versión anterior). No era una limpieza inocua: enganchaba history.pushState,
+// history.replaceState y popstate del objeto History REAL de Everest, de modo que en CADA
+// navegación del router de Angular ejecutaba run(), y run() hacía clearInterval de los cuatro
+// temporizadores creados en boot() — el recordatorio de cargar el PyM, el repintado del
+// silenciador, el reintento del reporte y el chequeo de versión — que NADIE volvía a armar,
+// porque boot() solo corre una vez. Tras el primer cambio de vista se apagaban en silencio.
+// Además arrancaba del DOM los modales registrados: el de agendamiento podía desaparecer a
+// media consulta. Y al estar duplicado, los dos parches de history quedaban encadenados.
+// La fuga que pretendía resolver ya está corregida en origen (módulo duplicado eliminado).
 
 // --- AUTOACTUALIZACIÓN -------------------------------------------------------
 // Activada (v7.4.0): Tampermonkey revisa este Gist secreto solo y actualiza cada
@@ -187,6 +56,110 @@ if (typeof window !== 'undefined' && window.history) {
 // ----------------------------------------------------------------------------
 
 /*
+  v12.0.0 — UNIFICACIÓN DE LOS DOS LINAJES
+  El script se había bifurcado en dos versiones que evolucionaron por separado y ya no se
+  podían mezclar solas. Esta versión las funde en una sola: de cada lado se conserva lo que
+  funciona y se descarta lo que no.
+
+  SE ELIMINA (venía del linaje del repositorio y era peligroso o inerte)
+  - Resultados de laboratorio INVENTADOS. Cuando la consulta real no devolvía nada se
+    mostraban siete exámenes fabricados en la misma tabla y con la misma etiqueta de origen
+    que los reales. Además nunca se llegaba a consultar Athenea de verdad: el contrato de
+    getAtheneaIdSolicitudAuto estaba mal comprobado y esa rama era código muerto, así que
+    los datos inventados eran, en la práctica, lo único que se veía.
+  - Pacientes de PRUEBA con cédulas ficticias que se pintaban en el panel igual que los
+    reales, uno de ellos marcado como abandono del programa cardiovascular.
+  - El recolector de basura para la SPA: estaba pegado dos veces y, en cada cambio de ruta
+    de Angular, apagaba los cuatro temporizadores creados al arrancar (recordatorio de PyM,
+    reporte, chequeo de versión y contador del silenciador) sin que nadie los volviera a
+    armar, y arrancaba del DOM los modales abiertos, incluido el de agendamiento en uso.
+  - Los modales de agendar, ordenar y laboratorios, y la bitácora de auditoría, dejan de
+    publicarse en la ventana de la página: eran acciones de ESCRITURA clínica accesibles a
+    cualquier script de Everest.
+  - La quinta ruta de búsqueda de paciente, que pasaba la cédula donde va el id interno.
+
+  SE CONSERVA DEL LINAJE DEL REPOSITORIO
+  - Buscador de pacientes tolerante a erratas.
+  - Bitácora local de diagnóstico, ahora sin objetos crudos: solo campos acotados, para que
+    no acaben datos del paciente en el registro.
+  - Liberación del bloqueo de liderazgo también en unload, no solo en beforeunload.
+  - Consulta a Athenea como fuente principal del modal de paraclínicos, ya reparada.
+  - Resaltado en rojo de los valores que el propio laboratorio declara alterados. El resto
+    deja de pintarse en verde: dar por normal lo que el script no ha interpretado es una
+    afirmación clínica que no le corresponde hacer.
+
+  SE INCORPORA DEL LINAJE LOCAL
+  - Consulta a Athenea con reintento por AÑO: con un solo año, los laboratorios pedidos a
+    finales del año anterior no aparecían nunca.
+  - Avisos de sincronización descartables y con autocierre; antes se quedaban fijos toda la
+    jornada tapando la esquina de la pantalla.
+  - La notificación del PyM del día deja de repetirse en cada revisión de fondo.
+  - Parche de digiturno para los nombres con espacios, acotado al host correcto.
+
+  SE CORRIGE EN LA PROPIA UNIFICACIÓN
+  - El filtro de sexo de las órdenes PyM estaba definido pero NO se usaba: las diez
+    actividades seguían saliendo premarcadas, incluidas mamografía y citología en hombres.
+  - Los ajustes técnicos habían quedado INALCANZABLES (se abrían con una marca que ya nadie
+    escribía) y con ellos controles que el médico sí usa. Ahora «Actualizar lista de
+    prevención» y «Sincronizar almacenamiento» están siempre visibles, y el resto se abre
+    con un interruptor normal.
+  - El cartel de cita asignada usaba una clase CSS que no existía y salía sin estilo.
+  - Las filas de Athenea se pintaban con el texto genérico «Paraclínico» porque faltaba su
+    campo de nombre.
+  - Aviso cuando algún examen de un paquete de órdenes no se pudo resolver.
+
+  PENDIENTE (documentado, no resuelto aquí)
+  - La contraseña de Athenea sigue en claro como respaldo heredado: hay que ROTARLA y
+    después fijarla por equipo con GM_setValue, sin volver a publicarla.
+  - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la aplicación oficial los envía y
+    el script no. Sin más capturas, cambiarlo es más arriesgado que el defecto.
+  - (RESUELTO en v12.3.0) El módulo de órdenes PyM ya está verificado contra una captura
+    del módulo nativo de Everest: el payload coincide byte por byte.
+*/
+
+/*
+  v11.0.1 — AUDITORÍA CONTRA TELEMETRÍA REAL (26 capturas · 1527 llamadas de Everest)
+  Cada cambio está respaldado por lo que la aplicación OFICIAL hace de verdad. Lo que no
+  tenía respaldo en las capturas se dejó como estaba, y se anotó por qué.
+
+  SEGURIDAD DEL PACIENTE
+  - La cita solo se da por creada si el servidor lo confirma (error:false + radicado).
+    Antes cualquier "mensaje" —incluido uno de ERROR— mostraba "¡Cita Creada
+    Exitosamente!", marcaba al paciente como agendado y silenciaba al vigilante para él.
+  - La toma de muestras se agenda DESPUÉS de confirmar la cita principal y una sola vez.
+  - Se retiran los valores CABLEADOS del laboratorio: el teléfono 3022813246 (destinatario
+    de TODOS los SMS y teléfono de TODOS los pacientes), el agendaId 282531 y la hora
+    07:00:00. Y se elimina el "cupo por defecto", que citaba en silencio en el primer
+    turno del día cuando la hora elegida ya no estaba libre.
+  - Las agendas se filtran por la FECHA elegida (la respuesta mezcla hasta 7 días) y el
+    turno muestra siempre profesional, fecha y sede.
+  - Sin nombre de médico cableado: si no se identifica la agenda propia se avisa.
+  - El médico activo se toma solo de servicios fiables: varios endpoints usan
+    "UsuarioId" para el id del PACIENTE.
+  - Órdenes PyM: sin coincidencia con la base salen DESMARCADAS (antes las 10 venían
+    premarcadas: mamografía y citología a hombres, PSA a mujeres) y se advierte el choque
+    de sexo. Un CIE-10 o un CUPS no resuelto ya no se sustituye por el primero de la lista.
+  - Laboratorios: la fecha de toma ya no se rellena con la de HOY, los analitos PENDIENTES
+    dejan de escribirse como resultados y la casilla del RAC usa el identificador real.
+  - Retirados los dos prompt() que permitían teclear una cédula o un idSolicitud a mano y
+    volcar los resultados de otro paciente en la historia clínica abierta.
+
+  ESTABILIDAD
+  - Ninguna ESCRITURA se reintenta: el motor de red repetía los POST hasta 8 veces (ocho
+    citas u ocho órdenes idénticas).
+  - Corregido un bucle infinito de recarga en el chequeo de versión.
+  - localStorage.clear() ya no borra la bitácora de auditoría de fraudes e inasistencias,
+    los contadores, los ajustes ni el registro anti-duplicados del día.
+
+  PRIVACIDAD
+  - El mapa de cédulas con PyM pendiente deja de publicarse en window.state.
+  - Retirada la telemetría a un endpoint que era un marcador de posición.
+
+  PENDIENTE (a propósito, por falta de evidencia)
+  - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la app oficial los envía y el
+    script no. Cambiarlos con una sola captura es más peligroso que el defecto.
+  - (RESUELTO en v12.3.0) El contrato del módulo de órdenes PyM ya está verificado.
+
   v7.9.0 — AGENDAMIENTO EXPRÉS DE CONTROL Y PyM EN 1-CLIC DESDE EL PANEL
   Agendamiento inteligente de citas de control directamente desde el panel del Vigilante
   conectado con APIAcceso (https://neps.everestintelligent.com/apiviva/APIAcceso/api/...).
@@ -317,9 +290,23 @@ if (typeof window !== 'undefined' && window.history) {
       const passInput = document.querySelector("#Password") || document.querySelector("input[name='Password']");
       const loginBtn = document.querySelector("button[type='submit']") || document.querySelector("input[type='submit']");
 
+      // v11.0.1 — Las credenciales se leen PRIMERO del almacén local de Tampermonkey
+      // (vgl_ath_user / vgl_ath_pass), que no sale del equipo. Los valores de abajo son
+      // solo el respaldo heredado para no dejar sin autologin a los equipos ya instalados.
+      // ⚠ Esta contraseña está en claro en un script que se distribuye por URL: ROTARLA.
+      //   Tras rotarla, fijarla por equipo desde la consola de Tampermonkey con
+      //   GM_setValue("vgl_ath_user", "USUARIO"); GM_setValue("vgl_ath_pass", "CLAVE");
+      let athUser = "CONSULTAMED", athPass = "Viva1a*md04";
+      try {
+        if (typeof GM_getValue !== "undefined") {
+          athUser = GM_getValue("vgl_ath_user", "") || athUser;
+          athPass = GM_getValue("vgl_ath_pass", "") || athPass;
+        }
+      } catch (e) {}
+
       if (userInput && passInput && loginBtn && !userInput.value) {
-        userInput.value = "CONSULTAMED";
-        passInput.value = "Viva1a*md04";
+        userInput.value = athUser;
+        passInput.value = athPass;
         userInput.dispatchEvent(new Event('input', { bubbles: true }));
         passInput.dispatchEvent(new Event('input', { bubbles: true }));
         setTimeout(() => loginBtn.click(), 300);
@@ -349,7 +336,7 @@ if (typeof window !== 'undefined' && window.history) {
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "11.0.0";
+  const VERSION = "12.3.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -442,9 +429,26 @@ if (typeof window !== 'undefined' && window.history) {
     try { const f = window.fetch; if (typeof f !== "function") return null; return (u, o) => f.call(window, u, o); } catch (e) { return null; }
   })();
 
-// =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
-  // =====================================================================
+  // v12.0.0 (del otro linaje) — HOTFIX DIGITURNO: el nombre del paciente viaja en la URL
+  // de LlamadoPorMedicoManual y, si lleva espacios, la petición se rompe. Se recodifica al
+  // vuelo. El enganche está ACOTADO al host de digiturno y a esa única llamada: no toca la
+  // red de Everest ni la de ningún otro sitio.
+  // endsWith y no includes: con includes, un host como "digiturno.viva1a.com.co.otro.com"
+  // también habría activado el parche. Y el replace va en try/catch porque este código se
+  // interpone en TODAS las peticiones del host: si lanzara, rompería la aplicación entera.
+  if (location.hostname === "digiturno.viva1a.com.co" || location.hostname.endsWith(".digiturno.viva1a.com.co")) {
+    const originalOpenXhr = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      try {
+        if (url && typeof url === "string" && url.includes("LlamadoPorMedicoManual") && url.includes("NombreUsuario=")) {
+          url = url.replace(/NombreUsuario=([^&]+)/, function (match, namePart) {
+            return "NombreUsuario=" + encodeURIComponent(decodeURIComponent(namePart));
+          });
+        }
+      } catch (e) { /* si la URL no es decodificable se deja intacta */ }
+      return originalOpenXhr.apply(this, [method, url, ...rest]);
+    };
+  }
 
   // =====================================================================
   //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS EN RUTA CRÓNICOS
@@ -459,11 +463,38 @@ if (typeof window !== 'undefined' && window.history) {
     { key: "COLESTEROL_TOTAL", names: ["COLESTEROL TOTAL"], codes: ["2009", "903818"], resultId: "resultadoColesterolTotal", dateId: "fechaResultColesterolTotal" },
     { key: "COLESTEROL_HDL", names: ["COLESTEROL HDL", "COLESTEROL DE ALTA DENSIDAD"], codes: ["2015", "903815"], resultId: "resultadoColesterolHDL", dateId: "fechaResultColesterolHDL" },
     { key: "COLESTEROL_LDL", names: ["COLESTEROL LDL", "COLESTEROL DE BAJA DENSIDAD"], codes: ["2014", "903817", "903816"], resultId: "resultadoColesterolLDL", dateId: "fechaResultColesterolLDL" },
-    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    // v12.0.5 — CORREGIDO con el CUPS real capturado en el consultorio: los triglicéridos
+    // son 903868 (payload de Everest: {"codigo":"903868","descripcion":"TRIGLICERIDOS"}).
+    // Aquí figuraba 903866, que no corresponde a nada, mientras que 903868 estaba asignado
+    // por error al RAC. Como el emparejamiento por CÓDIGO manda sobre el nombre, un
+    // resultado de TRIGLICÉRIDOS se escribía en la casilla de la relación
+    // albuminuria/creatinina: dos analitos distintos, con rangos distintos.
+    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903868", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO hay casilla de texto para el
+    // uroanálisis. Lo que existe es `resultadoPrograma.swUroanalisis`, un par de botones
+    // de opción (sí/no), donde no cabe un resultado escrito. Se deja la entrada para que
+    // el analito se CUENTE y se avise ("Sin casilla en esta vista: UROANALISIS") en vez de
+    // desaparecer en silencio: el médico sabe así que ese lo registra a mano.
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
-    { key: "RAC", names: ["RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA", "MICROALBUMINURIA", "RAC"], codes: ["2092", "2080", "903868"], resultId: "resultadoRAC", dateId: "fechaResultRAC" },
-    { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
+    // v12.0.5 — CONFIRMADO EN EL CONSULTORIO (10/08/2026), leyendo la etiqueta que
+    // acompaña a cada casilla en la Ruta de Crónicos:
+    //     resultadoRelacionAlbuminaCreatinina  -> "Relación albuminuria/Creatinina en orina (mg/g)"   <-- ESTA
+    //     resultadoMicroAlbuminuriaCreatinuria -> "Microalbuminuria/Creatinuria"
+    // El médico registra la relación en la PRIMERA, que es la que usa el script. Con el
+    // nombre anterior ("resultadoRAC", que no existe en el DOM) esa casilla no se llenaba
+    // nunca. Se conserva el nombre viejo como alternativa por si otra vista lo usa.
+    // NO cambiar a resultadoMicroAlbuminuriaCreatinuria: es otra casilla distinta.
+    // Se quitan además los códigos 2092/2080 y los alias sueltos "MICROALBUMINURIA"/"RAC",
+    // que capturaban analitos que no son la relación.
+    { key: "RAC", names: ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"], codes: ["8779"], resultId: "resultadoRelacionAlbuminaCreatinina", altIds: ["resultadoRAC"], dateId: "fechaResultRelacionAlbuminaCreatinina", altDateIds: ["fechaResultRAC"] },
+    // v11.0.1 — "CREATININA" a secas casaba también con la creatinina en ORINA, la
+    // creatinuria y la depuración de 24 h, que sobrescribían la creatinina sérica.
+    { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], excluye: ["ORINA", "CREATINURIA", "DEPURAC", "24 H"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
+    // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO existe ninguna casilla de HbA1c
+    // (se listaron los 64 campos de resultado de esa vista y no aparece). El nombre
+    // "resultadoHBA1C" era una suposición que nunca se cumplió. Se conserva la entrada
+    // para que el analito se avise como pendiente de escribir a mano, no para escribirlo.
     { key: "HBA1C", names: ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"], codes: ["2035", "903843"], resultId: "resultadoHBA1C", dateId: "fechaResultHBA1C" },
     { key: "PTH", names: ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"], codes: ["2065", "904921"], resultId: "resultadoPTH", dateId: "fechaResultPTH" },
     { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
@@ -471,43 +502,53 @@ if (typeof window !== 'undefined' && window.history) {
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
 
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
+  // v12.0.0 (del otro linaje) — Consulta a Athenea con reintento por AÑO. El endpoint exige
+  // el año de la solicitud; con un único año, los laboratorios pedidos a finales del año
+  // anterior no aparecían nunca. Se prueban el año en curso y los dos anteriores, y se
+  // distingue la sesión vencida de la ausencia real de resultados.
+  function fetchAtheneaLabs(idSolicitud, anoEspecifico = null) {
+      const currentYear = new Date().getFullYear();
+      const yearsToTry = anoEspecifico ? [anoEspecifico] : [currentYear, currentYear - 1, currentYear - 2];
+
+      const tryFetchYear = (yearIndex) => {
+          const ano = yearsToTry[yearIndex];
+          return new Promise((resolve, reject) => {
+              const siguiente = (motivoFinal) => {
+                  if (yearIndex + 1 < yearsToTry.length) tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                  else reject(motivoFinal);
+              };
+              GM_xmlhttpRequest({
+                  method: "POST",
+                  url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
+                  headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                  data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
+                  onload: function (response) {
+                      try {
+                          if (response.status === 200) {
+                              const res = JSON.parse(response.responseText);
+                              if (res && res.dataObject) {
+                                  const data = JSON.parse(res.dataObject);
+                                  if (Array.isArray(data) && data.length > 0) { resolve(data); return; }
+                              }
+                              if (res && res.bolValido === false) {
+                                  reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
+                                  return;
+                              }
+                              siguiente("No se encontraron resultados en Athenea para la solicitud #" + idSolicitud + " (años " + yearsToTry.join(", ") + ").");
                           } else {
-                              reject("No se encontraron resultados del paciente en este momento.");
+                              siguiente("La sesión con Athenea ha caducado (HTTP " + response.status + "). Inicia sesión en Athenea.");
                           }
-                      } else {
-                          reject("La sesión con el sistema ha caducado. Por favor, renueva tu acceso: " + response.status);
+                      } catch (e) {
+                          siguiente("Error al procesar la respuesta de Athenea: " + e);
                       }
-                  } catch (e) {
-                      reject("El archivo de prevención tuvo un problema al leerse. Inténtalo de nuevo: " + e);
-                  }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
+                  },
+                  onerror: function (err) { siguiente("No se pudo conectar con Athenea: " + err); },
+                  ontimeout: function () { siguiente("Athenea no respondió a tiempo."); },
+              });
           });
-      });
+      };
+
+      return tryFetchYear(0);
   }
 
   // Despacha eventos para que Angular actualice el modelo
@@ -522,8 +563,14 @@ if (typeof window !== 'undefined' && window.history) {
       const code = String(lab.CodigoParametro || lab.codigo || "").trim();
       const name = String(lab.NombreParametro || lab.nombre || lab.examen || "").toUpperCase().trim();
 
+      // v11.0.1 — El código exacto manda SIEMPRE sobre el nombre (antes dependía del
+      // orden del recorrido). Solo si ningún código casa se intenta por nombre, y ahí se
+      // respetan las exclusiones de cada analito.
       for (const item of WHITELIST_13_LABS) {
-          if (item.codes.includes(code)) return item;
+          if (code && item.codes.includes(code)) return item;
+      }
+      for (const item of WHITELIST_13_LABS) {
+          if (item.excluye && item.excluye.some((x) => name.includes(x))) continue;
           for (const n of item.names) {
               if (name.includes(n)) return item;
           }
@@ -531,33 +578,63 @@ if (typeof window !== 'undefined' && window.history) {
       return null;
   }
 
+  // Primer elemento del DOM que exista entre el id principal y sus alternativas.
+  function _findLabField(primaryId, altIds) {
+      for (const id of [primaryId].concat(altIds || [])) {
+          if (!id) continue;
+          const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+          if (el) return el;
+      }
+      return null;
+  }
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
-      if (!Array.isArray(labsArray)) return 0;
+      let pendientes = 0;
+      const sinCasilla = [];
+      const yaEscritas = new Set();
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [] };
 
       labsArray.forEach(lab => {
           const matched = _matchLabInWhitelist(lab);
           if (!matched) return; // Filtro estricto: solo los 13 laboratorios autorizados
 
           const resultVal = lab.Resultado || lab.resultado || lab.valor;
-          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || new Date().toISOString().split('T')[0];
-
           if (!resultVal) return;
 
-          // Inyectar valor en casilla correspondiente
-          let inputEl = document.getElementById(matched.resultId) || document.querySelector(`[name="${matched.resultId}"]`);
+          // v11.0.1 — Un analito que aún NO tiene resultado ("PENDIENTE", o estado 1 en
+          // Athenea) se estaba escribiendo en la historia clínica COMO SI FUERA un
+          // resultado. Se excluye por valor conocido, no por lista blanca de formatos,
+          // para no perder los resultados cualitativos legítimos ("Negativo", "Normal").
+          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientes++; return; }
+
+          // v11.0.1 — Si dos analitos distintos caen en la misma casilla (p. ej. creatinina
+          // en suero y creatinina en orina), manda el PRIMERO y se avisa por consola en vez
+          // de sobrescribir en silencio con el equivocado.
+          if (yaEscritas.has(matched.resultId)) { console.warn("[Vigilante] casilla ya escrita, se conserva el primer valor:", matched.key); return; }
+
+          // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la
+          // trae: eso convertía un resultado de hace meses en uno "de hoy" dentro de la
+          // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
+          // médico la escriba.
+          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || null;
+
+          let inputEl = _findLabField(matched.resultId, matched.altIds);
           if (inputEl) {
               setNgValue(inputEl, resultVal);
+              yaEscritas.add(matched.resultId);
               count++;
+          } else {
+              sinCasilla.push(matched.key);   // el campo no existe en esta vista: hay que avisarlo
+              return;
           }
 
-          // Inyectar fecha en casilla correspondiente
-          let dateInput = document.getElementById(matched.dateId) || document.querySelector(`[name="${matched.dateId}"]`);
-          if (dateInput) {
+          let dateInput = _findLabField(matched.dateId, matched.altDateIds);
+          if (dateInput && resultDate) {
               setNgValue(dateInput, resultDate);
           }
       });
-      return count;
+      return { count, pendientes, sinCasilla };
   }
 
   // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
@@ -567,10 +644,11 @@ if (typeof window !== 'undefined' && window.history) {
           if (!doc && typeof extractPacienteAbierto === "function") {
               doc = extractPacienteAbierto();
           }
+          // v11.0.1 — SIN prompt(). Pedir la cédula a mano permitía escribir en la historia
+          // clínica ABIERTA los resultados de OTRO paciente (basta un dígito mal tecleado).
+          // La identidad solo puede venir del paciente que está abierto en Everest.
           if (!doc) {
-              doc = prompt("No se detectó la cédula del paciente abierto en Everest. Ingresa el número de documento:");
-          }
-          if (!doc) {
+              console.warn("[Vigilante] no se pudo determinar el paciente abierto: no se consultan laboratorios");
               resolve(null);
               return;
           }
@@ -586,9 +664,17 @@ if (typeof window !== 'undefined' && window.history) {
                   onload: function(response) {
                       if (response.status === 200) {
                           try {
+                              // v12.0.0 — CONTRATO NORMALIZADO: esta función resuelve SIEMPRE
+                              // un número o null. Antes devolvía un escalar mientras cada
+                              // consumidor lo desempaquetaba como si fuera un objeto
+                              // (`atheneaData.idSolicitud`), lo que dejaba la consulta de
+                              // Athenea del modal de paraclínicos como CÓDIGO MUERTO: nunca
+                              // se cumplía la condición y siempre se caía al caso "sin datos".
                               const res = JSON.parse(response.responseText);
-                              if (res && res.idSolicitud) {
-                                  resolve(res.idSolicitud);
+                              const bruto = res && (res.idSolicitud != null ? res.idSolicitud : res.id);
+                              const num = Number(bruto);
+                              if (Number.isFinite(num) && num > 0) {
+                                  resolve(num);
                                   return;
                               }
                           } catch (e) {
@@ -626,25 +712,34 @@ if (typeof window !== 'undefined' && window.history) {
   let lastAutoFetchedDoc = "";
 
   async function autoFetchAtheneaLabsForActivePatient() {
-      vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
+      // v11.0.1 — El registro va DESPUÉS de la guarda. Antes se escribía en cada ráfaga del
+      // observador de DOM, y cada escritura reserializa hasta 500 entradas: en la historia
+      // clínica eso era trabajo constante y evitable en el hilo de la página.
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
       if (!docId || docId === lastAutoFetchedDoc) return;
+      vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
 
       lastAutoFetchedDoc = docId;
       console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
 
       try {
           const atheneaData = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = (atheneaData && (atheneaData.idSolicitud || atheneaData.id)) || (typeof atheneaData === "number" ? atheneaData : null);
+          const idSol = atheneaData; // v12.0.0: getAtheneaIdSolicitudAuto ya devuelve número o null
 
           if (idSol) {
               const labs = await fetchAtheneaLabs(idSol);
               if (labs && labs.length > 0) {
-                  const count = injectLabsIntoCronicos(labs);
-                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: count });
+                  const r = injectLabsIntoCronicos(labs);
+                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
+                  // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
+                  // muestra), deja de ser persistente (los avisos persistentes sin cerrar
+                  // reaparecen horas después desde el Centro de actividades de Windows) y
+                  // dice lo que NO se pudo llenar, para que el médico lo revise.
+                  const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
+                    + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
                   notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
-                    `Se encontraron ${labs.length} resultados en Athenea para la cédula ${docId}.
-Se auto-diligenciaron ${count} casillas en Everest.`, true);
+                    `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
+                    false, "athenea|" + docId + "|" + todayStamp());
               }
           }
       } catch (e) {
@@ -666,19 +761,28 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
           btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
 
           let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = (idSolicitud && (idSolicitud.idSolicitud || idSolicitud.id)) || (typeof idSolicitud === "number" ? idSolicitud : null);
+          const idSol = idSolicitud; // v12.0.0: contrato normalizado (número o null)
 
+          // v11.0.1 — SIN prompt(). Escribir a mano un "idSolicitud" traía a esta historia
+          // clínica los resultados de la solicitud que fuera — es decir, los de CUALQUIER
+          // otro paciente — y se escribían sin ninguna comprobación de identidad.
           if (!idSol) {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge. Ingresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) { btn.innerHTML = "🧬 Auto-Labs (Athenea)"; return; }
+              btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+              alert("No se pudo resolver la solicitud de laboratorio del paciente abierto"
+                + (docId ? " (cédula " + docId + ")" : "")
+                + ".\n\nConsulte los resultados directamente en Athenea. No se diligenció ninguna casilla.");
+              return;
           }
 
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSol || idSolicitud);
+              const labs = await fetchAtheneaLabs(idSol);
               if (labs && labs.length > 0) {
-                  const injectedCount = injectLabsIntoCronicos(labs);
-                  alert("✅ ¡Éxito! Se encontraron y extrajeron " + labs.length + " analitos. Se inyectaron " + injectedCount + " valores en la Ruta Crónicos.");
+                  const r = injectLabsIntoCronicos(labs);
+                  alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
+                    + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
+                    + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
+                    + "\n\nRevise las fechas de toma antes de guardar la historia.");
               } else {
                   alert("⚠️ No se encontraron laboratorios en esa solicitud.");
               }
@@ -695,11 +799,11 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   let labMutationObs = null;
   function initLabMutationObserver() {
       if (labMutationObs || typeof MutationObserver === "undefined") return;
-      labMutationObs = VigilanteGC.registerObserver(new MutationObserver(debounceVgl(() => {
+      labMutationObs = new MutationObserver(debounceVgl(() => {
           if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
               createLabInjectorUI();
           }
-      }, 300)));
+      }, 300));
       if (document.body) {
           labMutationObs.observe(document.body, { childList: true, subtree: true });
       }
@@ -734,49 +838,17 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       return text.replace(/\b\d{6,11}\b/g, '[CENSURADO]');
   }
 
-  window.addEventListener('error', function(e) {
-      const msg = sanitizePII(e.message || '');
-      if (typeof FETCH0 === 'function') {
-          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
-              method: 'POST', mode: 'no-cors',
-              body: JSON.stringify({ error: msg, location: e.filename, line: e.lineno, type: 'error' })
-          }).catch(()=>{});
-      }
-  });
+  // v11.0.1 — RETIRADA la telemetría remota a ".../AKfycby_TELEMETRY/exec". Ese
+  // identificador es un marcador de posición (los reales tienen ~60 caracteres): NADIE
+  // recibía nada. Y se disparaba con CUALQUIER error de la página, incluidos los de
+  // Angular y los de la propia Everest, ajenos al Vigilante, generando peticiones
+  // inútiles todo el día. El registro local (vglLog) ya cubre la depuración sin que
+  // ningún dato salga del equipo.
 
-  window.addEventListener('unhandledrejection', function(e) {
-      const msg = sanitizePII(e.reason ? e.reason.toString() : '');
-      if (typeof FETCH0 === 'function') {
-          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
-              method: 'POST', mode: 'no-cors',
-              body: JSON.stringify({ error: msg, type: 'promise_rejection' })
-          }).catch(()=>{});
-      }
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-      let devClickCount = 0;
-      let devClickTimer;
-      document.body.addEventListener('click', (e) => {
-          const target = e.target.closest('#vgl-title small');
-          if (target) {
-              devClickCount++;
-              clearTimeout(devClickTimer);
-              if (devClickCount >= 7) {
-                  devClickCount = 0;
-                  const pin = prompt('VGL SecOps - Ingrese PIN de Desarrollador:');
-                  if (pin === '7355608') {
-                      localStorage.setItem('__vgl_dev_mode', 'true');
-                      alert('Modo Desarrollador Activado. Opciones técnicas reveladas.');
-                      location.reload();
-                  } else if (pin !== null) {
-                      alert('PIN Incorrecto.');
-                  }
-              }
-              devClickTimer = setTimeout(() => { devClickCount = 0; }, 5000);
-          }
-      });
-  });
+  // v11.0.1 — RETIRADO el "modo desarrollador": siete clics sobre el número de versión
+  // abrían un cuadro pidiendo un PIN y, si se acertaba, recargaba la página. La marca que
+  // guardaba (__vgl_dev_mode) NO SE LEE EN NINGÚN SITIO, así que no revelaba nada: para el
+  // médico solo era una recarga inesperada a mitad de consulta.
  // ventana real de la página (sandbox de Tampermonkey)
 
   // =====================================================================
@@ -842,6 +914,8 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     recordatorioPym: true,    // recordatorio (calmado) de PyM pendiente al abrir la historia
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
+    smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
+    opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
@@ -1021,25 +1095,29 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       return true;
     }
   });
-  PAGEWIN.state = state; PAGEWIN.rawState = rawState;
-  PAGEWIN.repaint = () => repaint();
-  PAGEWIN.renderSettings = () => renderSettings();
-  PAGEWIN.openAgendamientoModal = (a) => openAgendamientoModal(a);
-  PAGEWIN.openOrdenamientoModal = (a) => openOrdenamientoModal(a);
-  PAGEWIN.openLaboratoriosModal = (a) => openLaboratoriosModal(a);
-  PAGEWIN.vglExportLogs = () => vglExportLogs();
-  PAGEWIN.vglLog = (c, a, d) => vglLog(c, a, d);
-  PAGEWIN.simularCitasDirectas = (dummyList) => {
-    state.lastSnapshot = { list: dummyList, source: "pagina", at: new Date() };
-    state.pymFile = "Base_Simulada_PyM.xlsx";
-    state.pym = new Map([
-      ["1017123456", ["Tamización de cérvix — VPH", "Tamización de mama"]],
-      ["43567890", ["Remisión a Optometría"]],
-      ["98765432", ["Tamización de riesgo cardiometabólico"]]
-    ]);
-    state.pymAbandono = new Set(["98765432"]);
-    render(dummyList, "pagina", new Date());
-  };
+  // v11.0.1 — Ya NO se cuelga el estado interno de la ventana real de la página. Exponía
+  // en `window.state` el mapa completo de pacientes con PyM pendiente (cédulas y
+  // actividades) al alcance de cualquier script cargado por Everest.
+  try { PAGEWIN.vglDebug = { version: VERSION, pymSize: () => state.pym.size, leader: () => state.leader }; } catch (e) {}
+  // v12.0.0 — RETIRADO todo lo demás que colgaba de la ventana real de la página. Arriba
+  // queda solo `vglDebug`, que no contiene ningún dato de paciente. Lo eliminado y por qué:
+  //
+  //  · simularCitasDirectas — cableaba TRES cédulas inventadas con actividades de PyM
+  //    ficticias (una de ellas marcada como abandono del programa cardiovascular) y las
+  //    pintaba en el panel EXACTAMENTE igual que a los pacientes reales, además de dejar
+  //    state.pymFile en "Base_Simulada_PyM.xlsx". Un dato clínico fabricado indistinguible
+  //    del real no puede viajar en el script que se usa en consulta.
+  //  · openAgendamientoModal / openOrdenamientoModal / openLaboratoriosModal — publicaban,
+  //    con parámetro libre, los tres modales que terminan en ESCRITURAS clínicas (crear
+  //    cita, crear orden, volcar laboratorios en la historia). Cualquier script de la
+  //    página podía abrirlos con una cita fabricada. Se siguen invocando desde los botones
+  //    de cada tarjeta, dentro del script: no hacía falta ningún puente por window.
+  //  · vglLog / vglExportLogs — daban acceso a la bitácora que respalda el registro de
+  //    atenciones extemporáneas e inasistencias: permitían insertar entradas falsas o
+  //    desplazar las reales por el tope de 500, y disparar la descarga sin intervención
+  //    del médico. La exportación sigue disponible desde el botón de Ajustes.
+  //  · repaint / renderSettings — superficie expuesta sin necesidad; ya se llaman desde
+  //    los propios controles del panel.
   let pollTimer = null;
   function restartPolling() { if (!el || !el.root) return; if (pollTimer) clearInterval(pollTimer); pollTimer = setInterval(tick, CONFIG.POLL_MS); }
   // ---- Coordinación entre pestañas: SOLO UNA vigila y notifica (evita avisos repetidos) ----
@@ -1780,7 +1858,15 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       const viejas = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (!k || k.indexOf("vgl_ev_") !== 0) continue;
+        if (!k) continue;
+        // v11.0.1 — Las marcas anti-duplicado entre pestañas (vgl_n_*) se creaban una por
+        // aviso y no las borraba nadie: crecían sin límite. Su ventana útil son 12 s.
+        if (k.indexOf("vgl_n_") === 0) {
+          const t = +(localStorage.getItem(k) || 0);
+          if (!t || Date.now() - t > 86400000) viejas.push(k);
+          continue;
+        }
+        if (k.indexOf("vgl_ev_") !== 0) continue;
         const f = new Date(k.slice(7) + "T00:00:00");
         if (!isFinite(f) || f < lim) viejas.push(k);
       }
@@ -2233,10 +2319,18 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
       const idx = await readPym(sel.Name, dl.response);
       const eraRespaldo = state.pymFallback;
+      // v12.0.0 (del otro linaje) — El aviso de Windows solo sale cuando APORTA algo: la
+      // primera carga del día, la llegada del PyM real tras la base piloto, o una búsqueda
+      // pedida a mano. El script revisa la carpeta cada 10 minutos y vuelve a descargar en
+      // cuanto alguien guarda el Excel, así que sin esta condición el médico recibía el
+      // mismo cartel "PyM del día cargado" una y otra vez durante la consulta.
+      const teniaPymPreviamente = !!state.pymMTime;
       state.pymFallback = false;
       applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name);
-      notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : "📋 PyM del día cargado",
-        sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      if (!silent || eraRespaldo || !teniaPymPreviamente) {
+        notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
+          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      }
       return true;
     } catch (e) {
       if (!silent) setSummary("No pude leer el PyM del día (" + ((e && e.message) || e) + "). " + (state.pymFile ? "Sigo con lo que hay cargado." : "Probando la base piloto."), "warn");
@@ -2310,8 +2404,59 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       if (!ok) schedulePymBase();
     }, espera);
   }
-  function spToast(msg) {
-    try { let t = document.getElementById("vgl-sp"); if (!t) { t = document.createElement("div"); t.id = "vgl-sp"; t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:430px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:8px;padding:12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)"; (document.body || document.documentElement).appendChild(t); } t.textContent = "🛡️ Vigilante PyM · " + msg; } catch (e) {}
+  // v12.0.0 (del otro linaje) — Aviso de sincronización DESCARTABLE. La versión anterior
+  // creaba un cartel fijo sin botón de cierre ni autodescarte: se quedaba tapando la
+  // esquina de la pantalla el resto de la jornada. Ahora se cierra con la × , con un clic,
+  // o solo a los 6 s (durationMs = 0 para dejarlo fijo cuando haga falta).
+  let spToastTimer = null;
+
+  function dismissSpToast() {
+    try {
+      if (spToastTimer) { clearTimeout(spToastTimer); spToastTimer = null; }
+      const t = document.getElementById("vgl-sp");
+      if (t) {
+        t.style.opacity = "0";
+        t.style.transform = "translateY(10px)";
+        setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
+      }
+    } catch (e) {}
+  }
+
+  function spToast(msg, durationMs = 6000) {
+    try {
+      let t = document.getElementById("vgl-sp");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "vgl-sp";
+        t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:440px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:10px;padding:12px 34px 12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);cursor:pointer;transition:opacity 0.25s ease,transform 0.25s ease;opacity:0;transform:translateY(10px);";
+
+        const closeBtn = document.createElement("span");
+        closeBtn.style.cssText = "position:absolute;top:8px;right:10px;font-size:14px;font-weight:bold;color:#94A3B8;cursor:pointer;line-height:1;";
+        closeBtn.textContent = "×";
+        closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
+        t.appendChild(closeBtn);
+
+        t.onclick = () => dismissSpToast();
+        (document.body || document.documentElement).appendChild(t);
+        t.getBoundingClientRect();
+      }
+
+      let textNode = t.querySelector(".vgl-sp-text");
+      if (!textNode) {
+        textNode = document.createElement("span");
+        textNode.className = "vgl-sp-text";
+        t.insertBefore(textNode, t.firstChild);
+      }
+      textNode.textContent = "🛡️ Vigilante PyM · " + msg;
+
+      t.style.opacity = "1";
+      t.style.transform = "translateY(0)";
+
+      if (spToastTimer) clearTimeout(spToastTimer);
+      if (durationMs > 0) {
+        spToastTimer = setTimeout(() => dismissSpToast(), durationMs);
+      }
+    } catch (e) {}
   }
 
   function loadPymFile(file) {
@@ -3453,6 +3598,16 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(251,191,36,.55)}
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
+         PyM y botones) pero su CSS nunca llegó al archivo: sin estas reglas los elementos
+         quedaban apilados en vertical, el nombre perdía la elipsis y los botones de acción
+         se iban de sitio. Se añaden aquí para que el rediseño funcione como estaba pensado. */
+      .vgl-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+      .vgl-card-time-wrap{display:flex;align-items:center;gap:8px;min-width:0}
+      .vgl-card-badges-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .vgl-card-mid{display:flex;align-items:baseline;gap:8px;margin-top:6px;min-width:0}
+      .vgl-card-btm{display:flex;align-items:center;gap:8px;margin-top:2px;min-width:0}
+      .vgl-card-btm .vgl-pyms{flex:1 1 auto;min-width:0}
       .vgl-cdot{
         width:10px;height:10px;border-radius:50%;flex:0 0 auto;
         box-shadow:0 0 5px currentColor;
@@ -3863,6 +4018,15 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       #vgl-agendar-modal.light .vgl-agm-slots{
         background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.13)
       }
+      /* v12.0.0 — Estas tres clases se usaban en el modal pero NUNCA estaban definidas:
+         el cartel verde de "Cita asignada exitosamente" salía sin ningún estilo y los
+         botones de turno y de plazo perdían el ajuste de línea que tenían en línea. */
+      .vgl-msg-success{
+        background:rgba(16,185,129,.25);color:#10b981;font-size:14px;padding:12px;
+        text-align:center;margin-top:14px;border:1px solid #10b981;border-radius:10px;
+      }
+      .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
+      .vgl-agm-pbtn.vgl-sm{font-size:12px;padding:3px 9px}
       .vgl-agm-sbtn{
         background:#1e293b;color:#ffffff;
         border:1px solid #475569;
@@ -4101,7 +4265,13 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     } catch (e) {}
     if (!srcStr || typeof srcStr !== "string") return;
     try {
-      const uIdM = /UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr);
+      // v11.0.1 — LISTA BLANCA DE ORIGEN. Antes se aceptaba cualquier "UsuarioId=" de
+      // cualquier URL del registro de red, y varios servicios usan ese nombre para el id
+      // del PACIENTE (APIEnvioCorreo, APIHCHealth/Morbilidad) o de otro usuario (digiturno).
+      // El "médico activo" podía acabar siendo el identificador de un paciente, y con él se
+      // creaban las citas y las órdenes.
+      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/(APIAcceso|ApiIntegracionEverestDigiturno)\//i;
+      const uIdM = ORIGEN_FIABLE.test(srcStr) ? (/UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr)) : null;
       if (uIdM && uIdM[1]) {
         const id = parseInt(uIdM[1], 10);
         if (id > 0) state.activeDoctor.id = id;
@@ -4111,7 +4281,45 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         const name = decodeURIComponent(uNameM[1]).replace(/\+/g, " ").trim();
         if (name && name.length > 3) state.activeDoctor.name = name;
       }
+
+      // v12.0.2 — FUENTE REAL DE LA IDENTIDAD DEL MÉDICO.
+      // El nombre completo NO viaja en ninguna URL de Everest: los raspados de arriba nunca
+      // encuentran nada (el único "NombreUsuario=" del registro de red es de digiturno y
+      // lleva el nombre del PACIENTE, no el del profesional). Por eso, mientras existió el
+      // nombre cableado del autor, el filtro "mi agenda" parecía funcionar — en realidad no
+      // detectaba a nadie. Al retirarlo quedó al descubierto: sin nombre no se puede
+      // reconocer la agenda propia y se ofrecen turnos de otros profesionales.
+      //
+      // Everest sí publica la ficha del usuario en sesión, con id y nombre completo:
+      //   GET /apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/<login>
+      //   -> { data: { id: 515, nombreCompleto: "…", perfilCodigo: "PROFESIONAL" } }
+      // Aquí se detecta el <login> cuando la propia aplicación llama a ese endpoint y se
+      // consulta una sola vez para resolver id y nombre de forma autoritativa.
+      const perfilM = /\/apiviva\/APIAcceso\/api\/ParametrizacionLista\/GetUsuarioPerfil\/([^/?#]+)/i.exec(srcStr);
+      if (perfilM && perfilM[1]) resolverMedicoPorPerfil(decodeURIComponent(perfilM[1]));
     } catch (e) {}
+  }
+
+  // Consulta (una sola vez por login) la ficha del usuario en sesión para fijar el médico
+  // activo. Es de SOLO LECTURA y no bloquea nada: si falla, el panel sigue avisando de que
+  // no identificó la agenda propia y el médico puede escribir su nombre en Ajustes.
+  let perfilPedido = "";
+  async function resolverMedicoPorPerfil(login) {
+    if (!login || perfilPedido === login) return;
+    perfilPedido = login;
+    try {
+      const r = await pageFetchJson(`/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/${encodeURIComponent(login)}`);
+      const d = r && r.data;
+      if (!d) return;
+      const nombre = String(d.nombreCompleto || "").trim();
+      const id = parseInt(d.id, 10);
+      if (nombre.length > 3) state.activeDoctor.name = nombre;
+      if (id > 0) state.activeDoctor.id = id;
+      if (nombre || id) {
+        console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
+        state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
+      }
+    } catch (e) { console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
   }
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
@@ -4147,7 +4355,13 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
-    const maxRetries = 3;
+    // v11.0.1 — NO se reintenta una ESCRITURA. Este núcleo reintentaba hasta 4 veces y,
+    // en cada vuelta, repetía la petición por una segunda vía (GM_xmlhttpRequest): hasta
+    // OCHO envíos del mismo POST. En AsignarTurno son ocho citas para el mismo paciente;
+    // en GuardarOrdenamiento, ocho órdenes clínicas repetidas.
+    const metodo = String((options && options.method) || "GET").toUpperCase();
+    const esEscritura = metodo !== "GET" && metodo !== "HEAD" && !(options && options.__idempotent === true);
+    const maxRetries = esEscritura ? 0 : 3;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       let isError = false;
@@ -4174,6 +4388,9 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       }
 
       if (isError) {
+        // v11.0.1 — En una escritura NO se reenvía por la segunda vía: la primera pudo
+        // llegar al servidor y solo haberse perdido la respuesta. Duplicaría la cita.
+        if (esEscritura) { console.warn("[Vigilante] escritura fallida, NO se reintenta para no duplicar:", url); return null; }
         if (typeof GM_xmlhttpRequest !== "undefined") {
           try {
             const result = await new Promise((resolve, reject) => {
@@ -4236,8 +4453,15 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         const fromData = extractPatientId(res.data);
         if (fromData) return fromData;
       }
+      // v11.0.1 — Al bajar por las ramas del objeto, NO entrar en las que se sabe que NO
+      // contienen al paciente. Sin esta lista, una ficha sin `id` devolvía el primer entero
+      // positivo que encontrara: el id de la EPS (2) o el de una sede (12). Con ese número
+      // se agendaba y se ordenaba: paciente equivocado.
+      const NO_PACIENTE = new Set(["eps", "sedes", "contratos", "planes_Medicos", "programasPaciente",
+        "ubicacionesBOT", "mediosTransporte", "puntosReferenciaResidencia", "puntosReferenciaUbicacionHabitual",
+        "prestador", "remisor", "usuarioCreacion"]);
       for (const k of Object.keys(res)) {
-        if (k !== "data" && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
+        if (k !== "data" && !NO_PACIENTE.has(k) && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
           const fromSub = extractPatientId(res[k]);
           if (fromSub) return fromSub;
         }
@@ -4248,16 +4472,23 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)
   async function apiAccesoBuscarPaciente(docId) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
 
     const paths = [
-      `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
-      `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
+      // v12.0.3 — RETIRADAS las dos rutas de APIPacienteV2: en la consola del consultorio
+      // devuelven 404 para TODOS los pacientes, sin excepción. Al ir primeras en la
+      // cascada, cada búsqueda gastaba dos peticiones fallidas antes de llegar a la que sí
+      // funciona (APIAcceso), y como la precarga al pasar el cursor por las tarjetas también
+      // las dispara, la agenda entera generaba un goteo constante de 404 contra el servidor.
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
-      `/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(cleanDoc)}`,
+      // v12.0.0 — RETIRADA la quinta ruta: pasaba la CÉDULA en el parámetro idPaciente,
+      // que espera el identificador INTERNO de Everest. Son dos numeraciones distintas, así
+      // que una cédula puede coincidir con el id interno de OTRA persona y devolver su
+      // ficha. Además solo se disparaba cuando fallaban las cuatro anteriores, es decir,
+      // justo cuando nadie iba a sospechar del resultado.
     ];
 
     for (const path of paths) {
@@ -4272,19 +4503,19 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
 
   // Interfaz con APIAcceso: Buscar Agendas Disponibles (Soporta Medicina General, Med. Interna, Nutrición, Psicología y Odontología)
   async function apiAccesoBuscarCitasDisponibles(pacienteId, fechaIso, especialidadId) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const espId = especialidadId || 12;
     const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
     const path2 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=0&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
 
     try {
-      const res = await pageFetchJson(path1, { method: "POST", body: "{}" });
+      const res = await pageFetchJson(path1, { method: "POST", body: "{}", __idempotent: true });
       const list = extractAgendasList(res);
       if (list && list.length) return res;
     } catch (e) {}
 
     try {
-      return await pageFetchJson(path2, { method: "POST", body: "{}" });
+      return await pageFetchJson(path2, { method: "POST", body: "{}", __idempotent: true });
     } catch (e) {
       return {};
     }
@@ -4329,6 +4560,27 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     });
   };
 
+  // v11.0.1 — Igual que gmPostJson pero además informa del RESULTADO HTTP. Hacía falta
+  // porque el agendamiento de laboratorio daba por buena la cita sin mirar la respuesta.
+  // Se añade aparte para no cambiar el valor de retorno de gmPostJson, que usan otros
+  // puntos del script.
+  const gmPostJsonEx = async (url, data = {}) => {
+    return new Promise((resolve) => {
+      if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, status: 0, data: null }); return; }
+      GM_xmlhttpRequest({
+        method: "POST", url, headers: { "Content-Type": "application/json" },
+        data: JSON.stringify(data), timeout: 15000,
+        onload: (r) => {
+          let parsed = null;
+          try { parsed = JSON.parse(r.responseText); } catch (e) {}
+          resolve({ ok: r.status >= 200 && r.status < 300, status: r.status, data: parsed, text: r.responseText });
+        },
+        onerror: () => resolve({ ok: false, status: 0, data: null }),
+        ontimeout: () => resolve({ ok: false, status: 0, data: null }),
+      });
+    });
+  };
+
   function format12hTime(timeStr) {
     if (!timeStr) return "";
     const parts = String(timeStr).split(":");
@@ -4347,31 +4599,55 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${fechaIso}`;
       const resAg = await gmPostJson(urlTurnos, {});
       const turnos = extractAgendasList(resAg);
+      // v11.0.1 — SIN "cupo por defecto". Antes, si la hora elegida por el médico ya no
+      // estaba libre (o no venía), se caía a `turnos[0]`: el paciente quedaba citado
+      // EN SILENCIO en el primer cupo del día (normalmente las 6:00 a. m.), una hora que
+      // nadie eligió y que el médico nunca llegaba a ver.
       let turnoElegido = null;
-      if (turnos && turnos.length) {
-        if (horaSeleccionada) {
-          turnoElegido = turnos.find(t => String(t.hora || "").includes(horaSeleccionada)) || turnos[0];
-        } else {
-          turnoElegido = turnos[0];
-        }
+      if (turnos && turnos.length && horaSeleccionada) {
+        turnoElegido = turnos.find((t) => String(t.hora || "") === String(horaSeleccionada)) || null;
       }
-      const horaFinal = (turnoElegido && turnoElegido.hora) || horaSeleccionada || "07:00:00";
-      const agendaId = (turnoElegido && (turnoElegido.agendaId || turnoElegido.id)) || "282531";
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=3022813246&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
-      const resBook = await gmPostJson(urlBook, {});
+      if (!turnoElegido) {
+        spToast("⚠ El horario de laboratorio elegido ya no está disponible. NO se agendó la toma de muestras: hágalo manualmente en AppCita.");
+        return false;
+      }
+      // v11.0.1 — Sin valores fabricados: el "07:00:00" y sobre todo el agendaId
+      // "282531" estaban cableados, de modo que un turno sin datos habría citado al
+      // paciente en una agenda arbitraria. Ahora, si falta cualquiera de los dos, se aborta.
+      const horaFinal = turnoElegido.hora || horaSeleccionada;
+      const agendaId = turnoElegido.agendaId || turnoElegido.id;
+      // v11.0.1 — El número 3022813246 estaba CABLEADO: se enviaba como teléfono de
+      // TODOS los pacientes y era el destinatario de TODOS los SMS de laboratorio. Se
+      // sustituye por el literal 0, que es lo que manda la aplicación oficial cuando no
+      // lleva número (4 de 6 capturas reales).
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=0&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      const resBook = await gmPostJsonEx(urlBook, {});
+      console.log("[Vigilante Lab] AgendarCita →", resBook.status, resBook.text);
 
-      // Enviar SMS de confirmación en segundo plano
-      const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=3022813246&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
-      gmGet(urlSms, "", "", 5000).catch(() => {});
+      // v11.0.1 — Se comprueba que el servidor haya aceptado la cita. Antes se anunciaba
+      // "Cita de Laboratorio agendada" pasara lo que pasara: con la red caída o con un
+      // rechazo del servidor, el médico se iba convencido de que el paciente tenía su
+      // toma de muestras, y no la tenía.
+      if (!resBook.ok) {
+        spToast(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
+        return false;
+      }
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}`);
-    } catch(e) {}
+      // v11.0.1 — RETIRADO el SMS de laboratorio. Iba a un número cableado (no al del
+      // paciente) y con codigoCita=AgendaId, que es el identificador de la AGENDA, no el
+      // de la cita: en las capturas reales un mismo AgendaId genera varios codigoCita
+      // distintos. Se reactivará cuando se capture la respuesta real de AgendarCita y se
+      // sepa de qué campo sale el identificador correcto.
+
+      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}. El paciente NO recibe SMS del laboratorio: recuérdeselo.`);
+      return true;
+    } catch(e) { console.warn("[Vigilante Lab] error agendando laboratorio:", e); return false; }
   }
 
   // Interfaz API: Finalizar Ticket Digiturno al terminar atención
   async function apiDigiturnoFinalizarTicket(citaId) {
     if (!citaId) return;
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const b64Cita = btoa(String(citaId));
     const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=${uId}&EverestId=${encodeURIComponent(b64Cita)}`;
     try { await pageFetchJson(path); } catch (e) {}
@@ -4390,9 +4666,11 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   // Interfaz con APIAcceso: Validar Agenda
   async function apiAccesoAgdValidarAgenda(agendaId, pacienteId) {
     const path = `/apiviva/APIAcceso/api/Acceso/AgdValidarAgenda?agendaId=${agendaId}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;
+    // v11.0.1 — Devuelve el veredicto en vez de descartarlo. Es una compuerta del servidor
+    // ("Superó las validaciones" / isError) y el script la estaba ignorando por completo.
     try {
-      await pageFetchJson(path);
-    } catch (e) {}
+      return await pageFetchJson(path);
+    } catch (e) { console.warn("[Vigilante] AgdValidarAgenda falló:", e); return null; }
   }
 
   // Interfaz con APIAcceso: Obtener Turnos / Horas Libres
@@ -4401,9 +4679,18 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     return pageFetchJson(path);
   }
 
+  // Celular al que se envió el último SMS de recordatorio (para mostrarlo en el aviso de
+  // confirmación: el médico debe poder ver a qué número salió). Vacío = no se envió.
+  let ultimoSmsEnviado = "";
+
   // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
-  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
+    const uId = state.activeDoctor.id || S.medicoId || 0;
+    // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
+    // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
+    // otro profesional. Ahora se aborta de forma visible y el médico puede fijar su
+    // identificador en Ajustes.
+    if (!uId) return { error: true, mensaje: "No se pudo identificar al médico en Everest. NO se creó la cita. Indique su identificador en Ajustes." };
     const docName = stripAccents(String(state.activeDoctor.name || S.medicoNombre || "").toUpperCase());
 
     const rcvDoctors = ["PALENCIA", "BPALENCIA", "PINO", "MPINO", "ESTRADA", "EESTRADA", "MIJARES", "SMIJARES"];
@@ -4414,8 +4701,41 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         const marc = encodeURIComponent(marcacion || "Consulta");
         const obs = encodeURIComponent(observacion || "");
 
-        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null&Tratamiento=false&Consulta=true&Emergencia=false&PresupuestoId=0`;
-        return pageFetchJson(path, { method: "POST", body: "{}" });
+        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null` + (programaId ? `&ProgramaId=${encodeURIComponent(programaId)}` : "") + `&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
+        console.log("[Vigilante] AsignarTurno →", { Marcacion: marcacion || "NA", Consulta: false, swIsPyM: swPyM, SwProgramaEspecial: swProgEspecial });
+        const res = await pageFetchJson(path, { method: "POST", body: "{}" });
+
+        // ---- SMS de recordatorio al paciente -------------------------------------
+        // v11.0.1. Replica lo que hace la aplicación oficial de Everest tras agendar
+        // (capturado: EnviarSMS?Telefono=...&AgendaTurnoId=..., y AsignarTurno devuelve
+        // swSms:false, o sea que el servidor NO lo manda solo). Con tres cautelas:
+        //  1) Solo se envía si la cita se creó DE VERDAD (error:false + radicado), para no
+        //     avisar al paciente de una cita inexistente.
+        //  2) Un solo disparo (fetch directo). Por pageFetchJson se reintentaría hasta 4
+        //     veces con doble vía: hasta OCHO mensajes al mismo paciente.
+        //  3) Se puede apagar desde Ajustes (S.smsRecordatorio).
+        // NOTA: en las 26 telemetrías, los 2 de 2 envíos de SMS de la aplicación oficial
+        // fueron precedidos por un clic manual del operador; aquí es automático a petición
+        // expresa del médico, por eso queda el interruptor y el aviso en pantalla.
+        ultimoSmsEnviado = "";
+        const creada = res && res.error === false && res.data && (Number(res.data.radicado) > 0 || /Agendada Correctamente/i.test(String(res.data.motivo || "")));
+        // v12.2.0 — El número YA NO se busca aquí a ciegas: llega desde el modal, donde el
+        // médico lo ha visto y ha podido corregirlo. Motivo: en las telemetrías del propio
+        // consultorio hay un mismo celular registrado para DOS pacientes distintos, así que
+        // enviar al "celular de la ficha" sin mirarlo puede avisar a la persona equivocada
+        // de la cita de otra, con su nombre y su fecha.
+        const cel = String(celularSms || "").replace(/\D/g, "");
+        if (creada && S.smsRecordatorio && cel.length >= 7) {
+          const smsUrl = location.origin + `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(cel)}&AgendaTurnoId=${turnoId}`;
+          (FETCH0 || window.fetch)(smsUrl, { credentials: "include", headers: { Accept: "application/json" } })
+            .then(() => { console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId); })
+            .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
+          ultimoSmsEnviado = cel;
+        } else if (creada && S.smsRecordatorio) {
+          console.warn("[Vigilante] sin celular válido: no se envía SMS");
+        }
+
+        return res;
       }
 
   // [BLINDADO v8.2.0 DOM-04] Extractor universal de Agendas movido a scope de módulo.
@@ -4529,7 +4849,6 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     const closeMod = () => {
       xBtn?.removeEventListener("click", closeMod);
@@ -4537,7 +4856,6 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     const xBtn = modal.querySelector("#vgl-labs-x");
     const cancelBtn = modal.querySelector("#vgl-labs-close");
@@ -4555,8 +4873,10 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES VIA BRIDGE / API
     try {
       const atheneaData = await getAtheneaIdSolicitudAuto(apt.doc_id);
-      if (atheneaData && atheneaData.idSolicitud) {
-        const labsArr = await fetchAtheneaLabs(atheneaData.idSolicitud);
+      // v12.0.0 — Antes se comprobaba `atheneaData.idSolicitud` sobre un valor que ya era
+      // un número: la condición NUNCA se cumplía y esta consulta jamás llegaba a ejecutarse.
+      if (atheneaData) {
+        const labsArr = await fetchAtheneaLabs(atheneaData);
         if (labsArr && labsArr.length) {
           labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
         }
@@ -4580,32 +4900,38 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       }
     } catch (e) {}
 
-    // Fallback con datos clínicos de muestra para simulación / paciente sin registros
+    // v12.0.0 — RETIRADOS los "datos clínicos de muestra". Cuando la consulta real no
+    // devolvía nada, se inventaban SIETE resultados de laboratorio (glicemia 98 mg/dL,
+    // colesterol total 224 "Elevado", "Negativo para LIE"…) y se pintaban en la misma
+    // tabla y con la misma etiqueta "Athenea (Principal)" que los reales: el médico no
+    // tenía forma de distinguirlos. Ahora, sin resultados, se dice que no los hay.
     if (!todosLabs.length) {
-      const atheneaDemoLabs = [
-        { fecha: "2026-08-01", examen: "Glicemia Basal en Suero", resultado: "98 mg/dL", referencia: "70 - 100 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol Total", resultado: "224 mg/dL", referencia: "< 200 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol HDL", resultado: "42 mg/dL", referencia: "> 40 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol LDL", resultado: "145 mg/dL", referencia: "< 100 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Triglicéridos en Suero", resultado: "185 mg/dL", referencia: "< 150 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Creatinina en Suero", resultado: "0.85 mg/dL", referencia: "0.6 - 1.1 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Tamización de Cérvix (VPH / Citología)", resultado: "Negativo para LIE", referencia: "Sin atipia celular", origen: "Athenea (Principal)" }
-      ];
-      todosLabs.push(...atheneaDemoLabs);
+      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+      return;
     }
 
     let rowsHtml = todosLabs.map(lab => {
       const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || "Sin fecha";
-      const examen = lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.nombre || lab.Prueba || "Paraclínico";
-      const resultado = lab.resultado || lab.Resultado || lab.valor || lab.Valor || "Registrado";
-      const referencia = lab.referencia || lab.ValoresReferencia || lab.unidades || lab.Estado || "";
+      // v12.0.0 — Se añade NombreParametro al principio: es el campo con el que Athenea
+      // nombra el examen (el mismo que ya lee _matchLabInWhitelist). Sin él, TODA fila
+      // venida de Athenea se pintaba con el texto genérico "Paraclínico".
+      const examen = lab.NombreParametro || lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.nombre || lab.Prueba || "Examen sin nombre";
+      const resultado = lab.Resultado || lab.resultado || lab.valor || lab.Valor || "—";
+      // v12.0.0 — Fuera `lab.unidades` de esta cadena: unas unidades ("mg/dL") no son un
+      // rango de referencia, y colarlas aquí ensucia la única señal que usa el resaltado.
+      const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || "";
+      // v12.0.0 — El color por defecto ya NO es verde. Pintar de verde todo lo que no
+      // reconoce equivale a declarar "normal" un resultado que el script no ha
+      // interpretado: es una afirmación clínica que no le corresponde hacer. Ahora solo
+      // marca en rojo lo que la PROPIA fuente declara elevado o anormal; el resto va en
+      // color de texto neutro, sin insinuar nada.
       const esAlerta = String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal");
 
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
           <td style="padding:8px;font-size:12px;opacity:.85">${escapeHtml(String(fecha))}</td>
           <td style="padding:8px;font-size:12.5px;font-weight:600">${escapeHtml(String(examen))}</td>
-          <td style="padding:8px;font-size:12.5px;color:${esAlerta ? "#ef4444" : "#10b981"};font-weight:700">${escapeHtml(String(resultado))}</td>
+          <td style="padding:8px;font-size:12.5px;color:${esAlerta ? "#ef4444" : "inherit"};font-weight:700">${escapeHtml(String(resultado))}</td>
           <td style="padding:8px;font-size:11.5px;opacity:.7">${escapeHtml(String(referencia))}</td>
           <td style="padding:8px;font-size:11px"><span style="background:${lab.origen.includes("Athenea") ? "rgba(37,99,235,.35)" : "rgba(255,255,255,.1)"};color:${lab.origen.includes("Athenea") ? "#93c5fd" : "#fff"};padding:3px 7px;border-radius:4px;font-weight:600">${escapeHtml(lab.origen)}</span></td>
         </tr>
@@ -4640,7 +4966,7 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     document.querySelectorAll("#vgl-ordenar-modal").forEach(e => e.remove());
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "BRANDON JESUS PALENCIA MARTINEZ";
+    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-agendar-modal";   // v8.2.1 fix: was "vgl-ordenar-modal" (ID mismatch -> CSS position:fixed missing -> modal inlined in page)
     modal.className = isLight() ? "light" : "";
@@ -4690,13 +5016,39 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         </div>
 
         <div class="vgl-agm-sec">
+          <!-- v12.1.0 — Selector de PROGRAMA. Confirmado con la captura del consultorio:
+               la aplicación oficial muestra aquí un desplegable con los programas del
+               paciente y el médico ELIGE uno; ese identificador viaja como ProgramaId en
+               AsignarTurno. No se puede deducir: en la captura, para una agenda de HTA el
+               médico eligió "Nefroprotección". Por eso se pregunta, igual que Everest. -->
+          <div id="vgl-agm-prog-box" style="display:none;margin-bottom:10px">
+            <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:</label>
+            <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
+          </div>
           <label class="vgl-agm-check-lbl">
             <input type="checkbox" id="vgl-agm-pym-chk" checked>
             <span>¿Es cita para actividades del programa RCV / Prevención?</span>
           </label>
+          <!-- v12.2.0 — El SMS ya no sale a ciegas. Se muestra el celular registrado, se
+               puede corregir antes de confirmar y se puede desmarcar. Motivo: en las
+               telemetrías del propio consultorio hay un mismo celular registrado para DOS
+               pacientes distintos; enviando sin mirar, uno recibiría el aviso de la cita
+               del otro, con su nombre y su fecha. La aplicación oficial también lo enseña
+               antes de enviar. -->
+          <div id="vgl-agm-sms-box" style="margin-top:8px;padding:10px;background:rgba(37,99,235,.12);border:1px solid #2563eb;border-radius:8px">
+            <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
+              <input type="checkbox" id="vgl-agm-sms-chk" checked>
+              <span>📱 Enviar SMS de recordatorio al paciente</span>
+            </label>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc;flex-wrap:wrap">
+              <label for="vgl-agm-sms-tel" style="color:#93c5fd;font-weight:700">Celular:</label>
+              <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;padding:5px 9px;font-size:13px" placeholder="cargando…">
+              <span id="vgl-agm-sms-nota" style="opacity:.8"></span>
+            </div>
+          </div>
           <div class="vgl-lab-box" style="margin-top:8px;padding:10px;background:rgba(16,185,129,.14);border:1px solid #10b981;border-radius:8px">
             <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
-              <input type="checkbox" id="vgl-agm-lab-chk" style="accent-color:#10b981">
+              <input type="checkbox" id="vgl-agm-lab-chk" disabled style="accent-color:#10b981">
               <span>🧪 Pre-agendar Toma de Muestras (5 días hábiles antes: <b id="vgl-lab-date-lbl" style="color:#34d399">--/--/----</b>)</span>
             </label>
             <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc">
@@ -4717,11 +5069,11 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
     let pacienteIdAcceso = null;
+    let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
 
     const xBtn = modal.querySelector("#vgl-agm-x");
@@ -4737,7 +5089,6 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -4762,11 +5113,17 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         try {
           const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${suggestedLab.iso}`;
           const resAg = await gmPostJson(urlTurnos, {});
+          // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de
+          // fecha mientras esta consulta viajaba, sus horas pertenecen a otro día y no
+          // deben pintarse (la ruta principal ya tenía esta guarda; aquí faltaba).
+          if (token !== _cargarHorasToken) return;
           const turnos = extractAgendasList(resAg);
+          // v11.0.1 — Se descartan los turnos sin hora real en vez de fabricar "07:00:00".
+          const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
           if (labTimeSel) {
-            if (turnos && turnos.length > 0) {
-              labTimeSel.innerHTML = turnos.map((t, idx) => {
-                const hRaw = t.hora || t.horaTexto || t.Hora || "07:00:00";
+            if (turnosConHora.length > 0) {
+              labTimeSel.innerHTML = turnosConHora.map((t, idx) => {
+                const hRaw = t.hora || t.horaTexto || t.Hora;
                 const hFmt = format12hTime(hRaw);
                 const selected = idx === 0 ? "selected" : "";
                 return `<option value="${escapeHtml(hRaw)}" ${selected}>${escapeHtml(hFmt)}</option>`;
@@ -4779,6 +5136,7 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
           }
         } catch(e) {
           if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
+          if (labChk) { labChk.checked = false; labChk.disabled = true; }
         }
       })();
 
@@ -4800,6 +5158,40 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         return;
       }
 
+      // v12.1.0 — Se cargan los programas del paciente para el selector, una sola vez por
+      // modal. Solo se ofrecen los marcados swProgramaEspecial (los mismos que lista la
+      // aplicación oficial: en la captura, "Salud Mental" no aparecía y sí las otras dos).
+      if (!progCargados) {
+        progCargados = true;
+        try {
+          const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
+          const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
+          if (progs.length && box && sel) {
+            sel.innerHTML = progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${i === 0 ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
+            box.style.display = "block";
+          }
+
+          // v12.2.0 — Celular del SMS: se muestra el registrado para que el médico lo vea
+          // y pueda corregirlo. Si el paciente no tiene ninguno, la casilla del SMS se
+          // desmarca y se dice por qué, en vez de intentar un envío que no llegaría.
+          const tel = String((det && det.data && (det.data.celular || det.data.telefono)) || "").replace(/\D/g, "");
+          const inpTel = modal.querySelector("#vgl-agm-sms-tel");
+          const chkSms = modal.querySelector("#vgl-agm-sms-chk");
+          const notaSms = modal.querySelector("#vgl-agm-sms-nota");
+          if (inpTel) {
+            inpTel.value = tel;
+            inpTel.placeholder = tel ? "" : "sin celular registrado";
+            if (!tel) {
+              if (chkSms) { chkSms.checked = false; }
+              if (notaSms) notaSms.textContent = "— el paciente no tiene celular en su ficha";
+            } else if (notaSms) {
+              notaSms.textContent = "— verifíquelo antes de confirmar";
+            }
+          }
+        } catch (e) { console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e); }
+      }
+
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
@@ -4809,14 +5201,32 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         return;
       }
 
-      let agendasFiltradas = agendas;
+      // v11.0.1 — FILTRO POR FECHA. La respuesta del servidor mezcla agendas de VARIOS días
+      // (en la captura real: 123 agendas repartidas en 7 fechas distintas, incluidas 3 del
+      // mismo día de la consulta). Sin este filtro se podían ofrecer turnos de un día que
+      // no era el que el médico eligió en los chips.
+      const agendasDelDia = agendas.filter((a) => String(a.fechaAgenda || "").trim() === selectedDateInfo.fmt);
+      if (!agendasDelDia.length) {
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${selectedDateInfo.fmt}. Elija otro día del rango (±3 días).</div>`;
+        return;
+      }
+
+      let agendasFiltradas = agendasDelDia;
+      let avisoAgendaAjena = "";
       if (selectedEspId === 12) {
-        const normMedDoc = stripAccents(doctorName.toLowerCase());
-        const miAgenda = agendas.find((a) => {
+        const normMedDoc = stripAccents(String(doctorName || "").toLowerCase()).trim();
+        // OJO: con el nombre vacío, `nm.includes("")` sería SIEMPRE cierto y elegiría la
+        // primera agenda de la lista (la de otro profesional). Sin nombre no se filtra.
+        const toks = normMedDoc.split(/\s+/).filter(Boolean);
+        const miAgenda = !normMedDoc ? null : agendasDelDia.find((a) => {
           const nm = stripAccents(String(a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre || "").toLowerCase());
-          return nm.includes(normMedDoc) || normMedDoc.split(" ").every((tok) => tok.length > 2 && nm.includes(tok));
+          return nm.includes(normMedDoc) || (toks.length > 0 && toks.every((tok) => tok.length > 2 && nm.includes(tok)));
         });
+        // v11.0.1 — Antes, si no se reconocía la agenda propia se caía EN SILENCIO a las
+        // agendas de TODOS los profesionales, y la etiqueta del turno ocultaba el nombre
+        // en Medicina General: el médico podía agendar en la agenda de otro sin notarlo.
         if (miAgenda) agendasFiltradas = [miAgenda];
+        else avisoAgendaAjena = "⚠ No se identificó su agenda propia. Los turnos de abajo pueden ser de OTRO profesional — verifique el nombre antes de confirmar.";
       }
 
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
@@ -4826,12 +5236,17 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         if (token !== _cargarHorasToken) return;
         const agendaId = ag.agendaId || ag.id || ag.AgendaId || ag.idAgenda || ag.IdAgenda || ag.AGendadId;
         const nombreProf = ag.medico || ag.usuarioNombreCompleto || ag.nombreMedico || ag.profesional || ag.nombre || "Profesional";
-        await apiAccesoAgdValidarAgenda(agendaId, pacienteIdAcceso);
+        // v11.0.1 — El veredicto de la validación ya no se tira a la basura: si el servidor
+        // dice explícitamente que esta agenda no admite al paciente, se salta en vez de
+        // ofrecer turnos que después fallarán al confirmar.
+        const val = await apiAccesoAgdValidarAgenda(agendaId, pacienteIdAcceso);
+        const vd = val && val.data;
+        if (vd && vd.isError === true) { console.warn("[Vigilante] agenda descartada por validación:", agendaId, vd.mensaje); continue; }
 
         const resTurnos = await apiAccesoObtenerTurnos(agendaId, selectedDateInfo.fmt, pacienteIdAcceso);
         const turnos = extractAgendasList(resTurnos);
         if (turnos && turnos.length) {
-          turnos.forEach((t) => turnosAcumulados.push({ turno: t, profesional: nombreProf }));
+          turnos.forEach((t) => turnosAcumulados.push({ turno: t, profesional: nombreProf, sede: ag.sede || "", fecha: ag.fechaAgenda || selectedDateInfo.fmt }));
         }
       }
 
@@ -4843,9 +5258,27 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       }
 
       slotsEl.innerHTML = "";
-      turnosAcumulados.forEach(({ turno: t, profesional }) => {
+      // v11.0.1 — Solo turnos activos. "ACT" es el único estado visto en campo; si el
+      // campo no viene, se asume activo para no dejar al médico sin poder agendar.
+      const turnosLibres = turnosAcumulados.filter((x) => {
+        const e = String((x.turno && x.turno.estado) || "ACT").toUpperCase().trim();
+        return e === "" || e === "ACT";
+      });
+      if (!turnosLibres.length) {
+        slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${selectedDateInfo.fmt} pero ninguno está activo. Elija otro día.</div>`;
+        return;
+      }
+      if (avisoAgendaAjena) {
+        const w = document.createElement("div");
+        w.className = "vgl-agm-err";
+        w.textContent = avisoAgendaAjena;
+        slotsEl.appendChild(w);
+      }
+      turnosLibres.forEach(({ turno: t, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
-        const labelCompleto = selectedEspId === 12 ? `✓ ${escapeHtml(horaTxt)}` : `✓ ${escapeHtml(horaTxt)} (${escapeHtml(profesional)})`;
+        // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
+        // Medicina General, que es justo donde el fallback podía colar otra agenda).
+        const labelCompleto = `✓ ${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
         btn.className = "vgl-agm-sbtn";
         btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "");
@@ -4921,17 +5354,35 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
 
       console.log("[Vigilante Agendamiento] Asignando turno RCV:", { turnoId, pacienteIdAcceso, fechaIso: selectedDateInfo.iso, obs, isPyM, selectedEspId });
       vglLog("APPCITA", "AsignarTurnoRequested", { turnoId, pacienteIdAcceso, fecha: selectedDateInfo.iso });
-      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "Consulta");
-      vglLog("APPCITA", "AsignarTurnoResponse", { res });
-        const isLabChecked = modal.querySelector("#vgl-agm-lab-chk")?.checked;
-        const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
-        if (isLabChecked && apt.doc_id) {
-          const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
-          apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
-        }
+      // v11.0.1 — Marcacion="NA": el valor que envía la aplicación oficial en la única
+      // secuencia capturada que terminó en "Agendada Correctamente". "Consulta" no aparece
+      // ni una vez en las 1527 llamadas registradas: era un valor inventado.
+      // v12.1.0 — El programa que eligió el médico viaja como ProgramaId, igual que en
+      // la aplicación oficial. Si el paciente no tiene programas, va vacío y no se envía.
+      // v12.2.0 — El SMS solo sale si la casilla está marcada, y al número que el
+      // médico tiene a la vista (puede haberlo corregido).
+      const smsChk = modal.querySelector("#vgl-agm-sms-chk");
+      const smsTel = modal.querySelector("#vgl-agm-sms-tel");
+      const celularSms = (smsChk && smsChk.checked && smsTel) ? String(smsTel.value || "").replace(/D/g, "") : "";
+      const progSel = modal.querySelector("#vgl-agm-prog-sel");
+      const programaId = (progSel && progSel.value) || "";
+      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId, celularSms);
+      // v12.0.0 — Se registran solo campos PLANOS y acotados. sanitizePII únicamente
+      // censura valores de primer nivel, así que pasar el objeto `res` entero podía escribir
+      // datos del paciente en la bitácora local sin filtrar.
+      vglLog("APPCITA", "AsignarTurnoResponse", { error: !!(res && res.error), radicado: Number((res && res.data && res.data.radicado) || 0), motivo: String((res && res.data && res.data.motivo) || "") });
       console.log("[Vigilante Agendamiento] Respuesta AsignarTurno:", res);
 
-      const ok = res && (res.error === false || res.data || res.mensaje || res.isSuccess || !res.error);
+      const isLabChecked = modal.querySelector("#vgl-agm-lab-chk")?.checked;
+      const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
+
+      // v11.0.1 — ÉXITO ESTRICTO. Antes bastaba con que la respuesta trajera cualquier
+      // `mensaje` (incluido uno de ERROR) para dar la cita por creada: se mostraba
+      // "¡Cita Creada Exitosamente!", se marcaba al paciente como agendado del día y se
+      // silenciaba al vigilante para él. Ahora se exige la forma confirmada en campo:
+      // error:false + data.radicado>0 (o el motivo literal "Agendada Correctamente").
+      const d = res && res.data;
+      const ok = !!(res && res.error === false && d && (Number(d.radicado) > 0 || /Agendada Correctamente/i.test(String(d.motivo || ""))));
       if (ok) {
         confirmBtn.style.background = "#10b981"; // [UI-CSS]
         confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
@@ -4943,15 +5394,31 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
         markCitaAgendadaHoy(apt.doc_id);
-        notify("VERDE", "✅ Cita asignada exitosamente", `Paciente: ${patientName}\nFecha: ${selectedDateInfo.fmt} · Hora: ${horaTxt}\nAsignada por el sistema de agenda.`, true); // [COPY-UX]
+        // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
+        // quedan vivos en el Centro de actividades de Windows y REAPARECEN horas después.
+        // Se indica además a qué número salió el SMS, para que el médico pueda verificarlo.
+        notify("VERDE", "✅ Cita asignada exitosamente",
+          `Paciente: ${patientName}\nFecha: ${selectedDateInfo.fmt} · Hora: ${horaTxt}`
+          + (ultimoSmsEnviado ? `\nSMS de recordatorio enviado al ${ultimoSmsEnviado}.` : `\nSin SMS de recordatorio.`),
+          false, "cita|" + apt.doc_id + "|" + selectedDateInfo.iso);
         bumpStat("atiempo");
 
-        setTimeout(() => closeMod(), 2200);
+        // v11.0.1 — La toma de muestras se agenda SOLO si la cita principal se creó de
+        // verdad (antes salía disparada antes de comprobarlo, de modo que una cita fallida
+        // dejaba igualmente al paciente citado en el laboratorio), CON await para que el
+        // médico vea el resultado, y una sola vez aunque se pulse "Reintentar".
+        if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
+          modal.dataset.labDone = "1";
+          const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
+          await apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
+        }
+
+        setTimeout(() => closeMod(), 2600);
       } else {
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar Crear Cita";
-        const errMsg = (res && res.mensaje) || "Respuesta no confirmada del sistema de agenda."; // [COPY-UX]
-        alert("Atención al crear cita: " + errMsg);
+        const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
+        alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Verifique en Everest antes de reintentar.");
       }
     });
 
@@ -5001,7 +5468,7 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       keywords: ["cardiometabolica", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
-        { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" },
+        { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL] Automatizado" }, // v11.0.1: 903816 no es el CUPS que emite Everest en campo
         { codigo: "903818", desc: "Colesterol Total" },
         { codigo: "903895", desc: "Creatinina En Suero U Otros Fluidos" },
         { codigo: "907106", desc: "Uroanalisis" },
@@ -5082,7 +5549,9 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase()) || items[0];
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase());
+      // v11.0.1 — Sin `|| items[0]`: si el CIE-10 no aparece, antes se cogía el PRIMER
+      // diagnóstico de la lista y la orden salía con un diagnóstico ajeno al paciente.
       if (item) {
         const dxId = item.id || item.Id || item.DiagnosticoId;
         if (dxId) { DX_CACHE[cie10] = dxId; return dxId; }
@@ -5100,7 +5569,9 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim()) || items[0];
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim());
+      // v11.0.1 — Sin `|| items[0]`: si el CUPS pedido no aparece, antes se sustituía por
+      // el PRIMERO de la lista, es decir, se ordenaba un EXAMEN DISTINTO del solicitado.
       if (item) {
         const cObj = {
           Id: item.id || item.Id || item.cupId,
@@ -5115,8 +5586,21 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   }
 
   // Guardar Ordenamiento por CIE-10 (POST GuardarOrdenamiento)
+  // v12.3.0 — CONTRATO VERIFICADO contra el módulo NATIVO de Everest (captura del
+  // consultorio, 10/08/2026, orden de VIH). El cuerpo que arma esta función coincide byte
+  // por byte con el que envía Everest, y la cadena de búsquedas previa devuelve los mismos
+  // identificadores: Z113 -> DiagnosticoId 24300, CUPS 906249 -> cup.Id 19984. La respuesta
+  // real es {"agrupador":"1226083892","ordenAuth":[{"numeroAutorizacion":"1226083892319"}]},
+  // que la comprobación de éxito de más abajo reconoce correctamente.
+  //
+  // NO CONFUNDIR con el ordenamiento desde la Ruta de Crónicos: ese es OTRO flujo, con un
+  // cuerpo distinto (camelCase, el objeto completo del paciente, citaId real y swHC:true).
+  // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
+    // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
+    // órdenes clínicas a nombre de otro profesional.
+    if (!uId) { alert("No se pudo identificar al médico en Everest. NO se generaron las órdenes.\n\nIndique su identificador en Ajustes."); return null; }
     const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento`;
     const payload = {
       DiagnosticoId: dxId,
@@ -5149,19 +5633,43 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     if (existing) existing.remove();
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "BRANDON JESUS PALENCIA MARTINEZ";
+    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-ordenar-modal";
     modal.className = isLight() ? "light" : "";
 
+    // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
+    // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
+    // nombre, modalidad y estado) y el aviso de "actividad propia del otro sexo" no se
+    // disparaba jamás: la protección existía en el código pero era inerte. El campo `sexo`
+    // viene en la ficha de BuscarPacienteDetallado. Si la consulta falla, se sigue adelante
+    // sin el aviso — nunca se bloquea el ordenamiento por no haber podido comprobarlo.
+    let sexoPacienteReal = "";
+    try {
+      const pid = await apiAccesoBuscarPaciente(apt.doc_id);
+      if (pid) {
+        const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pid}`);
+        sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
+      }
+    } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
+
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
     const activePymText = stripToAlphanum((apt.pym || []).join(" "));
     const matchedPackages = PYM_CATALOG.filter((pkg) => {
-      if (!apt.pym || !apt.pym.length) return true;
+      if (!apt.pym || !apt.pym.length) return false;
       return pkg.keywords.some((kw) => activePymText.includes(stripToAlphanum(kw)));
     });
 
-    const pkgsToRender = matchedPackages.length ? matchedPackages : PYM_CATALOG;
+    // v11.0.1 — Cuando NO hay coincidencia con el PyM del paciente se siguen mostrando
+    // todas las actividades, pero DESMARCADAS. Antes salían las 10 premarcadas y un solo
+    // clic en "Generar" creaba las diez órdenes: incluidas mamografía y citología en un
+    // hombre, o PSA en una mujer. Ahora premarcar exige coincidencia explícita.
+    const hayCoincidencia = matchedPackages.length > 0;
+    const pkgsToRender = hayCoincidencia ? matchedPackages : PYM_CATALOG;
+    // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
+    // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
+    const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
+    const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
 
     // [COPY-UX] Modal de generación de órdenes de prevención
     modal.innerHTML = `
@@ -5177,20 +5685,31 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">Seleccione las actividades de prevención a solicitar para el paciente:</label>
+          ${hayCoincidencia ? "" : `<div class="vgl-agm-err" style="margin-bottom:8px">No se detectaron actividades pendientes en la base de prevención para este paciente. Las opciones salen <b>sin marcar</b>: seleccione manualmente lo que corresponda.</div>`}
           <div id="vgl-ord-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px">
-            ${pkgsToRender.map((pkg, idx) => `
+            ${pkgsToRender.map((pkg, idx) => {
+              // v12.0.0 — El \`checked\` era INCONDICIONAL: sin coincidencia con la base
+              // salían las 10 actividades premarcadas y un solo clic en "Generar" creaba
+              // las diez órdenes, incluidas mamografía y citología en un hombre o PSA en
+              // una mujer. Ahora premarcar exige coincidencia explícita Y que el sexo
+              // registrado no contradiga la actividad.
+              const sexoReq = SEXO_PKG[pkg.cie10] || "";
+              const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
+              const marcar = hayCoincidencia && !chocaSexo;
+              return `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}" checked>
+                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">[CIE-10: ${escapeHtml(pkg.cie10)}]</span></div>
+                    ${chocaSexo ? `<div class="vgl-ord-cups" style="color:#e54d42;font-weight:700">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       CUPS: ${pkg.cups.map((c) => `<b>${escapeHtml(c.codigo)}</b> (${escapeHtml(c.desc)})`).join(" · ")}
                     </div>
                   </div>
                 </label>
-              </div>
-            `).join("")}
+              </div>`;
+            }).join("")}
           </div>
         </div>
 
@@ -5202,7 +5721,6 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     const xBtn = modal.querySelector("#vgl-ord-x");
     const cancelBtn = modal.querySelector("#vgl-ord-cancel");
@@ -5215,7 +5733,6 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -5256,19 +5773,28 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
 
         const cupsObjs = [];
+        const cupsFaltantes = [];
         for (const cInfo of pkg.cups) {
           const cObj = await apiOrdenamientoObtenerCup(pacienteIdOrd, cInfo.codigo);
-          if (cObj) cupsObjs.push(cObj);
+          if (cObj) cupsObjs.push(cObj); else cupsFaltantes.push(cInfo.codigo);
         }
 
         if (!cupsObjs.length) { console.warn("[Vigilante PyM] No CUPS para", pkg.cie10); fallidasCount++; continue; }
+        // v12.0.0 — Si algún examen del paquete no se pudo resolver, se avisa: antes la
+        // orden se creaba incompleta en silencio y el médico creía haberlos pedido todos.
+        if (cupsFaltantes.length) console.warn("[Vigilante PyM] " + pkg.cie10 + ": no se resolvieron los CUPS " + cupsFaltantes.join(", "));
 
         vglLog("ORDEN", "GuardarOrdenRequested", { pacienteIdOrd, dxId, countCups: cupsObjs.length });
         const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
-        vglLog("ORDEN", "GuardarOrdenResponse", { resOrd });
-        if (resOrd && (resOrd.agrupador || resOrd.data || !resOrd.error)) {
+        // v12.0.0 — Igual que arriba: solo campos planos, nunca el objeto completo.
+        vglLog("ORDEN", "GuardarOrdenResponse", { error: !!(resOrd && resOrd.error), agrupador: String((resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador))) || "") });
+        // v11.0.1 — Éxito estricto: antes bastaba cualquier respuesta sin `error:true`
+        // (incluido un cuerpo vacío) para dar la orden por creada, mostrar el agrupador
+        // falso "OK", marcarla como hecha del día y silenciar el recordatorio de PyM.
+        const agpReal = resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador));
+        if (resOrd && !resOrd.error && agpReal) {
           creadasCount++;
-          const agp = resOrd.agrupador || (resOrd.data && resOrd.data.agrupador) || "OK";
+          const agp = agpReal;
           agrupadores.push(agp);
           c.checked = false; // Desmarcar exitoso
           c.disabled = true; // Deshabilitar
@@ -5443,7 +5969,13 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
 
   // [COPY-UX] Ajustes del asistente clínico
   function renderSettings() {
-    const isDevMode = localStorage.getItem("__vgl_dev_mode") === "true";
+    // v12.0.0 — La sección técnica se abría con una marca (__vgl_dev_mode) que solo escribía
+    // el "modo desarrollador" de los siete clics y un PIN. Al retirarse ese activador (no
+    // hacía nada y provocaba recargas a mitad de consulta), la sección quedó INALCANZABLE:
+    // con ella se perdían controles que el médico sí usa, como «Actualizar lista de
+    // prevención» o «Sincronizar almacenamiento». Ahora se abre con un interruptor normal,
+    // y los dos controles operativos se sacaron a la parte siempre visible.
+    const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
@@ -5464,8 +5996,17 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         <div class="vgl-fld"><label>Recordatorio al abrir la historia<span class="vgl-hint">Aviso al abrir la historia clínica si existen actividades preventivas pendientes.</span></label>${sw("c-pymrem", S.recordatorioPym)}</div>
         <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
+        <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
-      <!-- SECCIÓN DESARROLLADOR / SECOPS (OCULTA POR DEFECTO PARA MÉDICOS) -->
+      <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
+      <div class="vgl-grp">
+        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
+        <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el almacenamiento para renovar la sesión si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
+        <div class="vgl-fld"><label>Su identificador de médico<span class="vgl-hint">Solo si el panel no lo detecta solo. Sin él no se pueden crear citas ni órdenes: aparece detectado como <b>${escapeHtml(String(state.activeDoctor.id || S.medicoId || "— sin detectar —"))}</b>.</span></label><input type="number" id="c-medid" min="0" value="${escapeHtml(String(S.medicoId || ""))}" placeholder="(automático)"></div>
+        <div class="vgl-fld"><label>Su nombre como aparece en la agenda<span class="vgl-hint">Solo si el panel no identifica su agenda propia. Detectado: <b>${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "— sin detectar —"))}</b>.</span></label><input type="text" id="c-mednom" value="${escapeHtml(String(S.medicoNombre || ""))}" placeholder="(automático)"></div>
+        <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
+      </div>
+      <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
       <div class="vgl-grp" ${devStyle}>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
@@ -5476,8 +6017,8 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
         <div class="vgl-fld"><label>Probar alerta cardiovascular<span class="vgl-hint">Muestra una vista previa del aviso de prioridad cardiovascular.</span></label><button class="vgl-btn" id="c-pestest">Probar</button></div>
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
         <div class="vgl-fld"><label>Enlace de la base de referencia<span class="vgl-hint">${escapeHtml((CONFIG?.SP?.respaldo?.name) || "ninguna")} — Identificador del archivo de referencia.</span></label><input type="text" id="c-fbid" placeholder="(predeterminado)" value="${escapeHtml(S.respaldoId)}"></div>
-        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Consulta inmediatamente la versión más reciente de la lista de prevención.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
-        <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el acceso al almacenamiento para validar la sesión de usuario si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
+<!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
+             arriba, a la sección siempre visible: son operativos, no técnicos. -->
         <div class="vgl-fld"><label>Reporte de atención consolidado<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento.</span></label>${sw("c-rep", S.reporte)}</div>
         <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Probar comunicación<span class="vgl-hint" id="c-repn">Realiza una prueba de conexión con el servidor de reportes.</span></label><button class="vgl-btn" id="c-repgo">Probar</button></div>
@@ -5504,6 +6045,16 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     bind("#c-pes", "abandonoPES", (n) => n.checked);
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
+    bind("#c-sms", "smsRecordatorio", (n) => n.checked);
+    bind("#c-medid", "medicoId", (n) => parseInt(n.value, 10) || 0);
+    bind("#c-mednom", "medicoNombre", (n) => String(n.value || "").trim());
+    // v12.0.0 — El deslizador de Volumen se pintaba pero NO estaba enlazado a nada: moverlo
+    // no cambiaba el volumen ni se guardaba. Al soltarlo suena un tono para confirmarlo.
+    const volSlider = q("#c-vol");
+    if (volSlider) volSlider.addEventListener("change", () => { S.volumen = clampNum(volSlider.value, 2, 60, 15) / 100; saveSettings(); playTone("AZUL"); });
+    // El interruptor de opciones técnicas repinta la hoja para mostrar u ocultar el bloque.
+    const tecBtn = q("#c-tecnicas");
+    if (tecBtn) tecBtn.addEventListener("change", () => { S.opcionesTecnicas = tecBtn.checked; saveSettings(); renderSettings(); });
     bind("#c-base", "baseAuto", (n) => n.checked);
     bind("#c-fbid", "respaldoId", (n) => n.value);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
@@ -5520,7 +6071,10 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     const testBtn = q("#c-test"); if (testBtn) testBtn.addEventListener("click", testNotifications);
     const resetBtn = q("#c-reset"); if (resetBtn) resetBtn.addEventListener("click", () => {
       if (!confirm("¿Restablecer toda la configuración a los valores predeterminados?")) return;
-      S = Object.assign({}, DEFAULTS); saveSettings(); applySettings(); state.lastSignature = ""; repaint(); renderSettings();
+      // v12.0.0 — Era `S = Object.assign({}, DEFAULTS)`, una REASIGNACIÓN de `S`, que está
+      // declarada con `const`: lanzaba TypeError y el botón no restablecía nada. Se muta el
+      // objeto en su sitio, que es lo que hacía el otro linaje.
+      Object.assign(S, DEFAULTS); saveSettings(); applySettings(); state.lastSignature = ""; repaint(); renderSettings();
     });
   }
 
@@ -6027,9 +6581,26 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
                 setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
                 return;
               }
-              localStorage.clear();
+              // v11.0.1 — DOS fallos graves corregidos aquí:
+              // 1) BUCLE INFINITO DE RECARGA. Recargar la página NO actualiza el script
+              //    (eso solo lo hace Tampermonkey desde el Gist), así que al volver a
+              //    cargar se cumplía otra vez la misma condición y se recargaba de nuevo
+              //    cada pocos segundos: el equipo quedaba inutilizable.
+              // 2) localStorage.clear() borraba la BITÁCORA DE AUDITORÍA de fraudes e
+              //    inasistencias (vgl_ev_*, 30 días), los contadores, los ajustes y el
+              //    registro anti-duplicados del día, cuya pérdida permite volver a crear
+              //    citas y órdenes ya creadas.
+              const marca = "vgl_upd|" + minVer;
+              try {
+                if (sessionStorage.getItem(marca)) {
+                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde Tampermonkey → «Check for userscript updates».`, "warn");
+                  return;
+                }
+                sessionStorage.setItem(marca, "1");
+              } catch (e) {}
+              try { localStorage.removeItem("vgl_pym_dia"); } catch (e) {}
               setSummary(`🔄 Vigilante se actualiza a v${minVer}...`, "info");
-              setTimeout(() => location.reload(true), 2000);
+              setTimeout(() => location.reload(), 2000);
             }
           } catch (e) { console.error("[Vigilante] version check parse:", e); }
         },
@@ -6048,13 +6619,13 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     heartbeat();
     tick();
     checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
-    VigilanteGC.registerInterval(setInterval(checkVersionMinimum, 300000)); // repite cada 5 minutos
-    VigilanteGC.registerInterval(setInterval(paintMute, 15000));
-    VigilanteGC.registerInterval(setInterval(pymReminderCheck, 60000));
+    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
+    setInterval(paintMute, 15000);
+    setInterval(pymReminderCheck, 60000);
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
     setTimeout(repDailySummary, 8000);
-    VigilanteGC.registerInterval(setInterval(repFlush, 600000));
+    setInterval(repFlush, 600000);
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue
