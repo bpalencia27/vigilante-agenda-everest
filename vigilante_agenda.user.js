@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.0
+// @version      12.0.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.0";
+  const VERSION = "12.0.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5496,6 +5496,21 @@
     modal.id = "vgl-ordenar-modal";
     modal.className = isLight() ? "light" : "";
 
+    // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
+    // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
+    // nombre, modalidad y estado) y el aviso de "actividad propia del otro sexo" no se
+    // disparaba jamás: la protección existía en el código pero era inerte. El campo `sexo`
+    // viene en la ficha de BuscarPacienteDetallado. Si la consulta falla, se sigue adelante
+    // sin el aviso — nunca se bloquea el ordenamiento por no haber podido comprobarlo.
+    let sexoPacienteReal = "";
+    try {
+      const pid = await apiAccesoBuscarPaciente(apt.doc_id);
+      if (pid) {
+        const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pid}`);
+        sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
+      }
+    } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
+
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
     const activePymText = stripToAlphanum((apt.pym || []).join(" "));
     const matchedPackages = PYM_CATALOG.filter((pkg) => {
@@ -5512,7 +5527,7 @@
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
-    const sexoPaciente = String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
+    const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
 
     // [COPY-UX] Modal de generación de órdenes de prevención
     modal.innerHTML = `
