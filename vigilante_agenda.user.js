@@ -32,6 +32,152 @@
 // @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
 // ==/UserScript==
 
+
+
+
+
+// =====================================================================
+// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
+// =====================================================================
+var VigilanteGC = {
+  intervals: new Set(),
+  observers: new Set(),
+  modals: new Set(),
+
+  registerInterval: function(id) {
+    if(id) this.intervals.add(id);
+    return id;
+  },
+
+  registerObserver: function(obs) {
+    if(obs) this.observers.add(obs);
+    return obs;
+  },
+
+  registerModal: function(modalEl) {
+    if(modalEl) this.modals.add(modalEl);
+    return modalEl;
+  },
+
+  run: function() {
+    // Limpiar intervalos
+    this.intervals.forEach(id => clearInterval(id));
+    this.intervals.clear();
+
+    // Desconectar observers
+    this.observers.forEach(obs => {
+      if(obs && typeof obs.disconnect === 'function') {
+         obs.disconnect();
+      }
+    });
+    this.observers.clear();
+
+    // Remover modales zombis
+    this.modals.forEach(modal => {
+      if(modal && modal.parentNode) {
+         modal.parentNode.removeChild(modal);
+      }
+    });
+    this.modals.clear();
+
+    // Reset variables globales que controlan la reinicializacion
+    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
+  }
+};
+
+// Monkey-patch history API para detectar cambios de ruta en la SPA
+if (typeof window !== 'undefined' && window.history) {
+  (function(history){
+    const pushState = history.pushState;
+    if (pushState) {
+        history.pushState = function() {
+            VigilanteGC.run();
+            return pushState.apply(history, arguments);
+        };
+    }
+    const replaceState = history.replaceState;
+    if (replaceState) {
+        history.replaceState = function() {
+            VigilanteGC.run();
+            return replaceState.apply(history, arguments);
+        };
+    }
+  })(window.history);
+
+  window.addEventListener('popstate', () => VigilanteGC.run());
+}
+
+// =====================================================================
+// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
+// =====================================================================
+var VigilanteGC = {
+  intervals: new Set(),
+  observers: new Set(),
+  modals: new Set(),
+
+  registerInterval: function(id) {
+    if(id) this.intervals.add(id);
+    return id;
+  },
+
+  registerObserver: function(obs) {
+    if(obs) this.observers.add(obs);
+    return obs;
+  },
+
+  registerModal: function(modalEl) {
+    if(modalEl) this.modals.add(modalEl);
+    return modalEl;
+  },
+
+  run: function() {
+    // Limpiar intervalos
+    this.intervals.forEach(id => clearInterval(id));
+    this.intervals.clear();
+
+    // Desconectar observers
+    this.observers.forEach(obs => {
+      if(obs && typeof obs.disconnect === 'function') {
+         obs.disconnect();
+      }
+    });
+    this.observers.clear();
+
+    // Remover modales zombis
+    this.modals.forEach(modal => {
+      if(modal && modal.parentNode) {
+         modal.parentNode.removeChild(modal);
+      }
+    });
+    this.modals.clear();
+
+    // Reset variables globales que controlan la reinicializacion
+    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
+  }
+};
+
+// Monkey-patch history API para detectar cambios de ruta en la SPA
+if (typeof window !== 'undefined' && window.history) {
+  (function(history){
+    const pushState = history.pushState;
+    if (pushState) {
+        history.pushState = function() {
+            VigilanteGC.run();
+            return pushState.apply(history, arguments);
+        };
+    }
+    const replaceState = history.replaceState;
+    if (replaceState) {
+        history.replaceState = function() {
+            VigilanteGC.run();
+            return replaceState.apply(history, arguments);
+        };
+    }
+  })(window.history);
+
+  window.addEventListener('popstate', () => VigilanteGC.run());
+}
+
 // --- AUTOACTUALIZACIÓN -------------------------------------------------------
 // Activada (v7.4.0): Tampermonkey revisa este Gist secreto solo y actualiza cada
 // equipo cuando @version suba. Para publicar una versión nueva: editar el Gist
@@ -549,11 +695,11 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   let labMutationObs = null;
   function initLabMutationObserver() {
       if (labMutationObs || typeof MutationObserver === "undefined") return;
-      labMutationObs = new MutationObserver(debounceVgl(() => {
+      labMutationObs = VigilanteGC.registerObserver(new MutationObserver(debounceVgl(() => {
           if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
               createLabInjectorUI();
           }
-      }, 300));
+      }, 300)));
       if (document.body) {
           labMutationObs.observe(document.body, { childList: true, subtree: true });
       }
@@ -4383,18 +4529,24 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
+    VigilanteGC.registerModal(modal);
 
     const closeMod = () => {
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
+      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     const xBtn = modal.querySelector("#vgl-labs-x");
     const cancelBtn = modal.querySelector("#vgl-labs-close");
     if (xBtn) xBtn.addEventListener("click", closeMod);
     if (cancelBtn) cancelBtn.addEventListener("click", closeMod);
-    modal.addEventListener("click", (e) => { if (e.target === modal) closeMod(); });
+
+    const bgClick = (e) => { if (e.target === modal) closeMod(); };
+    modal.addEventListener("click", bgClick);
+
 
     const contentEl = modal.querySelector("#vgl-labs-content");
 
@@ -4565,6 +4717,7 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
+    VigilanteGC.registerModal(modal);
 
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
@@ -4581,8 +4734,10 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     const closeMod = () => {
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
+      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -5047,6 +5202,7 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     `;
 
     document.body.appendChild(modal);
+    VigilanteGC.registerModal(modal);
 
     const xBtn = modal.querySelector("#vgl-ord-x");
     const cancelBtn = modal.querySelector("#vgl-ord-cancel");
@@ -5056,8 +5212,10 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     const closeMod = () => {
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
+      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -5843,13 +6001,13 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
     heartbeat();
     tick();
     checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
-    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
-    setInterval(paintMute, 15000);
-    setInterval(pymReminderCheck, 60000);
+    VigilanteGC.registerInterval(setInterval(checkVersionMinimum, 300000)); // repite cada 5 minutos
+    VigilanteGC.registerInterval(setInterval(paintMute, 15000));
+    VigilanteGC.registerInterval(setInterval(pymReminderCheck, 60000));
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
     setTimeout(repDailySummary, 8000);
-    setInterval(repFlush, 600000);
+    VigilanteGC.registerInterval(setInterval(repFlush, 600000));
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue
