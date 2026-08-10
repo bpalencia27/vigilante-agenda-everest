@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      11.0.1
+// @version      12.0.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -36,147 +36,16 @@
 
 
 
-// =====================================================================
-// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
-// =====================================================================
-var VigilanteGC = {
-  intervals: new Set(),
-  observers: new Set(),
-  modals: new Set(),
-
-  registerInterval: function(id) {
-    if(id) this.intervals.add(id);
-    return id;
-  },
-
-  registerObserver: function(obs) {
-    if(obs) this.observers.add(obs);
-    return obs;
-  },
-
-  registerModal: function(modalEl) {
-    if(modalEl) this.modals.add(modalEl);
-    return modalEl;
-  },
-
-  run: function() {
-    // Limpiar intervalos
-    this.intervals.forEach(id => clearInterval(id));
-    this.intervals.clear();
-
-    // Desconectar observers
-    this.observers.forEach(obs => {
-      if(obs && typeof obs.disconnect === 'function') {
-         obs.disconnect();
-      }
-    });
-    this.observers.clear();
-
-    // Remover modales zombis
-    this.modals.forEach(modal => {
-      if(modal && modal.parentNode) {
-         modal.parentNode.removeChild(modal);
-      }
-    });
-    this.modals.clear();
-
-    // Reset variables globales que controlan la reinicializacion
-    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
-  }
-};
-
-// Monkey-patch history API para detectar cambios de ruta en la SPA
-if (typeof window !== 'undefined' && window.history) {
-  (function(history){
-    const pushState = history.pushState;
-    if (pushState) {
-        history.pushState = function() {
-            VigilanteGC.run();
-            return pushState.apply(history, arguments);
-        };
-    }
-    const replaceState = history.replaceState;
-    if (replaceState) {
-        history.replaceState = function() {
-            VigilanteGC.run();
-            return replaceState.apply(history, arguments);
-        };
-    }
-  })(window.history);
-
-  window.addEventListener('popstate', () => VigilanteGC.run());
-}
-
-// =====================================================================
-// GARBAGE COLLECTOR PARA SPA (EVITA LEAKS AL CAMBIAR DE VISTA EN ANGULAR)
-// =====================================================================
-var VigilanteGC = {
-  intervals: new Set(),
-  observers: new Set(),
-  modals: new Set(),
-
-  registerInterval: function(id) {
-    if(id) this.intervals.add(id);
-    return id;
-  },
-
-  registerObserver: function(obs) {
-    if(obs) this.observers.add(obs);
-    return obs;
-  },
-
-  registerModal: function(modalEl) {
-    if(modalEl) this.modals.add(modalEl);
-    return modalEl;
-  },
-
-  run: function() {
-    // Limpiar intervalos
-    this.intervals.forEach(id => clearInterval(id));
-    this.intervals.clear();
-
-    // Desconectar observers
-    this.observers.forEach(obs => {
-      if(obs && typeof obs.disconnect === 'function') {
-         obs.disconnect();
-      }
-    });
-    this.observers.clear();
-
-    // Remover modales zombis
-    this.modals.forEach(modal => {
-      if(modal && modal.parentNode) {
-         modal.parentNode.removeChild(modal);
-      }
-    });
-    this.modals.clear();
-
-    // Reset variables globales que controlan la reinicializacion
-    if (typeof labMutationObs !== 'undefined') labMutationObs = null;
-  }
-};
-
-// Monkey-patch history API para detectar cambios de ruta en la SPA
-if (typeof window !== 'undefined' && window.history) {
-  (function(history){
-    const pushState = history.pushState;
-    if (pushState) {
-        history.pushState = function() {
-            VigilanteGC.run();
-            return pushState.apply(history, arguments);
-        };
-    }
-    const replaceState = history.replaceState;
-    if (replaceState) {
-        history.replaceState = function() {
-            VigilanteGC.run();
-            return replaceState.apply(history, arguments);
-        };
-    }
-  })(window.history);
-
-  window.addEventListener('popstate', () => VigilanteGC.run());
-}
+// v12.0.0 — RETIRADO el "GARBAGE COLLECTOR PARA SPA" (estaba pegado DOS veces, líneas 39-108
+// y 110-179 de la versión anterior). No era una limpieza inocua: enganchaba history.pushState,
+// history.replaceState y popstate del objeto History REAL de Everest, de modo que en CADA
+// navegación del router de Angular ejecutaba run(), y run() hacía clearInterval de los cuatro
+// temporizadores creados en boot() — el recordatorio de cargar el PyM, el repintado del
+// silenciador, el reintento del reporte y el chequeo de versión — que NADIE volvía a armar,
+// porque boot() solo corre una vez. Tras el primer cambio de vista se apagaban en silencio.
+// Además arrancaba del DOM los modales registrados: el de agendamiento podía desaparecer a
+// media consulta. Y al estar duplicado, los dos parches de history quedaban encadenados.
+// La fuga que pretendía resolver ya está corregida en origen (módulo duplicado eliminado).
 
 // --- AUTOACTUALIZACIÓN -------------------------------------------------------
 // Activada (v7.4.0): Tampermonkey revisa este Gist secreto solo y actualiza cada
@@ -185,6 +54,68 @@ if (typeof window !== 'undefined' && window.history) {
 // archivo completo, subir @version, "Update secret gist") — nada más que hacer en
 // los consultorios. Guía completa: 3_ACTUALIZAR_TODOS_LOS_EQUIPOS.txt
 // ----------------------------------------------------------------------------
+
+/*
+  v12.0.0 — UNIFICACIÓN DE LOS DOS LINAJES
+  El script se había bifurcado en dos versiones que evolucionaron por separado y ya no se
+  podían mezclar solas. Esta versión las funde en una sola: de cada lado se conserva lo que
+  funciona y se descarta lo que no.
+
+  SE ELIMINA (venía del linaje del repositorio y era peligroso o inerte)
+  - Resultados de laboratorio INVENTADOS. Cuando la consulta real no devolvía nada se
+    mostraban siete exámenes fabricados en la misma tabla y con la misma etiqueta de origen
+    que los reales. Además nunca se llegaba a consultar Athenea de verdad: el contrato de
+    getAtheneaIdSolicitudAuto estaba mal comprobado y esa rama era código muerto, así que
+    los datos inventados eran, en la práctica, lo único que se veía.
+  - Pacientes de PRUEBA con cédulas ficticias que se pintaban en el panel igual que los
+    reales, uno de ellos marcado como abandono del programa cardiovascular.
+  - El recolector de basura para la SPA: estaba pegado dos veces y, en cada cambio de ruta
+    de Angular, apagaba los cuatro temporizadores creados al arrancar (recordatorio de PyM,
+    reporte, chequeo de versión y contador del silenciador) sin que nadie los volviera a
+    armar, y arrancaba del DOM los modales abiertos, incluido el de agendamiento en uso.
+  - Los modales de agendar, ordenar y laboratorios, y la bitácora de auditoría, dejan de
+    publicarse en la ventana de la página: eran acciones de ESCRITURA clínica accesibles a
+    cualquier script de Everest.
+  - La quinta ruta de búsqueda de paciente, que pasaba la cédula donde va el id interno.
+
+  SE CONSERVA DEL LINAJE DEL REPOSITORIO
+  - Buscador de pacientes tolerante a erratas.
+  - Bitácora local de diagnóstico, ahora sin objetos crudos: solo campos acotados, para que
+    no acaben datos del paciente en el registro.
+  - Liberación del bloqueo de liderazgo también en unload, no solo en beforeunload.
+  - Consulta a Athenea como fuente principal del modal de paraclínicos, ya reparada.
+  - Resaltado en rojo de los valores que el propio laboratorio declara alterados. El resto
+    deja de pintarse en verde: dar por normal lo que el script no ha interpretado es una
+    afirmación clínica que no le corresponde hacer.
+
+  SE INCORPORA DEL LINAJE LOCAL
+  - Consulta a Athenea con reintento por AÑO: con un solo año, los laboratorios pedidos a
+    finales del año anterior no aparecían nunca.
+  - Avisos de sincronización descartables y con autocierre; antes se quedaban fijos toda la
+    jornada tapando la esquina de la pantalla.
+  - La notificación del PyM del día deja de repetirse en cada revisión de fondo.
+  - Parche de digiturno para los nombres con espacios, acotado al host correcto.
+
+  SE CORRIGE EN LA PROPIA UNIFICACIÓN
+  - El filtro de sexo de las órdenes PyM estaba definido pero NO se usaba: las diez
+    actividades seguían saliendo premarcadas, incluidas mamografía y citología en hombres.
+  - Los ajustes técnicos habían quedado INALCANZABLES (se abrían con una marca que ya nadie
+    escribía) y con ellos controles que el médico sí usa. Ahora «Actualizar lista de
+    prevención» y «Sincronizar almacenamiento» están siempre visibles, y el resto se abre
+    con un interruptor normal.
+  - El cartel de cita asignada usaba una clase CSS que no existía y salía sin estilo.
+  - Las filas de Athenea se pintaban con el texto genérico «Paraclínico» porque faltaba su
+    campo de nombre.
+  - Aviso cuando algún examen de un paquete de órdenes no se pudo resolver.
+
+  PENDIENTE (documentado, no resuelto aquí)
+  - La contraseña de Athenea sigue en claro como respaldo heredado: hay que ROTARLA y
+    después fijarla por equipo con GM_setValue, sin volver a publicarla.
+  - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la aplicación oficial los envía y
+    el script no. Sin más capturas, cambiarlo es más arriesgado que el defecto.
+  - El módulo de órdenes PyM se apoya en un contrato de API sin ninguna captura que lo
+    respalde: conviene cotejar las primeras órdenes contra el módulo nativo de Everest.
+*/
 
 /*
   v11.0.1 — AUDITORÍA CONTRA TELEMETRÍA REAL (26 capturas · 1527 llamadas de Everest)
@@ -405,7 +336,7 @@ if (typeof window !== 'undefined' && window.history) {
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "11.0.1";
+  const VERSION = "12.0.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -498,9 +429,26 @@ if (typeof window !== 'undefined' && window.history) {
     try { const f = window.fetch; if (typeof f !== "function") return null; return (u, o) => f.call(window, u, o); } catch (e) { return null; }
   })();
 
-// =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
-  // =====================================================================
+  // v12.0.0 (del otro linaje) — HOTFIX DIGITURNO: el nombre del paciente viaja en la URL
+  // de LlamadoPorMedicoManual y, si lleva espacios, la petición se rompe. Se recodifica al
+  // vuelo. El enganche está ACOTADO al host de digiturno y a esa única llamada: no toca la
+  // red de Everest ni la de ningún otro sitio.
+  // endsWith y no includes: con includes, un host como "digiturno.viva1a.com.co.otro.com"
+  // también habría activado el parche. Y el replace va en try/catch porque este código se
+  // interpone en TODAS las peticiones del host: si lanzara, rompería la aplicación entera.
+  if (location.hostname === "digiturno.viva1a.com.co" || location.hostname.endsWith(".digiturno.viva1a.com.co")) {
+    const originalOpenXhr = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+      try {
+        if (url && typeof url === "string" && url.includes("LlamadoPorMedicoManual") && url.includes("NombreUsuario=")) {
+          url = url.replace(/NombreUsuario=([^&]+)/, function (match, namePart) {
+            return "NombreUsuario=" + encodeURIComponent(decodeURIComponent(namePart));
+          });
+        }
+      } catch (e) { /* si la URL no es decodificable se deja intacta */ }
+      return originalOpenXhr.apply(this, [method, url, ...rest]);
+    };
+  }
 
   // =====================================================================
   //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS EN RUTA CRÓNICOS
@@ -533,43 +481,53 @@ if (typeof window !== 'undefined' && window.history) {
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
 
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
+  // v12.0.0 (del otro linaje) — Consulta a Athenea con reintento por AÑO. El endpoint exige
+  // el año de la solicitud; con un único año, los laboratorios pedidos a finales del año
+  // anterior no aparecían nunca. Se prueban el año en curso y los dos anteriores, y se
+  // distingue la sesión vencida de la ausencia real de resultados.
+  function fetchAtheneaLabs(idSolicitud, anoEspecifico = null) {
+      const currentYear = new Date().getFullYear();
+      const yearsToTry = anoEspecifico ? [anoEspecifico] : [currentYear, currentYear - 1, currentYear - 2];
+
+      const tryFetchYear = (yearIndex) => {
+          const ano = yearsToTry[yearIndex];
+          return new Promise((resolve, reject) => {
+              const siguiente = (motivoFinal) => {
+                  if (yearIndex + 1 < yearsToTry.length) tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                  else reject(motivoFinal);
+              };
+              GM_xmlhttpRequest({
+                  method: "POST",
+                  url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
+                  headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                  data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
+                  onload: function (response) {
+                      try {
+                          if (response.status === 200) {
+                              const res = JSON.parse(response.responseText);
+                              if (res && res.dataObject) {
+                                  const data = JSON.parse(res.dataObject);
+                                  if (Array.isArray(data) && data.length > 0) { resolve(data); return; }
+                              }
+                              if (res && res.bolValido === false) {
+                                  reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
+                                  return;
+                              }
+                              siguiente("No se encontraron resultados en Athenea para la solicitud #" + idSolicitud + " (años " + yearsToTry.join(", ") + ").");
                           } else {
-                              reject("No se encontraron resultados del paciente en este momento.");
+                              siguiente("La sesión con Athenea ha caducado (HTTP " + response.status + "). Inicia sesión en Athenea.");
                           }
-                      } else {
-                          reject("La sesión con el sistema ha caducado. Por favor, renueva tu acceso: " + response.status);
+                      } catch (e) {
+                          siguiente("Error al procesar la respuesta de Athenea: " + e);
                       }
-                  } catch (e) {
-                      reject("El archivo de prevención tuvo un problema al leerse. Inténtalo de nuevo: " + e);
-                  }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
+                  },
+                  onerror: function (err) { siguiente("No se pudo conectar con Athenea: " + err); },
+                  ontimeout: function () { siguiente("Athenea no respondió a tiempo."); },
+              });
           });
-      });
+      };
+
+      return tryFetchYear(0);
   }
 
   // Despacha eventos para que Angular actualice el modelo
@@ -685,9 +643,17 @@ if (typeof window !== 'undefined' && window.history) {
                   onload: function(response) {
                       if (response.status === 200) {
                           try {
+                              // v12.0.0 — CONTRATO NORMALIZADO: esta función resuelve SIEMPRE
+                              // un número o null. Antes devolvía un escalar mientras cada
+                              // consumidor lo desempaquetaba como si fuera un objeto
+                              // (`atheneaData.idSolicitud`), lo que dejaba la consulta de
+                              // Athenea del modal de paraclínicos como CÓDIGO MUERTO: nunca
+                              // se cumplía la condición y siempre se caía al caso "sin datos".
                               const res = JSON.parse(response.responseText);
-                              if (res && res.idSolicitud) {
-                                  resolve(res.idSolicitud);
+                              const bruto = res && (res.idSolicitud != null ? res.idSolicitud : res.id);
+                              const num = Number(bruto);
+                              if (Number.isFinite(num) && num > 0) {
+                                  resolve(num);
                                   return;
                               }
                           } catch (e) {
@@ -737,7 +703,7 @@ if (typeof window !== 'undefined' && window.history) {
 
       try {
           const atheneaData = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = (atheneaData && (atheneaData.idSolicitud || atheneaData.id)) || (typeof atheneaData === "number" ? atheneaData : null);
+          const idSol = atheneaData; // v12.0.0: getAtheneaIdSolicitudAuto ya devuelve número o null
 
           if (idSol) {
               const labs = await fetchAtheneaLabs(idSol);
@@ -774,7 +740,7 @@ if (typeof window !== 'undefined' && window.history) {
           btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
 
           let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = (idSolicitud && (idSolicitud.idSolicitud || idSolicitud.id)) || (typeof idSolicitud === "number" ? idSolicitud : null);
+          const idSol = idSolicitud; // v12.0.0: contrato normalizado (número o null)
 
           // v11.0.1 — SIN prompt(). Escribir a mano un "idSolicitud" traía a esta historia
           // clínica los resultados de la solicitud que fuera — es decir, los de CUALQUIER
@@ -812,11 +778,11 @@ if (typeof window !== 'undefined' && window.history) {
   let labMutationObs = null;
   function initLabMutationObserver() {
       if (labMutationObs || typeof MutationObserver === "undefined") return;
-      labMutationObs = VigilanteGC.registerObserver(new MutationObserver(debounceVgl(() => {
+      labMutationObs = new MutationObserver(debounceVgl(() => {
           if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
               createLabInjectorUI();
           }
-      }, 300)));
+      }, 300));
       if (document.body) {
           labMutationObs.observe(document.body, { childList: true, subtree: true });
       }
@@ -928,6 +894,7 @@ if (typeof window !== 'undefined' && window.history) {
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
+    opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
@@ -1111,24 +1078,25 @@ if (typeof window !== 'undefined' && window.history) {
   // en `window.state` el mapa completo de pacientes con PyM pendiente (cédulas y
   // actividades) al alcance de cualquier script cargado por Everest.
   try { PAGEWIN.vglDebug = { version: VERSION, pymSize: () => state.pym.size, leader: () => state.leader }; } catch (e) {}
-  PAGEWIN.repaint = () => repaint();
-  PAGEWIN.renderSettings = () => renderSettings();
-  PAGEWIN.openAgendamientoModal = (a) => openAgendamientoModal(a);
-  PAGEWIN.openOrdenamientoModal = (a) => openOrdenamientoModal(a);
-  PAGEWIN.openLaboratoriosModal = (a) => openLaboratoriosModal(a);
-  PAGEWIN.vglExportLogs = () => vglExportLogs();
-  PAGEWIN.vglLog = (c, a, d) => vglLog(c, a, d);
-  PAGEWIN.simularCitasDirectas = (dummyList) => {
-    state.lastSnapshot = { list: dummyList, source: "pagina", at: new Date() };
-    state.pymFile = "Base_Simulada_PyM.xlsx";
-    state.pym = new Map([
-      ["1017123456", ["Tamización de cérvix — VPH", "Tamización de mama"]],
-      ["43567890", ["Remisión a Optometría"]],
-      ["98765432", ["Tamización de riesgo cardiometabólico"]]
-    ]);
-    state.pymAbandono = new Set(["98765432"]);
-    render(dummyList, "pagina", new Date());
-  };
+  // v12.0.0 — RETIRADO todo lo demás que colgaba de la ventana real de la página. Arriba
+  // queda solo `vglDebug`, que no contiene ningún dato de paciente. Lo eliminado y por qué:
+  //
+  //  · simularCitasDirectas — cableaba TRES cédulas inventadas con actividades de PyM
+  //    ficticias (una de ellas marcada como abandono del programa cardiovascular) y las
+  //    pintaba en el panel EXACTAMENTE igual que a los pacientes reales, además de dejar
+  //    state.pymFile en "Base_Simulada_PyM.xlsx". Un dato clínico fabricado indistinguible
+  //    del real no puede viajar en el script que se usa en consulta.
+  //  · openAgendamientoModal / openOrdenamientoModal / openLaboratoriosModal — publicaban,
+  //    con parámetro libre, los tres modales que terminan en ESCRITURAS clínicas (crear
+  //    cita, crear orden, volcar laboratorios en la historia). Cualquier script de la
+  //    página podía abrirlos con una cita fabricada. Se siguen invocando desde los botones
+  //    de cada tarjeta, dentro del script: no hacía falta ningún puente por window.
+  //  · vglLog / vglExportLogs — daban acceso a la bitácora que respalda el registro de
+  //    atenciones extemporáneas e inasistencias: permitían insertar entradas falsas o
+  //    desplazar las reales por el tope de 500, y disparar la descarga sin intervención
+  //    del médico. La exportación sigue disponible desde el botón de Ajustes.
+  //  · repaint / renderSettings — superficie expuesta sin necesidad; ya se llaman desde
+  //    los propios controles del panel.
   let pollTimer = null;
   function restartPolling() { if (!el || !el.root) return; if (pollTimer) clearInterval(pollTimer); pollTimer = setInterval(tick, CONFIG.POLL_MS); }
   // ---- Coordinación entre pestañas: SOLO UNA vigila y notifica (evita avisos repetidos) ----
@@ -2330,10 +2298,18 @@ if (typeof window !== 'undefined' && window.history) {
       if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
       const idx = await readPym(sel.Name, dl.response);
       const eraRespaldo = state.pymFallback;
+      // v12.0.0 (del otro linaje) — El aviso de Windows solo sale cuando APORTA algo: la
+      // primera carga del día, la llegada del PyM real tras la base piloto, o una búsqueda
+      // pedida a mano. El script revisa la carpeta cada 10 minutos y vuelve a descargar en
+      // cuanto alguien guarda el Excel, así que sin esta condición el médico recibía el
+      // mismo cartel "PyM del día cargado" una y otra vez durante la consulta.
+      const teniaPymPreviamente = !!state.pymMTime;
       state.pymFallback = false;
       applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name);
-      notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : "📋 PyM del día cargado",
-        sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      if (!silent || eraRespaldo || !teniaPymPreviamente) {
+        notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
+          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      }
       return true;
     } catch (e) {
       if (!silent) setSummary("No pude leer el PyM del día (" + ((e && e.message) || e) + "). " + (state.pymFile ? "Sigo con lo que hay cargado." : "Probando la base piloto."), "warn");
@@ -2407,8 +2383,59 @@ if (typeof window !== 'undefined' && window.history) {
       if (!ok) schedulePymBase();
     }, espera);
   }
-  function spToast(msg) {
-    try { let t = document.getElementById("vgl-sp"); if (!t) { t = document.createElement("div"); t.id = "vgl-sp"; t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:430px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:8px;padding:12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)"; (document.body || document.documentElement).appendChild(t); } t.textContent = "🛡️ Vigilante PyM · " + msg; } catch (e) {}
+  // v12.0.0 (del otro linaje) — Aviso de sincronización DESCARTABLE. La versión anterior
+  // creaba un cartel fijo sin botón de cierre ni autodescarte: se quedaba tapando la
+  // esquina de la pantalla el resto de la jornada. Ahora se cierra con la × , con un clic,
+  // o solo a los 6 s (durationMs = 0 para dejarlo fijo cuando haga falta).
+  let spToastTimer = null;
+
+  function dismissSpToast() {
+    try {
+      if (spToastTimer) { clearTimeout(spToastTimer); spToastTimer = null; }
+      const t = document.getElementById("vgl-sp");
+      if (t) {
+        t.style.opacity = "0";
+        t.style.transform = "translateY(10px)";
+        setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
+      }
+    } catch (e) {}
+  }
+
+  function spToast(msg, durationMs = 6000) {
+    try {
+      let t = document.getElementById("vgl-sp");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "vgl-sp";
+        t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:440px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:10px;padding:12px 34px 12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);cursor:pointer;transition:opacity 0.25s ease,transform 0.25s ease;opacity:0;transform:translateY(10px);";
+
+        const closeBtn = document.createElement("span");
+        closeBtn.style.cssText = "position:absolute;top:8px;right:10px;font-size:14px;font-weight:bold;color:#94A3B8;cursor:pointer;line-height:1;";
+        closeBtn.textContent = "×";
+        closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
+        t.appendChild(closeBtn);
+
+        t.onclick = () => dismissSpToast();
+        (document.body || document.documentElement).appendChild(t);
+        t.getBoundingClientRect();
+      }
+
+      let textNode = t.querySelector(".vgl-sp-text");
+      if (!textNode) {
+        textNode = document.createElement("span");
+        textNode.className = "vgl-sp-text";
+        t.insertBefore(textNode, t.firstChild);
+      }
+      textNode.textContent = "🛡️ Vigilante PyM · " + msg;
+
+      t.style.opacity = "1";
+      t.style.transform = "translateY(0)";
+
+      if (spToastTimer) clearTimeout(spToastTimer);
+      if (durationMs > 0) {
+        spToastTimer = setTimeout(() => dismissSpToast(), durationMs);
+      }
+    } catch (e) {}
   }
 
   function loadPymFile(file) {
@@ -3550,6 +3577,16 @@ if (typeof window !== 'undefined' && window.history) {
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(251,191,36,.55)}
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
+         PyM y botones) pero su CSS nunca llegó al archivo: sin estas reglas los elementos
+         quedaban apilados en vertical, el nombre perdía la elipsis y los botones de acción
+         se iban de sitio. Se añaden aquí para que el rediseño funcione como estaba pensado. */
+      .vgl-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+      .vgl-card-time-wrap{display:flex;align-items:center;gap:8px;min-width:0}
+      .vgl-card-badges-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      .vgl-card-mid{display:flex;align-items:baseline;gap:8px;margin-top:6px;min-width:0}
+      .vgl-card-btm{display:flex;align-items:center;gap:8px;margin-top:2px;min-width:0}
+      .vgl-card-btm .vgl-pyms{flex:1 1 auto;min-width:0}
       .vgl-cdot{
         width:10px;height:10px;border-radius:50%;flex:0 0 auto;
         box-shadow:0 0 5px currentColor;
@@ -3960,6 +3997,15 @@ if (typeof window !== 'undefined' && window.history) {
       #vgl-agendar-modal.light .vgl-agm-slots{
         background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.13)
       }
+      /* v12.0.0 — Estas tres clases se usaban en el modal pero NUNCA estaban definidas:
+         el cartel verde de "Cita asignada exitosamente" salía sin ningún estilo y los
+         botones de turno y de plazo perdían el ajuste de línea que tenían en línea. */
+      .vgl-msg-success{
+        background:rgba(16,185,129,.25);color:#10b981;font-size:14px;padding:12px;
+        text-align:center;margin-top:14px;border:1px solid #10b981;border-radius:10px;
+      }
+      .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
+      .vgl-agm-pbtn.vgl-sm{font-size:12px;padding:3px 9px}
       .vgl-agm-sbtn{
         background:#1e293b;color:#ffffff;
         border:1px solid #475569;
@@ -4367,7 +4413,7 @@ if (typeof window !== 'undefined' && window.history) {
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)
   async function apiAccesoBuscarPaciente(docId) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
 
@@ -4376,7 +4422,11 @@ if (typeof window !== 'undefined' && window.history) {
       `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
-      `/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(cleanDoc)}`,
+      // v12.0.0 — RETIRADA la quinta ruta: pasaba la CÉDULA en el parámetro idPaciente,
+      // que espera el identificador INTERNO de Everest. Son dos numeraciones distintas, así
+      // que una cédula puede coincidir con el id interno de OTRA persona y devolver su
+      // ficha. Además solo se disparaba cuando fallaban las cuatro anteriores, es decir,
+      // justo cuando nadie iba a sospechar del resultado.
     ];
 
     for (const path of paths) {
@@ -4391,7 +4441,7 @@ if (typeof window !== 'undefined' && window.history) {
 
   // Interfaz con APIAcceso: Buscar Agendas Disponibles (Soporta Medicina General, Med. Interna, Nutrición, Psicología y Odontología)
   async function apiAccesoBuscarCitasDisponibles(pacienteId, fechaIso, especialidadId) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const espId = especialidadId || 12;
     const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
     const path2 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=0&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
@@ -4535,7 +4585,7 @@ if (typeof window !== 'undefined' && window.history) {
   // Interfaz API: Finalizar Ticket Digiturno al terminar atención
   async function apiDigiturnoFinalizarTicket(citaId) {
     if (!citaId) return;
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
     const b64Cita = btoa(String(citaId));
     const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=${uId}&EverestId=${encodeURIComponent(b64Cita)}`;
     try { await pageFetchJson(path); } catch (e) {}
@@ -4573,7 +4623,12 @@ if (typeof window !== 'undefined' && window.history) {
 
   // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
+    // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
+    // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
+    // otro profesional. Ahora se aborta de forma visible y el médico puede fijar su
+    // identificador en Ajustes.
+    if (!uId) return { error: true, mensaje: "No se pudo identificar al médico en Everest. NO se creó la cita. Indique su identificador en Ajustes." };
     const docName = stripAccents(String(state.activeDoctor.name || S.medicoNombre || "").toUpperCase());
 
     const rcvDoctors = ["PALENCIA", "BPALENCIA", "PINO", "MPINO", "ESTRADA", "EESTRADA", "MIJARES", "SMIJARES"];
@@ -4732,7 +4787,6 @@ if (typeof window !== 'undefined' && window.history) {
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     const closeMod = () => {
       xBtn?.removeEventListener("click", closeMod);
@@ -4740,7 +4794,6 @@ if (typeof window !== 'undefined' && window.history) {
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     const xBtn = modal.querySelector("#vgl-labs-x");
     const cancelBtn = modal.querySelector("#vgl-labs-close");
@@ -4758,8 +4811,10 @@ if (typeof window !== 'undefined' && window.history) {
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES VIA BRIDGE / API
     try {
       const atheneaData = await getAtheneaIdSolicitudAuto(apt.doc_id);
-      if (atheneaData && atheneaData.idSolicitud) {
-        const labsArr = await fetchAtheneaLabs(atheneaData.idSolicitud);
+      // v12.0.0 — Antes se comprobaba `atheneaData.idSolicitud` sobre un valor que ya era
+      // un número: la condición NUNCA se cumplía y esta consulta jamás llegaba a ejecutarse.
+      if (atheneaData) {
+        const labsArr = await fetchAtheneaLabs(atheneaData);
         if (labsArr && labsArr.length) {
           labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
         }
@@ -4783,32 +4838,38 @@ if (typeof window !== 'undefined' && window.history) {
       }
     } catch (e) {}
 
-    // Fallback con datos clínicos de muestra para simulación / paciente sin registros
+    // v12.0.0 — RETIRADOS los "datos clínicos de muestra". Cuando la consulta real no
+    // devolvía nada, se inventaban SIETE resultados de laboratorio (glicemia 98 mg/dL,
+    // colesterol total 224 "Elevado", "Negativo para LIE"…) y se pintaban en la misma
+    // tabla y con la misma etiqueta "Athenea (Principal)" que los reales: el médico no
+    // tenía forma de distinguirlos. Ahora, sin resultados, se dice que no los hay.
     if (!todosLabs.length) {
-      const atheneaDemoLabs = [
-        { fecha: "2026-08-01", examen: "Glicemia Basal en Suero", resultado: "98 mg/dL", referencia: "70 - 100 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol Total", resultado: "224 mg/dL", referencia: "< 200 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol HDL", resultado: "42 mg/dL", referencia: "> 40 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Colesterol LDL", resultado: "145 mg/dL", referencia: "< 100 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Triglicéridos en Suero", resultado: "185 mg/dL", referencia: "< 150 mg/dL (Elevado)", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Creatinina en Suero", resultado: "0.85 mg/dL", referencia: "0.6 - 1.1 mg/dL", origen: "Athenea (Principal)" },
-        { fecha: "2026-08-01", examen: "Tamización de Cérvix (VPH / Citología)", resultado: "Negativo para LIE", referencia: "Sin atipia celular", origen: "Athenea (Principal)" }
-      ];
-      todosLabs.push(...atheneaDemoLabs);
+      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+      return;
     }
 
     let rowsHtml = todosLabs.map(lab => {
       const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || "Sin fecha";
-      const examen = lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.nombre || lab.Prueba || "Paraclínico";
-      const resultado = lab.resultado || lab.Resultado || lab.valor || lab.Valor || "Registrado";
-      const referencia = lab.referencia || lab.ValoresReferencia || lab.unidades || lab.Estado || "";
+      // v12.0.0 — Se añade NombreParametro al principio: es el campo con el que Athenea
+      // nombra el examen (el mismo que ya lee _matchLabInWhitelist). Sin él, TODA fila
+      // venida de Athenea se pintaba con el texto genérico "Paraclínico".
+      const examen = lab.NombreParametro || lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.nombre || lab.Prueba || "Examen sin nombre";
+      const resultado = lab.Resultado || lab.resultado || lab.valor || lab.Valor || "—";
+      // v12.0.0 — Fuera `lab.unidades` de esta cadena: unas unidades ("mg/dL") no son un
+      // rango de referencia, y colarlas aquí ensucia la única señal que usa el resaltado.
+      const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || "";
+      // v12.0.0 — El color por defecto ya NO es verde. Pintar de verde todo lo que no
+      // reconoce equivale a declarar "normal" un resultado que el script no ha
+      // interpretado: es una afirmación clínica que no le corresponde hacer. Ahora solo
+      // marca en rojo lo que la PROPIA fuente declara elevado o anormal; el resto va en
+      // color de texto neutro, sin insinuar nada.
       const esAlerta = String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal");
 
       return `
         <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
           <td style="padding:8px;font-size:12px;opacity:.85">${escapeHtml(String(fecha))}</td>
           <td style="padding:8px;font-size:12.5px;font-weight:600">${escapeHtml(String(examen))}</td>
-          <td style="padding:8px;font-size:12.5px;color:${esAlerta ? "#ef4444" : "#10b981"};font-weight:700">${escapeHtml(String(resultado))}</td>
+          <td style="padding:8px;font-size:12.5px;color:${esAlerta ? "#ef4444" : "inherit"};font-weight:700">${escapeHtml(String(resultado))}</td>
           <td style="padding:8px;font-size:11.5px;opacity:.7">${escapeHtml(String(referencia))}</td>
           <td style="padding:8px;font-size:11px"><span style="background:${lab.origen.includes("Athenea") ? "rgba(37,99,235,.35)" : "rgba(255,255,255,.1)"};color:${lab.origen.includes("Athenea") ? "#93c5fd" : "#fff"};padding:3px 7px;border-radius:4px;font-weight:600">${escapeHtml(lab.origen)}</span></td>
         </tr>
@@ -4920,7 +4981,6 @@ if (typeof window !== 'undefined' && window.history) {
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
@@ -4940,7 +5000,6 @@ if (typeof window !== 'undefined' && window.history) {
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -5176,7 +5235,10 @@ if (typeof window !== 'undefined' && window.history) {
       // secuencia capturada que terminó en "Agendada Correctamente". "Consulta" no aparece
       // ni una vez en las 1527 llamadas registradas: era un valor inventado.
       const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA");
-      vglLog("APPCITA", "AsignarTurnoResponse", { res });
+      // v12.0.0 — Se registran solo campos PLANOS y acotados. sanitizePII únicamente
+      // censura valores de primer nivel, así que pasar el objeto `res` entero podía escribir
+      // datos del paciente en la bitácora local sin filtrar.
+      vglLog("APPCITA", "AsignarTurnoResponse", { error: !!(res && res.error), radicado: Number((res && res.data && res.data.radicado) || 0), motivo: String((res && res.data && res.data.motivo) || "") });
       console.log("[Vigilante Agendamiento] Respuesta AsignarTurno:", res);
 
       const isLabChecked = modal.querySelector("#vgl-agm-lab-chk")?.checked;
@@ -5393,7 +5455,10 @@ if (typeof window !== 'undefined' && window.history) {
 
   // Guardar Ordenamiento por CIE-10 (POST GuardarOrdenamiento)
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
-    const uId = state.activeDoctor.id || S.medicoId || 515;
+    const uId = state.activeDoctor.id || S.medicoId || 0;
+    // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
+    // órdenes clínicas a nombre de otro profesional.
+    if (!uId) { alert("No se pudo identificar al médico en Everest. NO se generaron las órdenes.\n\nIndique su identificador en Ajustes."); return null; }
     const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento`;
     const payload = {
       DiagnosticoId: dxId,
@@ -5463,20 +5528,31 @@ if (typeof window !== 'undefined' && window.history) {
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">Seleccione las actividades de prevención a solicitar para el paciente:</label>
+          ${hayCoincidencia ? "" : `<div class="vgl-agm-err" style="margin-bottom:8px">No se detectaron actividades pendientes en la base de prevención para este paciente. Las opciones salen <b>sin marcar</b>: seleccione manualmente lo que corresponda.</div>`}
           <div id="vgl-ord-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px">
-            ${pkgsToRender.map((pkg, idx) => `
+            ${pkgsToRender.map((pkg, idx) => {
+              // v12.0.0 — El \`checked\` era INCONDICIONAL: sin coincidencia con la base
+              // salían las 10 actividades premarcadas y un solo clic en "Generar" creaba
+              // las diez órdenes, incluidas mamografía y citología en un hombre o PSA en
+              // una mujer. Ahora premarcar exige coincidencia explícita Y que el sexo
+              // registrado no contradiga la actividad.
+              const sexoReq = SEXO_PKG[pkg.cie10] || "";
+              const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
+              const marcar = hayCoincidencia && !chocaSexo;
+              return `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}" checked>
+                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">[CIE-10: ${escapeHtml(pkg.cie10)}]</span></div>
+                    ${chocaSexo ? `<div class="vgl-ord-cups" style="color:#e54d42;font-weight:700">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       CUPS: ${pkg.cups.map((c) => `<b>${escapeHtml(c.codigo)}</b> (${escapeHtml(c.desc)})`).join(" · ")}
                     </div>
                   </div>
                 </label>
-              </div>
-            `).join("")}
+              </div>`;
+            }).join("")}
           </div>
         </div>
 
@@ -5488,7 +5564,6 @@ if (typeof window !== 'undefined' && window.history) {
     `;
 
     document.body.appendChild(modal);
-    VigilanteGC.registerModal(modal);
 
     const xBtn = modal.querySelector("#vgl-ord-x");
     const cancelBtn = modal.querySelector("#vgl-ord-cancel");
@@ -5501,7 +5576,6 @@ if (typeof window !== 'undefined' && window.history) {
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
       modal.innerHTML = "";
       modal.remove();
-      if (typeof VigilanteGC !== 'undefined') VigilanteGC.modals.delete(modal); // Limpiar del GC manual si se cierra
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
@@ -5542,16 +5616,21 @@ if (typeof window !== 'undefined' && window.history) {
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
 
         const cupsObjs = [];
+        const cupsFaltantes = [];
         for (const cInfo of pkg.cups) {
           const cObj = await apiOrdenamientoObtenerCup(pacienteIdOrd, cInfo.codigo);
-          if (cObj) cupsObjs.push(cObj);
+          if (cObj) cupsObjs.push(cObj); else cupsFaltantes.push(cInfo.codigo);
         }
 
         if (!cupsObjs.length) { console.warn("[Vigilante PyM] No CUPS para", pkg.cie10); fallidasCount++; continue; }
+        // v12.0.0 — Si algún examen del paquete no se pudo resolver, se avisa: antes la
+        // orden se creaba incompleta en silencio y el médico creía haberlos pedido todos.
+        if (cupsFaltantes.length) console.warn("[Vigilante PyM] " + pkg.cie10 + ": no se resolvieron los CUPS " + cupsFaltantes.join(", "));
 
         vglLog("ORDEN", "GuardarOrdenRequested", { pacienteIdOrd, dxId, countCups: cupsObjs.length });
         const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
-        vglLog("ORDEN", "GuardarOrdenResponse", { resOrd });
+        // v12.0.0 — Igual que arriba: solo campos planos, nunca el objeto completo.
+        vglLog("ORDEN", "GuardarOrdenResponse", { error: !!(resOrd && resOrd.error), agrupador: String((resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador))) || "") });
         // v11.0.1 — Éxito estricto: antes bastaba cualquier respuesta sin `error:true`
         // (incluido un cuerpo vacío) para dar la orden por creada, mostrar el agrupador
         // falso "OK", marcarla como hecha del día y silenciar el recordatorio de PyM.
@@ -5733,7 +5812,13 @@ if (typeof window !== 'undefined' && window.history) {
 
   // [COPY-UX] Ajustes del asistente clínico
   function renderSettings() {
-    const isDevMode = localStorage.getItem("__vgl_dev_mode") === "true";
+    // v12.0.0 — La sección técnica se abría con una marca (__vgl_dev_mode) que solo escribía
+    // el "modo desarrollador" de los siete clics y un PIN. Al retirarse ese activador (no
+    // hacía nada y provocaba recargas a mitad de consulta), la sección quedó INALCANZABLE:
+    // con ella se perdían controles que el médico sí usa, como «Actualizar lista de
+    // prevención» o «Sincronizar almacenamiento». Ahora se abre con un interruptor normal,
+    // y los dos controles operativos se sacaron a la parte siempre visible.
+    const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
@@ -5756,7 +5841,15 @@ if (typeof window !== 'undefined' && window.history) {
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
-      <!-- SECCIÓN DESARROLLADOR / SECOPS (OCULTA POR DEFECTO PARA MÉDICOS) -->
+      <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
+      <div class="vgl-grp">
+        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
+        <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el almacenamiento para renovar la sesión si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
+        <div class="vgl-fld"><label>Su identificador de médico<span class="vgl-hint">Solo si el panel no lo detecta solo. Sin él no se pueden crear citas ni órdenes: aparece detectado como <b>${escapeHtml(String(state.activeDoctor.id || S.medicoId || "— sin detectar —"))}</b>.</span></label><input type="number" id="c-medid" min="0" value="${escapeHtml(String(S.medicoId || ""))}" placeholder="(automático)"></div>
+        <div class="vgl-fld"><label>Su nombre como aparece en la agenda<span class="vgl-hint">Solo si el panel no identifica su agenda propia. Detectado: <b>${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "— sin detectar —"))}</b>.</span></label><input type="text" id="c-mednom" value="${escapeHtml(String(S.medicoNombre || ""))}" placeholder="(automático)"></div>
+        <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
+      </div>
+      <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
       <div class="vgl-grp" ${devStyle}>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
@@ -5767,8 +5860,8 @@ if (typeof window !== 'undefined' && window.history) {
         <div class="vgl-fld"><label>Probar alerta cardiovascular<span class="vgl-hint">Muestra una vista previa del aviso de prioridad cardiovascular.</span></label><button class="vgl-btn" id="c-pestest">Probar</button></div>
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
         <div class="vgl-fld"><label>Enlace de la base de referencia<span class="vgl-hint">${escapeHtml((CONFIG?.SP?.respaldo?.name) || "ninguna")} — Identificador del archivo de referencia.</span></label><input type="text" id="c-fbid" placeholder="(predeterminado)" value="${escapeHtml(S.respaldoId)}"></div>
-        <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Consulta inmediatamente la versión más reciente de la lista de prevención.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
-        <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el acceso al almacenamiento para validar la sesión de usuario si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
+<!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
+             arriba, a la sección siempre visible: son operativos, no técnicos. -->
         <div class="vgl-fld"><label>Reporte de atención consolidado<span class="vgl-hint">Permite el envío del resumen diario de atención al panel de seguimiento.</span></label>${sw("c-rep", S.reporte)}</div>
         <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Probar comunicación<span class="vgl-hint" id="c-repn">Realiza una prueba de conexión con el servidor de reportes.</span></label><button class="vgl-btn" id="c-repgo">Probar</button></div>
@@ -5796,6 +5889,15 @@ if (typeof window !== 'undefined' && window.history) {
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
+    bind("#c-medid", "medicoId", (n) => parseInt(n.value, 10) || 0);
+    bind("#c-mednom", "medicoNombre", (n) => String(n.value || "").trim());
+    // v12.0.0 — El deslizador de Volumen se pintaba pero NO estaba enlazado a nada: moverlo
+    // no cambiaba el volumen ni se guardaba. Al soltarlo suena un tono para confirmarlo.
+    const volSlider = q("#c-vol");
+    if (volSlider) volSlider.addEventListener("change", () => { S.volumen = clampNum(volSlider.value, 2, 60, 15) / 100; saveSettings(); playTone("AZUL"); });
+    // El interruptor de opciones técnicas repinta la hoja para mostrar u ocultar el bloque.
+    const tecBtn = q("#c-tecnicas");
+    if (tecBtn) tecBtn.addEventListener("change", () => { S.opcionesTecnicas = tecBtn.checked; saveSettings(); renderSettings(); });
     bind("#c-base", "baseAuto", (n) => n.checked);
     bind("#c-fbid", "respaldoId", (n) => n.value);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
@@ -5812,7 +5914,10 @@ if (typeof window !== 'undefined' && window.history) {
     const testBtn = q("#c-test"); if (testBtn) testBtn.addEventListener("click", testNotifications);
     const resetBtn = q("#c-reset"); if (resetBtn) resetBtn.addEventListener("click", () => {
       if (!confirm("¿Restablecer toda la configuración a los valores predeterminados?")) return;
-      S = Object.assign({}, DEFAULTS); saveSettings(); applySettings(); state.lastSignature = ""; repaint(); renderSettings();
+      // v12.0.0 — Era `S = Object.assign({}, DEFAULTS)`, una REASIGNACIÓN de `S`, que está
+      // declarada con `const`: lanzaba TypeError y el botón no restablecía nada. Se muta el
+      // objeto en su sitio, que es lo que hacía el otro linaje.
+      Object.assign(S, DEFAULTS); saveSettings(); applySettings(); state.lastSignature = ""; repaint(); renderSettings();
     });
   }
 
@@ -6357,13 +6462,13 @@ if (typeof window !== 'undefined' && window.history) {
     heartbeat();
     tick();
     checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
-    VigilanteGC.registerInterval(setInterval(checkVersionMinimum, 300000)); // repite cada 5 minutos
-    VigilanteGC.registerInterval(setInterval(paintMute, 15000));
-    VigilanteGC.registerInterval(setInterval(pymReminderCheck, 60000));
+    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
+    setInterval(paintMute, 15000);
+    setInterval(pymReminderCheck, 60000);
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
     setTimeout(repDailySummary, 8000);
-    VigilanteGC.registerInterval(setInterval(repFlush, 600000));
+    setInterval(repFlush, 600000);
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue
