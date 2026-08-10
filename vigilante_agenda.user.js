@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.1
+// @version      12.0.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.1";
+  const VERSION = "12.0.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4260,7 +4260,45 @@
         const name = decodeURIComponent(uNameM[1]).replace(/\+/g, " ").trim();
         if (name && name.length > 3) state.activeDoctor.name = name;
       }
+
+      // v12.0.2 — FUENTE REAL DE LA IDENTIDAD DEL MÉDICO.
+      // El nombre completo NO viaja en ninguna URL de Everest: los raspados de arriba nunca
+      // encuentran nada (el único "NombreUsuario=" del registro de red es de digiturno y
+      // lleva el nombre del PACIENTE, no el del profesional). Por eso, mientras existió el
+      // nombre cableado del autor, el filtro "mi agenda" parecía funcionar — en realidad no
+      // detectaba a nadie. Al retirarlo quedó al descubierto: sin nombre no se puede
+      // reconocer la agenda propia y se ofrecen turnos de otros profesionales.
+      //
+      // Everest sí publica la ficha del usuario en sesión, con id y nombre completo:
+      //   GET /apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/<login>
+      //   -> { data: { id: 515, nombreCompleto: "…", perfilCodigo: "PROFESIONAL" } }
+      // Aquí se detecta el <login> cuando la propia aplicación llama a ese endpoint y se
+      // consulta una sola vez para resolver id y nombre de forma autoritativa.
+      const perfilM = /\/apiviva\/APIAcceso\/api\/ParametrizacionLista\/GetUsuarioPerfil\/([^/?#]+)/i.exec(srcStr);
+      if (perfilM && perfilM[1]) resolverMedicoPorPerfil(decodeURIComponent(perfilM[1]));
     } catch (e) {}
+  }
+
+  // Consulta (una sola vez por login) la ficha del usuario en sesión para fijar el médico
+  // activo. Es de SOLO LECTURA y no bloquea nada: si falla, el panel sigue avisando de que
+  // no identificó la agenda propia y el médico puede escribir su nombre en Ajustes.
+  let perfilPedido = "";
+  async function resolverMedicoPorPerfil(login) {
+    if (!login || perfilPedido === login) return;
+    perfilPedido = login;
+    try {
+      const r = await pageFetchJson(`/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/${encodeURIComponent(login)}`);
+      const d = r && r.data;
+      if (!d) return;
+      const nombre = String(d.nombreCompleto || "").trim();
+      const id = parseInt(d.id, 10);
+      if (nombre.length > 3) state.activeDoctor.name = nombre;
+      if (id > 0) state.activeDoctor.id = id;
+      if (nombre || id) {
+        console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
+        state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
+      }
+    } catch (e) { console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
   }
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
