@@ -5432,9 +5432,56 @@ Se auto-diligenciaron ${count} casillas en Everest.`, true);
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+  function fuzzyMatch(q, text) {
+    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
+
+    for (const qToken of queryTokens) {
+      let tokenMatched = false;
+      for (const tToken of textTokens) {
+        if (tToken.includes(qToken)) {
+          tokenMatched = true;
+          break;
+        }
+        const m = qToken.length;
+        const n = tToken.length;
+        const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
+        if (maxErrors === 0) continue;
+
+        let matrix = [];
+        for (let i = 0; i <= m; i++) matrix[i] = [i];
+        for (let j = 0; j <= n; j++) matrix[0][j] = j;
+
+        for (let i = 1; i <= m; i++) {
+          for (let j = 1; j <= n; j++) {
+            const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j - 1] + cost
+            );
+            if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
+              matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
+            }
+          }
+        }
+        let minCost = Infinity;
+        for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
+          if (matrix[m][j] < minCost) minCost = matrix[m][j];
+        }
+        if (minCost <= maxErrors) {
+          tokenMatched = true;
+          break;
+        }
+      }
+      if (!tokenMatched) return false;
+    }
+    return true;
+  }
+
   function matchesSearch(a) {
     const q = state.busqueda; if (!q) return true;
-    if (stripAccents((a.nombre || "").toLowerCase()).includes(stripAccents(q))) return true;
+    if (fuzzyMatch(q, a.nombre || "")) return true;
     const digitos = q.replace(/\D/g, "");
     return !!digitos && String(a.doc_id || "").includes(digitos);
   }
