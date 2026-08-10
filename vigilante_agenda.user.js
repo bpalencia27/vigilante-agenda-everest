@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.4
+// @version      12.0.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.4";
+  const VERSION = "12.0.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -463,7 +463,13 @@
     { key: "COLESTEROL_TOTAL", names: ["COLESTEROL TOTAL"], codes: ["2009", "903818"], resultId: "resultadoColesterolTotal", dateId: "fechaResultColesterolTotal" },
     { key: "COLESTEROL_HDL", names: ["COLESTEROL HDL", "COLESTEROL DE ALTA DENSIDAD"], codes: ["2015", "903815"], resultId: "resultadoColesterolHDL", dateId: "fechaResultColesterolHDL" },
     { key: "COLESTEROL_LDL", names: ["COLESTEROL LDL", "COLESTEROL DE BAJA DENSIDAD"], codes: ["2014", "903817", "903816"], resultId: "resultadoColesterolLDL", dateId: "fechaResultColesterolLDL" },
-    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    // v12.0.5 — CORREGIDO con el CUPS real capturado en el consultorio: los triglicéridos
+    // son 903868 (payload de Everest: {"codigo":"903868","descripcion":"TRIGLICERIDOS"}).
+    // Aquí figuraba 903866, que no corresponde a nada, mientras que 903868 estaba asignado
+    // por error al RAC. Como el emparejamiento por CÓDIGO manda sobre el nombre, un
+    // resultado de TRIGLICÉRIDOS se escribía en la casilla de la relación
+    // albuminuria/creatinina: dos analitos distintos, con rangos distintos.
+    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903868", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
     // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO hay casilla de texto para el
     // uroanálisis. Lo que existe es `resultadoPrograma.swUroanalisis`, un par de botones
     // de opción (sí/no), donde no cabe un resultado escrito. Se deja la entrada para que
@@ -471,15 +477,17 @@
     // desaparecer en silencio: el médico sabe así que ese lo registra a mano.
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
-    // v12.0.4 — CONFIRMADO contra el DOM real de la Ruta de Crónicos (captura del
-    // consultorio, 10/08/2026): el campo se llama resultadoRelacionAlbuminaCreatinina.
-    // Con "resultadoRAC" la casilla NUNCA se llenaba. Se conserva el nombre viejo como
-    // alternativa por si otra vista lo usa. Se quitan los códigos 2092/2080 y los alias
-    // sueltos "MICROALBUMINURIA"/"RAC", que capturaban analitos que no son la relación.
-    // OJO: en esa misma vista existe además resultadoMicroAlbuminuriaCreatinuria, que es
-    // otra casilla distinta. Si en su sede la relación se registra en ESA, cámbiela aquí;
-    // el script no puede decidirlo solo porque las dos existen.
-    { key: "RAC", names: ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"], codes: ["8779", "903868"], resultId: "resultadoRelacionAlbuminaCreatinina", altIds: ["resultadoRAC"], dateId: "fechaResultRelacionAlbuminaCreatinina", altDateIds: ["fechaResultRAC"] },
+    // v12.0.5 — CONFIRMADO EN EL CONSULTORIO (10/08/2026), leyendo la etiqueta que
+    // acompaña a cada casilla en la Ruta de Crónicos:
+    //     resultadoRelacionAlbuminaCreatinina  -> "Relación albuminuria/Creatinina en orina (mg/g)"   <-- ESTA
+    //     resultadoMicroAlbuminuriaCreatinuria -> "Microalbuminuria/Creatinuria"
+    // El médico registra la relación en la PRIMERA, que es la que usa el script. Con el
+    // nombre anterior ("resultadoRAC", que no existe en el DOM) esa casilla no se llenaba
+    // nunca. Se conserva el nombre viejo como alternativa por si otra vista lo usa.
+    // NO cambiar a resultadoMicroAlbuminuriaCreatinuria: es otra casilla distinta.
+    // Se quitan además los códigos 2092/2080 y los alias sueltos "MICROALBUMINURIA"/"RAC",
+    // que capturaban analitos que no son la relación.
+    { key: "RAC", names: ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"], codes: ["8779"], resultId: "resultadoRelacionAlbuminaCreatinina", altIds: ["resultadoRAC"], dateId: "fechaResultRelacionAlbuminaCreatinina", altDateIds: ["fechaResultRAC"] },
     // v11.0.1 — "CREATININA" a secas casaba también con la creatinina en ORINA, la
     // creatinuria y la depuración de 24 h, que sobrescribían la creatinina sérica.
     { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], excluye: ["ORINA", "CREATINURIA", "DEPURAC", "24 H"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
