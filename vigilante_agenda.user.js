@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.6
+// @version      12.3.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.6";
+  const VERSION = "12.3.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3174,10 +3174,8 @@
   function invalidarApiSiCambioMedico(nuevoId) {
     if (!(nuevoId > 0)) return;
     if (API.medicoId > 0 && API.medicoId !== nuevoId) {
-      console.warn("[Vigilante] la llamada de agenda aprendida pertenecía a otro médico (id " + API.medicoId + "); se descarta para el médico actual (id " + nuevoId + ").");
-      API.url = ""; API.fallos = 0; API.ok = 0;
+      purgarApiUrl("pertenecía al médico id " + API.medicoId + ", ahora en sesión id " + nuevoId);
       state.apiCitas = null; state.apiEn = 0;
-      try { localStorage.removeItem("vgl_api_url"); } catch (e) {}
     }
     // Se etiqueta (o re-etiqueta) siempre con el médico ya resuelto: cubre tanto el
     // caso de arriba como el de una URL aprendida ANTES de que la identidad se
@@ -3340,14 +3338,39 @@
       const txt = (await leerConTope(r, API_MAX) || "").trim();
       API.ms = Date.now() - t0;
       if (!txt) { API.fallos = 0; return []; }        // cuerpo vacío: agenda vacía, no es un fallo
+      // v12.3.7 — BUG REAL encontrado al reforzar esto: si citas===null, el código de
+      // antes SOLO retornaba cuando fallos llegaba a valer EXACTAMENTE 3 — pero como no
+      // había return en los casos 1 y 2, la ejecución SEGUÍA de largo hasta "fallos = 0;
+      // ok++; return citas" (con citas=null), que BORRABA el contador que se acababa de
+      // subir y contaba la falla como un ÉXITO. fallos jamás llegaba a 3 de verdad: la
+      // rama de recuperación era código muerto, y apiSano() (que exige ok>0) se daba por
+      // buena con un API que en realidad llevaba fallando desde el principio.
       const citas = apiParse(apiLista(JSON.parse(txt)));
-      if (citas === null) { API.fallos++; if (API.fallos === 3) return null; }
+      if (citas === null) {
+        API.fallos++;
+        if (API.fallos >= 3) purgarApiUrl("la respuesta ya no tiene la forma esperada");
+        return null;
+      }
       API.fallos = 0; API.ok++;
       return citas;
     } catch (e) {
       API.fallos++;
+      if (API.fallos >= 3) purgarApiUrl((e && e.message) || String(e));
       return null;
     } finally { clearTimeout(corte); API.enVuelo = false; }
+  }
+  // v12.3.7 — Antes se insistía contra la MISMA url hasta 5 fallos y luego se esperaban
+  // 5 minutos completos, una y otra vez, contra una url que —salvo un corte de red
+  // pasajero— casi nunca se recupera sola (sesión caída, médico distinto, o Everest
+  // cambió la forma de la llamada). A los 3 fallos SEGUIDOS se olvida la URL entera: la
+  // próxima vez que la propia Everest haga esa llamada (apiObservar está siempre activo),
+  // se vuelve a aprender sin que nadie tenga que esperar ni volver a "Citas del día" a la
+  // fuerza. Generaliza invalidarApiSiCambioMedico() a CUALQUIER causa de fallo repetido,
+  // no solo el cambio de médico.
+  function purgarApiUrl(motivo) {
+    console.warn("[Vigilante] se descarta la llamada de agenda aprendida tras fallos repetidos (" + motivo + ").");
+    API.url = ""; API.fallos = 0; API.ok = 0; API.medicoId = 0;
+    try { localStorage.removeItem("vgl_api_url"); localStorage.removeItem("vgl_api_medico"); } catch (e) {}
   }
   // ¿Se puede intentar el API? Tras 5 fallos seguidos se deja descansar, pero se
   // reintenta cada 5 min: una caída pasajera (reinicio del servidor, corte de la VPN)
