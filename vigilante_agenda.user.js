@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.2
+// @version      12.0.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.2";
+  const VERSION = "12.0.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4456,8 +4456,11 @@
     if (!cleanDoc) return null;
 
     const paths = [
-      `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
-      `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
+      // v12.0.3 — RETIRADAS las dos rutas de APIPacienteV2: en la consola del consultorio
+      // devuelven 404 para TODOS los pacientes, sin excepción. Al ir primeras en la
+      // cascada, cada búsqueda gastaba dos peticiones fallidas antes de llegar a la que sí
+      // funciona (APIAcceso), y como la precarga al pasar el cursor por las tarjetas también
+      // las dispara, la agenda entera generaba un goteo constante de 404 contra el servidor.
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
       // v12.0.0 — RETIRADA la quinta ruta: pasaba la CÉDULA en el parámetro idPaciente,
