@@ -4265,7 +4265,8 @@
         // llame a GetUsuarioPerfil por su cuenta: se consulta activamente (una sola vez,
         // resolverMedicoPorPerfil ya deduplica) para fijar id y nombre del médico.
         if (PAGEWIN.UsuarioLogin && (!state.activeDoctor.id || state.activeDoctor.id === 0)) {
-          resolverMedicoPorPerfil(String(PAGEWIN.UsuarioLogin).trim());
+          loginVisto = String(PAGEWIN.UsuarioLogin).trim();
+          resolverMedicoPorPerfil(loginVisto);
         }
       }
     } catch (e) {}
@@ -4276,11 +4277,16 @@
       // del PACIENTE (APIEnvioCorreo, APIHCHealth/Morbilidad) o de otro usuario (digiturno).
       // El "médico activo" podía acabar siendo el identificador de un paciente, y con él se
       // creaban las citas y las órdenes.
-      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/(APIAcceso|ApiIntegracionEverestDigiturno)\//i;
+      // v12.3.1 — Se retira ApiIntegracionEverestDigiturno de la lista: el propio comentario
+      // de arriba documenta que su "UsuarioId" es el de OTRO usuario, y aun así seguía en la
+      // lista blanca. Y el id raspado ya NO pisa uno existente: la ficha de GetUsuarioPerfil
+      // es autoritativa, y un eco de las llamadas del propio Vigilante (que viajan con el
+      // S.medicoId manual de Ajustes) no debe sobrescribirla.
+      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/APIAcceso\//i;
       const uIdM = ORIGEN_FIABLE.test(srcStr) ? (/UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr)) : null;
       if (uIdM && uIdM[1]) {
         const id = parseInt(uIdM[1], 10);
-        if (id > 0) state.activeDoctor.id = id;
+        if (id > 0 && !state.activeDoctor.id) { state.activeDoctor.id = id; state.lastSignature = ""; }
       }
       const uNameM = /UsuarioNombreCompleto=([^&]+)/i.exec(srcStr) || /"usuarioNombreCompleto":\s*"([^"]+)"/i.exec(srcStr);
       if (uNameM && uNameM[1]) {
@@ -4302,7 +4308,24 @@
       // Aquí se detecta el <login> cuando la propia aplicación llama a ese endpoint y se
       // consulta una sola vez para resolver id y nombre de forma autoritativa.
       const perfilM = /\/apiviva\/APIAcceso\/api\/ParametrizacionLista\/GetUsuarioPerfil\/([^/?#]+)/i.exec(srcStr);
-      if (perfilM && perfilM[1]) resolverMedicoPorPerfil(decodeURIComponent(perfilM[1]));
+      if (perfilM && perfilM[1]) { loginVisto = decodeURIComponent(perfilM[1]); resolverMedicoPorPerfil(loginVisto); }
+
+      // v12.3.1 — MECANISMO PRIMARIO para cualquier médico. GetUsuarioPerfil no aparece
+      // en NINGUNA captura posterior al login (solo ocurre —si ocurre— en el bootstrap),
+      // así que esperar únicamente por él dejaba el id en 0 en los equipos ajenos y
+      // BuscarPaciente con UsuarioId=0 "no encontraba" a ningún paciente. Pero la
+      // aplicación SÍ pasa el LOGIN de la sesión como parámetro en otras llamadas
+      // (capturado en consultorio: APIMedicoHealth/api/Medico/ObtenerEspecialidadMedico
+      // ?login=bpalencia al pulsar "Nueva orden"). Cualquier "login=" dentro de /apiviva/
+      // es el del usuario en sesión; se resuelve por la misma puerta autoritativa
+      // (GetUsuarioPerfil) antes de usarse para nada.
+      if (!state.activeDoctor.id) {
+        const loginM = /\/apiviva\/[^?#\s"']+\?[^#\s"']*\blogin=([^&#\s"']+)/i.exec(srcStr);
+        if (loginM && loginM[1]) {
+          const lg = decodeURIComponent(loginM[1]).trim();
+          if (lg) { loginVisto = lg; resolverMedicoPorPerfil(lg); }
+        }
+      }
     } catch (e) {}
   }
 
@@ -4310,22 +4333,24 @@
   // activo. Es de SOLO LECTURA y no bloquea nada: si falla, el panel sigue avisando de que
   // no identificó la agenda propia y el médico puede escribir su nombre en Ajustes.
   let perfilPedido = "";
+  let loginVisto = "";   // v12.3.1 — último login de sesión visto en la red (para reintentos)
+  let idRetryAt = 0;     // v12.3.1 — sello del último reintento de identidad desde tick()
   async function resolverMedicoPorPerfil(login) {
     if (!login || perfilPedido === login) return;
     perfilPedido = login;
     try {
       const r = await pageFetchJson(`/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/${encodeURIComponent(login)}`);
       const d = r && r.data;
-      if (!d) return;
+      const id = d ? parseInt(d.id, 10) : 0;
+      // v12.3.1 — Sin ficha con id se LIBERA el login para poder reintentar: antes un
+      // único fallo (red caída, 4xx) vetaba ese login de por vida de la pestaña.
+      if (!(id > 0)) { perfilPedido = ""; return; }
       const nombre = String(d.nombreCompleto || "").trim();
-      const id = parseInt(d.id, 10);
       if (nombre.length > 3) state.activeDoctor.name = nombre;
-      if (id > 0) state.activeDoctor.id = id;
-      if (nombre || id) {
-        console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
-        state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
-      }
-    } catch (e) { console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
+      state.activeDoctor.id = id;
+      console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
+      state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
+    } catch (e) { perfilPedido = ""; console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
   }
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
@@ -6450,6 +6475,15 @@
       // llamada se busca en el registro de rendimiento; si ya se aprendió, se sondea.
       if (leader) {
         if (!API.url) apiSniffPerf(window);
+        // v12.3.1 — Reintento de identidad, mismo patrón que apiSniffPerf: mientras el
+        // médico no esté identificado, cada 30 s se re-consultan los globales de la
+        // página y, si ya se vio un login en la red pero su resolución falló, se vuelve
+        // a intentar (resolverMedicoPorPerfil deduplica los intentos en vuelo).
+        if (!state.activeDoctor.id && Date.now() - idRetryAt > 30000) {
+          idRetryAt = Date.now();
+          captureDoctorInfo("");
+          if (loginVisto) resolverMedicoPorPerfil(loginVisto);
+        }
         tickApi();
         checkRecordatorioPym();
         checkAbandonoPES();

@@ -26,6 +26,17 @@
   w("======= DIAGNÓSTICO IDENTIDAD MÉDICO · " + location.href + " =======");
   w("fecha: " + new Date().toISOString());
 
+  // ---------- 0. Contexto: Vigilante e iframes ----------
+  w("\n--- 0. CONTEXTO ---");
+  try {
+    w("origin: " + location.origin);
+    w("iframes: " + document.querySelectorAll("iframe").length);
+    document.querySelectorAll("iframe").forEach((f, i) => w("   iframe[" + i + "].src = " + corto(f.src || "(sin src)", 100)));
+    w("Vigilante PerformanceObserver (__vglPO): " + (window.__vglPO ? "activo" : "(no presente en este contexto)"));
+    try { w("vgl_cfg: " + corto(localStorage.getItem("vgl_cfg") || "(no existe)", 300)); } catch (e) {}
+    try { w("vgl_api_url: " + corto(localStorage.getItem("vgl_api_url") || "(no existe)", 200)); } catch (e) {}
+  } catch (e) { w("ERROR contexto: " + e.message); }
+
   // ---------- 1. Globales de window ----------
   w("\n--- 1. GLOBALES DE WINDOW (nombre coincide con identidad) ---");
   try {
@@ -194,20 +205,40 @@
         }
       }
     }
+    // También del registro de red: cualquier login= en /apiviva/ es el de la sesión
+    try {
+      performance.getEntriesByType("resource").forEach((e) => {
+        const m = /\/apiviva\/[^?#]+\?[^#]*\blogin=([^&#]+)/i.exec(e.name || "");
+        if (m && m[1]) candidatos.add(decodeURIComponent(m[1]));
+      });
+    } catch (e) {}
     w("candidatos a login: " + (candidatos.size ? [...candidatos].join(", ") : "(ninguno)"));
+    // Si no se halló ninguno, se le pregunta al médico (él conoce su login de Everest)
+    if (!candidatos.size) {
+      try {
+        const escrito = prompt("Diagnóstico Vigilante: escriba su LOGIN de Everest (el usuario con el que inicia sesión). Cancele si prefiere no probarlo.");
+        if (escrito && escrito.trim()) candidatos.add(escrito.trim());
+      } catch (e) {}
+    }
     let probados = 0;
     for (const login of candidatos) {
       if (probados >= 3) break;
       probados++;
       try {
         const r = await fetch("/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/" + encodeURIComponent(login), { headers: { Accept: "application/json" } });
-        if (!r.ok) { w("   " + login + " -> HTTP " + r.status); continue; }
+        if (!r.ok) { w("   GetUsuarioPerfil(" + login + ") -> HTTP " + r.status); continue; }
         const j = await r.json();
         const d = j && j.data;
-        w("   " + login + " -> " + (d ? "id=" + d.id + " · nombreCompleto=" + corto(d.nombreCompleto, 60) + " · perfilCodigo=" + d.perfilCodigo : "sin data: " + corto(JSON.stringify(j), 100)));
+        w("   GetUsuarioPerfil(" + login + ") -> " + (d ? "id=" + d.id + " · nombreCompleto=" + corto(d.nombreCompleto, 60) + " · perfilCodigo=" + d.perfilCodigo : "sin data: " + corto(JSON.stringify(j), 100)));
+        // Confirmar también la ruta que la app usa con login= (vista en captura real)
+        try {
+          const r2 = await fetch("/apiviva/APIMedicoHealth/api/Medico/ObtenerEspecialidadMedico?login=" + encodeURIComponent(login), { headers: { Accept: "application/json" } });
+          w("   ObtenerEspecialidadMedico(" + login + ") -> HTTP " + r2.status + (r2.ok ? " · " + corto(await r2.text(), 140) : ""));
+        } catch (e) { w("   ObtenerEspecialidadMedico -> ERROR " + e.message); }
       } catch (e) { w("   " + login + " -> ERROR " + e.message); }
     }
     if (!candidatos.size) w("(sin candidatos: revisar secciones 1, 2 y 5 del informe)");
+    w("NOTA: para confirmar qué llama Everest DURANTE el login: F12 -> Network -> 'Preserve log' -> cerrar sesión y volver a entrar -> filtrar por 'apiviva' -> exportar HAR.");
   } catch (e) { w("ERROR validación: " + e.message); }
 
   w("\n======= FIN DEL DIAGNÓSTICO =======");
