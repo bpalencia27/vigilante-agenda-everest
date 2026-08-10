@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      11.0.0
+// @version      11.0.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -41,6 +41,60 @@
 // ----------------------------------------------------------------------------
 
 /*
+  v11.0.1 — AUDITORÍA CONTRA TELEMETRÍA REAL (26 capturas · 1527 llamadas de Everest)
+  Cada cambio de abajo está respaldado por lo que la aplicación OFICIAL hace de verdad,
+  no por suposiciones. Lo que no tenía respaldo en las capturas se dejó como estaba.
+
+  SEGURIDAD DEL PACIENTE
+  - La cita solo se da por creada si el servidor lo confirma (error:false + radicado).
+    Antes bastaba con que la respuesta trajera cualquier "mensaje" —incluido uno de
+    ERROR— para anunciar "¡Cita Creada Exitosamente!", marcar al paciente como agendado
+    del día y silenciar al vigilante para él.
+  - La toma de muestras se agenda DESPUÉS de confirmar la cita principal, y una sola vez.
+    Antes salía disparada antes de comprobar nada: una cita fallida dejaba igualmente al
+    paciente citado en el laboratorio.
+  - Ya no se elige un "cupo por defecto" de laboratorio: si la hora elegida no está
+    libre, se avisa en vez de citar en silencio en el primer turno del día.
+  - Las agendas se filtran por la FECHA elegida (la respuesta mezcla hasta 7 días) y el
+    turno muestra siempre profesional, fecha y sede.
+  - Sin nombre de médico cableado: si no se identifica la agenda propia se avisa, en vez
+    de usar la del autor del script.
+  - El "médico activo" se toma solo de servicios fiables: varios endpoints usan
+    "UsuarioId" para el id del PACIENTE y podía acabar creando citas con él.
+  - Órdenes PyM: sin coincidencia con la base salen DESMARCADAS (antes las 10 venían
+    premarcadas: mamografía y citología a hombres, PSA a mujeres) y se avisa del choque
+    de sexo. Si un CIE-10 o un CUPS no se resuelve ya no se sustituye por el primero de
+    la lista, que ordenaba un examen o un diagnóstico distintos del pedido.
+  - Laboratorios: la fecha de toma ya no se rellena con la de HOY (convertía un
+    resultado de hace meses en uno de hoy dentro de la historia), los analitos
+    PENDIENTES dejan de escribirse como si fueran resultados, y la casilla del RAC usa
+    por fin el identificador real del formulario.
+  - Retirados los dos prompt() que permitían teclear una cédula o un idSolicitud a mano:
+    escribían en la historia abierta los resultados de otro paciente.
+
+  ESTABILIDAD
+  - Ninguna ESCRITURA se reintenta: el motor de red repetía los POST hasta 8 veces, lo
+    que podía crear ocho citas u ocho órdenes idénticas.
+  - Eliminadas 427 líneas del módulo Athenea duplicado que estaban pegadas dentro de dos
+    funciones muy usadas; cada ejecución dejaba un temporizador de 2 s activo para
+    siempre (uno por cada vez que se pasaba el cursor sobre una tarjeta de paciente).
+  - Corregido un bucle infinito de recarga: al detectar versión nueva se recargaba cada
+    pocos segundos sin freno, porque recargar no actualiza el script.
+  - localStorage.clear() ya no borra la bitácora de auditoría de fraudes e
+    inasistencias, los contadores, los ajustes ni el registro anti-duplicados del día.
+
+  PRIVACIDAD
+  - El estado interno (mapa de cédulas con PyM pendiente) deja de publicarse en
+    window.state, donde cualquier script de la página podía leerlo.
+  - Retirada la telemetría a un endpoint que era un marcador de posición y que se
+    disparaba con cualquier error de la página, incluidos los ajenos al Vigilante.
+
+  PENDIENTE (a propósito, por falta de evidencia — ver notas en el código)
+  - ProgramaId en AsignarTurno y en BuscarCitasDisponibles: la app oficial los envía,
+    el script no. Cambiarlos con una sola captura es más peligroso que el defecto.
+  - El módulo de órdenes PyM se apoya en un contrato de API del que no existe ni una
+    captura: conviene verificar las primeras órdenes contra el módulo nativo.
+
   v7.9.0 — AGENDAMIENTO EXPRÉS DE CONTROL Y PyM EN 1-CLIC DESDE EL PANEL
   Agendamiento inteligente de citas de control directamente desde el panel del Vigilante
   conectado con APIAcceso (https://neps.everestintelligent.com/apiviva/APIAcceso/api/...).
@@ -171,9 +225,27 @@
       const passInput = document.querySelector("#Password") || document.querySelector("input[name='Password']");
       const loginBtn = document.querySelector("button[type='submit']") || document.querySelector("input[type='submit']");
       
+      // v11.0.1 — Las credenciales se leen PRIMERO del almacén local de Tampermonkey
+      // (vgl_ath_user / vgl_ath_pass), que no sale del equipo. Los valores de abajo son
+      // solo el respaldo heredado para no dejar sin autologin a los consultorios ya
+      // instalados.
+      //
+      // ⚠ IMPORTANTE: esta contraseña está escrita en claro en un script que se distribuye
+      // por una URL de Gist. Debe ROTARSE. Después de rotarla, NO la vuelva a escribir
+      // aquí: fíjela en cada equipo una sola vez desde la consola de Tampermonkey con
+      //     GM_setValue("vgl_ath_user", "USUARIO"); GM_setValue("vgl_ath_pass", "CLAVE");
+      // y borre el respaldo de las dos líneas de abajo.
+      let athUser = "CONSULTAMED", athPass = "Viva1a*md04";
+      try {
+        if (typeof GM_getValue !== "undefined") {
+          athUser = GM_getValue("vgl_ath_user", "") || athUser;
+          athPass = GM_getValue("vgl_ath_pass", "") || athPass;
+        }
+      } catch (e) {}
+
       if (userInput && passInput && loginBtn && !userInput.value) {
-        userInput.value = "CONSULTAMED";
-        passInput.value = "Viva1a*md04";
+        userInput.value = athUser;
+        passInput.value = athPass;
         userInput.dispatchEvent(new Event('input', { bubbles: true }));
         passInput.dispatchEvent(new Event('input', { bubbles: true }));
         setTimeout(() => loginBtn.click(), 300);
@@ -203,7 +275,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "11.0.0";
+  const VERSION = "11.0.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -321,8 +393,14 @@
     { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
-    { key: "RAC", names: ["RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA", "MICROALBUMINURIA", "RAC"], codes: ["2092", "2080", "903868"], resultId: "resultadoRAC", dateId: "fechaResultRAC" },
-    { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
+    // v11.0.1 — RAC: el campo del DOM se llama resultadoRelacionAlbuminaCreatinina; con
+    // "resultadoRAC" la casilla NUNCA se llenaba. Se conserva el nombre viejo como
+    // alternativa por si la vista cambia. Se quitan los códigos 2092/2080 y los alias
+    // sueltos "MICROALBUMINURIA"/"RAC", que capturaban analitos que no son la relación.
+    { key: "RAC", names: ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"], codes: ["8779", "903868"], resultId: "resultadoRelacionAlbuminaCreatinina", altIds: ["resultadoRAC"], dateId: "fechaResultRelacionAlbuminaCreatinina", altDateIds: ["fechaResultRAC"] },
+    // v11.0.1 — "CREATININA" a secas casaba también con la creatinina en ORINA, la
+    // creatinuria y la depuración de 24 h, que sobrescribían la creatinina sérica.
+    { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], excluye: ["ORINA", "CREATINURIA", "DEPURAC", "24 H"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
     { key: "HBA1C", names: ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"], codes: ["2035", "903843"], resultId: "resultadoHBA1C", dateId: "fechaResultHBA1C" },
     { key: "PTH", names: ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"], codes: ["2065", "904921"], resultId: "resultadoPTH", dateId: "fechaResultPTH" },
     { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
@@ -412,42 +490,77 @@
       const code = String(lab.CodigoParametro || lab.codigo || "").trim();
       const name = String(lab.NombreParametro || lab.nombre || lab.examen || "").toUpperCase().trim();
 
+      // v11.0.1 — El código exacto manda SIEMPRE sobre el nombre (antes dependía del
+      // orden del recorrido). Solo si ningún código casa se intenta por nombre, y ahí se
+      // respetan las exclusiones de cada analito.
       for (const item of WHITELIST_13_LABS) {
-          if (item.codes.includes(code)) return item;
+          if (code && item.codes.includes(code)) return item;
+      }
+      for (const item of WHITELIST_13_LABS) {
+          if (item.excluye && item.excluye.some((x) => name.includes(x))) continue;
           for (const n of item.names) {
               if (name.includes(n)) return item;
           }
       }
       return null;
   }
+  // Primer elemento del DOM que exista entre el id principal y sus alternativas.
+  function _findLabField(primaryId, altIds) {
+      for (const id of [primaryId].concat(altIds || [])) {
+          if (!id) continue;
+          const el = document.getElementById(id) || document.querySelector(`[name="${id}"]`);
+          if (el) return el;
+      }
+      return null;
+  }
 
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
-      if (!Array.isArray(labsArray)) return 0;
+      let pendientes = 0;
+      const sinCasilla = [];
+      const yaEscritas = new Set();
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [] };
 
       labsArray.forEach(lab => {
           const matched = _matchLabInWhitelist(lab);
           if (!matched) return; // Filtro estricto: solo los 13 laboratorios autorizados
 
           const resultVal = lab.Resultado || lab.resultado || lab.valor;
-          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || new Date().toISOString().split('T')[0];
-
           if (!resultVal) return;
 
-          // Inyectar valor en casilla correspondiente
-          let inputEl = document.getElementById(matched.resultId) || document.querySelector(`[name="${matched.resultId}"]`);
+          // v11.0.1 — Un analito que aún NO tiene resultado ("PENDIENTE", o estado 1 en
+          // Athenea) se estaba escribiendo en la historia clínica COMO SI FUERA un
+          // resultado. Se excluye por valor conocido, no por lista blanca de formatos,
+          // para no perder los resultados cualitativos legítimos ("Negativo", "Normal").
+          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientes++; return; }
+
+          // v11.0.1 — Si dos analitos distintos caen en la misma casilla (p. ej. creatinina
+          // en suero y creatinina en orina), manda el PRIMERO y se avisa por consola en vez
+          // de sobrescribir en silencio con el equivocado.
+          if (yaEscritas.has(matched.resultId)) { console.warn("[Vigilante] casilla ya escrita, se conserva el primer valor:", matched.key); return; }
+
+          // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la
+          // trae: eso convertía un resultado de hace meses en uno "de hoy" dentro de la
+          // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
+          // médico la escriba.
+          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || null;
+
+          let inputEl = _findLabField(matched.resultId, matched.altIds);
           if (inputEl) {
               setNgValue(inputEl, resultVal);
+              yaEscritas.add(matched.resultId);
               count++;
+          } else {
+              sinCasilla.push(matched.key);   // el campo no existe en esta vista: hay que avisarlo
+              return;
           }
 
-          // Inyectar fecha en casilla correspondiente
-          let dateInput = document.getElementById(matched.dateId) || document.querySelector(`[name="${matched.dateId}"]`);
-          if (dateInput) {
+          let dateInput = _findLabField(matched.dateId, matched.altDateIds);
+          if (dateInput && resultDate) {
               setNgValue(dateInput, resultDate);
           }
       });
-      return count;
+      return { count, pendientes, sinCasilla };
   }
 
   // Obtención automatizada de idSolicitud vía Athenea API Bridge
@@ -457,10 +570,11 @@
           if (!doc && typeof extractPacienteAbierto === "function") {
               doc = extractPacienteAbierto();
           }
+          // v11.0.1 — SIN prompt(). Pedir la cédula a mano permitía escribir en la historia
+          // clínica ABIERTA los resultados de OTRO paciente (basta un dígito mal tecleado).
+          // La identidad solo puede venir del paciente que está abierto en Everest.
           if (!doc) {
-              doc = prompt("No se detectó la cédula del paciente abierto en Everest. Ingresa el número de documento:");
-          }
-          if (!doc) {
+              console.warn("[Vigilante] no se pudo determinar el paciente abierto: no se consultan laboratorios");
               resolve(null);
               return;
           }
@@ -509,9 +623,12 @@
   let lastAutoFetchedDoc = "";
 
   async function autoFetchAtheneaLabsForActivePatient() {
-      vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
+      // v11.0.1 — El registro va DESPUÉS de la guarda. Antes se escribía en cada ráfaga del
+      // observador de DOM, y cada escritura reserializa hasta 500 entradas: en la historia
+      // clínica eso era trabajo constante y evitable en el hilo de la página.
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
       if (!docId || docId === lastAutoFetchedDoc) return;
+      vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
       
       lastAutoFetchedDoc = docId;
       console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
@@ -523,10 +640,17 @@
           if (idSol) {
               const labs = await fetchAtheneaLabs(idSol);
               if (labs && labs.length > 0) {
-                  const count = injectLabsIntoCronicos(labs);
-                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: count });
-                  notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados", 
-                    `Se encontraron ${labs.length} resultados en Athenea para la cédula ${docId}.\nSe auto-diligenciaron ${count} casillas en Everest.`, true);
+                  const r = injectLabsIntoCronicos(labs);
+                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
+                  // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
+                  // muestra), deja de ser persistente (los avisos persistentes sin cerrar
+                  // reaparecen horas después desde el Centro de actividades de Windows) y
+                  // dice lo que NO se pudo llenar, para que el médico lo revise.
+                  const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
+                    + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
+                  notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
+                    `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
+                    false, "athenea|" + docId + "|" + todayStamp());
               }
           }
       } catch (e) {
@@ -550,17 +674,26 @@
           let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
           const idSol = (idSolicitud && (idSolicitud.idSolicitud || idSolicitud.id)) || (typeof idSolicitud === "number" ? idSolicitud : null);
           
+          // v11.0.1 — SIN prompt(). Escribir a mano un "idSolicitud" traía a esta historia
+          // clínica los resultados de la solicitud que fuera — es decir, los de CUALQUIER
+          // otro paciente — y se escribían sin ninguna comprobación de identidad.
           if (!idSol) {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge. Ingresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) { btn.innerHTML = "🧬 Auto-Labs (Athenea)"; return; }
+              btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+              alert("No se pudo resolver la solicitud de laboratorio del paciente abierto"
+                + (docId ? " (cédula " + docId + ")" : "")
+                + ".\n\nConsulte los resultados directamente en Athenea. No se diligenció ninguna casilla.");
+              return;
           }
-          
+
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSol || idSolicitud);
+              const labs = await fetchAtheneaLabs(idSol);
               if (labs && labs.length > 0) {
-                  const injectedCount = injectLabsIntoCronicos(labs);
-                  alert("✅ ¡Éxito! Se encontraron y extrajeron " + labs.length + " analitos. Se inyectaron " + injectedCount + " valores en la Ruta Crónicos.");
+                  const r = injectLabsIntoCronicos(labs);
+                  alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
+                    + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
+                    + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
+                    + "\n\nRevise las fechas de toma antes de guardar la historia.");
               } else {
                   alert("⚠️ No se encontraron laboratorios en esa solicitud.");
               }
@@ -610,49 +743,18 @@
       return text.replace(/\b\d{6,11}\b/g, '[CENSURADO]');
   }
 
-  window.addEventListener('error', function(e) {
-      const msg = sanitizePII(e.message || '');
-      if (typeof FETCH0 === 'function') {
-          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
-              method: 'POST', mode: 'no-cors',
-              body: JSON.stringify({ error: msg, location: e.filename, line: e.lineno, type: 'error' })
-          }).catch(()=>{});
-      }
-  });
-
-  window.addEventListener('unhandledrejection', function(e) {
-      const msg = sanitizePII(e.reason ? e.reason.toString() : '');
-      if (typeof FETCH0 === 'function') {
-          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
-              method: 'POST', mode: 'no-cors',
-              body: JSON.stringify({ error: msg, type: 'promise_rejection' })
-          }).catch(()=>{});
-      }
-  });
-
-  window.addEventListener('DOMContentLoaded', () => {
-      let devClickCount = 0;
-      let devClickTimer;
-      document.body.addEventListener('click', (e) => {
-          const target = e.target.closest('#vgl-title small');
-          if (target) {
-              devClickCount++;
-              clearTimeout(devClickTimer);
-              if (devClickCount >= 7) {
-                  devClickCount = 0;
-                  const pin = prompt('VGL SecOps - Ingrese PIN de Desarrollador:');
-                  if (pin === '7355608') {
-                      localStorage.setItem('__vgl_dev_mode', 'true');
-                      alert('Modo Desarrollador Activado. Opciones técnicas reveladas.');
-                      location.reload();
-                  } else if (pin !== null) {
-                      alert('PIN Incorrecto.');
-                  }
-              }
-              devClickTimer = setTimeout(() => { devClickCount = 0; }, 5000);
-          }
-      });
-  });
+  // v11.0.1 — RETIRADOS dos bloques que solo hacían daño:
+  //
+  // 1) Telemetría remota a ".../AKfycby_TELEMETRY/exec". Ese identificador es un marcador
+  //    de posición (los reales tienen ~60 caracteres): NADIE recibía nada. Y se disparaba
+  //    con CUALQUIER error de la página, incluidos los de Angular y los de la propia
+  //    Everest, ajenos al Vigilante, generando peticiones inútiles todo el día. El
+  //    registro local ("caja negra" vglLog) ya cubre la depuración sin salir del equipo.
+  //
+  // 2) "Modo desarrollador": siete clics sobre el número de versión abrían un cuadro
+  //    pidiendo un PIN y, si acertabas, recargaba la página. La marca que guardaba
+  //    (__vgl_dev_mode) NO SE LEE EN NINGÚN SITIO, así que no revelaba nada: para el
+  //    médico solo era una recarga inesperada a mitad de consulta.
 
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
@@ -719,6 +821,7 @@
     recordatorioPym: true,    // recordatorio (calmado) de PyM pendiente al abrir la historia
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
+    smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
@@ -898,7 +1001,11 @@
       return true;
     }
   });
-  PAGEWIN.state = state; PAGEWIN.rawState = rawState;
+  // v11.0.1 — Ya NO se cuelga el estado interno de la ventana real de la página. Exponía
+  // en `window.state` el mapa completo de pacientes con PyM pendiente (cédulas y
+  // actividades) al alcance de cualquier script cargado por Everest. Para depurar queda
+  // una vista mínima que no contiene datos de pacientes.
+  try { PAGEWIN.vglDebug = { version: VERSION, pymSize: () => state.pym.size, leader: () => state.leader }; } catch (e) {}
   let pollTimer = null;
   function restartPolling() { if (!el || !el.root) return; if (pollTimer) clearInterval(pollTimer); pollTimer = setInterval(tick, CONFIG.POLL_MS); }
   // ---- Coordinación entre pestañas: SOLO UNA vigila y notifica (evita avisos repetidos) ----
@@ -1633,7 +1740,16 @@
       const viejas = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (!k || k.indexOf("vgl_ev_") !== 0) continue;
+        if (!k) continue;
+        // v11.0.1 — Las marcas anti-duplicado entre pestañas (vgl_n_*) se creaban una por
+        // aviso y no las borraba nadie: crecían sin límite en equipos que nunca se
+        // reinstalan. Su ventana útil son 12 segundos, así que un día sobra de margen.
+        if (k.indexOf("vgl_n_") === 0) {
+          const t = +(localStorage.getItem(k) || 0);
+          if (!t || Date.now() - t > 86400000) viejas.push(k);
+          continue;
+        }
+        if (k.indexOf("vgl_ev_") !== 0) continue;
         const f = new Date(k.slice(7) + "T00:00:00");
         if (!isFinite(f) || f < lim) viejas.push(k);
       }
@@ -4003,7 +4119,16 @@
     } catch (e) {}
     if (!srcStr || typeof srcStr !== "string") return;
     try {
-      const uIdM = /UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr);
+      // v11.0.1 — LISTA BLANCA DE ORIGEN. Antes se aceptaba cualquier "UsuarioId=" de
+      // cualquier URL que pasara por el registro de red, y varios servicios usan ese mismo
+      // nombre de parámetro para cosas que NO son el médico: APIEnvioCorreo y
+      // APIHCHealth/Morbilidad lo usan para el id del PACIENTE, y el host de digiturno para
+      // otro usuario distinto. El resultado era que el "médico activo" podía acabar siendo
+      // el identificador de un paciente, y con él se creaban las citas y las órdenes.
+      // Verificado sobre las 1527 llamadas: con esta lista blanca el valor es siempre el
+      // correcto y desaparecen las 60+ contaminaciones.
+      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/(APIAcceso|ApiIntegracionEverestDigiturno)\//i;
+      const uIdM = ORIGEN_FIABLE.test(srcStr) ? (/UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr)) : null;
       if (uIdM && uIdM[1]) {
         const id = parseInt(uIdM[1], 10);
         if (id > 0) state.activeDoctor.id = id;
@@ -4049,8 +4174,16 @@
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
-    const maxRetries = 3;
-    
+    // v11.0.1 — NO se reintenta una ESCRITURA. Este núcleo reintentaba hasta 4 veces y,
+    // en cada vuelta, además repetía la petición por una segunda vía (GM_xmlhttpRequest):
+    // hasta OCHO envíos del mismo POST. Aplicado a AsignarTurno eso son ocho citas para
+    // el mismo paciente; aplicado a GuardarOrdenamiento, ocho órdenes clínicas repetidas.
+    // Solo se conserva el reintento en lecturas (GET) y en el POST de búsqueda de agendas,
+    // que es de solo lectura pese a ser POST (se marca con __idempotent).
+    const metodo = String((options && options.method) || "GET").toUpperCase();
+    const esEscritura = metodo !== "GET" && metodo !== "HEAD" && !(options && options.__idempotent === true);
+    const maxRetries = esEscritura ? 0 : 3;
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       let isError = false;
       try {
@@ -4076,6 +4209,9 @@
       }
 
       if (isError) {
+        // v11.0.1 — En una escritura NO se reenvía por la segunda vía: la primera pudo
+        // haber llegado al servidor y solo haberse perdido la respuesta. Duplicaría la cita.
+        if (esEscritura) { console.warn("[Vigilante] escritura fallida, NO se reintenta para no duplicar:", url); return null; }
         if (typeof GM_xmlhttpRequest !== "undefined") {
           try {
             const result = await new Promise((resolve, reject) => {
@@ -4138,8 +4274,15 @@
         const fromData = extractPatientId(res.data);
         if (fromData) return fromData;
       }
+      // v11.0.1 — Al bajar por las ramas del objeto, NO entrar en las que se sabe que NO
+      // contienen al paciente. Sin esta lista, una ficha sin `id` devolvía el primer
+      // entero positivo que encontrara: el id de la EPS (2) o el de una sede (12). Con ese
+      // número se agendaba y se ordenaba: paciente equivocado.
+      const NO_PACIENTE = new Set(["eps", "sedes", "contratos", "planes_Medicos", "programasPaciente",
+        "ubicacionesBOT", "mediosTransporte", "puntosReferenciaResidencia", "puntosReferenciaUbicacionHabitual",
+        "prestador", "remisor", "usuarioCreacion"]);
       for (const k of Object.keys(res)) {
-        if (k !== "data" && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
+        if (k !== "data" && !NO_PACIENTE.has(k) && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
           const fromSub = extractPatientId(res[k]);
           if (fromSub) return fromSub;
         }
@@ -4168,7 +4311,10 @@
       `/apiviva/APIPacienteV2/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2&UsuarioId=${uId}`,
       `/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=${encodeURIComponent(cleanDoc)}&UsuarioId=${uId}`,
-      `/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(cleanDoc)}`,
+      // v11.0.1 — RETIRADA la quinta ruta: pasaba la CÉDULA en el parámetro idPaciente,
+      // que espera el identificador INTERNO de Everest. Son dos numeraciones distintas, así
+      // que una cédula puede coincidir con el id interno de OTRA persona y devolver la
+      // ficha equivocada — con ella se agendaba y se ordenaba.
     ];
 
     for (const path of paths) {
@@ -4189,13 +4335,13 @@
     const path2 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=0&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
 
     try {
-      const res = await pageFetchJson(path1, { method: "POST", body: "{}" });
+      const res = await pageFetchJson(path1, { method: "POST", body: "{}", __idempotent: true });
       const list = extractAgendasList(res);
       if (list && list.length) return res;
     } catch (e) {}
 
     try {
-      return await pageFetchJson(path2, { method: "POST", body: "{}" });
+      return await pageFetchJson(path2, { method: "POST", body: "{}", __idempotent: true });
     } catch (e) {
       return {};
     }
@@ -4240,6 +4386,28 @@
     });
   };
 
+  // v11.0.1 — Igual que gmPostJson pero además informa del RESULTADO HTTP. Hacía falta
+  // porque el agendamiento de laboratorio daba por buena la cita sin mirar la respuesta:
+  // se anunciaba "Cita de Laboratorio agendada" aunque el servidor la hubiera rechazado.
+  // Se añade aparte para no cambiar el valor de retorno de gmPostJson, que usan otros dos
+  // puntos del script.
+  const gmPostJsonEx = async (url, data = {}) => {
+    return new Promise((resolve) => {
+      if (typeof GM_xmlhttpRequest === "undefined") { resolve({ ok: false, status: 0, data: null }); return; }
+      GM_xmlhttpRequest({
+        method: "POST", url, headers: { "Content-Type": "application/json" },
+        data: JSON.stringify(data), timeout: 15000,
+        onload: (res) => {
+          let parsed = null;
+          try { parsed = JSON.parse(res.responseText); } catch (e) {}
+          resolve({ ok: res.status >= 200 && res.status < 300, status: res.status, data: parsed, text: res.responseText });
+        },
+        onerror: () => resolve({ ok: false, status: 0, data: null }),
+        ontimeout: () => resolve({ ok: false, status: 0, data: null }),
+      });
+    });
+  };
+
   function format12hTime(timeStr) {
     if (!timeStr) return "";
     const parts = String(timeStr).split(":");
@@ -4258,13 +4426,17 @@
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${fechaIso}`;
       const resAg = await gmPostJson(urlTurnos, {});
       const turnos = extractAgendasList(resAg);
+      // v11.0.1 — SIN "cupo por defecto". Antes, si la hora elegida por el médico ya no
+      // estaba libre (o no venía), se caía a `turnos[0]`: el paciente quedaba citado
+      // EN SILENCIO en el primer cupo del día (normalmente las 6:00 a. m.), una hora que
+      // nadie eligió y que el médico nunca llegaba a ver.
       let turnoElegido = null;
-      if (turnos && turnos.length) {
-        if (horaSeleccionada) {
-          turnoElegido = turnos.find(t => String(t.hora || "").includes(horaSeleccionada)) || turnos[0];
-        } else {
-          turnoElegido = turnos[0];
-        }
+      if (turnos && turnos.length && horaSeleccionada) {
+        turnoElegido = turnos.find((t) => String(t.hora || "") === String(horaSeleccionada)) || null;
+      }
+      if (!turnoElegido) {
+        spToast("⚠ El horario de laboratorio elegido ya no está disponible. NO se agendó la toma de muestras: hágalo manualmente en AppCita.");
+        return false;
       }
       const horaFinal = (turnoElegido && turnoElegido.hora) || horaSeleccionada;
       const agendaId = (turnoElegido && (turnoElegido.agendaId || turnoElegido.id));
@@ -4272,19 +4444,34 @@
       // Si no tenemos hora real o ID de agenda real, ¡ABORTAMOS LA OPERACIÓN!
       if (!horaFinal || !agendaId) {
           spToast(`❌ Error: No se pudo obtener turno disponible para Laboratorio en la fecha ${fechaIso}. Intente agendar manualmente.`);
-          return; // Salimos de la función sin crear citas fantasma
+          return false; // Salimos de la función sin crear citas fantasma
       }
 
-      // Si tenemos los datos reales, procedemos normal:
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
-      const resBook = await gmPostJson(urlBook, {});
-      
-      // Enviar SMS de confirmación en segundo plano
-      const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
-      gmGet(urlSms, "", "", 5000).catch(() => {});
+      // v11.0.1 — Telefono=0 en vez de vacío: es el valor que envía la propia aplicación
+      // oficial cuando no lleva el número (4 de 6 capturas). Vacío no lo manda nunca.
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=0&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      const resBook = await gmPostJsonEx(urlBook, {});
+      console.log("[Vigilante Lab] AgendarCita →", resBook.status, resBook.text);
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}`);
-    } catch(e) {}
+      // v11.0.1 — Se comprueba que el servidor haya aceptado la cita. Antes se anunciaba
+      // "Cita de Laboratorio agendada" pasara lo que pasara: con la red caída o con un
+      // rechazo del servidor, el médico se iba convencido de que el paciente tenía su
+      // toma de muestras, y no la tenía.
+      if (!resBook.ok) {
+        spToast(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
+        return false;
+      }
+
+      // v11.0.1 — RETIRADO el SMS de laboratorio. Iba con Celular= VACÍO (no llegaba a
+      // nadie) y con codigoCita=AgendaId, que es el identificador de la AGENDA, no el de
+      // la cita: en las capturas reales un mismo AgendaId genera varios codigoCita
+      // distintos. Es decir, era un mensaje sin destinatario que además citaba un
+      // identificador ajeno. Se reactivará cuando se capture la respuesta real de
+      // AgendarCita y se sepa de qué campo sale el identificador correcto.
+
+      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}. El paciente NO recibe SMS del laboratorio: recuérdeselo.`);
+      return true;
+    } catch(e) { console.warn("[Vigilante Lab] error agendando laboratorio:", e); return false; }
   }
 
   // Interfaz API: Finalizar Ticket Digiturno al terminar atención
@@ -4309,9 +4496,11 @@
   // Interfaz con APIAcceso: Validar Agenda
   async function apiAccesoAgdValidarAgenda(agendaId, pacienteId) {
     const path = `/apiviva/APIAcceso/api/Acceso/AgdValidarAgenda?agendaId=${agendaId}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;
+    // v11.0.1 — Devuelve el veredicto en vez de descartarlo. Es una compuerta del servidor
+    // ("Superó las validaciones" / isError) y el script la estaba ignorando por completo.
     try {
-      await pageFetchJson(path);
-    } catch (e) {}
+      return await pageFetchJson(path);
+    } catch (e) { console.warn("[Vigilante] AgdValidarAgenda falló:", e); return null; }
   }
 
   // Interfaz con APIAcceso: Obtener Turnos / Horas Libres
@@ -4319,6 +4508,10 @@
     const path = `/apiviva/APIAcceso/api/Acceso/ObtenerTurnos?agendaid=${agendaId}&fecha=${encodeURIComponent(fechaFmt)}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;
     return pageFetchJson(path);
   }
+
+  // Celular al que se envió el último SMS de recordatorio (para mostrarlo en el aviso
+  // de confirmación: el médico debe poder ver a qué número salió). Vacío = no se envió.
+  let ultimoSmsEnviado = "";
 
   // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion) {
@@ -4333,20 +4526,38 @@
         const marc = encodeURIComponent(marcacion || "Consulta");
         const obs = encodeURIComponent(observacion || "");
 
-        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null&Tratamiento=false&Consulta=true&Emergencia=false&PresupuestoId=0`;
+        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
+        console.log("[Vigilante] AsignarTurno →", { Marcacion: marcacion || "NA", Consulta: false, swIsPyM: swPyM, SwProgramaEspecial: swProgEspecial });
         const res = await pageFetchJson(path, { method: "POST", body: "{}" });
 
-        // Enviar SMS Nativo de Recordatorio en Segundo Plano
-        try {
-          const resPaciente = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteId}`);
-          if (resPaciente && resPaciente.data) {
-            const telefono = resPaciente.data.celular || resPaciente.data.telefono;
-            if (telefono && String(telefono).length >= 7) {
-              const urlSms = `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(telefono)}&AgendaTurnoId=${turnoId}`;
-              pageFetchJson(urlSms).catch(() => {});
+        // ---- SMS de recordatorio al paciente -------------------------------------
+        // v11.0.1. Tres cambios, todos por evidencia de la telemetría real:
+        //  1) Solo se envía si la cita se creó DE VERDAD (error:false + radicado). Antes
+        //     salía aunque AsignarTurno hubiera fallado: el paciente recibía un aviso de
+        //     una cita inexistente.
+        //  2) Un solo disparo (fetch directo). Antes iba por pageFetchJson, que reintenta
+        //     hasta 4 veces con doble vía: hasta OCHO mensajes al mismo paciente.
+        //  3) Se puede apagar desde Ajustes (S.smsRecordatorio).
+        // NOTA: en las 26 telemetrías, los 2 de 2 envíos de SMS de la aplicación oficial
+        // fueron precedidos por un clic manual del operador; aquí es automático a
+        // petición expresa del médico, por eso queda el interruptor y el aviso en pantalla.
+        ultimoSmsEnviado = "";
+        const creada = res && res.error === false && res.data && (Number(res.data.radicado) > 0 || /Agendada Correctamente/i.test(String(res.data.motivo || "")));
+        if (creada && S.smsRecordatorio) {
+          try {
+            const resPaciente = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteId}`);
+            const cel = String((resPaciente && resPaciente.data && (resPaciente.data.celular || resPaciente.data.telefono)) || "").replace(/\D/g, "");
+            if (cel.length >= 7) {
+              const smsUrl = location.origin + `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(cel)}&AgendaTurnoId=${turnoId}`;
+              (FETCH0 || window.fetch)(smsUrl, { credentials: "include", headers: { Accept: "application/json" } })
+                .then(() => { console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId); })
+                .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
+              ultimoSmsEnviado = cel;
+            } else {
+              console.warn("[Vigilante] el paciente no tiene celular registrado: no se envía SMS");
             }
-          }
-        } catch(e) {}
+          } catch (e) { console.warn("[Vigilante] no se pudo consultar el celular del paciente:", e); }
+        }
 
         return res;
       }
@@ -4538,7 +4749,11 @@
     document.querySelectorAll("#vgl-ordenar-modal").forEach(e => e.remove());
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "BRANDON JESUS PALENCIA MARTINEZ";
+    // v11.0.1 — Sin nombre cableado. Antes, si la detección del médico fallaba, TODOS los
+    // equipos daban por hecho que el médico era el mismo (el autor del script) y elegían
+    // SU agenda: un médico de otro consultorio habría citado a sus pacientes en la agenda
+    // ajena. Con el nombre vacío el filtro simplemente no filtra y se avisa en pantalla.
+    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-agendar-modal";   // v8.2.1 fix: was "vgl-ordenar-modal" (ID mismatch -> CSS position:fixed missing -> modal inlined in page)
     modal.className = isLight() ? "light" : "";
@@ -4594,7 +4809,7 @@
           </label>
           <div class="vgl-lab-box" style="margin-top:8px;padding:10px;background:rgba(16,185,129,.14);border:1px solid #10b981;border-radius:8px">
             <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
-              <input type="checkbox" id="vgl-agm-lab-chk" style="accent-color:#10b981">
+              <input type="checkbox" id="vgl-agm-lab-chk" disabled style="accent-color:#10b981">
               <span>🧪 Pre-agendar Toma de Muestras (5 días hábiles antes: <b id="vgl-lab-date-lbl" style="color:#34d399">--/--/----</b>)</span>
             </label>
             <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc">
@@ -4652,11 +4867,17 @@
         try {
           const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${suggestedLab.iso}`;
           const resAg = await gmPostJson(urlTurnos, {});
+          // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de
+          // fecha mientras esta consulta viajaba, sus horas pertenecen a otro día y no
+          // deben pintarse (la ruta principal ya tenía esta guarda; aquí faltaba).
+          if (token !== _cargarHorasToken) return;
           const turnos = extractAgendasList(resAg);
+          // v11.0.1 — Se descartan los turnos sin hora real en vez de fabricar "07:00:00".
+          const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
           if (labTimeSel) {
-            if (turnos && turnos.length > 0) {
-              labTimeSel.innerHTML = turnos.map((t, idx) => {
-                const hRaw = t.hora || t.horaTexto || t.Hora || "07:00:00";
+            if (turnosConHora.length > 0) {
+              labTimeSel.innerHTML = turnosConHora.map((t, idx) => {
+                const hRaw = t.hora || t.horaTexto || t.Hora;
                 const hFmt = format12hTime(hRaw);
                 const selected = idx === 0 ? "selected" : "";
                 return `<option value="${escapeHtml(hRaw)}" ${selected}>${escapeHtml(hFmt)}</option>`;
@@ -4669,224 +4890,9 @@
           }
         } catch(e) {
           if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
+          if (labChk) { labChk.checked = false; labChk.disabled = true; }
         }
-      
-
-  // =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
-  // =====================================================================
-  
-  // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
-  const ATHENEA_MAP = {
-      "2009": "resultadoColesterolTotal",
-      "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
-      "2013": "resultadoGlicemia",
-      "2028": "resultadoCreatinina",
-      "2080": "resultadoCreatinuria",
-      "2092": "resultadoMicroAlbuminuria",
-      // Otros analitos comunes basados en nombres si no tenemos el código exacto:
-  };
-  
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
-                          } else {
-                              reject("No dataObject");
-                          }
-                      } else {
-                          reject("Status " + response.status);
-                      }
-                  } catch (e) {
-                      reject("Parse error: " + e);
-                  }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
-          });
-      });
-  }
-
-  // Despacha eventos para que Angular actualice el modelo
-  function setNgValue(inputEl, value) {
-      if (!inputEl) return;
-      inputEl.value = value;
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function injectLabsIntoCronicos(labsArray) {
-      let count = 0;
-      labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
-          const name = (lab.NombreParametro || "").toUpperCase();
-          const result = lab.Resultado;
-          
-          if (!result) return;
-          
-          let everestId = ATHENEA_MAP[code];
-          
-          // Fallback por nombre si el código no está mapeado
-          if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
-          }
-          
-          if (everestId) {
-              // Intentar buscar el input por ID
-              let inputEl = document.getElementById(everestId);
-              if (inputEl) {
-                  setNgValue(inputEl, result);
-                  count++;
-                  // Intentar establecer la fecha de este resultado al día de hoy o la fecha de Athenea (si viene)
-                  let dateId = everestId.replace("resultado", "fechaResult");
-                  let dateInput = document.getElementById(dateId);
-                  if (dateInput) {
-                      const today = new Date().toISOString().split('T')[0];
-                      setNgValue(dateInput, today);
-                  }
-              }
-          }
-      });
-      return count;
-  }
-
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
-  function getAtheneaIdSolicitudAuto(docId) {
-      return new Promise((resolve) => {
-          let doc = docId;
-          if (!doc && typeof extractPacienteAbierto === "function") {
-              doc = extractPacienteAbierto();
-          }
-          if (!doc) {
-              doc = prompt("No se detectó la cédula del paciente abierto en Everest. Ingresa el número de documento:");
-          }
-          if (!doc) {
-              resolve(null);
-              return;
-          }
-
-          const bridgeUrl = `http://localhost:5050/api/buscar_laboratorios?documento=${encodeURIComponent(doc)}`;
-          console.log(`[Vigilante] Consultando idSolicitud en Athenea API Bridge para documento: ${doc}`);
-
-          if (typeof GM_xmlhttpRequest !== "undefined") {
-              GM_xmlhttpRequest({
-                  method: "GET",
-                  url: bridgeUrl,
-                  headers: { "Accept": "application/json" },
-                  onload: function(response) {
-                      if (response.status === 200) {
-                          try {
-                              const res = JSON.parse(response.responseText);
-                              if (res && res.idSolicitud) {
-                                  resolve(res.idSolicitud);
-                                  return;
-                              }
-                          } catch (e) {
-                              console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
-                          }
-                      }
-                      console.warn("[Vigilante] API Bridge devolvió status " + response.status);
-                      resolve(null);
-                  },
-                  onerror: function(err) {
-                      console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
-                      resolve(null);
-                  },
-                  ontimeout: function() {
-                      console.warn("[Vigilante] Timeout consultando API Bridge");
-                      resolve(null);
-                  }
-              });
-          } else {
-              fetch(bridgeUrl)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
-                  .catch(err => {
-                      console.warn("[Vigilante] Error fetch API Bridge:", err);
-                      resolve(null);
-                  });
-          }
-      });
-  }
-
-  // Interfaz de Usuario para activar la inyección
-  function createLabInjectorUI() {
-      if (document.getElementById("vgl-lab-injector")) return;
-      
-      const btn = document.createElement("button");
-      btn.id = "vgl-lab-injector";
-      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      btn.style.cssText = "position:fixed;bottom:80px;left:15px;z-index:9999999;background:#8b5cf6;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;";
-      
-      btn.onclick = async () => {
-          const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          if (idSolicitud) {
-              btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
-          } else {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge.\nIngresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) {
-                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-                  return;
-              }
-          }
-          
-          btn.innerHTML = "⏳ Consultando laboratorios...";
-          try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
-              if (labs && labs.length > 0) {
-                  const injectedCount = injectLabsIntoCronicos(labs);
-                  alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
-              } else {
-                  alert("⚠️ No se encontraron laboratorios en esa solicitud.");
-              }
-          } catch (e) {
-              alert("❌ Error al consultar Athenea:\n" + e + "\n\n¿Tienes sesión activa en Athenea?");
-          }
-          btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      };
-      
-      document.body.appendChild(btn);
-  }
-
-  // Observador para detectar cuándo inyectar el botón
-  setInterval(() => {
-      // Solo en la historia clínica o panel de Everest
-      if (location.href.includes("Morbilidad") || document.querySelector("a#pes")) {
-          createLabInjectorUI();
-      }
-  }, 2000);
-
-
-})();
+      })();
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Buscando agendas de ${escapeHtml(selectedEspName)} para el ${selectedDateInfo.fmt}...</div>`;
 
       if (!pacienteIdAcceso) {
@@ -4908,14 +4914,32 @@
         return;
       }
 
-      let agendasFiltradas = agendas;
+      // v11.0.1 — FILTRO POR FECHA. La respuesta del servidor mezcla agendas de VARIOS días
+      // (en la captura real: 123 agendas repartidas en 7 fechas distintas, incluidas 3 del
+      // mismo día de la consulta). Sin este filtro se podían ofrecer turnos de un día que
+      // no era el que el médico eligió en los chips.
+      const agendasDelDia = agendas.filter((a) => String(a.fechaAgenda || "").trim() === selectedDateInfo.fmt);
+      if (!agendasDelDia.length) {
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${selectedDateInfo.fmt}. Elija otro día del rango (±3 días).</div>`;
+        return;
+      }
+
+      let agendasFiltradas = agendasDelDia;
+      let avisoAgendaAjena = "";
       if (selectedEspId === 12) {
-        const normMedDoc = stripAccents(doctorName.toLowerCase());
-        const miAgenda = agendas.find((a) => {
+        const normMedDoc = stripAccents(String(doctorName || "").toLowerCase()).trim();
+        // OJO: con el nombre vacío, `nm.includes("")` sería SIEMPRE cierto y elegiría la
+        // primera agenda de la lista (la de otro profesional). Sin nombre no se filtra.
+        const toks = normMedDoc.split(/\s+/).filter(Boolean);
+        const miAgenda = !normMedDoc ? null : agendasDelDia.find((a) => {
           const nm = stripAccents(String(a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre || "").toLowerCase());
-          return nm.includes(normMedDoc) || normMedDoc.split(" ").every((tok) => tok.length > 2 && nm.includes(tok));
+          return nm.includes(normMedDoc) || (toks.length > 0 && toks.every((tok) => tok.length > 2 && nm.includes(tok)));
         });
+        // v11.0.1 — Antes, si no se reconocía la agenda propia se caía EN SILENCIO a las
+        // agendas de TODOS los profesionales, y la etiqueta del turno ocultaba el nombre
+        // en Medicina General: el médico podía agendar en la agenda de otro sin notarlo.
         if (miAgenda) agendasFiltradas = [miAgenda];
+        else avisoAgendaAjena = "⚠ No se identificó su agenda propia. Los turnos de abajo pueden ser de OTRO profesional — verifique el nombre antes de confirmar.";
       }
 
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
@@ -4925,12 +4949,17 @@
         if (token !== _cargarHorasToken) return;
         const agendaId = ag.agendaId || ag.id || ag.AgendaId || ag.idAgenda || ag.IdAgenda || ag.AGendadId;
         const nombreProf = ag.medico || ag.usuarioNombreCompleto || ag.nombreMedico || ag.profesional || ag.nombre || "Profesional";
-        await apiAccesoAgdValidarAgenda(agendaId, pacienteIdAcceso);
+        // v11.0.1 — El veredicto de la validación ya no se tira a la basura: si el servidor
+        // dice explícitamente que esta agenda no admite al paciente, se salta en vez de
+        // ofrecer turnos que después fallarán al confirmar.
+        const val = await apiAccesoAgdValidarAgenda(agendaId, pacienteIdAcceso);
+        const vd = val && val.data;
+        if (vd && vd.isError === true) { console.warn("[Vigilante] agenda descartada por validación:", agendaId, vd.mensaje); continue; }
 
         const resTurnos = await apiAccesoObtenerTurnos(agendaId, selectedDateInfo.fmt, pacienteIdAcceso);
         const turnos = extractAgendasList(resTurnos);
         if (turnos && turnos.length) {
-          turnos.forEach((t) => turnosAcumulados.push({ turno: t, profesional: nombreProf }));
+          turnos.forEach((t) => turnosAcumulados.push({ turno: t, profesional: nombreProf, sede: ag.sede || "", fecha: ag.fechaAgenda || selectedDateInfo.fmt }));
         }
       }
 
@@ -4942,12 +4971,30 @@
       }
 
       slotsEl.innerHTML = "";
-      turnosAcumulados.forEach(({ turno: t, profesional }) => {
+      // v11.0.1 — Solo turnos activos. "ACT" es el único estado visto en campo; si el
+      // campo no viene, se asume activo para no dejar al médico sin poder agendar.
+      const turnosLibres = turnosAcumulados.filter((x) => {
+        const e = String((x.turno && x.turno.estado) || "ACT").toUpperCase().trim();
+        return e === "" || e === "ACT";
+      });
+      if (!turnosLibres.length) {
+        slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${selectedDateInfo.fmt} pero ninguno está activo. Elija otro día.</div>`;
+        return;
+      }
+      if (avisoAgendaAjena) {
+        const w = document.createElement("div");
+        w.className = "vgl-agm-err";
+        w.textContent = avisoAgendaAjena;
+        slotsEl.appendChild(w);
+      }
+      turnosLibres.forEach(({ turno: t, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
-        const labelCompleto = selectedEspId === 12 ? `✓ ${escapeHtml(horaTxt)}` : `✓ ${escapeHtml(horaTxt)} (${escapeHtml(profesional)})`;
+        // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
+        // Medicina General, que es justo donde el fallback podía colar otra agenda).
+        const labelCompleto = `✓ ${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
         btn.className = "vgl-agm-sbtn";
-        btn.style.cssText = selectedEspId !== 12 ? "white-space:normal;text-align:left;height:auto;padding:6px 10px;" : "";
+        btn.style.cssText = "white-space:normal;text-align:left;height:auto;padding:6px 10px;"; // v11.0.1: la etiqueta ahora siempre lleva profesional y fecha
         btn.innerHTML = labelCompleto;
         btn.addEventListener("click", () => {
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
@@ -5019,16 +5066,22 @@
       const horaTxt = selectedTurnoObj.horaTexto || selectedTurnoObj.hora || selectedTurnoObj.horaInicio || "";
 
       console.log("[Vigilante Agendamiento] Asignando turno RCV:", { turnoId, pacienteIdAcceso, fechaIso: selectedDateInfo.iso, obs, isPyM, selectedEspId });
-      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "Consulta");
-        const isLabChecked = modal.querySelector("#vgl-agm-lab-chk")?.checked;
-        const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
-        if (isLabChecked && apt.doc_id) {
-          const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
-          apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
-        }
+      // v11.0.1 — Marcacion="NA": el valor que envía la aplicación oficial de Everest en la
+      // única secuencia de agendamiento capturada que terminó en "Agendada Correctamente".
+      // "Consulta" no aparece ni una vez en las 1527 llamadas registradas: era inventado.
+      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA");
       console.log("[Vigilante Agendamiento] Respuesta AsignarTurno:", res);
 
-      const ok = res && (res.error === false || res.data || res.mensaje || res.isSuccess || !res.error);
+      const isLabChecked = modal.querySelector("#vgl-agm-lab-chk")?.checked;
+      const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
+
+      // v11.0.1 — ÉXITO ESTRICTO. Antes bastaba con que la respuesta trajera cualquier
+      // `mensaje` (incluido uno de ERROR) para dar la cita por creada: se mostraba
+      // "¡Cita Creada Exitosamente!", se marcaba al paciente como agendado del día y se
+      // silenciaba al vigilante para él. Ahora se exige la forma confirmada en campo:
+      // error:false + data.radicado>0 (o el motivo literal "Agendada Correctamente").
+      const d = res && res.data;
+      const ok = !!(res && res.error === false && d && (Number(d.radicado) > 0 || /Agendada Correctamente/i.test(String(d.motivo || ""))));
       if (ok) {
         confirmBtn.style.background = "#10b981"; // [UI-CSS]
         confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
@@ -5040,15 +5093,31 @@
         modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
         markCitaAgendadaHoy(apt.doc_id);
-        notify("VERDE", "✅ Cita asignada exitosamente", `Paciente: ${patientName}\nFecha: ${selectedDateInfo.fmt} · Hora: ${horaTxt}\nAsignada por el sistema de agenda.`, true); // [COPY-UX]
+        // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
+        // quedan vivos en el Centro de actividades de Windows y REAPARECEN horas después.
+        // Se indica además a qué número salió el SMS, para que el médico pueda verificarlo.
+        notify("VERDE", "✅ Cita asignada exitosamente",
+          `Paciente: ${patientName}\nFecha: ${selectedDateInfo.fmt} · Hora: ${horaTxt}`
+          + (ultimoSmsEnviado ? `\nSMS de recordatorio enviado al ${ultimoSmsEnviado}.` : `\nSin SMS de recordatorio.`),
+          false, "cita|" + apt.doc_id + "|" + selectedDateInfo.iso);
         bumpStat("atiempo");
 
-        setTimeout(() => closeMod(), 2200);
+        // v11.0.1 — La toma de muestras se agenda SOLO si la cita principal se creó de
+        // verdad (antes salía disparada antes de comprobarlo, de modo que una cita fallida
+        // dejaba igualmente al paciente citado en el laboratorio), CON await para que el
+        // médico vea el resultado, y una sola vez aunque se pulse "Reintentar".
+        if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
+          modal.dataset.labDone = "1";
+          const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
+          await apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
+        }
+
+        setTimeout(() => closeMod(), 2600);
       } else {
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar Crear Cita";
-        const errMsg = (res && res.mensaje) || "Respuesta no confirmada del sistema de agenda."; // [COPY-UX]
-        alert("Atención al crear cita: " + errMsg);
+        const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
+        alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Verifique en Everest antes de reintentar.");
       }
     });
 
@@ -5098,7 +5167,7 @@
       keywords: ["cardiometabolica", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos", "cmb", "tamizacion cmb", "riesgo cardiometabolico"],
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
-        { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" },
+        { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL] Automatizado" }, // v11.0.1: 903816 no es el CUPS que emite Everest en campo
         { codigo: "903818", desc: "Colesterol Total" },
         { codigo: "903895", desc: "Creatinina En Suero U Otros Fluidos" },
         { codigo: "907106", desc: "Uroanalisis" },
@@ -5179,7 +5248,10 @@
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase()) || items[0];
+      // v11.0.1 — Sin `|| items[0]`: si el CIE-10 buscado no aparece, antes se cogía el
+      // PRIMER diagnóstico de la lista y la orden salía con un diagnóstico que no es el
+      // del paciente. Ahora se devuelve null y el paquete se marca como fallido.
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").toUpperCase() === cie10.toUpperCase());
       if (item) {
         const dxId = item.id || item.Id || item.DiagnosticoId;
         if (dxId) { DX_CACHE[cie10] = dxId; return dxId; }
@@ -5197,7 +5269,10 @@
     try {
       const res = await pageFetchJson(path);
       const items = Array.isArray(res) ? res : (res && res.data && Array.isArray(res.data) ? res.data : []);
-      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim()) || items[0];
+      // v11.0.1 — Sin `|| items[0]`: si el CUPS pedido no aparece en el listado, antes se
+      // sustituía por el PRIMERO de la lista, es decir, se ordenaba un EXAMEN DISTINTO del
+      // solicitado. Ahora se omite ese examen y el paquete se reporta como fallido.
+      const item = items.find((x) => String(x.codigo || x.Codigo || "").trim() === cupCodigo.trim());
       if (item) {
         const cObj = {
           Id: item.id || item.Id || item.cupId,
@@ -5246,7 +5321,11 @@
     if (existing) existing.remove();
 
     const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = state.activeDoctor.name || S.medicoNombre || "BRANDON JESUS PALENCIA MARTINEZ";
+    // v11.0.1 — Sin nombre cableado. Antes, si la detección del médico fallaba, TODOS los
+    // equipos daban por hecho que el médico era el mismo (el autor del script) y elegían
+    // SU agenda: un médico de otro consultorio habría citado a sus pacientes en la agenda
+    // ajena. Con el nombre vacío el filtro simplemente no filtra y se avisa en pantalla.
+    const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-ordenar-modal";
     modal.className = isLight() ? "light" : "";
@@ -5254,11 +5333,20 @@
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
     const activePymText = stripToAlphanum((apt.pym || []).join(" "));
     const matchedPackages = PYM_CATALOG.filter((pkg) => {
-      if (!apt.pym || !apt.pym.length) return true;
+      if (!apt.pym || !apt.pym.length) return false;
       return pkg.keywords.some((kw) => activePymText.includes(stripToAlphanum(kw)));
     });
 
-    const pkgsToRender = matchedPackages.length ? matchedPackages : PYM_CATALOG;
+    // v11.0.1 — Cuando NO hay coincidencia con el PyM del paciente se siguen mostrando
+    // todas las actividades, pero DESMARCADAS. Antes salían las 10 premarcadas y un solo
+    // clic en "Generar" creaba las diez órdenes: incluidas mamografía y citología en un
+    // hombre, o PSA en una mujer. Ahora premarcar exige coincidencia explícita.
+    const hayCoincidencia = matchedPackages.length > 0;
+    const pkgsToRender = hayCoincidencia ? matchedPackages : PYM_CATALOG;
+    // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
+    // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
+    const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
+    const sexoPaciente = String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
 
     // [COPY-UX] Modal de generación de órdenes de prevención
     modal.innerHTML = `
@@ -5274,20 +5362,26 @@
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">Seleccione las actividades de prevención a solicitar para el paciente:</label>
+          ${hayCoincidencia ? "" : `<div class="vgl-agm-err" style="margin-bottom:8px">No se detectaron actividades pendientes en la base de prevención para este paciente. Las opciones salen <b>sin marcar</b>: seleccione manualmente lo que corresponda.</div>`}
           <div id="vgl-ord-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px">
-            ${pkgsToRender.map((pkg, idx) => `
+            ${pkgsToRender.map((pkg, idx) => {
+              const sexoReq = SEXO_PKG[pkg.cie10] || "";
+              const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
+              const marcar = hayCoincidencia && !chocaSexo;
+              return `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
-                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}" checked>
+                  <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">[CIE-10: ${escapeHtml(pkg.cie10)}]</span></div>
+                    ${chocaSexo ? `<div class="vgl-ord-cups" style="color:#e54d42;font-weight:700">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       CUPS: ${pkg.cups.map((c) => `<b>${escapeHtml(c.codigo)}</b> (${escapeHtml(c.desc)})`).join(" · ")}
                     </div>
                   </div>
                 </label>
-              </div>
-            `).join("")}
+              </div>`;
+            }).join("")}
           </div>
         </div>
 
@@ -5345,17 +5439,25 @@
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
 
         const cupsObjs = [];
+        const cupsFaltantes = [];
         for (const cInfo of pkg.cups) {
           const cObj = await apiOrdenamientoObtenerCup(pacienteIdOrd, cInfo.codigo);
-          if (cObj) cupsObjs.push(cObj);
+          if (cObj) cupsObjs.push(cObj); else cupsFaltantes.push(cInfo.codigo);
         }
 
         if (!cupsObjs.length) { console.warn("[Vigilante PyM] No CUPS para", pkg.cie10); fallidasCount++; continue; }
+        // v11.0.1 — Si algún examen del paquete no se pudo resolver, se avisa: antes se
+        // creaba la orden incompleta en silencio y el médico creía haberlos pedido todos.
+        if (cupsFaltantes.length) console.warn("[Vigilante PyM] " + pkg.cie10 + ": no se resolvieron los CUPS " + cupsFaltantes.join(", "));
 
         const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
-        if (resOrd && (resOrd.agrupador || resOrd.data || !resOrd.error)) {
+        // v11.0.1 — Éxito estricto: antes bastaba cualquier respuesta sin `error:true`
+        // (incluido un cuerpo vacío) para dar la orden por creada, marcarla como hecha del
+        // día y silenciar el recordatorio de PyM de ese paciente.
+        const agpReal = resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador));
+        if (resOrd && !resOrd.error && agpReal) {
           creadasCount++;
-          const agp = resOrd.agrupador || (resOrd.data && resOrd.data.agrupador) || "OK";
+          const agp = agpReal;
           agrupadores.push(agp);
           c.checked = false; // Desmarcar exitoso
           c.disabled = true; // Deshabilitar
@@ -5428,220 +5530,6 @@
           }
         } catch (err) {}
       
-
-  // =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
-  // =====================================================================
-  
-  // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
-  const ATHENEA_MAP = {
-      "2009": "resultadoColesterolTotal",
-      "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
-      "2013": "resultadoGlicemia",
-      "2028": "resultadoCreatinina",
-      "2080": "resultadoCreatinuria",
-      "2092": "resultadoMicroAlbuminuria",
-      // Otros analitos comunes basados en nombres si no tenemos el código exacto:
-  };
-  
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
-                          } else {
-                              reject("No dataObject");
-                          }
-                      } else {
-                          reject("Status " + response.status);
-                      }
-                  } catch (e) {
-                      reject("Parse error: " + e);
-                  }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
-          });
-      });
-  }
-
-  // Despacha eventos para que Angular actualice el modelo
-  function setNgValue(inputEl, value) {
-      if (!inputEl) return;
-      inputEl.value = value;
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function injectLabsIntoCronicos(labsArray) {
-      let count = 0;
-      labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
-          const name = (lab.NombreParametro || "").toUpperCase();
-          const result = lab.Resultado;
-          
-          if (!result) return;
-          
-          let everestId = ATHENEA_MAP[code];
-          
-          // Fallback por nombre si el código no está mapeado
-          if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
-          }
-          
-          if (everestId) {
-              // Intentar buscar el input por ID
-              let inputEl = document.getElementById(everestId);
-              if (inputEl) {
-                  setNgValue(inputEl, result);
-                  count++;
-                  // Intentar establecer la fecha de este resultado al día de hoy o la fecha de Athenea (si viene)
-                  let dateId = everestId.replace("resultado", "fechaResult");
-                  let dateInput = document.getElementById(dateId);
-                  if (dateInput) {
-                      const today = new Date().toISOString().split('T')[0];
-                      setNgValue(dateInput, today);
-                  }
-              }
-          }
-      });
-      return count;
-  }
-
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
-  function getAtheneaIdSolicitudAuto(docId) {
-      return new Promise((resolve) => {
-          let doc = docId;
-          if (!doc && typeof extractPacienteAbierto === "function") {
-              doc = extractPacienteAbierto();
-          }
-          if (!doc) {
-              doc = prompt("No se detectó la cédula del paciente abierto en Everest. Ingresa el número de documento:");
-          }
-          if (!doc) {
-              resolve(null);
-              return;
-          }
-
-          const bridgeUrl = `http://localhost:5050/api/buscar_laboratorios?documento=${encodeURIComponent(doc)}`;
-          console.log(`[Vigilante] Consultando idSolicitud en Athenea API Bridge para documento: ${doc}`);
-
-          if (typeof GM_xmlhttpRequest !== "undefined") {
-              GM_xmlhttpRequest({
-                  method: "GET",
-                  url: bridgeUrl,
-                  headers: { "Accept": "application/json" },
-                  onload: function(response) {
-                      if (response.status === 200) {
-                          try {
-                              const res = JSON.parse(response.responseText);
-                              if (res && res.idSolicitud) {
-                                  resolve(res.idSolicitud);
-                                  return;
-                              }
-                          } catch (e) {
-                              console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
-                          }
-                      }
-                      console.warn("[Vigilante] API Bridge devolvió status " + response.status);
-                      resolve(null);
-                  },
-                  onerror: function(err) {
-                      console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
-                      resolve(null);
-                  },
-                  ontimeout: function() {
-                      console.warn("[Vigilante] Timeout consultando API Bridge");
-                      resolve(null);
-                  }
-              });
-          } else {
-              fetch(bridgeUrl)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
-                  .catch(err => {
-                      console.warn("[Vigilante] Error fetch API Bridge:", err);
-                      resolve(null);
-                  });
-          }
-      });
-  }
-
-  // Interfaz de Usuario para activar la inyección
-  function createLabInjectorUI() {
-      if (document.getElementById("vgl-lab-injector")) return;
-      
-      const btn = document.createElement("button");
-      btn.id = "vgl-lab-injector";
-      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      btn.style.cssText = "position:fixed;bottom:80px;left:15px;z-index:9999999;background:#8b5cf6;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;";
-      
-      btn.onclick = async () => {
-          const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          if (idSolicitud) {
-              btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
-          } else {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge.\nIngresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) {
-                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-                  return;
-              }
-          }
-          
-          btn.innerHTML = "⏳ Consultando laboratorios...";
-          try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
-              if (labs && labs.length > 0) {
-                  const injectedCount = injectLabsIntoCronicos(labs);
-                  alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
-              } else {
-                  alert("⚠️ No se encontraron laboratorios en esa solicitud.");
-              }
-          } catch (e) {
-              alert("❌ Error al consultar Athenea:\n" + e + "\n\n¿Tienes sesión activa en Athenea?");
-          }
-          btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      };
-      
-      document.body.appendChild(btn);
-  }
-
-  // Observador para detectar cuándo inyectar el botón
-  setInterval(() => {
-      // Solo en la historia clínica o panel de Everest
-      if (location.href.includes("Morbilidad") || document.querySelector("a#pes")) {
-          createLabInjectorUI();
-      }
-  }, 2000);
-
 
 })();
       GHOST.promises.set(promKey, p);
@@ -5765,6 +5653,7 @@
         <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
         <div class="vgl-fld"><label>Probar alerta cardiovascular<span class="vgl-hint">Muestra una vista previa del aviso de prioridad cardiovascular.</span></label><button class="vgl-btn" id="c-pestest">Probar</button></div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
+        <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
@@ -5800,6 +5689,7 @@
     bind("#c-pes", "abandonoPES", (n) => n.checked);
     q("#c-pestest").addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
+    bind("#c-sms", "smsRecordatorio", (n) => n.checked);
     bind("#c-base", "baseAuto", (n) => n.checked);
     bind("#c-rep", "reporte", (n) => n.checked);
     bind("#c-eq", "equipo", (n) => n.value.slice(0, 40));
@@ -6291,9 +6181,31 @@
                 setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
                 return;
               }
-              localStorage.clear();
+              // v11.0.1 — DOS fallos graves corregidos aquí:
+              //
+              // 1) BUCLE INFINITO DE RECARGA. Recargar la página NO actualiza el script
+              //    (eso solo lo hace Tampermonkey desde el Gist), así que al volver a
+              //    cargar se cumplía otra vez la misma condición y se recargaba de nuevo,
+              //    sin freno, cada pocos segundos: el equipo quedaba inutilizable. Ahora
+              //    se recarga UNA sola vez por versión y sesión; si tras eso sigue
+              //    desactualizado, se avisa por texto y no se toca más la página.
+              //
+              // 2) localStorage.clear() borraba la BITÁCORA DE AUDITORÍA de fraudes e
+              //    inasistencias (vgl_ev_*, 30 días — la evidencia para la que existe el
+              //    Vigilante), los contadores del turno, los ajustes y el registro
+              //    anti-duplicados del día, cuya pérdida permite volver a crear citas y
+              //    órdenes ya creadas. Se sustituye por una sola línea quirúrgica.
+              const marca = "vgl_upd|" + minVer;
+              try {
+                if (sessionStorage.getItem(marca)) {
+                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde Tampermonkey → «Check for userscript updates».`, "warn");
+                  return;
+                }
+                sessionStorage.setItem(marca, "1");
+              } catch (e) {}
+              try { localStorage.removeItem("vgl_pym_dia"); } catch (e) {}
               setSummary(`🔄 Vigilante se actualiza a v${minVer}...`, "info");
-              setTimeout(() => location.reload(true), 2000);
+              setTimeout(() => location.reload(), 2000);
             }
           } catch (e) { console.error("[Vigilante] version check parse:", e); }
         },
