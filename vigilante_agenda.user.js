@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.5
+// @version      12.1.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.5";
+  const VERSION = "12.1.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4684,7 +4684,7 @@
   let ultimoSmsEnviado = "";
 
   // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
-  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion) {
+  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
     // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
@@ -4701,7 +4701,7 @@
         const marc = encodeURIComponent(marcacion || "Consulta");
         const obs = encodeURIComponent(observacion || "");
 
-        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
+        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null` + (programaId ? `&ProgramaId=${encodeURIComponent(programaId)}` : "") + `&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
         console.log("[Vigilante] AsignarTurno →", { Marcacion: marcacion || "NA", Consulta: false, swIsPyM: swPyM, SwProgramaEspecial: swProgEspecial });
         const res = await pageFetchJson(path, { method: "POST", body: "{}" });
 
@@ -5016,6 +5016,15 @@
         </div>
 
         <div class="vgl-agm-sec">
+          <!-- v12.1.0 — Selector de PROGRAMA. Confirmado con la captura del consultorio:
+               la aplicación oficial muestra aquí un desplegable con los programas del
+               paciente y el médico ELIGE uno; ese identificador viaja como ProgramaId en
+               AsignarTurno. No se puede deducir: en la captura, para una agenda de HTA el
+               médico eligió "Nefroprotección". Por eso se pregunta, igual que Everest. -->
+          <div id="vgl-agm-prog-box" style="display:none;margin-bottom:10px">
+            <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:</label>
+            <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
+          </div>
           <label class="vgl-agm-check-lbl">
             <input type="checkbox" id="vgl-agm-pym-chk" checked>
             <span>¿Es cita para actividades del programa RCV / Prevención?</span>
@@ -5047,6 +5056,7 @@
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
     let pacienteIdAcceso = null;
+    let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
 
     const xBtn = modal.querySelector("#vgl-agm-x");
@@ -5129,6 +5139,22 @@
       if (!pacienteIdAcceso) {
         slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ No se encontró el paciente en el sistema de agenda con el documento ${escapeHtml(apt.doc_id)}.</div>`;
         return;
+      }
+
+      // v12.1.0 — Se cargan los programas del paciente para el selector, una sola vez por
+      // modal. Solo se ofrecen los marcados swProgramaEspecial (los mismos que lista la
+      // aplicación oficial: en la captura, "Salud Mental" no aparecía y sí las otras dos).
+      if (!progCargados) {
+        progCargados = true;
+        try {
+          const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
+          const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
+          if (progs.length && box && sel) {
+            sel.innerHTML = progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${i === 0 ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
+            box.style.display = "block";
+          }
+        } catch (e) { console.warn("[Vigilante] no se pudieron cargar los programas del paciente:", e); }
       }
 
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
@@ -5296,7 +5322,11 @@
       // v11.0.1 — Marcacion="NA": el valor que envía la aplicación oficial en la única
       // secuencia capturada que terminó en "Agendada Correctamente". "Consulta" no aparece
       // ni una vez en las 1527 llamadas registradas: era un valor inventado.
-      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA");
+      // v12.1.0 — El programa que eligió el médico viaja como ProgramaId, igual que en
+      // la aplicación oficial. Si el paciente no tiene programas, va vacío y no se envía.
+      const progSel = modal.querySelector("#vgl-agm-prog-sel");
+      const programaId = (progSel && progSel.value) || "";
+      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId);
       // v12.0.0 — Se registran solo campos PLANOS y acotados. sanitizePII únicamente
       // censura valores de primer nivel, así que pasar el objeto `res` entero podía escribir
       // datos del paciente en la bitácora local sin filtrar.
