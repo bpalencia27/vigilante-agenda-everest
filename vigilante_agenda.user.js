@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.2
+// @version      12.3.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.2";
+  const VERSION = "12.3.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -551,6 +551,151 @@
       return tryFetchYear(0);
   }
 
+  // =====================================================================
+  //  PUENTE ATHENEA — BÚSQUEDA POR CÉDULA, SOLO NAVEGADOR (v12.3.3)
+  //
+  //  Reemplaza al "API Bridge" de localhost:5050 (Milestone 3): ese servidor
+  //  nunca existió en este repositorio, así que la búsqueda automática en
+  //  Athenea era código muerto en TODOS los equipos — nunca falló con un
+  //  error visible, simplemente nunca encontraba nada.
+  //
+  //  Reconstruido a partir de una captura HAR real del flujo humano
+  //  (Buscar otro paciente -> cédula -> Ver Resumen), confirmando que:
+  //   1. GET  /Resultados/BusquedaPaciente         -> formulario + token CSRF
+  //   2. POST /Resultados/BuscarPaciente (multipart, tipoId=0 = Cédula)
+  //      -> si hay UN solo resultado, la respuesta trae ya el <input
+  //         name="IdPaciente"> (el id INTERNO de Athenea) y un token CSRF
+  //         nuevo, listos para confirmar.
+  //   3. POST /Resultados/DatosPaciente (multipart, con ese IdPaciente)
+  //      -> página del paciente. Cada solicitud aparece como
+  //         <form id="{idSolicitud}{año}" data-modulo="LAB|PAT"
+  //               action="/Resultados/Reporte">
+  //         (el propio JS de Athenea, DatosPaciente.js, parte ese id en los
+  //         últimos 4 dígitos como año y el resto como idSolicitud — misma
+  //         regla que se usa aquí).
+  //   4. consultaDetalleSolicitud {idSolicitud, ano, modulo} por cada una
+  //      (ya implementado arriba en fetchAtheneaLabs).
+  //
+  //  El paciente activo vive en la SESIÓN DEL SERVIDOR de Athenea, no en la
+  //  URL: por eso no basta un GET con la cédula. GM_xmlhttpRequest reusa la
+  //  sesión ya iniciada en el navegador (cookies del dominio, incluido el
+  //  token antifraude), igual que ya hacía fetchAtheneaLabs.
+  // =====================================================================
+
+  function _gmReq(opts) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest(Object.assign({ timeout: 15000, onload: resolve, onerror: () => reject(new Error("NetErr")), ontimeout: () => reject(new Error("Timeout")) }, opts));
+    });
+  }
+
+  // Multipart/form-data a mano: Athenea exige ese Content-Type exacto (así lo
+  // envía su propio formulario) y GM_xmlhttpRequest no construye FormData.
+  function _atheneaMultipart(fields) {
+    const boundary = "----VglAthenea" + Math.random().toString(16).slice(2) + Date.now().toString(16);
+    let body = "";
+    for (const k of Object.keys(fields)) {
+      body += `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${fields[k] == null ? "" : fields[k]}\r\n`;
+    }
+    body += `--${boundary}--\r\n`;
+    return { boundary, body };
+  }
+
+  function _atheneaToken(html) {
+    const m = /name=["']__RequestVerificationToken["'][^>]*value=["']([^"']+)["']/i.exec(html)
+      || /value=["']([^"']+)["'][^>]*name=["']__RequestVerificationToken["']/i.exec(html);
+    return m ? m[1] : "";
+  }
+
+  function _atheneaIdPaciente(html) {
+    const tag = /<input[^>]*name=["']IdPaciente["'][^>]*>/i.exec(html);
+    if (!tag) return "";
+    const v = /value=["']([^"']*)["']/i.exec(tag[0]);
+    return v ? v[1] : "";
+  }
+
+  // v12.3.3 — VERIFICACIÓN DE IDENTIDAD. La respuesta de DatosPaciente va a
+  // usarse para escribir resultados en la historia clínica del paciente
+  // ABIERTO en Everest. Antes de confiar en nada, se confirma que la cédula
+  // que trae la página de Athenea es la MISMA que se buscó — no basta con
+  // que el servidor haya respondido 200.
+  function _atheneaCedulaCoincide(html, docLimpio) {
+    if (!docLimpio) return false;
+    const m = /\b(?:CC|TI|CE|RC|PA|CD|MS|AS|CN)\b[^0-9]{0,10}(\d{5,12})/i.exec(html);
+    if (m) return m[1].replace(/\D/g, "") === docLimpio;
+    try { return new RegExp("(?<!\\d)" + docLimpio + "(?!\\d)").test(html); } catch (e) { return html.includes(docLimpio); }
+  }
+
+  // Lee las tarjetas de solicitud de la página de resultados: cada una es un
+  // <form action="/Resultados/Reporte"> cuyo id concatena idSolicitud+año.
+  function _atheneaExtraerSolicitudes(html) {
+    const out = [];
+    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      const tag = m[0];
+      const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
+      if (!idM) continue;
+      const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB" });
+    }
+    return out;
+  }
+
+  // Resuelve, para una cédula, la lista de solicitudes {idSolicitud, ano, modulo}
+  // disponibles en Athenea. Devuelve null ante cualquier fallo o duda de
+  // identidad — nunca "adivina" un idPaciente ni una solicitud.
+  async function getAtheneaSolicitudesAuto(docId) {
+    const doc = String(docId || "").replace(/\D/g, "");
+    if (!doc) return null;
+    const BASE = "https://medicosviva1a.atheneasoluciones.com";
+    try {
+      const r1 = await _gmReq({ method: "GET", url: `${BASE}/Resultados/BusquedaPaciente` });
+      if (r1.status !== 200) return null;
+      const token1 = _atheneaToken(r1.responseText);
+      if (!token1) return null;
+
+      // tipoId=0 = Cédula de Ciudadanía (confirmado en captura real: numId=<cédula>).
+      const mp1 = _atheneaMultipart({ porRango: "false", tipoId: "0", numId: doc, nombre1: "", nombre2: "", apellido1: "", apellido2: "", __RequestVerificationToken: token1 });
+      const r2 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/BuscarPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp1.boundary}` }, data: mp1.body });
+      if (r2.status !== 200) return null;
+
+      // Sin IdPaciente no se avanza: puede ser que Athenea no tenga a este
+      // paciente, o que la búsqueda haya devuelto una LISTA de coincidencias
+      // en vez de un resultado único — en ambos casos, se detiene en vez de
+      // adivinar (el mismo motivo por el que v11.0.1 quitó el prompt() de
+      // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
+      const idPaciente = _atheneaIdPaciente(r2.responseText);
+      const token2 = _atheneaToken(r2.responseText);
+      if (!idPaciente || !token2) return null;
+
+      const mp2 = _atheneaMultipart({ IdPaciente: idPaciente, __RequestVerificationToken: token2 });
+      const r3 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/DatosPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp2.boundary}` }, data: mp2.body });
+      if (r3.status !== 200) return null;
+
+      if (!_atheneaCedulaCoincide(r3.responseText, doc)) {
+        console.warn("[Vigilante Athenea] la cédula de la respuesta no coincide con la buscada; se descarta por seguridad.");
+        return null;
+      }
+
+      return { idPaciente, solicitudes: _atheneaExtraerSolicitudes(r3.responseText) };
+    } catch (e) {
+      console.warn("[Vigilante Athenea] error resolviendo solicitudes:", e);
+      return null;
+    }
+  }
+
+  // Trae y fusiona los analitos de TODAS las solicitudes de laboratorio
+  // (módulo LAB) de un paciente. Cada solicitud ya trae su año exacto
+  // (raspado de Athenea), así que fetchAtheneaLabs no necesita reintentar
+  // por año — solo lo hace cuando se le llama sin ese dato.
+  async function getAtheneaLabsAuto(docId) {
+    const resuelto = await getAtheneaSolicitudesAuto(docId);
+    if (!resuelto || !resuelto.solicitudes.length) return [];
+    const porLab = resuelto.solicitudes.filter((s) => s.modulo === "LAB");
+    const listas = await Promise.all(porLab.map((s) => fetchAtheneaLabs(s.idSolicitud, s.ano).catch(() => [])));
+    return listas.flat();
+  }
+
   // Despacha eventos para que Angular actualice el modelo
   function setNgValue(inputEl, value) {
       if (!inputEl) return;
@@ -637,74 +782,6 @@
       return { count, pendientes, sinCasilla };
   }
 
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
-  function getAtheneaIdSolicitudAuto(docId) {
-      return new Promise((resolve) => {
-          let doc = docId;
-          if (!doc && typeof extractPacienteAbierto === "function") {
-              doc = extractPacienteAbierto();
-          }
-          // v11.0.1 — SIN prompt(). Pedir la cédula a mano permitía escribir en la historia
-          // clínica ABIERTA los resultados de OTRO paciente (basta un dígito mal tecleado).
-          // La identidad solo puede venir del paciente que está abierto en Everest.
-          if (!doc) {
-              console.warn("[Vigilante] no se pudo determinar el paciente abierto: no se consultan laboratorios");
-              resolve(null);
-              return;
-          }
-
-          const bridgeUrl = `http://localhost:5050/api/buscar_laboratorios?documento=${encodeURIComponent(doc)}`;
-          console.log(`[Vigilante] Consultando idSolicitud en Athenea API Bridge para documento: ${doc}`);
-
-          if (typeof GM_xmlhttpRequest !== "undefined") {
-              GM_xmlhttpRequest({
-                  method: "GET",
-                  url: bridgeUrl,
-                  headers: { "Accept": "application/json" },
-                  onload: function(response) {
-                      if (response.status === 200) {
-                          try {
-                              // v12.0.0 — CONTRATO NORMALIZADO: esta función resuelve SIEMPRE
-                              // un número o null. Antes devolvía un escalar mientras cada
-                              // consumidor lo desempaquetaba como si fuera un objeto
-                              // (`atheneaData.idSolicitud`), lo que dejaba la consulta de
-                              // Athenea del modal de paraclínicos como CÓDIGO MUERTO: nunca
-                              // se cumplía la condición y siempre se caía al caso "sin datos".
-                              const res = JSON.parse(response.responseText);
-                              const bruto = res && (res.idSolicitud != null ? res.idSolicitud : res.id);
-                              const num = Number(bruto);
-                              if (Number.isFinite(num) && num > 0) {
-                                  resolve(num);
-                                  return;
-                              }
-                          } catch (e) {
-                              console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
-                          }
-                      }
-                      // console.warn("[Vigilante] API Bridge devolvió status " + response.status);
-                      resolve(null);
-                  },
-                  onerror: function(err) {
-                      // console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
-                      resolve(null);
-                  },
-                  ontimeout: function() {
-                      // console.warn("[Vigilante] Timeout consultando API Bridge");
-                      resolve(null);
-                  }
-              });
-          } else {
-              fetch(bridgeUrl)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
-                  .catch(err => {
-                      // console.warn("[Vigilante] Error fetch API Bridge:", err);
-                      resolve(null);
-                  });
-          }
-      });
-  }
-
   // Interfaz de Usuario para activar la inyección
     // =====================================================================
   //  ROBOT AUTOMÁTICO ATHENEA: BUSCA LA CÉDULA DEL PACIENTE AL ABRIR HISTORIA
@@ -723,24 +800,19 @@
       console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
 
       try {
-          const atheneaData = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = atheneaData; // v12.0.0: getAtheneaIdSolicitudAuto ya devuelve número o null
-
-          if (idSol) {
-              const labs = await fetchAtheneaLabs(idSol);
-              if (labs && labs.length > 0) {
-                  const r = injectLabsIntoCronicos(labs);
-                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
-                  // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
-                  // muestra), deja de ser persistente (los avisos persistentes sin cerrar
-                  // reaparecen horas después desde el Centro de actividades de Windows) y
-                  // dice lo que NO se pudo llenar, para que el médico lo revise.
-                  const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
-                    + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
-                  notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
-                    `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
-                    false, "athenea|" + docId + "|" + todayStamp());
-              }
+          const labs = await getAtheneaLabsAuto(docId);
+          if (labs && labs.length > 0) {
+              const r = injectLabsIntoCronicos(labs);
+              vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
+              // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
+              // muestra), deja de ser persistente (los avisos persistentes sin cerrar
+              // reaparecen horas después desde el Centro de actividades de Windows) y
+              // dice lo que NO se pudo llenar, para que el médico lo revise.
+              const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
+                + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
+              notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
+                `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
+                false, "athenea|" + docId + "|" + todayStamp());
           }
       } catch (e) {
           console.warn("[Vigilante Robot Athenea] No se pudieron auto-cargar los paraclínicos:", e);
@@ -758,25 +830,13 @@
 
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = idSolicitud; // v12.0.0: contrato normalizado (número o null)
-
-          // v11.0.1 — SIN prompt(). Escribir a mano un "idSolicitud" traía a esta historia
-          // clínica los resultados de la solicitud que fuera — es decir, los de CUALQUIER
-          // otro paciente — y se escribían sin ninguna comprobación de identidad.
-          if (!idSol) {
-              btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-              alert("No se pudo resolver la solicitud de laboratorio del paciente abierto"
-                + (docId ? " (cédula " + docId + ")" : "")
-                + ".\n\nConsulte los resultados directamente en Athenea. No se diligenció ninguna casilla.");
+          if (!docId) {
+              alert("No se pudo determinar el paciente abierto en esta historia clínica.");
               return;
           }
-
-          btn.innerHTML = "⏳ Consultando laboratorios...";
+          btn.innerHTML = "⏳ Buscando en Athenea...";
           try {
-              const labs = await fetchAtheneaLabs(idSol);
+              const labs = await getAtheneaLabsAuto(docId);
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
@@ -784,7 +844,13 @@
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
                     + "\n\nRevise las fechas de toma antes de guardar la historia.");
               } else {
-                  alert("⚠️ No se encontraron laboratorios en esa solicitud.");
+                  // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
+                  // historia clínica los resultados de CUALQUIER otro paciente, sin
+                  // comprobación de identidad. Este mensaje cubre tanto "no se encontró
+                  // el paciente en Athenea" como "se encontró pero sin resultados": en
+                  // ambos casos no se diligenció nada y hay que revisar a mano.
+                  alert("⚠️ No se encontraron laboratorios para el paciente abierto (cédula " + docId + ") en Athenea."
+                    + "\n\nConsulte los resultados directamente en el portal. No se diligenció ninguna casilla.");
               }
           } catch (e) {
               alert("❌ Error al consultar Athenea: " + e);
@@ -4934,19 +5000,15 @@
 
     const todosLabs = [];
 
-    // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES VIA BRIDGE / API
+    // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
+    // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
     try {
-      const atheneaData = await getAtheneaIdSolicitudAuto(apt.doc_id);
-      // v12.0.0 — Antes se comprobaba `atheneaData.idSolicitud` sobre un valor que ya era
-      // un número: la condición NUNCA se cumplía y esta consulta jamás llegaba a ejecutarse.
-      if (atheneaData) {
-        const labsArr = await fetchAtheneaLabs(atheneaData);
-        if (labsArr && labsArr.length) {
-          labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
-        }
+      const labsArr = await getAtheneaLabsAuto(apt.doc_id);
+      if (labsArr && labsArr.length) {
+        labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
       }
     } catch (e) {
-      console.warn("[Vigilante Labs] Error consultando Athenea Bridge:", e);
+      console.warn("[Vigilante Labs] Error consultando Athenea:", e);
     }
 
     // 2. BÚSQUEDA SECUNDARIA EN COMPLEMENTO (ANNAR / CITI)
