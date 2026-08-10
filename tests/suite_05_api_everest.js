@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Llamadas a Everest y clínicas",
-  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente"],
+  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "getAtheneaIdSolicitudAuto", "fetchAtheneaLabs"],
   pruebas(t, api, env, cargar) {
     t.casoAsync("apiOrdenamientoGuardar construye payload correctamente y llama al endpoint", async () => {
       const c = cargar();
@@ -129,6 +129,38 @@ module.exports = {
 
       const pacId = await c.api.apiOrdenamientoBuscarPaciente("CC 123456");
       t.igual(pacId, 111);
+    });
+    t.casoAsync("getAtheneaIdSolicitudAuto llama al bridge local y retorna idSolicitud", async () => {
+      const c = cargar();
+
+      let fetchUrl;
+      c.env.win.GM_xmlhttpRequest = (opts) => {
+        fetchUrl = opts.url;
+        opts.onload({ status: 200, responseText: JSON.stringify({ idSolicitud: 5555 }) });
+      };
+
+      const id = await c.api.getAtheneaIdSolicitudAuto("12345");
+      t.igual(id, 5555);
+      t.cierto(fetchUrl.includes("documento=12345"));
+    });
+
+    t.casoAsync("fetchAtheneaLabs intenta multiples anos si no se especifica", async () => {
+      const c = cargar();
+      let fetchCalls = [];
+      c.env.win.GM_xmlhttpRequest = (opts) => {
+        const payload = JSON.parse(opts.data);
+        fetchCalls.push(payload.ano);
+        opts.onload({ status: 200, responseText: JSON.stringify({ dataObject: [] }) }); // empty triggers retry
+      };
+
+      try {
+        await c.api.fetchAtheneaLabs(5555);
+      } catch (e) {
+        // expected to reject if no data after trying all years
+      }
+
+      t.igual(fetchCalls.length, 3);
+      t.cierto(fetchCalls.includes(new Date().getFullYear()));
     });
   }
 };
