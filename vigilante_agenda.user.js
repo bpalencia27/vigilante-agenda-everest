@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.1
+// @version      12.3.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.1";
+  const VERSION = "12.3.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4353,6 +4353,39 @@
     } catch (e) { perfilPedido = ""; console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
   }
 
+  // v12.3.2 — IDENTIDAD DESDE EL ALMACENAMIENTO DEL CLIENTE (volcado real del 2026-08-10
+  // en el equipo de otro profesional). Everest guarda en localStorage la ficha de la
+  // sesión: user = {userId, userIdIdentity, username, ...} y jwt (JWT cuyo sub es ese
+  // mismo userIdIdentity), y además deja la cookie UsuarioMedico=<login>. El login NUNCA
+  // se usa directamente: se pasa por GetUsuarioPerfil (validación de backend), así que un
+  // almacenamiento rancio de un médico anterior en un equipo compartido no puede firmar
+  // nada por sí solo. Coherencia extra: si hay jwt, user.username solo se acepta cuando
+  // jwt.sub coincide con user.userIdIdentity (el jwt es el token vivo de ESTA sesión).
+  function identidadDesdeCliente() {
+    if (state.activeDoctor.id) return;
+    try {
+      let login = "";
+      let u = null;
+      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
+      let jwtSub = "";
+      try {
+        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
+        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
+      } catch (e) {}
+      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
+        login = String(u.username).trim();
+      }
+      if (!login) {
+        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
+        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
+      }
+      if (login) { loginVisto = login; resolverMedicoPorPerfil(login); }
+    } catch (e) {}
+  }
+  // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
+  // sesión ya existe a document-start; el timeout evita depender del orden de las const).
+  try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
+
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
   function calcBusinessTargetDate(monthsToAdd, daysToAdd) {
     const d = new Date();
@@ -6482,6 +6515,7 @@
         if (!state.activeDoctor.id && Date.now() - idRetryAt > 30000) {
           idRetryAt = Date.now();
           captureDoctorInfo("");
+          identidadDesdeCliente();
           if (loginVisto) resolverMedicoPorPerfil(loginVisto);
         }
         tickApi();
