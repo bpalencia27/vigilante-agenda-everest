@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.4
+// @version      12.3.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.4";
+  const VERSION = "12.3.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -650,6 +650,40 @@
   // accionable: "inicia sesión en Athenea en este navegador".
   function _atheneaPareceLogin(html) {
     return /type=["']password["']/i.test(html) || /Iniciar\s+sesi[oó]n/i.test(html);
+  }
+
+  // v12.3.5 — LATIDO DE SESIÓN. Reportado en uso real: la sesión de Athenea caduca en
+  // pocos minutos y el médico tenía que volver a iniciar sesión constantemente para que
+  // los laboratorios automáticos funcionaran.
+  //
+  // Vigilante NO guarda ni escribe la contraseña de Athenea en ningún caso — eso sería
+  // un riesgo real en un equipo de consultorio compartido. Lo que SÍ puede hacer, sin
+  // tocar credenciales: la mayoría de sesiones ASP.NET (que es lo que corre Athenea, a
+  // juzgar por el token __RequestVerificationToken y /Account/Login) usan expiración
+  // DESLIZANTE por defecto — el reloj se reinicia con cada petición autenticada, no solo
+  // con clics del médico. Un GET periódico y liviano (el mismo BusquedaPaciente ya usado
+  // en el paso 1 de la búsqueda) mantiene viva la sesión mientras el médico ya inició
+  // sesión una vez en este navegador — sin credenciales, sin adivinar nada.
+  //
+  // Si la sesión NO está activa (nunca se inició, o el intervalo fue más largo que el
+  // timeout real), se avisa UNA VEZ AL DÍA con notify() (que ya deduplica por uid+día)
+  // en vez de fallar en silencio cada vez que se intenta traer un laboratorio.
+  let atheneaKeepAliveAt = 0;
+  let atheneaSesionViva = null;   // null = aún no se sabe; true/false tras el primer chequeo
+  async function atheneaKeepAlive() {
+    try {
+      const r = await _gmReq({ method: "GET", url: "https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente" });
+      const viva = r.status === 200 && !_atheneaPareceLogin(r.responseText);
+      if (viva !== atheneaSesionViva) {
+        console.log("[Vigilante Athenea] latido — sesión " + (viva ? "ACTIVA (mantenida)" : "NO activa"));
+      }
+      atheneaSesionViva = viva;
+      if (!viva) {
+        notify("AMBAR", "🔑 Athenea: inicia sesión una vez",
+          "Los laboratorios automáticos no se están cargando porque no hay sesión activa en Athenea en este navegador. Abre medicosviva1a.atheneasoluciones.com e inicia sesión — después Vigilante la mantiene activa sola, sin que tengas que repetirlo.",
+          false, "athenea_sesion_caducada|" + todayStamp());
+      }
+    } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
   }
 
   async function getAtheneaSolicitudesAuto(docId) {
@@ -6595,6 +6629,13 @@
           captureDoctorInfo("");
           identidadDesdeCliente();
           if (loginVisto) resolverMedicoPorPerfil(loginVisto);
+        }
+        // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
+        // reportado en consultorio, deja margen para que la expiración deslizante nunca
+        // llegue a cumplirse mientras el navegador siga abierto.
+        if (Date.now() - atheneaKeepAliveAt > 180000) {
+          atheneaKeepAliveAt = Date.now();
+          atheneaKeepAlive();
         }
         tickApi();
         checkRecordatorioPym();
