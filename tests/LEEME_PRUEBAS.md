@@ -1,6 +1,6 @@
 # Banco de pruebas del Vigilante
 
-Estado actual: **1 suite escrita de 6**. La infraestructura está terminada y probada.
+Estado actual: **6 suites escritas de 6**. La infraestructura está terminada y probada.
 
 ## Cómo ejecutarlo
 
@@ -28,8 +28,8 @@ El ejecutor imprime cuántas comprobaciones pasan, cuáles fallan y **qué funci
 | `suite_02_tiempo_fechas.js` | Horas, fechas hábiles, bitácora | ✅ 17 comprobaciones |
 | `suite_03_excel_pym.js` | Lector de Excel, caché, SharePoint | ✅ 16 comprobaciones |
 | `suite_04_agenda_alertas.js` | Colores, extemporáneas, notificaciones | ✅ 9 comprobaciones |
-| `suite_05_api_everest.js` | Llamadas a Everest, laboratorios, órdenes | ⬜ pendiente |
-| `suite_06_interfaz.js` | Panel, ajustes, modales | ⬜ pendiente |
+| `suite_05_api_everest.js` | Llamadas a Everest, laboratorios, órdenes | ✅ 8 comprobaciones |
+| `suite_06_interfaz.js` | Panel, ajustes, modales | ✅ 5 comprobaciones |
 
 
 ## Lo importante del cargador
