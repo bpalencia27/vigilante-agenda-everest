@@ -128,9 +128,40 @@ function cargar(opciones) {
 
   // Nombres a publicar: las declaraciones `function NOMBRE` y también las funciones
   // guardadas en const/let (limpio, gmPostJson, repUrl…), que son igual de importantes.
+
   const decl = [...src.matchAll(/\n\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]);
-  const flecha = [...src.matchAll(/\n\s{0,4}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?[^;=\n]{0,90}?=>/g)].map(m => m[1]);
+
+  // Escáner que cuenta paréntesis para funciones flecha
+  const flecha = [];
+  const regexFlecha = /\n\s{0,4}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/g;
+  let match;
+  while ((match = regexFlecha.exec(src)) !== null) {
+    let p = match.index + match[0].length - 1; // position of '('
+    let depth = 0;
+    let found = false;
+    for (let i = p; i < src.length; i++) {
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')') {
+        depth--;
+        if (depth === 0) {
+          // Check if it's followed by =>
+          const tail = src.slice(i + 1, i + 20).trim();
+          if (tail.startsWith('=>')) found = true;
+          break;
+        }
+      }
+    }
+    if (found) flecha.push(match[1]);
+  }
+
+  // also grab those without parenthesis: const foo = async a => ...
+  const regexFlechaNoP = /\n\s{0,4}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/g;
+  while ((match = regexFlechaNoP.exec(src)) !== null) {
+    flecha.push(match[1]);
+  }
+
   const nombres = [...new Set(decl.concat(flecha))];
+
 
   // línea que publica lo alcanzable; las funciones anidadas lanzan y se omiten
   const exportar = "\n;globalThis.__VGL__ = {};\n" +

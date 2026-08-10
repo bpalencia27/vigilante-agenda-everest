@@ -34,7 +34,7 @@ El ejecutor imprime cuántas comprobaciones pasan, cuáles fallan y **qué funci
 
 ## Lo importante del cargador
 
-El userscript es un único IIFE: sus 273 funciones son privadas. `harness.js` **no modifica el archivo de producción**; lo lee, le añade en memoria una línea que publica las funciones, y lo ejecuta en un navegador simulado.
+El userscript es un único IIFE: sus 241 funciones son privadas. `harness.js` **no modifica el archivo de producción**; lo lee, le añade en memoria una línea que publica las funciones, y lo ejecuta en un navegador simulado.
 
 Para que la carga llegue al final sin efectos secundarios:
 
@@ -42,7 +42,7 @@ Para que la carga llegue al final sin efectos secundarios:
 - `hostname = neps.everestintelligent.com` → no entra en la rama de Athenea ni en la de SharePoint
 - `document.readyState = "loading"` → `boot()` queda registrado en `DOMContentLoaded` y **nunca se ejecuta**, así no se construye la interfaz
 
-Alcanzables: **239 de 273**. Las no alcanzables están anidadas dentro de otras funciones (por ejemplo `cargarHoras` y `renderDayChips`, dentro del modal de agendamiento) y solo se pueden probar a través de su función madre.
+Alcanzables: **241 de 241**. Las no alcanzables están anidadas dentro de otras funciones (por ejemplo `cargarHoras` y `renderDayChips`, dentro del modal de agendamiento) y solo se pueden probar a través de su función madre.
 
 ## Cómo escribir una suite nueva
 

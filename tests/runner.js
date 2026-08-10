@@ -11,16 +11,17 @@ const COL = { ok: "\x1b[32m", mal: "\x1b[31m", dim: "\x1b[90m", tit: "\x1b[36m",
 
 function crearT() {
   const res = { pasa: 0, falla: 0, fallos: [], actual: "" };
+  const promesas = [];
   const t = {
     caso(desc, fn) {
       res.actual = desc;
       try { fn(); res.pasa++; }
       catch (e) { res.falla++; res.fallos.push({ desc, msg: e.message }); }
     },
-    async casoAsync(desc, fn) {
-      res.actual = desc;
-      try { await fn(); res.pasa++; }
-      catch (e) { res.falla++; res.fallos.push({ desc, msg: e.message }); }
+    casoAsync(desc, fn) {
+      promesas.push(
+        fn().then(() => { res.pasa++; }).catch(e => { res.falla++; res.fallos.push({ desc, msg: e.message }); })
+      );
     },
     igual(a, b, nota) {
       const A = JSON.stringify(a), B = JSON.stringify(b);
@@ -31,7 +32,7 @@ function crearT() {
     lanza(fn, nota) { let l = false; try { fn(); } catch (e) { l = true; } if (!l) throw new Error(nota || "se esperaba una excepción"); },
     noLanza(fn, nota) { try { fn(); } catch (e) { throw new Error((nota || "no debía lanzar") + ": " + e.message); } },
   };
-  return { t, res };
+  return { t, res, promesas };
 }
 
 async function main() {
@@ -55,10 +56,22 @@ async function main() {
   const cubiertas = new Set();
   const fallosGlobales = [];
 
+
+  const todas = Object.keys(api).filter(k => !k.startsWith("__"));
+  const todosSet = new Set(todas);
   for (const arch of archivos) {
     const suite = require(path.join(__dirname, arch));
-    const { t, res } = crearT();
-    try { await suite.pruebas(t, api, env, cargar); }
+    if (suite.cubre) {
+      for (const fn of suite.cubre) {
+        if (!todosSet.has(fn)) {
+          console.error(COL.mal + "Error: la suite '" + (suite.nombre || arch) + "' dice cubrir '" + fn + "', pero esa función no existe en el API." + COL.fin);
+          process.exit(1);
+        }
+      }
+    }
+
+    const { t, res, promesas } = crearT();
+    try { await suite.pruebas(t, api, env, cargar); await Promise.all(promesas); }
     catch (e) { res.falla++; res.fallos.push({ desc: "(la suite lanzó)", msg: e.message }); }
     (suite.cubre || []).forEach(n => cubiertas.add(n));
     tp += res.pasa; tf += res.falla;
@@ -68,14 +81,13 @@ async function main() {
   }
 
   // cobertura real de funciones
-  const todas = Object.keys(api).filter(k => !k.startsWith("__"));
   const sinCubrir = todas.filter(n => !cubiertas.has(n));
-  const pct = (cubiertas.size / cargado.totalDeclaradas * 100);
+  const pct = (cubiertas.size / todas.length * 100);
 
   console.log("");
   console.log(COL.tit + "─".repeat(64) + COL.fin);
   console.log("  comprobaciones : " + COL.ok + tp + " pasan" + COL.fin + (tf ? "  " + COL.mal + tf + " fallan" + COL.fin : ""));
-  console.log("  funciones cubiertas: " + cubiertas.size + " / " + cargado.totalDeclaradas + "  (" + pct.toFixed(1) + "%)");
+  console.log("  funciones cubiertas: " + cubiertas.size + " / " + todas.length + "  (" + pct.toFixed(1) + "%)");
   if (sinCubrir.length) {
     console.log("");
     console.log(COL.ama + "  sin cubrir (" + sinCubrir.length + "):" + COL.fin);
