@@ -15,30 +15,37 @@ module.exports = {
       t.cierto(api.nameHasToken("agenda06deagosto", "06deagosto"));
     });
 
-    t.caso("esNombreDeHoy identifica archivos correspondientes a la fecha (2026-08-10)", () => {
-      // todayStamp() returns 2026-08-10 statically in harness if not overridden.
-      // So todayTokens will contain tokens for August 10, 2026.
-      t.cierto(api.esNombreDeHoy("Agenda_Dia_CMB_20260810.xlsx"));
-      t.cierto(api.esNombreDeHoy("Citas 10-08-2026.xlsx"));
-      t.cierto(api.esNombreDeHoy("10 de agosto.xlsx"));
-      t.falso(api.esNombreDeHoy("Agenda_Dia_CMB_20260809.xlsx"));
+    t.caso("esNombreDeHoy identifica archivos correspondientes a la fecha", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      t.cierto(c.api.esNombreDeHoy("Agenda_Dia_CMB_20260810.xlsx"));
+      t.cierto(c.api.esNombreDeHoy("Citas 10-08-2026.xlsx"));
+      t.cierto(c.api.esNombreDeHoy("10 de agosto.xlsx"));
+      t.falso(c.api.esNombreDeHoy("Agenda_Dia_CMB_20260809.xlsx"));
     });
 
     t.caso("pickTodaysFile selecciona el archivo correcto basado en el nombre", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
       const files = [
         { Name: "Agenda_20260809.xlsx" },
         { Name: "Agenda_20260810.xlsx" }
       ];
-      const selected = api.pickTodaysFile(files);
+      const selected = c.api.pickTodaysFile(files);
       t.cierto(selected !== null);
       t.igual(selected.Name, "Agenda_20260810.xlsx");
     });
 
     t.caso("pickTodaysFile selecciona basado en fecha de modificación si no hay nombre obvio", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
       const files = [
         { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-10T08:00:00Z" }
       ];
-      const selected = api.pickTodaysFile(files);
+      const selected = c.api.pickTodaysFile(files);
       t.cierto(selected !== null);
       t.igual(selected.Name, "ArchivoRandom.xlsx");
     });
