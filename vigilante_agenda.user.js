@@ -4247,21 +4247,6 @@
   //  (https://neps.everestintelligent.com/apiviva/APIAcceso/api/...)
   // =====================================================================
 
-  // v12.3.1 — La lista blanca de v11.0.1 solo aceptaba URLs absolutas del host
-  // neps.everestintelligent.com. Pero cuando Everest corre detrás del proxy
-  // (medicosviva1a.atheneasoluciones.com, el único host donde vive este script), sus
-  // llamadas a /apiviva/... quedan en el registro de red con el ORIGEN DEL PROXY y
-  // ninguna pasaba el filtro: el UsuarioId que la propia aplicación envía jamás se
-  // captaba. En el equipo del autor lo tapaba la detección por GetUsuarioPerfil; en el
-  // de otro médico, sin esa llamada a la vista, el id quedaba en 0, BuscarPaciente iba
-  // con UsuarioId=0 y "no encontraba" a NINGÚN paciente. Se acepta también el origen
-  // actual de la página, conservando la restricción por RUTA (APIAcceso / digiturno),
-  // que es la que evita confundir el id de un paciente con el del profesional.
-  const ORIGEN_FIABLE = new RegExp(
-    "^(?:https://neps\\.everestintelligent\\.com|" +
-    location.origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
-    ")/apiviva/(?:APIAcceso|ApiIntegracionEverestDigiturno)/", "i");
-
   // Capta automáticamente el UsuarioId y UsuarioNombreCompleto del médico en sesión
   function captureDoctorInfo(srcStr) {
     try {
@@ -4290,8 +4275,8 @@
       // cualquier URL del registro de red, y varios servicios usan ese nombre para el id
       // del PACIENTE (APIEnvioCorreo, APIHCHealth/Morbilidad) o de otro usuario (digiturno).
       // El "médico activo" podía acabar siendo el identificador de un paciente, y con él se
-      // creaban las citas y las órdenes. (v12.3.1: la expresión ORIGEN_FIABLE vive ahora
-      // arriba, a nivel de módulo, y acepta también el origen del proxy.)
+      // creaban las citas y las órdenes.
+      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/(APIAcceso|ApiIntegracionEverestDigiturno)\//i;
       const uIdM = ORIGEN_FIABLE.test(srcStr) ? (/UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr)) : null;
       if (uIdM && uIdM[1]) {
         const id = parseInt(uIdM[1], 10);
