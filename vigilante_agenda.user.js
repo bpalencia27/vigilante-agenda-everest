@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.5
+// @version      12.3.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.5";
+  const VERSION = "12.3.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3128,12 +3128,15 @@
   //  Si algo no encaja (campos irreconocibles, respuesta vacía, error de red),
   //  se vuelve solo al método de siempre. Nunca se queda sin vigilar.
   // =====================================================================
-  const API = { url: "", visto: 0, campos: null, fallos: 0, ok: 0, ultimo: 0, enVuelo: false, ms: 0, noF0: false };
+  const API = { url: "", visto: 0, campos: null, fallos: 0, ok: 0, ultimo: 0, enVuelo: false, ms: 0, noF0: false, medicoId: 0 };
   const API_RE = /\/ObtenerConsultas\?/i;
   // Vocabulario de estados que el script sabe interpretar. Si lo que llega no se
   // parece a esto, el API se descarta y se sigue por el camino de siempre.
   const EST_RE = /en sala|sin presentar|atendid|pendiente|confirmad|cancelad|agendad|asignad|no asisti|inasist|reprogram|programad|espera|admitid|admision|llamad|triage|ausente/i;
-  try { API.url = localStorage.getItem("vgl_api_url") || ""; } catch (e) {}
+  try {
+    API.url = localStorage.getItem("vgl_api_url") || "";
+    API.medicoId = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
+  } catch (e) {}
   function apiRecordar(url) {
     try {
       if (!url || !API_RE.test(url)) return;
@@ -3141,8 +3144,47 @@
       if (abs === API.url) { API.visto = Date.now(); return; }
       API.url = abs; API.visto = Date.now(); API.fallos = 0;
       localStorage.setItem("vgl_api_url", abs);
+      // v12.3.6 — Se etiqueta la URL aprendida con el médico bajo el cual se aprendió.
+      // Ver invalidarApiSiCambioMedico() para el porqué: en un equipo de consultorio
+      // compartido, esta URL trae el profesionalId de OTRO médico y no debe reusarse.
+      API.medicoId = (state.activeDoctor && state.activeDoctor.id) || 0;
+      try { localStorage.setItem("vgl_api_medico", String(API.medicoId)); } catch (e2) {}
       console.log("[Vigilante] llamada de agenda aprendida");
     } catch (e) {}
+  }
+  // v12.3.6 — DESCUBIERTO EN CONSULTORIO: el panel se quedaba mostrando "Última
+  // lectura... vuelve a Citas del día" de forma PERSISTENTE (no transitoria) en el
+  // equipo de un médico, incluso estando en Historia Clínica un buen rato — la
+  // condición en la que el modo API en segundo plano está diseñado para funcionar
+  // (ver el comentario "MODO LIGERO" en tick()).
+  //
+  // Causa: API.url guarda la URL COMPLETA de ObtenerConsultas, con el profesionalId
+  // del médico que la generó, en localStorage — GLOBAL al equipo, no por médico. En
+  // un consultorio compartido, si el Dr. A la dejó aprendida y luego entra la Dra. B,
+  // Vigilante seguía reintentando la URL de A con la SESIÓN de B: el servidor la
+  // rechaza, apiSano() exige menos de 2 fallos para confiar en el API (línea de
+  // apiSano más abajo) y el modo API queda inhabilitado hasta que alguien note el
+  // problema — el mismo patrón de fuga de identidad entre médicos ya corregido para
+  // el agendamiento en v12.3.1/v12.3.2, aquí en la LECTURA de la agenda.
+  //
+  // Se limpia el estado del API en cuanto se identifica a un médico DISTINTO de aquel
+  // bajo el que se aprendió la URL: Everest la vuelve a enseñar sola (apiObservar ya
+  // está siempre activo) la próxima vez que ese médico visite "Citas del día", sin
+  // que nadie tenga que reinstalar ni tocar Ajustes.
+  function invalidarApiSiCambioMedico(nuevoId) {
+    if (!(nuevoId > 0)) return;
+    if (API.medicoId > 0 && API.medicoId !== nuevoId) {
+      console.warn("[Vigilante] la llamada de agenda aprendida pertenecía a otro médico (id " + API.medicoId + "); se descarta para el médico actual (id " + nuevoId + ").");
+      API.url = ""; API.fallos = 0; API.ok = 0;
+      state.apiCitas = null; state.apiEn = 0;
+      try { localStorage.removeItem("vgl_api_url"); } catch (e) {}
+    }
+    // Se etiqueta (o re-etiqueta) siempre con el médico ya resuelto: cubre tanto el
+    // caso de arriba como el de una URL aprendida ANTES de que la identidad se
+    // resolviera (apiRecordar la marcó con medicoId=0 por no saberlo aún) — de aquí
+    // en adelante ya queda protegida frente al próximo cambio de médico.
+    API.medicoId = nuevoId;
+    try { localStorage.setItem("vgl_api_medico", String(nuevoId)); } catch (e) {}
   }
   // Segunda vía para aprender la llamada, SIN interceptar nada: el navegador ya
   // guarda todas las peticiones de la pestaña en su registro de rendimiento. Sirve
@@ -4463,6 +4505,7 @@
       if (!(id > 0)) { perfilPedido = ""; return; }
       const nombre = String(d.nombreCompleto || "").trim();
       if (nombre.length > 3) state.activeDoctor.name = nombre;
+      invalidarApiSiCambioMedico(id);   // v12.3.6 — antes de fijar el id nuevo, purgar el de otro médico
       state.activeDoctor.id = id;
       console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
       state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
