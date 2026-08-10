@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.2.0
+// @version      12.3.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -113,8 +113,8 @@
     después fijarla por equipo con GM_setValue, sin volver a publicarla.
   - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la aplicación oficial los envía y
     el script no. Sin más capturas, cambiarlo es más arriesgado que el defecto.
-  - El módulo de órdenes PyM se apoya en un contrato de API sin ninguna captura que lo
-    respalde: conviene cotejar las primeras órdenes contra el módulo nativo de Everest.
+  - (RESUELTO en v12.3.0) El módulo de órdenes PyM ya está verificado contra una captura
+    del módulo nativo de Everest: el payload coincide byte por byte.
 */
 
 /*
@@ -158,7 +158,7 @@
   PENDIENTE (a propósito, por falta de evidencia)
   - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la app oficial los envía y el
     script no. Cambiarlos con una sola captura es más peligroso que el defecto.
-  - El módulo de órdenes PyM se apoya en un contrato de API sin ninguna captura.
+  - (RESUELTO en v12.3.0) El contrato del módulo de órdenes PyM ya está verificado.
 
   v7.9.0 — AGENDAMIENTO EXPRÉS DE CONTROL Y PyM EN 1-CLIC DESDE EL PANEL
   Agendamiento inteligente de citas de control directamente desde el panel del Vigilante
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.2.0";
+  const VERSION = "12.3.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5586,6 +5586,16 @@
   }
 
   // Guardar Ordenamiento por CIE-10 (POST GuardarOrdenamiento)
+  // v12.3.0 — CONTRATO VERIFICADO contra el módulo NATIVO de Everest (captura del
+  // consultorio, 10/08/2026, orden de VIH). El cuerpo que arma esta función coincide byte
+  // por byte con el que envía Everest, y la cadena de búsquedas previa devuelve los mismos
+  // identificadores: Z113 -> DiagnosticoId 24300, CUPS 906249 -> cup.Id 19984. La respuesta
+  // real es {"agrupador":"1226083892","ordenAuth":[{"numeroAutorizacion":"1226083892319"}]},
+  // que la comprobación de éxito de más abajo reconoce correctamente.
+  //
+  // NO CONFUNDIR con el ordenamiento desde la Ruta de Crónicos: ese es OTRO flujo, con un
+  // cuerpo distinto (camelCase, el objeto completo del paciente, citaId real y swHC:true).
+  // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
