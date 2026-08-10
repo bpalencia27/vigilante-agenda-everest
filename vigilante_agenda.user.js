@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.1.0
+// @version      12.2.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.1.0";
+  const VERSION = "12.2.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4684,7 +4684,7 @@
   let ultimoSmsEnviado = "";
 
   // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
-  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId) {
+  async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
     // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
@@ -4719,20 +4719,20 @@
         // expresa del médico, por eso queda el interruptor y el aviso en pantalla.
         ultimoSmsEnviado = "";
         const creada = res && res.error === false && res.data && (Number(res.data.radicado) > 0 || /Agendada Correctamente/i.test(String(res.data.motivo || "")));
-        if (creada && S.smsRecordatorio) {
-          try {
-            const resPaciente = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteId}`);
-            const cel = String((resPaciente && resPaciente.data && (resPaciente.data.celular || resPaciente.data.telefono)) || "").replace(/\D/g, "");
-            if (cel.length >= 7) {
-              const smsUrl = location.origin + `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(cel)}&AgendaTurnoId=${turnoId}`;
-              (FETCH0 || window.fetch)(smsUrl, { credentials: "include", headers: { Accept: "application/json" } })
-                .then(() => { console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId); })
-                .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
-              ultimoSmsEnviado = cel;
-            } else {
-              console.warn("[Vigilante] el paciente no tiene celular registrado: no se envía SMS");
-            }
-          } catch (e) { console.warn("[Vigilante] no se pudo consultar el celular del paciente:", e); }
+        // v12.2.0 — El número YA NO se busca aquí a ciegas: llega desde el modal, donde el
+        // médico lo ha visto y ha podido corregirlo. Motivo: en las telemetrías del propio
+        // consultorio hay un mismo celular registrado para DOS pacientes distintos, así que
+        // enviar al "celular de la ficha" sin mirarlo puede avisar a la persona equivocada
+        // de la cita de otra, con su nombre y su fecha.
+        const cel = String(celularSms || "").replace(/\D/g, "");
+        if (creada && S.smsRecordatorio && cel.length >= 7) {
+          const smsUrl = location.origin + `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(cel)}&AgendaTurnoId=${turnoId}`;
+          (FETCH0 || window.fetch)(smsUrl, { credentials: "include", headers: { Accept: "application/json" } })
+            .then(() => { console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId); })
+            .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
+          ultimoSmsEnviado = cel;
+        } else if (creada && S.smsRecordatorio) {
+          console.warn("[Vigilante] sin celular válido: no se envía SMS");
         }
 
         return res;
@@ -5029,6 +5029,23 @@
             <input type="checkbox" id="vgl-agm-pym-chk" checked>
             <span>¿Es cita para actividades del programa RCV / Prevención?</span>
           </label>
+          <!-- v12.2.0 — El SMS ya no sale a ciegas. Se muestra el celular registrado, se
+               puede corregir antes de confirmar y se puede desmarcar. Motivo: en las
+               telemetrías del propio consultorio hay un mismo celular registrado para DOS
+               pacientes distintos; enviando sin mirar, uno recibiría el aviso de la cita
+               del otro, con su nombre y su fecha. La aplicación oficial también lo enseña
+               antes de enviar. -->
+          <div id="vgl-agm-sms-box" style="margin-top:8px;padding:10px;background:rgba(37,99,235,.12);border:1px solid #2563eb;border-radius:8px">
+            <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
+              <input type="checkbox" id="vgl-agm-sms-chk" checked>
+              <span>📱 Enviar SMS de recordatorio al paciente</span>
+            </label>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc;flex-wrap:wrap">
+              <label for="vgl-agm-sms-tel" style="color:#93c5fd;font-weight:700">Celular:</label>
+              <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;padding:5px 9px;font-size:13px" placeholder="cargando…">
+              <span id="vgl-agm-sms-nota" style="opacity:.8"></span>
+            </div>
+          </div>
           <div class="vgl-lab-box" style="margin-top:8px;padding:10px;background:rgba(16,185,129,.14);border:1px solid #10b981;border-radius:8px">
             <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
               <input type="checkbox" id="vgl-agm-lab-chk" disabled style="accent-color:#10b981">
@@ -5154,7 +5171,25 @@
             sel.innerHTML = progs.map((p, i) => `<option value="${escapeHtml(String(p.id))}"${i === 0 ? " selected" : ""}>${escapeHtml(String(p.descripcion || ("Programa " + p.id)))}</option>`).join("");
             box.style.display = "block";
           }
-        } catch (e) { console.warn("[Vigilante] no se pudieron cargar los programas del paciente:", e); }
+
+          // v12.2.0 — Celular del SMS: se muestra el registrado para que el médico lo vea
+          // y pueda corregirlo. Si el paciente no tiene ninguno, la casilla del SMS se
+          // desmarca y se dice por qué, en vez de intentar un envío que no llegaría.
+          const tel = String((det && det.data && (det.data.celular || det.data.telefono)) || "").replace(/\D/g, "");
+          const inpTel = modal.querySelector("#vgl-agm-sms-tel");
+          const chkSms = modal.querySelector("#vgl-agm-sms-chk");
+          const notaSms = modal.querySelector("#vgl-agm-sms-nota");
+          if (inpTel) {
+            inpTel.value = tel;
+            inpTel.placeholder = tel ? "" : "sin celular registrado";
+            if (!tel) {
+              if (chkSms) { chkSms.checked = false; }
+              if (notaSms) notaSms.textContent = "— el paciente no tiene celular en su ficha";
+            } else if (notaSms) {
+              notaSms.textContent = "— verifíquelo antes de confirmar";
+            }
+          }
+        } catch (e) { console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e); }
       }
 
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
@@ -5324,9 +5359,14 @@
       // ni una vez en las 1527 llamadas registradas: era un valor inventado.
       // v12.1.0 — El programa que eligió el médico viaja como ProgramaId, igual que en
       // la aplicación oficial. Si el paciente no tiene programas, va vacío y no se envía.
+      // v12.2.0 — El SMS solo sale si la casilla está marcada, y al número que el
+      // médico tiene a la vista (puede haberlo corregido).
+      const smsChk = modal.querySelector("#vgl-agm-sms-chk");
+      const smsTel = modal.querySelector("#vgl-agm-sms-tel");
+      const celularSms = (smsChk && smsChk.checked && smsTel) ? String(smsTel.value || "").replace(/D/g, "") : "";
       const progSel = modal.querySelector("#vgl-agm-prog-sel");
       const programaId = (progSel && progSel.value) || "";
-      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId);
+      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId, celularSms);
       // v12.0.0 — Se registran solo campos PLANOS y acotados. sanitizePII únicamente
       // censura valores de primer nivel, así que pasar el objeto `res` entero podía escribir
       // datos del paciente en la bitácora local sin filtrar.
