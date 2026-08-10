@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.3
+// @version      12.3.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.3";
+  const VERSION = "12.3.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -644,20 +644,33 @@
   // Resuelve, para una cédula, la lista de solicitudes {idSolicitud, ano, modulo}
   // disponibles en Athenea. Devuelve null ante cualquier fallo o duda de
   // identidad — nunca "adivina" un idPaciente ni una solicitud.
+  // v12.3.4 — Heurística de página de login: si Athenea no reconoce la sesión, en vez de
+  // servir el formulario esperado suele redirigir a Account/Login (con un campo de
+  // contraseña). Detectarlo aquí convierte un "no encontrado" mudo en un diagnóstico
+  // accionable: "inicia sesión en Athenea en este navegador".
+  function _atheneaPareceLogin(html) {
+    return /type=["']password["']/i.test(html) || /Iniciar\s+sesi[oó]n/i.test(html);
+  }
+
   async function getAtheneaSolicitudesAuto(docId) {
     const doc = String(docId || "").replace(/\D/g, "");
     if (!doc) return null;
     const BASE = "https://medicosviva1a.atheneasoluciones.com";
+    const diag = (paso, extra) => console.log("[Vigilante Athenea] " + paso + (extra ? " — " + extra : ""));
     try {
       const r1 = await _gmReq({ method: "GET", url: `${BASE}/Resultados/BusquedaPaciente` });
-      if (r1.status !== 200) return null;
+      diag("1/3 GET BusquedaPaciente", "status=" + r1.status + " len=" + (r1.responseText || "").length);
+      if (r1.status !== 200) { console.warn("[Vigilante Athenea] paso 1 falló: HTTP " + r1.status); return null; }
+      if (_atheneaPareceLogin(r1.responseText)) { console.warn("[Vigilante Athenea] paso 1 devolvió una pantalla de LOGIN: la sesión de Athenea no está activa en este navegador. Inicia sesión en medicosviva1a.atheneasoluciones.com y vuelve a intentar."); return null; }
       const token1 = _atheneaToken(r1.responseText);
-      if (!token1) return null;
+      if (!token1) { console.warn("[Vigilante Athenea] paso 1 respondió 200 pero sin token CSRF reconocible (¿cambió el formulario de Athenea?)."); return null; }
 
       // tipoId=0 = Cédula de Ciudadanía (confirmado en captura real: numId=<cédula>).
       const mp1 = _atheneaMultipart({ porRango: "false", tipoId: "0", numId: doc, nombre1: "", nombre2: "", apellido1: "", apellido2: "", __RequestVerificationToken: token1 });
       const r2 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/BuscarPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp1.boundary}` }, data: mp1.body });
-      if (r2.status !== 200) return null;
+      diag("2/3 POST BuscarPaciente", "status=" + r2.status + " len=" + (r2.responseText || "").length);
+      if (r2.status !== 200) { console.warn("[Vigilante Athenea] paso 2 falló: HTTP " + r2.status); return null; }
+      if (_atheneaPareceLogin(r2.responseText)) { console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
 
       // Sin IdPaciente no se avanza: puede ser que Athenea no tenga a este
       // paciente, o que la búsqueda haya devuelto una LISTA de coincidencias
@@ -666,20 +679,23 @@
       // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
       const idPaciente = _atheneaIdPaciente(r2.responseText);
       const token2 = _atheneaToken(r2.responseText);
-      if (!idPaciente || !token2) return null;
+      if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente=" + JSON.stringify(idPaciente) + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
 
       const mp2 = _atheneaMultipart({ IdPaciente: idPaciente, __RequestVerificationToken: token2 });
       const r3 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/DatosPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp2.boundary}` }, data: mp2.body });
-      if (r3.status !== 200) return null;
+      diag("3/3 POST DatosPaciente", "status=" + r3.status + " len=" + (r3.responseText || "").length);
+      if (r3.status !== 200) { console.warn("[Vigilante Athenea] paso 3 falló: HTTP " + r3.status); return null; }
 
       if (!_atheneaCedulaCoincide(r3.responseText, doc)) {
         console.warn("[Vigilante Athenea] la cédula de la respuesta no coincide con la buscada; se descarta por seguridad.");
         return null;
       }
 
-      return { idPaciente, solicitudes: _atheneaExtraerSolicitudes(r3.responseText) };
+      const solicitudes = _atheneaExtraerSolicitudes(r3.responseText);
+      diag("OK", solicitudes.length + " solicitud(es) encontradas: " + solicitudes.map((s) => s.idSolicitud + "/" + s.ano + "/" + s.modulo).join(", "));
+      return { idPaciente, solicitudes };
     } catch (e) {
-      console.warn("[Vigilante Athenea] error resolviendo solicitudes:", e);
+      console.warn("[Vigilante Athenea] excepción resolviendo solicitudes:", e);
       return null;
     }
   }
