@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.9
+// @version      12.3.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.9";
+  const VERSION = "12.3.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -783,6 +783,14 @@
       return null;
   }
 
+  // v12.3.10 — Se comprobó en consultorio real que los 7 resultados de un paciente se
+  // inyectaron bien, pero NINGUNA fecha se escribió: lab.Fecha/fechaResult/fecha eran
+  // nombres de campo adivinados, nunca confirmados contra la respuesta real de
+  // consultaDetalleSolicitud. En vez de adivinar un cuarto nombre a ciegas, se deja
+  // esta bandera para volcar UNA sola vez las claves reales del primer analito sin
+  // fecha reconocida — así la próxima corrida real revela el nombre correcto.
+  let _diagLabFechaLogged = false;
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
       let pendientes = 0;
@@ -813,6 +821,10 @@
           // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
           // médico la escriba.
           const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || null;
+          if (!resultDate && !_diagLabFechaLogged) {
+              _diagLabFechaLogged = true;
+              console.warn("[Vigilante] diagnóstico: no se reconoció el campo de fecha en el resultado de Athenea. Claves disponibles:", Object.keys(lab), lab);
+          }
 
           let inputEl = _findLabField(matched.resultId, matched.altIds);
           if (inputEl) {
