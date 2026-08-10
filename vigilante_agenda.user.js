@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.7
+// @version      12.3.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.7";
+  const VERSION = "12.3.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3384,25 +3384,51 @@
   // Con un frenado creciente clásico, rendirse costaba un cuarto de hora.
   const apiEspera = (base) => (API.fallos >= 5 ? 300000 : API.fallos ? Math.min(30000, 5000 * (1 + API.fallos)) : Math.max(4000, base));
 
-  // ---- Sondeo del API en MODO LIGERO (v7.3.1) ----
+  // ---- Sondeo del API en MODO LIGERO (v7.3.1, umbrales v12.3.8) ----
   // Ritmo adaptativo, calcado del que usaba el clon pero sin clon: rápido SOLO
   // cuando una cita está cerca de la tolerancia (que es cuando puede colarse un
   // fraude), y muy tranquilo el resto del día. Cada consulta son unos pocos kB.
+  //
+  // v12.3.8 — Pedido explícito del médico: cadencia prudente casi todo el día y
+  // "cada 5 segundos" desde el minuto 5 de gracia. La política se rediseñó ASIMÉTRICA
+  // (el esquema anterior era ±2.5/±10 simétrico alrededor del cruce): el riesgo real —
+  // que alguien pase la cita a "En Sala"/"Atendido" tapando una llegada tardía — ocurre
+  // DESPUÉS del cruce de la tolerancia, no antes. Con tolerancia=6 (por defecto),
+  // resta=1 equivale exactamente al "minuto 5 de gracia".
+  //
+  // El "elapsed" se recalcula EN VIVO desde hora_texto en vez de usar el congelado del
+  // último snapshot: con un "Refresco" alto en Ajustes, el snapshot puede tener minutos
+  // de edad y la ventana crítica se evaluaría con datos viejos justo cuando más importa.
+  function vivoElapsed(a) {
+    return a && a.hora_texto ? elapsedMin(a.hora_texto, Date.now()) : ((a && a.elapsed) || 0);
+  }
   function apiCadencia() {
+    const TOL = CONFIG.TOLERANCIA_MIN;
+    const SIN_PENDIENTES = 90000; // 90s — ninguna cita "Sin presentarse" vigente: cero riesgo real
+    const LEJANO         = 45000; // 45s — a más de 10 min del cruce; aquí vive casi toda la jornada
+    const APROXIMACION   = 15000; // 15s — bisagra antes del cruce y vigilancia sostenida mucho después
+    const RECIENTE       = 8000;  // 8s  — 2..15 min DESPUÉS del cruce: la franja de las ediciones tardías
+    const CRITICA        = 5000;  // 5s  — minuto 5 de gracia → 2 min tras el cruce (piso real del sistema)
+    const ABANDONO_MIN   = 60;    // >1h "Sin presentarse" sin editar: ya no cuenta (antes 25 min, pero
+                                  // ese corte dejaba al no-show viejo INFLANDO "pendientes" para siempre
+                                  // y el sistema jamás volvía al reposo de 90s)
     const lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
-    let cerca = Infinity, pendientes = 0;
+    let pendientes = 0, mejor = Infinity;
     for (const a of lst) {
       const s = (a.estado || "").toLowerCase();
-      if (s.includes("atendido") || s.includes("en sala")) continue;  // ya resuelta
+      if (s.includes("atendido") || s.includes("en sala")) continue;  // resuelta: no aporta riesgo
+      const resta = TOL - vivoElapsed(a);        // + = falta para el cruce, − = ya lo cruzó (min)
+      if (resta < -ABANDONO_MIN) continue;       // abandonada hace horas: se deja de vigilar
       pendientes++;
-      const resta = CONFIG.TOLERANCIA_MIN - (a.elapsed || 0);
-      if (resta < -25) continue;                                      // muy pasada: ya no cambiará
-      cerca = Math.min(cerca, Math.abs(resta));
+      let cad;
+      if (resta > 10)        cad = LEJANO;
+      else if (resta > 1)    cad = APROXIMACION; // 9 min de margen antes de la ventana crítica
+      else if (resta >= -2)  cad = CRITICA;      // ventana crítica: minuto 5 → 2 min tras el cruce
+      else if (resta >= -15) cad = RECIENTE;     // recién cruzada: máxima probabilidad de edición tardía
+      else                   cad = APROXIMACION; // −60..−15: vigilancia sostenida sin urgencia
+      if (cad < mejor) mejor = cad;
     }
-    if (!pendientes) return 60000;    // nada pendiente: 1 vez por minuto (ver llegar al primero)
-    if (cerca <= 2.5) return 6000;    // ventana crítica de la tolerancia
-    if (cerca <= 10) return 18000;
-    return 45000;
+    return pendientes ? mejor : SIN_PENDIENTES;
   }
   function tickApi() {
     if (!apiUtil()) return;
@@ -3415,6 +3441,37 @@
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
     });
   }
+  // v12.3.8 — BOMBA DE VENTANA CRÍTICA. Dos huecos que ningún umbral de apiCadencia()
+  // puede cerrar por sí solo, señalados por la auditoría del diseño:
+  //  (a) el "Refresco" de Ajustes (2–120s) gobierna tick(): con Refresco=30s, el
+  //      "cada 5 segundos" de la ventana crítica jamás se cumplía en la práctica;
+  //  (b) la entrada a la ventana se detectaba recién en el siguiente tick programado.
+  // Este bucle propio de 5s corre SIEMPRE, pero su chequeo es unas comparaciones sobre
+  // ≤20 citas (nada de red): solo cuando de verdad hay una cita en ventana crítica
+  // dispara tickApi() — ignorando el Refresco configurado — y al ENTRAR a la ventana
+  // fuerza una lectura INMEDIATA (API.ultimo=0 salta la espera de cadencia).
+  // No duplica peticiones: tickApi() ya se protege solo con API.enVuelo + API.ultimo.
+  let _criticoPrev = false;
+  function hayVentanaCritica() {
+    const TOL = CONFIG.TOLERANCIA_MIN;
+    const lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
+    for (const a of lst) {
+      const s = (a.estado || "").toLowerCase();
+      if (s.includes("atendido") || s.includes("en sala")) continue;
+      const resta = TOL - vivoElapsed(a);
+      if (resta <= 1 && resta >= -2) return true;
+    }
+    return false;
+  }
+  setInterval(() => {
+    try {
+      if (!state.leader) return;
+      const crit = hayVentanaCritica();
+      if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
+      if (crit) tickApi();
+      _criticoPrev = crit;
+    } catch (e) {}
+  }, 5000);
 
 
   // ---- Overlay ----
