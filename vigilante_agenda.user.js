@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.10
+// @version      12.3.11
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.10";
+  const VERSION = "12.3.11";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7384,80 +7384,94 @@
     try {
       const leader = heartbeat();
       diaNuevo();                                    // reinicio limpio si el turno cruzó la medianoche
-      // v7.8.1: fuera de agenda del día / historia clínica, NO se vigila — ni lectura
-      // de DOM, ni sondeo del API, ni panel abierto. Se recoge sola a la pastilla
-      // flotante (el "×" real del usuario NO se toca: autoDocked distingue uno de otro)
-      // y se restaura sola al volver a una de las dos vistas permitidas. heartbeat() y
-      // diaNuevo() SIEMPRE corren primero (baratos, importantes: continuidad del
-      // liderazgo entre pestañas y limpieza de medianoche aunque el médico esté en
-      // otra pantalla en ese instante).
+      // v7.8.1: fuera de agenda del día / historia clínica, el panel no se repinta —
+      // se recoge sola a la pastilla flotante (el "×" real del usuario NO se toca:
+      // autoDocked distingue uno de otro) y se restaura sola al volver a una de las
+      // dos vistas permitidas. heartbeat() y diaNuevo() SIEMPRE corren primero
+      // (baratos, importantes: continuidad del liderazgo entre pestañas y limpieza de
+      // medianoche aunque el médico esté en otra pantalla en ese instante).
+      // v12.3.11 — Antes, "otra" también apagaba el sondeo del API y el sniff de la
+      // llamada aprendida (return inmediato, antes de llegar al bloque "leader" de
+      // más abajo). Ninguno de los dos toca el DOM de Everest: son solo red y JSON,
+      // así que salir a Órdenes, RCV o cualquier otra pantalla los dejaba sin correr
+      // sin ninguna razón real — la causa de que el panel pidiera "vuelve a Citas del
+      // día" incluso con el modo API ya aprendido. Ahora solo el repintado (que sí
+      // depende del DOM de cada vista) se queda condicionado a estar en agenda/historia.
       const secc = seccionActiva();
-      if (secc === "otra") {
+      const enVistaVigilada = secc !== "otra";
+      if (!enVistaVigilada) {
         if (state.lastSeccion !== "otra" && el.root && winState !== "dock") {
           state.autoDocked = true;
           setWinState("dock", true);
         }
-        state.lastSeccion = secc;
-        return;
+      } else if (state.autoDocked) {
+        // Al volver a una sección permitida, se restaura la ÚLTIMA ventana que el
+        // médico eligió de verdad (state.userWinState) — no siempre "full": si la
+        // había dejado minimizada, sigue minimizada; si la había cerrado a mano, ver
+        // más abajo.
+        state.autoDocked = false; setWinState(state.userWinState, true);
       }
       state.lastSeccion = secc;
-      // Al volver a una sección permitida, se restaura la ÚLTIMA ventana que el médico
-      // eligió de verdad (state.userWinState) — no siempre "full": si la había dejado
-      // minimizada, sigue minimizada; si la había cerrado a mano, ver más abajo.
-      if (state.autoDocked) { state.autoDocked = false; setWinState(state.userWinState, true); }
-      const now = new Date();
-      // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
-      // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
-      // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
-      let data = null, source = null;
-      if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
-        data = { visible: true, citas: state.apiCitas }; source = "api";
-      }
-      if (!data || !data.citas.length) {
-        const dPag = extractAgenda(document);
-        if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
-      }
-      if (data && data.citas.length) {
-        const processed = data.citas.map((a) => colorAndAlert(a, now));
-        if (!state.summarized) {
-          // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
-          state.summarized = true;
-          processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          if (leader) helloOncePerDay(processed);
-        } else if (leader) {
-          processed.forEach(maybeNotify);
+
+      if (enVistaVigilada) {
+        const now = new Date();
+        // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
+        // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
+        // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
+        let data = null, source = null;
+        if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
+          data = { visible: true, citas: state.apiCitas }; source = "api";
         }
-        state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) share(processed);
-        render(processed, source, now);
-      } else if (state.shared && Date.now() - state.shared.t < 60000) {
-        render(state.shared.list, "compartido", new Date(state.shared.t));
-      } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
-      else { render([], null, null); }
-      // Vía directa, SIEMPRE al final (haya datos o no): si aún no se aprendió la
-      // llamada se busca en el registro de rendimiento; si ya se aprendió, se sondea.
+        if (!data || !data.citas.length) {
+          const dPag = extractAgenda(document);
+          if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
+        }
+        if (data && data.citas.length) {
+          const processed = data.citas.map((a) => colorAndAlert(a, now));
+          if (!state.summarized) {
+            // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
+            state.summarized = true;
+            processed.forEach((a) => state.notified.set(a.key, nkey(a)));
+            if (leader) helloOncePerDay(processed);
+          } else if (leader) {
+            processed.forEach(maybeNotify);
+          }
+          state.lastSnapshot = { at: now, list: processed, source };
+          if (leader) share(processed);
+          render(processed, source, now);
+        } else if (state.shared && Date.now() - state.shared.t < 60000) {
+          render(state.shared.list, "compartido", new Date(state.shared.t));
+        } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
+        else { render([], null, null); }
+      }
+
+      // Vía directa, SIEMPRE al final (haya datos o no, y en TODA la aplicación desde
+      // v12.3.11): si aún no se aprendió la llamada se busca en el registro de
+      // rendimiento; si ya se aprendió, se sondea.
       if (leader) {
         if (!API.url) apiSniffPerf(window);
-        // v12.3.1 — Reintento de identidad, mismo patrón que apiSniffPerf: mientras el
-        // médico no esté identificado, cada 30 s se re-consultan los globales de la
-        // página y, si ya se vio un login en la red pero su resolución falló, se vuelve
-        // a intentar (resolverMedicoPorPerfil deduplica los intentos en vuelo).
-        if (!state.activeDoctor.id && Date.now() - idRetryAt > 30000) {
-          idRetryAt = Date.now();
-          captureDoctorInfo("");
-          identidadDesdeCliente();
-          if (loginVisto) resolverMedicoPorPerfil(loginVisto);
-        }
-        // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
-        // reportado en consultorio, deja margen para que la expiración deslizante nunca
-        // llegue a cumplirse mientras el navegador siga abierto.
-        if (Date.now() - atheneaKeepAliveAt > 180000) {
-          atheneaKeepAliveAt = Date.now();
-          atheneaKeepAlive();
-        }
         tickApi();
-        checkRecordatorioPym();
-        checkAbandonoPES();
+        if (enVistaVigilada) {
+          // v12.3.1 — Reintento de identidad, mismo patrón que apiSniffPerf: mientras el
+          // médico no esté identificado, cada 30 s se re-consultan los globales de la
+          // página y, si ya se vio un login en la red pero su resolución falló, se vuelve
+          // a intentar (resolverMedicoPorPerfil deduplica los intentos en vuelo).
+          if (!state.activeDoctor.id && Date.now() - idRetryAt > 30000) {
+            idRetryAt = Date.now();
+            captureDoctorInfo("");
+            identidadDesdeCliente();
+            if (loginVisto) resolverMedicoPorPerfil(loginVisto);
+          }
+          // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
+          // reportado en consultorio, deja margen para que la expiración deslizante nunca
+          // llegue a cumplirse mientras el navegador siga abierto.
+          if (Date.now() - atheneaKeepAliveAt > 180000) {
+            atheneaKeepAliveAt = Date.now();
+            atheneaKeepAlive();
+          }
+          checkRecordatorioPym();
+          checkAbandonoPES();
+        }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }
   }
