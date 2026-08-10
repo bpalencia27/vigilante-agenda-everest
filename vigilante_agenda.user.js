@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      9.6.0
+// @version      11.0.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -203,70 +203,201 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "9.6.0"; // fuente única de la versión (título + diagnóstico)
+  const VERSION = "11.0.0";
 
-  // fetch ORIGINAL, guardado en document-start (antes de que Angular y el propio
-  // Vigilante envuelvan el de la página). Las consultas al API van por aquí: así no
-  // pasan por ningún envoltorio ajeno ni por el registro de red del propio script,
-  // que clonaría cada respuesta y gastaría memoria en cada sondeo.
+  // =====================================================================
+  //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
+  //  Registra silenciosamente eventos, llamadas API, extracciones de CC,
+  //  auto-llenado de laboratorios y errores para depuración en vivo.
+  // =====================================================================
+  const FLIGHT_RECORDER_KEY = "vgl_flight_recorder_logs";
+  const MAX_LOG_ENTRIES = 500;
+
+  function vglLog(category, action, details) {
+    try {
+      const safeDetails = {};
+      if (details) {
+        for (const k in details) {
+          const val = details[k];
+          safeDetails[k] = (typeof val === "string") ? sanitizePII(val) : (typeof val === "number" && val > 99999 ? sanitizePII(String(val)) : val);
+        }
+      }
+      const entry = {
+        ts: new Date().toISOString(),
+        cat: category, // 'NAV' | 'PATIENT' | 'ATHENEA' | 'APPCITA' | 'ORDEN' | 'ERROR' | 'PERF'
+        act: action,
+        det: safeDetails || {}
+      };
+      
+      console.log(`[VglFlightRecorder] [${entry.cat}] ${entry.act}`, entry.det);
+      
+      let logs = [];
+      try {
+        const raw = localStorage.getItem(FLIGHT_RECORDER_KEY);
+        logs = raw ? JSON.parse(raw) : [];
+      } catch (e) { logs = []; }
+      
+      logs.push(entry);
+      if (logs.length > MAX_LOG_ENTRIES) logs = logs.slice(-MAX_LOG_ENTRIES);
+      localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+    } catch (e) {}
+  }
+
+  function vglExportLogs() {
+    try {
+      const raw = localStorage.getItem(FLIGHT_RECORDER_KEY);
+      const logs = raw ? JSON.parse(raw) : [];
+      const report = {
+        meta: {
+          version: VERSION,
+          exportedAt: new Date().toISOString(),
+          totalEntries: logs.length,
+          userAgent: navigator.userAgent,
+          url: location.href
+        },
+        logs: logs
+      };
+      const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `BITACORA_VIGILANTE_REAL_${todayStamp()}_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      alert("✅ Bitácora de Telemetría descargada exitosamente. Envía este archivo para depurar con datos reales.");
+    } catch (e) { alert("❌ Error al exportar bitácora: " + e); }
+  }
+
+  // Interceptores Globales de Errores y Excepciones
+  window.addEventListener("error", (e) => {
+    vglLog("ERROR", "UncaughtException", { msg: e.message, src: e.filename, line: e.lineno, col: e.colno });
+  });
+
+  window.addEventListener("unhandledrejection", (e) => {
+    vglLog("ERROR", "UnhandledPromiseRejection", { reason: String(e.reason) });
+  });
+
+  // Observador de Navegación y Secciones Everest
+  let lastObservedUrl = "";
+  setInterval(() => {
+    if (location.href !== lastObservedUrl) {
+      const oldUrl = lastObservedUrl;
+      lastObservedUrl = location.href;
+      vglLog("NAV", "UrlChanged", { from: oldUrl, to: lastObservedUrl, section: seccionActiva() });
+    }
+  }, 1000);
+
+  // fetch ORIGINAL, guardado en document-start
   const FETCH0 = (function () {
     try { const f = window.fetch; if (typeof f !== "function") return null; return (u, o) => f.call(window, u, o); } catch (e) { return null; }
-  
+  })();
+
+  // HOTFIX DIGITURNO: Interceptar LlamadoPorMedicoManual para codificar NombreUsuario (espacios rompen XHR)
+  if (location.hostname.includes("digiturno.viva1a.com.co")) {
+    const originalOpenXhr = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+      if (url && typeof url === "string" && url.includes("LlamadoPorMedicoManual") && url.includes("NombreUsuario=")) {
+        url = url.replace(/NombreUsuario=([^&]+)/, function(match, namePart) {
+          return "NombreUsuario=" + encodeURIComponent(decodeURIComponent(namePart));
+        });
+      }
+      return originalOpenXhr.apply(this, [method, url, ...rest]);
+    };
+  }
 
   // =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
+  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS EN RUTA CRÓNICOS
+  //  Lista estricta autorizada (13 analitos):
+  //  1. Colesterol Total  2. Colesterol HDL  3. Colesterol LDL  4. Triglicéridos
+  //  5. Uroanálisis       6. Glucosa en Suero 7. Creatinina en Suero 8. RAC
+  //  9. HbA1c            10. PTH            11. Fósforo en Suero   12. Albúmina en Suero
+  //  13. Hemoglobina
   // =====================================================================
-  
-  // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
-  const ATHENEA_MAP = {
-      "2009": "resultadoColesterolTotal",
-      "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
-      "2013": "resultadoGlicemia",
-      "2028": "resultadoCreatinina",
-      "2080": "resultadoCreatinuria",
-      "2092": "resultadoMicroAlbuminuria",
-      // Otros analitos comunes basados en nombres si no tenemos el código exacto:
-  };
-  
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
+
+  const WHITELIST_13_LABS = [
+    { key: "COLESTEROL_TOTAL", names: ["COLESTEROL TOTAL"], codes: ["2009", "903818"], resultId: "resultadoColesterolTotal", dateId: "fechaResultColesterolTotal" },
+    { key: "COLESTEROL_HDL", names: ["COLESTEROL HDL", "COLESTEROL DE ALTA DENSIDAD"], codes: ["2015", "903815"], resultId: "resultadoColesterolHDL", dateId: "fechaResultColesterolHDL" },
+    { key: "COLESTEROL_LDL", names: ["COLESTEROL LDL", "COLESTEROL DE BAJA DENSIDAD"], codes: ["2014", "903817", "903816"], resultId: "resultadoColesterolLDL", dateId: "fechaResultColesterolLDL" },
+    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
+    { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
+    { key: "RAC", names: ["RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA", "MICROALBUMINURIA", "RAC"], codes: ["2092", "2080", "903868"], resultId: "resultadoRAC", dateId: "fechaResultRAC" },
+    { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
+    { key: "HBA1C", names: ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"], codes: ["2035", "903843"], resultId: "resultadoHBA1C", dateId: "fechaResultHBA1C" },
+    { key: "PTH", names: ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"], codes: ["2065", "904921"], resultId: "resultadoPTH", dateId: "fechaResultPTH" },
+    { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
+    { key: "ALBUMINA", names: ["ALBUMINA EN SUERO", "ALBÚMINA EN SUERO"], codes: ["2002", "903801"], resultId: "resultadoAlbumina", dateId: "fechaResultAlbumina" },
+    { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
+  ];
+
+  // Función para consumir el endpoint de Athenea con fallback multi-año (2026 -> 2025 -> 2024)
+  function fetchAtheneaLabs(idSolicitud, anoEspecifico = null) {
+      const currentYear = new Date().getFullYear();
+      const yearsToTry = anoEspecifico ? [anoEspecifico] : [currentYear, currentYear - 1, currentYear - 2];
+
+      const tryFetchYear = (yearIndex) => {
+          const ano = yearsToTry[yearIndex];
+          return new Promise((resolve, reject) => {
+              GM_xmlhttpRequest({
+                  method: "POST",
+                  url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
+                  headers: {
+                      "Content-Type": "application/json",
+                      "Accept": "application/json"
+                  },
+                  data: JSON.stringify({
+                      idSolicitud: parseInt(idSolicitud, 10),
+                      ano: ano,
+                      modulo: "LAB"
+                  }),
+                  onload: function(response) {
+                      try {
+                          if (response.status === 200) {
+                              const res = JSON.parse(response.responseText);
+                              if (res && res.dataObject) {
+                                  const data = JSON.parse(res.dataObject);
+                                  if (Array.isArray(data) && data.length > 0) {
+                                      resolve(data);
+                                      return;
+                                  }
+                              }
+                              // Si no vino dataObject o vino array vacío [], reintentar con el año anterior si hay disponibles
+                              if (yearIndex + 1 < yearsToTry.length) {
+                                  tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                              } else {
+                                  if (res && res.bolValido === false) {
+                                      reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
+                                  } else {
+                                      reject("No se encontraron resultados del paciente en Athenea para la solicitud #" + idSolicitud + " (años " + yearsToTry.join(", ") + ").");
+                                  }
+                              }
                           } else {
-                              reject("No dataObject");
+                              if (yearIndex + 1 < yearsToTry.length) {
+                                  tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                              } else {
+                                  reject("La sesión con Athenea ha caducado (HTTP " + response.status + "). Por favor, inicia sesión en Athenea.");
+                              }
                           }
-                      } else {
-                          reject("Status " + response.status);
+                      } catch (e) {
+                          if (yearIndex + 1 < yearsToTry.length) {
+                              tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                          } else {
+                              reject("Error al procesar respuesta de Athenea: " + e);
+                          }
                       }
-                  } catch (e) {
-                      reject("Parse error: " + e);
+                  },
+                  onerror: function(err) {
+                      if (yearIndex + 1 < yearsToTry.length) {
+                          tryFetchYear(yearIndex + 1).then(resolve).catch(reject);
+                      } else {
+                          reject("Error de conexión al consultar Athenea (" + (err.status || "Red/CORS") + ").");
+                      }
                   }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
+              });
           });
-      });
+      };
+
+      return tryFetchYear(0);
   }
 
   // Despacha eventos para que Angular actualice el modelo
@@ -277,47 +408,49 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  function _matchLabInWhitelist(lab) {
+      const code = String(lab.CodigoParametro || lab.codigo || "").trim();
+      const name = String(lab.NombreParametro || lab.nombre || lab.examen || "").toUpperCase().trim();
+
+      for (const item of WHITELIST_13_LABS) {
+          if (item.codes.includes(code)) return item;
+          for (const n of item.names) {
+              if (name.includes(n)) return item;
+          }
+      }
+      return null;
+  }
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
+      if (!Array.isArray(labsArray)) return 0;
+
       labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
-          const name = (lab.NombreParametro || "").toUpperCase();
-          const result = lab.Resultado;
-          
-          if (!result) return;
-          
-          let everestId = ATHENEA_MAP[code];
-          
-          // Fallback por nombre si el código no está mapeado
-          if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
+          const matched = _matchLabInWhitelist(lab);
+          if (!matched) return; // Filtro estricto: solo los 13 laboratorios autorizados
+
+          const resultVal = lab.Resultado || lab.resultado || lab.valor;
+          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || new Date().toISOString().split('T')[0];
+
+          if (!resultVal) return;
+
+          // Inyectar valor en casilla correspondiente
+          let inputEl = document.getElementById(matched.resultId) || document.querySelector(`[name="${matched.resultId}"]`);
+          if (inputEl) {
+              setNgValue(inputEl, resultVal);
+              count++;
           }
-          
-          if (everestId) {
-              // Intentar buscar el input por ID
-              let inputEl = document.getElementById(everestId);
-              if (inputEl) {
-                  setNgValue(inputEl, result);
-                  count++;
-                  // Intentar establecer la fecha de este resultado al día de hoy o la fecha de Athenea (si viene)
-                  let dateId = everestId.replace("resultado", "fechaResult");
-                  let dateInput = document.getElementById(dateId);
-                  if (dateInput) {
-                      const today = new Date().toISOString().split('T')[0];
-                      setNgValue(dateInput, today);
-                  }
-              }
+
+          // Inyectar fecha en casilla correspondiente
+          let dateInput = document.getElementById(matched.dateId) || document.querySelector(`[name="${matched.dateId}"]`);
+          if (dateInput) {
+              setNgValue(dateInput, resultDate);
           }
       });
       return count;
   }
 
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
+  // Obtención automatizada de idSolicitud vía Athenea API Bridge
   function getAtheneaIdSolicitudAuto(docId) {
       return new Promise((resolve) => {
           let doc = docId;
@@ -352,15 +485,12 @@
                               console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
                           }
                       }
-                      console.warn("[Vigilante] API Bridge devolvió status " + response.status);
                       resolve(null);
                   },
                   onerror: function(err) {
-                      console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
                       resolve(null);
                   },
                   ontimeout: function() {
-                      console.warn("[Vigilante] Timeout consultando API Bridge");
                       resolve(null);
                   }
               });
@@ -369,15 +499,43 @@
                   .then(r => r.ok ? r.json() : null)
                   .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
                   .catch(err => {
-                      console.warn("[Vigilante] Error fetch API Bridge:", err);
                       resolve(null);
                   });
           }
       });
   }
 
-  // Interfaz de Usuario para activar la inyección
+  // ROBOT AUTOMÁTICO ATHENEA: BUSCA LA CÉDULA DEL PACIENTE AL ABRIR HISTORIA
+  let lastAutoFetchedDoc = "";
+
+  async function autoFetchAtheneaLabsForActivePatient() {
+      vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
+      const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
+      if (!docId || docId === lastAutoFetchedDoc) return;
+      
+      lastAutoFetchedDoc = docId;
+      console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
+
+      try {
+          const atheneaData = await getAtheneaIdSolicitudAuto(docId);
+          const idSol = (atheneaData && (atheneaData.idSolicitud || atheneaData.id)) || (typeof atheneaData === "number" ? atheneaData : null);
+          
+          if (idSol) {
+              const labs = await fetchAtheneaLabs(idSol);
+              if (labs && labs.length > 0) {
+                  const count = injectLabsIntoCronicos(labs);
+                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: count });
+                  notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados", 
+                    `Se encontraron ${labs.length} resultados en Athenea para la cédula ${docId}.\nSe auto-diligenciaron ${count} casillas en Everest.`, true);
+              }
+          }
+      } catch (e) {
+          console.warn("[Vigilante Robot Athenea] No se pudieron auto-cargar los paraclínicos:", e);
+      }
+  }
+
   function createLabInjectorUI() {
+      autoFetchAtheneaLabsForActivePatient();
       if (document.getElementById("vgl-lab-injector")) return;
       
       const btn = document.createElement("button");
@@ -390,27 +548,24 @@
           btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
           
           let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          if (idSolicitud) {
-              btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
-          } else {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge.\nIngresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) {
-                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-                  return;
-              }
+          const idSol = (idSolicitud && (idSolicitud.idSolicitud || idSolicitud.id)) || (typeof idSolicitud === "number" ? idSolicitud : null);
+          
+          if (!idSol) {
+              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge. Ingresa el 'idSolicitud' de Athenea manualmente:");
+              if (!idSolicitud) { btn.innerHTML = "🧬 Auto-Labs (Athenea)"; return; }
           }
           
           btn.innerHTML = "⏳ Consultando laboratorios...";
           try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
+              const labs = await fetchAtheneaLabs(idSol || idSolicitud);
               if (labs && labs.length > 0) {
                   const injectedCount = injectLabsIntoCronicos(labs);
-                  alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
+                  alert("✅ ¡Éxito! Se encontraron y extrajeron " + labs.length + " analitos. Se inyectaron " + injectedCount + " valores en la Ruta Crónicos.");
               } else {
                   alert("⚠️ No se encontraron laboratorios en esa solicitud.");
               }
           } catch (e) {
-              alert("❌ Error al consultar Athenea:\n" + e + "\n\n¿Tienes sesión activa en Athenea?");
+              alert("❌ Error al consultar Athenea: " + e);
           }
           btn.innerHTML = "🧬 Auto-Labs (Athenea)";
       };
@@ -418,16 +573,86 @@
       document.body.appendChild(btn);
   }
 
-  // Observador para detectar cuándo inyectar el botón
-  setInterval(() => {
-      // Solo en la historia clínica o panel de Everest
-      if (location.href.includes("Morbilidad") || document.querySelector("a#pes")) {
-          createLabInjectorUI();
+  // Observador de mutaciones DOM eficiente para disparo automático del Robot Athenea
+  let labMutationObs = null;
+  function initLabMutationObserver() {
+      if (labMutationObs || typeof MutationObserver === "undefined") return;
+      labMutationObs = new MutationObserver(debounceVgl(() => {
+          if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
+              createLabInjectorUI();
+          }
+      }, 300));
+      if (document.body) {
+          labMutationObs.observe(document.body, { childList: true, subtree: true });
       }
-  }, 2000);
+  }
+  if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initLabMutationObserver);
+  } else {
+      initLabMutationObserver();
+  }
 
+  // =====================================================================
+  //  SECOPS Y ESTABILIDAD (VIGILANTE DE AGENDA)
+  // =====================================================================
+  
+  function debounceVgl(func, wait) {
+      let timeout;
+      return function(...args) {
+          const context = this;
+          clearTimeout(timeout);
+          timeout = setTimeout(() => func.apply(context, args), wait);
+      };
+  }
 
-})();
+  function sanitizePII(text) {
+      if (!text) return text;
+      return text.replace(/\b\d{6,11}\b/g, '[CENSURADO]');
+  }
+
+  window.addEventListener('error', function(e) {
+      const msg = sanitizePII(e.message || '');
+      if (typeof FETCH0 === 'function') {
+          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
+              method: 'POST', mode: 'no-cors',
+              body: JSON.stringify({ error: msg, location: e.filename, line: e.lineno, type: 'error' })
+          }).catch(()=>{});
+      }
+  });
+
+  window.addEventListener('unhandledrejection', function(e) {
+      const msg = sanitizePII(e.reason ? e.reason.toString() : '');
+      if (typeof FETCH0 === 'function') {
+          FETCH0('https://script.google.com/macros/s/AKfycby_TELEMETRY/exec', {
+              method: 'POST', mode: 'no-cors',
+              body: JSON.stringify({ error: msg, type: 'promise_rejection' })
+          }).catch(()=>{});
+      }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+      let devClickCount = 0;
+      let devClickTimer;
+      document.body.addEventListener('click', (e) => {
+          const target = e.target.closest('#vgl-title small');
+          if (target) {
+              devClickCount++;
+              clearTimeout(devClickTimer);
+              if (devClickCount >= 7) {
+                  devClickCount = 0;
+                  const pin = prompt('VGL SecOps - Ingrese PIN de Desarrollador:');
+                  if (pin === '7355608') {
+                      localStorage.setItem('__vgl_dev_mode', 'true');
+                      alert('Modo Desarrollador Activado. Opciones técnicas reveladas.');
+                      location.reload();
+                  } else if (pin !== null) {
+                      alert('PIN Incorrecto.');
+                  }
+              }
+              devClickTimer = setTimeout(() => { devClickCount = 0; }, 5000);
+          }
+      });
+  });
 
   const PAGEWIN = (typeof unsafeWindow !== "undefined") ? unsafeWindow : window; // ventana real de la página (sandbox de Tampermonkey)
 
@@ -1859,10 +2084,13 @@
       if (!esLibroValido(dl.response, sel.Name)) throw new Error(esXlsxCifrado(dl.response) ? "el archivo tiene contraseña — pide que la quiten antes de subirlo" : "no es un Excel (¿sesión caída?)");
       const idx = await readPym(sel.Name, dl.response);
       const eraRespaldo = state.pymFallback;
+      const teniaPymPreviamente = !!state.pymMTime;
       state.pymFallback = false;
       applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name);
-      notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : "📋 PyM del día cargado",
-        sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      if (!silent || eraRespaldo || !teniaPymPreviamente) {
+        notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
+          sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
+      }
       return true;
     } catch (e) {
       if (!silent) setSummary("No pude leer el PyM del día (" + ((e && e.message) || e) + "). " + (state.pymFile ? "Sigo con lo que hay cargado." : "Probando la base piloto."), "warn");
@@ -1936,8 +2164,55 @@
       if (!ok) schedulePymBase();
     }, espera);
   }
-  function spToast(msg) {
-    try { let t = document.getElementById("vgl-sp"); if (!t) { t = document.createElement("div"); t.id = "vgl-sp"; t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:430px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:8px;padding:12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5)"; (document.body || document.documentElement).appendChild(t); } t.textContent = "🛡️ Vigilante PyM · " + msg; } catch (e) {}
+  let spToastTimer = null;
+
+  function dismissSpToast() {
+    try {
+      if (spToastTimer) { clearTimeout(spToastTimer); spToastTimer = null; }
+      const t = document.getElementById("vgl-sp");
+      if (t) {
+        t.style.opacity = "0";
+        t.style.transform = "translateY(10px)";
+        setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
+      }
+    } catch (e) {}
+  }
+
+  function spToast(msg, durationMs = 6000) {
+    try {
+      let t = document.getElementById("vgl-sp");
+      if (!t) {
+        t = document.createElement("div");
+        t.id = "vgl-sp";
+        t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:440px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:10px;padding:12px 34px 12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);cursor:pointer;transition:opacity 0.25s ease,transform 0.25s ease;opacity:0;transform:translateY(10px);";
+
+        const closeBtn = document.createElement("span");
+        closeBtn.style.cssText = "position:absolute;top:8px;right:10px;font-size:14px;font-weight:bold;color:#94A3B8;cursor:pointer;line-height:1;";
+        closeBtn.textContent = "×";
+        closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
+        t.appendChild(closeBtn);
+
+        t.onclick = () => dismissSpToast();
+        (document.body || document.documentElement).appendChild(t);
+        t.getBoundingClientRect();
+      }
+
+      let textNode = t.querySelector(".vgl-sp-text");
+      if (!textNode) {
+        textNode = document.createElement("span");
+        textNode.className = "vgl-sp-text";
+        t.insertBefore(textNode, t.firstChild);
+      }
+      textNode.textContent = "🛡️ Vigilante PyM · " + msg;
+
+      t.style.opacity = "1";
+      t.style.transform = "translateY(0)";
+
+      if (spToastTimer) clearTimeout(spToastTimer);
+      if (durationMs > 0) {
+        spToastTimer = setTimeout(() => dismissSpToast(), durationMs);
+      }
+    } catch (e) {}
   }
 
   function loadPymFile(file) {
@@ -3874,8 +4149,17 @@
   }
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)
-  async function apiAccesoBuscarPaciente(docId) {
+  async function apiAccesoBuscarPaciente(docId, citaId) {
     const uId = state.activeDoctor.id || S.medicoId || 515;
+    
+    if (citaId) {
+      try {
+        const resCita = await pageFetchJson(`/apiviva/APIPacienteV2/api/Paciente/CargarDatosPacienteByCitaId/${btoa(String(citaId))}`);
+        const pid = extractPatientId(resCita);
+        if (pid) return pid;
+      } catch (e) {}
+    }
+
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
 
@@ -3982,13 +4266,21 @@
           turnoElegido = turnos[0];
         }
       }
-      const horaFinal = (turnoElegido && turnoElegido.hora) || horaSeleccionada || "07:00:00";
-      const agendaId = (turnoElegido && (turnoElegido.agendaId || turnoElegido.id)) || "282531";
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=3022813246&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      const horaFinal = (turnoElegido && turnoElegido.hora) || horaSeleccionada;
+      const agendaId = (turnoElegido && (turnoElegido.agendaId || turnoElegido.id));
+
+      // Si no tenemos hora real o ID de agenda real, ¡ABORTAMOS LA OPERACIÓN!
+      if (!horaFinal || !agendaId) {
+          spToast(`❌ Error: No se pudo obtener turno disponible para Laboratorio en la fecha ${fechaIso}. Intente agendar manualmente.`);
+          return; // Salimos de la función sin crear citas fantasma
+      }
+
+      // Si tenemos los datos reales, procedemos normal:
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
       const resBook = await gmPostJson(urlBook, {});
       
       // Enviar SMS de confirmación en segundo plano
-      const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=3022813246&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
+      const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${agendaId}&codigoSede=378`;
       gmGet(urlSms, "", "", 5000).catch(() => {});
 
       spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}`);
@@ -4042,7 +4334,21 @@
         const obs = encodeURIComponent(observacion || "");
 
         const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null&Tratamiento=false&Consulta=true&Emergencia=false&PresupuestoId=0`;
-        return pageFetchJson(path, { method: "POST", body: "{}" });
+        const res = await pageFetchJson(path, { method: "POST", body: "{}" });
+
+        // Enviar SMS Nativo de Recordatorio en Segundo Plano
+        try {
+          const resPaciente = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteId}`);
+          if (resPaciente && resPaciente.data) {
+            const telefono = resPaciente.data.celular || resPaciente.data.telefono;
+            if (telefono && String(telefono).length >= 7) {
+              const urlSms = `/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=${encodeURIComponent(telefono)}&AgendaTurnoId=${turnoId}`;
+              pageFetchJson(urlSms).catch(() => {});
+            }
+          }
+        } catch(e) {}
+
+        return res;
       }
 
   // [BLINDADO v8.2.0 DOM-04] Extractor universal de Agendas movido a scope de módulo.
@@ -4164,7 +4470,7 @@
     const contentEl = modal.querySelector("#vgl-labs-content");
 
     // Buscar PacienteId si no lo tenemos aún
-    let pId = await apiAccesoBuscarPaciente(apt.doc_id);
+    let pId = await apiAccesoBuscarPaciente(apt.doc_id, apt.cita_id);
     if (!pId) {
       contentEl.innerHTML = `<div class="vgl-agm-err">⚠ No se encontró el expediente del paciente (${escapeHtml(apt.doc_id)}) para consultar laboratorios. Puedes usar el botón de Athenea Soluciones arriba.</div>`;
       return;
@@ -4584,7 +4890,7 @@
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Buscando agendas de ${escapeHtml(selectedEspName)} para el ${selectedDateInfo.fmt}...</div>`;
 
       if (!pacienteIdAcceso) {
-        pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
+        pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id, apt.cita_id);
       }
       if (token !== _cargarHorasToken) return;
 
@@ -4771,7 +5077,7 @@
     {
       cie10: "Z124",
       titulo: "Detección temprana de cáncer de cuello uterino (Citología / ADN VPH)",
-      keywords: ["cervix", "citologia", "ccu", "cuello uterino", "vph", "tamizar con ccu"],
+      keywords: ["cervix", "citologia", "ccu", "cuello uterino", "vph", "tamizar con ccu", "tamizacion cervix"],
       cups: [
         { codigo: "908890", desc: "Deteccion Virus Del Papiloma Humano Por Pruebas Moleculares (Especifico)" },
         { codigo: "898001", desc: "Estudio de coloracion basica en citologia vaginal tumoral o funcional" },
@@ -4781,7 +5087,7 @@
     {
       cie10: "Z113",
       titulo: "Tamización de VIH (Anticuerpos VIH 1 y 2)",
-      keywords: ["vih", "inmunodeficiencia", "hiv", "tamización vih"],
+      keywords: ["vih", "inmunodeficiencia", "hiv", "tamización vih", "tamizacion vih", "ultimo vih", "último vih"],
       cups: [
         { codigo: "906249", desc: "Virus De Inmunodeficiencia Humana 1 Y 2 Anticuerpos" }
       ]
@@ -4789,7 +5095,7 @@
     {
       cie10: "Z108",
       titulo: "Evaluación de riesgo cardiovascular y metabólico (Perfil lipídico, Creatinina, Parcial de orina, Glicemia)",
-      keywords: ["cardiometabolica", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
+      keywords: ["cardiometabolica", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos", "cmb", "tamizacion cmb", "riesgo cardiometabolico"],
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
         { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" },
@@ -4803,7 +5109,7 @@
     {
       cie10: "Z123",
       titulo: "Detección temprana de cáncer de mama (Mamografía Bilateral)",
-      keywords: ["mamografia", "mama", "seno"],
+      keywords: ["mamografia", "mama", "seno", "tamizacion mama"],
       cups: [
         { codigo: "876802", desc: "Mamografia Bilateral" }
       ]
@@ -4811,7 +5117,7 @@
     {
       cie10: "Z125",
       titulo: "Antígeno Específico de Próstata (PSA)",
-      keywords: ["psa", "prostata"],
+      keywords: ["psa", "prostata", "tamizacion prostata"],
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
       ]
@@ -4819,7 +5125,7 @@
     {
       cie10: "Z121",
       titulo: "Detección de sangre oculta en materia fecal",
-      keywords: ["omf", "sangre oculta", "materia fecal"],
+      keywords: ["colon", "somf", "omf", "sangre oculta", "materia fecal", "tamizacion colon", "cancer de colon", "ultima somf", "última somf"],
       cups: [
         { codigo: "907009", desc: "Sangre Oculta En Materia Fecal (Determinacion De Hemoglobina Humana Especifica)" }
       ]
@@ -4827,7 +5133,7 @@
     {
       cie10: "Z113",
       titulo: "Prueba de Anticuerpos Hepatitis C",
-      keywords: ["hepatitis", "hepa"],
+      keywords: ["hepatitis", "hepa", "hepc", "hvc", "vhc"],
       cups: [
         { codigo: "906225", desc: "Hepatitis C Anticuerpo Semiautomatizado O Automatizado" }
       ]
@@ -4843,7 +5149,7 @@
     {
       cie10: "Z103",
       titulo: "Examen de Hemoglobina y Hematocrito",
-      keywords: ["hemoglobina", "hematocrito"],
+      keywords: ["hemoglobina", "hematocrito", "tamizacion hb", "tamizacion hto"],
       cups: [
         { codigo: "902213", desc: "Hemoglobina" },
         { codigo: "902211", desc: "Hematocrito" }
@@ -6086,219 +6392,5 @@
   apiObservar(window); // document-start: aprende la llamada de la agenda en cuanto Everest la haga
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 
-
-  // =====================================================================
-  //  MÓDULO: EXTRACCIÓN E INYECCIÓN DE LABORATORIOS (ATHENEA -> EVEREST)
-  // =====================================================================
-  
-  // Mapeo de Códigos de Athenea a las propiedades de Angular (pesHC) en Everest
-  const ATHENEA_MAP = {
-      "2009": "resultadoColesterolTotal",
-      "2015": "resultadoColesterolHDL",
-      "2014": "resultadoColesterolLDL",
-      "2074": "resultadoTrigliceridos",
-      "2013": "resultadoGlicemia",
-      "2028": "resultadoCreatinina",
-      "2080": "resultadoCreatinuria",
-      "2092": "resultadoMicroAlbuminuria",
-      // Otros analitos comunes basados en nombres si no tenemos el código exacto:
-  };
-  
-  // Función para consumir el endpoint de Athenea
-  function fetchAtheneaLabs(idSolicitud, ano = new Date().getFullYear()) {
-      return new Promise((resolve, reject) => {
-          GM_xmlhttpRequest({
-              method: "POST",
-              url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
-              headers: {
-                  "Content-Type": "application/json",
-                  "Accept": "application/json"
-              },
-              data: JSON.stringify({
-                  idSolicitud: parseInt(idSolicitud, 10),
-                  ano: ano,
-                  modulo: "LAB"
-              }),
-              onload: function(response) {
-                  try {
-                      if (response.status === 200) {
-                          const res = JSON.parse(response.responseText);
-                          if (res.dataObject) {
-                              const data = JSON.parse(res.dataObject);
-                              resolve(data);
-                          } else {
-                              reject("No dataObject");
-                          }
-                      } else {
-                          reject("Status " + response.status);
-                      }
-                  } catch (e) {
-                      reject("Parse error: " + e);
-                  }
-              },
-              onerror: function(err) {
-                  reject(err);
-              }
-          });
-      });
-  }
-
-  // Despacha eventos para que Angular actualice el modelo
-  function setNgValue(inputEl, value) {
-      if (!inputEl) return;
-      inputEl.value = value;
-      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
-  }
-
-  function injectLabsIntoCronicos(labsArray) {
-      let count = 0;
-      labsArray.forEach(lab => {
-          const code = lab.CodigoParametro;
-          const name = (lab.NombreParametro || "").toUpperCase();
-          const result = lab.Resultado;
-          
-          if (!result) return;
-          
-          let everestId = ATHENEA_MAP[code];
-          
-          // Fallback por nombre si el código no está mapeado
-          if (!everestId) {
-              if (name.includes("HEMOGLOBINA GLICOSILADA") || name.includes("HBA1C")) everestId = "resultadoHBA1C"; // Verificar id real
-              else if (name.includes("PTH") || name.includes("PARATOHORMONA")) everestId = "resultadoPTH";
-              else if (name.includes("FOSFORO EN SUERO")) everestId = "resultadoFosforo";
-              else if (name.includes("ALBUMINA EN SUERO")) everestId = "resultadoAlbumina";
-              else if (name.includes("HEMOGLOBINA") && !name.includes("GLICOSILADA")) everestId = "resultadoHemoglobina";
-              else if (name.includes("UROANALISIS") || name.includes("ORINA")) everestId = "resultadoUroanalisis";
-          }
-          
-          if (everestId) {
-              // Intentar buscar el input por ID
-              let inputEl = document.getElementById(everestId);
-              if (inputEl) {
-                  setNgValue(inputEl, result);
-                  count++;
-                  // Intentar establecer la fecha de este resultado al día de hoy o la fecha de Athenea (si viene)
-                  let dateId = everestId.replace("resultado", "fechaResult");
-                  let dateInput = document.getElementById(dateId);
-                  if (dateInput) {
-                      const today = new Date().toISOString().split('T')[0];
-                      setNgValue(dateInput, today);
-                  }
-              }
-          }
-      });
-      return count;
-  }
-
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
-  function getAtheneaIdSolicitudAuto(docId) {
-      return new Promise((resolve) => {
-          let doc = docId;
-          if (!doc && typeof extractPacienteAbierto === "function") {
-              doc = extractPacienteAbierto();
-          }
-          if (!doc) {
-              doc = prompt("No se detectó la cédula del paciente abierto en Everest. Ingresa el número de documento:");
-          }
-          if (!doc) {
-              resolve(null);
-              return;
-          }
-
-          const bridgeUrl = `http://localhost:5050/api/buscar_laboratorios?documento=${encodeURIComponent(doc)}`;
-          console.log(`[Vigilante] Consultando idSolicitud en Athenea API Bridge para documento: ${doc}`);
-
-          if (typeof GM_xmlhttpRequest !== "undefined") {
-              GM_xmlhttpRequest({
-                  method: "GET",
-                  url: bridgeUrl,
-                  headers: { "Accept": "application/json" },
-                  onload: function(response) {
-                      if (response.status === 200) {
-                          try {
-                              const res = JSON.parse(response.responseText);
-                              if (res && res.idSolicitud) {
-                                  resolve(res.idSolicitud);
-                                  return;
-                              }
-                          } catch (e) {
-                              console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
-                          }
-                      }
-                      console.warn("[Vigilante] API Bridge devolvió status " + response.status);
-                      resolve(null);
-                  },
-                  onerror: function(err) {
-                      console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
-                      resolve(null);
-                  },
-                  ontimeout: function() {
-                      console.warn("[Vigilante] Timeout consultando API Bridge");
-                      resolve(null);
-                  }
-              });
-          } else {
-              fetch(bridgeUrl)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
-                  .catch(err => {
-                      console.warn("[Vigilante] Error fetch API Bridge:", err);
-                      resolve(null);
-                  });
-          }
-      });
-  }
-
-  // Interfaz de Usuario para activar la inyección
-  function createLabInjectorUI() {
-      if (document.getElementById("vgl-lab-injector")) return;
-      
-      const btn = document.createElement("button");
-      btn.id = "vgl-lab-injector";
-      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      btn.style.cssText = "position:fixed;bottom:80px;left:15px;z-index:9999999;background:#8b5cf6;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;";
-      
-      btn.onclick = async () => {
-          const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-          
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          if (idSolicitud) {
-              btn.innerHTML = `⏳ idSolicitud obtenido: ${idSolicitud}`;
-          } else {
-              idSolicitud = prompt("No se pudo obtener idSolicitud automáticamente desde Athenea API Bridge.\nIngresa el 'idSolicitud' de Athenea manualmente:");
-              if (!idSolicitud) {
-                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-                  return;
-              }
-          }
-          
-          btn.innerHTML = "⏳ Consultando laboratorios...";
-          try {
-              const labs = await fetchAtheneaLabs(idSolicitud);
-              if (labs && labs.length > 0) {
-                  const injectedCount = injectLabsIntoCronicos(labs);
-                  alert(`✅ ¡Éxito! Se encontraron y extrajeron ${labs.length} analitos.\nSe inyectaron ${injectedCount} valores en la Ruta Crónicos.`);
-              } else {
-                  alert("⚠️ No se encontraron laboratorios en esa solicitud.");
-              }
-          } catch (e) {
-              alert("❌ Error al consultar Athenea:\n" + e + "\n\n¿Tienes sesión activa en Athenea?");
-          }
-          btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      };
-      
-      document.body.appendChild(btn);
-  }
-
-  // Observador para detectar cuándo inyectar el botón
-  setInterval(() => {
-      // Solo en la historia clínica o panel de Everest
-      if (location.href.includes("Morbilidad") || document.querySelector("a#pes")) {
-          createLabInjectorUI();
-      }
-  }, 2000);
-
-
 })();
+
