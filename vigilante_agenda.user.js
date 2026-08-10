@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.0.3
+// @version      12.0.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.0.3";
+  const VERSION = "12.0.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -464,16 +464,29 @@
     { key: "COLESTEROL_HDL", names: ["COLESTEROL HDL", "COLESTEROL DE ALTA DENSIDAD"], codes: ["2015", "903815"], resultId: "resultadoColesterolHDL", dateId: "fechaResultColesterolHDL" },
     { key: "COLESTEROL_LDL", names: ["COLESTEROL LDL", "COLESTEROL DE BAJA DENSIDAD"], codes: ["2014", "903817", "903816"], resultId: "resultadoColesterolLDL", dateId: "fechaResultColesterolLDL" },
     { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO hay casilla de texto para el
+    // uroanálisis. Lo que existe es `resultadoPrograma.swUroanalisis`, un par de botones
+    // de opción (sí/no), donde no cabe un resultado escrito. Se deja la entrada para que
+    // el analito se CUENTE y se avise ("Sin casilla en esta vista: UROANALISIS") en vez de
+    // desaparecer en silencio: el médico sabe así que ese lo registra a mano.
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
-    // v11.0.1 — RAC: el campo del DOM se llama resultadoRelacionAlbuminaCreatinina; con
-    // "resultadoRAC" la casilla NUNCA se llenaba. Se conserva el nombre viejo como
-    // alternativa por si la vista cambia. Se quitan los códigos 2092/2080 y los alias
+    // v12.0.4 — CONFIRMADO contra el DOM real de la Ruta de Crónicos (captura del
+    // consultorio, 10/08/2026): el campo se llama resultadoRelacionAlbuminaCreatinina.
+    // Con "resultadoRAC" la casilla NUNCA se llenaba. Se conserva el nombre viejo como
+    // alternativa por si otra vista lo usa. Se quitan los códigos 2092/2080 y los alias
     // sueltos "MICROALBUMINURIA"/"RAC", que capturaban analitos que no son la relación.
+    // OJO: en esa misma vista existe además resultadoMicroAlbuminuriaCreatinuria, que es
+    // otra casilla distinta. Si en su sede la relación se registra en ESA, cámbiela aquí;
+    // el script no puede decidirlo solo porque las dos existen.
     { key: "RAC", names: ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"], codes: ["8779", "903868"], resultId: "resultadoRelacionAlbuminaCreatinina", altIds: ["resultadoRAC"], dateId: "fechaResultRelacionAlbuminaCreatinina", altDateIds: ["fechaResultRAC"] },
     // v11.0.1 — "CREATININA" a secas casaba también con la creatinina en ORINA, la
     // creatinuria y la depuración de 24 h, que sobrescribían la creatinina sérica.
     { key: "CREATININA", names: ["CREATININA EN SUERO", "CREATININA"], excluye: ["ORINA", "CREATINURIA", "DEPURAC", "24 H"], codes: ["2028", "903895"], resultId: "resultadoCreatinina", dateId: "fechaResultCreatinina" },
+    // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO existe ninguna casilla de HbA1c
+    // (se listaron los 64 campos de resultado de esa vista y no aparece). El nombre
+    // "resultadoHBA1C" era una suposición que nunca se cumplió. Se conserva la entrada
+    // para que el analito se avise como pendiente de escribir a mano, no para escribirlo.
     { key: "HBA1C", names: ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"], codes: ["2035", "903843"], resultId: "resultadoHBA1C", dateId: "fechaResultHBA1C" },
     { key: "PTH", names: ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"], codes: ["2065", "904921"], resultId: "resultadoPTH", dateId: "fechaResultPTH" },
     { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
