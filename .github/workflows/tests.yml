@@ -34,14 +34,26 @@ jobs:
         set -e
         cat runner_output.txt
 
-        # 4. Compuerta de silencio: el paso de tests debe fallar si la salida
-        # NO contiene la línea "comprobaciones" del resumen final.
-        if ! grep -q "comprobaciones" runner_output.txt; then
-          echo "Error: el proceso murió en silencio o se colgó (no se halló 'comprobaciones')."
+        # 1. Compuerta de estado: el paso falla si el código de salida no es 0
+        if [ "$EXIT_CODE" -ne 0 ]; then
+          echo "Error: el código de salida no es 0 ($EXIT_CODE)."
           exit 1
         fi
 
-        # 3. Compuerta de cobertura: parsear la línea "funciones cubiertas: X / Y"
+        # 2. Compuerta de silencio: el paso de tests debe fallar si la salida
+        # NO contiene la línea "comprobaciones : ... pasan" del resumen final.
+        if ! grep -qE "comprobaciones :.*pasan" runner_output.txt; then
+          echo "Error: el proceso murió en silencio o se colgó (no se halló 'comprobaciones : ... pasan')."
+          exit 1
+        fi
+
+        # 3. Compuerta de fallos: el paso debe fallar si se detectan pruebas fallidas.
+        if grep -qE "[1-9][0-9]* fallan" runner_output.txt; then
+          echo "Error: se detectaron pruebas fallidas."
+          exit 1
+        fi
+
+        # 4. Compuerta de cobertura: parsear la línea "funciones cubiertas: X / Y"
         # y fallar si X < 266.
         COBERTURA=$(grep -Eo 'funciones cubiertas: [0-9]+' runner_output.txt | awk '{print $3}')
         if [ -z "$COBERTURA" ]; then
