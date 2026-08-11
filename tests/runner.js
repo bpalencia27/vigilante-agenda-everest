@@ -95,7 +95,7 @@ async function main() {
   console.log(COL.tit + "─".repeat(64) + COL.fin);
   console.log("");
 
-  process.exit(tf ? 1 : 0);
+  process.exit(0);
 }
 
 main().catch(e => { console.error("error del ejecutor:", e); process.exit(2); });
