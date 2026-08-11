@@ -493,7 +493,9 @@ module.exports = {
       const contenido = modal.querySelector("#vgl-labs-content");
       t.cierto(contenido.innerHTML.includes("CREATININA"));
       t.cierto(contenido.innerHTML.includes("1.2"));
-      t.cierto(contenido.innerHTML.includes("2026-08-01"));
+      // v12.3.30 — la tabla ahora muestra dd/mm/aaaa (mismo formato que el resto de la UI),
+      // no el ISO crudo que devuelve Athenea.
+      t.cierto(contenido.innerHTML.includes("01/08/2026"));
       t.cierto(contenido.innerHTML.includes("Athenea (Principal)"), "la fila declara su fuente");
       t.cierto(contenido.innerHTML.includes("vgl-labs-tr vgl-labs-alert"), "un resultado que la fuente declara Elevado lleva la clase de resalte en rojo (vgl-labs-alert; el color vive en la hoja de estilos, no inline)");
     });
