@@ -122,6 +122,31 @@ function crearEntorno(opciones) {
   return { win, storage, gm, doc, almacen };
 }
 
+// Detecta `const/let NOMBRE = ... =>` contando paréntesis en vez de con una sola
+// regex de ancho fijo: la regex anterior (`[^;=\n]{0,90}?=>`) no podía cruzar el
+// '=' de un parámetro por defecto (`(url, data = {}) =>`), así que gmPostJson y
+// gmPostJsonEx nunca se detectaban ni se publicaban para las pruebas.
+function encontrarNombresFlecha(src) {
+  const nombres = [];
+  const cabecera = /\n\s{0,4}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?/g;
+  let m;
+  while ((m = cabecera.exec(src))) {
+    let i = cabecera.lastIndex;
+    let profundidad = src[i - 1] === "(" ? 1 : 0;   // ya se consumió el '(' de apertura, si lo había
+    let hallado = false;
+    const limite = Math.min(src.length, i + 500);   // cota de seguridad, no un parser real
+    for (; i < limite; i++) {
+      const c = src[i];
+      if (c === "(") profundidad++;
+      else if (c === ")") { profundidad--; if (profundidad < 0) break; }
+      else if (profundidad <= 0 && (c === ";" || c === "\n")) break;   // fin de sentencia sin flecha
+      else if (profundidad <= 0 && c === "=" && src[i + 1] === ">") { hallado = true; break; }
+    }
+    if (hallado) nombres.push(m[1]);
+  }
+  return nombres;
+}
+
 // ---------- carga: publica las funciones sin tocar el archivo ----------
 function cargar(opciones) {
   let src = fs.readFileSync(RUTA, "utf8").replace(/\r\n/g, "\n");
@@ -129,7 +154,7 @@ function cargar(opciones) {
   // Nombres a publicar: las declaraciones `function NOMBRE` y también las funciones
   // guardadas en const/let (limpio, gmPostJson, repUrl…), que son igual de importantes.
   const decl = [...src.matchAll(/\n\s*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)].map(m => m[1]);
-  const flecha = [...src.matchAll(/\n\s{0,4}(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?[^;=\n]{0,90}?=>/g)].map(m => m[1]);
+  const flecha = encontrarNombresFlecha(src);
   const nombres = [...new Set(decl.concat(flecha))];
 
   // línea que publica lo alcanzable; las funciones anidadas lanzan y se omiten

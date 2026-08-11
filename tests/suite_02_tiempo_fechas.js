@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Tiempo y fechas",
-  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp"],
+  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList"],
   pruebas(t, api, env, cargar) {
     // Helper to setup mock date using a fresh harness to avoid global pollution
     function runWithMockDate(mockIsoStr, fn) {

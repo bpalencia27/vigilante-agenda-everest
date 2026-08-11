@@ -55,8 +55,20 @@ async function main() {
   const cubiertas = new Set();
   const fallosGlobales = [];
 
+  // El array `cubre` de cada suite se VALIDA contra la API real antes de sumarlo:
+  // sin esto, un nombre inventado o mal escrito inflaba el porcentaje en silencio.
+  const todas = Object.keys(api).filter(k => !k.startsWith("__"));
+  const todosSet = new Set(todas);
   for (const arch of archivos) {
     const suite = require(path.join(__dirname, arch));
+    if (suite.cubre) {
+      for (const fn of suite.cubre) {
+        if (!todosSet.has(fn)) {
+          console.error(COL.mal + "Error: la suite '" + (suite.nombre || arch) + "' dice cubrir '" + fn + "', pero esa función no existe en el API." + COL.fin);
+          process.exit(1);
+        }
+      }
+    }
     const { t, res } = crearT();
     try { await suite.pruebas(t, api, env, cargar); }
     catch (e) { res.falla++; res.fallos.push({ desc: "(la suite lanzó)", msg: e.message }); }
@@ -68,7 +80,6 @@ async function main() {
   }
 
   // cobertura real de funciones
-  const todas = Object.keys(api).filter(k => !k.startsWith("__"));
   const sinCubrir = todas.filter(n => !cubiertas.has(n));
   const pct = (cubiertas.size / cargado.totalDeclaradas * 100);
 
