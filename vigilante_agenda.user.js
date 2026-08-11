@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.0
+// @version      12.5.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -68,7 +68,24 @@
   órdenes creadas/fallo/correo, avisos PyM/PES mostrados y atendidos, Auto-Labs,
   filtros, búsqueda, silenciar, hojas de Resumen/Ajustes, abrir PyM manual. El
   tablero procesa la fila con TABLERO/Codigo.gs (pestañas "uso" y "uso_detalle").
-  Banco: 541 comprobaciones (suite_23 nueva), cobertura 288/313 (92.0%).
+
+  v12.5.1 — REVISIÓN ADVERSARIAL DE LA TELEMETRÍA (3 lentes, 18 confirmados, 0 refutados):
+  · El saneo anti-PII ahora se aplica TAMBIÉN al exportar (uxClaveLimpia en claves,
+    valores forzados a número, tiras de 6+ dígitos eliminadas): una ventana contaminada
+    por un tercero en localStorage ya no puede subir texto al tablero.
+  · Presupuesto por claves enteras (jamás un JSON partido por slice) + "_recortadas".
+  · Cambio de día: la ventana vieja se APARCA (vgl_ux_pend) y la despacha SOLO la
+    pestaña líder — sin filas duplicadas y sin descartar conteos cuando el reporte
+    está apagado o no hay red.
+  · La cola remota sacrifica filas "ux" antes que fraude/resumen al desbordarse, y
+    repQLoad ya no cachea (una pestaña vieja no pisa filas de otra).
+  · Los botones "Probar" de Ajustes ya no contaminan las métricas (esPrueba).
+  · VERSION ahora sale de GM_info (la const llevaba 3 versiones diciendo 12.3.37 en
+    cada fila del tablero) y una prueba compara el respaldo contra @version.
+  · TABLERO/Codigo.gs endurecido: lista blanca de eventos (adiós pestaña "otros" con
+    cuerpo arbitrario), re-saneo server-side, topes de tamaño y claves, neutralización
+    de fórmulas (=,+,-,@) y uso_detalle por lotes (setValues, máx. 120).
+  Banco: 549 comprobaciones, cobertura 289/314 (92.0%).
 */
 
 /*
@@ -415,7 +432,12 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.37";
+  // v12.5.1 — La versión sale del PROPIO encabezado vía Tampermonkey (GM_info): la
+  // const manual llevaba TRES versiones sin subirse ("12.3.37") y toda fila del tablero
+  // y el log de arranque mentían la versión. El literal queda solo de respaldo para
+  // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
+  // contra el @version del encabezado para que no vuelva a quedarse atrás.
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3011,8 +3033,25 @@
     });
   }
   let repQ = null, repFlushing = false;
-  function repQLoad() { if (repQ) return; try { repQ = JSON.parse(GM_getValue("vgl_repq", "[]")) || []; } catch (e) { repQ = []; } }
-  function repQSave() { try { GM_setValue("vgl_repq", JSON.stringify((repQ || []).slice(-30))); } catch (e) {} }
+  // v12.5.1 — repQLoad ya NO cachea: siempre relee el almacén compartido. La caché en
+  // memoria hacía que una pestaña con cola vieja pisara filas recién encoladas por otra
+  // (revisión adversarial); releer 30 filas cuesta microsegundos. Queda una ventana de
+  // carrera mínima entre leer y guardar — asumida: GM no ofrece escritura atómica.
+  function repQLoad() { try { repQ = JSON.parse(GM_getValue("vgl_repq", "[]")) || []; } catch (e) { repQ = repQ || []; } }
+  function repQSave() {
+    try {
+      let q = (repQ || []).slice();
+      // v12.5.1 — Al recortar por tope, las filas "ux" (telemetría de uso) se sacrifican
+      // PRIMERO: una fila de fraude o el resumen diario jamás debe salir de la cola por
+      // culpa de las métricas de uso.
+      while (q.length > 30) {
+        const i = q.findIndex((r) => r && r.evento === "ux");
+        if (i < 0) break;
+        q.splice(i, 1);
+      }
+      GM_setValue("vgl_repq", JSON.stringify(q.slice(-30)));
+    } catch (e) {}
+  }
   async function repFlush() {
     if (repFlushing || !repOn()) return;
     repQLoad(); if (!repQ.length) return;
@@ -3060,20 +3099,30 @@
   //  localStorage; una carrera de escritura puede perder algún conteo aislado —
   //  aceptable para métricas de uso, jamás para datos clínicos.
   const UX_KEY = "vgl_ux";
+  const UX_PEND_KEY = "vgl_ux_pend"; // v12.5.1 — aparcadero de UNA ventana de otro día aún sin despachar
   const UX_FLUSH_MS = 30 * 60 * 1000; // media hora, decidido con el pedido ("cada 30 min o cada hora")
   function uxVentanaNueva() { return { dia: todayStamp(), desde: new Date().toISOString(), acciones: {} }; }
+  // v12.5.1 — El MISMO saneo se aplica al escribir Y al exportar (revisión adversarial:
+  // localStorage lo comparte la página de Athenea y cualquier otro script del origen —
+  // la barrera solo en la escritura convertía al Vigilante en un puente que podía subir
+  // texto ajeno, incluso PII, al tablero).
+  // Además del filtro de caracteres, toda tira de 6+ dígitos se elimina: una cédula
+  // jamás puede sobrevivir en una clave, ni siquiera inyectada por un tercero.
+  function uxClaveLimpia(k) { return String(k == null ? "" : k).toLowerCase().replace(/\d{6,}/g, "").replace(/[^a-z0-9.:_-]/g, "").slice(0, 60); }
   function uxTrack(accion, extra) {
     try {
       if (S.uxTelemetria === false) return;
       // Solo nombres fijos de acción (letras/números/./:/_/-): nada que venga del DOM
       // o del paciente puede colarse en la clave.
-      const a = String(accion || "").toLowerCase().replace(/[^a-z0-9.:_-]/g, "").slice(0, 60);
+      const a = uxClaveLimpia(accion);
       if (!a) return;
       let w = readJSON(UX_KEY, null);
       if (!w || !w.acciones || typeof w.acciones !== "object") w = uxVentanaNueva();
-      // Cambio de día con conteos pendientes: se empaquetan hacia la cola (si el
-      // reporte está activo) y la ventana arranca limpia — nada se pierde ni se mezcla.
-      if (w.dia !== todayStamp()) { uxEnviarVentana(w); w = uxVentanaNueva(); }
+      // Cambio de día con conteos pendientes: la ventana vieja se APARCA (una sola
+      // plaza) y la despacha la pestaña líder en su siguiente ciclo — así ninguna
+      // pestaña no-líder duplica la fila, y un reporte apagado o sin red no tira los
+      // conteos a la basura (revisión adversarial v12.5.1).
+      if (w.dia !== todayStamp()) { writeJSON(UX_PEND_KEY, w); w = uxVentanaNueva(); }
       w.acciones[a] = (w.acciones[a] || 0) + 1;
       const n = extra && typeof extra.n === "number" && isFinite(extra.n) ? extra.n : 0;
       if (n) w.acciones[a + ".total"] = (w.acciones[a + ".total"] || 0) + n;
@@ -3084,22 +3133,39 @@
   // true = la fila quedó ENCOLADA (la entrega real la garantiza repFlush con reintentos).
   function uxEnviarVentana(w) {
     try {
-      if (!w || !w.acciones) return false;
-      const claves = Object.keys(w.acciones);
-      if (!claves.length) return false;
+      if (!w || !w.acciones || typeof w.acciones !== "object") return false;
       if (S.uxTelemetria === false || !repOn()) return false;
-      const total = claves.reduce((s, k) => s + (k.endsWith(".total") ? 0 : (w.acciones[k] || 0)), 0);
-      // Tope defensivo: una ventana normal pesa <1 KB; si algo creciera de forma
-      // anómala, mejor una fila truncada que reventar la celda de la Hoja.
-      reportar("ux", { deDia: w.dia, desde: w.desde || "", n: total, acciones: JSON.stringify(w.acciones).slice(0, 4000) });
+      // v12.5.1 — Reconstrucción con saneo de salida: claves re-filtradas y SOLO
+      // valores numéricos positivos; lo demás se descarta. Presupuesto por CLAVES
+      // enteras (nunca un JSON partido a mitad de string, que el tablero registraría
+      // a medias o descartaría): si no cabe, se omiten claves y se anota cuántas.
+      const limpio = {};
+      let total = 0, omitidas = 0, tam = 2;
+      for (const k of Object.keys(w.acciones)) {
+        const kk = uxClaveLimpia(k);
+        const v = Number(w.acciones[k]);
+        if (!kk || !isFinite(v) || v <= 0) continue;
+        const peso = kk.length + String(Math.round(v)).length + 4; // "clave":valor,
+        if (tam + peso > 3800) { omitidas++; continue; }
+        tam += peso;
+        limpio[kk] = (limpio[kk] || 0) + Math.round(v);
+        if (!kk.endsWith(".total")) total += Math.round(v);
+      }
+      if (!Object.keys(limpio).length) return false;
+      if (omitidas) limpio["_recortadas"] = omitidas;
+      reportar("ux", { deDia: String(w.dia || "").slice(0, 10), desde: String(w.desde || "").slice(0, 30), n: total, acciones: JSON.stringify(limpio) });
       return true;
     } catch (e) { return false; }
   }
   function uxFlush() {
     try {
       if (!heartbeat()) return;                          // solo la pestaña líder envía
+      // Primero la ventana aparcada de otro día (si el reporte estaba apagado o sin
+      // red cuando cruzó la medianoche); después la ventana corriente.
+      const pend = readJSON(UX_PEND_KEY, null);
+      if (pend && uxEnviarVentana(pend)) { try { localStorage.removeItem(UX_PEND_KEY); } catch (e2) {} }
       const w = readJSON(UX_KEY, null);
-      if (uxEnviarVentana(w)) writeJSON(UX_KEY, uxVentanaNueva());
+      if (w && w.acciones && Object.keys(w.acciones).length && uxEnviarVentana(w)) writeJSON(UX_KEY, uxVentanaNueva());
     } catch (e) {}
   }
   // Al arrancar: si quedó una ventana de OTRO día (el navegador se cerró antes del
@@ -3107,6 +3173,8 @@
   function uxBootCheck() {
     try {
       if (!heartbeat()) return;
+      const pend = readJSON(UX_PEND_KEY, null);
+      if (pend && uxEnviarVentana(pend)) { try { localStorage.removeItem(UX_PEND_KEY); } catch (e2) {} }
       const w = readJSON(UX_KEY, null);
       if (w && w.dia !== todayStamp() && uxEnviarVentana(w)) writeJSON(UX_KEY, uxVentanaNueva());
     } catch (e) {}
@@ -3916,7 +3984,7 @@
   function acknowledge() { stopNag(); stopFlash(); const m = document.getElementById("vgl-modal"); if (m) m.remove(); }
 
   // [COPY-UX] Recordatorio modal de actividades de prevención
-  function pymAlert(nombre, actividades, esPes) {
+  function pymAlert(nombre, actividades, esPes, esPrueba) {
     try {
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
@@ -3944,8 +4012,9 @@
         </div>`;
       ov.querySelector(".vgl-pym-n").textContent = nombre || "Paciente";
       const ok = ov.querySelector(".vgl-pym-ok");
-      ok.addEventListener("click", () => { uxTrack("aviso.pym.entendido"); ov.remove(); });
-      uxTrack(esPes ? "aviso.pym.mostrado.pes" : "aviso.pym.mostrado", { n: (actividades || []).length });
+      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
+      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pym.entendido"); ov.remove(); });
+      if (!esPrueba) uxTrack(esPes ? "aviso.pym.mostrado.pes" : "aviso.pym.mostrado", { n: (actividades || []).length });
       document.body.appendChild(ov);
       try { ok.focus(); } catch (e2) {}
       ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
@@ -3953,7 +4022,7 @@
   }
 
   // [COPY-UX] Alerta modal de prioridad cardiovascular
-  function abandonoPESAlert(nombre) {
+  function abandonoPESAlert(nombre, esPrueba) {
     try {
       let ov = document.getElementById("vgl-pes-modal");
       if (ov) ov.remove();
@@ -3971,8 +4040,9 @@
         </div>`;
       ov.querySelector(".vgl-pes-n").textContent = nombre || "Paciente";
       const ok = ov.querySelector(".vgl-pes-ok");
-      ok.addEventListener("click", () => { uxTrack("aviso.pes.entendido"); ov.remove(); });
-      uxTrack("aviso.pes.mostrado");
+      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
+      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pes.entendido"); ov.remove(); });
+      if (!esPrueba) uxTrack("aviso.pes.mostrado");
       document.body.appendChild(ov);
       try { ok.focus(); } catch (e2) {}
       ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
@@ -8923,9 +8993,9 @@
     bind("#c-exc", "excluir", (n) => n.value);
     bind("#c-rec", "recordatorio", (n) => n.value);
     bind("#c-pymrem", "recordatorioPym", (n) => n.checked);
-    const pymBtn = q("#c-pymtest"); if (pymBtn) pymBtn.addEventListener("click", () => pymAlert("Paciente de prueba", ["Tamización VIH", "Tamización de mama"]));
+    const pymBtn = q("#c-pymtest"); if (pymBtn) pymBtn.addEventListener("click", () => { uxTrack("ajustes.probar.pym"); pymAlert("Paciente de prueba", ["Tamización VIH", "Tamización de mama"], false, true); });
     bind("#c-pes", "abandonoPES", (n) => n.checked);
-    const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
+    const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => { uxTrack("ajustes.probar.pes"); abandonoPESAlert("Paciente de prueba", true); });
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
     // v12.3.16 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
