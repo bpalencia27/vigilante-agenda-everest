@@ -187,7 +187,64 @@ module.exports = {
     cz.ctx.TextEncoder = TextEncoder;
     cz.ctx.Blob = Blob;
     cz.ctx.Response = Response;
-    cz.ctx.DecompressionStream = DecompressionStream;
+    cz.ctx.DecompressionStream = typeof DecompressionStream !== "undefined" ? DecompressionStream : null;
+
+    let nativeDeflateRaw = true;
+    if (cz.ctx.DecompressionStream) {
+      try { new cz.ctx.DecompressionStream('deflate-raw'); } catch (e) { nativeDeflateRaw = false; }
+    } else {
+      nativeDeflateRaw = false;
+    }
+
+    if (!nativeDeflateRaw) {
+      const zlib = require('zlib');
+      cz.ctx.DecompressionStream = class MockDecompressionStream {
+        constructor(format) {
+          if (format !== 'deflate-raw') throw new TypeError(`Unsupported format: ${format}`);
+          let buf = Buffer.alloc(0);
+          this.writable = new WritableStream({
+            write(chunk) { buf = Buffer.concat([buf, chunk]); }
+          });
+          this.readable = new ReadableStream({
+            start(controller) {
+              setTimeout(() => {
+                let decompressed;
+                try {
+                   decompressed = zlib.inflateRawSync(buf);
+                } catch(e) {
+                   // Ignore Z_BUF_ERROR or incomplete buffer
+                   decompressed = zlib.inflateRawSync(buf, { finishFlush: zlib.constants.Z_SYNC_FLUSH });
+                }
+                let offset = 0;
+                let closed = false;
+
+                const pushChunk = () => {
+                  if (closed) return;
+                  if (offset >= decompressed.length) {
+                     try { controller.close(); } catch(e){}
+                     closed = true;
+                     return;
+                  }
+                  const chunkLen = Math.min(1024, decompressed.length - offset);
+                  try {
+                    controller.enqueue(new Uint8Array(decompressed.buffer, decompressed.byteOffset + offset, chunkLen));
+                  } catch(e) {
+                    closed = true;
+                    return;
+                  }
+                  offset += chunkLen;
+                  setTimeout(pushChunk, 0);
+                };
+                setTimeout(pushChunk, 10);
+              }, 100);
+            },
+            cancel() {
+              // Gracefully handle cancel
+            }
+          });
+        }
+      };
+    }
 
     const textoBase = "El Vigilante lee la base PyM por trozos, sin congelar la consulta. ".repeat(8000);
     const bytesOriginales = new TextEncoder().encode(textoBase);
