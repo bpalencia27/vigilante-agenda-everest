@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.16
+// @version      12.3.17
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.16";
+  const VERSION = "12.3.17";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1259,11 +1259,31 @@
     const sDoc = String(docId);
     if (!p.citas.includes(sDoc)) { p.citas.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
   }
-  function markOrdenesCreadasHoy(docId) {
+  // v12.3.x — "ID y bloqueo de seguridad": además del booleano de dedup (p.ordenes, ya
+  // existente), se guarda el/los agrupador(es) REALES que Everest asignó a la orden —
+  // el mismo id que usa el propio botón oficial para reimprimir o reenviar. Con esto el
+  // botón deshabilitado en el panel y el envío por correo saben CUÁL orden ya existe,
+  // no solo QUE existe. Reemplaza a guardarOrdenEnMemoriaLocal (nunca se implementó:
+  // era un `if (typeof ... === 'function')` que siempre evaluaba false, código muerto).
+  function markOrdenesCreadasHoy(docId, agrupadores) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    if (!p.ordenes.includes(sDoc)) { p.ordenes.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+    if (!p.ordenes.includes(sDoc)) p.ordenes.push(sDoc);
+    if (agrupadores && agrupadores.length) {
+      if (!p.ordenesDetalle) p.ordenesDetalle = {};
+      const previos = (p.ordenesDetalle[sDoc] && p.ordenesDetalle[sDoc].agrupadores) || [];
+      p.ordenesDetalle[sDoc] = { agrupadores: [...new Set(previos.concat(agrupadores))], ts: Date.now() };
+    }
+    writeJSON(PROC_KEY, p);
+    state.lastSignature = "";
+    repaint();
+  }
+  // Detalle de la(s) orden(es) ya generadas hoy para este paciente — null si no hay.
+  function ordenesDetalleHoy(docId) {
+    if (!docId) return null;
+    const p = getProcessedToday();
+    return (p.ordenesDetalle && p.ordenesDetalle[String(docId)]) || null;
   }
   function applySettings() {
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
@@ -2849,6 +2869,10 @@
       if (!S.recordatorioPym) return;
       const doc = extractPacienteAbierto(); if (!doc) return;
       const key = normalizeKey(doc); if (!key) return;
+      // v12.3.x — Claramente conectado con markOrdenesCreadasHoy: si las órdenes de este
+      // paciente ya se generaron HOY desde el panel, lo que pedía el recordatorio ya se
+      // pidió — insistir con el cartel grande sería ruido, no ayuda.
+      if (isOrdenesCreadasHoy(doc)) return;
       const pend = getActivities(key); if (!pend.length) return;
       const uid = "pymrem|" + key;
       if (avisoYaVisto(uid)) return;
@@ -4949,11 +4973,13 @@
       #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
       #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
       #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
-      #vgl-agendar-modal .vgl-agm-fieldrow{
+      /* v12.3.x — Se extiende a #vgl-ordenar-modal (antes solo agendar) para la sección de
+         envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
+      #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
         display:flex;align-items:center;gap:8px;flex-wrap:wrap;
         margin-top:8px;font-size:12px;color:var(--fg2)
       }
-      #vgl-agendar-modal .vgl-agm-fieldrow>label{
+      #vgl-agendar-modal .vgl-agm-fieldrow>label, #vgl-ordenar-modal .vgl-agm-fieldrow>label{
         flex:none;font-weight:800;font-size:11px;letter-spacing:.6px;
         text-transform:uppercase;color:var(--c-azul)
       }
@@ -6870,6 +6896,76 @@
     return pageFetchJson(path, { method: "POST", body: JSON.stringify(payload) });
   }
 
+  // =====================================================================
+  //  v12.3.x — ENVÍO DE LA ORDEN POR CORREO AL PACIENTE
+  //
+  //  Contrato REAL, no inventado: reconstruido a partir de telemetría de red genuina
+  //  capturada en consultorio el 8 de agosto de 2026 (VIGILANTE_AGENDA_RESCATE/
+  //  everest_telemetry_PRO_*.json — decenas de envíos reales, mismo patrón repetido),
+  //  la MISMA vía que usa el botón oficial de Everest para esto:
+  //   1. GET /apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos
+  //         ?PacienteId=<id>&Agrupador=<agrupador>   (genera el link/PDF de la orden;
+  //         se observó SIEMPRE antes del envío — best-effort: si falla, no bloquea)
+  //   2. GET /apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento
+  //         ?Grupo=<agrupador>&Correo=<correo>&UsuarioId=<idMedico>
+  //  Mismo origen que Everest (neps.everestintelligent.com): fetch normal, no
+  //  GM_xmlhttpRequest — eso es solo para el puente a Athenea (otro dominio).
+  //  La telemetría de origen NUNCA grabó el cuerpo de la respuesta (herramienta de
+  //  captura sin registro de body): la validación de éxito es por status HTTP, con un
+  //  diagnóstico de una sola vez que confirmará su forma exacta en el primer uso real.
+  // =====================================================================
+
+  // Recursivo, mismo patrón que extractPatientId: la respuesta de GuardarOrdenamiento
+  // ya expone `agrupador` directo o en `.data.agrupador` (ver el manejo de éxito más
+  // abajo); este extractor cubre además cualquier variante de mayúsculas o anidación.
+  function extractAgrupador(res) {
+    if (!res) return null;
+    if (typeof res === "number" && res > 0) return String(res);
+    if (typeof res === "string" && res.trim()) return res.trim();
+    if (Array.isArray(res) && res.length > 0) return extractAgrupador(res[0]);
+    if (typeof res === "object") {
+      const direct = res.agrupador || res.Agrupador || res.grupo || res.Grupo || res.idAgrupador || res.IdAgrupador;
+      if (direct) return String(direct).trim();
+      if (res.data) { const fromData = extractAgrupador(res.data); if (fromData) return fromData; }
+      for (const k of Object.keys(res)) {
+        if (k !== "data" && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
+          const fromSub = extractAgrupador(res[k]);
+          if (fromSub) return fromSub;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Best-effort: genera el link/PDF de impresión de la orden. Un fallo aquí NO debe
+  // impedir el envío del correo (el paso se observó siempre antes, pero su función es
+  // preparar el documento, no autorizar el envío).
+  async function apiOrdenamientoGenerarLinks(pacienteId, agrupador) {
+    try {
+      await pageFetchJson(
+        `/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=${encodeURIComponent(pacienteId)}&Agrupador=${encodeURIComponent(agrupador)}`,
+        { method: "GET", __idempotent: true }
+      );
+    } catch (e) { console.warn("[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):", e); }
+  }
+
+  let _diagEnvioCorreoLogged = false;
+  async function apiEnviarOrdenPorCorreo(agrupador, correo, usuarioId) {
+    try {
+      const f = FETCH0 || window.fetch;
+      const url = location.origin + "/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento"
+        + "?Grupo=" + encodeURIComponent(agrupador) + "&Correo=" + encodeURIComponent(correo) + "&UsuarioId=" + encodeURIComponent(usuarioId);
+      const resp = await f(url, { headers: { "Accept": "application/json" } });
+      if (!_diagEnvioCorreoLogged) {
+        _diagEnvioCorreoLogged = true;
+        let cuerpo = "";
+        try { cuerpo = await resp.clone().text(); } catch (e) {}
+        console.log("[Vigilante] EnviarEmailOrdenamiento — diagnóstico único: status=" + resp.status + " cuerpo=" + cuerpo.slice(0, 300));
+      }
+      return !!(resp && resp.ok);
+    } catch (e) { console.warn("[Vigilante PyM] no se pudo enviar la orden por correo:", e); return false; }
+  }
+
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
   async function openOrdenamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -7076,6 +7172,7 @@
       if (creadasCount > 0 && fallidasCount === 0) {
         // v12.3.14 — Las órdenes YA quedaron creadas en el servidor: el registro y el
         // estado de abajo corren siempre; solo el pintado se salta si el modal fue cerrado.
+        const agrupadoresUnicos = [...new Set(agrupadores)];
         if (vivo()) {
           confirmBtn.style.background = "#10b981"; // [UI-CSS]
           confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
@@ -7085,16 +7182,53 @@
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
           successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+
+          // v12.3.x — Envío de la orden al correo del paciente. Contrato real, ver
+          // apiEnviarOrdenPorCorreo. El correo se pide DESPUÉS de generar las órdenes,
+          // como se pidió: nunca antes, para no bloquear la creación si en ese momento
+          // no se tiene el correo del paciente a mano.
+          const mailBox = document.createElement("div");
+          mailBox.className = "vgl-ord-mailbox";
+          mailBox.innerHTML = `
+            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <div class="vgl-agm-fieldrow">
+              <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
+              <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
+            </div>
+            <div id="vgl-ord-mail-status" class="vgl-agm-sub"></div>
+          `;
+          modal.querySelector(".vgl-agm-card").appendChild(mailBox);
+          const mailInput = mailBox.querySelector("#vgl-ord-mail-input");
+          const mailBtn = mailBox.querySelector("#vgl-ord-mail-send");
+          const mailStatus = mailBox.querySelector("#vgl-ord-mail-status");
+          mailBtn.addEventListener("click", async () => {
+            const correo = (mailInput.value || "").trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "⚠ Escriba un correo válido."; return; }
+            mailBtn.disabled = true; mailBtn.textContent = "⏳ Enviando...";
+            const uIdEnvio = state.activeDoctor.id || S.medicoId || 0;
+            let okCount = 0;
+            for (const agp of agrupadoresUnicos) {
+              await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp);
+              const ok = await apiEnviarOrdenPorCorreo(agp, correo, uIdEnvio);
+              if (ok) okCount++;
+            }
+            vglLog("ORDEN", "EnviarPorCorreoIntentado", { agrupadores: agrupadoresUnicos.length, ok: okCount });
+            if (!vivo()) return;
+            mailBtn.disabled = false; mailBtn.textContent = "Enviar";
+            mailStatus.textContent = okCount === agrupadoresUnicos.length
+              ? `✅ Orden(es) enviada(s) a ${correo}.`
+              : (okCount > 0 ? `⚠ Se enviaron ${okCount} de ${agrupadoresUnicos.length} orden(es). Verifique en el portal de Everest.` : "❌ No se pudo enviar la orden por correo. Verifique el correo o inténtelo desde el portal.");
+          });
         }
 
-        const creadosPkgs = selectedBoxes.map((c) => pkgsToRender[parseInt(c.getAttribute("data-idx"), 10)]).filter(Boolean);
-        try { if (typeof guardarOrdenEnMemoriaLocal === 'function') guardarOrdenEnMemoriaLocal(apt.doc_id, creadosPkgs); } catch (e) {}
-
-        markOrdenesCreadasHoy(apt.doc_id);
+        // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
+        // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
+        // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
+        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos);
         notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
         bumpStat("atiempo");
-
-        setTimeout(() => closeMod(), 2600);
+        // v12.3.x — Ya NO se cierra sola a los 2.6 s: el médico necesita tiempo para
+        // escribir el correo del paciente y confirmar el envío. Se cierra con ✕/Cancelar.
       } else {
         if (vivo()) {
           confirmBtn.disabled = false;
@@ -7617,8 +7751,17 @@
       const agendarBtn = (S.agendamientoRapido !== false && a.doc_id)
         ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`
         : "";
+      // v12.3.x — "ID y bloqueo de seguridad": una vez el panel confirma que las órdenes
+      // de este paciente ya se generaron y (si aplica) se enviaron por correo HOY, el
+      // botón se deshabilita — evita la duplicación de ordenamientos por doble clic o
+      // por reabrir el paciente más tarde en la misma jornada. Se reactiva solo al
+      // cruzar la medianoche (mismo reloj que getProcessedToday/diaNuevo).
+      const ordDetalleHoy = a.doc_id ? ordenesDetalleHoy(a.doc_id) : null;
+      const yaOrdenadoHoy = a.doc_id ? isOrdenesCreadasHoy(a.doc_id) : false;
       const ordenarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`
+        ? (yaOrdenadoHoy
+            ? `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Órdenes PyM ya generadas hoy para ${escapeHtml(a.nombre)}" title="✅ Órdenes PyM ya generadas hoy${ordDetalleHoy && ordDetalleHoy.agrupadores && ordDetalleHoy.agrupadores.length ? " — agrupador(es): " + escapeHtml(ordDetalleHoy.agrupadores.join(", ")) : ""}. Bloqueado para evitar duplicados.">📋</button>`
+            : `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`)
         : "";
       const labsBtn = a.doc_id
         ? `<button class="vgl-btn-labs vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
