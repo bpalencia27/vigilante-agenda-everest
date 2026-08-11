@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.14
+// @version      12.3.15
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.14";
+  const VERSION = "12.3.15";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -691,6 +691,14 @@
       const viva = r.status === 200 && !_atheneaPareceLogin(r.responseText);
       if (viva !== atheneaSesionViva) {
         console.log("[Vigilante Athenea] latido — sesión " + (viva ? "ACTIVA (mantenida)" : "NO activa"));
+        // v12.3.15 — Al REVIVIR la sesión (el médico acaba de iniciar sesión en la otra
+        // pestaña), se resetea la guarda una-vez-por-paciente del robot: en el siguiente
+        // tick de la historia clínica vuelve a buscar los laboratorios del paciente
+        // abierto, sin recargar la página ni volver a entrar a la historia.
+        if (viva && atheneaSesionViva === false) {
+          lastAutoFetchedDoc = "";
+          console.log("[Vigilante Athenea] sesión restaurada: el robot reintentará los laboratorios del paciente abierto.");
+        }
       }
       atheneaSesionViva = viva;
       if (!viva) {
@@ -710,7 +718,7 @@
       const r1 = await _gmReq({ method: "GET", url: `${BASE}/Resultados/BusquedaPaciente` });
       diag("1/3 GET BusquedaPaciente", "status=" + r1.status + " len=" + (r1.responseText || "").length);
       if (r1.status !== 200) { console.warn("[Vigilante Athenea] paso 1 falló: HTTP " + r1.status); return null; }
-      if (_atheneaPareceLogin(r1.responseText)) { console.warn("[Vigilante Athenea] paso 1 devolvió una pantalla de LOGIN: la sesión de Athenea no está activa en este navegador. Inicia sesión en medicosviva1a.atheneasoluciones.com y vuelve a intentar."); return null; }
+      if (_atheneaPareceLogin(r1.responseText)) { atheneaSesionViva = false; console.warn("[Vigilante Athenea] paso 1 devolvió una pantalla de LOGIN: la sesión de Athenea no está activa en este navegador. Inicia sesión en medicosviva1a.atheneasoluciones.com y vuelve a intentar."); return null; }
       const token1 = _atheneaToken(r1.responseText);
       if (!token1) { console.warn("[Vigilante Athenea] paso 1 respondió 200 pero sin token CSRF reconocible (¿cambió el formulario de Athenea?)."); return null; }
 
@@ -920,6 +928,19 @@
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
                     + "\n\nRevise las fechas de toma antes de guardar la historia.");
+              } else if (atheneaSesionViva === false) {
+                  // v12.3.15 — La causa más común de "sin resultados" es que NO HAY SESIÓN
+                  // en Athenea: su cookie es DE SESIÓN pura (muere al cerrar el navegador)
+                  // y el formulario de login no ofrece "recordarme" — verificado en la
+                  // captura real: solo Usuario, Password y token CSRF. Ningún latido puede
+                  // resucitar una cookie que ya no existe, así que en vez de un aviso sin
+                  // salida se ofrece abrir el portal aquí mismo; al volver, el latido en
+                  // cadencia rápida detecta la sesión nueva y el robot reintenta solo.
+                  if (confirm("🔑 La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios."
+                    + "\n\n¿Abrir Athenea ahora para iniciar sesión?"
+                    + "\n\nAl volver a esta pestaña, el Vigilante reintentará solo en menos de un minuto.")) {
+                      window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank");
+                  }
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
                   // historia clínica los resultados de CUALQUIER otro paciente, sin
@@ -5134,6 +5155,28 @@
       #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
       #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
       @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
+
+      /* ==== [v12.3.15] BLINDAJE TIPOGRÁFICO contra los estilos globales de Everest ==== */
+      /* Descubierto con un pantallazo real del consultorio: los textos que confiaban en
+         HERENCIA (p. ej. el <span> de .vgl-agm-check-lbl hereda color:var(--fg)) salían
+         en el azul corporativo de Everest, ilegible sobre nuestros paneles oscuros: la
+         hoja global de Everest trae reglas DIRECTAS sobre span/label/b, y un valor
+         directo siempre le gana a uno heredado, por baja que sea su especificidad. En el
+         preview sintético del rediseño (sin el CSS de Everest) esto era invisible.
+         La armadura: forzar color:inherit SOLO en los elementos SIN clase (los únicos
+         que dependen de herencia) dentro de cada contenedor nuestro. Con el ID del
+         contenedor le gana a cualquier regla sin ID de Everest; con :where() aporta
+         especificidad CERO extra, así TODAS nuestras reglas internas de acento (fechas
+         verdes, etiquetas azules, notas) le siguen ganando sin tocarlas. */
+      #vgl-root :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-dock :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-toasts :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-pym-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -7600,7 +7643,12 @@
         // dejó al latido apagado y la expiración deslizante se cumplió. Igual que el
         // sondeo del API en v12.3.11: es red pura (GM_xmlhttpRequest), no toca el DOM de
         // Everest, así que no había razón real para condicionarlo a la vista activa.
-        if (Date.now() - atheneaKeepAliveAt > 180000) {
+        // v12.3.15 — Cadencia adaptativa del latido: 3 min bastan cuando la sesión está
+        // viva (solo hay que impedir que el timeout deslizante se cumpla), pero cuando
+        // está CAÍDA se sondea cada 45 s: así, tras el login manual del médico en la
+        // otra pestaña, la restauración se detecta en menos de un minuto y el robot
+        // reanuda solo (ver el reset de lastAutoFetchedDoc en atheneaKeepAlive).
+        if (Date.now() - atheneaKeepAliveAt > (atheneaSesionViva === false ? 45000 : 180000)) {
           atheneaKeepAliveAt = Date.now();
           atheneaKeepAlive();
         }
