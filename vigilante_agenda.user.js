@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.15
+// @version      12.3.16
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.15";
+  const VERSION = "12.3.16";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -667,6 +667,87 @@
     return /type=["']password["']/i.test(html) || /Iniciar\s+sesi[oó]n/i.test(html);
   }
 
+  // =====================================================================
+  //  v12.3.16 — AUTO-INICIO DE SESIÓN EN ATHENEA (OPT-IN, POR MÉDICO)
+  //
+  //  Habilitado por decisión explícita del médico responsable (equipos
+  //  personales por turno): permite que Vigilante inicie sesión SOLO en
+  //  Athenea cuando la sesión caiga, para que los laboratorios automáticos
+  //  no exijan un login manual tras cada reinicio del navegador — la cookie
+  //  de Athenea es DE SESIÓN pura (confirmado en el HAR real: muere al
+  //  cerrar el navegador y su formulario no ofrece "recordarme").
+  //
+  //  ADVERTENCIA DE SEGURIDAD, sin adornos: el almacén de Tampermonkey
+  //  (GM_setValue) NO está cifrado. La ofuscación de abajo solo evita leer
+  //  la contraseña de un vistazo en el panel de Tampermonkey; NO es cifrado
+  //  — cualquiera con acceso técnico real a este equipo puede recuperarla.
+  //  Por eso el diseño es defensivo: (1) OPT-IN, apagado de fábrica;
+  //  (2) las credenciales se guardan POR ID DE MÉDICO y solo se usan cuando
+  //  ESE mismo médico está en sesión en Everest — la clave de uno jamás se
+  //  usa bajo la sesión de otro en un equipo compartido; (3) un rechazo de
+  //  credenciales NO se reintenta solo (los intentos repetidos bloquean la
+  //  cuenta): se marca y se avisa una vez para re-guardarlas.
+  // =====================================================================
+  const ATH_CRED_KEY = "vgl_ath_creds";
+  const atheneaLoginBloqueada = {};   // docId -> true: credenciales rechazadas, NO reintentar
+  let atheneaLoginEnVuelo = false;
+  // Ofuscación reversible (XOR + base64) — anti-vistazo, NO cifrado (ver arriba).
+  function _vglXor(s) { const k = "Vgl-Athenea-2026-local"; let o = ""; for (let i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }
+  function _vglOfusca(s) { try { return btoa(unescape(encodeURIComponent(_vglXor(String(s))))); } catch (e) { return ""; } }
+  function _vglDesofusca(s) { try { return _vglXor(decodeURIComponent(escape(atob(String(s))))); } catch (e) { return ""; } }
+  function atheneaCredsAll() { try { return GM_getValue(ATH_CRED_KEY, {}) || {}; } catch (e) { return {}; } }
+  function atheneaCredsGet(docId) {
+    const c = docId && atheneaCredsAll()[String(docId)];
+    if (!c) return null;
+    const u = _vglDesofusca(c.u), p = _vglDesofusca(c.p);
+    return (u && p) ? { u, p } : null;
+  }
+  function atheneaCredsSet(docId, u, p) {
+    if (!docId || !u || !p) return false;
+    const all = atheneaCredsAll();
+    all[String(docId)] = { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() };
+    try { GM_setValue(ATH_CRED_KEY, all); delete atheneaLoginBloqueada[String(docId)]; return true; } catch (e) { return false; }
+  }
+  function atheneaCredsClear(docId) {
+    const all = atheneaCredsAll();
+    if (docId) delete all[String(docId)];
+    try { GM_setValue(ATH_CRED_KEY, docId ? all : {}); } catch (e) {}
+    if (docId) delete atheneaLoginBloqueada[String(docId)];
+  }
+  // Intenta iniciar sesión en Athenea con las credenciales del médico EN TURNO.
+  // Devuelve true solo si la sesión quedó activa. Distingue fallo de RED (transitorio,
+  // se reintentará) de rechazo de CREDENCIALES (se marca y NO se reintenta solo).
+  async function atheneaAutoLogin() {
+    if (!S.atheneaAutoLogin) return false;
+    const docId = state.activeDoctor && state.activeDoctor.id;
+    if (!docId || atheneaLoginBloqueada[String(docId)] || atheneaLoginEnVuelo) return false;
+    const cred = atheneaCredsGet(docId);
+    if (!cred) return false;
+    atheneaLoginEnVuelo = true;
+    try {
+      const BASE = "https://medicosviva1a.atheneasoluciones.com";
+      const g = await _gmReq({ method: "GET", url: BASE + "/Account/Login" });
+      if (g.status !== 200) return false;                       // error transitorio: no se bloquea
+      const token = _atheneaToken(g.responseText);
+      if (!token) return false;
+      // Contrato confirmado en HAR real: application/x-www-form-urlencoded; éxito = 302 a /Resultados.
+      // La contraseña NUNCA se registra en consola ni en telemetría.
+      const cuerpo = "Usuario=" + encodeURIComponent(cred.u) + "&Password=" + encodeURIComponent(cred.p) + "&__RequestVerificationToken=" + encodeURIComponent(token);
+      const r = await _gmReq({ method: "POST", url: BASE + "/Account/Login", headers: { "Content-Type": "application/x-www-form-urlencoded" }, data: cuerpo });
+      const ok = r.status >= 200 && r.status < 400 && !_atheneaPareceLogin(r.responseText || "");
+      if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (credenciales del médico en turno)."); return true; }
+      // Rechazo de credenciales (o el portal cambió): se MARCA y NO se reintenta solo.
+      atheneaLoginBloqueada[String(docId)] = true;
+      notify("AMBAR", "🔑 Athenea: revisa tus credenciales",
+        "El inicio de sesión automático en Athenea falló (usuario/contraseña incorrectos o el portal cambió). Vuelve a guardarlas en Ajustes o inicia sesión a mano. No se reintenta solo para no bloquear tu cuenta.",
+        false, "athenea_autologin_fallo|" + docId + "|" + todayStamp());
+      return false;
+    } catch (e) {
+      console.warn("[Vigilante Athenea] auto-login: error de red (reintenta en el próximo latido):", e && e.message);
+      return false;                                             // error de RED, no de credenciales: no se bloquea
+    } finally { atheneaLoginEnVuelo = false; }
+  }
+
   // v12.3.5 — LATIDO DE SESIÓN. Reportado en uso real: la sesión de Athenea caduca en
   // pocos minutos y el médico tenía que volver a iniciar sesión constantemente para que
   // los laboratorios automáticos funcionaran.
@@ -688,7 +769,11 @@
   async function atheneaKeepAlive() {
     try {
       const r = await _gmReq({ method: "GET", url: "https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente" });
-      const viva = r.status === 200 && !_atheneaPareceLogin(r.responseText);
+      let viva = r.status === 200 && !_atheneaPareceLogin(r.responseText);
+      // v12.3.16 — Si la sesión cayó y el médico configuró el auto-inicio, se intenta ANTES
+      // de molestarlo: el login corre sobre BusquedaPaciente de nuevo tras loguear, así que
+      // basta con marcar viva=true (atheneaAutoLogin ya verificó que la sesión quedó activa).
+      if (!viva && S.atheneaAutoLogin && await atheneaAutoLogin()) viva = true;
       if (viva !== atheneaSesionViva) {
         console.log("[Vigilante Athenea] latido — sesión " + (viva ? "ACTIVA (mantenida)" : "NO activa"));
         // v12.3.15 — Al REVIVIR la sesión (el médico acaba de iniciar sesión en la otra
@@ -936,7 +1021,28 @@
                   // resucitar una cookie que ya no existe, así que en vez de un aviso sin
                   // salida se ofrece abrir el portal aquí mismo; al volver, el latido en
                   // cadencia rápida detecta la sesión nueva y el robot reintenta solo.
-                  if (confirm("🔑 La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios."
+                  // v12.3.16 — Si el médico configuró el auto-inicio, se intenta aquí mismo y
+                  // se reintenta la búsqueda una vez, sin abrir otra pestaña ni pedir nada.
+                  const idm = state.activeDoctor && state.activeDoctor.id;
+                  if (S.atheneaAutoLogin && atheneaCredsGet(idm)) {
+                      btn.innerHTML = "🔑 Iniciando sesión en Athenea…";
+                      const okl = await atheneaAutoLogin();
+                      if (okl) {
+                          btn.innerHTML = "⏳ Reintentando…";
+                          const labs2 = await getAtheneaLabsAuto(docId);
+                          if (labs2 && labs2.length > 0) {
+                              const r2 = injectLabsIntoCronicos(labs2);
+                              alert("✅ Sesión iniciada y " + labs2.length + " analitos encontrados: " + r2.count + " casillas diligenciadas en la Ruta Crónicos."
+                                + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
+                                + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
+                                + "\n\nRevise las fechas de toma antes de guardar la historia.");
+                          } else {
+                              alert("Sesión de Athenea iniciada, pero no se encontraron laboratorios para el paciente (cédula " + docId + ").");
+                          }
+                      } else {
+                          alert("❌ No se pudo iniciar sesión automáticamente en Athenea. Revise sus credenciales en Ajustes o inicie sesión a mano.");
+                      }
+                  } else if (confirm("🔑 La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios."
                     + "\n\n¿Abrir Athenea ahora para iniciar sesión?"
                     + "\n\nAl volver a esta pestaña, el Vigilante reintentará solo en menos de un minuto.")) {
                       window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank");
@@ -1081,6 +1187,7 @@
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
+    atheneaAutoLogin: false,  // v12.3.16 — OPT-IN: iniciar sesión solo en Athenea con credenciales guardadas por médico (apagado de fábrica)
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
@@ -7146,6 +7253,11 @@
     const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
+    // v12.3.16 — Estado de las credenciales de Athenea para el médico en turno (sin exponer valores).
+    const _athId = state.activeDoctor && state.activeDoctor.id;
+    const athEstado = !_athId
+      ? "<b>Primero abre 'Citas del día' una vez para que el panel detecte tu ID de médico.</b>"
+      : (atheneaCredsGet(_athId) ? "<b>✅ Credenciales guardadas para tu ID.</b>" : "<b>Sin credenciales guardadas todavía.</b>");
     // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
     // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
@@ -7170,6 +7282,15 @@
         <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
+      </div>
+      <!-- v12.3.16 — Auto-inicio de sesión en Athenea (OPT-IN, por médico). -->
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Athenea</div>
+        <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">⚠️ Guarda tu usuario y contraseña de Athenea EN ESTE EQUIPO para reconectar solo cuando la sesión caiga. El almacén del navegador NO está cifrado: úsalo únicamente en un equipo personal, nunca en uno compartido. Tus credenciales se guardan por médico y solo se usan cuando TÚ estás en sesión. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin === true)}</div>
+        <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">Se guarda solo en este navegador, asociado a tu ID de médico.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
+        <div class="vgl-fld"><label>Contraseña de Athenea<span class="vgl-hint">No se muestra ni se registra en ningún log. Déjala vacía si solo quieres cambiar el usuario.</span></label><input type="password" id="c-athpass" autocomplete="new-password" placeholder="••••••••" value=""></div>
+        <div class="vgl-fld"><label>Guardar credenciales<span class="vgl-hint">Guárdalas para el médico en turno (${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "sin detectar"))}).</span></label><button class="vgl-btn" id="c-athsave">Guardar</button></div>
+        <div class="vgl-fld"><label>Borrar mis credenciales<span class="vgl-hint">Elimina de este equipo las credenciales de Athenea guardadas para tu ID.</span></label><button class="vgl-btn off" id="c-athclear">Borrar</button></div>
       </div>
       <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
       <div class="vgl-grp">
@@ -7221,6 +7342,34 @@
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
+    // v12.3.16 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
+    // comportamiento; las credenciales se guardan aparte, por ID de médico, y nunca se
+    // registran en consola ni en telemetría.
+    bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
+    const athSave = q("#c-athsave");
+    if (athSave) athSave.addEventListener("click", () => {
+      const id = state.activeDoctor && state.activeDoctor.id;
+      if (!id) { alert("Aún no se detecta tu ID de médico. Abre 'Citas del día' una vez para que el panel te identifique y vuelve a guardar."); return; }
+      const uNode = q("#c-athuser"), pNode = q("#c-athpass");
+      const u = (uNode && uNode.value || "").trim();
+      const p = (pNode && pNode.value) || "";
+      if (!u || !p) { alert("Escribe tu usuario y contraseña de Athenea antes de guardar."); return; }
+      const okg = atheneaCredsSet(id, u, p);
+      if (pNode) pNode.value = "";   // no dejar la contraseña en el DOM tras guardar
+      alert(okg
+        ? "✅ Credenciales de Athenea guardadas SOLO en este equipo, para tu ID de médico. El inicio de sesión automático se activará cuando la sesión de Athenea caiga."
+        : "❌ No se pudieron guardar las credenciales.");
+      renderSettings();
+    });
+    const athClear = q("#c-athclear");
+    if (athClear) athClear.addEventListener("click", () => {
+      const id = state.activeDoctor && state.activeDoctor.id;
+      if (id && !atheneaCredsGet(id)) { alert("No hay credenciales guardadas para tu ID."); return; }
+      if (!confirm("¿Borrar de este equipo tus credenciales de Athenea guardadas?")) return;
+      atheneaCredsClear(id || null);
+      alert("🗑️ Credenciales de Athenea borradas de este equipo.");
+      renderSettings();
+    });
     bind("#c-medid", "medicoId", (n) => parseInt(n.value, 10) || 0);
     bind("#c-mednom", "medicoNombre", (n) => String(n.value || "").trim());
     // v12.0.0 — El deslizador de Volumen se pintaba pero NO estaba enlazado a nada: moverlo
