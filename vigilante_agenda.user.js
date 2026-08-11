@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.12
+// @version      12.3.13
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.12";
+  const VERSION = "12.3.13";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -522,6 +522,10 @@
                   url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
                   headers: { "Content-Type": "application/json", "Accept": "application/json" },
                   data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
+                  // v12.3.12 — sin `timeout`, el ontimeout de abajo era código muerto: una
+                  // conexión que Athenea aceptara y nunca respondiera dejaba esta promesa
+                  // colgada para siempre. 15 s, el mismo margen que usa _gmReq en este puente.
+                  timeout: 15000,
                   onload: function (response) {
                       try {
                           if (response.status === 200) {
@@ -2861,35 +2865,11 @@
       const c = COLORS[color] || COLORS.AZUL;
       ov = document.createElement("div"); ov.id = "vgl-modal";
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<style>
-          /* Frost sobre Everest + entrada spring; todo se apaga en .perf y reduced-motion */
-          #vgl-modal{backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)}
-          @keyframes vglModalPop{from{opacity:0;transform:translateY(24px) scale(.92)}to{opacity:1;transform:none}}
-          @keyframes vglModalBeacon{
-            0%,100%{box-shadow:0 0 0 0 rgba(var(--ac-rgb),.50),0 0 22px rgba(var(--ac-rgb),.85)}
-            50%{box-shadow:0 0 0 14px rgba(var(--ac-rgb),0),0 0 30px rgba(var(--ac-rgb),.95)}
-          }
-          #vgl-modal .vgl-modal-card{
-            animation:vglModalPop .44s var(--spring) both;
-            background:linear-gradient(165deg,rgba(var(--ac-rgb),.16),rgba(0,0,0,0) 55%),var(--bg-solid);
-            box-shadow:var(--shadow-float),0 0 90px rgba(var(--ac-rgb),.22),var(--glow-edge);
-          }
-          #vgl-modal .vgl-modal-dot{animation:vglModalBeacon 1.6s ease-in-out infinite}
-          #vgl-modal .vgl-modal-t{font-size:22px;letter-spacing:.3px}
-          #vgl-modal .vgl-modal-b{font-size:15px}
-          #vgl-modal .vgl-modal-ok:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
-          #vgl-root.perf~#vgl-modal,#vgl-root.perf~#vgl-modal *{
-            animation:none !important;transition:none !important;
-            backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
-            text-shadow:none !important;
-          }
-          #vgl-root.perf~#vgl-modal .vgl-modal-card{box-shadow:0 0 0 1px rgba(var(--ac-rgb),.55),0 16px 44px rgba(0,0,0,.50) !important}
-          #vgl-root.perf~#vgl-modal .vgl-modal-dot,
-          #vgl-root.perf~#vgl-modal .vgl-modal-ok{box-shadow:none !important}
-          @media (prefers-reduced-motion:reduce){
-            #vgl-modal,#vgl-modal *{animation:none !important;transition:none !important}
-          }
-        </style><div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);border-color:rgba(var(--ac-rgb),.60)">
+      // [v12.3.13] El CSS estático de este cartel vive al final de la hoja maestra de buildOverlay()
+      // (se inyecta UNA vez, no en cada alerta). El único valor dinámico —el color del estado— entra
+      // aquí como custom property inline (--ac / --ac-rgb) sobre la tarjeta; las reglas de la hoja
+      // maestra lo consumen con var(), de modo que el estilo computado es idéntico al de antes.
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);border-color:rgba(var(--ac-rgb),.60)">
           <div class="vgl-modal-dot" style="background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85)"></div>
           <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
           <button class="vgl-modal-ok" style="background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35)">Entendido</button>
@@ -2915,32 +2895,9 @@
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
       if (isLight()) ov.classList.add("light");
       const chips = actividades.map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
-      ov.innerHTML = `<style>
-          /* Frost + entrada spring; jerarquía: el nombre del paciente manda. Apagado en .perf/reduced-motion */
-          #vgl-pym-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
-          @keyframes vglPymPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
-          #vgl-pym-modal .vgl-pym-card{animation:vglPymPop .42s var(--spring) both}
-          #vgl-pym-modal .vgl-pym-chip{transition:transform .18s var(--spring),box-shadow .18s var(--ease-out),background .18s var(--ease-out)}
-          #vgl-pym-modal .vgl-pym-chip:hover{
-            transform:translateY(-2px) scale(1.04);
-            background:rgba(var(--rgb-recordatorio),.22);
-            box-shadow:0 4px 14px rgba(var(--rgb-recordatorio),.28);
-          }
-          #vgl-pym-modal .vgl-pym-ok:focus-visible{outline:2px solid var(--c-recordatorio);outline-offset:3px}
-          #vgl-root.perf~#vgl-pym-modal,#vgl-root.perf~#vgl-pym-modal *{
-            animation:none !important;transition:none !important;
-            backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
-            text-shadow:none !important;
-          }
-          #vgl-root.perf~#vgl-pym-modal .vgl-pym-card{box-shadow:0 0 0 1px rgba(var(--rgb-recordatorio),.45),0 16px 44px rgba(0,0,0,.50) !important}
-          #vgl-root.perf~#vgl-pym-modal .vgl-pym-ic,
-          #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip,
-          #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip:hover,
-          #vgl-root.perf~#vgl-pym-modal .vgl-pym-ok{box-shadow:none !important;transform:none !important}
-          @media (prefers-reduced-motion:reduce){
-            #vgl-pym-modal,#vgl-pym-modal *{animation:none !important;transition:none !important}
-          }
-        </style><div class="vgl-pym-card">
+      // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
+      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
+      ov.innerHTML = `<div class="vgl-pym-card">
           <div class="vgl-pym-ic" style="text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)">🩺</div>
           <div class="vgl-pym-t" style="font-size:12.5px;font-weight:800;color:var(--c-recordatorio);letter-spacing:1.1px;text-transform:uppercase">Actividades preventivas pendientes</div>
           <div class="vgl-pym-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)"></div>
@@ -2965,32 +2922,9 @@
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pes-modal";
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<style>
-          /* Frost + entrada spring + latido del icono; jerarquía: nombre del paciente arriba de todo. Apagado en .perf/reduced-motion */
-          #vgl-pes-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
-          @keyframes vglPesPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
-          @keyframes vglPesBeat{
-            0%,100%{transform:scale(1)}
-            12%{transform:scale(1.14)}
-            24%{transform:scale(1)}
-            36%{transform:scale(1.08)}
-            48%{transform:scale(1)}
-          }
-          #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
-          #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
-          #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
-          #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
-            animation:none !important;transition:none !important;
-            backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
-            text-shadow:none !important;
-          }
-          #vgl-root.perf~#vgl-pes-modal .vgl-pes-card{box-shadow:0 0 0 1px rgba(var(--rgb-pes),.45),0 16px 44px rgba(0,0,0,.50) !important}
-          #vgl-root.perf~#vgl-pes-modal .vgl-pes-ic,
-          #vgl-root.perf~#vgl-pes-modal .vgl-pes-ok{box-shadow:none !important;transform:none !important}
-          @media (prefers-reduced-motion:reduce){
-            #vgl-pes-modal,#vgl-pes-modal *{animation:none !important;transition:none !important}
-          }
-        </style><div class="vgl-pes-card">
+      // [v12.3.13] El CSS de esta alerta vive al final de la hoja maestra de buildOverlay():
+      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
+      ov.innerHTML = `<div class="vgl-pes-card">
           <div class="vgl-pes-ic" style="text-shadow:0 0 14px rgba(var(--rgb-pes),.45)">🫀</div>
           <div class="vgl-pes-t" style="font-size:12.5px;font-weight:800;color:var(--c-pes);letter-spacing:1.1px;text-transform:uppercase">Prioridad de Atención: Riesgo Cardiovascular</div>
           <div class="vgl-pes-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)"></div>
@@ -3089,20 +3023,12 @@
       const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
       const icon = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" }[color] || "🛡️";
       const t = document.createElement("div"); t.className = "vgl-toast";
-      t.innerHTML = `<style>
-        /* Apagado total de efectos en modo rendimiento (#vgl-root precede a #vgl-toasts en body) */
-        #vgl-root.perf~#vgl-toasts .vgl-toast,#vgl-root.perf~#vgl-toasts .vgl-toast *{
-          animation:none !important;transition:none !important;
-          backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
-          text-shadow:none !important;
-        }
-        #vgl-root.perf~#vgl-toasts .vgl-toast{
-          background:var(--toast);
-          box-shadow:0 0 0 1px var(--edge),0 10px 26px rgba(0,0,0,.45);
-        }
-        #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-rail,
-        #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-ic{box-shadow:none !important}
-      </style><i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);flex:0 0 5px;align-self:stretch;border-radius:var(--r-pill);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:0 0 12px rgba(var(--tk),.70),0 0 3px rgba(var(--tk),.90)"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25)"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});font-size:14.5px;letter-spacing:.2px;text-shadow:0 0 16px rgba(var(--tk),.35)"></div><div class="vgl-toast-b" style="font-size:12.5px"></div></div><span class="vgl-toast-x">×</span>`;
+      // [v12.3.13] El CSS estático del toast vive al final de la hoja maestra de buildOverlay()
+      // (antes CADA toast traía su propia copia y el motor la re-parseaba por aviso). El único
+      // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
+      // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
+      // de modo que el estilo computado es idéntico al de antes.
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);flex:0 0 5px;align-self:stretch;border-radius:var(--r-pill);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:0 0 12px rgba(var(--tk),.70),0 0 3px rgba(var(--tk),.90)"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25)"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});font-size:14.5px;letter-spacing:.2px;text-shadow:0 0 16px rgba(var(--tk),.35)"></div><div class="vgl-toast-b" style="font-size:12.5px"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
@@ -3385,10 +3311,10 @@
       const r = lista[i] || {}, min = parseHoraMin(r[c.hora]);
       if (min != null) buenas++;
       citas.push({
-        hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] == null ? "" : r[c.hora])),
-        doc_id: extractDoc(String(c.doc ? (r[c.doc] == null ? "" : r[c.doc]) : "")),
+        hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] ?? "")),
+        doc_id: extractDoc(String(c.doc ? (r[c.doc] ?? "") : "")),
         nombre: limpio(c.nombres.map((k) => r[k]).filter(Boolean).join(" ")) || "Paciente Everest",
-        modalidad: "", estado: limpio(String(r[c.estado] == null ? "" : r[c.estado])) || "Pendiente", index: i,
+        modalidad: "", estado: limpio(String(r[c.estado] ?? "")) || "Pendiente", index: i,
       });
     }
     // GUARDAS. Si algo no cuadra NO se usa el API: más vale seguir por el camino
@@ -4661,6 +4587,511 @@
       #vgl-agendar-modal.light .vgl-ord-cups {
         color: var(--fg2);
       }
+
+      /* ==== [v12.3.13] CSS del modal de laboratorios — antes inline en openLaboratoriosModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-labs-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:14px}
+      #vgl-labs-modal .vgl-labs-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-verde);background:rgba(var(--rgb-verde),.12);
+        border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
+      }
+      #vgl-labs-modal .vgl-labs-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
+      }
+      #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
+      #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde)}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde)}
+
+      /* ---- Celda bento de fuente + botón portal ---- */
+      #vgl-labs-modal .vgl-labs-srcbar{
+        display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;
+        background:linear-gradient(165deg,rgba(var(--rgb-azul),.10),rgba(var(--rgb-azul),.02) 70%),var(--bg2);
+        border:1px solid rgba(var(--rgb-azul),.28);border-radius:var(--r-card);
+        padding:12px 16px;box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:12.5px;color:var(--fg2);line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
+      #vgl-labs-modal .vgl-labs-portal{
+        text-decoration:none;display:inline-flex;align-items:center;gap:7px;
+        background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
+        color:var(--c-azul);font-size:12.5px;font-weight:800;
+        padding:9px 16px;border-radius:var(--r-pill);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
+      }
+      #vgl-labs-modal .vgl-labs-portal:hover{transform:translateY(-1px);filter:brightness(1.08)}
+
+      /* ---- Contenedor de resultados ---- */
+      #vgl-labs-modal #vgl-labs-content{background:rgba(0,0,0,.22);border-color:var(--line);padding:0 10px 10px}
+      #vgl-labs-modal.light #vgl-labs-content{background:rgba(15,23,42,.035)}
+      #vgl-labs-modal .vgl-agm-loading{display:flex;align-items:center;gap:10px;padding:18px 8px;font-size:13px;animation:vglLabsPulse 1.6s ease-in-out infinite}
+      @keyframes vglLabsPulse{0%,100%{opacity:.55}50%{opacity:1}}
+      #vgl-labs-modal .vgl-labs-empty{
+        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2);
+        border-radius:var(--r-card);padding:22px 20px;text-align:center;
+        font-size:13px;font-weight:600;line-height:1.6;box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
+
+      /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
+      #vgl-labs-modal .vgl-labs-table{width:100%;border-collapse:separate;border-spacing:0 7px;text-align:left}
+      #vgl-labs-modal .vgl-labs-table thead th{
+        position:sticky;top:0;z-index:2;background:var(--bg-solid);
+        font-size:10.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
+        color:var(--fg3);text-align:left;padding:12px 12px 9px;
+        border-bottom:1px solid var(--edge)
+      }
+      #vgl-labs-modal .vgl-labs-tr td{
+        background:var(--bg2);padding:11px 12px;vertical-align:middle;
+        transition:background-color .15s var(--ease-out)
+      }
+      #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
+      #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
+      #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
+      #vgl-labs-modal .vgl-labs-date{font-size:11.5px;color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-exam{font-size:13px;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-val{
+        font-size:15.5px;font-weight:900;letter-spacing:-.2px;color:var(--fg);
+        font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:90px
+      }
+      #vgl-labs-modal .vgl-labs-ref{font-size:11px;color:var(--fg3);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-src{
+        display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+        font-size:10.5px;font-weight:800;letter-spacing:.4px;
+        padding:4px 10px;border-radius:var(--r-pill);
+        background:var(--bg3);color:var(--fg2);box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal .vgl-labs-src.athenea{
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
+      }
+
+      /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert:hover td{background:rgba(var(--rgb-rojo),.15)}
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td:first-child{box-shadow:inset 3px 0 0 var(--c-rojo)}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo);text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
+      #vgl-labs-modal.light .vgl-labs-alert .vgl-labs-val{text-shadow:none}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val::before{content:"▲ ";font-size:10px;vertical-align:2px}
+
+      @media (prefers-reduced-motion:reduce){
+        #vgl-labs-modal,#vgl-labs-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-labs-modal,
+      #vgl-root.perf~#vgl-labs-modal *,
+      #vgl-root.perf~#vgl-labs-modal *::before,
+      #vgl-root.perf~#vgl-labs-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-labs-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-labs-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-srcbar,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-src,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-empty,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-kicker,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal{box-shadow:none}
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal:hover{transform:none}
+
+      /* ==== [v12.3.13] CSS del modal de agendamiento — antes inline en openAgendamientoModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Bento grid (micro-grilla asimétrica 12 col) ---- */
+      #vgl-agendar-modal .vgl-agm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
+      #vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}
+      #vgl-agendar-modal .vgl-agm-c6{grid-column:span 6}
+      #vgl-agendar-modal .vgl-agm-c7{grid-column:span 7}
+      #vgl-agendar-modal .vgl-agm-c12{grid-column:span 12}
+      @media (max-width:640px){
+        #vgl-agendar-modal .vgl-agm-c5,#vgl-agendar-modal .vgl-agm-c6,#vgl-agendar-modal .vgl-agm-c7{grid-column:span 12}
+      }
+      #vgl-agendar-modal .vgl-agm-cell{
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 62%),var(--bg2);
+        border:1px solid var(--line);border-radius:var(--r-card);padding:16px;min-width:0;
+        box-shadow:var(--glow-edge);
+        transition:border-color .18s var(--ease-out),box-shadow .22s var(--ease-out),transform .22s var(--spring)
+      }
+      #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
+      #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
+      #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
+      #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
+
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
+      #vgl-agendar-modal .vgl-agm-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-azul);background:rgba(var(--rgb-azul),.12);
+        border:1px solid rgba(var(--rgb-azul),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-azul),.10)
+      }
+      #vgl-agendar-modal .vgl-agm-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-azul),.25)
+      }
+      #vgl-agendar-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-agendar-modal .vgl-agm-sub{margin-top:5px}
+
+      /* ---- Pasos numerados como fichas ---- */
+      #vgl-agendar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+      #vgl-agendar-modal .vgl-agm-step{
+        flex:none;display:inline-flex;align-items:center;justify-content:center;
+        width:21px;height:21px;border-radius:var(--r-pill);
+        font-size:11px;font-weight:900;color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.15);border:1px solid rgba(var(--rgb-azul),.42);
+        box-shadow:0 0 12px rgba(var(--rgb-azul),.14)
+      }
+
+      /* ---- Horarios como grilla de losetas ---- */
+      #vgl-agendar-modal .vgl-agm-slots{
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;
+        max-height:224px;padding:12px;border-radius:var(--r-field)
+      }
+      #vgl-agendar-modal .vgl-agm-slots .vgl-agm-loading,
+      #vgl-agendar-modal .vgl-agm-slots .vgl-agm-err{grid-column:1/-1}
+      #vgl-agendar-modal .vgl-agm-sbtn{
+        border-radius:var(--r-field);padding:9px 11px;min-height:38px;
+        white-space:normal;line-height:1.4;text-align:center
+      }
+      #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
+
+      /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
+      #vgl-agendar-modal .vgl-agm-cell-sms{
+        background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
+        border-color:rgba(var(--rgb-azul),.36);
+        box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
+      #vgl-agendar-modal .vgl-agm-cell-lab{
+        background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
+        border-color:rgba(var(--rgb-verde),.34);
+        box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
+      #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
+      #vgl-agendar-modal .vgl-agm-fieldrow{
+        display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+        margin-top:8px;font-size:12px;color:var(--fg2)
+      }
+      #vgl-agendar-modal .vgl-agm-fieldrow>label{
+        flex:none;font-weight:800;font-size:11px;letter-spacing:.6px;
+        text-transform:uppercase;color:var(--c-azul)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
+      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:11.5px;font-style:italic;color:var(--fg3)}
+      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
+      #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
+      #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-check-lbl input[type=checkbox]{accent-color:var(--c-verde)}
+      #vgl-agendar-modal #vgl-agm-obs{border-radius:var(--r-card);padding:13px 15px;min-height:58px}
+
+      /* ---- Pie flotante (sticky glass) ---- */
+      #vgl-agendar-modal .vgl-agm-foot{
+        position:sticky;bottom:10px;z-index:5;
+        margin:18px 2px 2px;padding:12px 14px;
+        background:var(--bg);
+        border:1px solid var(--edge);border-radius:var(--r-card);
+        backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
+        box-shadow:var(--shadow-float)
+      }
+      @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
+        #vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid)}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-agendar-modal,
+      #vgl-root.perf~#vgl-agendar-modal *,
+      #vgl-root.perf~#vgl-agendar-modal *::before,
+      #vgl-root.perf~#vgl-agendar-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-agendar-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell,
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell:hover{box-shadow:none;transform:none}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
+
+      /* ==== [v12.3.13] CSS del modal de ordenamiento PyM — antes inline en openOrdenamientoModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-ordenar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
+      #vgl-ordenar-modal .vgl-agm-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.12);
+        border:1px solid rgba(var(--rgb-morado),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-morado),.10)
+      }
+      #vgl-ordenar-modal .vgl-agm-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-morado),.25)
+      }
+      #vgl-ordenar-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-ordenar-modal .vgl-agm-sub{margin-top:5px}
+
+      /* ---- Rótulo de sección con ficha de conteo ---- */
+      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado)}
+      #vgl-ordenar-modal .vgl-agm-step{
+        flex:none;display:inline-flex;align-items:center;justify-content:center;
+        min-width:21px;height:21px;padding:0 6px;border-radius:var(--r-pill);
+        font-size:11px;font-weight:900;color:var(--c-morado);
+        background:rgba(var(--rgb-morado),.15);border:1px solid rgba(var(--rgb-morado),.42);
+        box-shadow:0 0 12px rgba(var(--rgb-morado),.14)
+      }
+
+      /* ---- Lista de actividades como micro-grilla bento ---- */
+      #vgl-ordenar-modal #vgl-ord-list{
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;
+        align-items:stretch;max-height:340px;overflow-y:auto;padding:4px 4px 8px
+      }
+      #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar{width:6px}
+      #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
+      #vgl-ordenar-modal .vgl-ord-item{
+        height:100%;border-radius:var(--r-card);padding:13px 14px;
+        transition:background .16s var(--ease-out),border-color .16s var(--ease-out),box-shadow .2s var(--ease-out),transform .22s var(--spring)
+      }
+      #vgl-ordenar-modal .vgl-ord-item:hover{
+        border-color:rgba(var(--rgb-morado),.50);box-shadow:var(--shadow-card);transform:translateY(-1px)
+      }
+      /* Marcada para generar => celda respira en VERDE (mismo color del botón primario) */
+      #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked){
+        background:linear-gradient(165deg,rgba(var(--rgb-verde),.14),rgba(var(--rgb-verde),.03) 70%),var(--bg2);
+        border-color:rgba(var(--rgb-verde),.45);
+        box-shadow:var(--glow-edge),0 0 22px rgba(var(--rgb-verde),.10)
+      }
+      #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:disabled){opacity:.55}
+      /* Borde transparente de reserva: cuando el JS pinta el borde rojo de fallo
+         sobre el label, no hay salto de layout */
+      #vgl-ordenar-modal .vgl-ord-label{gap:11px;border:1px solid transparent;border-radius:var(--r-field);padding:1px}
+      #vgl-ordenar-modal .vgl-ord-chk{width:19px;height:19px;accent-color:var(--c-verde)}
+      #vgl-ordenar-modal .vgl-ord-chk:focus-visible{outline:2px solid rgba(var(--rgb-verde),.80);outline-offset:2px;border-radius:4px}
+      #vgl-ordenar-modal .vgl-ord-title{font-size:13.5px;line-height:1.4}
+      #vgl-ordenar-modal .vgl-ord-cie{
+        display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.5px;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-pill);
+        padding:1px 8px;margin-left:2px;white-space:nowrap;vertical-align:1px
+      }
+      /* CUPS como chips pastilla */
+      #vgl-ordenar-modal .vgl-ord-cups{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px}
+      #vgl-ordenar-modal .vgl-ord-cupk{
+        flex:none;font-size:9.5px;font-weight:800;letter-spacing:1.2px;
+        text-transform:uppercase;color:var(--fg3)
+      }
+      #vgl-ordenar-modal .vgl-ord-cup{
+        display:inline-flex;align-items:baseline;gap:5px;min-width:0;
+        font-size:11px;font-weight:600;line-height:1.35;color:var(--fg2);
+        background:var(--bg2);border:1px solid var(--line);
+        border-radius:var(--r-field);padding:2px 9px;box-shadow:var(--glow-edge)
+      }
+      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
+      /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
+      #vgl-ordenar-modal .vgl-ord-sexwarn{
+        font-size:11.5px;font-weight:700;line-height:1.45;
+        color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
+        border:1px solid rgba(var(--rgb-rojo),.40);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+        box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
+      }
+
+      /* ---- Pie flotante (sticky glass) ---- */
+      #vgl-ordenar-modal .vgl-agm-foot{
+        position:sticky;bottom:10px;z-index:5;
+        margin:18px 2px 2px;padding:12px 14px;
+        background:var(--bg);
+        border:1px solid var(--edge);border-radius:var(--r-card);
+        backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
+        box-shadow:var(--shadow-float)
+      }
+      @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
+        #vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid)}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-ordenar-modal,
+      #vgl-root.perf~#vgl-ordenar-modal *,
+      #vgl-root.perf~#vgl-ordenar-modal *::before,
+      #vgl-root.perf~#vgl-ordenar-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-ordenar-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item,
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:hover,
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked),
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-cup{box-shadow:none;transform:none}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-sexwarn{box-shadow:none}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
+
+      /* ==== [v12.3.13] CSS del cartel modal de alerta (bigAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada alerta. El color del estado NO se interpola en el CSS: el elemento raíz del cartel lo fija inline como custom property (--ac / --ac-rgb) y estas reglas lo consumen con var(), así el estilo computado queda idéntico ==== */
+      /* Frost sobre Everest + entrada spring; todo se apaga en .perf y reduced-motion */
+      #vgl-modal{backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)}
+      @keyframes vglModalPop{from{opacity:0;transform:translateY(24px) scale(.92)}to{opacity:1;transform:none}}
+      @keyframes vglModalBeacon{
+        0%,100%{box-shadow:0 0 0 0 rgba(var(--ac-rgb),.50),0 0 22px rgba(var(--ac-rgb),.85)}
+        50%{box-shadow:0 0 0 14px rgba(var(--ac-rgb),0),0 0 30px rgba(var(--ac-rgb),.95)}
+      }
+      #vgl-modal .vgl-modal-card{
+        animation:vglModalPop .44s var(--spring) both;
+        background:linear-gradient(165deg,rgba(var(--ac-rgb),.16),rgba(0,0,0,0) 55%),var(--bg-solid);
+        box-shadow:var(--shadow-float),0 0 90px rgba(var(--ac-rgb),.22),var(--glow-edge);
+      }
+      #vgl-modal .vgl-modal-dot{animation:vglModalBeacon 1.6s ease-in-out infinite}
+      #vgl-modal .vgl-modal-t{font-size:22px;letter-spacing:.3px}
+      #vgl-modal .vgl-modal-b{font-size:15px}
+      #vgl-modal .vgl-modal-ok:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
+      #vgl-root.perf~#vgl-modal,#vgl-root.perf~#vgl-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-modal .vgl-modal-card{box-shadow:0 0 0 1px rgba(var(--ac-rgb),.55),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-modal .vgl-modal-dot,
+      #vgl-root.perf~#vgl-modal .vgl-modal-ok{box-shadow:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-modal,#vgl-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS del recordatorio modal de PyM (pymAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* Frost + entrada spring; jerarquía: el nombre del paciente manda. Apagado en .perf/reduced-motion */
+      #vgl-pym-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
+      @keyframes vglPymPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
+      #vgl-pym-modal .vgl-pym-card{animation:vglPymPop .42s var(--spring) both}
+      #vgl-pym-modal .vgl-pym-chip{transition:transform .18s var(--spring),box-shadow .18s var(--ease-out),background .18s var(--ease-out)}
+      #vgl-pym-modal .vgl-pym-chip:hover{
+        transform:translateY(-2px) scale(1.04);
+        background:rgba(var(--rgb-recordatorio),.22);
+        box-shadow:0 4px 14px rgba(var(--rgb-recordatorio),.28);
+      }
+      #vgl-pym-modal .vgl-pym-ok:focus-visible{outline:2px solid var(--c-recordatorio);outline-offset:3px}
+      #vgl-root.perf~#vgl-pym-modal,#vgl-root.perf~#vgl-pym-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-card{box-shadow:0 0 0 1px rgba(var(--rgb-recordatorio),.45),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-ic,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip:hover,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-ok{box-shadow:none !important;transform:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-pym-modal,#vgl-pym-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS de la alerta de prioridad cardiovascular (abandonoPESAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* Frost + entrada spring + latido del icono; jerarquía: nombre del paciente arriba de todo. Apagado en .perf/reduced-motion */
+      #vgl-pes-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
+      @keyframes vglPesPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
+      @keyframes vglPesBeat{
+        0%,100%{transform:scale(1)}
+        12%{transform:scale(1.14)}
+        24%{transform:scale(1)}
+        36%{transform:scale(1.08)}
+        48%{transform:scale(1)}
+      }
+      #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
+      #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
+      #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-card{box-shadow:0 0 0 1px rgba(var(--rgb-pes),.45),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-ic,
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-ok{box-shadow:none !important;transform:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-pes-modal,#vgl-pes-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS de los avisos toast (_renderToast) — antes inline en CADA toast (una copia por aviso); se movió aquí para inyectarse UNA vez. El color del estado NO se interpola en el CSS: cada pieza del toast lo fija inline como custom property (--tk) y con var(--c-*) directo, así el estilo computado queda idéntico ==== */
+      /* Apagado total de efectos en modo rendimiento (#vgl-root precede a #vgl-toasts en body) */
+      #vgl-root.perf~#vgl-toasts .vgl-toast,#vgl-root.perf~#vgl-toasts .vgl-toast *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-toasts .vgl-toast{
+        background:var(--toast);
+        box-shadow:0 0 0 1px var(--edge),0 10px 26px rgba(0,0,0,.45);
+      }
+      #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-rail,
+      #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-ic{box-shadow:none !important}
+
+      /* ==== [v12.3.13] CSS del Resumen del turno — antes inline en renderResumen(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura de la hoja ==== */
+      /* [HUD-2026] Resumen del turno — bento de estadísticas. Scope estricto: #vgl-root #vgl-sheet. */
+      #vgl-root #vgl-sheet .vgl-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+      #vgl-root #vgl-sheet .vgl-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px 10px 15px;border-radius:var(--r-card);background:linear-gradient(165deg,rgba(var(--kpi-rgb),.16),rgba(var(--kpi-rgb),.04) 72%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.22),var(--shadow-card);transition:transform .24s var(--spring),box-shadow .24s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-kpi:hover{transform:translateY(-2px);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.36),0 10px 26px rgba(var(--kpi-rgb),.13),var(--shadow-card-hover)}
+      #vgl-root #vgl-sheet .vgl-kpi-rojo{--kpi-rgb:var(--rgb-rojo)}
+      #vgl-root #vgl-sheet .vgl-kpi-ambar{--kpi-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-kpi-verde{--kpi-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-kpi .vgl-n{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.5px;color:rgb(var(--kpi-rgb));text-shadow:0 0 18px rgba(var(--kpi-rgb),.35)}
+      #vgl-root #vgl-sheet .vgl-kpi .vgl-l{color:var(--fg2);letter-spacing:.6px;margin-top:7px}
+      #vgl-root #vgl-sheet .vgl-tile-chart{padding:14px 16px 12px}
+      #vgl-root #vgl-sheet .vgl-chart-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--fg3);font-weight:700;letter-spacing:.4px}
+      #vgl-root #vgl-sheet .vgl-leg{display:flex;gap:12px;flex-wrap:wrap}
+      #vgl-root #vgl-sheet .vgl-leg-i{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--fg2);letter-spacing:0}
+      #vgl-root #vgl-sheet .vgl-leg-i i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--lg-rgb));box-shadow:0 0 8px rgba(var(--lg-rgb),.55)}
+      #vgl-root #vgl-sheet .vgl-lg-verde{--lg-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-lg-ambar{--lg-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-lg-rojo{--lg-rgb:var(--rgb-rojo)}
+      #vgl-root #vgl-sheet .vgl-bars{display:flex;align-items:flex-end;gap:8px;height:84px;margin-top:12px}
+      #vgl-root #vgl-sheet .vgl-bar{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%;padding:4px 2px 3px;border-radius:12px;transition:background .18s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-bar:hover{background:var(--bg2)}
+      #vgl-root #vgl-sheet .vgl-bar:last-child .vgl-lb{color:var(--fg)}
+      #vgl-root #vgl-sheet .vgl-col{display:flex;flex-direction:column-reverse;width:20px;gap:2px}
+      #vgl-root #vgl-sheet .vgl-col:empty::after{content:"";display:block;height:3px;border-radius:2px;background:var(--bg3)}
+      #vgl-root #vgl-sheet .vgl-seg{width:100%;border-radius:5px;min-height:2px}
+      #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:15px;font-weight:800;color:var(--fg);background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
+      /* [v12.3.13] .vgl-fld tiene métricas DISTINTAS en Resumen (11px, gap heredado 12px) y en Ajustes (12px, gap 14px).
+         Antes nunca convivían (cada hoja traía su bloque de estilos y solo existía uno en el DOM); ya consolidadas en esta
+         hoja única, la regla posterior pisaría a la anterior. El :has() reproduce esa exclusividad: solo aplica la regla
+         de la hoja que está realmente montada (.vgl-kpis solo existe en Resumen, .vgl-set-cap solo en Ajustes). */
+      #vgl-root #vgl-sheet:has(.vgl-kpis) .vgl-fld{margin:0 -8px;padding:11px 8px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
+      #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
+      #vgl-root.perf #vgl-sheet .vgl-kpi,#vgl-root.perf #vgl-sheet .vgl-kpi:hover{transform:none;box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.25)}
+      #vgl-root.perf #vgl-sheet .vgl-seg{box-shadow:none!important}
+      #vgl-root.perf #vgl-sheet .vgl-leg-i i,#vgl-root.perf #vgl-sheet .vgl-count{box-shadow:none}
+      @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}#vgl-root #vgl-sheet .vgl-kpi:hover{transform:none}}
+
+      /* ==== [v12.3.13] CSS de Ajustes — antes inline en renderSettings(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura de la hoja ==== */
+      /* [HUD-2026] Ajustes — celdas claras + switches grandes. Scope estricto: #vgl-root #vgl-sheet. */
+      #vgl-root #vgl-sheet .vgl-set-cap{display:flex;align-items:center;gap:8px;padding:12px 0 7px;font-size:12px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:var(--fg3)}
+      #vgl-root #vgl-sheet .vgl-set-cap i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--cap-rgb));box-shadow:0 0 10px rgba(var(--cap-rgb),.55)}
+      #vgl-root #vgl-sheet .vgl-cap-azul{--cap-rgb:var(--rgb-azul)}
+      #vgl-root #vgl-sheet .vgl-cap-ambar{--cap-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-cap-verde{--cap-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-cap-recordatorio{--cap-rgb:var(--rgb-recordatorio)}
+      #vgl-root #vgl-sheet .vgl-cap-morado{--cap-rgb:var(--rgb-morado)}
+      /* [v12.3.13] Mismo caso que arriba: la variante de .vgl-fld de Ajustes solo aplica cuando la hoja montada es Ajustes */
+      #vgl-root #vgl-sheet:has(.vgl-set-cap) .vgl-fld{margin:0 -8px;padding:12px 8px;gap:14px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
+      #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
+      #vgl-root #vgl-sheet .vgl-sw{width:54px;height:32px}
+      #vgl-root #vgl-sheet .vgl-sw i:after{width:26px;height:26px;top:3px;left:3px}
+      #vgl-root #vgl-sheet .vgl-sw input:checked + i:after{transform:translateX(22px)}
+      #vgl-root #vgl-sheet .vgl-fld input[type=range]{accent-color:var(--c-azul);width:180px;max-width:180px;height:28px;cursor:pointer;background:transparent;border:0;box-shadow:none;padding:0}
+      #vgl-root #vgl-sheet .vgl-fld input:disabled{opacity:.55;cursor:not-allowed}
+      #vgl-root #vgl-sheet .vgl-grp-tec{background:linear-gradient(170deg,rgba(var(--rgb-morado),.07),rgba(var(--rgb-morado),0) 55%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--rgb-morado),.16),var(--shadow-card)}
+      #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
+      #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
+      @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -5383,127 +5814,16 @@
 
     const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
 
-    // [UI-CSS] HUD Espacial 2026 — placa de laboratorios. El <style> vive DENTRO del modal
-    // (muere con él en closeMod) y CADA selector está anclado a #vgl-labs-modal. Modo
-    // rendimiento: el modal cuelga de document.body (fuera de #vgl-root), así que los
-    // efectos pesados nuevos se apagan con el combinador de hermanos
-    // #vgl-root.perf ~ #vgl-labs-modal (#vgl-root se inserta en body ANTES que el modal).
+    // [UI-CSS] HUD Espacial 2026 — placa de laboratorios. Desde v12.3.13 el CSS de este
+    // modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez en
+    // document.head: antes iba en un <style> inline aquí dentro del innerHTML y el motor
+    // lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
+    // CADA selector sigue anclado a #vgl-labs-modal, así que nada se fuga fuera del modal
+    // aunque la hoja sea global. Modo rendimiento: el modal cuelga de document.body
+    // (fuera de #vgl-root), así que los efectos pesados nuevos se apagan con el
+    // combinador de hermanos #vgl-root.perf ~ #vgl-labs-modal (#vgl-root se inserta en
+    // body ANTES que el modal).
     modal.innerHTML = `
-      <style>
-        /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
-        #vgl-labs-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:14px}
-        #vgl-labs-modal .vgl-labs-kicker{
-          display:inline-flex;align-items:center;gap:7px;
-          font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-          color:var(--c-verde);background:rgba(var(--rgb-verde),.12);
-          border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
-          padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
-        }
-        #vgl-labs-modal .vgl-labs-patient{
-          font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
-          color:var(--fg);overflow-wrap:anywhere;
-          text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
-        }
-        #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
-        #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
-        #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde)}
-        #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde)}
-
-        /* ---- Celda bento de fuente + botón portal ---- */
-        #vgl-labs-modal .vgl-labs-srcbar{
-          display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;
-          background:linear-gradient(165deg,rgba(var(--rgb-azul),.10),rgba(var(--rgb-azul),.02) 70%),var(--bg2);
-          border:1px solid rgba(var(--rgb-azul),.28);border-radius:var(--r-card);
-          padding:12px 16px;box-shadow:var(--glow-edge)
-        }
-        #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-        #vgl-labs-modal .vgl-labs-srclbl{font-size:12.5px;color:var(--fg2);line-height:1.5;min-width:0}
-        #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
-        #vgl-labs-modal .vgl-labs-portal{
-          text-decoration:none;display:inline-flex;align-items:center;gap:7px;
-          background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-          color:var(--c-azul);font-size:12.5px;font-weight:800;
-          padding:9px 16px;border-radius:var(--r-pill);
-          box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
-          transition:transform .2s var(--spring),filter .15s var(--ease-out)
-        }
-        #vgl-labs-modal .vgl-labs-portal:hover{transform:translateY(-1px);filter:brightness(1.08)}
-
-        /* ---- Contenedor de resultados ---- */
-        #vgl-labs-modal #vgl-labs-content{background:rgba(0,0,0,.22);border-color:var(--line);padding:0 10px 10px}
-        #vgl-labs-modal.light #vgl-labs-content{background:rgba(15,23,42,.035)}
-        #vgl-labs-modal .vgl-agm-loading{display:flex;align-items:center;gap:10px;padding:18px 8px;font-size:13px;animation:vglLabsPulse 1.6s ease-in-out infinite}
-        @keyframes vglLabsPulse{0%,100%{opacity:.55}50%{opacity:1}}
-        #vgl-labs-modal .vgl-labs-empty{
-          margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2);
-          border-radius:var(--r-card);padding:22px 20px;text-align:center;
-          font-size:13px;font-weight:600;line-height:1.6;box-shadow:var(--glow-edge)
-        }
-        #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
-
-        /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
-        #vgl-labs-modal .vgl-labs-table{width:100%;border-collapse:separate;border-spacing:0 7px;text-align:left}
-        #vgl-labs-modal .vgl-labs-table thead th{
-          position:sticky;top:0;z-index:2;background:var(--bg-solid);
-          font-size:10.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
-          color:var(--fg3);text-align:left;padding:12px 12px 9px;
-          border-bottom:1px solid var(--edge)
-        }
-        #vgl-labs-modal .vgl-labs-tr td{
-          background:var(--bg2);padding:11px 12px;vertical-align:middle;
-          transition:background-color .15s var(--ease-out)
-        }
-        #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
-        #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
-        #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
-        #vgl-labs-modal .vgl-labs-date{font-size:11.5px;color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
-        #vgl-labs-modal .vgl-labs-exam{font-size:13px;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
-        #vgl-labs-modal .vgl-labs-val{
-          font-size:15.5px;font-weight:900;letter-spacing:-.2px;color:var(--fg);
-          font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:90px
-        }
-        #vgl-labs-modal .vgl-labs-ref{font-size:11px;color:var(--fg3);overflow-wrap:anywhere}
-        #vgl-labs-modal .vgl-labs-src{
-          display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
-          font-size:10.5px;font-weight:800;letter-spacing:.4px;
-          padding:4px 10px;border-radius:var(--r-pill);
-          background:var(--bg3);color:var(--fg2);box-shadow:var(--glow-edge)
-        }
-        #vgl-labs-modal .vgl-labs-src.athenea{
-          background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
-          box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
-        }
-
-        /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
-        #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
-        #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert:hover td{background:rgba(var(--rgb-rojo),.15)}
-        #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td:first-child{box-shadow:inset 3px 0 0 var(--c-rojo)}
-        #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo);text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
-        #vgl-labs-modal.light .vgl-labs-alert .vgl-labs-val{text-shadow:none}
-        #vgl-labs-modal .vgl-labs-alert .vgl-labs-val::before{content:"▲ ";font-size:10px;vertical-align:2px}
-
-        @media (prefers-reduced-motion:reduce){
-          #vgl-labs-modal,#vgl-labs-modal *{animation:none!important;transition:none!important}
-        }
-
-        /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
-        #vgl-root.perf~#vgl-labs-modal,
-        #vgl-root.perf~#vgl-labs-modal *,
-        #vgl-root.perf~#vgl-labs-modal *::before,
-        #vgl-root.perf~#vgl-labs-modal *::after{
-          animation:none!important;transition:none!important;
-          backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
-          filter:none!important;text-shadow:none!important
-        }
-        #vgl-root.perf~#vgl-labs-modal{background:rgba(2,4,9,.86)}
-        #vgl-root.perf~#vgl-labs-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-srcbar,
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-src,
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-empty,
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-kicker,
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal{box-shadow:none}
-        #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal:hover{transform:none}
-      </style>
       <div class="vgl-agm-card" style="max-width:760px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
@@ -5657,132 +5977,16 @@
     let selectedEspName = "Medicina General (Control)";
 
     // [COPY-UX] Modal de agendamiento de cita de control y remisión a especialidades RCV
-    // [UI-CSS] HUD Espacial 2026 — placa bento del agendamiento. El <style> vive DENTRO del
-    // modal (muere con él en closeMod) y CADA selector está anclado a #vgl-agendar-modal.
-    // Modo rendimiento: los modales cuelgan de document.body (fuera de #vgl-root), así que
-    // los efectos pesados nuevos se apagan con el combinador de hermanos
-    // #vgl-root.perf ~ #vgl-agendar-modal (#vgl-root se inserta en body ANTES que el modal).
+    // [UI-CSS] HUD Espacial 2026 — placa bento del agendamiento. Desde v12.3.13 el CSS de
+    // este modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez
+    // en document.head: antes iba en un <style> inline aquí dentro del innerHTML y el
+    // motor lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
+    // CADA selector sigue anclado a #vgl-agendar-modal, así que nada se fuga fuera del
+    // modal aunque la hoja sea global. Modo rendimiento: los modales cuelgan de
+    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
+    // con el combinador de hermanos #vgl-root.perf ~ #vgl-agendar-modal (#vgl-root se
+    // inserta en body ANTES que el modal).
     modal.innerHTML = `
-      <style>
-        /* ---- Bento grid (micro-grilla asimétrica 12 col) ---- */
-        #vgl-agendar-modal .vgl-agm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
-        #vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}
-        #vgl-agendar-modal .vgl-agm-c6{grid-column:span 6}
-        #vgl-agendar-modal .vgl-agm-c7{grid-column:span 7}
-        #vgl-agendar-modal .vgl-agm-c12{grid-column:span 12}
-        @media (max-width:640px){
-          #vgl-agendar-modal .vgl-agm-c5,#vgl-agendar-modal .vgl-agm-c6,#vgl-agendar-modal .vgl-agm-c7{grid-column:span 12}
-        }
-        #vgl-agendar-modal .vgl-agm-cell{
-          background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 62%),var(--bg2);
-          border:1px solid var(--line);border-radius:var(--r-card);padding:16px;min-width:0;
-          box-shadow:var(--glow-edge);
-          transition:border-color .18s var(--ease-out),box-shadow .22s var(--ease-out),transform .22s var(--spring)
-        }
-        #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
-        #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
-        #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
-        #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
-
-        /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
-        #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
-        #vgl-agendar-modal .vgl-agm-kicker{
-          display:inline-flex;align-items:center;gap:7px;
-          font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-          color:var(--c-azul);background:rgba(var(--rgb-azul),.12);
-          border:1px solid rgba(var(--rgb-azul),.32);border-radius:var(--r-pill);
-          padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-azul),.10)
-        }
-        #vgl-agendar-modal .vgl-agm-patient{
-          font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
-          color:var(--fg);overflow-wrap:anywhere;
-          text-shadow:0 0 30px rgba(var(--rgb-azul),.25)
-        }
-        #vgl-agendar-modal.light .vgl-agm-patient{text-shadow:none}
-        #vgl-agendar-modal .vgl-agm-sub{margin-top:5px}
-
-        /* ---- Pasos numerados como fichas ---- */
-        #vgl-agendar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
-        #vgl-agendar-modal .vgl-agm-step{
-          flex:none;display:inline-flex;align-items:center;justify-content:center;
-          width:21px;height:21px;border-radius:var(--r-pill);
-          font-size:11px;font-weight:900;color:var(--c-azul);
-          background:rgba(var(--rgb-azul),.15);border:1px solid rgba(var(--rgb-azul),.42);
-          box-shadow:0 0 12px rgba(var(--rgb-azul),.14)
-        }
-
-        /* ---- Horarios como grilla de losetas ---- */
-        #vgl-agendar-modal .vgl-agm-slots{
-          display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;
-          max-height:224px;padding:12px;border-radius:var(--r-field)
-        }
-        #vgl-agendar-modal .vgl-agm-slots .vgl-agm-loading,
-        #vgl-agendar-modal .vgl-agm-slots .vgl-agm-err{grid-column:1/-1}
-        #vgl-agendar-modal .vgl-agm-sbtn{
-          border-radius:var(--r-field);padding:9px 11px;min-height:38px;
-          white-space:normal;line-height:1.4;text-align:center
-        }
-        #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
-
-        /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
-        #vgl-agendar-modal .vgl-agm-cell-sms{
-          background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
-          border-color:rgba(var(--rgb-azul),.36);
-          box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
-        }
-        #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
-        #vgl-agendar-modal .vgl-agm-cell-lab{
-          background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
-          border-color:rgba(var(--rgb-verde),.34);
-          box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
-        }
-        #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
-        #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
-        #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
-        #vgl-agendar-modal .vgl-agm-fieldrow{
-          display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-          margin-top:8px;font-size:12px;color:var(--fg2)
-        }
-        #vgl-agendar-modal .vgl-agm-fieldrow>label{
-          flex:none;font-weight:800;font-size:11px;letter-spacing:.6px;
-          text-transform:uppercase;color:var(--c-azul)
-        }
-        #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
-        #vgl-agendar-modal #vgl-agm-sms-nota{font-size:11.5px;font-style:italic;color:var(--fg3)}
-        #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
-        #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
-        #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
-        #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-check-lbl input[type=checkbox]{accent-color:var(--c-verde)}
-        #vgl-agendar-modal #vgl-agm-obs{border-radius:var(--r-card);padding:13px 15px;min-height:58px}
-
-        /* ---- Pie flotante (sticky glass) ---- */
-        #vgl-agendar-modal .vgl-agm-foot{
-          position:sticky;bottom:10px;z-index:5;
-          margin:18px 2px 2px;padding:12px 14px;
-          background:var(--bg);
-          border:1px solid var(--edge);border-radius:var(--r-card);
-          backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
-          box-shadow:var(--shadow-float)
-        }
-        @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
-          #vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid)}
-        }
-
-        /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
-        #vgl-root.perf~#vgl-agendar-modal,
-        #vgl-root.perf~#vgl-agendar-modal *,
-        #vgl-root.perf~#vgl-agendar-modal *::before,
-        #vgl-root.perf~#vgl-agendar-modal *::after{
-          animation:none!important;transition:none!important;
-          backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
-          filter:none!important;text-shadow:none!important
-        }
-        #vgl-root.perf~#vgl-agendar-modal{background:rgba(2,4,9,.86)}
-        #vgl-root.perf~#vgl-agendar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
-        #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell,
-        #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell:hover{box-shadow:none;transform:none}
-        #vgl-root.perf~#vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
-      </style>
       <div class="vgl-agm-card" style="max-width:720px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
@@ -6492,127 +6696,17 @@
 
     // [COPY-UX] Modal de generación de órdenes de prevención
     // [UI-CSS] HUD Espacial 2026 — placa bento del ordenamiento PyM, misma familia visual
-    // que el agendamiento. El <style> vive DENTRO del modal (muere con él en closeMod) y
-    // CADA selector está anclado a #vgl-ordenar-modal. Acento del modal: MORADO (PyM);
-    // estado "marcado para generar": VERDE (enlaza con el botón primario); choque de sexo:
-    // ROJO. Modo rendimiento: el modal cuelga de document.body (fuera de #vgl-root), así
-    // que los efectos pesados nuevos se apagan con el combinador de hermanos
-    // #vgl-root.perf ~ #vgl-ordenar-modal (#vgl-root se inserta en body ANTES que el modal).
+    // que el agendamiento. Desde v12.3.13 el CSS de este modal vive al FINAL de la hoja
+    // maestra que buildOverlay() inyecta UNA sola vez en document.head: antes iba en un
+    // <style> inline aquí dentro del innerHTML y el motor lo re-parseaba en CADA apertura
+    // del modal (thrashing de recálculo de estilos). CADA selector sigue anclado a
+    // #vgl-ordenar-modal, así que nada se fuga fuera del modal aunque la hoja sea global.
+    // Acento del modal: MORADO (PyM); estado "marcado para generar": VERDE (enlaza con el
+    // botón primario); choque de sexo: ROJO. Modo rendimiento: el modal cuelga de
+    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
+    // con el combinador de hermanos #vgl-root.perf ~ #vgl-ordenar-modal (#vgl-root se
+    // inserta en body ANTES que el modal).
     modal.innerHTML = `
-      <style>
-        /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
-        #vgl-ordenar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
-        #vgl-ordenar-modal .vgl-agm-kicker{
-          display:inline-flex;align-items:center;gap:7px;
-          font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-          color:var(--c-morado);background:rgba(var(--rgb-morado),.12);
-          border:1px solid rgba(var(--rgb-morado),.32);border-radius:var(--r-pill);
-          padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-morado),.10)
-        }
-        #vgl-ordenar-modal .vgl-agm-patient{
-          font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
-          color:var(--fg);overflow-wrap:anywhere;
-          text-shadow:0 0 30px rgba(var(--rgb-morado),.25)
-        }
-        #vgl-ordenar-modal.light .vgl-agm-patient{text-shadow:none}
-        #vgl-ordenar-modal .vgl-agm-sub{margin-top:5px}
-
-        /* ---- Rótulo de sección con ficha de conteo ---- */
-        #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado)}
-        #vgl-ordenar-modal .vgl-agm-step{
-          flex:none;display:inline-flex;align-items:center;justify-content:center;
-          min-width:21px;height:21px;padding:0 6px;border-radius:var(--r-pill);
-          font-size:11px;font-weight:900;color:var(--c-morado);
-          background:rgba(var(--rgb-morado),.15);border:1px solid rgba(var(--rgb-morado),.42);
-          box-shadow:0 0 12px rgba(var(--rgb-morado),.14)
-        }
-
-        /* ---- Lista de actividades como micro-grilla bento ---- */
-        #vgl-ordenar-modal #vgl-ord-list{
-          display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;
-          align-items:stretch;max-height:340px;overflow-y:auto;padding:4px 4px 8px
-        }
-        #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar{width:6px}
-        #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
-        #vgl-ordenar-modal .vgl-ord-item{
-          height:100%;border-radius:var(--r-card);padding:13px 14px;
-          transition:background .16s var(--ease-out),border-color .16s var(--ease-out),box-shadow .2s var(--ease-out),transform .22s var(--spring)
-        }
-        #vgl-ordenar-modal .vgl-ord-item:hover{
-          border-color:rgba(var(--rgb-morado),.50);box-shadow:var(--shadow-card);transform:translateY(-1px)
-        }
-        /* Marcada para generar => celda respira en VERDE (mismo color del botón primario) */
-        #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked){
-          background:linear-gradient(165deg,rgba(var(--rgb-verde),.14),rgba(var(--rgb-verde),.03) 70%),var(--bg2);
-          border-color:rgba(var(--rgb-verde),.45);
-          box-shadow:var(--glow-edge),0 0 22px rgba(var(--rgb-verde),.10)
-        }
-        #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:disabled){opacity:.55}
-        /* Borde transparente de reserva: cuando el JS pinta el borde rojo de fallo
-           sobre el label, no hay salto de layout */
-        #vgl-ordenar-modal .vgl-ord-label{gap:11px;border:1px solid transparent;border-radius:var(--r-field);padding:1px}
-        #vgl-ordenar-modal .vgl-ord-chk{width:19px;height:19px;accent-color:var(--c-verde)}
-        #vgl-ordenar-modal .vgl-ord-chk:focus-visible{outline:2px solid rgba(var(--rgb-verde),.80);outline-offset:2px;border-radius:4px}
-        #vgl-ordenar-modal .vgl-ord-title{font-size:13.5px;line-height:1.4}
-        #vgl-ordenar-modal .vgl-ord-cie{
-          display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.5px;
-          color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
-          border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-pill);
-          padding:1px 8px;margin-left:2px;white-space:nowrap;vertical-align:1px
-        }
-        /* CUPS como chips pastilla */
-        #vgl-ordenar-modal .vgl-ord-cups{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px}
-        #vgl-ordenar-modal .vgl-ord-cupk{
-          flex:none;font-size:9.5px;font-weight:800;letter-spacing:1.2px;
-          text-transform:uppercase;color:var(--fg3)
-        }
-        #vgl-ordenar-modal .vgl-ord-cup{
-          display:inline-flex;align-items:baseline;gap:5px;min-width:0;
-          font-size:11px;font-weight:600;line-height:1.35;color:var(--fg2);
-          background:var(--bg2);border:1px solid var(--line);
-          border-radius:var(--r-field);padding:2px 9px;box-shadow:var(--glow-edge)
-        }
-        #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
-        /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
-        #vgl-ordenar-modal .vgl-ord-sexwarn{
-          font-size:11.5px;font-weight:700;line-height:1.45;
-          color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
-          border:1px solid rgba(var(--rgb-rojo),.40);border-radius:var(--r-field);
-          padding:7px 10px;margin-top:8px;
-          box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
-        }
-
-        /* ---- Pie flotante (sticky glass) ---- */
-        #vgl-ordenar-modal .vgl-agm-foot{
-          position:sticky;bottom:10px;z-index:5;
-          margin:18px 2px 2px;padding:12px 14px;
-          background:var(--bg);
-          border:1px solid var(--edge);border-radius:var(--r-card);
-          backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
-          box-shadow:var(--shadow-float)
-        }
-        @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
-          #vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid)}
-        }
-
-        /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
-        #vgl-root.perf~#vgl-ordenar-modal,
-        #vgl-root.perf~#vgl-ordenar-modal *,
-        #vgl-root.perf~#vgl-ordenar-modal *::before,
-        #vgl-root.perf~#vgl-ordenar-modal *::after{
-          animation:none!important;transition:none!important;
-          backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
-          filter:none!important;text-shadow:none!important
-        }
-        #vgl-root.perf~#vgl-ordenar-modal{background:rgba(2,4,9,.86)}
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item,
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:hover,
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked),
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-cup{box-shadow:none;transform:none}
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-sexwarn{box-shadow:none}
-        #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
-      </style>
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
@@ -6868,41 +6962,9 @@
       const seg = (n, c) => (n ? `<div class="vgl-seg" style="height:${Math.max(2, Math.round((n / max) * 52))}px;background:${c};box-shadow:0 0 9px ${c}55" title="${n}"></div>` : "");
       return `<div class="vgl-bar"><div class="vgl-col">${seg(d.atiempo, COLORS.VERDE)}${seg(d.inasistencia, COLORS.AMBAR)}${seg(d.fraude, COLORS.ROJO)}</div><span class="vgl-lb">${dow[t.getDay()]} ${t.getDate()}</span></div>`;
     }).join("");
+    // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
+    // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Resumen del turno") + `
-      <style>
-        /* [HUD-2026] Resumen del turno — bento de estadísticas. Scope estricto: #vgl-root #vgl-sheet. */
-        #vgl-root #vgl-sheet .vgl-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
-        #vgl-root #vgl-sheet .vgl-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px 10px 15px;border-radius:var(--r-card);background:linear-gradient(165deg,rgba(var(--kpi-rgb),.16),rgba(var(--kpi-rgb),.04) 72%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.22),var(--shadow-card);transition:transform .24s var(--spring),box-shadow .24s var(--ease-out)}
-        #vgl-root #vgl-sheet .vgl-kpi:hover{transform:translateY(-2px);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.36),0 10px 26px rgba(var(--kpi-rgb),.13),var(--shadow-card-hover)}
-        #vgl-root #vgl-sheet .vgl-kpi-rojo{--kpi-rgb:var(--rgb-rojo)}
-        #vgl-root #vgl-sheet .vgl-kpi-ambar{--kpi-rgb:var(--rgb-ambar)}
-        #vgl-root #vgl-sheet .vgl-kpi-verde{--kpi-rgb:var(--rgb-verde)}
-        #vgl-root #vgl-sheet .vgl-kpi .vgl-n{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.5px;color:rgb(var(--kpi-rgb));text-shadow:0 0 18px rgba(var(--kpi-rgb),.35)}
-        #vgl-root #vgl-sheet .vgl-kpi .vgl-l{color:var(--fg2);letter-spacing:.6px;margin-top:7px}
-        #vgl-root #vgl-sheet .vgl-tile-chart{padding:14px 16px 12px}
-        #vgl-root #vgl-sheet .vgl-chart-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--fg3);font-weight:700;letter-spacing:.4px}
-        #vgl-root #vgl-sheet .vgl-leg{display:flex;gap:12px;flex-wrap:wrap}
-        #vgl-root #vgl-sheet .vgl-leg-i{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--fg2);letter-spacing:0}
-        #vgl-root #vgl-sheet .vgl-leg-i i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--lg-rgb));box-shadow:0 0 8px rgba(var(--lg-rgb),.55)}
-        #vgl-root #vgl-sheet .vgl-lg-verde{--lg-rgb:var(--rgb-verde)}
-        #vgl-root #vgl-sheet .vgl-lg-ambar{--lg-rgb:var(--rgb-ambar)}
-        #vgl-root #vgl-sheet .vgl-lg-rojo{--lg-rgb:var(--rgb-rojo)}
-        #vgl-root #vgl-sheet .vgl-bars{display:flex;align-items:flex-end;gap:8px;height:84px;margin-top:12px}
-        #vgl-root #vgl-sheet .vgl-bar{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%;padding:4px 2px 3px;border-radius:12px;transition:background .18s var(--ease-out)}
-        #vgl-root #vgl-sheet .vgl-bar:hover{background:var(--bg2)}
-        #vgl-root #vgl-sheet .vgl-bar:last-child .vgl-lb{color:var(--fg)}
-        #vgl-root #vgl-sheet .vgl-col{display:flex;flex-direction:column-reverse;width:20px;gap:2px}
-        #vgl-root #vgl-sheet .vgl-col:empty::after{content:"";display:block;height:3px;border-radius:2px;background:var(--bg3)}
-        #vgl-root #vgl-sheet .vgl-seg{width:100%;border-radius:5px;min-height:2px}
-        #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:15px;font-weight:800;color:var(--fg);background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
-        #vgl-root #vgl-sheet .vgl-fld{margin:0 -8px;padding:11px 8px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
-        #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
-        #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
-        #vgl-root.perf #vgl-sheet .vgl-kpi,#vgl-root.perf #vgl-sheet .vgl-kpi:hover{transform:none;box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.25)}
-        #vgl-root.perf #vgl-sheet .vgl-seg{box-shadow:none!important}
-        #vgl-root.perf #vgl-sheet .vgl-leg-i i,#vgl-root.perf #vgl-sheet .vgl-count{box-shadow:none}
-        @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}#vgl-root #vgl-sheet .vgl-kpi:hover{transform:none}}
-      </style>
       <div class="vgl-kpis">
         <div class="vgl-kpi vgl-kpi-rojo"><div class="vgl-n">${hoy.fraude || 0}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
         <div class="vgl-kpi vgl-kpi-ambar"><div class="vgl-n">${hoy.inasistencia || 0}</div><div class="vgl-l">INASISTENCIAS</div></div>
@@ -6952,29 +7014,9 @@
     const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
+    // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
+    // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
-      <style>
-        /* [HUD-2026] Ajustes — celdas claras + switches grandes. Scope estricto: #vgl-root #vgl-sheet. */
-        #vgl-root #vgl-sheet .vgl-set-cap{display:flex;align-items:center;gap:8px;padding:12px 0 7px;font-size:12px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:var(--fg3)}
-        #vgl-root #vgl-sheet .vgl-set-cap i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--cap-rgb));box-shadow:0 0 10px rgba(var(--cap-rgb),.55)}
-        #vgl-root #vgl-sheet .vgl-cap-azul{--cap-rgb:var(--rgb-azul)}
-        #vgl-root #vgl-sheet .vgl-cap-ambar{--cap-rgb:var(--rgb-ambar)}
-        #vgl-root #vgl-sheet .vgl-cap-verde{--cap-rgb:var(--rgb-verde)}
-        #vgl-root #vgl-sheet .vgl-cap-recordatorio{--cap-rgb:var(--rgb-recordatorio)}
-        #vgl-root #vgl-sheet .vgl-cap-morado{--cap-rgb:var(--rgb-morado)}
-        #vgl-root #vgl-sheet .vgl-fld{margin:0 -8px;padding:12px 8px;gap:14px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
-        #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
-        #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
-        #vgl-root #vgl-sheet .vgl-sw{width:54px;height:32px}
-        #vgl-root #vgl-sheet .vgl-sw i:after{width:26px;height:26px;top:3px;left:3px}
-        #vgl-root #vgl-sheet .vgl-sw input:checked + i:after{transform:translateX(22px)}
-        #vgl-root #vgl-sheet .vgl-fld input[type=range]{accent-color:var(--c-azul);width:180px;max-width:180px;height:28px;cursor:pointer;background:transparent;border:0;box-shadow:none;padding:0}
-        #vgl-root #vgl-sheet .vgl-fld input:disabled{opacity:.55;cursor:not-allowed}
-        #vgl-root #vgl-sheet .vgl-grp-tec{background:linear-gradient(170deg,rgba(var(--rgb-morado),.07),rgba(var(--rgb-morado),0) 55%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--rgb-morado),.16),var(--shadow-card)}
-        #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
-        #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
-        @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
-      </style>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-azul"><i></i>Apariencia</div>
         <div class="vgl-fld"><label>Tema<span class="vgl-hint">"Automático" sigue el modo claro/oscuro del sistema operativo.</span></label>
