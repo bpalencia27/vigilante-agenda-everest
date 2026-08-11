@@ -29,7 +29,7 @@ module.exports = {
     "_atheneaExtraerSolicitudes", "_atheneaMultipart", "_atheneaPareceLogin",
     "_gmReq", "getAtheneaSolicitudesAuto", "getAtheneaLabsAuto",
     "atheneaKeepAlive", "atheneaAutoLogin",
-    "atheneaCredsAll", "atheneaCredsGet", "atheneaCredsSet", "atheneaCredsClear",
+    "atheneaCredsGet", "atheneaCredsSet", "atheneaCredsClear",
     "_vglXor", "_vglOfusca", "_vglDesofusca",
   ],
 
@@ -235,100 +235,72 @@ module.exports = {
     });
 
     // =====================================================================
-    // atheneaCredsAll / atheneaCredsGet / atheneaCredsSet / atheneaCredsClear
+    // atheneaCredsGet / atheneaCredsSet / atheneaCredsClear — v12.5.2:
+    // credencial ÚNICA compartida por la sede (Athenea no tiene login por médico).
     // =====================================================================
-    t.caso("atheneaCredsAll: almacén vacío al arrancar", () => {
+    t.caso("atheneaCredsGet: sin nada guardado al arrancar -> null", () => {
       const c = cargar({ silencioso: true });
-      t.igual(c.api.atheneaCredsAll(), {});
+      t.igual(c.api.atheneaCredsGet(), null);
     });
 
     t.caso("atheneaCredsSet/Get: viaje de ida y vuelta EXACTO de usuario+contraseña, con tildes y símbolos", () => {
       const c = cargar({ silencioso: true });
-      const ok = c.api.atheneaCredsSet(11, USR, PWD);
+      const ok = c.api.atheneaCredsSet(USR, PWD);
       t.cierto(ok);
-      const leido = c.api.atheneaCredsGet(11);
+      const leido = c.api.atheneaCredsGet();
       t.igual(leido, { u: USR, p: PWD }, "debe leerse exactamente lo guardado, sin recortes ni mojibake");
     });
 
     t.caso("atheneaCredsSet: en el almacén crudo (GM_setValue) NUNCA queda el texto plano de la contraseña", () => {
       const c = cargar({ silencioso: true });
-      c.api.atheneaCredsSet(11, USR, PWD);
+      c.api.atheneaCredsSet(USR, PWD);
       const crudo = JSON.stringify(c.env.gm["vgl_ath_creds"]);
       t.falso(crudo.includes(PWD), "la contraseña en claro no debe aparecer en lo persistido");
       t.falso(crudo.includes(USR), "tampoco el usuario en claro (ofuscado también)");
     });
 
-    t.caso("atheneaCredsSet/Get: AISLAMIENTO POR MÉDICO — lo guardado para un docId no aparece bajo otro", () => {
+    t.caso("atheneaCredsSet: guardar de nuevo REEMPLAZA la credencial compartida anterior (una sola por equipo)", () => {
       const c = cargar({ silencioso: true });
-      c.api.atheneaCredsSet(11, "medico.uno", "ClaveUno_1");
-      c.api.atheneaCredsSet(22, "medico.dos", "ClaveDos_2");
-      t.igual(c.api.atheneaCredsGet(11), { u: "medico.uno", p: "ClaveUno_1" });
-      t.igual(c.api.atheneaCredsGet(22), { u: "medico.dos", p: "ClaveDos_2" });
-      t.igual(c.api.atheneaCredsGet(33), null, "un tercer médico sin credenciales propias no hereda nada");
-      const all = c.api.atheneaCredsAll();
-      t.igual(Object.keys(all).sort(), ["11", "22"]);
+      c.api.atheneaCredsSet("cuenta.vieja", "ClaveVieja_1");
+      c.api.atheneaCredsSet("cuenta.nueva", "ClaveNueva_2");
+      t.igual(c.api.atheneaCredsGet(), { u: "cuenta.nueva", p: "ClaveNueva_2" });
     });
 
-    t.caso("atheneaCredsSet: sin docId, sin usuario o sin contraseña -> false, y no toca el almacén", () => {
+    t.caso("atheneaCredsSet: sin usuario o sin contraseña -> false, y no toca el almacén", () => {
       const c = cargar({ silencioso: true });
-      t.falso(c.api.atheneaCredsSet(null, USR, PWD));
-      t.falso(c.api.atheneaCredsSet(11, "", PWD));
-      t.falso(c.api.atheneaCredsSet(11, USR, ""));
-      t.igual(c.api.atheneaCredsAll(), {});
+      t.falso(c.api.atheneaCredsSet("", PWD));
+      t.falso(c.api.atheneaCredsSet(USR, ""));
+      t.igual(c.api.atheneaCredsGet(), null);
     });
 
-    t.caso("atheneaCredsGet: docId ausente o sin credenciales guardadas -> null (nunca lanza)", () => {
+    t.caso("atheneaCredsClear: borra la credencial compartida del equipo", () => {
       const c = cargar({ silencioso: true });
-      t.igual(c.api.atheneaCredsGet(null), null);
-      t.igual(c.api.atheneaCredsGet(0), null);
-      t.igual(c.api.atheneaCredsGet(999), null);
-    });
-
-    t.caso("atheneaCredsClear: borrar UN docId deja intactas las credenciales de los demás", () => {
-      const c = cargar({ silencioso: true });
-      c.api.atheneaCredsSet(11, "medico.uno", "ClaveUno_1");
-      c.api.atheneaCredsSet(22, "medico.dos", "ClaveDos_2");
-      c.api.atheneaCredsClear(11);
-      t.igual(c.api.atheneaCredsGet(11), null);
-      t.igual(c.api.atheneaCredsGet(22), { u: "medico.dos", p: "ClaveDos_2" }, "el otro médico no se ve afectado");
-      t.igual(Object.keys(c.api.atheneaCredsAll()), ["22"]);
-    });
-
-    t.caso("atheneaCredsClear: sin docId, borra TODO el almacén de credenciales", () => {
-      const c = cargar({ silencioso: true });
-      c.api.atheneaCredsSet(11, "medico.uno", "ClaveUno_1");
-      c.api.atheneaCredsSet(22, "medico.dos", "ClaveDos_2");
+      c.api.atheneaCredsSet(USR, PWD);
       c.api.atheneaCredsClear();
-      t.igual(c.api.atheneaCredsAll(), {});
+      t.igual(c.api.atheneaCredsGet(), null);
     });
 
     // =====================================================================
-    // atheneaAutoLogin
+    // atheneaAutoLogin — v12.5.2: ya NO depende de un médico identificado en
+    // Everest (la cuenta es la misma para cualquiera que use el equipo).
     // =====================================================================
-    t.caso("atheneaAutoLogin: (a) con S.atheneaAutoLogin en false (por defecto) no hace NADA aunque haya credenciales", async () => {
+    t.caso("atheneaAutoLogin: (a) con S.atheneaAutoLogin en false no hace NADA aunque haya credenciales", async () => {
       const e = entornoAthenea();
-      e.c.api.__state.activeDoctor = { id: 42, name: "DRA PRUEBA" };
-      e.c.api.atheneaCredsSet(42, USR, PWD);
-      t.falso(e.c.api.__S.atheneaAutoLogin, "el interruptor debe venir apagado de fábrica");
+      e.c.api.atheneaCredsSet(USR, PWD);
+      e.c.api.__S.atheneaAutoLogin = false;
       const r = await e.c.api.atheneaAutoLogin();
       t.falso(r);
       t.igual(e.llamadas.length, 0, "no debe tocar la red mientras el interruptor esté apagado");
     });
 
-    t.caso("atheneaAutoLogin: (b) con el interruptor encendido pero SIN médico en sesión (id=0), tampoco hace nada", async () => {
-      const e = entornoAthenea();
-      e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 0, name: "" };
-      e.c.api.atheneaCredsSet(999, USR, PWD);   // credenciales de OTRO id no cuentan sin sesión activa
-      const r = await e.c.api.atheneaAutoLogin();
-      t.falso(r);
-      t.igual(e.llamadas.length, 0);
+    t.caso("atheneaAutoLogin: viene ENCENDIDO de fábrica", () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(c.api.__S.atheneaAutoLogin, "el interruptor debe venir encendido de fábrica (v12.5.2)");
     });
 
-    t.caso("atheneaAutoLogin: interruptor encendido, médico en sesión, pero sin credenciales guardadas -> nada", async () => {
+    t.caso("atheneaAutoLogin: interruptor encendido pero SIN credenciales guardadas -> nada, y NO exige médico identificado", async () => {
       const e = entornoAthenea();
-      e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 55, name: "DR X" };
+      e.c.api.__state.activeDoctor = { id: 0, name: "" }; // nadie identificado en Everest todavía
       const r = await e.c.api.atheneaAutoLogin();
       t.falso(r);
       t.igual(e.llamadas.length, 0);
@@ -345,9 +317,9 @@ module.exports = {
           o.onload({ status: 200, responseText: "" });
         }
       });
-      e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 42, name: "DRA PRUEBA" };
-      e.c.api.atheneaCredsSet(42, USR, PWD);
+      // Sin ningún médico identificado: el auto-login de la cuenta compartida igual funciona.
+      e.c.api.__state.activeDoctor = { id: 0, name: "" };
+      e.c.api.atheneaCredsSet(USR, PWD);
       const r = await e.c.api.atheneaAutoLogin();
       t.cierto(r);
       t.igual(e.llamadas.length, 2, "un GET (token) y un POST (credenciales), nada más");
@@ -372,9 +344,7 @@ module.exports = {
           o.onload({ status: 200, responseText: "" });
         }
       });
-      e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 42, name: "DRA PRUEBA" };
-      e.c.api.atheneaCredsSet(42, USR, "ClaveIncorrecta_000");
+      e.c.api.atheneaCredsSet(USR, "ClaveIncorrecta_000");
       const r1 = await e.c.api.atheneaAutoLogin();
       t.falso(r1);
       const llamadasTrasPrimerIntento = e.llamadas.length;
@@ -382,7 +352,16 @@ module.exports = {
       // Segunda llamada INMEDIATA: no debe volver a tocar la red en absoluto.
       const r2 = await e.c.api.atheneaAutoLogin();
       t.falso(r2);
-      t.igual(e.llamadas.length, llamadasTrasPrimerIntento, "cero llamadas nuevas: el bloqueo evita reintentar solo");
+      t.igual(e.llamadas.length, llamadasTrasPrimerIntento, "cero llamadas nuevas: el bloqueo evita reintentar solo (protege la cuenta de TODA la sede)");
+      // Guardar una credencial NUEVA desbloquea el reintento (atheneaCredsSet limpia el bloqueo).
+      e.c.api.atheneaCredsSet(USR, PWD);
+      e.setPlan((o) => {
+        if (o.url === BASE + "/Account/Login" && o.method === "GET") o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-3" /></form>` });
+        else if (o.url === BASE + "/Account/Login" && o.method === "POST") o.onload({ status: 302, responseText: "" });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const r3 = await e.c.api.atheneaAutoLogin();
+      t.cierto(r3, "tras re-guardar la credencial, sí se reintenta");
     });
 
     await t.casoAsync("atheneaAutoLogin: (e) fallo de RED (no de credenciales) no bloquea — la siguiente llamada SÍ reintenta", async () => {
@@ -398,9 +377,7 @@ module.exports = {
           o.onload({ status: 200, responseText: "" });
         }
       });
-      e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 77, name: "DR RED" };
-      e.c.api.atheneaCredsSet(77, USR, PWD);
+      e.c.api.atheneaCredsSet(USR, PWD);
       const r1 = await e.c.api.atheneaAutoLogin();
       t.falso(r1, "el GET falló por red: no hay sesión");
       t.igual(e.llamadas.length, 1, "solo el GET que falló; nunca llegó a intentar el POST");
@@ -425,9 +402,9 @@ module.exports = {
 
     await t.casoAsync("atheneaKeepAlive: sesión caída (paso 1 devuelve pantalla de login) y con auto-login apagado, se queda caída", async () => {
       const e = entornoAthenea();
+      e.c.api.__S.atheneaAutoLogin = false; // v12.5.2: viene encendido de fábrica; se apaga explícito para este caso
       e.setPlan((o) => o.onload({ status: 200, responseText: `<input type="password" /> Iniciar sesión` }));
       const logs = espiarConsola(e.c);
-      // S.atheneaAutoLogin en false por defecto: atheneaKeepAlive no debe intentar loguear.
       await e.c.api.atheneaKeepAlive();
       t.igual(e.llamadas.length, 1, "sin auto-login no hay llamadas extra de /Account/Login");
       t.cierto(logs.some((l) => l.includes("sesión NO activa") || l.includes("NO activa")));
@@ -466,8 +443,7 @@ module.exports = {
         }
       });
       e.c.api.__S.atheneaAutoLogin = true;
-      e.c.api.__state.activeDoctor = { id: 88, name: "DR AUTO" };
-      e.c.api.atheneaCredsSet(88, USR, PWD);
+      e.c.api.atheneaCredsSet(USR, PWD);
       const logs = espiarConsola(e.c);
       await e.c.api.atheneaKeepAlive();
       t.igual(e.llamadas.length, 3, "GET BusquedaPaciente (caída) + GET/POST de Account/Login (auto-login)");

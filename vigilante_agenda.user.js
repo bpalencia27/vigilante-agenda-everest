@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.1
+// @version      12.5.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -86,6 +86,30 @@
     cuerpo arbitrario), re-saneo server-side, topes de tamaño y claves, neutralización
     de fórmulas (=,+,-,@) y uso_detalle por lotes (setValues, máx. 120).
   Banco: 549 comprobaciones, cobertura 289/314 (92.0%).
+
+  v12.5.2 — 11-08-2026: LOGIN DE ATHENEA, RESUELTO DE RAÍZ (confirmado con el equipo:
+  Athenea NO tiene login por médico — TODA la sede entra con la MISMA cuenta
+  institucional). El diseño "por médico en turno" de v12.3.16 era, sin saberlo,
+  contraproducente: pedía guardar la misma cuenta N veces bajo N IDs distintos para
+  que "funcionara para todos". Ahora:
+  · atheneaCredsGet/Set/Clear ya NO reciben docId: hay UNA credencial compartida por
+    equipo/navegador (GM_setValue, ofuscada — nunca cifrado real, ver aviso junto al
+    código). Guardarla una vez en Ajustes sirve para cualquier médico que use ese
+    computador.
+  · DEFAULTS.atheneaAutoLogin pasa a true (encendido de fábrica): sin credenciales
+    guardadas simplemente no hace nada, así que no hay riesgo en el cambio.
+  · atheneaAutoLogin() ya no exige un médico identificado en Everest primero — no
+    tiene sentido cuando la cuenta es la misma para todos.
+  · Lo que NO cambia y es la garantía real: la credencial NUNCA toca el archivo del
+    script ni se commitea a git — vive solo en el almacén local de cada equipo. Una
+    filtración obliga a cambiar la contraseña de Athenea, no a purgar el historial de
+    git de todos los consultorios.
+  · Restricción de fondo que sigue intacta (no tiene arreglo posible desde aquí): la
+    cookie de sesión de Athenea es de sesión pura — muere al cerrar el navegador. El
+    auto-login es lo más cerca de "permanente" que se puede llegar sin tocar el
+    servidor; dentro de una misma sesión de navegador, el latido de 3 min (v12.3.5)
+    ya impedía que el timeout deslizante se cumpliera.
+  Banco: 547 comprobaciones, cobertura 288/313 (92.0%).
 */
 
 /*
@@ -934,60 +958,73 @@
   }
 
   // =====================================================================
-  //  v12.3.16 — AUTO-INICIO DE SESIÓN EN ATHENEA (OPT-IN, POR MÉDICO)
+  //  v12.5.2 — AUTO-INICIO DE SESIÓN EN ATHENEA (encendido de fábrica, cuenta
+  //  ÚNICA compartida por la sede)
   //
-  //  Habilitado por decisión explícita del médico responsable (equipos
-  //  personales por turno): permite que Vigilante inicie sesión SOLO en
-  //  Athenea cuando la sesión caiga, para que los laboratorios automáticos
-  //  no exijan un login manual tras cada reinicio del navegador — la cookie
-  //  de Athenea es DE SESIÓN pura (confirmado en el HAR real: muere al
-  //  cerrar el navegador y su formulario no ofrece "recordarme").
+  //  Confirmado con el equipo el 11-08-2026: Athenea NO tiene un login por
+  //  médico — toda VIVA 1A IPS BELLO entra con LA MISMA cuenta institucional.
+  //  Por eso este ya no guarda credenciales "por médico en turno" (v12.3.16):
+  //  hay UNA sola credencial compartida, guardada UNA vez por computador, y
+  //  sirve para cualquier médico que use ese equipo — exactamente lo que
+  //  hacía que "por médico" fuera contraproducente (la cuenta es la misma
+  //  para todos; pedir que cada quien la reguarde bajo su propio ID solo
+  //  añadía un paso sin ningún beneficio de aislamiento real).
+  //
+  //  Permite que Vigilante reinicie sesión sola en Athenea cuando la sesión
+  //  caiga, para que los laboratorios automáticos no exijan un login manual
+  //  tras cada reinicio del navegador — la cookie de Athenea es DE SESIÓN
+  //  pura (confirmado en el HAR real: muere al cerrar el navegador y su
+  //  formulario no ofrece "recordarme"), así que esto es lo más cerca que
+  //  se puede llegar a "permanente" sin tocar nada del lado del servidor.
   //
   //  ADVERTENCIA DE SEGURIDAD, sin adornos: el almacén de Tampermonkey
-  //  (GM_setValue) NO está cifrado. La ofuscación de abajo solo evita leer
-  //  la contraseña de un vistazo en el panel de Tampermonkey; NO es cifrado
-  //  — cualquiera con acceso técnico real a este equipo puede recuperarla.
-  //  Por eso el diseño es defensivo: (1) OPT-IN, apagado de fábrica;
-  //  (2) las credenciales se guardan POR ID DE MÉDICO y solo se usan cuando
-  //  ESE mismo médico está en sesión en Everest — la clave de uno jamás se
-  //  usa bajo la sesión de otro en un equipo compartido; (3) un rechazo de
-  //  credenciales NO se reintenta solo (los intentos repetidos bloquean la
-  //  cuenta): se marca y se avisa una vez para re-guardarlas.
+  //  (GM_setValue) NO está cifrado, y la ofuscación de abajo solo evita leer
+  //  la contraseña de un vistazo en el panel de Tampermonkey — NO es
+  //  cifrado real; cualquiera con acceso técnico al equipo puede
+  //  recuperarla. LA CREDENCIAL NUNCA VIVE EN EL CÓDIGO NI SE COMMITEA A
+  //  GIT: se escribe una sola vez en Ajustes, queda SOLO en el almacén
+  //  local de ESE navegador/computador, y nunca sale de ahí (no viaja al
+  //  script fuente, ni al Gist, ni a ningún repositorio). Guardarla ahí en
+  //  vez de hornearla en el archivo es la diferencia entre "una filtración
+  //  obliga a cambiarla en N computadores" y "una filtración obliga a
+  //  cambiarla en TODOS los equipos de TODA la clínica para siempre,
+  //  imposible de revertir una vez publicada en el historial de git".
+  //  Un rechazo de credenciales NO se reintenta solo (los intentos
+  //  repetidos bloquean la cuenta institucional para TODA la sede): se
+  //  marca y se avisa una vez para volver a guardarlas.
   // =====================================================================
   const ATH_CRED_KEY = "vgl_ath_creds";
-  const atheneaLoginBloqueada = {};   // docId -> true: credenciales rechazadas, NO reintentar
+  let atheneaLoginBloqueado = false;  // credencial compartida rechazada: NO reintentar sola
   let atheneaLoginEnVuelo = false;
   // Ofuscación reversible (XOR + base64) — anti-vistazo, NO cifrado (ver arriba).
   function _vglXor(s) { const k = "Vgl-Athenea-2026-local"; let o = ""; for (let i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }
   function _vglOfusca(s) { try { return btoa(unescape(encodeURIComponent(_vglXor(String(s))))); } catch (e) { return ""; } }
   function _vglDesofusca(s) { try { return _vglXor(decodeURIComponent(escape(atob(String(s))))); } catch (e) { return ""; } }
-  function atheneaCredsAll() { try { return GM_getValue(ATH_CRED_KEY, {}) || {}; } catch (e) { return {}; } }
-  function atheneaCredsGet(docId) {
-    const c = docId && atheneaCredsAll()[String(docId)];
-    if (!c) return null;
-    const u = _vglDesofusca(c.u), p = _vglDesofusca(c.p);
-    return (u && p) ? { u, p } : null;
+  function atheneaCredsGet() {
+    try {
+      const c = GM_getValue(ATH_CRED_KEY, null);
+      if (!c || !c.u || !c.p) return null;
+      const u = _vglDesofusca(c.u), p = _vglDesofusca(c.p);
+      return (u && p) ? { u, p } : null;
+    } catch (e) { return null; }
   }
-  function atheneaCredsSet(docId, u, p) {
-    if (!docId || !u || !p) return false;
-    const all = atheneaCredsAll();
-    all[String(docId)] = { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() };
-    try { GM_setValue(ATH_CRED_KEY, all); delete atheneaLoginBloqueada[String(docId)]; return true; } catch (e) { return false; }
+  function atheneaCredsSet(u, p) {
+    if (!u || !p) return false;
+    try { GM_setValue(ATH_CRED_KEY, { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() }); atheneaLoginBloqueado = false; return true; } catch (e) { return false; }
   }
-  function atheneaCredsClear(docId) {
-    const all = atheneaCredsAll();
-    if (docId) delete all[String(docId)];
-    try { GM_setValue(ATH_CRED_KEY, docId ? all : {}); } catch (e) {}
-    if (docId) delete atheneaLoginBloqueada[String(docId)];
+  function atheneaCredsClear() {
+    try { GM_setValue(ATH_CRED_KEY, null); } catch (e) {}
+    atheneaLoginBloqueado = false;
   }
-  // Intenta iniciar sesión en Athenea con las credenciales del médico EN TURNO.
+  // Intenta iniciar sesión en Athenea con la credencial compartida de la sede.
   // Devuelve true solo si la sesión quedó activa. Distingue fallo de RED (transitorio,
   // se reintentará) de rechazo de CREDENCIALES (se marca y NO se reintenta solo).
+  // v12.5.2 — ya NO exige un médico identificado en Everest primero: al ser una cuenta
+  // compartida, no depende de saber quién está en turno.
   async function atheneaAutoLogin() {
     if (!S.atheneaAutoLogin) return false;
-    const docId = state.activeDoctor && state.activeDoctor.id;
-    if (!docId || atheneaLoginBloqueada[String(docId)] || atheneaLoginEnVuelo) return false;
-    const cred = atheneaCredsGet(docId);
+    if (atheneaLoginBloqueado || atheneaLoginEnVuelo) return false;
+    const cred = atheneaCredsGet();
     if (!cred) return false;
     atheneaLoginEnVuelo = true;
     try {
@@ -1001,12 +1038,12 @@
       const cuerpo = "Usuario=" + encodeURIComponent(cred.u) + "&Password=" + encodeURIComponent(cred.p) + "&__RequestVerificationToken=" + encodeURIComponent(token);
       const r = await _gmReq({ method: "POST", url: BASE + "/Account/Login", headers: { "Content-Type": "application/x-www-form-urlencoded" }, data: cuerpo });
       const ok = r.status >= 200 && r.status < 400 && !_atheneaPareceLogin(r.responseText || "");
-      if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (credenciales del médico en turno)."); return true; }
+      if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (cuenta compartida de la sede)."); return true; }
       // Rechazo de credenciales (o el portal cambió): se MARCA y NO se reintenta solo.
-      atheneaLoginBloqueada[String(docId)] = true;
-      notify("AMBAR", "🔑 Athenea: revisa tus credenciales",
-        "El inicio de sesión automático en Athenea falló (usuario/contraseña incorrectos o el portal cambió). Vuelve a guardarlas en Ajustes o inicia sesión a mano. No se reintenta solo para no bloquear tu cuenta.",
-        false, "athenea_autologin_fallo|" + docId + "|" + todayStamp());
+      atheneaLoginBloqueado = true;
+      notify("AMBAR", "🔑 Athenea: revisa la cuenta compartida",
+        "El inicio de sesión automático en Athenea falló (usuario/contraseña incorrectos o el portal cambió). Vuelve a guardarlos en Ajustes o inicia sesión a mano. No se reintenta solo para no bloquear la cuenta de toda la sede.",
+        false, "athenea_autologin_fallo|" + todayStamp());
       return false;
     } catch (e) {
       console.warn("[Vigilante Athenea] auto-login: error de red (reintenta en el próximo latido):", e && e.message);
@@ -1674,8 +1711,7 @@
                   // cadencia rápida detecta la sesión nueva y el robot reintenta solo.
                   // v12.3.16 — Si el médico configuró el auto-inicio, se intenta aquí mismo y
                   // se reintenta la búsqueda una vez, sin abrir otra pestaña ni pedir nada.
-                  const idm = state.activeDoctor && state.activeDoctor.id;
-                  if (S.atheneaAutoLogin && atheneaCredsGet(idm)) {
+                  if (S.atheneaAutoLogin && atheneaCredsGet()) {
                       btn.innerHTML = "🔑 Iniciando sesión en Athenea…";
                       const okl = await atheneaAutoLogin();
                       if (okl) {
@@ -1839,7 +1875,7 @@
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
-    atheneaAutoLogin: false,  // v12.3.16 — OPT-IN: iniciar sesión solo en Athenea con credenciales guardadas por médico (apagado de fábrica)
+    atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
     uxTelemetria: true,       // v12.5.0 — conteo ANÓNIMO de acciones del panel (sin datos de paciente) para mejora continua; 1 fila agregada cada 30 min
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
@@ -8908,11 +8944,10 @@
     const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
-    // v12.3.16 — Estado de las credenciales de Athenea para el médico en turno (sin exponer valores).
-    const _athId = state.activeDoctor && state.activeDoctor.id;
-    const athEstado = !_athId
-      ? "<b>Primero abre 'Citas del día' una vez para que el panel detecte tu ID de médico.</b>"
-      : (atheneaCredsGet(_athId) ? "<b>✅ Credenciales guardadas para tu ID.</b>" : "<b>Sin credenciales guardadas todavía.</b>");
+    // v12.5.2 — Estado de la credencial COMPARTIDA de Athenea en este equipo (sin exponer valores).
+    const athEstado = atheneaCredsGet()
+      ? "<b>✅ Credenciales guardadas en este equipo.</b>"
+      : "<b>⚠️ Sin credenciales guardadas — la sesión de Athenea seguirá cayendo hasta que alguien las guarde aquí, una sola vez.</b>";
     // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
     // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
@@ -8938,14 +8973,15 @@
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
-      <!-- v12.3.16 — Auto-inicio de sesión en Athenea (OPT-IN, por médico). -->
+      <!-- v12.5.2 — Auto-inicio de sesión en Athenea: ENCENDIDO de fábrica, cuenta ÚNICA
+           compartida por la sede (confirmado: Athenea no tiene login por médico). -->
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Athenea</div>
-        <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">⚠️ Guarda tu usuario y contraseña de Athenea EN ESTE EQUIPO para reconectar solo cuando la sesión caiga. El almacén del navegador NO está cifrado: úsalo únicamente en un equipo personal, nunca en uno compartido. Tus credenciales se guardan por médico y solo se usan cuando TÚ estás en sesión. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin === true)}</div>
-        <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">Se guarda solo en este navegador, asociado a tu ID de médico.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
+        <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">Guarda AQUÍ, una sola vez por computador, el usuario y la contraseña de la CUENTA COMPARTIDA de Athenea de la sede — sirve para cualquier médico que use este equipo, sin repetirlo. El almacén del navegador NO está cifrado: úsalo únicamente en equipos de la IPS. La contraseña nunca sale de este navegador. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin !== false)}</div>
+        <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">La cuenta compartida de la sede — se guarda solo en este navegador/computador.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
         <div class="vgl-fld"><label>Contraseña de Athenea<span class="vgl-hint">No se muestra ni se registra en ningún log. Déjala vacía si solo quieres cambiar el usuario.</span></label><input type="password" id="c-athpass" autocomplete="new-password" placeholder="••••••••" value=""></div>
-        <div class="vgl-fld"><label>Guardar credenciales<span class="vgl-hint">Guárdalas para el médico en turno (${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "sin detectar"))}).</span></label><button class="vgl-btn" id="c-athsave">Guardar</button></div>
-        <div class="vgl-fld"><label>Borrar mis credenciales<span class="vgl-hint">Elimina de este equipo las credenciales de Athenea guardadas para tu ID.</span></label><button class="vgl-btn off" id="c-athclear">Borrar</button></div>
+        <div class="vgl-fld"><label>Guardar credenciales<span class="vgl-hint">Guarda la cuenta compartida en ESTE equipo — sirve para todos los médicos que lo usen.</span></label><button class="vgl-btn" id="c-athsave">Guardar</button></div>
+        <div class="vgl-fld"><label>Borrar credenciales de este equipo<span class="vgl-hint">Elimina de este equipo la credencial compartida de Athenea — afecta a TODOS los médicos que usen este computador.</span></label><button class="vgl-btn off" id="c-athclear">Borrar</button></div>
       </div>
       <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
       <div class="vgl-grp">
@@ -8998,32 +9034,29 @@
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => { uxTrack("ajustes.probar.pes"); abandonoPESAlert("Paciente de prueba", true); });
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
-    // v12.3.16 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
-    // comportamiento; las credenciales se guardan aparte, por ID de médico, y nunca se
-    // registran en consola ni en telemetría.
+    // v12.5.2 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
+    // comportamiento; la credencial compartida se guarda aparte y nunca se registra en
+    // consola ni en telemetría.
     bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
     bind("#c-uxtel", "uxTelemetria", (n) => n.checked);
     const athSave = q("#c-athsave");
     if (athSave) athSave.addEventListener("click", () => {
-      const id = state.activeDoctor && state.activeDoctor.id;
-      if (!id) { alert("Aún no se detecta tu ID de médico. Abre 'Citas del día' una vez para que el panel te identifique y vuelve a guardar."); return; }
       const uNode = q("#c-athuser"), pNode = q("#c-athpass");
       const u = (uNode && uNode.value || "").trim();
       const p = (pNode && pNode.value) || "";
-      if (!u || !p) { alert("Escribe tu usuario y contraseña de Athenea antes de guardar."); return; }
-      const okg = atheneaCredsSet(id, u, p);
+      if (!u || !p) { alert("Escribe el usuario y la contraseña de Athenea antes de guardar."); return; }
+      const okg = atheneaCredsSet(u, p);
       if (pNode) pNode.value = "";   // no dejar la contraseña en el DOM tras guardar
       alert(okg
-        ? "✅ Credenciales de Athenea guardadas SOLO en este equipo, para tu ID de médico. El inicio de sesión automático se activará cuando la sesión de Athenea caiga."
+        ? "✅ Credenciales de Athenea guardadas en este equipo. Sirven para cualquier médico que use este computador — el inicio de sesión automático se activará cuando la sesión de Athenea caiga."
         : "❌ No se pudieron guardar las credenciales.");
       renderSettings();
     });
     const athClear = q("#c-athclear");
     if (athClear) athClear.addEventListener("click", () => {
-      const id = state.activeDoctor && state.activeDoctor.id;
-      if (id && !atheneaCredsGet(id)) { alert("No hay credenciales guardadas para tu ID."); return; }
-      if (!confirm("¿Borrar de este equipo tus credenciales de Athenea guardadas?")) return;
-      atheneaCredsClear(id || null);
+      if (!atheneaCredsGet()) { alert("No hay credenciales guardadas en este equipo."); return; }
+      if (!confirm("¿Borrar de este equipo la credencial compartida de Athenea? Esto afecta a TODOS los médicos que usen este computador.")) return;
+      atheneaCredsClear();
       alert("🗑️ Credenciales de Athenea borradas de este equipo.");
       renderSettings();
     });
