@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.4.0
+// @version      12.4.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -92,6 +92,30 @@
      fecha se reconoce pero ninguna fuente trae hora, la consola lo dice con las claves
      reales del analito.
   Banco: 520 comprobaciones (26 nuevas, suite_21), cobertura 282/308 (91.6%).
+
+  v12.4.1 — REVISIÓN ADVERSARIAL DE LA v12.4.0 (3 lentes + verificación escéptica):
+  16 hallazgos, 15 confirmados con reproducción real, todos corregidos aquí:
+  · Entidades HTML en la tarjeta de Athenea ("p.&nbsp;m."): una toma de la TARDE se
+    mostraba como de la mañana — se normalizan entidades y se descarta la hora si el
+    meridiano quedó a medias. NBSP/espacio fino aceptados como separador.
+  · «Abrir PyM» con un archivo VIEJO ya no apaga la búsqueda del real de hoy: el día
+    solo se estampa cuando lo cargado es el diario real (nombre con la fecha de hoy).
+  · /Date(ms)/ de medianoche UTC: fecha por getters UTC, sin día corrido ni "19:00".
+  · Hora con designador de zona (Z/±hh:mm): se calla (podría estar corrida de reloj).
+  · Basura pegada a la fecha ("11/08/2026-15/09/2026", "12/05/2026 Control"): el valor
+    ENTERO se rechaza en vez de escribir la primera mitad en la historia.
+  · pymPendientesRestantes: el [] de "órdenes sin coincidencia PyM" ya se persiste y no
+    silencia tamizajes nunca ordenados; chip "+ remisión AV/OD" en el panel para que
+    las remisiones no queden invisibles con el aviso apagado.
+  · Confirmar cita: contexto del turno CONGELADO antes de los await (el turno asignado
+    no puede divergir de la hora visible) y botones de hora bloqueados en vuelo.
+  · Detector de agenda congelada: firma solo con ids completos y por especialidad.
+  · La hora del envoltorio de consultaDetalleSolicitud ahora sí se hereda.
+  · Pruebas nuevas: jornada partida (2 agendas propias), cupo re-verificado (con y sin
+    turno vivo), entidades HTML, zona horaria, basura tras fecha, [] persistido, parada
+    del polling con archivo viejo. Banco: 533 comprobaciones, cobertura 283/308.
+  Pendiente delegado (tests/): suite_05/07 tienen 10 casoAsync sin await (comprobaciones
+  fantasma) — tarea escrita para Jules en JULES_TAREAS.md; no toca este archivo.
 */
 
 /*
@@ -686,7 +710,8 @@
                                                   "· otros valores con pinta de fecha (solo evidencia, NO se usan):", otrasFechas,
                                                   "· claves del primer analito:", Object.keys(data[0] || {}));
                                           }
-                                          if (fechaSol) data.forEach((a) => { if (a && typeof a === "object") a.__vglFechaSolicitud = fechaSol.iso; });
+                                          // v12.4.1 — la HORA del envoltorio también se hereda (antes se calculaba y se tiraba).
+                                          if (fechaSol) data.forEach((a) => { if (a && typeof a === "object") { a.__vglFechaSolicitud = fechaSol.iso; if (fechaSol.hora) a.__vglHoraSolicitud = fechaSol.hora; } });
                                       } catch (eDiag) {}
                                       resolve(data); return;
                                   }
@@ -817,12 +842,29 @@
         // convierten esa ambigüedad en "sin fecha" — jamás en la fecha equivocada.
         const desde = Math.max(0, m.index - 400);
         const hasta = Math.min(html.length, m.index + tag.length + 700);
-        const ventana = html.slice(desde, hasta);
+        // v12.4.1 — La ventana es HTML CRUDO: el designador español "p. m." lleva un
+        // espacio duro que ASP.NET encodea como &nbsp;/&#160;/&#8239;. Sin decodificarlo,
+        // el regex capturaba "7:35 p." a medias y una toma de las 7:35 PM se mostraba
+        // como 07:35 de la mañana (hallazgo ALTO de la revisión adversarial). Se
+        // normalizan esas entidades a espacio simple ANTES de buscar.
+        const ventana = html.slice(desde, hasta).replace(/&(?:nbsp|#0*160|#x0*a0|#0*8239|#x0*202f);/gi, " ");
         // v12.4.0 — La HORA ya no se descarta: el regex captura la fecha CON su hora
         // adyacente si el portal la pinta ("11/08/2026 7:35 a. m."). Misma filosofía de
         // no adivinar: la hora solo se acepta si viene PEGADA a la única fecha aceptada.
-        const brutas = ventana.match(/(?:\b\d{1,2}\/\d{1,2}\/20\d{2}|\b20\d{2}-\d{2}-\d{2})(?:[ ,·T]{1,3}\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?\s?m\.?)?)?/gi) || [];
-        const parseadas = brutas.map((s) => _parseFechaHoraLike(s)).filter(Boolean);
+        // v12.4.1 — El separador acepta también NBSP/espacio fino LITERALES, y si tras la
+        // hora capturada el texto inmediato parece un meridiano truncado o una entidad
+        // residual, esa hora se DESCARTA (mejor sin hora que hora invertida).
+        const brutas = ventana.match(/(?:\b\d{1,2}\/\d{1,2}\/20\d{2}|\b20\d{2}-\d{2}-\d{2})(?:[ ,·T  ]{1,3}\d{1,2}:\d{2}(?::\d{2})?(?:[\s  ]*[ap]\.?[\s  ]?m\.?)?)?/gi) || [];
+        const parseadas = brutas.map((b) => {
+          const fh = _parseFechaHoraLike(b);
+          if (!fh || !fh.hora) return fh;
+          // ¿El texto que sigue a esta captura en la ventana insinúa un meridiano a
+          // medias ("p." sin "m.", "&" de entidad sin decodificar)? Hora fuera.
+          const fin = ventana.indexOf(b) + b.length;
+          const cola = ventana.slice(fin, fin + 12);
+          if (/^[\s  ]*(?:&|[ap]\b)/i.test(cola) && !/[ap]\.?[\s  ]?m/i.test(b)) return { iso: fh.iso, hora: null };
+          return fh;
+        }).filter(Boolean);
         const encontradas = [...new Set(parseadas.map((p) => p.iso))];
         if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) {
           fechaIso = encontradas[0];
@@ -1179,26 +1221,47 @@
       if (v === null || v === undefined) return null;
       const s = String(v).trim();
       if (!s) return null;
-      const horaDe = (resto) => {
-          const hm = String(resto || "").match(/^[T ,·]{1,3}(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(a|p)\.?\s?m\.?)?/i);
-          if (!hm) return null;
+      // v12.4.1 — Lo que sigue a la fecha se clasifica en TRES casos (revisión adversarial):
+      //  · hora reconocida y sana → {hora:"HH:MM"}; el separador acepta NBSP ( ) y
+      //    espacio fino ( ), habituales en HTML renderizado;
+      //  · hora seguida de designador de zona ("Z", "+00:00", "-05:00") → hora null (el
+      //    instante podría estar corrido de zona: antes casilla sin hora que hora movida);
+      //  · cualquier otra cosa (texto, un rango "11/08/2026-15/09/2026", "99:99") → la
+      //    FECHA ENTERA se rechaza: un valor con basura pegada no es una fecha confiable.
+      const analizarResto = (resto) => {
+          const r = String(resto || "");
+          if (!r.trim()) return { hora: null, ok: true };            // fecha sola y limpia
+          const hm = r.match(/^[T ,·  ]{1,3}(\d{1,2}):(\d{2})(?::\d{2})?(?:[\s  ]*([ap])\.?[\s  ]?m\.?)?/i);
+          if (!hm) return { hora: null, ok: false };                 // basura tras la fecha
           let h = Number(hm[1]); const min = Number(hm[2]);
           if (hm[3]) { const ap = hm[3].toLowerCase(); if (ap === "p" && h < 12) h += 12; if (ap === "a" && h === 12) h = 0; }
-          if (h < 0 || h > 23 || min < 0 || min > 59) return null;
-          return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+          if (h < 0 || h > 23 || min < 0 || min > 59) return { hora: null, ok: false };
+          // Tras la hora: milisegundos opcionales y luego, si viene una zona explícita,
+          // la hora se calla (no sabemos en qué reloj está escrita).
+          const tras = r.slice(hm[0].length).replace(/^[.,]\d+/, "").replace(/^[\s  ]+/, "");
+          if (/^(?:z\b|z$|[+-]\d{2}:?\d{2})/i.test(tras)) return { hora: null, ok: true };
+          return { hora: `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`, ok: true };
       };
       // v12.3.33 — hallado en revisión adversarial: sin frontera al final ni validación de
       // rango, un folio como "2026-08-1234567" se leía como la fecha 2026-08-12 y
       // "2026-99-99" pasaba entero. Se exige que tras el día NO siga otro dígito y que
       // mes/día estén en rango — igual de estricto que la rama dd/mm/aaaa de abajo.
       let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/);
-      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31)
-          return { iso: `${m[1]}-${m[2]}-${m[3]}`, hora: horaDe(s.slice(m[0].length)) };
+      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31) {
+          const r = analizarResto(s.slice(m[0].length));
+          return r.ok ? { iso: `${m[1]}-${m[2]}-${m[3]}`, hora: r.hora } : null;
+      }
       if (m) return null;
       m = s.match(/^\/Date\((-?\d+)/);
       if (m) {
           const d = new Date(Number(m[1]));
           if (isNaN(d.getTime())) return null;
+          // v12.4.1 — Una medianoche UTC exacta es el patrón "solo guardé la fecha" de un
+          // backend que serializa en UTC: se devuelve la fecha UTC sin hora. Sin esta
+          // guardia, /Date(...T00:00Z)/ en Colombia salía como el DÍA ANTERIOR a las
+          // "19:00" — fecha corrida y hora inventada a la vez.
+          if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0 && d.getUTCMilliseconds() === 0)
+              return { iso: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`, hora: null };
           const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
           // Muchos backend ASP.NET mandan la medianoche exacta cuando solo guardan la
           // FECHA: una 00:00 en punto no se muestra como hora (sería inventar precisión).
@@ -1208,8 +1271,10 @@
       m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/);
       if (m) {
           const dd = m[1].padStart(2, "0"), mm = m[2].padStart(2, "0");
-          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31)
-              return { iso: `${m[3]}-${mm}-${dd}`, hora: horaDe(s.slice(m[0].length)) };
+          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) {
+              const r = analizarResto(s.slice(m[0].length));
+              return r.ok ? { iso: `${m[3]}-${mm}-${dd}`, hora: r.hora } : null;
+          }
       }
       return null;
   }
@@ -1855,11 +1920,15 @@
     const p = getProcessedToday();
     const sDoc = String(docId);
     if (!p.ordenes.includes(sDoc)) p.ordenes.push(sDoc);
-    if ((agrupadores && agrupadores.length) || (actividades && actividades.length)) {
+    if ((agrupadores && agrupadores.length) || actividades) {
       if (!p.ordenesDetalle) p.ordenesDetalle = {};
       const det = p.ordenesDetalle[sDoc] || {};
       det.agrupadores = [...new Set((det.agrupadores || []).concat(agrupadores || []))];
-      if (actividades && actividades.length) det.actividades = [...new Set((det.actividades || []).concat(actividades))];
+      // v12.4.1 — Un arreglo VACÍO también se persiste (det.actividades = []): significa
+      // "estas órdenes no cubrieron ninguna actividad del Excel" (selección manual sin
+      // coincidencia) y es distinto de "marca vieja sin detalle". Sin esta distinción,
+      // el fallback de pymPendientesRestantes silenciaba tamizajes nunca ordenados.
+      if (actividades) det.actividades = [...new Set((det.actividades || []).concat(actividades))];
       det.ts = Date.now();
       p.ordenesDetalle[sDoc] = det;
     }
@@ -2157,8 +2226,11 @@
     if (!pend.length) return pend;
     const det = ordenesDetalleHoy(docId);
     if (!det) return pend;
-    const cubiertas = det.actividades || [];
-    if (!cubiertas.length) return pend.filter((l) => /optometr|odontolog|planificaci|valoraci/i.test(stripAccents(String(l || ""))));
+    const cubiertas = det.actividades;
+    // v12.4.1 — Solo la marca de una versión ANTERIOR (campo ausente, no []) cae al
+    // fallback "se asume que cubrieron lo ordenable": un [] real de hoy significa que
+    // las órdenes no casaron con ninguna actividad y NADA debe silenciarse.
+    if (!Array.isArray(cubiertas)) return pend.filter((l) => /optometr|odontolog|planificaci|valoraci/i.test(stripAccents(String(l || ""))));
     return pend.filter((l) => !cubiertas.includes(l));
   }
 
@@ -2664,11 +2736,17 @@
       }
     });
   }
-  function afterPymLoaded(fileName) {
+  function afterPymLoaded(fileName, esDiarioRealDeHoy) {
     state.pymFile = fileName;
     // v12.4.0 — Día en que se aplicó ESTA carga: con él, la re-búsqueda del diario sabe
     // distinguir "ya tengo el PyM real DE HOY" (parar) de "sigo con el de ayer" (buscar).
-    state.pymDia = todayStamp();
+    // v12.4.1 — Hallazgo ALTO de la revisión adversarial: estampar el día SIEMPRE hacía
+    // que una carga manual de un archivo VIEJO ("Abrir PyM" con el Excel de ayer, justo
+    // lo que induce el recordatorio de las 7:30 cuando la red falló) apagara la búsqueda
+    // del real de hoy para toda la jornada. Ahora el día solo se estampa cuando quien
+    // llama SABE que lo cargado es el diario real de hoy; en cualquier otro caso queda
+    // vacío y debeBuscarPymDiario() sigue buscando — el real reemplaza al llegar.
+    state.pymDia = esDiarioRealDeHoy ? todayStamp() : "";
     if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
     state.lastSignature = ""; tick();
     // [COPY-UX]
@@ -2742,14 +2820,14 @@
 
   // v7.8: se aplica un ÍNDICE ya construido ({map, todos, abandono}) — el lector en
   // streaming lo entrega directo, sin pasar por una tabla intermedia de filas.
-  function applyPymIdx(idx, fileName, mtime, nombreReal) {
+  function applyPymIdx(idx, fileName, mtime, nombreReal, esDiarioRealDeHoy) {
     state.pym = idx.map; state.pymTodos = idx.todos;
     state.pymAbandono = idx.abandono || new Set();
     state.pymMTime = mtime || "";
     // La huella usa el nombre CRUDO del archivo (sin las etiquetas que se le añaden para
     // mostrar), para que coincida con lo que devuelve SharePoint en la siguiente ronda.
     state.pymFP = pymFP(nombreReal || fileName, mtime);
-    afterPymLoaded(fileName);
+    afterPymLoaded(fileName, esDiarioRealDeHoy);
     // La caché se escribe DESPUÉS y por tandas: el panel ya está usable.
     savePymCache(fileName);
     try {
@@ -3091,7 +3169,7 @@
       if (!u) { purgar(); return false; }               // formato v2 u otro: se re-indexa
       if (u.meta.date !== todayStamp()) { purgar(); return false; }
       if (state.pymFile) return true;                    // algo se cargó mientras se desempaquetaba
-      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)"); return true;
+      state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = !!u.meta.fb; afterPymLoaded((u.meta.name || "PyM") + " (auto)", !u.meta.fb); return true;
     } catch (e) { return false; } finally { cacheCargando = false; } }
   // ¿La respuesta es de verdad un Excel? (.xlsx = ZIP, empieza por "PK"). Si SharePoint
   // devuelve la página de inicio de sesión con estado 200, aquí se cae la careta.
@@ -3308,7 +3386,7 @@
       // mismo cartel "PyM del día cargado" una y otra vez durante la consulta.
       const teniaPymPreviamente = !!state.pymMTime;
       state.pymFallback = false;
-      applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name);
+      applyPymIdx(idx, sel.Name + " (PyM de hoy)", sel.TimeLastModified, sel.Name, true);
       if (!silent || eraRespaldo || !teniaPymPreviamente) {
         notify("AZUL", eraRespaldo ? "📋 Ya llegó el PyM real de hoy" : (teniaPymPreviamente ? "📋 PyM del día actualizado" : "📋 PyM del día cargado"),
           sel.Name + "\n" + state.pym.size + " paciente(s) con actividades." + (eraRespaldo ? " Se reemplazó la base piloto." : ""), false);
@@ -3451,8 +3529,13 @@
   function loadPymFile(file) {
     const name = file.name.toLowerCase(); const reader = new FileReader();
     reader.onerror = () => setSummary("No se pudo leer el archivo PyM.", "error");
-    if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); state.pymFallback = false; applyPymIdx(idx, file.name); } catch (err) { setSummary("Error CSV: " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
-    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : "")); } catch (err) { setSummary("Error .xlsx (" + err.message + "). Prueba .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
+    // v12.4.1 — Un archivo elegido a mano solo cuenta como "el diario real de HOY" (y por
+    // tanto detiene la re-búsqueda automática) si su NOMBRE trae la fecha de hoy. Un
+    // Excel de ayer cargado a mano ya no apaga la búsqueda: el real de hoy lo reemplaza
+    // en cuanto aparece en SharePoint (hallazgo ALTO de la revisión adversarial).
+    const esDeHoy = esNombreDeHoy(file.name);
+    if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); state.pymFallback = false; applyPymIdx(idx, file.name, "", file.name, esDeHoy); } catch (err) { setSummary("Error CSV: " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
+    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : ""), "", file.name, esDeHoy); } catch (err) { setSummary("Error .xlsx (" + err.message + "). Prueba .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
   }
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
@@ -7408,18 +7491,27 @@
       // agenda llega incompleta — se advierte en pantalla y en consola, porque "el mismo
       // único cupo de 5:30 PM todos los días" es exactamente esa firma repetida.
       try {
-        const firma = turnosLibres.map(({ turno: t }) => String(t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno || "")).sort().join(",");
-        for (const [fechaPrev, firmaPrev] of _turnosVistosPorFecha) {
-          if (fechaPrev !== selectedDateInfo.fmt && firmaPrev === firma && firma) {
-            const w2 = document.createElement("div");
-            w2.className = "vgl-agm-err";
-            w2.textContent = `⚠ Everest devolvió LOS MISMOS turnos para el ${fechaPrev} y el ${selectedDateInfo.fmt}. La agenda puede estar llegando incompleta — verifique en la agenda oficial antes de confiar en estos horarios.`;
-            slotsEl.appendChild(w2);
-            console.warn("[Vigilante Agendamiento] agenda congelada: firma de turnos idéntica entre fechas", fechaPrev, "y", selectedDateInfo.fmt, "→", firma);
-            break;
+        // v12.4.1 — La firma exige que TODOS los turnos tengan id reconocible: si alguno
+        // viene sin id, la firma queda vacía y no se compara (antes, turnos sin id daban
+        // la firma ",," y CUALQUIER par de fechas disparaba el falso positivo). La clave
+        // lleva la especialidad: los mismos turnos en fechas distintas solo alarman
+        // dentro de la MISMA especialidad.
+        const ids = turnosLibres.map(({ turno: t }) => String(t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno || "")).filter(Boolean);
+        const firma = (ids.length && ids.length === turnosLibres.length) ? ids.sort().join(",") : "";
+        const claveFecha = selectedEspId + "|" + selectedDateInfo.fmt;
+        if (firma) {
+          for (const [clavePrev, firmaPrev] of _turnosVistosPorFecha) {
+            if (clavePrev !== claveFecha && clavePrev.split("|")[0] === String(selectedEspId) && firmaPrev === firma) {
+              const w2 = document.createElement("div");
+              w2.className = "vgl-agm-err";
+              w2.textContent = `⚠ Everest devolvió LOS MISMOS turnos para el ${clavePrev.split("|")[1]} y el ${selectedDateInfo.fmt}. La agenda puede estar llegando incompleta — verifique en la agenda oficial antes de confiar en estos horarios.`;
+              slotsEl.appendChild(w2);
+              console.warn("[Vigilante Agendamiento] agenda congelada: firma de turnos idéntica entre fechas", clavePrev, "y", claveFecha, "→", firma);
+              break;
+            }
           }
         }
-        _turnosVistosPorFecha.set(selectedDateInfo.fmt, firma);
+        _turnosVistosPorFecha.set(claveFecha, firma);
       } catch (e) {}
       turnosLibres.forEach(({ turno: t, agendaId, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
@@ -7573,7 +7665,18 @@
       confirmBtn.disabled = true;
       confirmBtn.textContent = "⏳ Asignando cita...";
 
-      const turnoId = selectedTurnoObj.turnoId || selectedTurnoObj.id || selectedTurnoObj.TurnoId || selectedTurnoObj.idTurno || selectedTurnoObj.IdTurno;
+      // v12.4.1 — CONTEXTO CONGELADO ANTES DE CUALQUIER await (hallazgo ALTO de la
+      // revisión adversarial): si el médico clicaba otra hora o otro chip de fecha
+      // mientras la verificación estaba en vuelo, el turno ASIGNADO podía divergir de la
+      // hora/fecha mostradas en el mensaje de éxito. Todo lo que describe al turno se
+      // captura en constantes aquí, y los botones de hora se bloquean mientras la
+      // confirmación está en curso (los recrea habilitados cualquier cargarHoras()).
+      const turnoElegido = selectedTurnoObj;
+      const ctxElegido = selectedTurnoCtx;
+      const fechaElegida = selectedDateInfo;
+      const turnoId = turnoElegido.turnoId || turnoElegido.id || turnoElegido.TurnoId || turnoElegido.idTurno || turnoElegido.IdTurno;
+      const horaTxt = turnoElegido.horaTexto || turnoElegido.hora || turnoElegido.horaInicio || "";
+      modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => { b.disabled = true; });
 
       // v12.4.0 — VERIFICACIÓN EN TIEMPO REAL DEL CUPO (el mismo patrón que ya usaba el
       // laboratorio): justo antes de confirmar se re-consulta la agenda; si el turno
@@ -7581,9 +7684,9 @@
       // se dispara AsignarTurno: se recargan los horarios frescos y se le dice al médico
       // que elija otra hora. Si la re-consulta falla por red (null), se sigue adelante:
       // el servidor sigue siendo la compuerta final y un fallo de red no debe bloquear.
-      if (selectedTurnoCtx && selectedTurnoCtx.agendaId) {
+      if (ctxElegido && ctxElegido.agendaId) {
         confirmBtn.textContent = "⏳ Verificando que el cupo siga disponible...";
-        const fresco = await apiAccesoObtenerTurnos(selectedTurnoCtx.agendaId, selectedTurnoCtx.fecha, pacienteIdAcceso);
+        const fresco = await apiAccesoObtenerTurnos(ctxElegido.agendaId, ctxElegido.fecha, pacienteIdAcceso);
         if (!vivo()) return;
         const listaFresca = extractAgendasList(fresco);
         if (Array.isArray(listaFresca) && listaFresca.length) {
@@ -7594,14 +7697,15 @@
           });
           if (!sigueLibre) {
             vglLog("APPCITA", "TurnoYaNoDisponible", { turnoId });
-            const horaPerdida = selectedTurnoCtx.horaTxt || "elegida";
+            const horaPerdida = ctxElegido.horaTxt || horaTxt || "elegida";
             selectedTurnoObj = null; selectedTurnoCtx = null;
             await cargarHoras(); // repinta los cupos REALES del momento (la hora tomada ya no aparece)
             if (vivo()) {
               const w = document.createElement("div");
               w.className = "vgl-agm-err";
               w.textContent = `⚠ La hora ${horaPerdida} ya no está disponible: acaba de ser tomada por otro usuario. Los horarios se actualizaron — elija otra hora.`;
-              slotsEl.prepend(w);
+              // prepend() no existe en todos los entornos (el DOM simulado del banco, WebViews viejos)
+              if (typeof slotsEl.prepend === "function") slotsEl.prepend(w); else slotsEl.appendChild(w);
               confirmBtn.disabled = true;
               confirmBtn.textContent = "✓ Sí, Crear Cita";
             }
@@ -7612,10 +7716,9 @@
       const isPyM = !!modal.querySelector("#vgl-agm-pym-chk").checked;
       const obsInput = modal.querySelector("#vgl-agm-obs").value || "";
       const obs = selectedEspId === 12 ? obsInput : `REMISION A ${selectedEspName.toUpperCase()}. ${obsInput}`.trim();
-      const horaTxt = selectedTurnoObj.horaTexto || selectedTurnoObj.hora || selectedTurnoObj.horaInicio || "";
 
-      console.log("[Vigilante Agendamiento] Asignando turno RCV:", { turnoId, pacienteIdAcceso, fechaIso: selectedDateInfo.iso, obs, isPyM, selectedEspId });
-      vglLog("APPCITA", "AsignarTurnoRequested", { turnoId, pacienteIdAcceso, fecha: selectedDateInfo.iso });
+      console.log("[Vigilante Agendamiento] Asignando turno RCV:", { turnoId, pacienteIdAcceso, fechaIso: fechaElegida.iso, obs, isPyM, selectedEspId });
+      vglLog("APPCITA", "AsignarTurnoRequested", { turnoId, pacienteIdAcceso, fecha: fechaElegida.iso });
       // v11.0.1 — Marcacion="NA": el valor que envía la aplicación oficial en la única
       // secuencia capturada que terminó en "Agendada Correctamente". "Consulta" no aparece
       // ni una vez en las 1527 llamadas registradas: era un valor inventado.
@@ -7631,7 +7734,7 @@
       const celularSms = (smsChk && smsChk.checked && smsTel) ? String(smsTel.value || "").replace(/\D/g, "") : "";
       const progSel = modal.querySelector("#vgl-agm-prog-sel");
       const programaId = (progSel && progSel.value) || "";
-      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId, celularSms);
+      const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, fechaElegida.iso, obs, isPyM, "NA", programaId, celularSms);
       // v12.0.0 — Se registran solo campos PLANOS y acotados. sanitizePII únicamente
       // censura valores de primer nivel, así que pasar el objeto `res` entero podía escribir
       // datos del paciente en la bitácora local sin filtrar.
@@ -7658,18 +7761,18 @@
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-agm-dinfo";
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
-          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${selectedDateInfo.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
         }
 
-        markCitaAgendadaHoy(apt.doc_id, selectedDateInfo.iso);
+        markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso);
         // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
         // quedan vivos en el Centro de actividades de Windows y REAPARECEN horas después.
         // Se indica además a qué número salió el SMS, para que el médico pueda verificarlo.
         notify("VERDE", "✅ Cita asignada exitosamente",
-          `Paciente: ${patientName}\nFecha: ${selectedDateInfo.fmt} · Hora: ${horaTxt}`
+          `Paciente: ${patientName}\nFecha: ${fechaElegida.fmt} · Hora: ${horaTxt}`
           + (ultimoSmsEnviado ? `\nSMS de recordatorio enviado al ${ultimoSmsEnviado}.` : `\nSin SMS de recordatorio.`),
-          false, "cita|" + apt.doc_id + "|" + selectedDateInfo.iso);
+          false, "cita|" + apt.doc_id + "|" + fechaElegida.iso);
         bumpStat("atiempo");
 
         // v11.0.1 — La toma de muestras se agenda SOLO si la cita principal se creó de
@@ -7682,7 +7785,7 @@
           // el día que el médico haya elegido con los chips de fecha alterna: si el sugerido
           // no tenía turnos y el médico eligió otro, la orden se mandaba igual al día
           // original (sin cupo). Ahora se usa la fecha realmente seleccionada.
-          const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(selectedDateInfo.iso, 5);
+          const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(fechaElegida.iso, 5);
           // v12.3.31 — se reutiliza el mismo celular ya capturado/editado por el médico
           // para el SMS de la cita principal (celularSms), para que el paciente también
           // reciba confirmación de la toma de muestras cuando ese número es conocido.
@@ -8993,8 +9096,13 @@
       // "al día". El tamaño del texto ahora lo gobierna la clase .vgl-chip (fila que
       // envuelve, texto completo visible), sin estilo inline que la pise.
       const pymsPanel = panelActivities(a.pym);
+      // v12.4.1 — Si el filtro ocultó remisiones (AV/OD), un chip compacto lo dice: sin
+      // él, con el aviso de la historia apagado en Ajustes esas remisiones quedaban
+      // invisibles en TODOS los canales (hallazgo de la revisión adversarial).
+      const ocultas = a.pym.length - pymsPanel.length;
+      const chipOcultas = ocultas > 0 ? `<span class="vgl-chip" style="opacity:.75">+ remisión AV/OD</span>` : "";
       const pyms = pymsPanel.length
-        ? `<div class="vgl-pyms">${pymsPanel.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}</div>`
+        ? `<div class="vgl-pyms">${pymsPanel.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipOcultas}</div>`
         : (a.pym.length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
           : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
           : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
@@ -9484,7 +9592,7 @@
             unpackPym(raw, makeYielder(15)).then((u) => {
               if (u && u.meta.date === todayStamp() && !u.meta.fb && state.pymFallback) {
                 state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || ""; state.pymFallback = false;
-                afterPymLoaded((u.meta.name || "PyM") + " (auto)");
+                afterPymLoaded((u.meta.name || "PyM") + " (auto)", true);
                 notify("AZUL", "📋 Ya llegó el PyM real de hoy", (u.meta.name || "PyM") + "\n" + state.pym.size + " paciente(s). Se reemplazó la base piloto.", false, "pymreal|" + todayStamp());
               }
             }).catch(() => {});

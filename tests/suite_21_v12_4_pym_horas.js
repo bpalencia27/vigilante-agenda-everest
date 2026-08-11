@@ -31,8 +31,32 @@ module.exports = {
       t.igual(api._parseFechaHoraLike("11/08/2026 12:15 p. m."), { iso: "2026-08-11", hora: "12:15" });
     });
 
-    t.caso("_parseFechaHoraLike: hora fuera de rango se descarta, la fecha se conserva", () => {
-      t.igual(api._parseFechaHoraLike("11/08/2026 99:99"), { iso: "2026-08-11", hora: null });
+    t.caso("_parseFechaHoraLike v12.4.1: basura tras la fecha invalida el valor ENTERO (revisión adversarial)", () => {
+      // Un rango, un texto o una pseudo-hora pegados a la fecha significan que el valor
+      // NO es una fecha confiable: mejor rechazarlo que escribir la primera mitad.
+      t.igual(api._parseFechaHoraLike("11/08/2026 99:99"), null);
+      t.igual(api._parseFechaHoraLike("11/08/2026-15/09/2026"), null);
+      t.igual(api._parseFechaHoraLike("12/05/2026 Control"), null);
+      t.igual(api._parseFechaHoraLike("2026-08-11 tomado"), null);
+    });
+
+    t.caso("_parseFechaHoraLike v12.4.1: designador de zona (Z / ±hh:mm) calla la hora, conserva la fecha", () => {
+      // No sabemos en qué reloj está escrita esa hora: antes casilla sin hora que hora corrida.
+      t.igual(api._parseFechaHoraLike("2026-08-11T12:35:00Z"), { iso: "2026-08-11", hora: null });
+      t.igual(api._parseFechaHoraLike("2026-08-11T12:35:00+00:00"), { iso: "2026-08-11", hora: null });
+      t.igual(api._parseFechaHoraLike("2026-08-11T07:35:00-05:00"), { iso: "2026-08-11", hora: null });
+      t.igual(api._parseFechaHoraLike("2026-08-11T07:35:00.123"), { iso: "2026-08-11", hora: "07:35" });
+    });
+
+    t.caso("_parseFechaHoraLike v12.4.1: medianoche UTC exacta = fecha-sola en UTC (sin corrimiento de día)", () => {
+      // 1786752000000 = 2026-08-15T00:00:00Z. En Colombia (UTC-5) la versión anterior
+      // devolvía 2026-08-14 con hora "19:00": día corrido Y hora inventada.
+      t.igual(api._parseFechaHoraLike("/Date(1786752000000)/"), { iso: "2026-08-15", hora: null });
+    });
+
+    t.caso("_parseFechaHoraLike v12.4.1: NBSP y espacio fino como separadores de la hora", () => {
+      t.igual(api._parseFechaHoraLike("11/08/2026 7:35 a. m."), { iso: "2026-08-11", hora: "07:35" });
+      t.igual(api._parseFechaHoraLike("11/08/2026 7:35 p. m."), { iso: "2026-08-11", hora: "19:35" });
     });
 
     t.caso("_parseFechaHoraLike: /Date(ms)/ conserva la hora real y calla la medianoche exacta", () => {
@@ -79,6 +103,16 @@ module.exports = {
       t.igual(r[0].horaTxt, null);
     });
 
+    t.caso("_atheneaExtraerSolicitudes v12.4.1: el 'p. m.' con entidad HTML (&nbsp;/&#160;) NO invierte la hora", () => {
+      // ASP.NET encodea el espacio duro del designador español: sin normalizar entidades,
+      // "7:35 p.&nbsp;m." se capturaba a medias y una toma de la TARDE salía como 07:35
+      // de la mañana (hallazgo ALTO de la revisión adversarial).
+      const conNbsp = '<div class="card">11/08/2026 7:35 p.&nbsp;m.<form action="/Resultados/Reporte" id="5552026" data-modulo="LAB"></form></div>';
+      t.igual(api._atheneaExtraerSolicitudes(conNbsp)[0].horaTxt, "19:35");
+      const conNum = '<div class="card">11/08/2026 7:35 p.&#160;m.<form action="/Resultados/Reporte" id="5552026" data-modulo="LAB"></form></div>';
+      t.igual(api._atheneaExtraerSolicitudes(conNum)[0].horaTxt, "19:35");
+    });
+
     // ---------- chips del panel: AV/OD ocultos, el resto visible ----------
     t.caso("isPanelHiddenActivity: solo Optometría y Odontología se ocultan del panel", () => {
       t.cierto(api.isPanelHiddenActivity("Remisión a Optometría"));
@@ -123,6 +157,26 @@ module.exports = {
       const det = c.api.ordenesDetalleHoy("777");
       t.igual(det.agrupadores, ["A1", "A2"]);
       t.igual(det.actividades, ["VIH", "Mamografía"]);
+    });
+
+    t.caso("pymPendientesRestantes v12.4.1: órdenes de hoy SIN coincidencia PyM (actividades=[]) no silencian nada", () => {
+      // El médico ordenó manualmente algo que no casaba con el Excel: el [] queda
+      // persistido y significa "no se cubrió ninguna actividad" — el aviso muestra todo.
+      const c = cargar();
+      c.api.__state.pym = new Map([["888", ["VIH", "Mamografía", "Remisión a Odontología"]]]);
+      c.api.markOrdenesCreadasHoy("888", ["AGP-X"], []);
+      t.igual(c.api.pymPendientesRestantes("888"), ["VIH", "Mamografía", "Remisión a Odontología"]);
+    });
+
+    t.caso("afterPymLoaded v12.4.1: un archivo que NO es el diario real de hoy no detiene la re-búsqueda", () => {
+      // «Abrir PyM» con el Excel de AYER (lo que induce el recordatorio de las 7:30 si
+      // la red falló) apagaba la búsqueda del real de hoy para toda la jornada.
+      const c = cargar();
+      c.api.__state.pymFallback = false;
+      c.api.afterPymLoaded("Agenda_Dia_CMB_20200101.xlsx (manual)", false);
+      t.cierto(c.api.debeBuscarPymDiario(), "carga que no es el diario de hoy: seguir buscando");
+      c.api.afterPymLoaded("Agenda_Dia_CMB_hoy.xlsx (PyM de hoy)", true);
+      t.falso(c.api.debeBuscarPymDiario(), "diario real de hoy: parar");
     });
 
     // ---------- parada del polling del PyM diario ----------

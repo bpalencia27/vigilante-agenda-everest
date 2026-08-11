@@ -599,6 +599,127 @@ module.exports = {
       t.cierto(botonTurno.classList.contains("active"));
     });
 
+    await t.casoAsync("openAgendamientoModal v12.4: se consultan TODAS las agendas propias del día (jornada partida), no solo la primera", async () => {
+      // El bug real reportado en consultorio: la médico con agenda de mañana Y de tarde
+      // solo veía los turnos de UNA (la que el servidor listara primero) — "solo aparece
+      // 5:30 PM todos los días". Con .filter() deben salir los turnos de ambas.
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cDos = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const f = iso2fmt(iso);
+            return respuestaJson({ agendas: [
+              { agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: f, sede: "CMB" },     // jornada mañana
+              { agendaId: 63, medico: "OTRO PROFESIONAL", fechaAgenda: f, sede: "CMB" },    // ajena
+              { agendaId: 62, medico: "ANA MARIA PEREZ", fechaAgenda: f, sede: "CMB" },     // jornada tarde
+            ] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) {
+            if (u.includes("agendaid=61")) return respuestaJson({ turnos: [{ id: 700, horaTexto: "07:00 AM", estado: "ACT" }] });
+            if (u.includes("agendaid=62")) return respuestaJson({ turnos: [{ id: 1730, horaTexto: "05:30 PM", estado: "ACT" }] });
+            return respuestaJson({ turnos: [{ id: 999, horaTexto: "09:00 AM", estado: "ACT" }] });
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cDos);
+      cDos.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cDos.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cDos.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      // En el DOM simulado innerHTML no refleja appendChild: se inspeccionan los hijos.
+      const textos = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ");
+      t.cierto(textos.includes("07:00 AM"), "la agenda de la mañana aparece");
+      t.cierto(textos.includes("05:30 PM"), "la agenda de la tarde TAMBIÉN aparece (antes se perdía)");
+      t.falso(textos.includes("09:00 AM"), "la agenda de otro profesional queda fuera");
+      t.falso(textos.includes("No se identificó su agenda propia"), "con agendas propias no hay aviso de agenda ajena");
+    });
+
+    await t.casoAsync("confirmar cita v12.4: el cupo se re-verifica en tiempo real — si ya no está ACT, NO se dispara AsignarTurno", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      let turnosServidos = 0;
+      const urlsVistas = [];
+      const cVer = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urlsVistas.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) {
+            // Primera consulta (listado): el turno está libre. Las siguientes (la
+            // verificación previa a confirmar y el re-listado): otro usuario lo tomó.
+            turnosServidos++;
+            return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: turnosServidos === 1 ? "ACT" : "CAN" }] });
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cVer);
+      cVer.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cVer.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cVer.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const botonTurno = [...slots.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      disparar(botonTurno, "click");
+      const confirmar = modal.querySelector("#vgl-agm-confirm");
+      t.igual(confirmar.disabled, false);
+      disparar(confirmar, "click");
+      await esperar(80);
+      t.falso(urlsVistas.some((u) => u.includes("AsignarTurno")), "la escritura clínica JAMÁS se disparó con el cupo perdido");
+      const textosVer = [...slots.children].map((n) => (n.innerHTML || "") + " " + (n.textContent || "")).join(" | ") + " " + slots.innerHTML;
+      t.cierto(textosVer.includes("ya no está disponible"), "se le dice al médico que la hora acaba de ser tomada");
+      t.cierto(confirmar.disabled, "el botón de confirmar queda a la espera de otra hora");
+    });
+
+    await t.casoAsync("confirmar cita v12.4: con el cupo aún libre, AsignarTurno SÍ se dispara", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const urlsVistas = [];
+      const cOk = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urlsVistas.push(u);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("AsignarTurno")) return respuestaJson({ error: false, data: { radicado: 12345, motivo: "Agendada Correctamente" } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cOk);
+      cOk.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cOk.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cOk.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const botonTurno = [...slots.children].find((n) => (n.innerHTML || "").includes("08:00 AM"));
+      disparar(botonTurno, "click");
+      disparar(modal.querySelector("#vgl-agm-confirm"), "click");
+      await esperar(80);
+      t.cierto(urlsVistas.some((u) => u.includes("AsignarTurno")), "con el cupo verificado libre, la cita sí se crea");
+      t.cierto(modal.querySelector("#vgl-agm-confirm").textContent.includes("Cita Creada Exitosamente"));
+    });
+
     // ================= openOrdenamientoModal =================
     await t.casoAsync("openOrdenamientoModal: una cita sin documento solo deja un aviso warn", async () => {
       await cv.api.openOrdenamientoModal({ nombre: "SIN DOC" });
