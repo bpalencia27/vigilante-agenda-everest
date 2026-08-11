@@ -40,13 +40,19 @@ module.exports = {
     }
 
     // ---------- heartbeat / share ----------
-    t.caso("heartbeat: sin Web Locks el fallback deja a esta pestaña como líder", () => {
+    t.caso("heartbeat: liderazgo por latido con RELEVO (v12.3.36 — el líder congelado por Edge pierde el mando)", () => {
       const c = cargar({ silencioso: true });
-      t.igual(c.api.heartbeat(), true, "navigator.locks nulo => líder por fallback");
-      c.api.__state.leader = false;
-      t.igual(c.api.heartbeat(), false, "devuelve el estado atómico actual, no uno cacheado");
-      c.api.__state.leader = true;
-      t.igual(c.api.heartbeat(), true);
+      const ls = c.env.win.localStorage;
+      t.igual(c.api.heartbeat(), true, "sin latido previo, esta pestaña toma el mando");
+      t.cierto(ls.getItem("vgl_leader_beat") !== null, "y deja su latido escrito");
+      // Otra pestaña dejó un latido FRESCO: esta se subordina sin robar el mando.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now() }));
+      t.igual(c.api.heartbeat(), false, "latido ajeno fresco: no se roba el mando");
+      t.igual(c.api.__state.leader, false);
+      // El latido ajeno envejece más de 20 s (líder congelado por Edge): relevo.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now() - 21000 }));
+      t.igual(c.api.heartbeat(), true, "latido vencido: la pestaña despierta releva al líder congelado");
+      t.igual(c.api.__state.leader, true);
     });
 
     t.caso("share: sin BroadcastChannel no lanza y no ensucia state.shared", () => {
@@ -252,6 +258,9 @@ module.exports = {
     // ---------- pymReminderCheck ----------
     t.caso("pymReminderCheck: avisa una sola vez al día y solo pasada la hora configurada", () => {
       const c = cargar({ silencioso: true });
+      // v12.3.36 — el liderazgo ya no es automático al arrancar (se gana con el primer
+      // latido); esta prueba es del recordatorio, no del liderazgo, así que lo fija.
+      c.api.__state.leader = true;
       const capturas = [];
       instalarNotificacion(c, capturas);
       const OriginalDate = c.ctx.Date || Date;
@@ -482,5 +491,27 @@ module.exports = {
     // {childList:true,subtree:true}: cientos de mutaciones/minuto bajo Angular). La misma
     // validación vive ahora anclada a tick() — ver suite_18_athenea_sesion.js, que prueba
     // que createLabInjectorUI es idempotente y que tick() la llama solo en secc==="historia".
+
+    await t.casoAsync("autoFetchAtheneaLabsForActivePatient: PRE-CARGA sin escribir — el robot ya no diligencia ninguna casilla solo (Incidente v12.3.34)", async () => {
+      const campo = { id: "resultadoGlicemia", tagName: "INPUT", value: "", dispatchEvent: () => {} };
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const url = String(o.url);
+          if (url.endsWith("/Resultados/BusquedaPaciente")) { o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' }); return; }
+          if (url.endsWith("/Resultados/BuscarPaciente")) { o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' }); return; }
+          if (url.endsWith("/Resultados/DatosPaciente")) { o.onload({ status: 200, responseText: 'CC 12345678 <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>' }); return; }
+          if (url.includes("consultaDetalleSolicitud")) { o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2026-08-01" }]) }) }); return; }
+          if (o.onerror) o.onerror(new Error("url no simulada"));
+        },
+      });
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : (id === "resultadoGlicemia" ? campo : null));
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ closest: () => null, textContent: "CC 12.345.678" }] : []);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(campo.value, "", "NADA se escribe en la historia sin el clic del médico");
+      const logs = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"] || "[]");
+      t.cierto(logs.some((e) => e.act === "LabsAutoPrefetched"), "la pre-carga queda registrada en la bitácora");
+      t.falso(logs.some((e) => e.act === "LabsAutoInjected"), "y ninguna inyección automática vuelve a ocurrir");
+    });
   },
 };

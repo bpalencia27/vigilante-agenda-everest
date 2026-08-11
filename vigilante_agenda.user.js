@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.33
+// @version      12.3.37
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.33";
+  const VERSION = "12.3.37";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -519,6 +519,78 @@
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
 
+  // v12.3.37 — SECCIÓN URONÁLISIS DE LA RUTA CRÓNICOS (pedido del consultorio, pantallazo
+  // del 2026-08-11): además del interruptor NORMAL/ANORMAL, la vista tiene 7 casillas de
+  // texto para los componentes del parcial de orina, todas con placeholder
+  // "Resultado <Componente>" visible en pantalla. Ese placeholder es el ÚNICO ancla
+  // confirmada del DOM (no hay ids capturados para estos campos), así que la búsqueda va
+  // por placeholder normalizado (sin tildes, sin mayúsculas/minúsculas). Los nombres con
+  // que Athenea entrega cada componente AÚN NO están confirmados en campo: los sinónimos
+  // de abajo son candidatos razonables del LIS, y si ninguno casa la casilla queda VACÍA
+  // (fallo seguro) mientras el diagnóstico de orina imprime el nombre real para añadirlo
+  // aquí con evidencia, nunca por adivinanza.
+  // El interruptor NORMAL/ANORMAL NO se automatiza todavía: es interpretación clínica y
+  // no hay evidencia del control ni de la semántica de IdNormalidad — regla de la casa
+  // (v11.0.1): ante la duda, se deja al médico, jamás se inventa.
+  const UROANALISIS_COMPONENTES = [
+    { key: "NITRITOS",    placeholder: "RESULTADO NITRITOS",    names: ["NITRITO"] },
+    // Las exclusiones "24 H"/"HORAS"/"DEPURAC" replican el patrón de la entrada sérica de
+    // CREATININA (incidente v11.0.1): la glucosuria/proteinuria DE 24 HORAS es un examen
+    // CUANTITATIVO distinto (mg/24 h) que, por coincidencia de nombre, caería verbatim en
+    // la casilla de la tira reactiva del parcial. Confirmado en revisión adversarial
+    // ejecutando el flujo completo. "ALBUMINA" se retiró de los sinónimos de proteinuria:
+    // "ALBUMINA EN ORINA" es el hijo cuantitativo del panel RAC (mg/L), no la tira; si el
+    // LIS llama "ALBUMINA" a la proteína del parcial, el diagnóstico de orina lo mostrará
+    // y se añadirá con evidencia.
+    { key: "GLUCOSURIA",  placeholder: "RESULTADO GLUCOSURIA",  names: ["GLUCOSURIA", "GLUCOSA"], excluye: ["24 H", "HORAS", "DEPURAC"] },
+    // "RELACION PROTEINA/CREATININA" y "MICROALBUMINURIA" son OTROS exámenes (cocientes),
+    // no la proteína del parcial: sin la exclusión, su valor caería en esta casilla.
+    { key: "PROTEINURIA", placeholder: "RESULTADO PROTEINURIA", names: ["PROTEINURIA", "PROTEINA"], excluye: ["RELACION", "CREATININ", "MICROALBUMIN", "24 H", "HORAS", "DEPURAC"] },
+    { key: "CILINDROS",   placeholder: "RESULTADO CILINDROS",   names: ["CILINDRO"] },
+    { key: "SANGRE",      placeholder: "RESULTADO SANGRE",      names: ["SANGRE", "HEMOGLOBINA"] },
+    { key: "HEMATIES",    placeholder: "RESULTADO HEMATIES",    names: ["HEMATIE", "ERITROCITO"] },
+    { key: "LEUCOCITOS",  placeholder: "RESULTADO LEUCOCITOS",  names: ["LEUCOCIT", "ESTERASA"] }
+  ];
+
+  // Normalización compartida para comparar nombres/placeholders: sin tildes, en
+  // mayúsculas y con los espacios colapsados ("Resultado  Hematíes " → "RESULTADO HEMATIES").
+  const _canonTexto = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
+
+  // v12.3.37 — ¿Este analito pertenece al panel de ORINA? Primero por su padre
+  // (NombreParametroPadre, el campo con que Athenea agrupa los hijos de un panel);
+  // como respaldo, por nombre propio SOLO cuando el nombre existe únicamente en orina.
+  // Jamás por "LEUCOCITOS"/"HEMATIES"/"HEMOGLOBINA" a secas: esos también son del
+  // hemograma EN SANGRE, y confundirlos escribiría sangre en las casillas de orina.
+  function _esAnalitoDeOrina(lab) {
+      const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));
+      // "URINAR" cubre SEDIMENTO URINARIO / CITOQUIMICO URINARIO (revisión adversarial:
+      // "URINARIO" no contiene la subcadena "ORINA" y esos padres se colaban al suero).
+      if (/ORINA|URINAR|UROAN/.test(padre)) return true;
+      const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+      return /\bORINA\b/.test(nombre) || /GLUCOSURIA|PROTEINURIA|NITRITO|CILINDRO|ESTERASA LEUCOCITARIA/.test(nombre);
+  }
+
+  function _matchUroComponente(lab) {
+      const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+      if (!nombre) return null;
+      for (const comp of UROANALISIS_COMPONENTES) {
+          if (comp.excluye && comp.excluye.some((x) => nombre.includes(x))) continue;
+          if (comp.names.some((n) => nombre.includes(n))) return comp;
+      }
+      return null;
+  }
+
+  // Busca la casilla del componente por su placeholder visible (única ancla confirmada).
+  function _findUroInput(placeholderCanon) {
+      try {
+          const inputs = document.querySelectorAll("input[placeholder]");
+          for (const el of inputs) {
+              if (_canonTexto(el.placeholder) === placeholderCanon) return el;
+          }
+      } catch (e) {}
+      return null;
+  }
+
   // v12.0.0 (del otro linaje) — Consulta a Athenea con reintento por AÑO. El endpoint exige
   // el año de la solicitud; con un único año, los laboratorios pedidos a finales del año
   // anterior no aparecían nunca. Se prueban el año en curso y los dos anteriores, y se
@@ -677,6 +749,15 @@
 
   // Lee las tarjetas de solicitud de la página de resultados: cada una es un
   // <form action="/Resultados/Reporte"> cuyo id concatena idSolicitud+año.
+  // v12.3.35 — FECHA DE LA SOLICITUD desde su tarjeta. CONFIRMADO con el diagnóstico de
+  // campo (2026-08-11): consultaDetalleSolicitud NO trae fecha en NINGUNA parte — ni en
+  // los 18 campos del analito ni en los 10 del envoltorio. La única fuente que queda es
+  // ESTA página, donde el portal le muestra al usuario la fecha de cada solicitud junto a
+  // su tarjeta. Se busca en el texto inmediatamente anterior a cada form un valor con
+  // forma de fecha, con DOS guardas para no adivinar jamás: (1) la tarjeta debe contener
+  // EXACTAMENTE UNA fecha reconocible (ambigüedad = sin fecha), y (2) el AÑO de esa fecha
+  // debe coincidir con el año que la propia solicitud declara en su id (idSolicitud+año).
+  let _diagFechaSolicitudHtmlLogged = false;
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
     const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
@@ -686,7 +767,30 @@
       const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
       if (!idM) continue;
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
-      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB" });
+      let fechaIso = null;
+      try {
+        // v12.3.36 — CONFIRMADO con el diagnóstico de campo de la .35: la ventana previa
+        // al formulario solo contiene la apertura de la tarjeta ("<div class=card>...");
+        // la fecha que el portal muestra va DESPUÉS del formulario, dentro de la misma
+        // tarjeta. La ventana ahora cubre ambos lados. Si por el lado posterior alcanza
+        // a rozar la tarjeta vecina, las dos guardas (fecha ÚNICA y año coincidente)
+        // convierten esa ambigüedad en "sin fecha" — jamás en la fecha equivocada.
+        const desde = Math.max(0, m.index - 400);
+        const hasta = Math.min(html.length, m.index + tag.length + 700);
+        const ventana = html.slice(desde, hasta);
+        const encontradas = [...new Set(
+          (ventana.match(/\b\d{1,2}\/\d{1,2}\/20\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b/g) || [])
+            .map((s) => _parseFechaLike(s)).filter(Boolean)
+        )];
+        if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) fechaIso = encontradas[0];
+        if (!_diagFechaSolicitudHtmlLogged) {
+          _diagFechaSolicitudHtmlLogged = true;
+          console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud — fechas reconocibles:", encontradas,
+            "· aceptada:", fechaIso || "NINGUNA",
+            "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)));
+        }
+      } catch (e) {}
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso });
     }
     return out;
   }
@@ -885,7 +989,18 @@
     const resuelto = await getAtheneaSolicitudesAuto(docId);
     if (!resuelto || !resuelto.solicitudes.length) return [];
     const porLab = resuelto.solicitudes.filter((s) => s.modulo === "LAB");
-    const listas = await Promise.all(porLab.map((s) => fetchAtheneaLabs(s.idSolicitud, s.ano).catch(() => [])));
+    // v12.3.35 — cada analito hereda la fecha de SU PROPIA solicitud (raspada de la
+    // tarjeta del portal, ver _atheneaExtraerSolicitudes): es la única fuente de fecha
+    // que existe, confirmado en campo. No pisa una fecha que fetchAtheneaLabs ya hubiera
+    // detectado por otra vía.
+    const listas = await Promise.all(porLab.map((s) =>
+      fetchAtheneaLabs(s.idSolicitud, s.ano).then((arr) => {
+        if (s.fechaIso && Array.isArray(arr)) arr.forEach((a) => {
+          if (a && typeof a === "object" && !("__vglFechaSolicitud" in a)) a.__vglFechaSolicitud = s.fechaIso;
+        });
+        return arr;
+      }).catch(() => [])
+    ));
     return listas.flat();
   }
 
@@ -907,7 +1022,20 @@
       for (const item of WHITELIST_13_LABS) {
           if (code && item.codes.includes(code)) return item;
       }
+      // v12.3.37 — GUARDA DE ORINA. Los hijos del parcial de orina se llaman igual que
+      // exámenes de SANGRE ("HEMOGLOBINA", "GLUCOSA", "ALBUMINA"...): sin esta guarda, la
+      // hemoglobina EN ORINA caía por nombre en la casilla de hemoglobina SÉRICA — el
+      // mismo error clínico silencioso que v11.0.1 corrigió para la creatinina, ahora
+      // para el panel entero. Por nombre, un analito de orina solo puede casar con los
+      // exámenes que legítimamente SON de orina (RAC y el propio uroanálisis); el código
+      // exacto de arriba sigue mandando porque un CUPS es inequívoco.
+      const deOrina = _esAnalitoDeOrina(lab);
       for (const item of WHITELIST_13_LABS) {
+          if (deOrina && item.key !== "RAC" && item.key !== "UROANALISIS") continue;
+          // Un HIJO cuyo nombre incluye el del panel ("LEUCOCITOS (PARCIAL DE ORINA)")
+          // casaría aquí con la entrada general UROANALISIS y jamás llegaría a su casilla
+          // de componente: si el analito mapea a un componente, se deja pasar a esa ruta.
+          if (deOrina && item.key === "UROANALISIS" && _matchUroComponente(lab)) continue;
           if (item.excluye && item.excluye.some((x) => name.includes(x))) continue;
           for (const n of item.names) {
               if (name.includes(n)) return item;
@@ -961,6 +1089,20 @@
   let _diagLabFechaLogged = false;
   let _diagLabFechaKeyFound = false;
   const _diagLabFechaPorCasilla = new Set();
+  // v12.3.36 — Reportado en consultorio con el Administrador de tareas en la mano: la
+  // consola abierta retiene CADA entrada con su pila de llamadas, y este aviso salía
+  // decenas de veces por clic (uno por analito duplicado, en cada reintento). Ahora se
+  // avisa UNA vez por casilla y sesión; el conteo completo ya viaja en el resumen.
+  const _avisoCasillaYaEscrita = new Set();
+  // v12.3.37 — volcar los analitos de ORINA tal como llegan de Athenea (nombre, padre,
+  // resultado, idNormalidad, idEstado): la evidencia real para afinar los sinónimos de
+  // UROANALISIS_COMPONENTES y construir la futura regla NORMAL/ANORMAL con datos, no con
+  // adivinanzas. La revisión adversarial tumbó la bandera única por sesión: el primer
+  // paciente del día agotaba el volcado y los componentes de los demás jamás se
+  // capturaban. Ahora se vuelca cuando aparece un NOMBRE de analito no visto aún en la
+  // sesión; paneles idénticos repetidos no vuelven a imprimir (mismo control de ruido
+  // de consola de v12.3.36).
+  const _diagUroNombresVistos = new Set();
   const _CAMPOS_FECHA_CONOCIDOS = ["Fecha", "fechaResult", "fecha", "fechaOrden", "fechaResultado"];
 
   // v12.3.30 — Los 4 nombres de campo de arriba se probaron contra la respuesta real de
@@ -1046,13 +1188,82 @@
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
       let pendientes = 0;
+      let respetadas = 0;
       const sinCasilla = [];
       const yaEscritas = new Set();
-      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [] };
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0 };
+
+      // v12.3.37 — Componentes del uroanálisis: cada uno va a SU casilla propia (anclada
+      // al placeholder visible), nunca al whitelist de suero. Mismas reglas sagradas del
+      // resto de casillas: se escribe VERBATIM lo que entrega Athenea, solo en casilla
+      // VACÍA; un valor distinto del médico se respeta entero; y el primer valor gana —
+      // las solicitudes llegan de más reciente a más antigua, así que el primero ES el
+      // resultado más reciente y los anteriores se omiten (pedido explícito del médico).
+      const escritorPorMarca = new Map();
+      const inyectarComponenteOrina = (lab) => {
+          const nombreCanon = _canonTexto(lab.NombreParametro || lab.nombre || lab.examen);
+          const comp = _matchUroComponente(lab);
+          const marca = comp ? "URO_" + comp.key : null;
+          const reclamar = () => { if (marca) { yaEscritas.add(marca); escritorPorMarca.set(marca, nombreCanon); } };
+          const resultVal = lab.Resultado || lab.resultado || lab.valor;
+          // Revisión adversarial de v12.3.37: el analito MÁS RECIENTE reclama su casilla
+          // aunque llegue vacío o PENDIENTE. Sin esto, un duplicado de hace meses del mismo
+          // componente la llenaba con un dato viejo — indetectable, porque estas 7 casillas
+          // no tienen fecha acompañante — y en la corrida siguiente el resultado nuevo
+          // quedaba "respetado" como si fuera del médico: el dato viejo se volvía permanente.
+          if (!resultVal) { reclamar(); return; }
+          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") {
+              pendientes++;
+              reclamar();
+              return;
+          }
+          if (!comp) return; // nombre aún sin confirmar: casilla vacía; el diagnóstico de orina ya mostró el nombre real
+          if (yaEscritas.has(marca)) {
+              // Dos analitos DISTINTOS compitiendo por la misma casilla (tira reactiva vs.
+              // sedimento, subtipos de cilindros): manda el más reciente y se AVISA una vez
+              // por sesión, como en la ruta sérica — nunca una omisión muda.
+              const escritor = escritorPorMarca.get(marca);
+              const avisoKey = marca + "|" + nombreCanon;
+              if (escritor && escritor !== nombreCanon && !_avisoCasillaYaEscrita.has(avisoKey)) {
+                  _avisoCasillaYaEscrita.add(avisoKey);
+                  console.warn("[Vigilante] casilla de uroanálisis ya reclamada por otro analito, se conserva el más reciente:", marca, "· omitido:", nombreCanon);
+              }
+              return;
+          }
+          const inputEl = _findUroInput(comp.placeholder);
+          if (!inputEl) {
+              if (!sinCasilla.includes(marca)) sinCasilla.push(marca);
+              return;
+          }
+          const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
+          if (valorActual !== "" && valorActual !== String(resultVal).trim()) { respetadas++; reclamar(); return; }
+          if (valorActual === "") { setNgValue(inputEl, resultVal); count++; } else { respetadas++; }
+          reclamar();
+      };
 
       labsArray.forEach(lab => {
+          if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
+              try {
+                  const deOrinaTodos = labsArray.filter(_esAnalitoDeOrina);
+                  deOrinaTodos.forEach((l) => _diagUroNombresVistos.add(_canonTexto(l.NombreParametro || l.nombre || l.examen)));
+                  console.log("[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea:",
+                      JSON.stringify(deOrinaTodos.map((l) => ({
+                          nombre: l.NombreParametro || l.nombre || l.examen || "",
+                          padre: l.NombreParametroPadre || l.nombreParametroPadre || "",
+                          resultado: String(l.Resultado || l.resultado || l.valor || ""),
+                          idNormalidad: l.IdNormalidad !== undefined ? l.IdNormalidad : l.idNormalidad,
+                          idEstado: l.idEstado
+                      }))));
+              } catch (e) {}
+          }
+
           const matched = _matchLabInWhitelist(lab);
-          if (!matched) return; // Filtro estricto: solo los 13 laboratorios autorizados
+          if (!matched) {
+              // Filtro estricto: solo los 13 laboratorios autorizados… y, desde v12.3.37,
+              // los componentes del panel de orina por su ruta propia.
+              if (_esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
+              return;
+          }
 
           const resultVal = lab.Resultado || lab.resultado || lab.valor;
           if (!resultVal) return;
@@ -1066,7 +1277,10 @@
           // v11.0.1 — Si dos analitos distintos caen en la misma casilla (p. ej. creatinina
           // en suero y creatinina en orina), manda el PRIMERO y se avisa por consola en vez
           // de sobrescribir en silencio con el equivocado.
-          if (yaEscritas.has(matched.resultId)) { console.warn("[Vigilante] casilla ya escrita, se conserva el primer valor:", matched.key); return; }
+          if (yaEscritas.has(matched.resultId)) {
+            if (!_avisoCasillaYaEscrita.has(matched.key)) { _avisoCasillaYaEscrita.add(matched.key); console.warn("[Vigilante] casilla ya escrita, se conserva el primer valor:", matched.key); }
+            return;
+          }
 
           // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la
           // trae: eso convertía un resultado de hace meses en uno "de hoy" dentro de la
@@ -1109,9 +1323,28 @@
           }
 
           if (inputEl) {
-              setNgValue(inputEl, resultVal);
+              // v12.3.34 — LA CASILLA DEL MÉDICO ES SAGRADA. Reportado en consultorio: el
+              // robot repetido reescribía valores que el médico había borrado o corregido.
+              // v12.3.35 — afinado en revisión adversarial: la guarda cubre valor Y fecha
+              // por separado. Un valor DISTINTO al de Athenea (escrito por el médico) se
+              // respeta entero, incluida su fecha; un valor IGUAL al de Athenea (escrito
+              // por una corrida anterior) no se reescribe pero SÍ permite completar una
+              // fecha que quedó vacía; y la fecha solo se escribe cuando su casilla está
+              // VACÍA — una fecha corregida a mano por el médico no se pisa jamás.
+              const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
+              const mismoValor = valorActual !== "" && valorActual === String(resultVal).trim();
+              if (valorActual !== "" && !mismoValor) {
+                  respetadas++;
+                  yaEscritas.add(matched.resultId);
+                  return;
+              }
+              if (valorActual === "") {
+                  setNgValue(inputEl, resultVal);
+                  count++;
+              } else {
+                  respetadas++;
+              }
               yaEscritas.add(matched.resultId);
-              count++;
           } else {
               sinCasilla.push(matched.key);   // el campo no existe en esta vista: hay que avisarlo
               return;
@@ -1128,11 +1361,13 @@
               console.log(`[Vigilante] diagnóstico fecha — ${matched.key}: dateInput ${dateInput ? "SÍ encontrado" : "NO encontrado"}, resultDate ${resultDate ? "= " + resultDate : "= null"}`);
           }
 
-          if (dateInput && resultDate) {
+          // v12.3.35 — la fecha SOLO se escribe en una casilla de fecha VACÍA: si el
+          // médico la corrigió a mano (p. ej. la fecha real de la toma), se respeta.
+          if (dateInput && resultDate && String(dateInput.value == null ? "" : dateInput.value).trim() === "") {
               setNgValue(dateInput, resultDate);
           }
       });
-      return { count, pendientes, sinCasilla };
+      return { count, pendientes, sinCasilla, respetadas };
   }
 
   // Interfaz de Usuario para activar la inyección
@@ -1141,6 +1376,15 @@
   // =====================================================================
   let lastAutoFetchedDoc = "";
   let lastAutoFetchedAt = 0;
+  // v12.3.34 — PRE-CARGA, no escritura. Reportado en consultorio con log real: el robot
+  // reescribía las casillas de la Ruta Crónicos cada ~30 s (el piso anti-ráfagas de
+  // v12.3.27 convirtió "una vez por paciente" en "cada 30 s por paciente"), pisando lo
+  // que el médico borraba o corregía — sin ningún clic suyo. Ahora el robot solo CONSULTA
+  // Athenea y guarda el resultado aquí; escribir en la historia clínica es EXCLUSIVO del
+  // botón «🧬 Auto-Labs», que gracias a esta pre-carga responde al instante.
+  let _labsPrefetch = { docId: "", labs: null, ts: 0 };
+  let _labsAvisoDoc = "";
+  const LABS_PREFETCH_TTL_MS = 10 * 60000;
 
   async function autoFetchAtheneaLabsForActivePatient() {
       // v11.0.1 — El registro va DESPUÉS de la guarda. Antes se escribía en cada ráfaga del
@@ -1159,29 +1403,33 @@
       // desde el último disparo, sea cual sea el docId.
       const ahora = Date.now();
       if (docId === lastAutoFetchedDoc && (ahora - lastAutoFetchedAt) < 30000) return;
+      // v12.3.34 — con resultados ya pre-cargados y vigentes para ESTE paciente, no hay
+      // nada que volver a consultar: esto es lo que de verdad cumple "una consulta por
+      // paciente" (el piso de 30 s de arriba queda como respaldo para los casos de error).
+      if (docId === _labsPrefetch.docId && _labsPrefetch.labs && (ahora - _labsPrefetch.ts) < LABS_PREFETCH_TTL_MS) return;
       vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
 
       lastAutoFetchedDoc = docId;
       lastAutoFetchedAt = ahora;
-      console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
+      console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Pre-consultando laboratorios (sin escribir nada)...`);
 
       try {
           const labs = await getAtheneaLabsAuto(docId);
           if (labs && labs.length > 0) {
-              const r = injectLabsIntoCronicos(labs);
-              vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
-              // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
-              // muestra), deja de ser persistente (los avisos persistentes sin cerrar
-              // reaparecen horas después desde el Centro de actividades de Windows) y
-              // dice lo que NO se pudo llenar, para que el médico lo revise.
-              const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
-                + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
-              notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
-                `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
-                false, "athenea|" + docId + "|" + todayStamp());
+              // v12.3.34 — AQUÍ YA NO SE ESCRIBE NADA: injectLabsIntoCronicos solo corre
+              // cuando el médico pulsa el botón. El robot deja los resultados listos y
+              // avisa UNA sola vez por paciente.
+              _labsPrefetch = { docId, labs, ts: Date.now() };
+              vglLog("ATHENEA", "LabsAutoPrefetched", { docId, totalLabs: labs.length });
+              if (_labsAvisoDoc !== docId) {
+                  _labsAvisoDoc = docId;
+                  notify("VERDE", "🧪 Paraclínicos de Athenea encontrados",
+                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧬 Auto-Labs (Athenea)» cuando quiera diligenciarlos.`,
+                    false, "athenea_listo|" + docId + "|" + todayStamp());
+              }
           }
       } catch (e) {
-          console.warn("[Vigilante Robot Athenea] No se pudieron auto-cargar los paraclínicos:", e);
+          console.warn("[Vigilante Robot Athenea] No se pudieron pre-consultar los paraclínicos:", e);
       }
   }
 
@@ -1202,10 +1450,19 @@
           }
           btn.innerHTML = "⏳ Buscando en Athenea...";
           try {
+              // v12.3.35 — hallado en revisión adversarial: usar aquí la PRE-CARGA servía
+              // datos de hasta 10 minutos como si fueran actuales ("siguen PENDIENTES" de
+              // resultados que ya habían salido) y no había forma de forzar un refresco
+              // dentro de ese lapso. El clic del médico SIEMPRE consulta en vivo; la
+              // pre-carga del robot queda solo para el aviso temprano y para no repetir
+              // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
+              // así el robot no vuelve a pedir lo que el clic acaba de traer.
               const labs = await getAtheneaLabsAuto(docId);
+              if (labs && labs.length) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
+                    + (r.respetadas ? "\n\n✋ " + r.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
                     + "\n\nRevise las fechas de toma antes de guardar la historia.");
@@ -1229,6 +1486,7 @@
                           if (labs2 && labs2.length > 0) {
                               const r2 = injectLabsIntoCronicos(labs2);
                               alert("✅ Sesión iniciada y " + labs2.length + " analitos encontrados: " + r2.count + " casillas diligenciadas en la Ruta Crónicos."
+                                + (r2.respetadas ? "\n\n✋ " + r2.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                                 + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
                                 + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
                                 + "\n\nRevise las fechas de toma antes de guardar la historia.");
@@ -1673,27 +1931,49 @@
   let chan = null;
   try { chan = new BroadcastChannel("vgl"); chan.onmessage = (e) => { if (e.data && e.data.t) state.shared = e.data; }; } catch (e) {}
 
-  // v8.1.0: KR-01 Leader Election System usando Web Locks API
-  // Reemplaza el frágil LocalStorage para evitar condiciones de carrera masivas.
-  state.leader = false; // Follower por defecto
-  if (navigator.locks) {
-    navigator.locks.request('vgl_leader_lock', { mode: 'exclusive' }, () => {
-      state.leader = true;
-      return new Promise((resolve) => {
-        const cleanup = () => { state.leader = false; resolve(); };
-        window.addEventListener('beforeunload', cleanup);
-        window.addEventListener('unload', cleanup);
-      });
-    }).catch(() => { state.leader = false; });
-  } else {
-    // Fallback silencioso si Web Locks no está disponible
-    state.leader = true;
-  }
-
+  // v12.3.36 — DESCUBIERTO EN CONSULTORIO (panel clavado en "Última lectura...
+  // vuelve a Citas del día" + cero avisos de confirmación durante toda la jornada):
+  // Edge SUSPENDE las pestañas en segundo plano, y el candado de Web Locks (v8.1.0)
+  // lo retenía una pestaña CONGELADA — sus temporizadores no corren, no sondea la
+  // agenda ni avisa, y ninguna otra pestaña podía relevarla porque el candado seguía
+  // ocupado hasta cerrar esa pestaña. Con el flujo real del consultorio (cada
+  // historia clínica abre pestaña NUEVA y la original queda atrás), el "líder"
+  // terminaba siendo siempre una pestaña dormida: vigilancia muerta todo el día.
+  //
+  // Se vuelve al latido en localStorage, pero con RELEVO AUTOMÁTICO: el líder
+  // renueva su latido cada ≤5 s (ver el bucle de la ventana crítica); si el latido
+  // lleva más de 20 s sin renovarse (líder congelado o cerrado en frío), la primera
+  // pestaña despierta que lo note toma el mando y fuerza una lectura de agenda
+  // inmediata. El doble-líder transitorio de un empate es inofensivo: los avisos ya
+  // se deduplican entre pestañas (crossTabDup) y una consulta de agenda repetida no
+  // daña nada. Al cerrarse con orden, el líder suelta su latido para que el relevo
+  // sea instantáneo en vez de esperar los 20 s.
+  const LEADER_KEY = "vgl_leader_beat", LEADER_TTL_MS = 20000;
+  state.leader = false;
   function heartbeat() {
-    // La elección ahora es pasiva y asíncrona; solo devolvemos el estado atómico actual.
-    return state.leader;
+    try {
+      const ahora = Date.now();
+      let beat = null;
+      try { beat = JSON.parse(localStorage.getItem(LEADER_KEY) || "null"); } catch (e) {}
+      if (beat && beat.id && beat.id !== TABID && (ahora - beat.t) < LEADER_TTL_MS) {
+        state.leader = false;               // hay un líder ajeno y su latido está fresco
+        return false;
+      }
+      // Latido propio, vencido o inexistente: esta pestaña manda y renueva el latido.
+      try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: ahora })); } catch (e) {}
+      if (!state.leader) API.ultimo = 0;    // al tomar el relevo: agenda fresca YA, sin esperar cadencia
+      state.leader = true;
+      return true;
+    } catch (e) { return state.leader; }
   }
+  try {
+    window.addEventListener("beforeunload", () => {
+      try {
+        const b = JSON.parse(localStorage.getItem(LEADER_KEY) || "null");
+        if (b && b.id === TABID) localStorage.removeItem(LEADER_KEY);
+      } catch (e) {}
+    });
+  } catch (e) {}
 
   function share(list) { try { if (chan) chan.postMessage({ t: Date.now(), list }); } catch (e) {} }
 
@@ -3938,7 +4218,11 @@
   }
   setInterval(() => {
     try {
-      if (!state.leader) return;
+      // v12.3.36 — El latido de liderazgo se renueva AQUÍ, cada 5 s, pase lo que pase
+      // con el "Refresco" de Ajustes (que gobierna tick() y puede llegar a 120 s):
+      // sin esta renovación frecuente, el latido del propio líder vencería entre
+      // ticks y las pestañas se relevarían en falso unas a otras.
+      if (!heartbeat()) return;
       const crit = hayVentanaCritica();
       if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
       if (crit) tickApi();

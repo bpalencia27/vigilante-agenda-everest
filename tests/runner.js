@@ -95,7 +95,10 @@ async function main() {
   console.log(COL.tit + "─".repeat(64) + COL.fin);
   console.log("");
 
-  process.exit(0);
+  // Hallado en revisión adversarial (2026-08-11): con exit(0) incondicional, todo el
+  // banco era CONSULTIVO — un runner con "N fallan" salía verde y el CI lo aceptaba.
+  // El código de salida debe decir la verdad: distinto de cero si algo falló.
+  process.exit(tf ? 1 : 0);
 }
 
 main().catch(e => { console.error("error del ejecutor:", e); process.exit(2); });
