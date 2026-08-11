@@ -585,6 +585,25 @@ module.exports = {
       t.falso(llamado);
     });
 
+    t.caso("abrirInformeAthenea v12.5.5: mismo hash en vuelo -> el segundo clic no dispara una segunda petición (guarda anti-doble-clic)", () => {
+      const llamadas = [];
+      let enVuelo = null;
+      // Mock que NO resuelve de inmediato: guarda la petición para resolverla a mano,
+      // así se puede simular el segundo clic mientras la primera sigue pendiente (algo
+      // que el mock síncrono de las demás pruebas de este bloque no permite observar).
+      const c = cargar({ silencioso: true, gmxhr: (o) => { llamadas.push(o); enVuelo = o; } });
+      enriquecerDom(c);
+      const btn1 = { disabled: false, textContent: "📄" };
+      const btn2 = { disabled: false, textContent: "📄" };
+      c.api.abrirInformeAthenea("HASH-DUP", "TOK", "LAB", btn1);
+      c.api.abrirInformeAthenea("HASH-DUP", "TOK", "LAB", btn2);
+      t.igual(llamadas.length, 1, "el segundo clic con el mismo hash no dispara una segunda petición mientras la primera sigue en vuelo");
+      enVuelo.onload({ status: 200, response: { simulado: true } });
+      // Tras resolver, el hash se libera: un nuevo clic sí puede volver a pedirlo.
+      c.api.abrirInformeAthenea("HASH-DUP", "TOK", "LAB", btn1);
+      t.igual(llamadas.length, 2, "tras resolver la primera, el hash queda libre y un nuevo clic sí dispara otra petición");
+    });
+
     await t.casoAsync("abrirInformeAthenea: éxito — POST correcto (hash/modulo/token, form-urlencoded, responseType blob) y el botón se reactiva", async () => {
       const llamadas = [];
       const c = cargar({ silencioso: true, gmxhr: (o) => { llamadas.push(o); o.onload({ status: 200, response: { simulado: true } }); } });

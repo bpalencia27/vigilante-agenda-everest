@@ -169,16 +169,24 @@ module.exports = {
       t.igual(anoAjeno[0].fechaIso, null, "la fecha no es del año de la solicitud: se descarta");
     });
 
-    t.caso("_atheneaExtraerSolicitudes: la fecha DESPUÉS del formulario también cuenta (v12.3.36 — disposición real de la tarjeta confirmada en campo)", () => {
-      // El diagnóstico de la .35 mostró que antes del <form> solo hay apertura de
-      // tarjeta ("<div class=card>...") y la fecha visible viene después, dentro de
-      // la misma tarjeta — exactamente esta estructura.
+    t.caso("_atheneaExtraerSolicitudes: v12.3.36 quedó SUPERADA por la tarjeta REAL de campo (v12.5.5) — la fecha después del formulario ya no se busca, a propósito", () => {
+      // La v12.3.36 creyó (con un diagnóstico incompleto de esa época) que la fecha
+      // visible iba DESPUÉS del <form>, dentro de la misma tarjeta, y por eso dejaba un
+      // margen de búsqueda hacia adelante. La tarjeta REAL de consultorio (captura de
+      // pantalla + volcado de HTML, 2026-08-11, ver el resto de esta suite y la 18)
+      // demostró que la fecha y el "Numero" van SIEMPRE ANTES del formulario — y ese
+      // margen hacia adelante, con tarjetas reales pegadas una tras otra, era la vía por
+      // la que la fecha (y el hash/token) de una solicitud VECINA se colaban en la
+      // actual (hallazgo BLOQUEANTE de la revisión adversarial de v12.5.4). Por eso desde
+      // v12.5.5 la ventana ya NO mira después del formulario: este fixture, con la fecha
+      // deliberadamente puesta DESPUÉS (una disposición que ya no se cree real), ahora
+      // devuelve sin fecha — fail-safe, no una fecha equivocada.
       const html = '<div class="card">\r\n  <div class="card-body p-5">\r\n' +
         '<form id="7368152026" data-modulo="LAB" action="/Resultados/Reporte"></form>' +
         '<h5>Solicitud 736815</h5><span>Fecha: 05/08/2026</span></div></div>';
       const out = testApi._atheneaExtraerSolicitudes(html);
       t.igual(out.length, 1);
-      t.igual(out[0].fechaIso, "2026-08-05");
+      t.igual(out[0].fechaIso, null, "la fecha después del formulario ya no se busca (ver la tarjeta REAL: siempre va antes)");
     });
 
     t.caso("injectLabsIntoCronicos: sinCasilla acumula analitos válidos sin destino en el DOM", () => {

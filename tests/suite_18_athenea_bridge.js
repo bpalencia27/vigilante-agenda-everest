@@ -247,6 +247,115 @@ module.exports = {
     });
 
     // =====================================================================
+    // v12.5.5 — BLOQUEANTE de la revisión adversarial: la ventana de búsqueda de fecha
+    // (antes -3000/+700 fijo, sin más guarda) rutinariamente cubría 2-3 tarjetas
+    // ANTERIORES en una lista real de solicitudes, y _fechaDesdeNumeroSolicitud (sin /g)
+    // devolvía el PRIMER "Numero:" de esa ventana compartida — el de la tarjeta VECINA,
+    // no el de la propia. Confirmado 8/9 tarjetas mal en un repro de 9 solicitudes
+    // reales. El fix acota cada ventana por la posición de la tarjeta anterior/siguiente.
+    // =====================================================================
+    function tarjetaReal({ idSolicitud, ano, dia, mesTxt, hora, numero, hash, token }) {
+      // Mismo esqueleto que la tarjeta real de consultorio (2026-08-11), solo cambian
+      // los valores — ~900 caracteres por tarjeta, igual que en producción, para que la
+      // prueba reproduzca el tamaño real de ventana en vez de un fixture artificialmente
+      // corto que ocultaría el bug de acotado hacia adelante.
+      return `
+        <div class="card text-dark bg-succes mb-5">
+          <div class="card-header p-10"><strong>SOLICITUD DE LABORATORIO</strong></div>
+          <div class="card-body p-10">
+            <div class="card-text no-margin"><strong>${dia} ${mesTxt} ${ano} ${hora} a.&nbsp;m.</strong></div>
+            <div class="card-title no-margin">Numero: ${numero}</div>
+            <div class="card-title no-margin">Estado: Solicitud Completa</div>
+            <div class="card-title no-margin">Relleno para simular el resto de campos que Athenea agrega en cada tarjeta real (tipo de examen, sede, profesional que ordena, observaciones administrativas) y que no aportan nada a la extracción de fecha.</div>
+          </div>
+          <div class="card-footer no-padding">
+            <span class="p-10" data-toggle="collapse" onclick="getDetalleSolicitud(this, 'LAB', ${idSolicitud}, ${ano}, 'True' )" href="#collapse${idSolicitud}${ano}LAB">Ver Resumen</span>
+            <form id="${idSolicitud}${ano}" data-modulo="LAB" action="/Resultados/Reporte" method="post">
+              <input type="hidden" id="hash" name="hash" value="${hash}" />
+              <button type="submit" class="btn btn-primary float-right btn-xs">Ver Informe</button>
+              <input name="__RequestVerificationToken" type="hidden" value="${token}" />
+            </form>
+          </div>
+        </div>`;
+    }
+
+    t.caso("_atheneaExtraerSolicitudes: 2 tarjetas vecinas del mismo año -> cada una conserva SU fecha y SU hash/token, nunca los de la vecina", () => {
+      const c1 = tarjetaReal({ idSolicitud: 111, ano: 2026, dia: "lun.", mesTxt: "5 ene.", hora: "08:00", numero: "26010512345", hash: "HASH-A", token: "TOK-A" });
+      const c2 = tarjetaReal({ idSolicitud: 222, ano: 2026, dia: "jue.", mesTxt: "12 feb.", hora: "09:15", numero: "26021212345", hash: "HASH-B", token: "TOK-B" });
+      const out = api._atheneaExtraerSolicitudes(c1 + c2);
+      t.igual(out.length, 2);
+      t.igual(out[0], { idSolicitud: 111, ano: 2026, modulo: "LAB", fechaIso: "2026-01-05", horaTxt: "08:00", hash: "HASH-A", token: "TOK-A" }, "tarjeta 1: su propia fecha y su propio hash/token, no los de la tarjeta 2");
+      t.igual(out[1], { idSolicitud: 222, ano: 2026, modulo: "LAB", fechaIso: "2026-02-12", horaTxt: "09:15", hash: "HASH-B", token: "TOK-B" }, "tarjeta 2: su propia fecha y su propio hash/token, no los de la tarjeta 1");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: 3 tarjetas del mismo año en cadena -> ninguna hereda la fecha ni el hash de una vecina (repro del hallazgo bloqueante, 8/9 mal en el original)", () => {
+      const c1 = tarjetaReal({ idSolicitud: 111, ano: 2026, dia: "lun.", mesTxt: "5 ene.", hora: "08:00", numero: "26010512345", hash: "HASH-A", token: "TOK-A" });
+      const c2 = tarjetaReal({ idSolicitud: 222, ano: 2026, dia: "jue.", mesTxt: "12 feb.", hora: "09:15", numero: "26021212345", hash: "HASH-B", token: "TOK-B" });
+      const c3 = tarjetaReal({ idSolicitud: 333, ano: 2026, dia: "mié.", mesTxt: "20 mar.", hora: "10:30", numero: "26032012345", hash: "HASH-C", token: "TOK-C" });
+      const out = api._atheneaExtraerSolicitudes(c1 + c2 + c3);
+      t.igual(out.length, 3);
+      t.igual(out.map((s) => s.hash), ["HASH-A", "HASH-B", "HASH-C"], "el hash de cada tarjeta es el suyo propio, en orden");
+      t.igual(out.map((s) => s.token), ["TOK-A", "TOK-B", "TOK-C"]);
+      // La fecha de la tarjeta del MEDIO (2) es la más expuesta a contaminación por ambos
+      // lados (vecina anterior Y siguiente) — es la que el bug original rompía primero.
+      t.igual(out[1].fechaIso, "2026-02-12", "la tarjeta del medio no hereda la fecha de la 1 ni de la 3");
+      t.igual(out[2].fechaIso, "2026-03-20");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: fecha en español con año DISTINTO al declarado por la propia solicitud -> sin fecha (guarda de año, antes sin cobertura de pruebas)", () => {
+      // El id de la tarjeta declara 2026, pero el texto en español dice 2025 — no debería
+      // pasar jamás en Athenea real, pero si pasara, la guarda de año debe rechazarlo en
+      // vez de aceptar una fecha de OTRO año.
+      const html = `
+        <div class="card">
+          <div class="card-text no-margin"><strong>lun. 5 ene. 2025 08:00 a. m.</strong></div>
+          <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte"></form>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].fechaIso, null, "año del texto (2025) no coincide con el año de la solicitud (2026) -> se rechaza");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: fecha numérica dd/mm/aaaa en conflicto con 'Numero' de la MISMA tarjeta -> se descarta (fix simétrico; antes solo protegía el camino español)", () => {
+      // 11/08/2026 (11 de agosto) vs Numero que codifica 2026-08-12 (día 12): mismo mes,
+      // día distinto -> conflicto real entre las dos fuentes de la MISMA tarjeta.
+      const html = `
+        <div class="card">
+          <div class="card-text no-margin">11/08/2026</div>
+          <div class="card-title no-margin">Numero: 26081203125</div>
+          <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte"></form>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].fechaIso, null, "camino numérico dd/mm/aaaa ahora también se descarta ante conflicto con Numero");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: hash y token con orden value-antes-de-name en el HTML -> igual se extraen (rama de respaldo, antes sin cobertura de pruebas)", () => {
+      const html = `
+        <div class="card">
+          <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte">
+            <input type="hidden" value="HASH-ORDEN-INVERSO" id="hash" name="hash" />
+            <input value="TOKEN-ORDEN-INVERSO" type="hidden" name="__RequestVerificationToken" />
+          </form>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].hash, "HASH-ORDEN-INVERSO");
+      t.igual(out[0].token, "TOKEN-ORDEN-INVERSO");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: entidad '&nbsp' sin punto y coma final -> igual se normaliza y la hora se reconoce", () => {
+      // v12.5.5 — Algunas variantes de HTML omiten el ';' de cierre de la entidad (los
+      // navegadores lo toleran igual). Sin el fix, "&nbsp" sin ';' quedaba SIN reemplazar
+      // por espacio y rompía el parseo de "a. m." -> la hora se perdía en silencio.
+      const html = `
+        <div class="card">
+          <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbspm.</strong></div>
+          <form id="8465672026" data-modulo="LAB" action="/Resultados/Reporte"></form>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].fechaIso, "2026-05-15");
+      t.igual(out[0].horaTxt, "07:31", "la entidad sin ';' final igual se limpia a espacio y la hora se reconoce");
+    });
+
+    // =====================================================================
     // _atheneaPareceLogin
     // =====================================================================
     t.caso("_atheneaPareceLogin: un input type=password lo delata como pantalla de login", () => {
@@ -682,6 +791,77 @@ module.exports = {
       t.igual(labs[0].__vglModulo, "LAB");
       // Y la casilla de Crónicos recibe justo esa fecha, como cualquier otra fuente.
       t.igual(e.c.api._extractAtheneaFecha(labs[0]).iso, "2026-05-15");
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v12.5.5: 2 solicitudes del mismo paciente -> cada analito hereda el hash/token/fecha de SU PROPIA solicitud, nunca de la otra", async () => {
+      // Guarda de regresión para el hallazgo bloqueante de la revisión adversarial: antes
+      // del fix, la segunda solicitud (o ambas) podían terminar con la fecha y/o el
+      // hash/token de la solicitud VECINA — aquí un paciente con 2 solicitudes reales
+      // confirma que getAtheneaLabsAuto entrega cada analito con los datos de SU propia
+      // tarjeta, de punta a punta (list -> extracción -> detalle -> propagación).
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({
+          status: 200,
+          responseText: `CC: ${DOC}
+            <div class="card text-dark bg-succes mb-5">
+              <div class="card-header p-10"><strong>SOLICITUD DE LABORATORIO</strong></div>
+              <div class="card-body p-10">
+                <div class="card-text no-margin"><strong>lun. 5 ene. 2026 08:00 a.&nbsp;m.</strong></div>
+                <div class="card-title no-margin">Numero: 26010512345</div>
+                <div class="card-title no-margin">Relleno administrativo para simular el resto de campos que trae cada tarjeta real y así separar bien las dos tarjetas de esta prueba.</div>
+              </div>
+              <div class="card-footer no-padding">
+                <span class="p-10" data-toggle="collapse" onclick="getDetalleSolicitud(this, 'LAB', 111, 2026, 'True' )" href="#collapse1112026LAB">Ver Resumen</span>
+                <form id="1112026" data-modulo="LAB" action="/Resultados/Reporte" method="post">
+                  <input type="hidden" id="hash" name="hash" value="HASH-UNO" />
+                  <button type="submit" class="btn btn-primary float-right btn-xs">Ver Informe</button>
+                  <input name="__RequestVerificationToken" type="hidden" value="TOK-UNO" />
+                </form>
+              </div>
+            </div>
+            <div class="card text-dark bg-succes mb-5">
+              <div class="card-header p-10"><strong>SOLICITUD DE LABORATORIO</strong></div>
+              <div class="card-body p-10">
+                <div class="card-text no-margin"><strong>jue. 12 feb. 2026 09:15 a.&nbsp;m.</strong></div>
+                <div class="card-title no-margin">Numero: 26021212345</div>
+                <div class="card-title no-margin">Relleno administrativo para simular el resto de campos que trae cada tarjeta real y así separar bien las dos tarjetas de esta prueba.</div>
+              </div>
+              <div class="card-footer no-padding">
+                <span class="p-10" data-toggle="collapse" onclick="getDetalleSolicitud(this, 'LAB', 222, 2026, 'True' )" href="#collapse2222026LAB">Ver Resumen</span>
+                <form id="2222026" data-modulo="LAB" action="/Resultados/Reporte" method="post">
+                  <input type="hidden" id="hash" name="hash" value="HASH-DOS" />
+                  <button type="submit" class="btn btn-primary float-right btn-xs">Ver Informe</button>
+                  <input name="__RequestVerificationToken" type="hidden" value="TOK-DOS" />
+                </form>
+              </div>
+            </div>`,
+        });
+        else if (url.includes("consultaDetalleSolicitud")) {
+          const cuerpo = JSON.parse(o.data);
+          if (cuerpo.idSolicitud === 111) {
+            o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2009", NombreParametro: "COLESTEROL TOTAL", Resultado: "159" }]) }) });
+          } else if (cuerpo.idSolicitud === 222) {
+            o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2013", NombreParametro: "GLUCOSA EN SUERO", Resultado: "90" }]) }) });
+          } else {
+            o.onload({ status: 200, responseText: JSON.stringify({ dataObject: "[]" }) });
+          }
+        } else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs.length, 2);
+      const colesterol = labs.find((l) => l.CodigoParametro === "2009");
+      const glucosa = labs.find((l) => l.CodigoParametro === "2013");
+      t.cierto(colesterol && glucosa, "llegó un analito de cada solicitud");
+      t.igual(colesterol.__vglFechaSolicitud, "2026-01-05");
+      t.igual(colesterol.__vglHash, "HASH-UNO");
+      t.igual(colesterol.__vglToken, "TOK-UNO");
+      t.igual(glucosa.__vglFechaSolicitud, "2026-02-12");
+      t.igual(glucosa.__vglHash, "HASH-DOS");
+      t.igual(glucosa.__vglToken, "TOK-DOS");
     });
 
     await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> [] sin llegar nunca a pedir detalle", async () => {

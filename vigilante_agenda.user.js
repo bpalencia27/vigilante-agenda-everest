@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.4
+// @version      12.5.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,35 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.5 — REVISIÓN ADVERSARIAL DE v12.5.4 (3 lentes, 13 confirmados, 0 refutados,
+  11-08-2026): la ventana de búsqueda alrededor de cada solicitud (-3000/+700 desde
+  v12.5.3) no estaba acotada por tarjeta — con solicitudes reales pegadas una tras
+  otra, cubría 2-3 tarjetas VECINAS, y _fechaDesdeNumeroSolicitud (sin bandera /g)
+  devolvía el PRIMER "Numero:" de esa ventana compartida: el de la tarjeta vecina, no
+  el de la propia. Confirmado 8/9 mal en un repro de 9 solicitudes reales — la fecha
+  de OTRO examen del mismo paciente podía terminar escrita en Crónicos (hallazgo
+  BLOQUEANTE). Un bug simétrico en la extracción de hash/token podía además abrir el
+  PDF de una solicitud vecina desde el botón "Ver informe" (ALTA). Correcciones:
+  · Cada tarjeta ahora se procesa con las posiciones de TODAS las demás ya conocidas
+    (matchAll en vez de exec en bucle), y su ventana de búsqueda queda acotada por la
+    tarjeta anterior y la siguiente — nunca más ancha que la tarjeta propia.
+  · Se retiró el margen fijo hacia ADELANTE del formulario: la tarjeta REAL de
+    consultorio (confirmada en v12.5.4) demostró que la fecha y el "Numero" van
+    SIEMPRE antes del formulario, nunca después — ese margen ya no aportaba nada y sí
+    abría la vía de contaminación cruzada. Una prueba de v12.3.36 que asumía fecha
+    DESPUÉS del formulario quedó documentada como superada.
+  · _fechaDesdeNumeroSolicitud exige ahora la MISMA disciplina que el camino español:
+    recoger TODOS los "Numero:" del texto y exigir que resuelvan a una única fecha.
+  · El camino numérico dd/mm/aaaa preexistente ahora también se descarta ante
+    conflicto con "Numero" de la misma tarjeta (antes solo protegía el camino español
+    en texto plano — fix simétrico).
+  · La entidad &nbsp;/&#160;/etc. ya no exige el ';' de cierre (algunas variantes de
+    HTML lo omiten; sin esto la HORA se perdía en silencio, nunca la fecha).
+  · abrirInformeAthenea gana una guarda anti-doble-clic (Set de hashes en vuelo).
+  Banco: 572 comprobaciones, cobertura 291/317 (91.8%).
 */
 
 /*
@@ -503,7 +532,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -974,43 +1003,78 @@
     return out;
   }
   // Verificación cruzada (nunca única fuente): "Numero: 26051503125" -> aaMMdd + consecutivo.
+  // v12.5.5 — BLOQUEANTE de la revisión adversarial: usaba .exec() SIN bandera /g, así que
+  // devolvía el PRIMER "Numero:" de TODO el texto que se le pasara — si ese texto abarcaba
+  // más de una tarjeta (ver el bloqueante de más abajo sobre el acotado de ventana), tomaba
+  // el consecutivo de una solicitud VECINA y lo hacía pasar por el de la actual. Ahora exige
+  // la MISMA disciplina que _parseFechaEspanolLike: recoger TODOS los "Numero:" del texto
+  // que se le entregue y exigir que resuelvan a una única fecha (ambigüedad = null).
   function _fechaDesdeNumeroSolicitud(texto) {
-    const m = /\bNumero\s*:\s*(\d{2})(\d{2})(\d{2})\d+\b/i.exec(texto);
-    if (!m) return null;
-    const mesN = Number(m[2]), diaN = Number(m[3]), anio = 2000 + Number(m[1]);
-    if (mesN < 1 || mesN > 12 || diaN < 1 || diaN > 31) return null;
-    const d = new Date(anio, mesN - 1, diaN);
-    if (d.getFullYear() !== anio || d.getMonth() !== mesN - 1 || d.getDate() !== diaN) return null;
-    return `${anio}-${m[2]}-${m[3]}`;
+    const re = /\bNumero\s*:\s*(\d{2})(\d{2})(\d{2})\d+\b/gi;
+    const isos = new Set();
+    let m;
+    while ((m = re.exec(texto))) {
+      const mesN = Number(m[2]), diaN = Number(m[3]), anio = 2000 + Number(m[1]);
+      if (mesN < 1 || mesN > 12 || diaN < 1 || diaN > 31) continue;
+      const d = new Date(anio, mesN - 1, diaN);
+      if (d.getFullYear() !== anio || d.getMonth() !== mesN - 1 || d.getDate() !== diaN) continue;
+      isos.add(`${anio}-${m[2]}-${m[3]}`);
+    }
+    return isos.size === 1 ? [...isos][0] : null;
   }
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
     const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
-    let m;
-    while ((m = re.exec(html))) {
+    // v12.5.5 — BLOQUEANTE de la revisión adversarial (confirmado 8/9 tarjetas en un repro
+    // con 9 solicitudes reales, como las de la captura de pantalla del consultorio): antes
+    // se procesaba tarjeta por tarjeta con `while (re.exec(html))` y CADA una recortaba su
+    // propia ventana de -3000/+700 caracteres SIN saber dónde empezaba o terminaba la
+    // tarjeta vecina. Con solicitudes reales de ~900-1200 caracteres cada una, esa ventana
+    // rutinariamente cubría 2-3 tarjetas ANTERIORES — así que la fecha, el Numero, y hasta
+    // el hash/token de una solicitud VECINA podían colarse como si fueran de la actual (la
+    // fecha de OTRO examen del mismo paciente, o el PDF de OTRA solicitud detrás del botón
+    // "Ver informe"). Se recolectan TODAS las posiciones de formulario en un solo pase para
+    // poder acotar cada ventana exactamente entre la tarjeta anterior y la siguiente —
+    // nunca más ancha que la tarjeta propia.
+    const matches = [...html.matchAll(re)];
+    for (let idx = 0; idx < matches.length; idx++) {
+      const m = matches[idx];
       const tag = m[0];
       const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
       if (!idM) continue;
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
       let fechaIso = null;
       let horaTxt = null; // v12.4.0 — hora que el portal muestra junto a la fecha, si existe
+      // v12.5.5 — Límites REALES de esta tarjeta: nunca antes de donde termina la tarjeta
+      // anterior, nunca después de donde empieza la siguiente. Junto con los offsets fijos
+      // de abajo (que ahora son un TOPE máximo, no la única guarda), evita que la ventana
+      // se extienda sobre una tarjeta vecina.
+      const limiteAtras = idx > 0 ? matches[idx - 1].index + matches[idx - 1][0].length : 0;
+      const limiteAdelante = idx < matches.length - 1 ? matches[idx + 1].index : html.length;
       try {
-        // v12.3.36 — CONFIRMADO con el diagnóstico de campo de la .35: la ventana previa
-        // al formulario solo contiene la apertura de la tarjeta ("<div class=card>...");
-        // la fecha que el portal muestra va DESPUÉS del formulario, dentro de la misma
-        // tarjeta. La ventana ahora cubre ambos lados. Si por el lado posterior alcanza
-        // a rozar la tarjeta vecina, las dos guardas (fecha ÚNICA y año coincidente)
-        // convierten esa ambigüedad en "sin fecha" — jamás en la fecha equivocada.
-        // v12.5.3 — atrás: 400 → 3000 (ver comentario de arriba); adelante se deja igual,
-        // ya confirmado que ahí solo hay un campo oculto sin fecha.
-        const desde = Math.max(0, m.index - 3000);
-        const hasta = Math.min(html.length, m.index + tag.length + 700);
+        // v12.3.36 — diagnóstico de campo de la .35: en ese momento se creyó que la fecha
+        // iba DESPUÉS del formulario. v12.5.3 dejó por eso un margen fijo hacia adelante.
+        // v12.5.4/12.5.5 — CORRECCIÓN con la tarjeta REAL de consultorio (2026-08-11): la
+        // fecha y el "Numero" van SIEMPRE ANTES del formulario, dentro del card-body; lo
+        // único confirmado después del formulario es un campo oculto sin fecha. Ese margen
+        // hacia adelante ya no aporta nada para la fecha y sí abría una vía de
+        // contaminación cruzada: con tarjetas reales de Athenea pegadas una tras otra, el
+        // margen alcanzaba a rozar el card-body (fecha + Numero) de la tarjeta SIGUIENTE, y
+        // aunque las guardas de unicidad evitan que eso produzca una fecha EQUIVOCADA (la
+        // ambigüedad cae a "sin fecha"), sí perdía en silencio la fecha de tarjetas que sí
+        // la tenían. Por eso ahora la ventana NO se extiende más allá del propio
+        // formulario — todo lo que la tarjeta necesita ya está ANTES.
+        const desde = Math.max(0, limiteAtras, m.index - 3000);
+        const hasta = Math.min(html.length, limiteAdelante, m.index + tag.length);
         // v12.4.1 — La ventana es HTML CRUDO: el designador español "p. m." lleva un
         // espacio duro que ASP.NET encodea como &nbsp;/&#160;/&#8239;. Sin decodificarlo,
         // el regex capturaba "7:35 p." a medias y una toma de las 7:35 PM se mostraba
         // como 07:35 de la mañana (hallazgo ALTO de la revisión adversarial). Se
         // normalizan esas entidades a espacio simple ANTES de buscar.
-        const ventana = html.slice(desde, hasta).replace(/&(?:nbsp|#0*160|#x0*a0|#0*8239|#x0*202f);/gi, " ");
+        // v12.5.5 — ';' opcional: el HTML a veces omite el punto y coma de cierre de la
+        // entidad (los navegadores lo toleran igual); sin esto la HORA se perdía en
+        // silencio con esas variantes (nunca la fecha — la busca un regex aparte).
+        const ventana = html.slice(desde, hasta).replace(/&(?:nbsp|#0*160|#x0*a0|#0*8239|#x0*202f);?/gi, " ");
         // v12.4.0 — La HORA ya no se descarta: el regex captura la fecha CON su hora
         // adyacente si el portal la pinta ("11/08/2026 7:35 a. m."). Misma filosofía de
         // no adivinar: la hora solo se acepta si viene PEGADA a la única fecha aceptada.
@@ -1034,21 +1098,29 @@
         const espIsos = [...new Set(esp.map((p) => p.iso))];
         const numeroIso = _fechaDesdeNumeroSolicitud(ventana);
 
+        // v12.5.5 — Candidata PRIMARIA: español (fuente real confirmada) o, en su defecto,
+        // el patrón numérico dd/mm/aaaa preexistente — ambos exigen ser la ÚNICA fecha
+        // reconocible en la ventana (ya acotada a esta tarjeta) y que el año coincida con
+        // el que la propia solicitud declara en su id.
+        let primaria = null;
         if (espIsos.length === 1 && espIsos[0].startsWith(idM[2] + "-")) {
-          // Si el "Numero" de la misma tarjeta también se reconoce y NO coincide con
-          // el texto en español, algo no cuadra entre las dos fuentes: mejor ninguna
-          // fecha que arriesgar cuál de las dos tiene razón.
-          if (!numeroIso || numeroIso === espIsos[0]) {
-            fechaIso = espIsos[0];
-            const horas = [...new Set(esp.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
-            if (horas.length === 1) horaTxt = horas[0];
-          }
+          const horas = [...new Set(esp.filter((p) => p.iso === espIsos[0] && p.hora).map((p) => p.hora))];
+          primaria = { iso: espIsos[0], hora: horas.length === 1 ? horas[0] : null };
         } else if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) {
-          // Respaldo: formato numérico dd/mm/aaaa o aaaa-mm-dd, por si Athenea lo llega
-          // a usar en algún otro punto de la tarjeta.
-          fechaIso = encontradas[0];
-          const horas = [...new Set(parseadas.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
-          if (horas.length === 1) horaTxt = horas[0];
+          const horas = [...new Set(parseadas.filter((p) => p.iso === encontradas[0] && p.hora).map((p) => p.hora))];
+          primaria = { iso: encontradas[0], hora: horas.length === 1 ? horas[0] : null };
+        }
+        if (primaria) {
+          // Si el "Numero" de la misma tarjeta también se reconoce y NO coincide con la
+          // fecha primaria, algo no cuadra entre las dos fuentes: mejor ninguna fecha que
+          // arriesgar cuál de las dos tiene razón.
+          // v12.5.5 — ALTA de la revisión adversarial: antes esta verificación solo
+          // protegía el camino español; el camino numérico dd/mm/aaaa quedaba con la
+          // MISMA clase de vulnerabilidad — ahora es simétrica para los dos.
+          if (!numeroIso || numeroIso === primaria.iso) {
+            fechaIso = primaria.iso;
+            horaTxt = primaria.hora;
+          }
         } else if (numeroIso && numeroIso.startsWith(idM[2] + "-")) {
           // Último respaldo: solo el consecutivo de "Numero" (sin hora — ese campo no la trae).
           fechaIso = numeroIso;
@@ -1061,7 +1133,7 @@
           console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud #" + _diagFechaSolicitudHtmlLogged + " — fechas reconocibles (numérico):", encontradas,
             "· español:", espIsos, "· Numero:", numeroIso || "NINGUNO",
             "· aceptada:", fechaIso || "NINGUNA", "· hora:", horaTxt || "NINGUNA",
-            "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)),
+            "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, Math.min(hasta, m.index + tag.length + 240))),
             "· ANTES del formulario (crudo, últimos 1500 caracteres):", JSON.stringify(ventana.slice(Math.max(0, posFormEnVentana - 1500), posFormEnVentana)));
         }
       } catch (e) {}
@@ -1074,9 +1146,15 @@
       // a mano. El orden de los atributos varía entre campos (visto en campo: "hash"
       // trae type/id/name/value, el token trae name/type/value), así que se prueban
       // ambos órdenes.
+      // v12.5.5 — ALTA de la revisión adversarial: igual que la fecha, esta búsqueda NO
+      // se detenía en el límite de la tarjeta — si la actual no traía su propio hash/token
+      // cerca (p. ej. una solicitud sin informe generado aún), el botón "Ver informe" podía
+      // terminar abriendo el PDF de una solicitud VECINA. Se acota al mismo
+      // `limiteAdelante` que ya protege la fecha: nunca cruza a la tarjeta siguiente.
       let hash = null, token = null;
       try {
-        const tras = html.slice(m.index + tag.length, m.index + tag.length + 1500);
+        const trasHasta = Math.min(limiteAdelante, m.index + tag.length + 1500);
+        const tras = html.slice(m.index + tag.length, trasHasta);
         const hM = /<input[^>]*\bname=["']hash["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']hash["']/i.exec(tras);
         const tM = /<input[^>]*\bname=["']__RequestVerificationToken["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']__RequestVerificationToken["']/i.exec(tras);
         if (hM) hash = hM[1];
@@ -7500,11 +7578,17 @@
   // La pestaña se abre en blanco de forma SÍNCRONA con el clic (antes de cualquier
   // await): los navegadores bloquean window.open() disparado desde dentro de una
   // promesa, aunque haya sido un clic real del usuario el que la inició.
+  // v12.5.5 — BAJA de la revisión adversarial: sin esta guarda, un doble clic (o dos
+  // clics en dos filas con el mismo hash) disparaba dos peticiones simultáneas al mismo
+  // informe — dos pestañas en blanco, dos POST redundantes a Athenea.
+  const _informesEnVuelo = new Set();
   function abrirInformeAthenea(hash, token, modulo, btn) {
     if (!hash || !token) return;
+    if (_informesEnVuelo.has(hash)) return;
+    _informesEnVuelo.add(hash);
     const pestana = window.open("", "_blank");
     if (btn) { btn.disabled = true; btn.textContent = "⏳"; }
-    const restaurar = () => { if (btn) { btn.disabled = false; btn.textContent = "📄"; } };
+    const restaurar = () => { _informesEnVuelo.delete(hash); if (btn) { btn.disabled = false; btn.textContent = "📄"; } };
     if (typeof GM_xmlhttpRequest === "undefined") {
       restaurar();
       if (pestana) pestana.close();
