@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.17
+// @version      12.3.18
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.17";
+  const VERSION = "12.3.18";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5094,6 +5094,15 @@
       }
       #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
       /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
+      /* v12.3.x — Caption de trazabilidad: qué actividad REAL del Excel de PyM disparó
+         cada paquete sugerido. Mismo tratamiento visual que .vgl-ord-sexwarn, en acento
+         morado informativo (no es una advertencia, es la fuente del dato). */
+      #vgl-ordenar-modal .vgl-ord-pymsrc{
+        font-size:11.5px;font-weight:700;line-height:1.45;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+      }
       #vgl-ordenar-modal .vgl-ord-sexwarn{
         font-size:11.5px;font-weight:700;line-height:1.45;
         color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
@@ -6995,11 +7004,23 @@
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
 
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-    const activePymText = stripToAlphanum((apt.pym || []).join(" "));
-    const matchedPackages = PYM_CATALOG.filter((pkg) => {
-      if (!apt.pym || !apt.pym.length) return false;
-      return pkg.keywords.some((kw) => activePymText.includes(stripToAlphanum(kw)));
-    });
+    // v12.3.x — Antes solo se sabía SI había coincidencia con la base de PyM (booleano);
+    // ahora se guarda también CUÁL actividad concreta del Excel del SharePoint la
+    // disparó — "el nombre de la prueba que toca enviarle al paciente según los xlsx",
+    // tal como se pidió. Esa etiqueta (activityLabel, viene de FRIENDLY/friendly() en la
+    // lectura del Excel) YA EXISTÍA en apt.pym — se usaba para emparejar por dentro, pero
+    // nunca se le mostraba al médico en el modal de Órdenes. Coincidencia por etiqueta
+    // INDIVIDUAL (no por el texto de todas juntas): más preciso, y permite saber cuál
+    // etiqueta específica corresponde a cuál paquete cuando el paciente tiene varias.
+    const pymPorPaquete = new Map();
+    for (const pkg of PYM_CATALOG) {
+      const coincidencias = (apt.pym || []).filter((etiqueta) => {
+        const et = stripToAlphanum(etiqueta);
+        return pkg.keywords.some((kw) => et.includes(stripToAlphanum(kw)));
+      });
+      if (coincidencias.length) pymPorPaquete.set(pkg, coincidencias);
+    }
+    const matchedPackages = PYM_CATALOG.filter((pkg) => pymPorPaquete.has(pkg));
 
     // v11.0.1 — Cuando NO hay coincidencia con el PyM del paciente se siguen mostrando
     // todas las actividades, pero DESMARCADAS. Antes salían las 10 premarcadas y un solo
@@ -7048,12 +7069,14 @@
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
               const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
               const marcar = hayCoincidencia && !chocaSexo;
+              const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               return `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
                   <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
+                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}
