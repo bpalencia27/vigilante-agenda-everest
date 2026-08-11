@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.4.1
+// @version      12.5.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -54,6 +54,22 @@
 // archivo completo, subir @version, "Update secret gist") — nada más que hacer en
 // los consultorios. Guía completa: 3_ACTUALIZAR_TODOS_LOS_EQUIPOS.txt
 // ----------------------------------------------------------------------------
+
+/*
+  v12.5.0 — TELEMETRÍA DE USO DEL PANEL (mejora continua, pedido del 11-08-2026)
+  Cada acción del médico en el panel se CUENTA de forma anónima (uxTrack: nombre fijo
+  de acción + números; jamás cédulas, nombres ni texto del DOM) y cada 30 minutos la
+  pestaña líder envía UNA fila "ux" agregada al tablero de Apps Script por la cola con
+  reintentos ya existente (reportar/repFlush). Ventana persistida en localStorage
+  (vgl_ux): sobrevive recargas y despacha lo pendiente de otro día al arrancar
+  (uxBootCheck). Interruptor en Ajustes ("Métricas de uso del panel", uxTelemetria) y
+  respeta además el interruptor general del reporte. ~20 acciones instrumentadas:
+  abrir agendar/ordenar/labs, cita creada/rechazada/cupo perdido, lab agendado,
+  órdenes creadas/fallo/correo, avisos PyM/PES mostrados y atendidos, Auto-Labs,
+  filtros, búsqueda, silenciar, hojas de Resumen/Ajustes, abrir PyM manual. El
+  tablero procesa la fila con TABLERO/Codigo.gs (pestañas "uso" y "uso_detalle").
+  Banco: 541 comprobaciones (suite_23 nueva), cobertura 288/313 (92.0%).
+*/
 
 /*
   v12.4.0 — RONDA DEL 11-08-2026 (pedidos del consultorio, decisiones del médico A/B/C/D)
@@ -1607,6 +1623,7 @@
               return;
           }
           btn.innerHTML = "⏳ Buscando en Athenea...";
+          uxTrack("labs.autollenado.click");
           try {
               // v12.3.35 — hallado en revisión adversarial: usar aquí la PRE-CARGA servía
               // datos de hasta 10 minutos como si fueran actuales ("siguen PENDIENTES" de
@@ -1619,6 +1636,7 @@
               if (labs && labs.length) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
+                  uxTrack("labs.autollenado.casillas", { n: r.count });
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
                     + (r.respetadas ? "\n\n✋ " + r.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
@@ -1800,6 +1818,7 @@
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     atheneaAutoLogin: false,  // v12.3.16 — OPT-IN: iniciar sesión solo en Athenea con credenciales guardadas por médico (apagado de fábrica)
+    uxTelemetria: true,       // v12.5.0 — conteo ANÓNIMO de acciones del panel (sin datos de paciente) para mejora continua; 1 fila agregada cada 30 min
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
@@ -3028,6 +3047,71 @@
     reportar("fraude", { hora: hora || "", min: Math.round((min || 0) * 10) / 10 });
   }
 
+  // =====================================================================
+  //  v12.5.0 — TELEMETRÍA DE USO DEL PANEL (mejora continua)
+  //  Pedido del 11-08-2026: cada acción del médico en el panel se CUENTA — jamás se
+  //  registra QUIÉN era el paciente (ni cédula, ni nombre, ni texto del DOM): solo el
+  //  nombre FIJO de la acción y números. Cada 30 minutos la pestaña LÍDER envía UNA
+  //  sola fila "ux" agregada al tablero de Apps Script, por la misma cola con
+  //  reintentos del reporte mínimo. Diseño deliberado: AGREGAR y no inundar — la cola
+  //  remota admite 30 filas y la Hoja no debe llenarse de clics sueltos. La fila "ux"
+  //  se procesa en el tablero con TABLERO/Codigo.gs (pestaña "uso" de la Hoja).
+  //  Nota de concurrencia: dos pestañas del mismo navegador comparten la ventana en
+  //  localStorage; una carrera de escritura puede perder algún conteo aislado —
+  //  aceptable para métricas de uso, jamás para datos clínicos.
+  const UX_KEY = "vgl_ux";
+  const UX_FLUSH_MS = 30 * 60 * 1000; // media hora, decidido con el pedido ("cada 30 min o cada hora")
+  function uxVentanaNueva() { return { dia: todayStamp(), desde: new Date().toISOString(), acciones: {} }; }
+  function uxTrack(accion, extra) {
+    try {
+      if (S.uxTelemetria === false) return;
+      // Solo nombres fijos de acción (letras/números/./:/_/-): nada que venga del DOM
+      // o del paciente puede colarse en la clave.
+      const a = String(accion || "").toLowerCase().replace(/[^a-z0-9.:_-]/g, "").slice(0, 60);
+      if (!a) return;
+      let w = readJSON(UX_KEY, null);
+      if (!w || !w.acciones || typeof w.acciones !== "object") w = uxVentanaNueva();
+      // Cambio de día con conteos pendientes: se empaquetan hacia la cola (si el
+      // reporte está activo) y la ventana arranca limpia — nada se pierde ni se mezcla.
+      if (w.dia !== todayStamp()) { uxEnviarVentana(w); w = uxVentanaNueva(); }
+      w.acciones[a] = (w.acciones[a] || 0) + 1;
+      const n = extra && typeof extra.n === "number" && isFinite(extra.n) ? extra.n : 0;
+      if (n) w.acciones[a + ".total"] = (w.acciones[a + ".total"] || 0) + n;
+      writeJSON(UX_KEY, w);
+    } catch (e) {}
+  }
+  // Empaqueta una ventana con conteos en UNA fila "ux" hacia la cola del tablero.
+  // true = la fila quedó ENCOLADA (la entrega real la garantiza repFlush con reintentos).
+  function uxEnviarVentana(w) {
+    try {
+      if (!w || !w.acciones) return false;
+      const claves = Object.keys(w.acciones);
+      if (!claves.length) return false;
+      if (S.uxTelemetria === false || !repOn()) return false;
+      const total = claves.reduce((s, k) => s + (k.endsWith(".total") ? 0 : (w.acciones[k] || 0)), 0);
+      // Tope defensivo: una ventana normal pesa <1 KB; si algo creciera de forma
+      // anómala, mejor una fila truncada que reventar la celda de la Hoja.
+      reportar("ux", { deDia: w.dia, desde: w.desde || "", n: total, acciones: JSON.stringify(w.acciones).slice(0, 4000) });
+      return true;
+    } catch (e) { return false; }
+  }
+  function uxFlush() {
+    try {
+      if (!heartbeat()) return;                          // solo la pestaña líder envía
+      const w = readJSON(UX_KEY, null);
+      if (uxEnviarVentana(w)) writeJSON(UX_KEY, uxVentanaNueva());
+    } catch (e) {}
+  }
+  // Al arrancar: si quedó una ventana de OTRO día (el navegador se cerró antes del
+  // último envío), sale ya — sin esperar la primera media hora.
+  function uxBootCheck() {
+    try {
+      if (!heartbeat()) return;
+      const w = readJSON(UX_KEY, null);
+      if (w && w.dia !== todayStamp() && uxEnviarVentana(w)) writeJSON(UX_KEY, uxVentanaNueva());
+    } catch (e) {}
+  }
+
   // ================== SharePoint: PyM del día automático ==================
   function todayStamp() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function spBase() { return "https://" + CONFIG.SP.host + CONFIG.SP.web; }
@@ -3860,7 +3944,8 @@
         </div>`;
       ov.querySelector(".vgl-pym-n").textContent = nombre || "Paciente";
       const ok = ov.querySelector(".vgl-pym-ok");
-      ok.addEventListener("click", () => ov.remove());
+      ok.addEventListener("click", () => { uxTrack("aviso.pym.entendido"); ov.remove(); });
+      uxTrack(esPes ? "aviso.pym.mostrado.pes" : "aviso.pym.mostrado", { n: (actividades || []).length });
       document.body.appendChild(ov);
       try { ok.focus(); } catch (e2) {}
       ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
@@ -3886,7 +3971,8 @@
         </div>`;
       ov.querySelector(".vgl-pes-n").textContent = nombre || "Paciente";
       const ok = ov.querySelector(".vgl-pes-ok");
-      ok.addEventListener("click", () => ov.remove());
+      ok.addEventListener("click", () => { uxTrack("aviso.pes.entendido"); ov.remove(); });
+      uxTrack("aviso.pes.mostrado");
       document.body.appendChild(ov);
       try { ok.focus(); } catch (e2) {}
       ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
@@ -6139,15 +6225,17 @@
     `;
     document.body.appendChild(root);
     el = { root, sum: root.querySelector("#vgl-sum"), stats: root.querySelector("#vgl-stats"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot"), sheet: root.querySelector("#vgl-sheet"), q: root.querySelector("#vgl-q") };
-    root.querySelector("#vgl-load").addEventListener("click", () => el.file.click());
-    root.querySelector("#vgl-bell").addEventListener("click", enableOsNotifications);
-    root.querySelector("#vgl-rep").addEventListener("click", () => toggleSheet("resumen"));
-    root.querySelector("#vgl-cfg").addEventListener("click", () => toggleSheet("ajustes"));
-    root.querySelector("#vgl-mute").addEventListener("click", () => (muted() ? unmute() : muteFor(15)));
-    // Buscador: filtra en vivo y resalta la coincidencia.
-    el.q.addEventListener("input", () => { state.busqueda = el.q.value.trim().toLowerCase(); state.lastSignature = ""; repaint(); });
+    root.querySelector("#vgl-load").addEventListener("click", () => { uxTrack("panel.pym.abrir_archivo"); el.file.click(); });
+    root.querySelector("#vgl-bell").addEventListener("click", () => { uxTrack("panel.notificaciones.activar"); enableOsNotifications(); });
+    root.querySelector("#vgl-rep").addEventListener("click", () => { uxTrack("panel.hoja.resumen"); toggleSheet("resumen"); });
+    root.querySelector("#vgl-cfg").addEventListener("click", () => { uxTrack("panel.hoja.ajustes"); toggleSheet("ajustes"); });
+    root.querySelector("#vgl-mute").addEventListener("click", () => { uxTrack(muted() ? "panel.sonido.reactivar" : "panel.silenciar15"); (muted() ? unmute() : muteFor(15)); });
+    // Buscador: filtra en vivo y resalta la coincidencia. La telemetría cuenta la
+    // PRIMERA tecla de cada búsqueda (no cada pulsación, y jamás el texto escrito).
+    el.q.addEventListener("input", () => { if (el.q.value.trim().length === 1 && !state.busqueda) uxTrack("panel.busqueda"); state.busqueda = el.q.value.trim().toLowerCase(); state.lastSignature = ""; repaint(); });
     el.q.addEventListener("keydown", (e) => { if (e.key === "Escape") { el.q.value = ""; state.busqueda = ""; state.lastSignature = ""; repaint(); } e.stopPropagation(); });
     root.querySelectorAll(".vgl-fchip").forEach((c) => c.addEventListener("click", () => {
+      uxTrack("panel.filtro:" + c.dataset.f); // valores fijos del propio panel (todas/…)
       state.filtro = c.dataset.f; state.lastSignature = "";
       root.querySelectorAll(".vgl-fchip").forEach((x) => x.classList.toggle("sel", x === c));
       if (root.classList.contains("sheet")) closeSheet();
@@ -7697,6 +7785,7 @@
           });
           if (!sigueLibre) {
             vglLog("APPCITA", "TurnoYaNoDisponible", { turnoId });
+            uxTrack("cita.cupo_perdido");
             const horaPerdida = ctxElegido.horaTxt || horaTxt || "elegida";
             selectedTurnoObj = null; selectedTurnoCtx = null;
             await cargarHoras(); // repinta los cupos REALES del momento (la hora tomada ya no aparece)
@@ -7766,6 +7855,7 @@
         }
 
         markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso);
+        uxTrack("cita.creada:" + selectedEspId);
         // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
         // quedan vivos en el Centro de actividades de Windows y REAPARECEN horas después.
         // Se indica además a qué número salió el SMS, para que el médico pueda verificarlo.
@@ -7792,6 +7882,7 @@
           const labOk = await apiLaboratorioAgendarAuto(apt.doc_id, labFecha.iso, selectedLabTime, celularSms);
           // v12.3.28 — Se marca SOLO si de verdad se agendó: así, si falla, el botón de
           // la tarjeta sigue ofreciendo "falta laboratorio" en vez de darlo por hecho.
+          uxTrack(labOk ? "lab.agendado" : "lab.fallo");
           if (labOk) markLabAgendadaHoy(apt.doc_id);
         }
 
@@ -7801,6 +7892,7 @@
           confirmBtn.disabled = false;
           confirmBtn.textContent = "✓ Reintentar Crear Cita";
         }
+        uxTrack("cita.rechazada");
         const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
         alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Se actualizaron los horarios disponibles — verifique y elija de nuevo.");
         // v12.4.0 — Tras un rechazo del servidor (cupo tomado, agenda cerrada…) los
@@ -7992,6 +8084,7 @@
         // v12.3.29 — mismo patrón que el modal principal (v12.3.14, línea ~6901): la cita
         // YA quedó creada en el servidor, así que el registro de éxito corre siempre; solo
         // pintar el modal se salta si el médico ya lo cerró durante el await.
+        uxTrack("lab.agendado.solo");
         markLabAgendadaHoy(apt.doc_id);
         if (vivo()) {
           confirmBtn.style.background = "#10b981"; // [UI-CSS]
@@ -8568,6 +8661,7 @@
               if (ok) okCount++;
             }
             vglLog("ORDEN", "EnviarPorCorreoIntentado", { agrupadores: agrupadoresUnicos.length, ok: okCount });
+            uxTrack("ordenes.correo", { n: okCount });
             if (!vivo()) return;
             mailBtn.disabled = false; mailBtn.textContent = "Enviar";
             mailStatus.textContent = okCount === agrupadoresUnicos.length
@@ -8580,6 +8674,7 @@
         // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
         // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
         markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)]);
+        uxTrack("ordenes.creadas", { n: creadasCount });
         notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
         bumpStat("atiempo");
         // v12.3.x — Ya NO se cierra sola a los 2.6 s: el médico necesita tiempo para
@@ -8589,6 +8684,7 @@
           confirmBtn.disabled = false;
           confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
         }
+        uxTrack("ordenes.fallo");
         alert("No se pudieron generar las órdenes en el sistema de órdenes."); // [COPY-UX]
       }
     });
@@ -8808,6 +8904,7 @@
         <div class="vgl-fld"><label>Nombre del consultorio / puesto<span class="vgl-hint">Identificador de la estación de trabajo (ej. "Consultorio 3").</span></label><input type="text" id="c-eq" placeholder="(opcional)" value="${escapeHtml(S.equipo)}"></div>
         <div class="vgl-fld"><label>Probar comunicación<span class="vgl-hint" id="c-repn">Realiza una prueba de conexión con el servidor de reportes.</span></label><button class="vgl-btn" id="c-repgo">Probar</button></div>
         <div class="vgl-fld"><label>Dirección del servidor de reportes<span class="vgl-hint">URL de servicio de datos.</span></label><input type="text" id="c-repurl" placeholder="(predeterminado)" value="${escapeHtml(S.reporteUrl)}"></div>
+        <div class="vgl-fld"><label>Métricas de uso del panel<span class="vgl-hint">Conteo anónimo de acciones (sin ningún dato de paciente), enviado agregado cada 30 min al panel de seguimiento para mejorar el programa.</span></label>${sw("c-uxtel", S.uxTelemetria)}</div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
         <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
       </div>`;
@@ -8835,6 +8932,7 @@
     // comportamiento; las credenciales se guardan aparte, por ID de médico, y nunca se
     // registran en consola ni en telemetría.
     bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
+    bind("#c-uxtel", "uxTelemetria", (n) => n.checked);
     const athSave = q("#c-athsave");
     if (athSave) athSave.addEventListener("click", () => {
       const id = state.activeDoctor && state.activeDoctor.id;
@@ -9177,11 +9275,11 @@
         </div>`;
       card.__vglKey = a.key;
       const bAg = card.querySelector(".vgl-btn-agendar");
-      if (bAg) bAg.addEventListener("click", (e) => { e.stopPropagation(); soloFaltaLab ? openLabSoloModal(a) : openAgendamientoModal(a); });
+      if (bAg) bAg.addEventListener("click", (e) => { e.stopPropagation(); uxTrack(soloFaltaLab ? "panel.agendar.sololab" : "panel.agendar.abrir"); soloFaltaLab ? openLabSoloModal(a) : openAgendamientoModal(a); });
       const bOrd = card.querySelector(".vgl-btn-ordenar");
-      if (bOrd) bOrd.addEventListener("click", (e) => { e.stopPropagation(); openOrdenamientoModal(a); });
+      if (bOrd) bOrd.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.ordenar.abrir"); openOrdenamientoModal(a); });
       const bLabs = card.querySelector(".vgl-btn-labs");
-      if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); openLaboratoriosModal(a); });
+      if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
       fragment.appendChild(card);
     }
     el.list.appendChild(fragment);
@@ -9542,6 +9640,11 @@
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
     setTimeout(repDailySummary, 8000);
     setInterval(repFlush, 600000);
+    // v12.5.0 — telemetría de uso del panel: la ventana pendiente de otro día sale al
+    // arrancar (45 s, tras estabilizarse el liderazgo) y luego una fila agregada cada
+    // 30 minutos. Solo la pestaña líder envía; el toggle vive en Ajustes (uxTelemetria).
+    setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
+    setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue
