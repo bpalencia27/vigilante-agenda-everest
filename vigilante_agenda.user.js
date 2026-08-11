@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.36
+// @version      12.3.37
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.36";
+  const VERSION = "12.3.37";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -518,6 +518,78 @@
     { key: "ALBUMINA", names: ["ALBUMINA EN SUERO", "ALBÚMINA EN SUERO"], codes: ["2002", "903801"], resultId: "resultadoAlbumina", dateId: "fechaResultAlbumina" },
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
+
+  // v12.3.37 — SECCIÓN URONÁLISIS DE LA RUTA CRÓNICOS (pedido del consultorio, pantallazo
+  // del 2026-08-11): además del interruptor NORMAL/ANORMAL, la vista tiene 7 casillas de
+  // texto para los componentes del parcial de orina, todas con placeholder
+  // "Resultado <Componente>" visible en pantalla. Ese placeholder es el ÚNICO ancla
+  // confirmada del DOM (no hay ids capturados para estos campos), así que la búsqueda va
+  // por placeholder normalizado (sin tildes, sin mayúsculas/minúsculas). Los nombres con
+  // que Athenea entrega cada componente AÚN NO están confirmados en campo: los sinónimos
+  // de abajo son candidatos razonables del LIS, y si ninguno casa la casilla queda VACÍA
+  // (fallo seguro) mientras el diagnóstico de orina imprime el nombre real para añadirlo
+  // aquí con evidencia, nunca por adivinanza.
+  // El interruptor NORMAL/ANORMAL NO se automatiza todavía: es interpretación clínica y
+  // no hay evidencia del control ni de la semántica de IdNormalidad — regla de la casa
+  // (v11.0.1): ante la duda, se deja al médico, jamás se inventa.
+  const UROANALISIS_COMPONENTES = [
+    { key: "NITRITOS",    placeholder: "RESULTADO NITRITOS",    names: ["NITRITO"] },
+    // Las exclusiones "24 H"/"HORAS"/"DEPURAC" replican el patrón de la entrada sérica de
+    // CREATININA (incidente v11.0.1): la glucosuria/proteinuria DE 24 HORAS es un examen
+    // CUANTITATIVO distinto (mg/24 h) que, por coincidencia de nombre, caería verbatim en
+    // la casilla de la tira reactiva del parcial. Confirmado en revisión adversarial
+    // ejecutando el flujo completo. "ALBUMINA" se retiró de los sinónimos de proteinuria:
+    // "ALBUMINA EN ORINA" es el hijo cuantitativo del panel RAC (mg/L), no la tira; si el
+    // LIS llama "ALBUMINA" a la proteína del parcial, el diagnóstico de orina lo mostrará
+    // y se añadirá con evidencia.
+    { key: "GLUCOSURIA",  placeholder: "RESULTADO GLUCOSURIA",  names: ["GLUCOSURIA", "GLUCOSA"], excluye: ["24 H", "HORAS", "DEPURAC"] },
+    // "RELACION PROTEINA/CREATININA" y "MICROALBUMINURIA" son OTROS exámenes (cocientes),
+    // no la proteína del parcial: sin la exclusión, su valor caería en esta casilla.
+    { key: "PROTEINURIA", placeholder: "RESULTADO PROTEINURIA", names: ["PROTEINURIA", "PROTEINA"], excluye: ["RELACION", "CREATININ", "MICROALBUMIN", "24 H", "HORAS", "DEPURAC"] },
+    { key: "CILINDROS",   placeholder: "RESULTADO CILINDROS",   names: ["CILINDRO"] },
+    { key: "SANGRE",      placeholder: "RESULTADO SANGRE",      names: ["SANGRE", "HEMOGLOBINA"] },
+    { key: "HEMATIES",    placeholder: "RESULTADO HEMATIES",    names: ["HEMATIE", "ERITROCITO"] },
+    { key: "LEUCOCITOS",  placeholder: "RESULTADO LEUCOCITOS",  names: ["LEUCOCIT", "ESTERASA"] }
+  ];
+
+  // Normalización compartida para comparar nombres/placeholders: sin tildes, en
+  // mayúsculas y con los espacios colapsados ("Resultado  Hematíes " → "RESULTADO HEMATIES").
+  const _canonTexto = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
+
+  // v12.3.37 — ¿Este analito pertenece al panel de ORINA? Primero por su padre
+  // (NombreParametroPadre, el campo con que Athenea agrupa los hijos de un panel);
+  // como respaldo, por nombre propio SOLO cuando el nombre existe únicamente en orina.
+  // Jamás por "LEUCOCITOS"/"HEMATIES"/"HEMOGLOBINA" a secas: esos también son del
+  // hemograma EN SANGRE, y confundirlos escribiría sangre en las casillas de orina.
+  function _esAnalitoDeOrina(lab) {
+      const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));
+      // "URINAR" cubre SEDIMENTO URINARIO / CITOQUIMICO URINARIO (revisión adversarial:
+      // "URINARIO" no contiene la subcadena "ORINA" y esos padres se colaban al suero).
+      if (/ORINA|URINAR|UROAN/.test(padre)) return true;
+      const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+      return /\bORINA\b/.test(nombre) || /GLUCOSURIA|PROTEINURIA|NITRITO|CILINDRO|ESTERASA LEUCOCITARIA/.test(nombre);
+  }
+
+  function _matchUroComponente(lab) {
+      const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+      if (!nombre) return null;
+      for (const comp of UROANALISIS_COMPONENTES) {
+          if (comp.excluye && comp.excluye.some((x) => nombre.includes(x))) continue;
+          if (comp.names.some((n) => nombre.includes(n))) return comp;
+      }
+      return null;
+  }
+
+  // Busca la casilla del componente por su placeholder visible (única ancla confirmada).
+  function _findUroInput(placeholderCanon) {
+      try {
+          const inputs = document.querySelectorAll("input[placeholder]");
+          for (const el of inputs) {
+              if (_canonTexto(el.placeholder) === placeholderCanon) return el;
+          }
+      } catch (e) {}
+      return null;
+  }
 
   // v12.0.0 (del otro linaje) — Consulta a Athenea con reintento por AÑO. El endpoint exige
   // el año de la solicitud; con un único año, los laboratorios pedidos a finales del año
@@ -950,7 +1022,20 @@
       for (const item of WHITELIST_13_LABS) {
           if (code && item.codes.includes(code)) return item;
       }
+      // v12.3.37 — GUARDA DE ORINA. Los hijos del parcial de orina se llaman igual que
+      // exámenes de SANGRE ("HEMOGLOBINA", "GLUCOSA", "ALBUMINA"...): sin esta guarda, la
+      // hemoglobina EN ORINA caía por nombre en la casilla de hemoglobina SÉRICA — el
+      // mismo error clínico silencioso que v11.0.1 corrigió para la creatinina, ahora
+      // para el panel entero. Por nombre, un analito de orina solo puede casar con los
+      // exámenes que legítimamente SON de orina (RAC y el propio uroanálisis); el código
+      // exacto de arriba sigue mandando porque un CUPS es inequívoco.
+      const deOrina = _esAnalitoDeOrina(lab);
       for (const item of WHITELIST_13_LABS) {
+          if (deOrina && item.key !== "RAC" && item.key !== "UROANALISIS") continue;
+          // Un HIJO cuyo nombre incluye el del panel ("LEUCOCITOS (PARCIAL DE ORINA)")
+          // casaría aquí con la entrada general UROANALISIS y jamás llegaría a su casilla
+          // de componente: si el analito mapea a un componente, se deja pasar a esa ruta.
+          if (deOrina && item.key === "UROANALISIS" && _matchUroComponente(lab)) continue;
           if (item.excluye && item.excluye.some((x) => name.includes(x))) continue;
           for (const n of item.names) {
               if (name.includes(n)) return item;
@@ -1009,6 +1094,15 @@
   // decenas de veces por clic (uno por analito duplicado, en cada reintento). Ahora se
   // avisa UNA vez por casilla y sesión; el conteo completo ya viaja en el resumen.
   const _avisoCasillaYaEscrita = new Set();
+  // v12.3.37 — volcar los analitos de ORINA tal como llegan de Athenea (nombre, padre,
+  // resultado, idNormalidad, idEstado): la evidencia real para afinar los sinónimos de
+  // UROANALISIS_COMPONENTES y construir la futura regla NORMAL/ANORMAL con datos, no con
+  // adivinanzas. La revisión adversarial tumbó la bandera única por sesión: el primer
+  // paciente del día agotaba el volcado y los componentes de los demás jamás se
+  // capturaban. Ahora se vuelca cuando aparece un NOMBRE de analito no visto aún en la
+  // sesión; paneles idénticos repetidos no vuelven a imprimir (mismo control de ruido
+  // de consola de v12.3.36).
+  const _diagUroNombresVistos = new Set();
   const _CAMPOS_FECHA_CONOCIDOS = ["Fecha", "fechaResult", "fecha", "fechaOrden", "fechaResultado"];
 
   // v12.3.30 — Los 4 nombres de campo de arriba se probaron contra la respuesta real de
@@ -1099,9 +1193,77 @@
       const yaEscritas = new Set();
       if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0 };
 
+      // v12.3.37 — Componentes del uroanálisis: cada uno va a SU casilla propia (anclada
+      // al placeholder visible), nunca al whitelist de suero. Mismas reglas sagradas del
+      // resto de casillas: se escribe VERBATIM lo que entrega Athenea, solo en casilla
+      // VACÍA; un valor distinto del médico se respeta entero; y el primer valor gana —
+      // las solicitudes llegan de más reciente a más antigua, así que el primero ES el
+      // resultado más reciente y los anteriores se omiten (pedido explícito del médico).
+      const escritorPorMarca = new Map();
+      const inyectarComponenteOrina = (lab) => {
+          const nombreCanon = _canonTexto(lab.NombreParametro || lab.nombre || lab.examen);
+          const comp = _matchUroComponente(lab);
+          const marca = comp ? "URO_" + comp.key : null;
+          const reclamar = () => { if (marca) { yaEscritas.add(marca); escritorPorMarca.set(marca, nombreCanon); } };
+          const resultVal = lab.Resultado || lab.resultado || lab.valor;
+          // Revisión adversarial de v12.3.37: el analito MÁS RECIENTE reclama su casilla
+          // aunque llegue vacío o PENDIENTE. Sin esto, un duplicado de hace meses del mismo
+          // componente la llenaba con un dato viejo — indetectable, porque estas 7 casillas
+          // no tienen fecha acompañante — y en la corrida siguiente el resultado nuevo
+          // quedaba "respetado" como si fuera del médico: el dato viejo se volvía permanente.
+          if (!resultVal) { reclamar(); return; }
+          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") {
+              pendientes++;
+              reclamar();
+              return;
+          }
+          if (!comp) return; // nombre aún sin confirmar: casilla vacía; el diagnóstico de orina ya mostró el nombre real
+          if (yaEscritas.has(marca)) {
+              // Dos analitos DISTINTOS compitiendo por la misma casilla (tira reactiva vs.
+              // sedimento, subtipos de cilindros): manda el más reciente y se AVISA una vez
+              // por sesión, como en la ruta sérica — nunca una omisión muda.
+              const escritor = escritorPorMarca.get(marca);
+              const avisoKey = marca + "|" + nombreCanon;
+              if (escritor && escritor !== nombreCanon && !_avisoCasillaYaEscrita.has(avisoKey)) {
+                  _avisoCasillaYaEscrita.add(avisoKey);
+                  console.warn("[Vigilante] casilla de uroanálisis ya reclamada por otro analito, se conserva el más reciente:", marca, "· omitido:", nombreCanon);
+              }
+              return;
+          }
+          const inputEl = _findUroInput(comp.placeholder);
+          if (!inputEl) {
+              if (!sinCasilla.includes(marca)) sinCasilla.push(marca);
+              return;
+          }
+          const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
+          if (valorActual !== "" && valorActual !== String(resultVal).trim()) { respetadas++; reclamar(); return; }
+          if (valorActual === "") { setNgValue(inputEl, resultVal); count++; } else { respetadas++; }
+          reclamar();
+      };
+
       labsArray.forEach(lab => {
+          if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
+              try {
+                  const deOrinaTodos = labsArray.filter(_esAnalitoDeOrina);
+                  deOrinaTodos.forEach((l) => _diagUroNombresVistos.add(_canonTexto(l.NombreParametro || l.nombre || l.examen)));
+                  console.log("[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea:",
+                      JSON.stringify(deOrinaTodos.map((l) => ({
+                          nombre: l.NombreParametro || l.nombre || l.examen || "",
+                          padre: l.NombreParametroPadre || l.nombreParametroPadre || "",
+                          resultado: String(l.Resultado || l.resultado || l.valor || ""),
+                          idNormalidad: l.IdNormalidad !== undefined ? l.IdNormalidad : l.idNormalidad,
+                          idEstado: l.idEstado
+                      }))));
+              } catch (e) {}
+          }
+
           const matched = _matchLabInWhitelist(lab);
-          if (!matched) return; // Filtro estricto: solo los 13 laboratorios autorizados
+          if (!matched) {
+              // Filtro estricto: solo los 13 laboratorios autorizados… y, desde v12.3.37,
+              // los componentes del panel de orina por su ruta propia.
+              if (_esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
+              return;
+          }
 
           const resultVal = lab.Resultado || lab.resultado || lab.valor;
           if (!resultVal) return;

@@ -34,6 +34,20 @@ jobs:
         set -e
         cat runner_output.txt
 
+        # 1. Compuerta de fallos: EXIT_CODE se capturaba pero JAMÁS se comprobaba
+        # (hallado en revisión adversarial 2026-08-11: pruebas en rojo daban CI verde).
+        if [ "$EXIT_CODE" -ne 0 ]; then
+          echo "Error: el runner terminó con código $EXIT_CODE (pruebas fallidas o muerte del proceso)."
+          exit "$EXIT_CODE"
+        fi
+
+        # 2. Defensa doble por si el código de salida mintiera: la línea de resumen
+        # solo contiene "fallan" cuando el contador de fallos es mayor que cero.
+        if grep -Eq "comprobaciones.*fallan" runner_output.txt; then
+          echo "Error: el resumen del runner reporta pruebas que fallan."
+          exit 1
+        fi
+
         # 4. Compuerta de silencio: el paso de tests debe fallar si la salida
         # NO contiene la línea "comprobaciones" del resumen final.
         if ! grep -q "comprobaciones" runner_output.txt; then

@@ -3,7 +3,8 @@ module.exports = {
   cubre: [
     "_matchLabInWhitelist", "_findLabField",
     "injectLabsIntoCronicos", "setNgValue",
-    "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel"
+    "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
+    "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -316,6 +317,187 @@ module.exports = {
       t.igual(rac.key, "RAC");
       t.igual(rac.resultId, "resultadoRelacionAlbuminaCreatinina", "Debe dirigirse a la casilla correcta");
       t.falso(rac.resultId === "resultadoMicroAlbuminuriaCreatinuria", "NO debe dirigirse a la casilla resultadoMicroAlbuminuriaCreatinuria");
+    });
+
+    // ================= v12.3.37 — uroanálisis por componentes =================
+
+    t.caso("_esAnalitoDeOrina: por padre ORINA, o por nombre inequívoco de orina; jamás por LEUCOCITOS/HEMOGLOBINA a secas (también existen en sangre)", () => {
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "GLUCOSURIA" }), "GLUCOSURIA solo existe en orina: respaldo sin campo padre");
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS EN ORINA" }));
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS" }), "LEUCOCITOS a secas es del hemograma en sangre");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA" }), "HEMOGLOBINA a secas es la sérica");
+    });
+
+    t.caso("_matchUroComponente: sinónimos del LIS y exclusión de cocientes (RPC/microalbuminuria NO son la proteinuria del parcial)", () => {
+      t.igual(testApi._matchUroComponente({ NombreParametro: "HEMOGLOBINA" }).key, "SANGRE");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "ESTERASA LEUCOCITARIA" }).key, "LEUCOCITOS");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "Hematíes" }).key, "HEMATIES", "con tilde también casa (normalización)");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "ERITROCITOS" }).key, "HEMATIES");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "GLUCOSA" }).key, "GLUCOSURIA");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "PROTEINAS" }).key, "PROTEINURIA");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "RELACION PROTEINA/CREATININA EN ORINA" }), null, "un cociente no es la proteinuria del parcial");
+      t.igual(testApi._matchUroComponente({ NombreParametro: "ASPECTO" }), null, "componente sin casilla en la vista: no se mapea");
+    });
+
+    t.caso("_matchLabInWhitelist: GUARDA DE ORINA v12.3.37 — el padre ORINA bloquea el match sérico por nombre; RAC/UROANALISIS y el código exacto siguen pasando", () => {
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }), null, "hemoglobina EN ORINA jamás casa con la casilla sérica");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS" }), null, "glucosa EN ORINA jamás casa con glicemia");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "HEMOGLOBINA" }).key, "HEMOGLOBINA", "la sérica de siempre sigue casando");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "PARCIAL DE ORINA" }).key, "RAC", "el RAC ES de orina: exento de la guarda");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "UROANALISIS", NombreParametroPadre: "PARCIAL DE ORINA" }).key, "UROANALISIS", "el panel padre sigue contándose/avisándose como siempre");
+      t.igual(testApi._matchLabInWhitelist({ CodigoParametro: "8779", NombreParametro: "CUALQUIERA", NombreParametroPadre: "ORINA" }).key, "RAC", "el CUPS exacto manda incluso con padre de orina");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.3.37: la HEMOGLOBINA del parcial de orina NO toca la casilla sérica (queda para su casilla de componente)", () => {
+      mockDOM = { "resultadoHemoglobina": { value: "" } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      const labs = [{ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "+++" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM["resultadoHemoglobina"].value, "", "la casilla sérica queda intacta");
+      t.cierto(res.sinCasilla.includes("URO_SANGRE"), "y se avisa que su casilla de componente no está en esta vista");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.3.37: los componentes se escriben por placeholder, verbatim, solo en casilla vacía y con el más reciente primero", () => {
+      mockDOM = {};
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "NEGATIVO ESCRITO POR EL MEDICO", dispatchEvent: () => {} };
+      const inputProteinuria = { placeholder: "Resultado  Proteinuria ", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      // El mock respeta el selector: si producción dejara de pedir input[placeholder],
+      // este caso debe romperse (revisión adversarial: un mock ciego al selector dejaba
+      // el ancla real inverificable).
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputSangre, inputNitritos, inputProteinuria] : []);
+      const labs = [
+        // orden real: la solicitud más reciente llega primero
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "POSITIVO" },
+        { NombreParametro: "PROTEINAS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 },
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "+++ (solicitud vieja)" }
+      ];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputSangre.value, "NEGATIVO", "hemoglobina en orina → casilla Sangre, valor verbatim, y el MÁS RECIENTE gana");
+      t.igual(inputNitritos.value, "NEGATIVO ESCRITO POR EL MEDICO", "un valor distinto del médico se respeta entero");
+      t.igual(inputProteinuria.value, "", "un componente PENDIENTE no se escribe (Incidente v11.0.1)");
+      t.igual(res.count, 1, "solo la casilla vacía de Sangre se escribió");
+      t.igual(res.pendientes, 1);
+      // Igualdad EXACTA: con >= 1 el dedup de yaEscritas era indetectable — el duplicado
+      // viejo, en vez de OMITIRSE, se colaba como "respetada" nº 2 y el banco seguía verde
+      // (mutante confirmado en revisión adversarial).
+      t.igual(res.respetadas, 1, "solo Nitritos se respeta; el HEMOGLOBINA viejo se OMITE por dedup, no se cuenta");
+    });
+
+    t.caso("_findUroInput y _canonTexto: placeholder normalizado (tildes, espacios dobles, bordes) y null si no existe", () => {
+      t.igual(testApi._canonTexto("Resultado  Hematíes "), "RESULTADO HEMATIES", "tildes fuera, espacios colapsados y recortados");
+      const inputHematies = { placeholder: "Resultado Hematíes", value: "", dispatchEvent: () => {} };
+      const inputCilindros = { placeholder: "Resultado  Cilindros ", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputHematies, inputCilindros] : []);
+      t.igual(testApi._findUroInput("RESULTADO HEMATIES"), inputHematies);
+      t.igual(testApi._findUroInput("RESULTADO CILINDROS"), inputCilindros, "el doble espacio del placeholder real también casa");
+      t.igual(testApi._findUroInput("RESULTADO GLUCOSURIA"), null);
+      c.env.doc.querySelectorAll = prevQSA;
+    });
+
+    t.caso("v12.3.37: padres 'URINARIO' (sedimento/citoquímico) también disparan la guarda de orina", () => {
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "SEDIMENTO URINARIO" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "CITOQUIMICO URINARIO" }));
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "SEDIMENTO URINARIO" }), null, "la hemoglobina del sedimento jamás cae en la casilla sérica");
+      // v12.3.37 — nota sobre CREATININA.excluye["ORINA"]: para nombres con ORINA la guarda
+      // de orina actúa ANTES que el excluye (que se conserva como defensa en profundidad);
+      // esta aserción fija la guarda por PADRE, que el caso viejo de exclusiones no cubre.
+      t.igual(testApi._matchLabInWhitelist({ nombre: "CREATININA", NombreParametroPadre: "PARCIAL DE ORINA" }), null, "creatinina hija del panel de orina tampoco casa con la sérica");
+    });
+
+    t.caso("v12.3.37: los exámenes CUANTITATIVOS de orina (24 h, albúmina del RAC) NO caen en las casillas de la tira reactiva", () => {
+      t.igual(testApi._matchUroComponente({ NombreParametro: "GLUCOSA EN ORINA DE 24 HORAS" }), null);
+      t.igual(testApi._matchUroComponente({ NombreParametro: "PROTEINAS EN ORINA DE 24 HORAS" }), null);
+      t.igual(testApi._matchUroComponente({ NombreParametro: "PROTEINURIA DE 24 HORAS" }), null);
+      t.igual(testApi._matchUroComponente({ NombreParametro: "ALBUMINA EN ORINA" }), null, "el hijo cuantitativo del panel RAC no es la proteinuria de la tira");
+      const inputGlucosuria = { placeholder: "Resultado Glucosuria", value: "", dispatchEvent: () => {} };
+      const inputProteinuria = { placeholder: "Resultado Proteinuria", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputGlucosuria, inputProteinuria] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "GLUCOSA EN ORINA DE 24 HORAS", Resultado: "1250" },
+        { NombreParametro: "PROTEINAS EN ORINA DE 24 HORAS", Resultado: "412.5" }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(res.count, 0);
+      t.igual(inputGlucosuria.value, "", "mg/24 h no es un resultado de tira reactiva");
+      t.igual(inputProteinuria.value, "");
+    });
+
+    t.caso("v12.3.37: el analito MÁS RECIENTE reclama su casilla aunque esté PENDIENTE o vacío — un duplicado viejo no la llena (estas casillas no tienen fecha que delate el dato viejo)", () => {
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputNitritos, inputSangre] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        // orden real: la solicitud más reciente llega primero
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO (SOLICITUD VIEJA)" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "+++ (SOLICITUD VIEJA)" }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputNitritos.value, "", "el PENDIENTE reciente bloquea el dato viejo");
+      t.igual(inputSangre.value, "", "el resultado vacío reciente también bloquea");
+      t.igual(res.count, 0);
+      t.igual(res.pendientes, 1);
+    });
+
+    t.caso("v12.3.37: un hijo cuyo nombre incluye el del panel ('LEUCOCITOS (PARCIAL DE ORINA)') va a SU casilla de componente, no a la general del uroanálisis", () => {
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "LEUCOCITOS (PARCIAL DE ORINA)" }), null, "no debe casar con la entrada general UROANALISIS");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "PARCIAL DE ORINA" }).key, "UROANALISIS", "el panel padre a secas sigue casando como siempre");
+      const inputLeucocitos = { placeholder: "Resultado Leucocitos", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputLeucocitos] : []);
+      testApi.injectLabsIntoCronicos([{ NombreParametro: "LEUCOCITOS (PARCIAL DE ORINA)", Resultado: "15 X CAMPO" }]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputLeucocitos.value, "15 X CAMPO");
+    });
+
+    t.caso("v12.3.37: dos analitos DISTINTOS compitiendo por la misma casilla (tira vs. sedimento) — manda el más reciente y se AVISA, nunca omisión muda", () => {
+      const inputLeucocitos = { placeholder: "Resultado Leucocitos", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputLeucocitos] : []);
+      const avisos = [];
+      const consolaPrev = c.ctx.console;
+      c.ctx.console = { log: () => {}, warn: (...a) => avisos.push(a.join(" ")), error: () => {}, info: () => {} };
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "ESTERASA LEUCOCITARIA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { NombreParametro: "RECUENTO DE LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5 X CAMPO" }
+      ]);
+      c.ctx.console = consolaPrev;
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputLeucocitos.value, "NEGATIVO", "el primero (más reciente) manda");
+      t.igual(res.count, 1);
+      t.igual(avisos.filter((a) => a.includes("URO_LEUCOCITOS")).length, 1, "el hermano omitido se avisa una vez, con la marca de la casilla");
+    });
+
+    t.caso("v12.3.37: el diagnóstico de orina vuelca claves reales, no repite paneles idénticos y SÍ vuelve a volcar ante nombres nuevos", () => {
+      const c4 = cargar({ silencioso: true });
+      const logs = [];
+      c4.ctx.console = { log: (...a) => logs.push(a), warn: () => {}, error: () => {}, info: () => {} };
+      const cuentaVolcados = () => logs.filter((a) => String(a[0]).includes("diagnóstico uroanálisis")).length;
+      const analito = { CodigoParametro: "111", NombreParametro: "NITRITOS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NEGATIVO", idEstado: 2, IdNormalidad: 1 };
+      c4.api.injectLabsIntoCronicos([analito]);
+      t.igual(cuentaVolcados(), 1);
+      const payload = JSON.parse(logs.find((a) => String(a[0]).includes("diagnóstico uroanálisis"))[1]);
+      t.igual(payload[0].nombre, "NITRITOS");
+      t.igual(payload[0].padre, "PARCIAL DE ORINA");
+      t.igual(payload[0].resultado, "NEGATIVO");
+      t.igual(payload[0].idNormalidad, 1, "IdNormalidad real de Athenea, la clave de la futura regla NORMAL/ANORMAL");
+      t.igual(payload[0].idEstado, 2, "idEstado con la clave real (minúscula), no una adivinada");
+      c4.api.injectLabsIntoCronicos([analito]);
+      t.igual(cuentaVolcados(), 1, "el mismo panel no se vuelve a imprimir (control de ruido v12.3.36)");
+      c4.api.injectLabsIntoCronicos([{ NombreParametro: "CILINDROS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NO SE OBSERVAN", idEstado: 2 }]);
+      t.igual(cuentaVolcados(), 2, "un nombre nuevo (otro paciente del día) sí genera evidencia nueva");
     });
   }
 };
