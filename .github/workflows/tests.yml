@@ -34,28 +34,26 @@ jobs:
         set -e
         cat runner_output.txt
 
-        # 1. Compuerta de fallos: EXIT_CODE se capturaba pero JAMÁS se comprobaba
-        # (hallado en revisión adversarial 2026-08-11: pruebas en rojo daban CI verde).
+        # 1. Compuerta de estado: el paso falla si el código de salida no es 0
         if [ "$EXIT_CODE" -ne 0 ]; then
-          echo "Error: el runner terminó con código $EXIT_CODE (pruebas fallidas o muerte del proceso)."
-          exit "$EXIT_CODE"
-        fi
-
-        # 2. Defensa doble por si el código de salida mintiera: la línea de resumen
-        # solo contiene "fallan" cuando el contador de fallos es mayor que cero.
-        if grep -Eq "comprobaciones.*fallan" runner_output.txt; then
-          echo "Error: el resumen del runner reporta pruebas que fallan."
+          echo "Error: el código de salida no es 0 ($EXIT_CODE)."
           exit 1
         fi
 
-        # 4. Compuerta de silencio: el paso de tests debe fallar si la salida
-        # NO contiene la línea "comprobaciones" del resumen final.
-        if ! grep -q "comprobaciones" runner_output.txt; then
-          echo "Error: el proceso murió en silencio o se colgó (no se halló 'comprobaciones')."
+        # 2. Compuerta de silencio: el paso de tests debe fallar si la salida
+        # NO contiene la línea "comprobaciones : ... pasan" del resumen final.
+        if ! grep -qE "comprobaciones :.*pasan" runner_output.txt; then
+          echo "Error: el proceso murió en silencio o se colgó (no se halló 'comprobaciones : ... pasan')."
           exit 1
         fi
 
-        # 3. Compuerta de cobertura: parsear la línea "funciones cubiertas: X / Y"
+        # 3. Compuerta de fallos: el paso debe fallar si se detectan pruebas fallidas.
+        if grep -qE "[1-9][0-9]* fallan" runner_output.txt; then
+          echo "Error: se detectaron pruebas fallidas."
+          exit 1
+        fi
+
+        # 4. Compuerta de cobertura: parsear la línea "funciones cubiertas: X / Y"
         # y fallar si X < 266.
         COBERTURA=$(grep -Eo 'funciones cubiertas: [0-9]+' runner_output.txt | awk '{print $3}')
         if [ -z "$COBERTURA" ]; then
