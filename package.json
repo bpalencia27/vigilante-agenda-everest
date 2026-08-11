@@ -1,7 +1,7 @@
 {
   "name": "vigilante-agenda-everest",
-  "version": "12.3.11",
-  "description": "Banco de pruebas del Vigilante (suites 07, 08 y CI)",
+  "version": "12.3.19",
+  "description": "Banco de pruebas del Vigilante (suites 01-20)",
   "private": true,
   "scripts": {
     "test": "node tests/runner.js"

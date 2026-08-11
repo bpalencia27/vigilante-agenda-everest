@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.19
+// @version      12.3.33
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.19";
+  const VERSION = "12.3.33";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -414,6 +414,12 @@
 
   // Interceptores Globales de Errores y Excepciones
   window.addEventListener("error", (e) => {
+    // v12.3.27 — "ResizeObserver loop completed with undelivered notifications." es
+    // ruido de navegador conocido (Angular/Google Charts de la propia página de
+    // Everest, no del Vigilante) sin ningún valor para depurar. Confirmado con una
+    // bitácora real de 22 h: llenó 32 de las 500 entradas (6.4%) con esto solo,
+    // compitiendo por espacio con los eventos que sí hacen falta.
+    if (String(e.message || "").includes("ResizeObserver loop")) return;
     vglLog("ERROR", "UncaughtException", { msg: e.message, src: e.filename, line: e.lineno, col: e.colno });
   });
 
@@ -517,6 +523,7 @@
   // el año de la solicitud; con un único año, los laboratorios pedidos a finales del año
   // anterior no aparecían nunca. Se prueban el año en curso y los dos anteriores, y se
   // distingue la sesión vencida de la ausencia real de resultados.
+  let _diagSolicitudFechaLogged = false;
   function fetchAtheneaLabs(idSolicitud, anoEspecifico = null) {
       const currentYear = new Date().getFullYear();
       const yearsToTry = anoEspecifico ? [anoEspecifico] : [currentYear, currentYear - 1, currentYear - 2];
@@ -543,7 +550,35 @@
                               const res = JSON.parse(response.responseText);
                               if (res && res.dataObject) {
                                   const data = JSON.parse(res.dataObject);
-                                  if (Array.isArray(data) && data.length > 0) { resolve(data); return; }
+                                  if (Array.isArray(data) && data.length > 0) {
+                                      // v12.3.32 — BLINDAJE de fechas: hasta ahora solo se leía
+                                      // res.dataObject (los analitos) y se DESCARTABA el resto de
+                                      // la respuesta. Si la fecha vive a nivel de SOLICITUD (no de
+                                      // analito, patrón común en estos backend), se buscaba donde
+                                      // nunca iba a estar. Se escanea el nivel superior con el
+                                      // mismo detector por forma y, si aparece, se hereda a cada
+                                      // analito como último respaldo (__vglFechaSolicitud). El
+                                      // registro de abajo es de UNA vez y deja evidencia decisiva:
+                                      // qué claves trae el nivel superior y si alguna es fecha.
+                                      try {
+                                          // v12.3.33 — solo claves de nombre inequívoco (ver
+                                          // _extractFechaSolicitudTopLevel); las demás fechas del
+                                          // envoltorio se REGISTRAN pero jamás se escriben.
+                                          const fechaSol = _extractFechaSolicitudTopLevel(res);
+                                          if (!_diagSolicitudFechaLogged) {
+                                              _diagSolicitudFechaLogged = true;
+                                              const otrasFechas = Object.keys(res)
+                                                  .filter((k) => k !== "dataObject" && _parseFechaLike(res[k]))
+                                                  .map((k) => k + "=" + _parseFechaLike(res[k]));
+                                              console.log("[Vigilante Athenea] consultaDetalleSolicitud — claves de nivel superior:", Object.keys(res),
+                                                  "· fecha de solicitud ACEPTADA:", fechaSol ? (fechaSol.key + " → " + fechaSol.iso) : "NINGUNA",
+                                                  "· otros valores con pinta de fecha (solo evidencia, NO se usan):", otrasFechas,
+                                                  "· claves del primer analito:", Object.keys(data[0] || {}));
+                                          }
+                                          if (fechaSol) data.forEach((a) => { if (a && typeof a === "object") a.__vglFechaSolicitud = fechaSol.iso; });
+                                      } catch (eDiag) {}
+                                      resolve(data); return;
+                                  }
                               }
                               if (res && res.bolValido === false) {
                                   reject("La sesión en Athenea ha vencido. Abre medicosviva1a.atheneasoluciones.com para renovar el acceso.");
@@ -891,6 +926,32 @@
       return null;
   }
 
+  // v12.3.26 — CONFIRMADO con el HTML real de la Ruta Crónicos pegado en consultorio:
+  // "Hemoglobina" (hemograma, type=text, sin límites) y "Hemoglobina glicosilada %"
+  // (HbA1c, type=number, max=30) tienen literalmente el MISMO id/name en el DOM de
+  // Everest — id="resultadoHemoglobina", name="resultadoHemoglobina" en LOS DOS <input>
+  // (un choque de ids real del propio Everest, no nuestro). document.getElementById()
+  // y querySelector('[name=...]') solo devuelven el PRIMERO que aparece — que es
+  // siempre el de Hemoglobina normal — así que _findLabField() nunca puede alcanzar el
+  // de HbA1c por id. Mapear HBA1C a ese mismo id escribiría el resultado de HbA1c en la
+  // casilla de hemoglobina normal: un error clínico silencioso, peor que no escribir
+  // nada. Se distingue por ATRIBUTO (type="number" + max="30", únicos del campo de
+  // HbA1c entre los que comparten ese id/name), no por posición en el DOM — así sigue
+  // funcionando aunque Everest reordene los campos de la vista. La fecha se busca como
+  // HERMANA del resultado dentro del mismo .input-group (mismo patrón que TODOS los
+  // pares resultado+fecha de esta vista), no por id: la fecha también está duplicada.
+  function _findHbA1cFields() {
+      const candidatos = document.querySelectorAll('input[name="resultadoHemoglobina"], input#resultadoHemoglobina');
+      for (const el of candidatos) {
+          if (el.type === "number" && el.getAttribute("max") === "30") {
+              const grupo = el.closest(".input-group");
+              const fechaEl = grupo ? grupo.querySelector('input[type="date"]') : null;
+              return { resultEl: el, dateEl: fechaEl };
+          }
+      }
+      return { resultEl: null, dateEl: null };
+  }
+
   // v12.3.10 — Se comprobó en consultorio real que los 7 resultados de un paciente se
   // inyectaron bien, pero NINGUNA fecha se escribió: lab.Fecha/fechaResult/fecha eran
   // nombres de campo adivinados, nunca confirmados contra la respuesta real de
@@ -898,6 +959,89 @@
   // esta bandera para volcar UNA sola vez las claves reales del primer analito sin
   // fecha reconocida — así la próxima corrida real revela el nombre correcto.
   let _diagLabFechaLogged = false;
+  let _diagLabFechaKeyFound = false;
+  const _diagLabFechaPorCasilla = new Set();
+  const _CAMPOS_FECHA_CONOCIDOS = ["Fecha", "fechaResult", "fecha", "fechaOrden", "fechaResultado"];
+
+  // v12.3.30 — Los 4 nombres de campo de arriba se probaron contra la respuesta real de
+  // Athenea (confirmado en consultorio, capturas de pantalla del 2026-08-11) y NINGUNO
+  // existe en el objeto: no es un problema de formato, la clave real se llama distinto.
+  // Capturarla con un HAR de la pestaña era imposible por diseño — GM_xmlhttpRequest
+  // despacha la petición por fuera de la pila de red de la página, así que nunca aparece
+  // en el panel de Red del navegador ni en su exportación a .har. En vez de adivinar un
+  // quinto nombre a ciegas, se detecta la fecha por LA FORMA del valor (ISO, dd/mm/aaaa
+  // o fecha .NET /Date(ms)/, los 3 formatos que puede devolver un backend ASP.NET como
+  // este) recorriendo TODAS las claves del objeto — sin importar cómo se llame la que
+  // la contiene. De paso corrige un bug latente: si la fecha llegaba como "15/03/2026",
+  // un <input type="date"> la rechazaba en silencio aunque el campo SÍ se hubiera
+  // encontrado, porque ese control exige el formato ISO aaaa-mm-dd exacto.
+  function _parseFechaLike(v) {
+      if (v === null || v === undefined) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      // v12.3.33 — hallado en revisión adversarial: sin frontera al final ni validación de
+      // rango, un folio como "2026-08-1234567" se leía como la fecha 2026-08-12 y
+      // "2026-99-99" pasaba entero. Se exige que tras el día NO siga otro dígito y que
+      // mes/día estén en rango — igual de estricto que la rama dd/mm/aaaa de abajo.
+      let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/);
+      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31) return `${m[1]}-${m[2]}-${m[3]}`;
+      if (m) return null;
+      m = s.match(/^\/Date\((-?\d+)/);
+      if (m) {
+          const d = new Date(Number(m[1]));
+          if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          return null;
+      }
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+          const dd = m[1].padStart(2, "0"), mm = m[2].padStart(2, "0");
+          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) return `${m[3]}-${mm}-${dd}`;
+      }
+      return null;
+  }
+
+  // v12.3.33 — BLOQUEANTE hallado en revisión adversarial de v12.3.32: heredar CUALQUIER
+  // valor con pinta de fecha del nivel superior de la respuesta era peligrosísimo — si el
+  // envoltorio trae el timestamp del SERVIDOR (fechaConsulta = hoy, patrón común en
+  // ASP.NET), un resultado de hace meses quedaría fechado HOY en la historia clínica:
+  // exactamente la falsificación clínica que v11.0.1 eliminó. Solo se acepta una clave
+  // cuyo NOMBRE denote inequívocamente la fecha de la solicitud/toma/orden; todo lo demás
+  // queda únicamente en el registro de diagnóstico como evidencia para ampliar esta lista
+  // con datos reales, nunca por adivinanza.
+  function _extractFechaSolicitudTopLevel(res) {
+      if (!res || typeof res !== "object") return null;
+      for (const k of Object.keys(res)) {
+          if (!/^fecha[_ ]?(solicitud|toma|muestra|orden)/i.test(k)) continue;
+          const iso = _parseFechaLike(res[k]);
+          if (iso) return { iso, key: k };
+      }
+      return null;
+  }
+
+  function _extractAtheneaFecha(lab) {
+      if (!lab || typeof lab !== "object") return null;
+      for (const k of _CAMPOS_FECHA_CONOCIDOS) {
+          const iso = _parseFechaLike(lab[k]);
+          if (iso) return { iso, key: k };
+      }
+      // Sin match por nombre: se recorren las demás claves buscando un valor con forma
+      // de fecha. Se prefiere una clave que además CONTENGA "fecha" en el nombre, para
+      // no confundirse con otro campo numérico que por azar calce /Date(ms)/.
+      // v12.3.32 — __vglFechaSolicitud (heredada del nivel de solicitud) se excluye del
+      // barrido general: es el ÚLTIMO respaldo, para que cualquier fecha propia del
+      // analito, se llame como se llame, siga ganando.
+      let candidato = null;
+      for (const k of Object.keys(lab)) {
+          if (_CAMPOS_FECHA_CONOCIDOS.includes(k) || k === "__vglFechaSolicitud") continue;
+          const iso = _parseFechaLike(lab[k]);
+          if (!iso) continue;
+          if (/fecha/i.test(k)) return { iso, key: k };
+          if (!candidato) candidato = { iso, key: k };
+      }
+      if (candidato) return candidato;
+      const isoSol = _parseFechaLike(lab.__vglFechaSolicitud);
+      return isoSol ? { iso: isoSol, key: "__vglFechaSolicitud" } : null;
+  }
 
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
@@ -928,13 +1072,42 @@
           // trae: eso convertía un resultado de hace meses en uno "de hoy" dentro de la
           // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
           // médico la escriba.
-          const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || null;
+          const fechaInfo = _extractAtheneaFecha(lab);
+          const resultDate = fechaInfo ? fechaInfo.iso : null;
+          if (fechaInfo && !_diagLabFechaKeyFound && !_CAMPOS_FECHA_CONOCIDOS.includes(fechaInfo.key)) {
+              _diagLabFechaKeyFound = true;
+              console.log("[Vigilante] fecha de Athenea detectada por forma del valor, clave real:", fechaInfo.key, "→", fechaInfo.iso);
+          }
           if (!resultDate && !_diagLabFechaLogged) {
               _diagLabFechaLogged = true;
-              console.warn("[Vigilante] diagnóstico: no se reconoció el campo de fecha en el resultado de Athenea. Claves disponibles:", Object.keys(lab), lab);
+              console.warn("[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles:", Object.keys(lab), lab);
           }
 
-          let inputEl = _findLabField(matched.resultId, matched.altIds);
+          // v12.3.26 — HBA1C toma una ruta de búsqueda propia (ver _findHbA1cFields): su
+          // id/name choca con el de "Hemoglobina" normal en el DOM de Everest, así que
+          // _findLabField (basada en getElementById/[name=]) siempre encontraría la
+          // casilla equivocada para este analito en particular.
+          let inputEl, dateInput;
+          if (matched.key === "HBA1C") {
+              const campos = _findHbA1cFields();
+              inputEl = campos.resultEl;
+              dateInput = campos.dateEl;
+          } else {
+              inputEl = _findLabField(matched.resultId, matched.altIds);
+              // v12.3.31 — CONFIRMADO en consultorio real (2026-08-11): con solo el id
+              // estático (dateId/altDateIds del whitelist) el VALOR se escribía bien pero
+              // la FECHA nunca aparecía para NINGÚN analito — porque, a diferencia de
+              // resultId (verificado contra el DOM real en v12.0.4), esos dateId NUNCA se
+              // confirmaron: son un nombre construido por convención ("fechaResult" + el
+              // mismo sufijo), nunca comprobado. El propio comentario de _findHbA1cFields
+              // ya documenta que la fecha vive como HERMANA del resultado dentro del mismo
+              // .input-group "en TODOS los pares resultado+fecha de esta vista" — así que
+              // se generaliza esa misma búsqueda dinámica aquí, con el id estático como
+              // respaldo solo si esa estructura no aparece.
+              const grupo = inputEl && inputEl.closest ? inputEl.closest(".input-group") : null;
+              dateInput = (grupo && grupo.querySelector("input[type=\"date\"]")) || (inputEl ? _findLabField(matched.dateId, matched.altDateIds) : null);
+          }
+
           if (inputEl) {
               setNgValue(inputEl, resultVal);
               yaEscritas.add(matched.resultId);
@@ -944,7 +1117,17 @@
               return;
           }
 
-          let dateInput = _findLabField(matched.dateId, matched.altDateIds);
+          // v12.3.31 — diagnóstico UNO POR ANALITO (antes era una sola bandera global, que
+          // se apagaba con el primer analito y dejaba a ciegas el resto). Si tras el arreglo
+          // de arriba la fecha SIGUE sin aparecer para algún laboratorio puntual, esta línea
+          // dice exactamente si el problema es "no hay dateInput" (el .input-group no tiene
+          // <input type="date">, ni tampoco el id estático) o "no hay resultDate" (Athenea no
+          // trae ninguna fecha reconocible para ese analito en particular).
+          if (!_diagLabFechaPorCasilla.has(matched.key)) {
+              _diagLabFechaPorCasilla.add(matched.key);
+              console.log(`[Vigilante] diagnóstico fecha — ${matched.key}: dateInput ${dateInput ? "SÍ encontrado" : "NO encontrado"}, resultDate ${resultDate ? "= " + resultDate : "= null"}`);
+          }
+
           if (dateInput && resultDate) {
               setNgValue(dateInput, resultDate);
           }
@@ -957,16 +1140,29 @@
   //  ROBOT AUTOMÁTICO ATHENEA: BUSCA LA CÉDULA DEL PACIENTE AL ABRIR HISTORIA
   // =====================================================================
   let lastAutoFetchedDoc = "";
+  let lastAutoFetchedAt = 0;
 
   async function autoFetchAtheneaLabsForActivePatient() {
       // v11.0.1 — El registro va DESPUÉS de la guarda. Antes se escribía en cada ráfaga del
       // observador de DOM, y cada escritura reserializa hasta 500 entradas: en la historia
       // clínica eso era trabajo constante y evitable en el hilo de la página.
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-      if (!docId || docId === lastAutoFetchedDoc) return;
+      if (!docId) return;
+      // v12.3.27 — La guarda de "mismo docId" NO bastaba: una bitácora real mostró este
+      // disparo cada 1-5 s de forma sostenida (410 de 500 entradas en 22 h) — mucho más
+      // rápido de lo que un médico cambia de paciente. Indicio real: extractPacienteAbierto()
+      // no siempre devuelve la MISMA cadena exacta entre relecturas del DOM (Angular
+      // re-renderiza esa zona), así que la comparación de igualdad fallaba y cada disparo
+      // repetía TODA la búsqueda en Athenea (3-4 peticiones reales) — no era solo ruido de
+      // bitácora, era carga real e innecesaria contra el servidor de Athenea. Se añade un
+      // piso de 30 s: además de "¿es el mismo docId?", exige que haya pasado ese tiempo
+      // desde el último disparo, sea cual sea el docId.
+      const ahora = Date.now();
+      if (docId === lastAutoFetchedDoc && (ahora - lastAutoFetchedAt) < 30000) return;
       vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
 
       lastAutoFetchedDoc = docId;
+      lastAutoFetchedAt = ahora;
       console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
 
       try {
@@ -1253,11 +1449,45 @@
     const p = getProcessedToday();
     return p.ordenes && p.ordenes.includes(String(docId));
   }
-  function markCitaAgendadaHoy(docId) {
+  // v12.3.28 — "ID y bloqueo de seguridad" independiente para cita de control y toma de
+  // muestras. Pedido explícito en consultorio: si la cita de control se creó pero la
+  // toma de muestras falló (turno agotado, red caída), o viceversa, la que SÍ se creó
+  // debe quedar bloqueada para evitar un duplicado, y la que quedó pendiente debe seguir
+  // disponible — no las dos juntas como un solo bloque, como hasta ahora. Se guarda
+  // también la fecha REAL de la cita de control agendada (fechaIso): si más tarde el
+  // médico solo necesita reintentar el laboratorio, hace falta esa fecha para calcular
+  // "5 días hábiles antes" sin volver a pasar por la creación de la cita (que ya existe).
+  function isLabAgendadaHoy(docId) {
+    if (!docId) return false;
+    const p = getProcessedToday();
+    return !!(p.labs && p.labs.includes(String(docId)));
+  }
+  // Fecha (ISO) de la cita de control agendada hoy para este paciente — null si no hay
+  // ninguna, o si se agendó antes de esta versión y no quedó guardada.
+  function citaAgendadaFechaHoy(docId) {
+    if (!docId) return null;
+    const p = getProcessedToday();
+    return (p.citasDetalle && p.citasDetalle[String(docId)] && p.citasDetalle[String(docId)].fechaIso) || null;
+  }
+  function markCitaAgendadaHoy(docId, fechaIso) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    if (!p.citas.includes(sDoc)) { p.citas.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+    let cambio = false;
+    if (!p.citas.includes(sDoc)) { p.citas.push(sDoc); cambio = true; }
+    if (fechaIso) {
+      if (!p.citasDetalle) p.citasDetalle = {};
+      p.citasDetalle[sDoc] = { fechaIso, ts: Date.now() };
+      cambio = true;
+    }
+    if (cambio) { writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+  }
+  function markLabAgendadaHoy(docId) {
+    if (!docId) return;
+    const p = getProcessedToday();
+    const sDoc = String(docId);
+    if (!p.labs) p.labs = [];
+    if (!p.labs.includes(sDoc)) { p.labs.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
   }
   // v12.3.x — "ID y bloqueo de seguridad": además del booleano de dedup (p.ordenes, ya
   // existente), se guarda el/los agrupador(es) REALES que Everest asignó a la orden —
@@ -1497,8 +1727,21 @@
     return stripAccents(String(val).trim().toLowerCase()) === "si";
   }
   function friendly(h) {
-    if (FRIENDLY[h]) return FRIENDLY[h];
-    const bruto = String(h == null ? "" : h).replace(/_/g, " ").trim();
+    // v12.3.24 — La etiqueta del chip se arma con el encabezado ORIGINAL del Excel (para
+    // conservar tildes/mayúsculas en los headers que SÍ están bien escritos — ver
+    // activityLabel más abajo), pero el diccionario FRIENDLY solo tiene claves EN
+    // MAYÚSCULAS ("CITA_PF"). Si el Excel trae la columna como "Cita_PF" (mayúscula solo
+    // en la inicial, como de hecho la trae la base real), la búsqueda exacta fallaba en
+    // silencio y el chip mostraba el respaldo crudo "Cita PF" en vez de "Remisión a
+    // Planificación Familiar" — reportado en consultorio como texto que no alcanza a
+    // decir nada útil. Se prueba primero tal cual (cubre las claves con tildes del
+    // diccionario, como "Último VIH") y luego en mayúsculas (cubre CITA_PF/TAMIZACION_*
+    // venga como venga escrito en el Excel).
+    const raw = String(h == null ? "" : h).trim();
+    if (FRIENDLY[raw]) return FRIENDLY[raw];
+    const upper = raw.toUpperCase();
+    if (FRIENDLY[upper]) return FRIENDLY[upper];
+    const bruto = raw.replace(/_/g, " ").trim();
     // Si el encabezado ya viene escrito como texto normal ("Última tamización CMB"),
     // se respeta tal cual; solo se arregla el que viene TODO EN MAYÚSCULAS.
     if (/[a-záéíóúñ]/.test(bruto)) return bruto;
@@ -2769,6 +3012,11 @@
       if (!textNode) {
         textNode = document.createElement("span");
         textNode.className = "vgl-sp-text";
+        // v12.3.32 — CONFIRMADO con captura real: el CSS de Everest pintaba este texto de
+        // azul oscuro sobre fondo negro (ilegible). Un estilo inline normal no basta si la
+        // página trae una regla !important, así que el color se fija también con !important.
+        textNode.style.setProperty("color", "#f7fafc", "important");
+        textNode.style.setProperty("font-weight", "600", "important");
         t.insertBefore(textNode, t.firstChild);
       }
       textNode.textContent = "🛡️ Vigilante PyM · " + msg;
@@ -4255,6 +4503,16 @@
         -ms-overflow-style:none;scrollbar-width:none;
         padding-bottom:2px;
       }
+      /* v12.3.24 — La fila SIEMPRE fue de desplazamiento horizontal (nunca de ajuste de
+         línea): con más chips o texto de los que caben, el último quedaba cortado a la
+         mitad justo en el borde, sin ninguna pista de que hay más deslizando a la
+         derecha — se veía roto en vez de "hay más". La clase .vgl-scroll-more la agrega
+         render() SOLO cuando de verdad sobra contenido (scrollWidth > clientWidth): con
+         todo visible no hay máscara, para no oscurecer el último chip sin motivo. */
+      .vgl-pyms.vgl-scroll-more{
+        mask-image:linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
+        -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
+      }
       .vgl-pyms::-webkit-scrollbar{display:none}
       .vgl-chip{
         font-size:12px;font-weight:700;padding:4px 11px; /* Mínimo 12px */
@@ -4664,6 +4922,10 @@
         font-size:13.5px;font-weight:700;margin-bottom:8px;
         cursor:pointer;color:var(--fg)
       }
+      /* v12.3.20 — Sin min-width:0 el span no podía encogerse por debajo de su ancho
+         intrínseco (comportamiento por defecto de los hijos flex) y el texto largo del
+         checkbox de laboratorio se salía de la tarjeta en vez de partirse en varias líneas. */
+      .vgl-agm-check-lbl span{min-width:0;word-break:break-word}
       .vgl-agm-input{
         width:100%;box-sizing:border-box;
         background:var(--bg2);color:var(--fg);
@@ -5806,6 +6068,18 @@
     });
   };
 
+  // v12.3.32 — BLINDAJE del emparejamiento de horas con AppCita: la hora elegida en el
+  // modal y la hora que devuelve ObtenerTurnosPorFecha en el momento de confirmar pueden
+  // venir con formatos distintos ("6:40:00" vs "06:40:00" vs "06:40") aunque sean EL MISMO
+  // turno. Comparar las cadenas crudas hacía que un turno perfectamente libre se declarara
+  // "ya no disponible" (captura real: el toast listaba como libre la MISMA hora que decía
+  // ocupada). Se normaliza a "HH:MM" (cero a la izquierda, sin segundos) antes de comparar.
+  function normalizeHora(h) {
+    const m = /(\d{1,2}):(\d{2})/.exec(String(h || ""));
+    if (!m) return String(h || "").trim();
+    return m[1].padStart(2, "0") + ":" + m[2];
+  }
+
   function format12hTime(timeStr) {
     if (!timeStr) return "";
     const parts = String(timeStr).split(":");
@@ -5819,7 +6093,10 @@
   }
 
   // Interfaz API: Agendamiento Automático de Citas de Laboratorio (AppCita V2)
-  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada) {
+  // v12.3.31 — celular es OPCIONAL: sin él (llamadas existentes que no lo pasan) el
+  // comportamiento no cambia, solo se agrega la posibilidad de mandar el SMS de
+  // confirmación cuando quien llama SÍ tiene el número a mano.
+  async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, celular) {
     try {
       const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${fechaIso}`;
       const resAg = await gmPostJson(urlTurnos, {});
@@ -5830,41 +6107,111 @@
       // nadie eligió y que el médico nunca llegaba a ver.
       let turnoElegido = null;
       if (turnos && turnos.length && horaSeleccionada) {
-        turnoElegido = turnos.find((t) => String(t.hora || "") === String(horaSeleccionada)) || null;
+        // v12.3.31 — antes solo probaba t.hora (minúscula): si el turno traía la hora en
+        // t.Hora (mayúscula, el nombre confirmado contra el código fuente real del front
+        // de AppCita para AgendaId/Hora) nunca calzaba con la elegida, y el flujo caía
+        // SIEMPRE por la rama de "ya no está disponible" aunque el cupo siguiera libre —
+        // mismos 3 candidatos que ya usa la lista de "otrasHoras" un poco más abajo.
+        // v12.3.32 — y además se compara la hora NORMALIZADA (ver normalizeHora): la
+        // captura real mostró el toast de "no disponible" listando como libre la MISMA
+        // hora rechazada — formato distinto, mismo turno.
+        const buscada = normalizeHora(horaSeleccionada);
+        turnoElegido = turnos.find((t) => normalizeHora(t.hora || t.horaTexto || t.Hora || "") === buscada) || null;
       }
       if (!turnoElegido) {
-        spToast("⚠ El horario de laboratorio elegido ya no está disponible. NO se agendó la toma de muestras: hágalo manualmente en AppCita.");
+        // v12.3.25 — Reportado en consultorio: "no me asigna nada y no dice qué más hay
+        // disponible". La hora elegida ya se ocupó entre que se consultó (al abrir el
+        // modal) y que se confirmó la cita — pero la respuesta que se acaba de recibir
+        // (`turnos`) YA trae la disponibilidad real de ese mismo día, y se estaba
+        // descartando sin mostrarla. En vez de mandar al médico a mirar a ciegas en
+        // AppCita, se listan aquí los horarios que SÍ siguen libres — sin reservar
+        // ninguno solo (ver v11.0.1 más arriba: nunca un cupo por defecto sin que el
+        // médico lo haya visto y elegido).
+        // v12.3.32 — lista ACOTADA (captura real: un muro de 50+ horas ilegible tapaba el
+        // mensaje). Se muestran las primeras 8 y se dice cuántas más hay; el modal, que
+        // se recarga solo tras el fallo, es donde se ve la lista completa.
+        const otrasHoras = [...new Set((turnos || []).map((t) => normalizeHora(t.hora || t.horaTexto || t.Hora)).filter(Boolean))];
+        const muestra = otrasHoras.slice(0, 8).map(format12hTime).join(", ");
+        const resto = otrasHoras.length > 8 ? ` y ${otrasHoras.length - 8} horarios más (véalos en el panel)` : "";
+        // v12.3.33 — el texto anterior prometía "el panel acaba de refrescar" también
+        // cuando se llega desde el modal principal, que NO refresca y se cierra solo a
+        // los 2,6 s. Se indica la ruta de reintento que funciona en AMBOS contextos.
+        const sugerencia = otrasHoras.length
+          ? ` Siguen libres ese día: ${muestra}${resto}. Elija otro horario y reintente; si este panel ya se cerró, use el botón 🧪 de la tarjeta del paciente para reintentar solo la toma de muestras.`
+          : " Ese día ya no quedan horarios libres de laboratorio en AppCita.";
+        spToast(`⚠ El horario de laboratorio elegido (${format12hTime(horaSeleccionada)}) ya no está disponible.${sugerencia} NO se agendó la toma de muestras.`, 14000);
         return false;
       }
       // v11.0.1 — Sin valores fabricados: el "07:00:00" y sobre todo el agendaId
       // "282531" estaban cableados, de modo que un turno sin datos habría citado al
       // paciente en una agenda arbitraria. Ahora, si falta cualquiera de los dos, se aborta.
-      const horaFinal = turnoElegido.hora || horaSeleccionada;
-      const agendaId = turnoElegido.agendaId || turnoElegido.id;
+      // v12.3.33 — hallado en revisión adversarial: aquí solo se leía turnoElegido.hora
+      // (minúscula), así que cuando el turno trae la hora como Hora/horaTexto (los mismos
+      // candidatos que YA usa el emparejador de arriba), se caía al string viejo del modal
+      // — enviando a AgendarCita una hora con formato que ese turno nunca tuvo. Se envía
+      // la hora TAL CUAL la trae el turno recién consultado, igual que hace el front
+      // oficial de AppCita (row.Hora verbatim).
+      const horaFinal = turnoElegido.hora || turnoElegido.horaTexto || turnoElegido.Hora || horaSeleccionada;
+      // v12.3.31 — CONFIRMADO contra el código fuente real del front de AppCita
+      // (agente-calendario.component.ts, pegado en consultorio): `agendarCita(row, ...)`
+      // usa `row.AgendaId` TAL CUAL, sin pasar por ningún mapeo a minúsculas — a
+      // diferencia de `consultarCita()`, que sí baja todo a minúsculas para el
+      // calendario. `agendaId`/`id` (lo único que se probaba antes) nunca se confirmaron
+      // contra una respuesta real; quedan de respaldo por si AppCita cambia el casing,
+      // pero el nombre real confirmado va primero.
+      const agendaId = turnoElegido.AgendaId || turnoElegido.agendaId || turnoElegido.id;
+      // v12.3.31 — Mismo dígitos-solamente que ya usa apiAccesoAsignarTurno (línea
+      // ~6141): sin esto un celular con espacios/guiones llegaba tal cual al parámetro.
       // v11.0.1 — El número 3022813246 estaba CABLEADO: se enviaba como teléfono de
-      // TODOS los pacientes y era el destinatario de TODOS los SMS de laboratorio. Se
-      // sustituye por el literal 0, que es lo que manda la aplicación oficial cuando no
-      // lleva número (4 de 6 capturas reales).
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente= &Telefono=0&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      // TODOS los pacientes. Ahora, sin celular real conocido, va el literal 0 — lo que
+      // manda la aplicación oficial cuando no lleva número (4 de 6 capturas reales).
+      const telParam = celular ? String(celular).replace(/\D/g, "") : "0";
+      // v12.3.31 — NombrePaciente=%20 (espacio CODIFICADO): la captura real del front
+      // manda el espacio como %20; el literal " " sin codificar que había antes quedaba
+      // como URL mal formada, aunque el servidor lo tolerara.
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente=%20&Telefono=${telParam}&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
       const resBook = await gmPostJsonEx(urlBook, {});
       console.log("[Vigilante Lab] AgendarCita →", resBook.status, resBook.text);
 
-      // v11.0.1 — Se comprueba que el servidor haya aceptado la cita. Antes se anunciaba
-      // "Cita de Laboratorio agendada" pasara lo que pasara: con la red caída o con un
-      // rechazo del servidor, el médico se iba convencido de que el paciente tenía su
-      // toma de muestras, y no la tenía.
-      if (!resBook.ok) {
+      // v12.3.31 — ÉXITO ESTRICTO, igual que AsignarTurno (v11.0.1) y ahora confirmado
+      // también aquí contra el código fuente real: `agendarConfirmado()` en el front SOLO
+      // da la cita por creada si `x['error']==false`, y saca el radicado de `x['radicado']`
+      // — plano, no anidado bajo `.data` como en la respuesta de Everest. Antes de esto
+      // solo se miraba el HTTP 200, que AppCita también devuelve cuando RECHAZA la cita
+      // (el cuerpo trae error:true): un rechazo real podía anunciarse como éxito.
+      const body = resBook.data;
+      const creada = !!(resBook.ok && body && body.error === false);
+      if (!creada) {
         spToast(`❌ No se pudo confirmar la cita de laboratorio (respuesta ${resBook.status || "sin conexión"}). Agéndela manualmente en AppCita.`);
         return false;
       }
+      const radicado = body.radicado;
 
       // v11.0.1 — RETIRADO el SMS de laboratorio. Iba a un número cableado (no al del
       // paciente) y con codigoCita=AgendaId, que es el identificador de la AGENDA, no el
       // de la cita: en las capturas reales un mismo AgendaId genera varios codigoCita
-      // distintos. Se reactivará cuando se capture la respuesta real de AgendarCita y se
-      // sepa de qué campo sale el identificador correcto.
+      // distintos.
+      // v12.3.31 — REACTIVADO: el código fuente real de AppCita (enviarSMS(), llamado
+      // justo después de agendarConfirmado()) confirma que codigoCita es el `radicado`
+      // de la respuesta de AgendarCita — no AgendaId — y que el endpoint es un GET a
+      // /API/EnviarMensajeTextoLaboratorio con Celular/Fecha/Hora/codigoCita/codigoSede.
+      // Solo se envía si YA se conoce el celular real del paciente (igual que exige el
+      // propio front: "El número de celular es obligatorio para poder recibir el sms").
+      let smsEnviado = false;
+      if (celular && radicado) {
+        try {
+          const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${encodeURIComponent(telParam)}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${encodeURIComponent(radicado)}&codigoSede=378`;
+          // v12.3.33 — hallado en revisión adversarial: _gmReq resuelve con CUALQUIER
+          // estado HTTP (incluidos 4xx/5xx), así que un rechazo del servicio de SMS se
+          // anunciaba igual como "Se envió SMS" y el médico se saltaba el recordatorio
+          // verbal. Solo se declara enviado con estado 2xx — el mismo estándar estricto
+          // que la reserva de arriba.
+          const rSms = await _gmReq({ method: "GET", url: urlSms });
+          smsEnviado = !!(rSms && rSms.status >= 200 && rSms.status < 300);
+        } catch (e) { console.warn("[Vigilante Lab] error enviando SMS de laboratorio:", e); }
+      }
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}. El paciente NO recibe SMS del laboratorio: recuérdeselo.`);
+      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}.` + (smsEnviado ? " Se envió SMS de recordatorio." : " El paciente NO recibe SMS del laboratorio: recuérdeselo."));
       return true;
     } catch(e) { console.warn("[Vigilante Lab] error agendando laboratorio:", e); return false; }
   }
@@ -6027,6 +6374,51 @@
     return [...prevDays, getInfo(baseDate, true), ...nextDays];
   }
 
+  // v12.3.20 — Igual que calcTargetDateRange pero centrado en una fecha ISO ya calculada
+  // (no en "hoy + meses/días"). Se usa para los chips de fecha alterna de toma de
+  // muestras, centrados en la fecha sugerida (5 días hábiles antes de la cita principal).
+  function calcDateRangeAroundIso(isoDateStr, sideCount = 3) {
+    const parts = isoDateStr.split("-");
+    const baseDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    const pad = (n) => String(n).padStart(2, "0");
+
+    const getInfo = (dt, isCenter) => {
+      const yyyy = dt.getFullYear();
+      const mm = pad(dt.getMonth() + 1);
+      const dd = pad(dt.getDate());
+      const dayShort = dt.toLocaleDateString("es-CO", { weekday: "short" }).replace(".", "");
+      const dayCap = dayShort.charAt(0).toUpperCase() + dayShort.slice(1);
+      return {
+        iso: `${yyyy}-${mm}-${dd}`,
+        fmt: `${dd}/${mm}/${yyyy}`,
+        shortLbl: `${dayCap} ${dd}/${mm}`,
+        lbl: dt.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+        isCenter: !!isCenter,
+        dateObj: new Date(dt),
+      };
+    };
+
+    const prevDays = [];
+    let curPrev = new Date(baseDate);
+    while (prevDays.length < sideCount) {
+      curPrev.setDate(curPrev.getDate() - 1);
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6) {
+        prevDays.unshift(getInfo(curPrev, false));
+      }
+    }
+
+    const nextDays = [];
+    let curNext = new Date(baseDate);
+    while (nextDays.length < sideCount) {
+      curNext.setDate(curNext.getDate() + 1);
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6) {
+        nextDays.push(getInfo(curNext, false));
+      }
+    }
+
+    return [...prevDays, getInfo(baseDate, true), ...nextDays];
+  }
+
   // Modal de Laboratorios y Paraclínicos (Annar, Citi y Puente Athenea)
   async function openLaboratoriosModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -6158,10 +6550,14 @@
     // del primer resultado de Athenea sin fecha reconocida.
     let diagFechaModalLogged = false;
     let rowsHtml = todosLabs.map(lab => {
-      const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || "Sin fecha";
+      // v12.3.30 — misma detección por forma de valor que injectLabsIntoCronicos (ver
+      // _extractAtheneaFecha): los 4 nombres de campo ya probados aquí no existen en el
+      // objeto real de Athenea, así que se busca la fecha por su forma, no por su nombre.
+      const fechaInfo = _extractAtheneaFecha(lab);
+      const fecha = fechaInfo ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; })() : "Sin fecha";
       if (fecha === "Sin fecha" && !diagFechaModalLogged && String(lab.origen || "").includes("Athenea")) {
         diagFechaModalLogged = true;
-        console.warn("[Vigilante Labs] diagnóstico: no se reconoció el campo de fecha en la tabla del modal. Claves disponibles:", Object.keys(lab), lab);
+        console.warn("[Vigilante Labs] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en la tabla del modal. Claves disponibles:", Object.keys(lab), lab);
       }
       // v12.0.0 — Se añade NombreParametro al principio: es el campo con el que Athenea
       // nombra el examen (el mismo que ya lee _matchLabInWhitelist). Sin él, TODA fila
@@ -6313,8 +6709,12 @@
           <div class="vgl-lab-box vgl-agm-cell vgl-agm-c6 vgl-agm-cell-lab">
             <label class="vgl-agm-check-lbl">
               <input type="checkbox" id="vgl-agm-lab-chk" disabled>
-              <span>🧪 Pre-agendar Toma de Muestras (5 días hábiles antes: <b id="vgl-lab-date-lbl">--/--/----</b>)</span>
+              <span>🧪 Pre-agendar Toma de Muestras (sugerido, 5 días hábiles antes: <b id="vgl-lab-date-lbl">--/--/----</b>)</span>
             </label>
+            <!-- v12.3.20 — Si el día sugerido no tiene turnos de laboratorio, antes no había
+                 forma de elegir otro: quedaba con la casilla bloqueada y sin salida, a
+                 diferencia de la fecha de la cita principal (que sí tiene chips ±3 días). -->
+            <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="margin:2px 0 6px;gap:4px;flex-wrap:wrap"></div>
             <div class="vgl-agm-fieldrow">
               <label for="vgl-agm-lab-time-sel">Hora del Laboratorio:</label>
               <select id="vgl-agm-lab-time-sel" class="vgl-agm-input" style="width:auto;flex:1;padding:7px 9px;font-size:12px">
@@ -6337,6 +6737,7 @@
 
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
+    let selectedLabDateInfo = null; // v12.3.20 — día elegido para la toma de muestras (editable con chips)
     let pacienteIdAcceso = null;
     let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
@@ -6366,6 +6767,7 @@
     cancelBtn.addEventListener("click", closeMod);
 
     let _cargarHorasToken = 0;
+    let _cargarHorasLabToken = 0;
     async function cargarHoras() {
       if (!selectedDateInfo) return;
       const token = ++_cargarHorasToken;
@@ -6377,42 +6779,10 @@
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
       if (labLbl) labLbl.textContent = `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
 
-      // Consultar dinámicamente los horarios REALES en vivo desde AppCita Viva 1A
-      (async () => {
-        const labTimeSel = modal.querySelector("#vgl-agm-lab-time-sel");
-        const labChk = modal.querySelector("#vgl-agm-lab-chk");
-        if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
-        try {
-          const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${suggestedLab.iso}`;
-          const resAg = await gmPostJson(urlTurnos, {});
-          if (!vivo()) return;
-          // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de
-          // fecha mientras esta consulta viajaba, sus horas pertenecen a otro día y no
-          // deben pintarse (la ruta principal ya tenía esta guarda; aquí faltaba).
-          if (token !== _cargarHorasToken) return;
-          const turnos = extractAgendasList(resAg);
-          // v11.0.1 — Se descartan los turnos sin hora real en vez de fabricar "07:00:00".
-          const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
-          if (labTimeSel) {
-            if (turnosConHora.length > 0) {
-              labTimeSel.innerHTML = turnosConHora.map((t, idx) => {
-                const hRaw = t.hora || t.horaTexto || t.Hora;
-                const hFmt = format12hTime(hRaw);
-                const selected = idx === 0 ? "selected" : "";
-                return `<option value="${escapeHtml(hRaw)}" ${selected}>${escapeHtml(hFmt)}</option>`;
-              }).join("");
-              if (labChk) { labChk.disabled = false; }
-            } else {
-              labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${suggestedLab.fmt}</option>`;
-              if (labChk) { labChk.checked = false; labChk.disabled = true; }
-            }
-          }
-        } catch(e) {
-          if (!vivo()) return;
-          if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
-          if (labChk) { labChk.checked = false; labChk.disabled = true; }
-        }
-      })();
+      // v12.3.20 — El día de laboratorio ahora tiene chips ±3 días hábiles, igual que la
+      // cita principal: si el sugerido no tiene turnos, el médico puede elegir otro sin
+      // quedar bloqueado. renderLabDayChips ya dispara la consulta de horas del día centro.
+      renderLabDayChips(suggestedLab.iso);
 
 
 
@@ -6580,6 +6950,85 @@
       });
     }
 
+    // v12.3.20 — Consulta los turnos de laboratorio REALES para selectedLabDateInfo (no
+    // para una fecha recalculada a ciegas). Se saca de la IIFE original de cargarHoras()
+    // para poder llamarla otra vez cuando el médico pulsa un chip de día distinto.
+    async function cargarHorasLab() {
+      if (!selectedLabDateInfo) return;
+      const labToken = ++_cargarHorasLabToken;
+      const labTimeSel = modal.querySelector("#vgl-agm-lab-time-sel");
+      const labChk = modal.querySelector("#vgl-agm-lab-chk");
+      // v12.3.22 — BLOQUEANTE hallado en revisión adversarial: si el médico ya había
+      // marcado la casilla para un día de laboratorio Y LUEGO cambiaba el día de la
+      // CITA PRINCIPAL (navegación normal por los chips de arriba), cargarHoras()
+      // recalculaba suggestedLab y volvía a llamar renderLabDayChips(), que sobrescribía
+      // selectedLabDateInfo EN SILENCIO sin tocar la casilla — si el nuevo día también
+      // tenía cupo, la casilla seguía marcada pero apuntando a una fecha que el médico
+      // NUNCA eligió. Se desmarca y bloquea aquí, al INICIO de cada consulta (cubre
+      // tanto el recentrado por cambio de cita principal como el clic directo en un
+      // chip de laboratorio distinto), para que solo quede marcada una fecha que el
+      // médico confirmó viendo el resultado real de esa fecha.
+      if (labChk) { labChk.checked = false; labChk.disabled = true; }
+      if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
+      try {
+        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${selectedLabDateInfo.iso}`;
+        const resAg = await gmPostJson(urlTurnos, {});
+        if (!vivo()) return;
+        // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de fecha
+        // (principal o de laboratorio) mientras esta consulta viajaba, sus horas pertenecen
+        // a otro día y no deben pintarse.
+        if (labToken !== _cargarHorasLabToken) return;
+        const turnos = extractAgendasList(resAg);
+        // v11.0.1 — Se descartan los turnos sin hora real en vez de fabricar "07:00:00".
+        const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
+        if (labTimeSel) {
+          if (turnosConHora.length > 0) {
+            labTimeSel.innerHTML = turnosConHora.map((t, idx) => {
+              const hRaw = t.hora || t.horaTexto || t.Hora;
+              const hFmt = format12hTime(hRaw);
+              const selected = idx === 0 ? "selected" : "";
+              return `<option value="${escapeHtml(hRaw)}" ${selected}>${escapeHtml(hFmt)}</option>`;
+            }).join("");
+            if (labChk) { labChk.disabled = false; }
+          } else {
+            labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${selectedLabDateInfo.fmt}. Elija otro día arriba.</option>`;
+            if (labChk) { labChk.checked = false; labChk.disabled = true; }
+          }
+        }
+      } catch(e) {
+        if (!vivo()) return;
+        if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
+        if (labChk) { labChk.checked = false; labChk.disabled = true; }
+      }
+    }
+
+    // v12.3.20 — Chips ±3 días hábiles alrededor del día sugerido de toma de muestras,
+    // igual patrón que renderDayChips para la cita principal. Se regenera cada vez que
+    // cambia la fecha de la cita principal, porque el centro (5 días hábiles antes) cambia.
+    function renderLabDayChips(centerIso) {
+      const labChipsEl = modal.querySelector("#vgl-lab-day-chips");
+      if (!labChipsEl) return;
+      const range = calcDateRangeAroundIso(centerIso, 3);
+      labChipsEl.innerHTML = "";
+      const labLblEl = modal.querySelector("#vgl-lab-date-lbl");
+
+      range.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
+        btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+        btn.addEventListener("click", () => {
+          labChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          selectedLabDateInfo = item;
+          if (labLblEl) labLblEl.textContent = `${item.fmt} (${item.lbl})`;
+          cargarHorasLab();
+        });
+        labChipsEl.appendChild(btn);
+        if (item.isCenter) selectedLabDateInfo = item;
+      });
+      cargarHorasLab();
+    }
+
     function renderDayChips(m, d) {
       const range = calcTargetDateRange(m, d);
       dayChipsEl.innerHTML = "";
@@ -6649,7 +7098,10 @@
       // médico tiene a la vista (puede haberlo corregido).
       const smsChk = modal.querySelector("#vgl-agm-sms-chk");
       const smsTel = modal.querySelector("#vgl-agm-sms-tel");
-      const celularSms = (smsChk && smsChk.checked && smsTel) ? String(smsTel.value || "").replace(/D/g, "") : "";
+      // v12.3.31 — era /D/g (la letra D literal, no "no-dígito"): un celular con espacios
+      // o guiones no se limpiaba de verdad antes de mandarlo. Debe ser /\D/g, igual que
+      // el mismo patrón en apiAccesoAsignarTurno (línea ~6174).
+      const celularSms = (smsChk && smsChk.checked && smsTel) ? String(smsTel.value || "").replace(/\D/g, "") : "";
       const progSel = modal.querySelector("#vgl-agm-prog-sel");
       const programaId = (progSel && progSel.value) || "";
       const res = await apiAccesoAsignarTurno(turnoId, pacienteIdAcceso, selectedDateInfo.iso, obs, isPyM, "NA", programaId, celularSms);
@@ -6683,7 +7135,7 @@
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
         }
 
-        markCitaAgendadaHoy(apt.doc_id);
+        markCitaAgendadaHoy(apt.doc_id, selectedDateInfo.iso);
         // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
         // quedan vivos en el Centro de actividades de Windows y REAPARECEN horas después.
         // Se indica además a qué número salió el SMS, para que el médico pueda verificarlo.
@@ -6699,8 +7151,18 @@
         // médico vea el resultado, y una sola vez aunque se pulse "Reintentar".
         if (isLabChecked && apt.doc_id && modal.dataset.labDone !== "1") {
           modal.dataset.labDone = "1";
-          const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
-          await apiLaboratorioAgendarAuto(apt.doc_id, suggestedLab.iso, selectedLabTime);
+          // v12.3.20 — Antes se recalculaba "5 días hábiles antes" desde cero aquí, IGNORANDO
+          // el día que el médico haya elegido con los chips de fecha alterna: si el sugerido
+          // no tenía turnos y el médico eligió otro, la orden se mandaba igual al día
+          // original (sin cupo). Ahora se usa la fecha realmente seleccionada.
+          const labFecha = selectedLabDateInfo || calcBusinessDaysBefore(selectedDateInfo.iso, 5);
+          // v12.3.31 — se reutiliza el mismo celular ya capturado/editado por el médico
+          // para el SMS de la cita principal (celularSms), para que el paciente también
+          // reciba confirmación de la toma de muestras cuando ese número es conocido.
+          const labOk = await apiLaboratorioAgendarAuto(apt.doc_id, labFecha.iso, selectedLabTime, celularSms);
+          // v12.3.28 — Se marca SOLO si de verdad se agendó: así, si falla, el botón de
+          // la tarjeta sigue ofreciendo "falta laboratorio" en vez de darlo por hecho.
+          if (labOk) markLabAgendadaHoy(apt.doc_id);
         }
 
         setTimeout(() => closeMod(), 2600);
@@ -6715,6 +7177,208 @@
     });
 
     cargarHoras(selectedTimeframe.m, selectedTimeframe.d);
+  }
+
+  // v12.3.28 — Modal ligero para cuando la cita de CONTROL ya se agendó hoy pero la
+  // toma de muestras quedó pendiente (turno agotado, fallo de red, etc. en el intento
+  // original). Antes no había forma de reintentar SOLO esa parte: reabrir el flujo
+  // completo (openAgendamientoModal) habría arriesgado crear una SEGUNDA cita de control
+  // duplicada para el mismo paciente el mismo día. Reutiliza la fecha real que quedó
+  // guardada al crear la cita de control (citaAgendadaFechaHoy) para calcular el mismo
+  // rango de "5 días hábiles antes" ±3 días que ya usa el flujo completo — nunca vuelve
+  // a preguntar nada de la cita principal, que ya existe y no se toca.
+  async function openLabSoloModal(apt) {
+    if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
+
+    const citaFechaIso = citaAgendadaFechaHoy(apt.doc_id);
+    if (!citaFechaIso) {
+      // Caso de transición: la cita se marcó "agendada hoy" antes de que esta versión
+      // empezara a guardar la fecha real. Sin esa fecha no hay sobre qué calcular "5
+      // días hábiles antes" sin arriesgar una fecha inventada — se avisa en vez de adivinar.
+      notify("AMBAR", "🧪 Falta la fecha guardada localmente (no es un error en Everest)",
+        `Para ${apt.nombre || "este paciente"}, la cita de control quedó marcada como agendada hoy antes de que el panel empezara a guardar su fecha exacta (posible actualización del script a mitad del día). La cita en Everest está bien — solo agende la toma de muestras manualmente en AppCita.`,
+        false, "labsolo-sinfecha|" + apt.doc_id);
+      return;
+    }
+
+    let existing = document.getElementById("vgl-agendar-modal");
+    if (existing) existing.remove();
+    // v12.3.30 — misma limpieza defensiva que openAgendamientoModal (v8.2.1): por si queda
+    // un modal de órdenes huérfano apilado, se retira también antes de pintar este.
+    document.querySelectorAll("#vgl-ordenar-modal").forEach(e => e.remove());
+
+    const patientName = apt.nombre || apt.name || "Paciente Everest";
+    const modal = document.createElement("div");
+    modal.id = "vgl-agendar-modal";
+    modal.className = isLight() ? "light" : "";
+
+    const suggestedLab = calcBusinessDaysBefore(citaFechaIso, 5);
+    const citaFechaFmt = (() => {
+      const p = citaFechaIso.split("-");
+      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : citaFechaIso;
+    })();
+
+    modal.innerHTML = `
+      <div class="vgl-agm-card" style="max-width:520px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-agm-kicker">🧪 Toma de Muestras Pendiente</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Cita de control ya agendada para el <b>${escapeHtml(citaFechaFmt)}</b></div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
+        </div>
+
+        <div class="vgl-agm-sec">
+          <label class="vgl-agm-lbl">Elija el día de toma de muestras (sugerido: <b>${escapeHtml(suggestedLab.fmt)} — ${escapeHtml(suggestedLab.dayLbl)}</b>)</label>
+          <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="gap:5px;flex-wrap:wrap"></div>
+          <div class="vgl-agm-fieldrow" style="margin-top:10px">
+            <label for="vgl-agm-lab-time-sel">Hora del Laboratorio:</label>
+            <select id="vgl-agm-lab-time-sel" class="vgl-agm-input" style="width:auto;flex:1;padding:7px 9px;font-size:12px">
+              <option value="">⏳ Consultando disponibilidades en AppCita...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="vgl-agm-foot">
+          <button id="vgl-agm-cancel" class="vgl-agm-btn sec">Cancelar</button>
+          <button id="vgl-agm-confirm" class="vgl-agm-btn pri" disabled>Seleccione un horario</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const xBtn = modal.querySelector("#vgl-agm-x");
+    const cancelBtn = modal.querySelector("#vgl-agm-cancel");
+    const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+    const labChipsEl = modal.querySelector("#vgl-lab-day-chips");
+
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
+    const closeMod = () => {
+      cerrado = true;
+      xBtn?.removeEventListener("click", closeMod);
+      cancelBtn?.removeEventListener("click", closeMod);
+      modal.innerHTML = "";
+      modal.remove();
+    };
+    xBtn.addEventListener("click", closeMod);
+    cancelBtn.addEventListener("click", closeMod);
+
+    let selectedLabDateInfo = null;
+    let _tokenLabSolo = 0;
+    // v12.3.29 — BLOQUEANTE hallado en revisión adversarial: sin este candado, un clic en
+    // un chip de día MIENTRAS la reserva ya estaba en curso reactivaba el botón Confirmar
+    // (la consulta de horas, de una sola llamada, resolvía antes que apiLaboratorioAgendarAuto,
+    // que hace lectura+escritura), permitiendo un segundo apiLaboratorioAgendarAuto concurrente
+    // y una posible cita de laboratorio duplicada de verdad en AppCita.
+    let isSubmitting = false;
+
+    // v12.3.33 — `exigirEleccion` (hallado en revisión adversarial): en el refresco
+    // automático tras un fallo de reserva, preseleccionar el primer cupo del día (las
+    // 6:00 a. m., normalmente) con el botón habilitado permitía que un reclic ciego en
+    // "Agendar" reservara una hora que el médico NUNCA eligió — la misma clase de fallo
+    // de "cupo por defecto" que v11.0.1 eliminó. Con exigirEleccion=true el desplegable
+    // arranca en un marcador vacío y el botón queda bloqueado hasta que el médico ELIJA.
+    async function cargarHorasLabSolo(exigirEleccion) {
+      if (!selectedLabDateInfo || isSubmitting) return;
+      const token = ++_tokenLabSolo;
+      const labTimeSel = modal.querySelector("#vgl-agm-lab-time-sel");
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "Seleccione un horario";
+      if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
+      try {
+        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${selectedLabDateInfo.iso}`;
+        const resAg = await gmPostJson(urlTurnos, {});
+        if (!vivo() || token !== _tokenLabSolo || isSubmitting) return;
+        const turnos = extractAgendasList(resAg);
+        const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
+        if (labTimeSel) {
+          if (turnosConHora.length > 0) {
+            const placeholder = exigirEleccion ? `<option value="" selected>— elija un horario —</option>` : "";
+            labTimeSel.innerHTML = placeholder + turnosConHora.map((t, idx) => {
+              const hRaw = t.hora || t.horaTexto || t.Hora;
+              const hFmt = format12hTime(hRaw);
+              return `<option value="${escapeHtml(hRaw)}" ${(!exigirEleccion && idx === 0) ? "selected" : ""}>${escapeHtml(hFmt)}</option>`;
+            }).join("");
+            if (!exigirEleccion) {
+              confirmBtn.disabled = false;
+              confirmBtn.textContent = "✓ Agendar Toma de Muestras";
+            }
+          } else {
+            labTimeSel.innerHTML = `<option value="">⛔ No hay turnos disponibles para el ${escapeHtml(selectedLabDateInfo.fmt)}</option>`;
+          }
+        }
+      } catch (e) {
+        if (!vivo()) return;
+        if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
+      }
+    }
+
+    // v12.3.33 — pareja de exigirEleccion: cuando el médico elige un horario en el
+    // desplegable recién refrescado, el botón se habilita; si vuelve al marcador vacío,
+    // se bloquea de nuevo.
+    const _labTimeSelEl = modal.querySelector("#vgl-agm-lab-time-sel");
+    if (_labTimeSelEl && _labTimeSelEl.addEventListener) _labTimeSelEl.addEventListener("change", () => {
+      if (isSubmitting) return;
+      if (_labTimeSelEl.value) { confirmBtn.disabled = false; confirmBtn.textContent = "✓ Agendar Toma de Muestras"; }
+      else { confirmBtn.disabled = true; confirmBtn.textContent = "Seleccione un horario"; }
+    });
+
+    function renderLabDayChipsSolo() {
+      const range = calcDateRangeAroundIso(suggestedLab.iso, 3);
+      labChipsEl.innerHTML = "";
+      range.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
+        btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+        btn.addEventListener("click", () => {
+          if (isSubmitting) return;
+          labChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          selectedLabDateInfo = item;
+          cargarHorasLabSolo();
+        });
+        labChipsEl.appendChild(btn);
+        if (item.isCenter) selectedLabDateInfo = item;
+      });
+      cargarHorasLabSolo();
+    }
+    renderLabDayChipsSolo();
+
+    confirmBtn.addEventListener("click", async () => {
+      const selectedLabTime = modal.querySelector("#vgl-agm-lab-time-sel")?.value;
+      if (!selectedLabTime || !selectedLabDateInfo || isSubmitting) return;
+      isSubmitting = true;
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = "⏳ Agendando...";
+      const ok = await apiLaboratorioAgendarAuto(apt.doc_id, selectedLabDateInfo.iso, selectedLabTime);
+      if (ok) {
+        // v12.3.29 — mismo patrón que el modal principal (v12.3.14, línea ~6901): la cita
+        // YA quedó creada en el servidor, así que el registro de éxito corre siempre; solo
+        // pintar el modal se salta si el médico ya lo cerró durante el await.
+        markLabAgendadaHoy(apt.doc_id);
+        if (vivo()) {
+          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.textContent = "✅ ¡Toma de Muestras Agendada!";
+          const successMsg = document.createElement("div");
+          successMsg.className = "vgl-msg-success"; // [UI-CSS]
+          successMsg.innerHTML = `✅ <b>Toma de muestras agendada exitosamente</b><br>Fecha: <b>${escapeHtml(selectedLabDateInfo.fmt)}</b> · Hora: <b>${escapeHtml(format12hTime(selectedLabTime))}</b>`;
+          modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+        }
+        setTimeout(() => closeMod(), 2600);
+      } else {
+        isSubmitting = false;
+        // v12.3.32 — tras un rechazo de AppCita (turno ocupado, formato, red), el panel NO
+        // se queda mostrando la lista de horas vieja: se vuelve a consultar la
+        // disponibilidad real en ese mismo momento, así el médico elige sobre datos
+        // frescos en vez de reintentar a ciegas contra un cupo que ya no existe.
+        // v12.3.33 — con exigirEleccion=true: el refresco NO preselecciona ningún cupo ni
+        // habilita el botón; el médico debe elegir la hora nueva a conciencia.
+        if (vivo()) cargarHorasLabSolo(true);
+      }
+    });
   }
 
   // =====================================================================
@@ -7000,6 +7664,56 @@
     modal.id = "vgl-ordenar-modal";
     modal.className = isLight() ? "light" : "";
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
+    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
+    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
+    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
+    let xBtn, cancelBtn;
+    const closeMod = () => {
+      cerrado = true;
+      xBtn?.removeEventListener("click", closeMod);
+      cancelBtn?.removeEventListener("click", closeMod);
+      modal.innerHTML = "";
+      modal.remove();
+    };
+
+    // v12.3.22 — Reportado en consultorio como "el botón no funciona": antes se
+    // esperaba (await, en cadena) a resolver el sexo real del paciente en el servidor
+    // ANTES de crear siquiera la ventana del modal, así que entre el clic y cualquier
+    // indicio visual podían pasar varios segundos en silencio total. El resto de los
+    // modales (agendar cita, laboratorios) ya seguían el patrón correcto: abrir YA, con
+    // un estado de carga, y llenar el contenido real después. Este se alinea ahora: se
+    // pinta una ventana de carga de inmediato y, cuando los datos estén listos, se
+    // reemplaza TODO el innerHTML de una sola vez (igual que hacía el código original)
+    // — nunca se parchean nodos hijos sueltos por querySelector.
+    modal.innerHTML = `
+      <div class="vgl-agm-card" style="max-width:680px">
+        <div class="vgl-agm-head">
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
+          </div>
+          <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
+        </div>
+        <div class="vgl-agm-sec">
+          <label class="vgl-agm-lbl">Verificando datos del paciente antes de sugerir actividades...</label>
+          <div class="vgl-agm-loading">⏳ Cargando actividades de prevención sugeridas...</div>
+        </div>
+        <div class="vgl-agm-foot">
+          <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    xBtn = modal.querySelector("#vgl-ord-x");
+    cancelBtn = modal.querySelector("#vgl-ord-cancel");
+    xBtn.addEventListener("click", closeMod);
+    cancelBtn.addEventListener("click", closeMod);
+
     // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
     // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
     // nombre, modalidad y estado) y el aviso de "actividad propia del otro sexo" no se
@@ -7014,6 +7728,7 @@
         sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
       }
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
+    if (!vivo()) return; // el médico ya cerró el modal mientras se verificaba el sexo
 
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
     // v12.3.x — Antes solo se sabía SI había coincidencia con la base de PyM (booleano);
@@ -7045,18 +7760,11 @@
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
     const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
 
-    // [COPY-UX] Modal de generación de órdenes de prevención
-    // [UI-CSS] HUD Espacial 2026 — placa bento del ordenamiento PyM, misma familia visual
-    // que el agendamiento. Desde v12.3.13 el CSS de este modal vive al FINAL de la hoja
-    // maestra que buildOverlay() inyecta UNA sola vez en document.head: antes iba en un
-    // <style> inline aquí dentro del innerHTML y el motor lo re-parseaba en CADA apertura
-    // del modal (thrashing de recálculo de estilos). CADA selector sigue anclado a
-    // #vgl-ordenar-modal, así que nada se fuga fuera del modal aunque la hoja sea global.
-    // Acento del modal: MORADO (PyM); estado "marcado para generar": VERDE (enlaza con el
-    // botón primario); choque de sexo: ROJO. Modo rendimiento: el modal cuelga de
-    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
-    // con el combinador de hermanos #vgl-root.perf ~ #vgl-ordenar-modal (#vgl-root se
-    // inserta en body ANTES que el modal).
+    // v12.3.22 — Contenido real, reemplazando TODO el innerHTML de una sola vez (igual
+    // que el código original) ahora que ya se conoce el sexo. Los botones de la ventana
+    // de carga quedan destruidos junto con el resto del contenido anterior; por eso
+    // xBtn/cancelBtn se vuelven a consultar y a enganchar abajo.
+    if (!vivo()) return;
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
@@ -7107,28 +7815,10 @@
       </div>
     `;
 
-    document.body.appendChild(modal);
-
-    const xBtn = modal.querySelector("#vgl-ord-x");
-    const cancelBtn = modal.querySelector("#vgl-ord-cancel");
+    xBtn = modal.querySelector("#vgl-ord-x");
+    cancelBtn = modal.querySelector("#vgl-ord-cancel");
     const confirmBtn = modal.querySelector("#vgl-ord-confirm");
     const chks = modal.querySelectorAll(".vgl-ord-chk");
-
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
-    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
-    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
-    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
-    let cerrado = false;
-    const vivo = () => !cerrado && modal.isConnected !== false;
-    const closeMod = () => {
-      cerrado = true;
-      xBtn?.removeEventListener("click", closeMod);
-      cancelBtn?.removeEventListener("click", closeMod);
-      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
-      modal.innerHTML = "";
-      modal.remove();
-    };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
 
@@ -7139,6 +7829,7 @@
     };
 
     chks.forEach((c) => c.addEventListener("change", updateCount));
+    updateCount();
 
     confirmBtn.addEventListener("click", async () => {
       const selectedBoxes = Array.from(chks).filter((c) => c.checked);
@@ -7783,8 +8474,28 @@
       // convive con ella si un paciente cayera en ambas categorías a la vez.
       const pesFlag = esPes ? `<span class="vgl-flag pes">❤ SEGUIMIENTO CARDIOVASCULAR</span>` : ""; // [COPY-UX]
       // v8.0.0: Botones de acción — icon-only con tooltip (Zero-Waste layout)
+      // v12.3.28 — Cita de control y toma de muestras ahora se bloquean POR SEPARADO
+      // (ver isLabAgendadaHoy más abajo, junto a ordDetalleHoy): antes, con la cita
+      // principal ya creada, el botón seguía abriendo el flujo COMPLETO, que habría
+      // vuelto a crear la cita de control como duplicado si el médico solo quería
+      // reintentar el laboratorio pendiente. Ahora hay tres estados: nada hecho (abre
+      // el flujo completo, sin cambios), solo falta el laboratorio (abre el modal
+      // ligero openLabSoloModal), y las dos hechas (bloqueado, mismo patrón que 📋).
+      const citaHechaHoy = a.doc_id ? isCitaAgendadaHoy(a.doc_id) : false;
+      const labHechoHoy = a.doc_id ? isLabAgendadaHoy(a.doc_id) : false;
+      const soloFaltaLab = citaHechaHoy && !labHechoHoy;
       const agendarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`
+        ? (citaHechaHoy && labHechoHoy
+            ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Cita y toma de muestras ya agendadas hoy para ${escapeHtml(a.nombre)}" title="✅ Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.">🗓️</button>`
+            : soloFaltaLab
+              // v12.3.30 — antes usaba el verde de "hecho/confirmado" (--rgb-verde) y el
+              // mismo 🗓️ de las otras 2 estados para un estado que en realidad significa
+              // "todavía falta algo": el verde es la señal de éxito en TODO el resto del
+              // script, así que aquí decía justo lo contrario de lo que pasa. Ámbar (mismo
+              // tono que usa notify("AMBAR", …) para avisos pendientes) + ícono 🧪 propio
+              // (igual al de la tooltip) para que se distinga a simple vista del 🗓️ normal.
+              ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px;background:rgba(var(--rgb-ambar),.14);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5)" aria-label="Falta agendar toma de muestras para ${escapeHtml(a.nombre)}" title="🧪 Cita de control ya agendada hoy — falta la toma de muestras. Clic para agendarla.">🧪</button>`
+              : `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`)
         : "";
       // v12.3.x — "ID y bloqueo de seguridad": una vez el panel confirma que las órdenes
       // de este paciente ya se generaron y (si aplica) se enviaron por correo HOY, el
@@ -7826,7 +8537,7 @@
         </div>`;
       card.__vglKey = a.key;
       const bAg = card.querySelector(".vgl-btn-agendar");
-      if (bAg) bAg.addEventListener("click", (e) => { e.stopPropagation(); openAgendamientoModal(a); });
+      if (bAg) bAg.addEventListener("click", (e) => { e.stopPropagation(); soloFaltaLab ? openLabSoloModal(a) : openAgendamientoModal(a); });
       const bOrd = card.querySelector(".vgl-btn-ordenar");
       if (bOrd) bOrd.addEventListener("click", (e) => { e.stopPropagation(); openOrdenamientoModal(a); });
       const bLabs = card.querySelector(".vgl-btn-labs");
@@ -7834,6 +8545,15 @@
       fragment.appendChild(card);
     }
     el.list.appendChild(fragment);
+    // v12.3.24 — Recién attachado al DOM real es cuando scrollWidth/clientWidth quedan
+    // correctos (en el fragment desconectado ambos dan 0). Se marca SOLO la fila de chips
+    // que de verdad se corta, para que la máscara de "hay más" (CSS de arriba) no oscurezca
+    // el último chip en pacientes con pocas actividades, donde todo ya cabe.
+    try {
+      el.list.querySelectorAll(".vgl-pyms").forEach((p) => {
+        p.classList.toggle("vgl-scroll-more", p.scrollWidth > p.clientWidth + 1);
+      });
+    } catch (e) {}
   }
   // Refresca SOLO el texto de la cuenta regresiva de cada tarjeta ya pintada. Cuesta unos
   // pocos microsegundos frente a recrear la lista entera.
@@ -7922,33 +8642,43 @@
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
       if (secc === "historia") createLabInjectorUI();
 
-      if (enVistaVigilada) {
-        const now = new Date();
-        // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
-        // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
-        // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
-        let data = null, source = null;
-        if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
-          data = { visible: true, citas: state.apiCitas }; source = "api";
+      // v12.3.21 — Antes, aunque tickApi() ya sondea el API en TODA la aplicación desde
+      // v12.3.11 (más abajo), el PROCESADO de esa respuesta —calcular colores, disparar
+      // maybeNotify— solo corría dentro de enVistaVigilada. Reportado en consultorio: con
+      // el médico en Órdenes/RCV/otra pantalla, el paciente entraba a tiempo y NO llegaba
+      // ningún aviso — el dato ya estaba fresco en state.apiCitas pero nadie lo procesaba
+      // hasta volver a "Citas del día". maybeNotify() ya es idempotente por diseño (dedup
+      // contra state.notified/avisoYaVisto), así que llamarlo aquí sin importar la vista
+      // es seguro: no duplica avisos. Lo único que se queda atado a enVistaVigilada es lo
+      // que de verdad depende del DOM — el respaldo por scrape de la página y el pintado
+      // del panel— para no gastar CPU pintando una vista que no está visible.
+      const now = new Date();
+      let data = null, source = null;
+      // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
+      // abierta: funciona aunque la pestaña esté en una historia clínica o en cualquier
+      // otra pantalla) y, como respaldo SOLO si hay agenda visible, la página delante.
+      if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
+        data = { visible: true, citas: state.apiCitas }; source = "api";
+      }
+      if (enVistaVigilada && (!data || !data.citas.length)) {
+        const dPag = extractAgenda(document);
+        if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
+      }
+      if (data && data.citas.length) {
+        const processed = data.citas.map((a) => colorAndAlert(a, now));
+        if (!state.summarized) {
+          // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
+          state.summarized = true;
+          processed.forEach((a) => state.notified.set(a.key, nkey(a)));
+          if (leader) helloOncePerDay(processed);
+        } else if (leader) {
+          processed.forEach(maybeNotify);
         }
-        if (!data || !data.citas.length) {
-          const dPag = extractAgenda(document);
-          if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
-        }
-        if (data && data.citas.length) {
-          const processed = data.citas.map((a) => colorAndAlert(a, now));
-          if (!state.summarized) {
-            // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
-            state.summarized = true;
-            processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-            if (leader) helloOncePerDay(processed);
-          } else if (leader) {
-            processed.forEach(maybeNotify);
-          }
-          state.lastSnapshot = { at: now, list: processed, source };
-          if (leader) share(processed);
-          render(processed, source, now);
-        } else if (state.shared && Date.now() - state.shared.t < 60000) {
+        state.lastSnapshot = { at: now, list: processed, source };
+        if (leader) share(processed);
+        if (enVistaVigilada) render(processed, source, now);
+      } else if (enVistaVigilada) {
+        if (state.shared && Date.now() - state.shared.t < 60000) {
           render(state.shared.list, "compartido", new Date(state.shared.t));
         } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
         else { render([], null, null); }
