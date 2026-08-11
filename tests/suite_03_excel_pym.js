@@ -58,10 +58,13 @@ module.exports = {
     });
 
     t.caso("xlsViejoDeHoy identifica un .xls antiguo de hoy", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
       const files = [
         { Name: "Agenda_20260810.xls" }
       ];
-      t.cierto(api.xlsViejoDeHoy(files) !== null);
+      t.cierto(c.api.xlsViejoDeHoy(files) !== null);
     });
 
     // ---------- esLibroValido / esXlsxCifrado ----------
