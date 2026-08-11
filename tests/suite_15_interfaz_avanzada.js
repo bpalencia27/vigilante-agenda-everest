@@ -393,7 +393,18 @@ module.exports = {
     });
 
     // ================= createLabInjectorUI =================
-    const cLab = cargar({ silencioso: true });
+    // El puente real de Athenea (v12.3.3+) es un flujo de 3 pasos por GM_xmlhttpRequest
+    // (BusquedaPaciente -> BuscarPaciente -> DatosPaciente); este mock solo necesita
+    // cubrir el paso 1 porque la respuesta que le damos (sin token CSRF) hace que
+    // getAtheneaSolicitudesAuto corte ahí mismo y nunca pida los pasos 2/3.
+    const cLab = cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        if (o.url.includes("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: "<html><body>sin formulario reconocible, sin token</body></html>" });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
 
     t.caso("createLabInjectorUI: crea el botón flotante una sola vez", () => {
       const antes = cLab.env.doc.body.children.length;
@@ -410,11 +421,23 @@ module.exports = {
 
     await t.casoAsync("createLabInjectorUI: sin solicitud resoluble alerta y restaura el botón", async () => {
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      // El paciente SÍ se resuelve en la historia clínica (#anamesis + cédula en un
+      // .text-muted, el mismo patrón que usa extractPacienteAbierto), pero Athenea no
+      // devuelve token CSRF en el paso 1: getAtheneaSolicitudesAuto corta ahí y
+      // getAtheneaLabsAuto acaba en [] — la rama real de "sin solicitud resoluble",
+      // no la de "no se pudo determinar el paciente".
+      cLab.env.doc.getElementById = (id) => {
+        if (id === "vgl-lab-injector") return btn;
+        if (id === "anamesis") return {};
+        return null;
+      };
+      cLab.env.doc.querySelector = () => null;
+      cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
       const alertas = [];
       cLab.ctx.alert = (m) => alertas.push(String(m));
       await btn.onclick();
       t.igual(alertas.length, 1);
-      t.cierto(alertas[0].includes("No se pudo resolver la solicitud"), "explica que no diligenció nada");
+      t.cierto(alertas[0].includes("No se encontraron laboratorios para el paciente abierto (cédula 999888777) en Athenea"), "explica que no encontró laboratorios para el paciente resuelto");
       t.cierto(alertas[0].includes("No se diligenció ninguna casilla"));
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
@@ -427,16 +450,26 @@ module.exports = {
       t.falso(cv.env.doc.body.children.some((n) => n.id === "vgl-labs-modal"), "no se abre ningún modal");
     });
 
-    // Instancia con red simulada: el puente localhost resuelve idSolicitud y
-    // Athenea devuelve un analito; el buscador de paciente de Everest no halla nada.
+    // Instancia con red simulada: el puente REAL de 3 pasos (BusquedaPaciente ->
+    // BuscarPaciente -> DatosPaciente) resuelve idSolicitud=4321/año=2026 para la
+    // cédula buscada, Athenea devuelve un analito por consultaDetalleSolicitud, y el
+    // buscador de paciente de Everest (fetch, no gmxhr) no halla nada por defecto.
     let labsSinDatos = false;
     const cModal = cargar({
       silencioso: true,
       gmxhr: (o) => {
         if (labsSinDatos) { if (o.onerror) o.onerror("sin red"); return; }
-        if (o.url.includes("buscar_laboratorios")) {
-          o.onload({ status: 200, responseText: JSON.stringify({ idSolicitud: 4321 }) });
-        } else if (o.url.includes("consultaDetalleSolicitud")) {
+        const url = o.url;
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          // La cédula buscada debe aparecer en el HTML para pasar _atheneaCedulaCoincide,
+          // y la solicitud viaja como <form id="{idSolicitud}{año}" data-modulo="LAB"
+          // action="/Resultados/Reporte"> (el mismo patrón que lee _atheneaExtraerSolicitudes).
+          o.onload({ status: 200, responseText: 'CC 12345678 <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>' });
+        } else if (url.includes("consultaDetalleSolicitud")) {
           o.onload({
             status: 200,
             responseText: JSON.stringify({
@@ -462,7 +495,7 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes("1.2"));
       t.cierto(contenido.innerHTML.includes("2026-08-01"));
       t.cierto(contenido.innerHTML.includes("Athenea (Principal)"), "la fila declara su fuente");
-      t.cierto(contenido.innerHTML.includes("#ef4444"), "un resultado que la fuente declara Elevado se resalta en rojo");
+      t.cierto(contenido.innerHTML.includes("vgl-labs-tr vgl-labs-alert"), "un resultado que la fuente declara Elevado lleva la clase de resalte en rojo (vgl-labs-alert; el color vive en la hoja de estilos, no inline)");
     });
 
     await t.casoAsync("openLaboratoriosModal: clic en el fondo cierra el modal (bgClick → closeMod)", async () => {
@@ -492,11 +525,16 @@ module.exports = {
       // fetch por defecto del harness: responde {} y extractPatientId no saca nada
       const cAg = cargar({ silencioso: true });
       enriquecerDom(cAg);
+      // Sin un id de médico en turno, cargarHoras() ni siquiera llega a buscar al
+      // paciente: se queda en el aviso "no identifica su usuario de Everest" (rama
+      // distinta a la que este caso quiere probar). Se fija un id para que la
+      // búsqueda de paciente sí corra y sea ESA la que falle.
+      cAg.api.__state.activeDoctor.id = 707;
       cAg.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
       await esperar(50);
       const modal = cAg.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       t.cierto(!!modal, "el modal de agendamiento quedó en el body");
-      t.cierto(modal.innerHTML.includes("Programación de Cita / Remisión RCV"));
+      t.cierto(modal.innerHTML.includes("Programación de Cita · Remisión RCV"));
       t.cierto(modal.innerHTML.includes("CARLOS RUIZ"));
       const fechaEsperada = cAg.api.calcBusinessTargetDate(1, 0).fmt;
       t.cierto(modal.querySelector("#vgl-agm-date-info").innerHTML.includes(fechaEsperada), "la fecha objetivo (1 mes) se calculó");

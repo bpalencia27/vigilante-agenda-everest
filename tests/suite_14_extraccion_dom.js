@@ -242,14 +242,20 @@ module.exports = {
       t.igual(c.api.__state.activeDoctor.id, 0);
     });
 
-    t.caso("captureDoctorInfo: origen fiable fija el id, en forma de query y de JSON", () => {
+    t.caso("captureDoctorInfo: origen fiable fija el id; Digiturno NO es fiable (v12.3.1)", () => {
       const c = cargar({ silencioso: true });
       c.api.captureDoctorInfo("https://neps.everestintelligent.com/apiviva/APIAcceso/api/ValidarSesion?UsuarioId=515");
       t.igual(c.api.__state.activeDoctor.id, 515);
-      // digiturno también es fiable, y ahí el id viaja como "usuarioId": N en el cuerpo
+      // v12.3.1 — Digiturno se RETIRÓ de la lista blanca a propósito: su "usuarioId" es el
+      // id de OTRO usuario (no necesariamente el médico), y confiar en él fue exactamente
+      // el bug real de identidad de esta sesión (UsuarioId de un médico distinto colándose
+      // como médico activo). Debe IGNORARSE por completo, sin pisar el id ya fijado.
+      c.api.captureDoctorInfo('https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Turno {"usuarioId": 309}');
+      t.igual(c.api.__state.activeDoctor.id, 515, "Digiturno no fiable: el id de otro usuario NO pisa el ya fijado");
+      // Con el id todavía en cero, Digiturno tampoco debe fijarlo desde cero.
       c.api.__state.activeDoctor.id = 0;
       c.api.captureDoctorInfo('https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Turno {"usuarioId": 309}');
-      t.igual(c.api.__state.activeDoctor.id, 309);
+      t.igual(c.api.__state.activeDoctor.id, 0, "Digiturno no fiable: tampoco fija el id partiendo de cero");
     });
 
     t.caso("captureDoctorInfo: nombre decodificado (+ y %20), corto rechazado, entrada no string no lanza", () => {

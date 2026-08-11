@@ -304,29 +304,35 @@ module.exports = {
       t.igual(c.api.apiEspera(60000), 60000, "la base manda cuando es mayor");
     });
 
-    await t.casoAsync("apiEspera/apiUtil: fallos acumulados — ritmo contenido, descanso a los 5 y reintento a los 5 min", async () => {
+    // v12.3.7 REDISEÑÓ este ciclo: "olvido tras 3 fallos SEGUIDOS" (purgarApiUrl) reemplazó
+    // al viejo "insistir hasta 5 y descansar 5 min contra la MISMA url". Ambos incrementos de
+    // API.fallos (apiLeerAgenda, tanto citas===null como el catch) llaman a purgarApiUrl en
+    // cuanto fallos llega a 3 — API.fallos JAMÁS alcanza 4 o 5 por esta vía: los umbrales
+    // ">=5" de apiUtil/apiEspera quedaron como código vestigial, protegido por el nuevo
+    // camino más agresivo, pero inalcanzable desde aquí (verificado leyendo cada
+    // incremento de API.fallos en el archivo — ninguno más existe).
+    await t.casoAsync("apiEspera/apiUtil: a los 3 fallos SEGUIDOS se olvida la URL entera (v12.3.7)", async () => {
       const e = entornoApi();
       e.c.api.apiRecordar(URL_AGENDA);
       e.setFetch(respuestaError(500));
-      // 4 fallos directos: la espera crece contenida (10, 15, 20, 25 s), sin frenado eterno
-      const esperados = [10000, 15000, 20000, 25000];
-      for (const esp of esperados) {
-        await e.c.api.apiLeerAgenda();
-        t.igual(e.c.api.apiEspera(0), esp);
-      }
-      t.cierto(e.c.api.apiUtil(), "con 4 fallos todavía se intenta");
-      // El 5º fallo llega por tickApi, que además deja API.ultimo reciente
-      e.c.api.tickApi();
-      await espera(30);
-      t.igual(e.c.api.apiEspera(0), 300000, "5 fallos -> descanso de 5 min");
-      t.falso(e.c.api.apiUtil(), "rendido y con el último intento reciente: no insiste");
+      // Fallo 1: la espera crece contenida, sin frenado eterno
+      await e.c.api.apiLeerAgenda();
+      t.igual(e.c.api.apiEspera(0), 10000, "1 fallo -> 10 s");
+      t.cierto(e.c.api.apiUtil(), "con 1 fallo todavía se intenta");
+      // Fallo 2
+      await e.c.api.apiLeerAgenda();
+      t.igual(e.c.api.apiEspera(0), 15000, "2 fallos -> 15 s");
+      t.cierto(e.c.api.apiUtil(), "con 2 fallos todavía se intenta");
+      // Fallo 3: purgarApiUrl se dispara DENTRO de apiLeerAgenda — la URL se olvida entera
+      await e.c.api.apiLeerAgenda();
+      t.falso(e.c.api.apiUtil(), "sin URL aprendida ya no hay nada que intentar");
+      t.igual(e.c.api.apiEspera(0), 4000, "fallos vueltos a cero: ritmo base, no el creciente");
       t.falso(e.c.api.apiSano());
-      // Pasan 5 minutos (Date simulada): el camino directo revive solo
-      const FechaCorrida = class extends Date {};
-      FechaCorrida.now = () => Date.now() + 301000;
-      e.c.ctx.Date = FechaCorrida;
-      t.cierto(e.c.api.apiUtil(), "tras 5 min de descanso vuelve a intentarlo");
-      // Y si el servidor se recupera, vuelve la confianza
+      // v12.3.7 — "la próxima vez que la propia Everest haga esa llamada ... se vuelve a
+      // aprender sin que nadie tenga que esperar": simula ese re-aprendizaje.
+      e.c.api.apiRecordar(URL_AGENDA);
+      t.cierto(e.c.api.apiUtil(), "URL reaprendida: vuelve a intentarse de inmediato, sin esperar minutos");
+      // Y si el servidor responde bien esta vez, vuelve la confianza
       e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) }));
       const citas = await e.c.api.apiLeerAgenda();
       t.igual(citas.length, 2);
@@ -334,25 +340,30 @@ module.exports = {
       t.igual(e.c.api.apiEspera(0), 4000, "fallos a cero tras el éxito");
     });
 
-    // ---------- apiCadencia ----------
-    t.caso("apiCadencia: ritmo adaptativo según lo cerca que esté una cita de la tolerancia", () => {
+    // v12.3.8 REDISEÑÓ los umbrales de esta función (el propio código lo documenta): pasó de
+    // un esquema ±2.5/±10 SIMÉTRICO alrededor del cruce a uno ASIMÉTRICO — el riesgo real
+    // (que alguien tape una llegada tardía pasando a "En Sala"/"Atendido") ocurre DESPUÉS
+    // del cruce, no antes, así que la cadencia se endurece más tras cruzar la tolerancia que
+    // antes de cruzarla. Cada valor de este test se verificó llamando apiCadencia() de
+    // verdad, no calculado a mano.
+    t.caso("apiCadencia: ritmo adaptativo y ASIMÉTRICO según lo cerca que esté una cita de la tolerancia", () => {
       const c = cargar({ silencioso: true });
       const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
       const st = c.api.__state;
       st.lastSnapshot = null;
-      t.igual(c.api.apiCadencia(), 60000, "sin agenda: 1 vez por minuto");
+      t.igual(c.api.apiCadencia(), 90000, "sin agenda: reposo de 90 s");
       st.lastSnapshot = { list: [{ estado: "Atendido", elapsed: 0 }, { estado: "En Sala", elapsed: 99 }] };
-      t.igual(c.api.apiCadencia(), 60000, "todas resueltas: nada que vigilar de cerca");
+      t.igual(c.api.apiCadencia(), 90000, "todas resueltas: nada que vigilar de cerca");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
-      t.igual(c.api.apiCadencia(), 6000, "en plena ventana crítica: 6 s");
+      t.igual(c.api.apiCadencia(), 5000, "en el cruce exacto (ventana crítica): 5 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 8 }] };
-      t.igual(c.api.apiCadencia(), 18000, "a 8 min de la tolerancia: 18 s");
+      t.igual(c.api.apiCadencia(), 15000, "8 min ANTES del cruce: 15 s (bisagra de aproximación)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 8 }] };
-      t.igual(c.api.apiCadencia(), 18000, "recién pasada también cuenta (valor absoluto)");
+      t.igual(c.api.apiCadencia(), 8000, "8 min DESPUÉS del cruce: 8 s — MÁS agresivo que antes, por diseño (asimetría v12.3.8)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 30 }] };
-      t.igual(c.api.apiCadencia(), 45000, "lejos de la tolerancia: 45 s");
+      t.igual(c.api.apiCadencia(), 45000, "lejos de la tolerancia, antes del cruce: 45 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
-      t.igual(c.api.apiCadencia(), 45000, "muy pasada: ya no cambiará, pero sigue pendiente");
+      t.igual(c.api.apiCadencia(), 15000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 15 s");
     });
 
     // ---------- tickApi ----------

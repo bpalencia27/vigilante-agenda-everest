@@ -15,7 +15,7 @@ module.exports = {
     "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
-    "autoFetchAtheneaLabsForActivePatient", "initLabMutationObserver",
+    "autoFetchAtheneaLabsForActivePatient",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -423,28 +423,39 @@ module.exports = {
       t.igual(consultas.length, 2);
     });
 
+    // v12.3.3 — El puente localhost:5050/buscar_laboratorios NUNCA existió; el puente real
+    // (getAtheneaSolicitudesAuto) llama primero a
+    // https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente. Estas dos
+    // pruebas rastreaban la URL muerta: un mock que solo respondía a "buscar_laboratorios"
+    // nunca llamaba onload/onerror/ontimeout contra la URL real, dejando la promesa de
+    // _gmReq COLGADA para siempre — sin nada más pendiente en el event loop, Node salía en
+    // silencio (exit 0) a mitad de esta suite, sin imprimir el resto de sus pruebas NI el
+    // resumen final del banco. Reenrutadas al flujo real (verificado llamando la función
+    // de verdad, no adivinado): la fuga se cierra rechazando la primera llamada real.
     // ---------- autoFetchAtheneaLabsForActivePatient ----------
     await t.casoAsync("autoFetchAtheneaLabsForActivePatient: sin paciente abierto no toca la red ni la bitácora", async () => {
-      const llamadasBridge = [];
+      const llamadas = [];
       const c = cargar({
         silencioso: true,
-        gmxhr: (o) => {
-          if (String(o.url).includes("buscar_laboratorios")) { llamadasBridge.push(o.url); o.onerror(new Error("sin bridge")); }
-        },
+        gmxhr: (o) => { llamadas.push(o.url); o.onerror(new Error("sin sesión")); },
       });
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadasBridge.length, 0, "sin cédula no se consulta nada");
+      t.igual(llamadas.length, 0, "sin cédula no se consulta nada");
       const crudo = c.env.almacen["vgl_flight_recorder_logs"];
       const disparos = crudo ? JSON.parse(crudo).filter((e) => e.act === "AutoFetchTriggered") : [];
       t.igual(disparos.length, 0, "el registro va DESPUÉS de la guarda (v11.0.1): sin paciente, sin entrada");
     });
 
     await t.casoAsync("autoFetchAtheneaLabsForActivePatient: con paciente en historia dispara UNA vez y no repite por ráfagas", async () => {
-      const llamadasBridge = [];
+      const llamadas = [];
+      let datosPaso2 = "";
       const c = cargar({
         silencioso: true,
         gmxhr: (o) => {
-          if (String(o.url).includes("buscar_laboratorios")) { llamadasBridge.push(o.url); o.onerror(new Error("sin bridge")); }
+          llamadas.push(o.url);
+          if (String(o.url).includes("BusquedaPaciente")) { o.onload({ status: 200, responseText: "<input name=\"__RequestVerificationToken\" value=\"tok\">" }); return; }
+          if (String(o.url).includes("BuscarPaciente")) { datosPaso2 = String(o.data); o.onerror(new Error("detenido tras confirmar la cédula")); return; }
+          o.onerror(new Error("inesperado"));
         },
       });
       // historia clínica abierta: existe #anamesis y la cédula vive en un .text-muted
@@ -453,46 +464,23 @@ module.exports = {
         ? [{ closest: () => null, textContent: "CC 12.345.678" }]
         : []);
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadasBridge.length, 1);
-      t.cierto(llamadasBridge[0].includes("documento=12345678"), "la cédula sale limpia de puntos y espacios");
+      t.igual(llamadas.length, 2, "paso 1 (BusquedaPaciente) y paso 2 (BuscarPaciente)");
+      t.cierto(llamadas[0].includes("BusquedaPaciente"));
+      t.cierto(llamadas[1].includes("BuscarPaciente"));
+      t.cierto(datosPaso2.includes('name="numId"') && datosPaso2.includes("12345678"), "la cédula sale limpia de puntos y espacios en el campo numId del multipart");
       const logs1 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
       t.igual(logs1.length, 1);
       t.igual(logs1[0].det.section, "historia");
-      // el observador de DOM dispara en ráfagas: el MISMO paciente no se vuelve a consultar
+      // mismo paciente: no se vuelve a consultar (guarda lastAutoFetchedDoc)
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadasBridge.length, 1, "guarda anti-ráfaga: mismo paciente, una sola consulta");
+      t.igual(llamadas.length, 2, "guarda anti-repetición: mismo paciente, ninguna llamada nueva");
       const logs2 = JSON.parse(c.env.almacen["vgl_flight_recorder_logs"]).filter((e) => e.act === "AutoFetchTriggered");
-      t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora en cada ráfaga");
+      t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora al repetir");
     });
 
-    // ---------- initLabMutationObserver ----------
-    await t.casoAsync("initLabMutationObserver: observa el body una sola vez y solo crea el botón en la vista correcta", async () => {
-      const c = cargar({ silencioso: true });
-      const instancias = [];
-      c.ctx.MutationObserver = class {
-        constructor(cb) { instancias.push(this); this.cb = cb; this.observado = null; }
-        observe(target, opts) { this.observado = { target, opts }; }
-        disconnect() {}
-      };
-      c.api.initLabMutationObserver();
-      t.igual(instancias.length, 1);
-      t.cierto(instancias[0].observado, "debe empezar a observar de inmediato");
-      t.cierto(instancias[0].observado.target === c.env.doc.body, "observa el body del documento");
-      t.igual(instancias[0].observado.opts, { childList: true, subtree: true });
-      // idempotente: una segunda llamada no crea otro observador
-      c.api.initLabMutationObserver();
-      t.igual(instancias.length, 1, "no debe duplicar observadores");
-
-      // fuera de la vista de historia/morbilidad: la mutación NO crea el botón
-      instancias[0].cb();
-      await esperar(20);      // debounce de 300 ms recortado a ~1 ms por el arnés
-      t.falso(c.env.doc.body.children.some((n) => n.id === "vgl-lab-injector"), "sin marcadores de la vista no hay botón");
-
-      // aparece el marcador de la vista (a#pes): la siguiente ráfaga sí lo crea
-      c.env.doc.querySelector = (sel) => (sel === "a#pes" ? { id: "pes" } : null);
-      instancias[0].cb();
-      await esperar(20);
-      t.cierto(c.env.doc.body.children.some((n) => n.id === "vgl-lab-injector"), "el botón Auto-Labs se inyecta al detectar la vista");
-    });
+    // v12.3.14 — initLabMutationObserver fue ERRADICADA (observaba document.body ENTERO con
+    // {childList:true,subtree:true}: cientos de mutaciones/minuto bajo Angular). La misma
+    // validación vive ahora anclada a tick() — ver suite_18_athenea_sesion.js, que prueba
+    // que createLabInjectorUI es idempotente y que tick() la llama solo en secc==="historia".
   },
 };
