@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.2
+// @version      12.5.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -110,6 +110,21 @@
     servidor; dentro de una misma sesión de navegador, el latido de 3 min (v12.3.5)
     ya impedía que el timeout deslizante se cumpliera.
   Banco: 547 comprobaciones, cobertura 288/313 (92.0%).
+*/
+
+/*
+  v12.5.3 — 11-08-2026: FECHA DE ATHENEA, MÁS EVIDENCIA DE CAMPO. Un caso real en
+  consultorio mostró "fechas reconocibles: []" con la ventana de ±400/+700 alrededor
+  del formulario de la solicitud — ni siquiera una candidata rechazada por
+  ambigüedad, y lo que sigue al formulario es solo el campo oculto "hash". La fecha,
+  si existe en este HTML, está más lejos de lo que se buscaba. Se ensancha la
+  ventana hacia atrás a 3000 caracteres (una fila de tabla con varias columnas de
+  estado/sede/médico antes de la celda de acciones puede ser larga) y, sobre todo,
+  el diagnóstico ahora vuelca el texto CRUDO de esos últimos 1500 caracteres antes
+  del formulario — no solo lo que el regex de fecha reconoció — para poder leerlo
+  directamente en la próxima captura de consola y encontrar el formato real, en vez
+  de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
+  distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
 */
 
 /*
@@ -461,7 +476,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -883,7 +898,15 @@
   // forma de fecha, con DOS guardas para no adivinar jamás: (1) la tarjeta debe contener
   // EXACTAMENTE UNA fecha reconocible (ambigüedad = sin fecha), y (2) el AÑO de esa fecha
   // debe coincidir con el año que la propia solicitud declara en su id (idSolicitud+año).
-  let _diagFechaSolicitudHtmlLogged = false;
+  // v12.5.3 — CONFIRMADO con evidencia de campo real (2026-08-11, consultorio): para
+  // una solicitud concreta, la ventana de ±400/+700 no reconoció NINGUNA fecha (ni
+  // siquiera una candidata rechazada por ambigüedad) y lo que sigue al formulario es
+  // solo el campo oculto "hash" — la fecha, si existe en este HTML, está más lejos de
+  // lo que se estaba mirando. Se ensancha muchísimo hacia atrás (una fila de tabla con
+  // varias columnas de estado/sede/médico antes de la celda de acciones puede ser larga)
+  // y esta vez se vuelca el texto CRUDO —no solo lo que el regex reconoció— para poder
+  // leerlo directamente y no seguir adivinando un formato de fecha a ciegas.
+  let _diagFechaSolicitudHtmlLogged = 0; // contador (hasta 2 muestras), no booleano
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
     const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
@@ -902,7 +925,9 @@
         // tarjeta. La ventana ahora cubre ambos lados. Si por el lado posterior alcanza
         // a rozar la tarjeta vecina, las dos guardas (fecha ÚNICA y año coincidente)
         // convierten esa ambigüedad en "sin fecha" — jamás en la fecha equivocada.
-        const desde = Math.max(0, m.index - 400);
+        // v12.5.3 — atrás: 400 → 3000 (ver comentario de arriba); adelante se deja igual,
+        // ya confirmado que ahí solo hay un campo oculto sin fecha.
+        const desde = Math.max(0, m.index - 3000);
         const hasta = Math.min(html.length, m.index + tag.length + 700);
         // v12.4.1 — La ventana es HTML CRUDO: el designador español "p. m." lleva un
         // espacio duro que ASP.NET encodea como &nbsp;/&#160;/&#8239;. Sin decodificarlo,
@@ -934,11 +959,15 @@
           const horas = [...new Set(parseadas.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
           if (horas.length === 1) horaTxt = horas[0];
         }
-        if (!_diagFechaSolicitudHtmlLogged) {
-          _diagFechaSolicitudHtmlLogged = true;
-          console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud — fechas reconocibles:", encontradas,
+        if (_diagFechaSolicitudHtmlLogged < 2) {
+          _diagFechaSolicitudHtmlLogged++;
+          // Posición del formulario DENTRO de `ventana` (que arranca en `desde`): todo lo
+          // que hay antes de ese punto es "antes del formulario" en el HTML real.
+          const posFormEnVentana = m.index - desde;
+          console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud #" + _diagFechaSolicitudHtmlLogged + " — fechas reconocibles:", encontradas,
             "· aceptada:", fechaIso || "NINGUNA", "· hora:", horaTxt || "NINGUNA",
-            "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)));
+            "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)),
+            "· ANTES del formulario (crudo, últimos 1500 caracteres):", JSON.stringify(ventana.slice(Math.max(0, posFormEnVentana - 1500), posFormEnVentana)));
         }
       } catch (e) {}
       out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt });
