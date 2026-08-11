@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.11
+// @version      12.3.12
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.11";
+  const VERSION = "12.3.12";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7451,6 +7451,20 @@
       if (leader) {
         if (!API.url) apiSniffPerf(window);
         tickApi();
+        // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
+        // reportado en consultorio, deja margen para que la expiración deslizante nunca
+        // llegue a cumplirse mientras el navegador siga abierto.
+        // v12.3.12 — El latido corre en TODA la aplicación, no solo en agenda/historia.
+        // Confirmado con un log real de consultorio: el flujo automático de labs funcionó
+        // varias veces seguidas y, un rato después, el modal manual encontró la sesión de
+        // Athenea CADUCADA — el tiempo que la médica pasó en otras pantallas de Everest
+        // dejó al latido apagado y la expiración deslizante se cumplió. Igual que el
+        // sondeo del API en v12.3.11: es red pura (GM_xmlhttpRequest), no toca el DOM de
+        // Everest, así que no había razón real para condicionarlo a la vista activa.
+        if (Date.now() - atheneaKeepAliveAt > 180000) {
+          atheneaKeepAliveAt = Date.now();
+          atheneaKeepAlive();
+        }
         if (enVistaVigilada) {
           // v12.3.1 — Reintento de identidad, mismo patrón que apiSniffPerf: mientras el
           // médico no esté identificado, cada 30 s se re-consultan los globales de la
@@ -7461,13 +7475,6 @@
             captureDoctorInfo("");
             identidadDesdeCliente();
             if (loginVisto) resolverMedicoPorPerfil(loginVisto);
-          }
-          // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
-          // reportado en consultorio, deja margen para que la expiración deslizante nunca
-          // llegue a cumplirse mientras el navegador siga abierto.
-          if (Date.now() - atheneaKeepAliveAt > 180000) {
-            atheneaKeepAliveAt = Date.now();
-            atheneaKeepAlive();
           }
           checkRecordatorioPym();
           checkAbandonoPES();
