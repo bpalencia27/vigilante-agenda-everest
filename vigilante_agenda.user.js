@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.13
+// @version      12.3.14
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.13";
+  const VERSION = "12.3.14";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -345,6 +345,9 @@
   // =====================================================================
   const FLIGHT_RECORDER_KEY = "vgl_flight_recorder_logs";
   const MAX_LOG_ENTRIES = 500;
+  // v12.3.13 — Cuota de almacenamiento llena (QuotaExceededError): se avisa por
+  // console.warn UNA sola vez por sesión, no en cada escritura fallida.
+  let quotaAvisada = false;
 
   function vglLog(category, action, details) {
     try {
@@ -372,7 +375,15 @@
 
       logs.push(entry);
       if (logs.length > MAX_LOG_ENTRIES) logs = logs.slice(-MAX_LOG_ENTRIES);
-      localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+      try {
+        localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+      } catch (eq) {
+        // Cuota llena (QuotaExceededError / code 22 / lo que sea que lance setItem):
+        // el tope circular de 500 ya limita el tamaño, así que aquí solo se recorta
+        // el búfer al 60% más reciente y se reintenta UNA vez. Si vuelve a fallar,
+        // se pierde esta entrada pero el flujo jamás se rompe.
+        try { localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs.slice(-Math.floor(MAX_LOG_ENTRIES * 0.6)))); } catch (e2) {}
+      }
     } catch (e) {}
   }
 
@@ -927,23 +938,25 @@
       document.body.appendChild(btn);
   }
 
-  // Observador de mutaciones DOM eficiente para disparo automático del Robot Athenea
-  let labMutationObs = null;
-  function initLabMutationObserver() {
-      if (labMutationObs || typeof MutationObserver === "undefined") return;
-      labMutationObs = new MutationObserver(debounceVgl(() => {
-          if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
-              createLabInjectorUI();
-          }
-      }, 300));
-      if (document.body) {
-          labMutationObs.observe(document.body, { childList: true, subtree: true });
-      }
-  }
+  // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
+  // Observaba document.body ENTERO con { childList: true, subtree: true }: en la SPA de
+  // Angular de Everest eso son cientos de mutaciones por minuto, y CADA ráfaga despertaba
+  // un debounce de 300 ms solo para decidir si tocaba crear el botón Auto-Labs — CPU
+  // quemada vigilando el universo para una pregunta que se responde con un getElementById.
+  // La misma validación viaja ahora en el bucle tick() ya existente (rama "historia", en
+  // TODA pestaña, SIN condicionar a leader: el observador también corría en todas): la
+  // llamada es barata porque createLabInjectorUI es idempotente con su botón (si
+  // #vgl-lab-injector ya existe no crea nada) y el robot automático conserva intacta su
+  // semántica de una-vez-por-paciente (la guarda lastAutoFetchedDoc de
+  // autoFetchAtheneaLabsForActivePatient, que corre ANTES de esa comprobación a
+  // propósito: así un cambio de paciente en la misma historia sí re-dispara la búsqueda).
+  // Se conserva ESTA única llamada de arranque —reemplazo del bootstrap del observador—
+  // para que el botón aparezca sin esperar el primer tick cuando el script se instala
+  // ya dentro de una historia clínica abierta.
   if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initLabMutationObserver);
-  } else {
-      initLabMutationObserver();
+      document.addEventListener("DOMContentLoaded", () => { if (seccionActiva() === "historia") createLabInjectorUI(); });
+  } else if (seccionActiva() === "historia") {
+      createLabInjectorUI();
   }
 
 
@@ -1052,7 +1065,31 @@
     medicoId: 0,              // opcional: ID manual del médico
   };
   function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
-  function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
+  // ~40% más viejo de las estadísticas y bitácoras DEL PROPIO script (deja 18 de los
+  // 30 días), reutilizando purgeOld y purgeEventDays con ventana reducida. Jamás toca
+  // claves ajenas de Everest. Los literales "vgl_stats"/18 (en vez de STATS_KEY /
+  // KEEP_DAYS*0.6) son a propósito: permiten que la purga funcione incluso si la
+  // cuota se llena durante el arranque, antes de que esas constantes se declaren.
+  function purgaPorCuota() {
+    try {
+      const dias = 18; // = KEEP_DAYS(30) * 0.6 — conserva solo lo más reciente
+      try { const a = readJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
+      try { purgeEventDays(dias); } catch (e) {}
+      if (!quotaAvisada) { quotaAvisada = true; console.warn("[Vigilante] Almacenamiento del navegador lleno (QuotaExceeded): se purgó lo más viejo de los registros propios (vgl_*) y se reintenta la escritura."); }
+    } catch (e) {}
+  }
+  function writeJSON(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch (e) {
+      // QuotaExceededError (e.name), code 22, o cualquier otro fallo de setItem:
+      // una purga de emergencia y UN único reintento; si vuelve a fallar, false como
+      // siempre. En el banco de pruebas el localStorage simulado nunca lanza, así
+      // que esta ruta solo corre en el navegador real.
+      purgaPorCuota();
+      try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e2) { return false; }
+    }
+  }
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
   // Migración desde v4.x: la ventana emergente se guardaba en una clave aparte.
   try { const viejo = localStorage.getItem("vgl_popup"); if (viejo !== null && !("popup" in (readJSON(SETTINGS_KEY, {}) || {}))) S.popup = viejo === "1"; } catch (e) {}
@@ -1942,8 +1979,9 @@
     purgeOld(a); writeJSON(STATS_KEY, a);
     frCache.dia = "";   // invalida el contador en memoria que usa la barra de estadísticas
   }
-  function purgeOld(obj) {
-    const lim = new Date(); lim.setDate(lim.getDate() - KEEP_DAYS);
+  function purgeOld(obj, dias) {
+    // "dias" es opcional: solo la purga de emergencia por cuota llena lo pasa (18).
+    const lim = new Date(); lim.setDate(lim.getDate() - (dias || KEEP_DAYS));
     for (const k of Object.keys(obj)) { const d = new Date(k + "T00:00:00"); if (!isFinite(d) || d < lim) delete obj[k]; }
   }
   function lastDays(n) {
@@ -1963,9 +2001,12 @@
     if (!evBuffer.length) return;
     try {
       const d = evDia || todayStamp(), k = evKey(d);
-      const hoy = (readJSON(k, []) || []).concat(evBuffer);
+      const pend = evBuffer;
       evBuffer = [];
-      writeJSON(k, hoy.length > 3000 ? hoy.slice(-3000) : hoy);
+      const hoy = (readJSON(k, []) || []).concat(pend);
+      // writeJSON ya trae purga de emergencia + reintento si la cuota está llena.
+      // Si aun así falla, la tanda vuelve a la cola (tope 200) en vez de perderse.
+      if (!writeJSON(k, hoy.length > 3000 ? hoy.slice(-3000) : hoy)) evBuffer = pend.concat(evBuffer).slice(-200);
     } catch (e) { evBuffer = []; }
   }
   function logEvent(ev) {
@@ -1984,9 +2025,10 @@
   }
   function eventsOf(day) { evFlush(); return readJSON(evKey(day), []) || []; }
   // Limpieza de días viejos: una sola vez al arrancar, no en cada evento.
-  function purgeEventDays() {
+  function purgeEventDays(dias) {
     try {
-      const lim = new Date(); lim.setDate(lim.getDate() - KEEP_DAYS);
+      // "dias" es opcional: solo la purga de emergencia por cuota llena lo pasa (18).
+      const lim = new Date(); lim.setDate(lim.getDate() - (dias || KEEP_DAYS));
       const viejas = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -5856,7 +5898,14 @@
 
     document.body.appendChild(modal);
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
+    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
+    // la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -5886,10 +5935,12 @@
     } catch (e) {
       console.warn("[Vigilante Labs] Error consultando Athenea:", e);
     }
+    if (!vivo()) return;
 
     // 2. BÚSQUEDA SECUNDARIA EN COMPLEMENTO (ANNAR / CITI)
     try {
       let pId = await apiAccesoBuscarPaciente(apt.doc_id);
+      if (!vivo()) return;
       if (pId) {
         const [annarRes, citiRes] = await Promise.all([
           apiAccesoObtenerLaboratoriosAnnar(pId).catch(() => null),
@@ -5901,6 +5952,7 @@
         if (citiList && citiList.length) citiList.forEach(item => todosLabs.push({ origen: "Citi", ...item }));
       }
     } catch (e) {}
+    if (!vivo()) return;
 
     // v12.0.0 — RETIRADOS los "datos clínicos de muestra". Cuando la consulta real no
     // devolvía nada, se inventaban SIETE resultados de laboratorio (glicemia 98 mg/dL,
@@ -6099,7 +6151,14 @@
     const slotsEl = modal.querySelector("#vgl-agm-slots");
     const dayChipsEl = modal.querySelector("#vgl-day-chips");
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
+    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
+    // la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -6129,6 +6188,7 @@
         try {
           const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${suggestedLab.iso}`;
           const resAg = await gmPostJson(urlTurnos, {});
+          if (!vivo()) return;
           // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de
           // fecha mientras esta consulta viajaba, sus horas pertenecen a otro día y no
           // deben pintarse (la ruta principal ya tenía esta guarda; aquí faltaba).
@@ -6151,6 +6211,7 @@
             }
           }
         } catch(e) {
+          if (!vivo()) return;
           if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
           if (labChk) { labChk.checked = false; labChk.disabled = true; }
         }
@@ -6167,6 +6228,7 @@
       if (!pacienteIdAcceso) {
         pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
       }
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
 
       if (!pacienteIdAcceso) {
@@ -6188,6 +6250,7 @@
         progCargados = true;
         try {
           const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          if (!vivo()) return;
           const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
           const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
           if (progs.length && box && sel) {
@@ -6216,6 +6279,7 @@
       }
 
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
 
@@ -6256,6 +6320,7 @@
 
       const turnosAcumulados = [];
       for (const ag of agendasFiltradas.slice(0, 5)) {
+        if (!vivo()) return;
         if (token !== _cargarHorasToken) return;
         const agendaId = ag.agendaId || ag.id || ag.AgendaId || ag.idAgenda || ag.IdAgenda || ag.AGendadId;
         const nombreProf = ag.medico || ag.usuarioNombreCompleto || ag.nombreMedico || ag.profesional || ag.nombre || "Profesional";
@@ -6273,6 +6338,7 @@
         }
       }
 
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
 
       if (!turnosAcumulados.length) {
@@ -6407,14 +6473,18 @@
       const d = res && res.data;
       const ok = !!(res && res.error === false && d && (Number(d.radicado) > 0 || /Agendada Correctamente/i.test(String(d.motivo || ""))));
       if (ok) {
-        confirmBtn.style.background = "#10b981"; // [UI-CSS]
-        confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
+        // v12.3.14 — La cita YA quedó creada en el servidor: el registro y el estado de
+        // abajo corren siempre; lo único que se salta si el modal fue cerrado es pintarlo.
+        if (vivo()) {
+          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
 
-        const successMsg = document.createElement("div");
-        successMsg.className = "vgl-agm-dinfo";
-        successMsg.className = "vgl-msg-success"; // [UI-CSS]
-        successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${selectedDateInfo.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
-        modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+          const successMsg = document.createElement("div");
+          successMsg.className = "vgl-agm-dinfo";
+          successMsg.className = "vgl-msg-success"; // [UI-CSS]
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${selectedDateInfo.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+        }
 
         markCitaAgendadaHoy(apt.doc_id);
         // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
@@ -6438,8 +6508,10 @@
 
         setTimeout(() => closeMod(), 2600);
       } else {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Crear Cita";
+        if (vivo()) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "✓ Reintentar Crear Cita";
+        }
         const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
         alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Verifique en Everest antes de reintentar.");
       }
@@ -6761,7 +6833,15 @@
     const confirmBtn = modal.querySelector("#vgl-ord-confirm");
     const chks = modal.querySelectorAll(".vgl-ord-chk");
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
+    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
+    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
+    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -6789,6 +6869,7 @@
       const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
       if (!pacienteIdOrd) {
         alert("No se pudo localizar al paciente en el sistema de órdenes con la cédula " + apt.doc_id); // [COPY-UX]
+        if (!vivo()) return;
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
         return;
@@ -6801,7 +6882,7 @@
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
-        confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
+        if (vivo()) confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
@@ -6830,25 +6911,31 @@
           creadasCount++;
           const agp = agpReal;
           agrupadores.push(agp);
-          c.checked = false; // Desmarcar exitoso
-          c.disabled = true; // Deshabilitar
-          c.closest("label").style.opacity = "0.5";
-          c.closest("label").style.textDecoration = "line-through";
+          if (vivo()) {
+            c.checked = false; // Desmarcar exitoso
+            c.disabled = true; // Deshabilitar
+            c.closest("label").style.opacity = "0.5";
+            c.closest("label").style.textDecoration = "line-through";
+          }
         } else {
           fallidasCount++;
-          c.closest("label").style.border = "1px solid #e54d42"; // Marcar fallido en ROJO // [UI-CSS]
+          if (vivo()) c.closest("label").style.border = "1px solid #e54d42"; // Marcar fallido en ROJO // [UI-CSS]
         }
       }
 
       if (creadasCount > 0 && fallidasCount === 0) {
-        confirmBtn.style.background = "#10b981"; // [UI-CSS]
-        confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
+        // v12.3.14 — Las órdenes YA quedaron creadas en el servidor: el registro y el
+        // estado de abajo corren siempre; solo el pintado se salta si el modal fue cerrado.
+        if (vivo()) {
+          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
 
-        const successMsg = document.createElement("div");
-        successMsg.className = "vgl-agm-dinfo";
-        successMsg.className = "vgl-msg-success"; // [UI-CSS]
-        successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
-        modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+          const successMsg = document.createElement("div");
+          successMsg.className = "vgl-agm-dinfo";
+          successMsg.className = "vgl-msg-success"; // [UI-CSS]
+          successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
+          modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+        }
 
         const creadosPkgs = selectedBoxes.map((c) => pkgsToRender[parseInt(c.getAttribute("data-idx"), 10)]).filter(Boolean);
         try { if (typeof guardarOrdenEnMemoriaLocal === 'function') guardarOrdenEnMemoriaLocal(apt.doc_id, creadosPkgs); } catch (e) {}
@@ -6859,8 +6946,10 @@
 
         setTimeout(() => closeMod(), 2600);
       } else {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        if (vivo()) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        }
         alert("No se pudieron generar las órdenes en el sistema de órdenes."); // [COPY-UX]
       }
     });
@@ -7454,6 +7543,14 @@
         state.autoDocked = false; setWinState(state.userWinState, true);
       }
       state.lastSeccion = secc;
+
+      // v12.3.14 — Disparo del Robot Athenea SIN MutationObserver global: la pregunta
+      // que el observador erradicado respondía quemando CPU en cada mutación de la SPA
+      // se contesta aquí por el precio de un getElementById por tick. Corre en TODA
+      // pestaña (SIN condicionar a leader, igual que corría el observador) y es barata:
+      // createLabInjectorUI es idempotente con su botón y el robot automático conserva
+      // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
+      if (secc === "historia") createLabInjectorUI();
 
       if (enVistaVigilada) {
         const now = new Date();
