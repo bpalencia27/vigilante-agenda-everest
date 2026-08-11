@@ -1,0 +1,546 @@
+// =====================================================================
+//  SUITE 13 — Lectura directa del API de agenda
+//  Cubre el camino v7.0 (aprender la URL de ObtenerConsultas, leerla,
+//  entender los campos, la cadencia adaptativa) y las interfaces con
+//  APIAcceso / AppCita / Digiturno que hablan con el servidor real.
+// =====================================================================
+module.exports = {
+  nombre: "Lectura directa del API de agenda",
+  cubre: [
+    "apiRecordar", "apiSniffPerf", "apiObservar", "apiLista", "apiCampos",
+    "apiParse", "leerConTope", "apiLeerAgenda", "apiCadencia", "tickApi",
+    "apiUtil", "apiSano", "apiEspera",
+    "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto",
+    "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
+    "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
+    "apiAccesoObtenerTurnos"
+  ],
+
+  async pruebas(t, api, env, cargar) {
+    const URL_AGENDA = "/apiviva/APIMedicoHealth/api/Medico/ObtenerConsultas?especialidadId=1&profesionalId=2";
+    const ABS_AGENDA = "https://neps.everestintelligent.com" + URL_AGENDA;
+
+    // Filas con la pinta real de la respuesta de Everest (hora + estado + doc + nombre)
+    const FILAS = [
+      { horaCita: "07:00", estado: "EN SALA", numeroDocumento: "12345678", nombrePaciente: "JUAN", apellidoPaciente: "PEREZ" },
+      { horaCita: "07:20", estado: "SIN PRESENTAR", numeroDocumento: "87654321", nombrePaciente: "MARIA", apellidoPaciente: "GOMEZ" },
+    ];
+
+    const espera = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function rechazo(p) { try { await p; return null; } catch (e) { return e; } }
+
+    // Entorno con fetch intercambiable + registro de llamadas (fetch y GM_xmlhttpRequest)
+    function entornoApi() {
+      const reg = { fetches: [], gm: [] };
+      let responderFetch = async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "" });
+      let responderGm = null;
+      const c = cargar({
+        silencioso: true,
+        fetch: (url, opt) => { reg.fetches.push({ url, opt }); return responderFetch(url, opt); },
+        gmxhr: (o) => { reg.gm.push(o); if (responderGm) responderGm(o); },
+      });
+      return {
+        c, reg,
+        setFetch: (f) => { responderFetch = f; },
+        setGm: (f) => { responderGm = f; },
+      };
+    }
+    const respuestaJson = (obj) => async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => obj, text: async () => JSON.stringify(obj) });
+    const respuestaError = (status) => async () => ({ ok: false, status, headers: { get: () => null }, json: async () => null, text: async () => "" });
+    // ¿Algún nodo del DOM falso contiene este texto? (así se verifica el toast de PyM)
+    const hayTexto = (c, frag) => c.env.doc._nodos.some((n) => typeof n.textContent === "string" && n.textContent.includes(frag));
+
+    // ---------- apiRecordar ----------
+    t.caso("apiRecordar: ignora URLs que no son la llamada de la agenda", () => {
+      const c = cargar({ silencioso: true });
+      c.api.apiRecordar("/apiviva/otro/Endpoint?x=1");
+      c.api.apiRecordar("");
+      t.igual(c.env.almacen["vgl_api_url"], undefined, "no debe persistir nada");
+      t.falso(c.api.apiUtil(), "sin URL aprendida el API no es utilizable");
+    });
+
+    t.caso("apiRecordar: aprende la URL relativa, la vuelve absoluta y la persiste", () => {
+      const c = cargar({ silencioso: true });
+      c.api.apiRecordar(URL_AGENDA);
+      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      t.cierto(c.api.apiUtil(), "con URL aprendida el API ya es utilizable");
+    });
+
+    t.caso("apiRecordar: una URL absoluta se guarda tal cual", () => {
+      const c = cargar({ silencioso: true });
+      const abs = "https://neps.everestintelligent.com/apiviva/X/ObtenerConsultas?a=9";
+      c.api.apiRecordar(abs);
+      t.igual(c.env.almacen["vgl_api_url"], abs);
+    });
+
+    // ---------- apiSniffPerf ----------
+    t.caso("apiSniffPerf: rescata del registro de rendimiento la llamada MÁS RECIENTE", () => {
+      const c = cargar({ silencioso: true });
+      const winFalso = {
+        performance: {
+          getEntriesByType: (tipo) => tipo === "resource" ? [
+            { name: ABS_AGENDA + "&vieja=1" },
+            { name: "https://neps.everestintelligent.com/apiviva/otra/cosa" },
+            { name: ABS_AGENDA + "&nueva=2" },
+          ] : [],
+        },
+      };
+      c.api.apiSniffPerf(winFalso);
+      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA + "&nueva=2", "recorre desde el final: gana la última");
+    });
+
+    t.caso("apiSniffPerf: sin registro o sin coincidencias no aprende nada ni lanza", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api.apiSniffPerf({}));
+      t.noLanza(() => c.api.apiSniffPerf({ performance: { getEntriesByType: () => [{ name: "https://x/y" }] } }));
+      t.igual(c.env.almacen["vgl_api_url"], undefined);
+    });
+
+    // ---------- apiObservar ----------
+    t.caso("apiObservar: instala el observador (resource + buffered) y aprende al llegar la entrada", () => {
+      const c = cargar({ silencioso: true });
+      let cb = null, construcciones = 0;
+      const observados = [];
+      const winFalso = {
+        PerformanceObserver: class {
+          constructor(f) { construcciones++; cb = f; }
+          observe(o) { observados.push(o); }
+        },
+      };
+      c.api.apiObservar(winFalso);
+      t.igual(construcciones, 1);
+      t.igual(observados, [{ type: "resource", buffered: true }]);
+      t.cierto(!!winFalso.__vglPO, "deja la marca para no duplicarse");
+      // La aplicación hace la llamada: el observador la ve y la aprende
+      cb({ getEntries: () => [{ name: ABS_AGENDA }] });
+      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      // Segunda instalación: no crea otro observador
+      c.api.apiObservar(winFalso);
+      t.igual(construcciones, 1, "con __vglPO presente no vuelve a instalarse");
+    });
+
+    t.caso("apiObservar: un navegador sin PerformanceObserver no rompe nada", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api.apiObservar({}));
+    });
+
+    // ---------- apiLista ----------
+    t.caso("apiLista: desenvuelve el arreglo venga como venga", () => {
+      const arr = [{ a: 1 }];
+      t.igual(api.apiLista(arr), arr, "un arreglo directo se devuelve igual");
+      t.igual(api.apiLista({ data: arr }), arr);
+      t.igual(api.apiLista({ Consultas: arr }), arr);
+      t.igual(api.apiLista({ x: [] }), [], "un arreglo vacío es dato válido");
+    });
+
+    t.caso("apiLista: rechaza lo que no contiene un arreglo de objetos", () => {
+      t.igual(api.apiLista(null), null);
+      t.igual(api.apiLista(42), null);
+      t.igual(api.apiLista("texto"), null);
+      t.igual(api.apiLista({ x: ["a", "b"] }), null, "un arreglo de strings no es una agenda");
+    });
+
+    // ---------- apiCampos ----------
+    t.caso("apiCampos: detecta hora, estado, documento y nombres mirando los VALORES", () => {
+      const campos = api.apiCampos(FILAS);
+      t.igual(campos, { hora: "horaCita", estado: "estado", doc: "numeroDocumento", nombres: ["nombrePaciente", "apellidoPaciente"] });
+    });
+
+    t.caso("apiCampos: penaliza las columnas de hora de FIN aunque también parezcan horas", () => {
+      const filas = [
+        { horaCita: "07:00", horaFinal: "07:20", estado: "ATENDIDO" },
+        { horaCita: "07:20", horaFinal: "07:40", estado: "PENDIENTE" },
+      ];
+      const campos = api.apiCampos(filas);
+      t.igual(campos.hora, "horaCita", "horaFinal parece hora pero no es la de la cita");
+    });
+
+    t.caso("apiCampos: excluye al médico y a la especialidad de los campos de nombre", () => {
+      const filas = [
+        { horaCita: "07:00", estado: "ATENDIDO", nombrePaciente: "JUAN", nombreMedico: "DR HOUSE", especialidadNombre: "MEDICINA INTERNA" },
+        { horaCita: "07:20", estado: "PENDIENTE", nombrePaciente: "MARIA", nombreMedico: "DR HOUSE", especialidadNombre: "MEDICINA INTERNA" },
+      ];
+      const campos = api.apiCampos(filas);
+      t.igual(campos.nombres, ["nombrePaciente"], "ni nombreMedico ni especialidadNombre son el paciente");
+    });
+
+    t.caso("apiCampos: sin hora o sin estados reconocibles devuelve null", () => {
+      t.igual(api.apiCampos([]), null, "sin filas objeto");
+      t.igual(api.apiCampos([{ horaCita: "07:00", estado: "ZZZ" }, { horaCita: "07:20", estado: "ZZZ" }]), null, "estados fuera del vocabulario");
+      t.igual(api.apiCampos([{ estado: "EN SALA" }, { estado: "ATENDIDO" }]), null, "sin ninguna columna de hora");
+    });
+
+    // ---------- apiParse (con instancia propia: cachea API.campos) ----------
+    const cParse = cargar({ silencioso: true });
+
+    t.caso("apiParse: entradas triviales — no-arreglo es fallo, arreglo vacío es agenda vacía", () => {
+      t.igual(cParse.api.apiParse(null), null);
+      t.igual(cParse.api.apiParse({ data: [] }), null, "un objeto no es la lista");
+      t.igual(cParse.api.apiParse([]), []);
+    });
+
+    t.caso("apiParse: convierte las filas crudas en citas normalizadas", () => {
+      const citas = cParse.api.apiParse(FILAS);
+      t.cierto(Array.isArray(citas));
+      t.igual(citas.length, 2);
+      t.igual(citas[0].hora_texto, "7:00 a. m.");
+      t.igual(citas[0].doc_id, "12345678");
+      t.igual(citas[0].nombre, "JUAN PEREZ");
+      t.igual(citas[0].estado, "EN SALA");
+      t.igual(citas[0].index, 0);
+      t.igual(citas[1].estado, "SIN PRESENTAR");
+    });
+
+    t.caso("apiParse: GUARDA — si los estados dejan de reconocerse, no se usa el API", () => {
+      // Los campos ya quedaron cacheados por el caso anterior; ahora Everest "cambia" sus estados.
+      const raras = FILAS.map((f) => Object.assign({}, f, { estado: "XKQZ" }));
+      t.igual(cParse.api.apiParse(raras), null);
+    });
+
+    t.caso("apiParse: GUARDA — si la mayoría de horas son ilegibles, no se usa el API", () => {
+      const rotas = FILAS.map((f) => Object.assign({}, f, { horaCita: "sin hora" }));
+      t.igual(cParse.api.apiParse(rotas), null);
+    });
+
+    // ---------- leerConTope ----------
+    const cTope = cargar({ silencioso: true });
+    cTope.ctx.TextDecoder = TextDecoder;   // el vm no trae TextDecoder de serie; se inyecta el de Node
+
+    await t.casoAsync("leerConTope: content-length dentro del tope -> se lee con text() directamente", async () => {
+      const r = { headers: { get: () => "5" }, text: async () => "hola!", body: { getReader: () => { throw new Error("no debía usar el reader"); } } };
+      t.igual(await cTope.api.leerConTope(r, 1000), "hola!");
+    });
+
+    await t.casoAsync("leerConTope: content-length por encima del tope -> rechaza y cancela el cuerpo", async () => {
+      let cancelado = false;
+      const r = { headers: { get: () => String(9 * 1048576) }, body: { cancel: () => { cancelado = true; } }, text: async () => "no debía" };
+      const e = await rechazo(cTope.api.leerConTope(r, 8 * 1048576));
+      t.cierto(!!e, "debía rechazar");
+      t.cierto(/demasiado grande/.test(e.message));
+      t.cierto(cancelado, "debe cancelar el cuerpo para no descargarlo");
+    });
+
+    await t.casoAsync("leerConTope: sin content-length y sin reader -> cae a text()", async () => {
+      const r = { headers: { get: () => null }, text: async () => '{"ok":1}' };
+      t.igual(await cTope.api.leerConTope(r, 1000), '{"ok":1}');
+    });
+
+    await t.casoAsync("leerConTope: respuesta troceada -> junta los trozos y decodifica UTF-8", async () => {
+      const enc = new TextEncoder();
+      const trozos = [enc.encode('{"citas":'), enc.encode('[1,2]}')];
+      let i = 0, liberado = false;
+      const r = {
+        headers: { get: () => null },
+        body: { getReader: () => ({
+          read: async () => (i < trozos.length ? { done: false, value: trozos[i++] } : { done: true, value: undefined }),
+          cancel: () => {}, releaseLock: () => { liberado = true; },
+        }) },
+      };
+      t.igual(await cTope.api.leerConTope(r, 1000), '{"citas":[1,2]}');
+      t.cierto(liberado, "debe soltar el lock del reader");
+    });
+
+    await t.casoAsync("leerConTope: respuesta troceada que excede el tope -> cancela el reader y rechaza", async () => {
+      const enc = new TextEncoder();
+      let cancelado = false, entregados = 0;
+      const r = {
+        headers: { get: () => null },
+        body: { getReader: () => ({
+          read: async () => { entregados++; return { done: false, value: enc.encode("x".repeat(64)) }; },
+          cancel: () => { cancelado = true; }, releaseLock: () => {},
+        }) },
+      };
+      const e = await rechazo(cTope.api.leerConTope(r, 100));
+      t.cierto(!!e && /demasiado grande/.test(e.message));
+      t.cierto(cancelado);
+      t.igual(entregados, 2, "debe cortar en cuanto se pasa, no seguir leyendo");
+    });
+
+    // ---------- apiLeerAgenda ----------
+    await t.casoAsync("apiLeerAgenda: sin URL aprendida no consulta nada", async () => {
+      const e = entornoApi();
+      t.igual(await e.c.api.apiLeerAgenda(), null);
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiLeerAgenda: éxito — repite la llamada de Everest con las cookies de sesión", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) }));
+      const citas = await e.c.api.apiLeerAgenda();
+      t.igual(citas.length, 2);
+      t.igual(citas[0].nombre, "JUAN PEREZ");
+      t.igual(e.reg.fetches.length, 1);
+      t.igual(e.reg.fetches[0].url, ABS_AGENDA);
+      t.igual(e.reg.fetches[0].opt.credentials, "include", "va autenticada solo con cookies");
+      t.igual(e.reg.fetches[0].opt.cache, "no-store");
+      t.cierto(e.c.api.apiSano(), "con un éxito y cero fallos ya se puede confiar");
+    });
+
+    await t.casoAsync("apiLeerAgenda: cuerpo vacío es agenda vacía (no un fallo) y resetea los fallos", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      e.setFetch(respuestaError(500));
+      t.igual(await e.c.api.apiLeerAgenda(), null, "HTTP 500 cuenta como fallo");
+      t.igual(e.c.api.apiEspera(0), 10000, "1 fallo -> espera de 10 s");
+      e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => "" }));
+      t.igual(await e.c.api.apiLeerAgenda(), []);
+      t.igual(e.c.api.apiEspera(0), 4000, "el cuerpo vacío limpió el contador de fallos");
+    });
+
+    await t.casoAsync("apiLeerAgenda: una respuesta ininteligible (JSON sin lista de citas) devuelve null", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      e.setFetch(respuestaJson({ foo: "bar" }));
+      t.igual(await e.c.api.apiLeerAgenda(), null);
+    });
+
+    // ---------- apiUtil / apiSano / apiEspera (ciclo de vida completo) ----------
+    t.caso("apiUtil/apiSano/apiEspera: estado inicial — sin URL, sin confianza, ritmo base con suelo de 4 s", () => {
+      const c = cargar({ silencioso: true });
+      t.falso(c.api.apiUtil());
+      t.falso(c.api.apiSano());
+      t.igual(c.api.apiEspera(1000), 4000, "nunca más rápido que 4 s");
+      t.igual(c.api.apiEspera(60000), 60000, "la base manda cuando es mayor");
+    });
+
+    await t.casoAsync("apiEspera/apiUtil: fallos acumulados — ritmo contenido, descanso a los 5 y reintento a los 5 min", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      e.setFetch(respuestaError(500));
+      // 4 fallos directos: la espera crece contenida (10, 15, 20, 25 s), sin frenado eterno
+      const esperados = [10000, 15000, 20000, 25000];
+      for (const esp of esperados) {
+        await e.c.api.apiLeerAgenda();
+        t.igual(e.c.api.apiEspera(0), esp);
+      }
+      t.cierto(e.c.api.apiUtil(), "con 4 fallos todavía se intenta");
+      // El 5º fallo llega por tickApi, que además deja API.ultimo reciente
+      e.c.api.tickApi();
+      await espera(30);
+      t.igual(e.c.api.apiEspera(0), 300000, "5 fallos -> descanso de 5 min");
+      t.falso(e.c.api.apiUtil(), "rendido y con el último intento reciente: no insiste");
+      t.falso(e.c.api.apiSano());
+      // Pasan 5 minutos (Date simulada): el camino directo revive solo
+      const FechaCorrida = class extends Date {};
+      FechaCorrida.now = () => Date.now() + 301000;
+      e.c.ctx.Date = FechaCorrida;
+      t.cierto(e.c.api.apiUtil(), "tras 5 min de descanso vuelve a intentarlo");
+      // Y si el servidor se recupera, vuelve la confianza
+      e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) }));
+      const citas = await e.c.api.apiLeerAgenda();
+      t.igual(citas.length, 2);
+      t.cierto(e.c.api.apiSano());
+      t.igual(e.c.api.apiEspera(0), 4000, "fallos a cero tras el éxito");
+    });
+
+    // ---------- apiCadencia ----------
+    t.caso("apiCadencia: ritmo adaptativo según lo cerca que esté una cita de la tolerancia", () => {
+      const c = cargar({ silencioso: true });
+      const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
+      const st = c.api.__state;
+      st.lastSnapshot = null;
+      t.igual(c.api.apiCadencia(), 60000, "sin agenda: 1 vez por minuto");
+      st.lastSnapshot = { list: [{ estado: "Atendido", elapsed: 0 }, { estado: "En Sala", elapsed: 99 }] };
+      t.igual(c.api.apiCadencia(), 60000, "todas resueltas: nada que vigilar de cerca");
+      st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
+      t.igual(c.api.apiCadencia(), 6000, "en plena ventana crítica: 6 s");
+      st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 8 }] };
+      t.igual(c.api.apiCadencia(), 18000, "a 8 min de la tolerancia: 18 s");
+      st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 8 }] };
+      t.igual(c.api.apiCadencia(), 18000, "recién pasada también cuenta (valor absoluto)");
+      st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 30 }] };
+      t.igual(c.api.apiCadencia(), 45000, "lejos de la tolerancia: 45 s");
+      st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
+      t.igual(c.api.apiCadencia(), 45000, "muy pasada: ya no cambiará, pero sigue pendiente");
+    });
+
+    // ---------- tickApi ----------
+    await t.casoAsync("tickApi: sin URL aprendida no dispara ninguna consulta", async () => {
+      const e = entornoApi();
+      e.c.api.tickApi();
+      await espera(20);
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("tickApi: consulta, publica en state.apiCitas y respeta la cadencia", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) }));
+      e.c.api.tickApi();
+      await espera(30);
+      t.igual(e.reg.fetches.length, 1);
+      t.cierto(Array.isArray(e.c.api.__state.apiCitas));
+      t.igual(e.c.api.__state.apiCitas.length, 2);
+      t.cierto(e.c.api.__state.apiEn > 0);
+      // Segundo tick inmediato: la cadencia (60 s sin pendientes) lo frena
+      e.c.api.tickApi();
+      await espera(30);
+      t.igual(e.reg.fetches.length, 1, "no debe consultar otra vez tan pronto");
+    });
+
+    await t.casoAsync("tickApi: KR-02 — si cambió la época de sesión, el resultado en vuelo se descarta", async () => {
+      const e = entornoApi();
+      e.c.api.apiRecordar(URL_AGENDA);
+      let liberar = null;
+      e.setFetch(() => new Promise((res) => {
+        liberar = () => res({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) });
+      }));
+      e.c.api.__state.sessionEpoch = 111;
+      e.c.api.tickApi();
+      await espera(10);
+      t.cierto(!!liberar, "la consulta debía estar en vuelo");
+      e.c.api.__state.sessionEpoch = 222;   // diaNuevo() en medio de la consulta
+      liberar();
+      await espera(30);
+      t.igual(e.c.api.__state.apiCitas, null, "los datos de ayer no se publican");
+    });
+
+    // ---------- apiAccesoBuscarCitasDisponibles ----------
+    await t.casoAsync("apiAccesoBuscarCitasDisponibles: con agendas en la sede 12 no toca la segunda ruta", async () => {
+      const e = entornoApi();
+      const res = { data: { dtCitasDisponibles: [{ id: 1 }] } };
+      e.setFetch((url) => respuestaJson(res)());
+      const r = await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-14");
+      t.igual(r, res);
+      t.igual(e.reg.fetches.length, 1);
+      const u = e.reg.fetches[0];
+      t.cierto(u.url.includes("/APIAcceso/api/Acceso/BuscarCitasDisponibles"));
+      t.cierto(u.url.includes("PacienteId=77"));
+      t.cierto(u.url.includes("EspecialidadId=12"), "sin especialidad explícita usa la 12");
+      t.cierto(u.url.includes("FechaDeseada=2026-08-14"));
+      t.cierto(u.url.includes("PuntoAtencionId=12"));
+      t.igual(u.opt.method, "POST");
+    });
+
+    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si la sede 12 viene vacía, cae a PuntoAtencionId=0 y respeta la especialidad pedida", async () => {
+      const e = entornoApi();
+      const res2 = { agendas: [{ id: 9 }] };
+      e.setFetch((url) => url.includes("PuntoAtencionId=12")
+        ? respuestaJson({ data: { dtCitasDisponibles: [] } })()
+        : respuestaJson(res2)());
+      const r = await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-15", 5);
+      t.igual(r, res2);
+      t.igual(e.reg.fetches.length, 2);
+      t.cierto(e.reg.fetches[0].url.includes("EspecialidadId=5"));
+      t.cierto(e.reg.fetches[1].url.includes("PuntoAtencionId=0"));
+    });
+
+    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si nada responde, devuelve null sin lanzar", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaError(404));
+      t.igual(await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-16"), null);
+      t.igual(e.reg.fetches.length, 2, "un 4xx no se reintenta: una llamada por ruta");
+    });
+
+    // ---------- apiLaboratorioAgendarAuto ----------
+    const TURNOS_LAB = { turnos: [{ hora: "07:00", agendaId: 555 }, { hora: "08:00", agendaId: 556 }] };
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: sin el horario elegido NO agenda en silencio (Incidente v11.0.1)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else o.onload({ status: 200, responseText: "{}" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "09:00");
+      t.falso(ok);
+      t.igual(e.reg.gm.length, 1, "solo consultó los turnos: jamás llamó a AgendarCita");
+      t.cierto(hayTexto(e.c, "NO se agendó"), "avisa al médico para que lo haga a mano");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: agenda el turno EXACTO elegido y solo canta éxito si el servidor acepta", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"resultado":"ok"}' });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
+      t.cierto(ok);
+      t.igual(e.reg.gm.length, 2);
+      const urlBook = e.reg.gm[1].url;
+      t.cierto(urlBook.indexOf("https://appcita.viva1a.com.co:8051/") === 0, "va por GM al dominio de AppCita");
+      t.cierto(urlBook.includes("AgendaId=555"), "usa el agendaId del turno real, no uno cableado");
+      t.cierto(urlBook.includes("Hora=07%3A00"));
+      t.cierto(urlBook.includes("Identificacion=123456"));
+      t.cierto(urlBook.includes("FechaCita=2026-08-14"));
+      t.cierto(urlBook.includes("Telefono=0"), "sin teléfono cableado: manda 0 como la app oficial");
+      t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: si el servidor rechaza la cita, NO se da por agendada", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 500, responseText: "error interno" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
+      t.falso(ok);
+      t.cierto(hayTexto(e.c, "No se pudo confirmar"), "el médico se entera de que debe agendar a mano");
+    });
+
+    // ---------- apiDigiturnoFinalizarTicket ----------
+    await t.casoAsync("apiDigiturnoFinalizarTicket: manda el id de la cita en base64 como EverestId", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson({ ok: 1 }));
+      await e.c.api.apiDigiturnoFinalizarTicket(987);
+      t.igual(e.reg.fetches.length, 1);
+      const u = e.reg.fetches[0].url;
+      t.cierto(u.includes("/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket"));
+      t.cierto(u.includes("EverestId=" + encodeURIComponent(Buffer.from("987", "binary").toString("base64"))));
+    });
+
+    await t.casoAsync("apiDigiturnoFinalizarTicket: sin citaId no llama a nada", async () => {
+      const e = entornoApi();
+      await e.c.api.apiDigiturnoFinalizarTicket(null);
+      await e.c.api.apiDigiturnoFinalizarTicket(0);
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    // ---------- apiAccesoObtenerLaboratoriosAnnar / Citi ----------
+    await t.casoAsync("apiAccesoObtenerLaboratoriosAnnar/Citi: cada uno pega a su endpoint con el pacienteId", async () => {
+      const e = entornoApi();
+      e.setFetch((url) => url.includes("Annar") ? respuestaJson({ lab: "annar" })() : respuestaJson({ lab: "citi" })());
+      t.igual(await e.c.api.apiAccesoObtenerLaboratoriosAnnar(55), { lab: "annar" });
+      t.igual(await e.c.api.apiAccesoObtenerLaboratoriosCiti(55), { lab: "citi" });
+      t.cierto(e.reg.fetches[0].url.includes("ObtenerResultadosLaboratorioAnnar?pacienteId=55"));
+      t.cierto(e.reg.fetches[1].url.includes("ObtenerResultadosLaboratorioCiti?pacienteId=55"));
+    });
+
+    await t.casoAsync("apiAccesoObtenerLaboratoriosAnnar: un 404 devuelve null sin lanzar", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaError(404));
+      t.igual(await e.c.api.apiAccesoObtenerLaboratoriosAnnar(55), null);
+    });
+
+    await t.casoAsync("apiAccesoObtenerLaboratoriosAnnar: con el fetch caído (500), la lectura se rescata por GM_xmlhttpRequest", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaError(500));
+      e.setGm((o) => o.onload({ status: 200, responseText: '{"lab":"annar-gm"}' }));
+      t.igual(await e.c.api.apiAccesoObtenerLaboratoriosAnnar(55), { lab: "annar-gm" });
+      t.cierto(e.reg.gm.length >= 1, "la segunda vía sí se usó");
+      t.cierto(e.reg.gm[0].url.includes("ObtenerResultadosLaboratorioAnnar?pacienteId=55"));
+    });
+
+    // ---------- apiAccesoAgdValidarAgenda ----------
+    await t.casoAsync("apiAccesoAgdValidarAgenda: devuelve el veredicto del servidor en vez de descartarlo", async () => {
+      const e = entornoApi();
+      const veredicto = { isError: false, mensaje: "Superó las validaciones" };
+      e.setFetch(respuestaJson(veredicto));
+      t.igual(await e.c.api.apiAccesoAgdValidarAgenda(10, 20), veredicto);
+      t.cierto(e.reg.fetches[0].url.includes("AgdValidarAgenda?agendaId=10&pacienteId=20"));
+    });
+
+    // ---------- apiAccesoObtenerTurnos ----------
+    await t.casoAsync("apiAccesoObtenerTurnos: pide las horas libres con la fecha dd/MM/yyyy codificada", async () => {
+      const e = entornoApi();
+      const res = { turnos: [{ id: 1, hora: "07:00" }] };
+      e.setFetch(respuestaJson(res));
+      t.igual(await e.c.api.apiAccesoObtenerTurnos(30, "14/08/2026", 40), res);
+      const u = e.reg.fetches[0].url;
+      t.cierto(u.includes("/APIAcceso/api/Acceso/ObtenerTurnos"));
+      t.cierto(u.includes("agendaid=30"));
+      t.cierto(u.includes("fecha=14%2F08%2F2026"), "la fecha viaja URL-encoded");
+      t.cierto(u.includes("pacienteId=40"));
+    });
+  }
+};
