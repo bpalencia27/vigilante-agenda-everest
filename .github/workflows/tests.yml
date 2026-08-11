@@ -6,15 +6,50 @@ on:
   pull_request:
     branches: [ "*" ]
 
+env:
+  # Umbral de cobertura estricto (funciones cubiertas como mínimo) para evitar regresiones
+  MIN_COVERAGE: 266
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Use Node.js 20
-      uses: actions/setup-node@v3
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
       with:
-        node-version: 20
+        node-version: ${{ matrix.node-version }}
+
     - name: Run tests
-      run: npm test
+      run: |
+        set +e
+        npm test > runner_output.txt 2>&1
+        EXIT_CODE=$?
+        set -e
+        cat runner_output.txt
+
+        # 4. Compuerta de silencio: el paso de tests debe fallar si la salida
+        # NO contiene la línea "comprobaciones" del resumen final.
+        if ! grep -q "comprobaciones" runner_output.txt; then
+          echo "Error: el proceso murió en silencio o se colgó (no se halló 'comprobaciones')."
+          exit 1
+        fi
+
+        # 3. Compuerta de cobertura: parsear la línea "funciones cubiertas: X / Y"
+        # y fallar si X < 266.
+        COBERTURA=$(grep -Eo 'funciones cubiertas: [0-9]+' runner_output.txt | awk '{print $3}')
+        if [ -z "$COBERTURA" ]; then
+          echo "Error: no se encontró la línea de cobertura en la salida."
+          exit 1
+        fi
+
+        if [ "$COBERTURA" -lt "$MIN_COVERAGE" ]; then
+          echo "Error: Cobertura insuficiente ($COBERTURA < $MIN_COVERAGE funciones)."
+          exit 1
+        fi
