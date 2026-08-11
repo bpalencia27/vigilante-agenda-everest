@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.0
+// @version      12.3.18
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.0";
+  const VERSION = "12.3.18";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -345,6 +345,9 @@
   // =====================================================================
   const FLIGHT_RECORDER_KEY = "vgl_flight_recorder_logs";
   const MAX_LOG_ENTRIES = 500;
+  // v12.3.13 — Cuota de almacenamiento llena (QuotaExceededError): se avisa por
+  // console.warn UNA sola vez por sesión, no en cada escritura fallida.
+  let quotaAvisada = false;
 
   function vglLog(category, action, details) {
     try {
@@ -372,7 +375,15 @@
 
       logs.push(entry);
       if (logs.length > MAX_LOG_ENTRIES) logs = logs.slice(-MAX_LOG_ENTRIES);
-      localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+      try {
+        localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs));
+      } catch (eq) {
+        // Cuota llena (QuotaExceededError / code 22 / lo que sea que lance setItem):
+        // el tope circular de 500 ya limita el tamaño, así que aquí solo se recorta
+        // el búfer al 60% más reciente y se reintenta UNA vez. Si vuelve a fallar,
+        // se pierde esta entrada pero el flujo jamás se rompe.
+        try { localStorage.setItem(FLIGHT_RECORDER_KEY, JSON.stringify(logs.slice(-Math.floor(MAX_LOG_ENTRIES * 0.6)))); } catch (e2) {}
+      }
     } catch (e) {}
   }
 
@@ -522,6 +533,10 @@
                   url: "https://medicosviva1a.atheneasoluciones.com/Resultados/consultaDetalleSolicitud",
                   headers: { "Content-Type": "application/json", "Accept": "application/json" },
                   data: JSON.stringify({ idSolicitud: parseInt(idSolicitud, 10), ano: ano, modulo: "LAB" }),
+                  // v12.3.12 — sin `timeout`, el ontimeout de abajo era código muerto: una
+                  // conexión que Athenea aceptara y nunca respondiera dejaba esta promesa
+                  // colgada para siempre. 15 s, el mismo margen que usa _gmReq en este puente.
+                  timeout: 15000,
                   onload: function (response) {
                       try {
                           if (response.status === 200) {
@@ -549,6 +564,294 @@
       };
 
       return tryFetchYear(0);
+  }
+
+  // =====================================================================
+  //  PUENTE ATHENEA — BÚSQUEDA POR CÉDULA, SOLO NAVEGADOR (v12.3.3)
+  //
+  //  Reemplaza al "API Bridge" de localhost:5050 (Milestone 3): ese servidor
+  //  nunca existió en este repositorio, así que la búsqueda automática en
+  //  Athenea era código muerto en TODOS los equipos — nunca falló con un
+  //  error visible, simplemente nunca encontraba nada.
+  //
+  //  Reconstruido a partir de una captura HAR real del flujo humano
+  //  (Buscar otro paciente -> cédula -> Ver Resumen), confirmando que:
+  //   1. GET  /Resultados/BusquedaPaciente         -> formulario + token CSRF
+  //   2. POST /Resultados/BuscarPaciente (multipart, tipoId=0 = Cédula)
+  //      -> si hay UN solo resultado, la respuesta trae ya el <input
+  //         name="IdPaciente"> (el id INTERNO de Athenea) y un token CSRF
+  //         nuevo, listos para confirmar.
+  //   3. POST /Resultados/DatosPaciente (multipart, con ese IdPaciente)
+  //      -> página del paciente. Cada solicitud aparece como
+  //         <form id="{idSolicitud}{año}" data-modulo="LAB|PAT"
+  //               action="/Resultados/Reporte">
+  //         (el propio JS de Athenea, DatosPaciente.js, parte ese id en los
+  //         últimos 4 dígitos como año y el resto como idSolicitud — misma
+  //         regla que se usa aquí).
+  //   4. consultaDetalleSolicitud {idSolicitud, ano, modulo} por cada una
+  //      (ya implementado arriba en fetchAtheneaLabs).
+  //
+  //  El paciente activo vive en la SESIÓN DEL SERVIDOR de Athenea, no en la
+  //  URL: por eso no basta un GET con la cédula. GM_xmlhttpRequest reusa la
+  //  sesión ya iniciada en el navegador (cookies del dominio, incluido el
+  //  token antifraude), igual que ya hacía fetchAtheneaLabs.
+  // =====================================================================
+
+  function _gmReq(opts) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest(Object.assign({ timeout: 15000, onload: resolve, onerror: () => reject(new Error("NetErr")), ontimeout: () => reject(new Error("Timeout")) }, opts));
+    });
+  }
+
+  // Multipart/form-data a mano: Athenea exige ese Content-Type exacto (así lo
+  // envía su propio formulario) y GM_xmlhttpRequest no construye FormData.
+  function _atheneaMultipart(fields) {
+    const boundary = "----VglAthenea" + Math.random().toString(16).slice(2) + Date.now().toString(16);
+    let body = "";
+    for (const k of Object.keys(fields)) {
+      body += `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${fields[k] == null ? "" : fields[k]}\r\n`;
+    }
+    body += `--${boundary}--\r\n`;
+    return { boundary, body };
+  }
+
+  function _atheneaToken(html) {
+    const m = /name=["']__RequestVerificationToken["'][^>]*value=["']([^"']+)["']/i.exec(html)
+      || /value=["']([^"']+)["'][^>]*name=["']__RequestVerificationToken["']/i.exec(html);
+    return m ? m[1] : "";
+  }
+
+  function _atheneaIdPaciente(html) {
+    const tag = /<input[^>]*name=["']IdPaciente["'][^>]*>/i.exec(html);
+    if (!tag) return "";
+    const v = /value=["']([^"']*)["']/i.exec(tag[0]);
+    return v ? v[1] : "";
+  }
+
+  // v12.3.3 — VERIFICACIÓN DE IDENTIDAD. La respuesta de DatosPaciente va a
+  // usarse para escribir resultados en la historia clínica del paciente
+  // ABIERTO en Everest. Antes de confiar en nada, se confirma que la cédula
+  // que trae la página de Athenea es la MISMA que se buscó — no basta con
+  // que el servidor haya respondido 200.
+  function _atheneaCedulaCoincide(html, docLimpio) {
+    if (!docLimpio) return false;
+    const m = /\b(?:CC|TI|CE|RC|PA|CD|MS|AS|CN)\b[^0-9]{0,10}(\d{5,12})/i.exec(html);
+    if (m) return m[1].replace(/\D/g, "") === docLimpio;
+    try { return new RegExp("(?<!\\d)" + docLimpio + "(?!\\d)").test(html); } catch (e) { return html.includes(docLimpio); }
+  }
+
+  // Lee las tarjetas de solicitud de la página de resultados: cada una es un
+  // <form action="/Resultados/Reporte"> cuyo id concatena idSolicitud+año.
+  function _atheneaExtraerSolicitudes(html) {
+    const out = [];
+    const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
+    let m;
+    while ((m = re.exec(html))) {
+      const tag = m[0];
+      const idM = /\bid=["'](\d+)(20\d{2})["']/.exec(tag);
+      if (!idM) continue;
+      const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB" });
+    }
+    return out;
+  }
+
+  // Resuelve, para una cédula, la lista de solicitudes {idSolicitud, ano, modulo}
+  // disponibles en Athenea. Devuelve null ante cualquier fallo o duda de
+  // identidad — nunca "adivina" un idPaciente ni una solicitud.
+  // v12.3.4 — Heurística de página de login: si Athenea no reconoce la sesión, en vez de
+  // servir el formulario esperado suele redirigir a Account/Login (con un campo de
+  // contraseña). Detectarlo aquí convierte un "no encontrado" mudo en un diagnóstico
+  // accionable: "inicia sesión en Athenea en este navegador".
+  function _atheneaPareceLogin(html) {
+    return /type=["']password["']/i.test(html) || /Iniciar\s+sesi[oó]n/i.test(html);
+  }
+
+  // =====================================================================
+  //  v12.3.16 — AUTO-INICIO DE SESIÓN EN ATHENEA (OPT-IN, POR MÉDICO)
+  //
+  //  Habilitado por decisión explícita del médico responsable (equipos
+  //  personales por turno): permite que Vigilante inicie sesión SOLO en
+  //  Athenea cuando la sesión caiga, para que los laboratorios automáticos
+  //  no exijan un login manual tras cada reinicio del navegador — la cookie
+  //  de Athenea es DE SESIÓN pura (confirmado en el HAR real: muere al
+  //  cerrar el navegador y su formulario no ofrece "recordarme").
+  //
+  //  ADVERTENCIA DE SEGURIDAD, sin adornos: el almacén de Tampermonkey
+  //  (GM_setValue) NO está cifrado. La ofuscación de abajo solo evita leer
+  //  la contraseña de un vistazo en el panel de Tampermonkey; NO es cifrado
+  //  — cualquiera con acceso técnico real a este equipo puede recuperarla.
+  //  Por eso el diseño es defensivo: (1) OPT-IN, apagado de fábrica;
+  //  (2) las credenciales se guardan POR ID DE MÉDICO y solo se usan cuando
+  //  ESE mismo médico está en sesión en Everest — la clave de uno jamás se
+  //  usa bajo la sesión de otro en un equipo compartido; (3) un rechazo de
+  //  credenciales NO se reintenta solo (los intentos repetidos bloquean la
+  //  cuenta): se marca y se avisa una vez para re-guardarlas.
+  // =====================================================================
+  const ATH_CRED_KEY = "vgl_ath_creds";
+  const atheneaLoginBloqueada = {};   // docId -> true: credenciales rechazadas, NO reintentar
+  let atheneaLoginEnVuelo = false;
+  // Ofuscación reversible (XOR + base64) — anti-vistazo, NO cifrado (ver arriba).
+  function _vglXor(s) { const k = "Vgl-Athenea-2026-local"; let o = ""; for (let i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }
+  function _vglOfusca(s) { try { return btoa(unescape(encodeURIComponent(_vglXor(String(s))))); } catch (e) { return ""; } }
+  function _vglDesofusca(s) { try { return _vglXor(decodeURIComponent(escape(atob(String(s))))); } catch (e) { return ""; } }
+  function atheneaCredsAll() { try { return GM_getValue(ATH_CRED_KEY, {}) || {}; } catch (e) { return {}; } }
+  function atheneaCredsGet(docId) {
+    const c = docId && atheneaCredsAll()[String(docId)];
+    if (!c) return null;
+    const u = _vglDesofusca(c.u), p = _vglDesofusca(c.p);
+    return (u && p) ? { u, p } : null;
+  }
+  function atheneaCredsSet(docId, u, p) {
+    if (!docId || !u || !p) return false;
+    const all = atheneaCredsAll();
+    all[String(docId)] = { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() };
+    try { GM_setValue(ATH_CRED_KEY, all); delete atheneaLoginBloqueada[String(docId)]; return true; } catch (e) { return false; }
+  }
+  function atheneaCredsClear(docId) {
+    const all = atheneaCredsAll();
+    if (docId) delete all[String(docId)];
+    try { GM_setValue(ATH_CRED_KEY, docId ? all : {}); } catch (e) {}
+    if (docId) delete atheneaLoginBloqueada[String(docId)];
+  }
+  // Intenta iniciar sesión en Athenea con las credenciales del médico EN TURNO.
+  // Devuelve true solo si la sesión quedó activa. Distingue fallo de RED (transitorio,
+  // se reintentará) de rechazo de CREDENCIALES (se marca y NO se reintenta solo).
+  async function atheneaAutoLogin() {
+    if (!S.atheneaAutoLogin) return false;
+    const docId = state.activeDoctor && state.activeDoctor.id;
+    if (!docId || atheneaLoginBloqueada[String(docId)] || atheneaLoginEnVuelo) return false;
+    const cred = atheneaCredsGet(docId);
+    if (!cred) return false;
+    atheneaLoginEnVuelo = true;
+    try {
+      const BASE = "https://medicosviva1a.atheneasoluciones.com";
+      const g = await _gmReq({ method: "GET", url: BASE + "/Account/Login" });
+      if (g.status !== 200) return false;                       // error transitorio: no se bloquea
+      const token = _atheneaToken(g.responseText);
+      if (!token) return false;
+      // Contrato confirmado en HAR real: application/x-www-form-urlencoded; éxito = 302 a /Resultados.
+      // La contraseña NUNCA se registra en consola ni en telemetría.
+      const cuerpo = "Usuario=" + encodeURIComponent(cred.u) + "&Password=" + encodeURIComponent(cred.p) + "&__RequestVerificationToken=" + encodeURIComponent(token);
+      const r = await _gmReq({ method: "POST", url: BASE + "/Account/Login", headers: { "Content-Type": "application/x-www-form-urlencoded" }, data: cuerpo });
+      const ok = r.status >= 200 && r.status < 400 && !_atheneaPareceLogin(r.responseText || "");
+      if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (credenciales del médico en turno)."); return true; }
+      // Rechazo de credenciales (o el portal cambió): se MARCA y NO se reintenta solo.
+      atheneaLoginBloqueada[String(docId)] = true;
+      notify("AMBAR", "🔑 Athenea: revisa tus credenciales",
+        "El inicio de sesión automático en Athenea falló (usuario/contraseña incorrectos o el portal cambió). Vuelve a guardarlas en Ajustes o inicia sesión a mano. No se reintenta solo para no bloquear tu cuenta.",
+        false, "athenea_autologin_fallo|" + docId + "|" + todayStamp());
+      return false;
+    } catch (e) {
+      console.warn("[Vigilante Athenea] auto-login: error de red (reintenta en el próximo latido):", e && e.message);
+      return false;                                             // error de RED, no de credenciales: no se bloquea
+    } finally { atheneaLoginEnVuelo = false; }
+  }
+
+  // v12.3.5 — LATIDO DE SESIÓN. Reportado en uso real: la sesión de Athenea caduca en
+  // pocos minutos y el médico tenía que volver a iniciar sesión constantemente para que
+  // los laboratorios automáticos funcionaran.
+  //
+  // Vigilante NO guarda ni escribe la contraseña de Athenea en ningún caso — eso sería
+  // un riesgo real en un equipo de consultorio compartido. Lo que SÍ puede hacer, sin
+  // tocar credenciales: la mayoría de sesiones ASP.NET (que es lo que corre Athenea, a
+  // juzgar por el token __RequestVerificationToken y /Account/Login) usan expiración
+  // DESLIZANTE por defecto — el reloj se reinicia con cada petición autenticada, no solo
+  // con clics del médico. Un GET periódico y liviano (el mismo BusquedaPaciente ya usado
+  // en el paso 1 de la búsqueda) mantiene viva la sesión mientras el médico ya inició
+  // sesión una vez en este navegador — sin credenciales, sin adivinar nada.
+  //
+  // Si la sesión NO está activa (nunca se inició, o el intervalo fue más largo que el
+  // timeout real), se avisa UNA VEZ AL DÍA con notify() (que ya deduplica por uid+día)
+  // en vez de fallar en silencio cada vez que se intenta traer un laboratorio.
+  let atheneaKeepAliveAt = 0;
+  let atheneaSesionViva = null;   // null = aún no se sabe; true/false tras el primer chequeo
+  async function atheneaKeepAlive() {
+    try {
+      const r = await _gmReq({ method: "GET", url: "https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente" });
+      let viva = r.status === 200 && !_atheneaPareceLogin(r.responseText);
+      // v12.3.16 — Si la sesión cayó y el médico configuró el auto-inicio, se intenta ANTES
+      // de molestarlo: el login corre sobre BusquedaPaciente de nuevo tras loguear, así que
+      // basta con marcar viva=true (atheneaAutoLogin ya verificó que la sesión quedó activa).
+      if (!viva && S.atheneaAutoLogin && await atheneaAutoLogin()) viva = true;
+      if (viva !== atheneaSesionViva) {
+        console.log("[Vigilante Athenea] latido — sesión " + (viva ? "ACTIVA (mantenida)" : "NO activa"));
+        // v12.3.15 — Al REVIVIR la sesión (el médico acaba de iniciar sesión en la otra
+        // pestaña), se resetea la guarda una-vez-por-paciente del robot: en el siguiente
+        // tick de la historia clínica vuelve a buscar los laboratorios del paciente
+        // abierto, sin recargar la página ni volver a entrar a la historia.
+        if (viva && atheneaSesionViva === false) {
+          lastAutoFetchedDoc = "";
+          console.log("[Vigilante Athenea] sesión restaurada: el robot reintentará los laboratorios del paciente abierto.");
+        }
+      }
+      atheneaSesionViva = viva;
+      if (!viva) {
+        notify("AMBAR", "🔑 Athenea: inicia sesión una vez",
+          "Los laboratorios automáticos no se están cargando porque no hay sesión activa en Athenea en este navegador. Abre medicosviva1a.atheneasoluciones.com e inicia sesión — después Vigilante la mantiene activa sola, sin que tengas que repetirlo.",
+          false, "athenea_sesion_caducada|" + todayStamp());
+      }
+    } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
+  }
+
+  async function getAtheneaSolicitudesAuto(docId) {
+    const doc = String(docId || "").replace(/\D/g, "");
+    if (!doc) return null;
+    const BASE = "https://medicosviva1a.atheneasoluciones.com";
+    const diag = (paso, extra) => console.log("[Vigilante Athenea] " + paso + (extra ? " — " + extra : ""));
+    try {
+      const r1 = await _gmReq({ method: "GET", url: `${BASE}/Resultados/BusquedaPaciente` });
+      diag("1/3 GET BusquedaPaciente", "status=" + r1.status + " len=" + (r1.responseText || "").length);
+      if (r1.status !== 200) { console.warn("[Vigilante Athenea] paso 1 falló: HTTP " + r1.status); return null; }
+      if (_atheneaPareceLogin(r1.responseText)) { atheneaSesionViva = false; console.warn("[Vigilante Athenea] paso 1 devolvió una pantalla de LOGIN: la sesión de Athenea no está activa en este navegador. Inicia sesión en medicosviva1a.atheneasoluciones.com y vuelve a intentar."); return null; }
+      const token1 = _atheneaToken(r1.responseText);
+      if (!token1) { console.warn("[Vigilante Athenea] paso 1 respondió 200 pero sin token CSRF reconocible (¿cambió el formulario de Athenea?)."); return null; }
+
+      // tipoId=0 = Cédula de Ciudadanía (confirmado en captura real: numId=<cédula>).
+      const mp1 = _atheneaMultipart({ porRango: "false", tipoId: "0", numId: doc, nombre1: "", nombre2: "", apellido1: "", apellido2: "", __RequestVerificationToken: token1 });
+      const r2 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/BuscarPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp1.boundary}` }, data: mp1.body });
+      diag("2/3 POST BuscarPaciente", "status=" + r2.status + " len=" + (r2.responseText || "").length);
+      if (r2.status !== 200) { console.warn("[Vigilante Athenea] paso 2 falló: HTTP " + r2.status); return null; }
+      if (_atheneaPareceLogin(r2.responseText)) { console.warn("[Vigilante Athenea] paso 2 devolvió una pantalla de LOGIN: la sesión de Athenea caducó a mitad de la búsqueda."); return null; }
+
+      // Sin IdPaciente no se avanza: puede ser que Athenea no tenga a este
+      // paciente, o que la búsqueda haya devuelto una LISTA de coincidencias
+      // en vez de un resultado único — en ambos casos, se detiene en vez de
+      // adivinar (el mismo motivo por el que v11.0.1 quitó el prompt() de
+      // cédula manual: un dato mal supuesto escribe en la ficha equivocada).
+      const idPaciente = _atheneaIdPaciente(r2.responseText);
+      const token2 = _atheneaToken(r2.responseText);
+      if (!idPaciente || !token2) { console.warn("[Vigilante Athenea] paso 2 no devolvió un paciente único (idPaciente=" + JSON.stringify(idPaciente) + ", token=" + (token2 ? "sí" : "no") + "): puede que la cédula no exista en Athenea, o que la búsqueda haya dado varios resultados. Verifique manualmente en el portal."); return null; }
+
+      const mp2 = _atheneaMultipart({ IdPaciente: idPaciente, __RequestVerificationToken: token2 });
+      const r3 = await _gmReq({ method: "POST", url: `${BASE}/Resultados/DatosPaciente`, headers: { "Content-Type": `multipart/form-data; boundary=${mp2.boundary}` }, data: mp2.body });
+      diag("3/3 POST DatosPaciente", "status=" + r3.status + " len=" + (r3.responseText || "").length);
+      if (r3.status !== 200) { console.warn("[Vigilante Athenea] paso 3 falló: HTTP " + r3.status); return null; }
+
+      if (!_atheneaCedulaCoincide(r3.responseText, doc)) {
+        console.warn("[Vigilante Athenea] la cédula de la respuesta no coincide con la buscada; se descarta por seguridad.");
+        return null;
+      }
+
+      const solicitudes = _atheneaExtraerSolicitudes(r3.responseText);
+      diag("OK", solicitudes.length + " solicitud(es) encontradas: " + solicitudes.map((s) => s.idSolicitud + "/" + s.ano + "/" + s.modulo).join(", "));
+      return { idPaciente, solicitudes };
+    } catch (e) {
+      console.warn("[Vigilante Athenea] excepción resolviendo solicitudes:", e);
+      return null;
+    }
+  }
+
+  // Trae y fusiona los analitos de TODAS las solicitudes de laboratorio
+  // (módulo LAB) de un paciente. Cada solicitud ya trae su año exacto
+  // (raspado de Athenea), así que fetchAtheneaLabs no necesita reintentar
+  // por año — solo lo hace cuando se le llama sin ese dato.
+  async function getAtheneaLabsAuto(docId) {
+    const resuelto = await getAtheneaSolicitudesAuto(docId);
+    if (!resuelto || !resuelto.solicitudes.length) return [];
+    const porLab = resuelto.solicitudes.filter((s) => s.modulo === "LAB");
+    const listas = await Promise.all(porLab.map((s) => fetchAtheneaLabs(s.idSolicitud, s.ano).catch(() => [])));
+    return listas.flat();
   }
 
   // Despacha eventos para que Angular actualice el modelo
@@ -588,6 +891,14 @@
       return null;
   }
 
+  // v12.3.10 — Se comprobó en consultorio real que los 7 resultados de un paciente se
+  // inyectaron bien, pero NINGUNA fecha se escribió: lab.Fecha/fechaResult/fecha eran
+  // nombres de campo adivinados, nunca confirmados contra la respuesta real de
+  // consultaDetalleSolicitud. En vez de adivinar un cuarto nombre a ciegas, se deja
+  // esta bandera para volcar UNA sola vez las claves reales del primer analito sin
+  // fecha reconocida — así la próxima corrida real revela el nombre correcto.
+  let _diagLabFechaLogged = false;
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
       let pendientes = 0;
@@ -618,6 +929,10 @@
           // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
           // médico la escriba.
           const resultDate = lab.Fecha || lab.fechaResult || lab.fecha || null;
+          if (!resultDate && !_diagLabFechaLogged) {
+              _diagLabFechaLogged = true;
+              console.warn("[Vigilante] diagnóstico: no se reconoció el campo de fecha en el resultado de Athenea. Claves disponibles:", Object.keys(lab), lab);
+          }
 
           let inputEl = _findLabField(matched.resultId, matched.altIds);
           if (inputEl) {
@@ -635,74 +950,6 @@
           }
       });
       return { count, pendientes, sinCasilla };
-  }
-
-  // Obtención automatizada de idSolicitud vía Athenea API Bridge (Milestone 3)
-  function getAtheneaIdSolicitudAuto(docId) {
-      return new Promise((resolve) => {
-          let doc = docId;
-          if (!doc && typeof extractPacienteAbierto === "function") {
-              doc = extractPacienteAbierto();
-          }
-          // v11.0.1 — SIN prompt(). Pedir la cédula a mano permitía escribir en la historia
-          // clínica ABIERTA los resultados de OTRO paciente (basta un dígito mal tecleado).
-          // La identidad solo puede venir del paciente que está abierto en Everest.
-          if (!doc) {
-              console.warn("[Vigilante] no se pudo determinar el paciente abierto: no se consultan laboratorios");
-              resolve(null);
-              return;
-          }
-
-          const bridgeUrl = `http://localhost:5050/api/buscar_laboratorios?documento=${encodeURIComponent(doc)}`;
-          console.log(`[Vigilante] Consultando idSolicitud en Athenea API Bridge para documento: ${doc}`);
-
-          if (typeof GM_xmlhttpRequest !== "undefined") {
-              GM_xmlhttpRequest({
-                  method: "GET",
-                  url: bridgeUrl,
-                  headers: { "Accept": "application/json" },
-                  onload: function(response) {
-                      if (response.status === 200) {
-                          try {
-                              // v12.0.0 — CONTRATO NORMALIZADO: esta función resuelve SIEMPRE
-                              // un número o null. Antes devolvía un escalar mientras cada
-                              // consumidor lo desempaquetaba como si fuera un objeto
-                              // (`atheneaData.idSolicitud`), lo que dejaba la consulta de
-                              // Athenea del modal de paraclínicos como CÓDIGO MUERTO: nunca
-                              // se cumplía la condición y siempre se caía al caso "sin datos".
-                              const res = JSON.parse(response.responseText);
-                              const bruto = res && (res.idSolicitud != null ? res.idSolicitud : res.id);
-                              const num = Number(bruto);
-                              if (Number.isFinite(num) && num > 0) {
-                                  resolve(num);
-                                  return;
-                              }
-                          } catch (e) {
-                              console.error("[Vigilante] Error deserializando respuesta de API Bridge:", e);
-                          }
-                      }
-                      // console.warn("[Vigilante] API Bridge devolvió status " + response.status);
-                      resolve(null);
-                  },
-                  onerror: function(err) {
-                      // console.warn("[Vigilante] Error conectando con API Bridge (http://localhost:5050):", err);
-                      resolve(null);
-                  },
-                  ontimeout: function() {
-                      // console.warn("[Vigilante] Timeout consultando API Bridge");
-                      resolve(null);
-                  }
-              });
-          } else {
-              fetch(bridgeUrl)
-                  .then(r => r.ok ? r.json() : null)
-                  .then(data => resolve(data && data.idSolicitud ? data.idSolicitud : null))
-                  .catch(err => {
-                      // console.warn("[Vigilante] Error fetch API Bridge:", err);
-                      resolve(null);
-                  });
-          }
-      });
   }
 
   // Interfaz de Usuario para activar la inyección
@@ -723,24 +970,19 @@
       console.log(`[Vigilante Robot Athenea] 🤖 Paciente detectado en Historia Clínica (CC: ${docId}). Buscando laboratorios automáticamente...`);
 
       try {
-          const atheneaData = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = atheneaData; // v12.0.0: getAtheneaIdSolicitudAuto ya devuelve número o null
-
-          if (idSol) {
-              const labs = await fetchAtheneaLabs(idSol);
-              if (labs && labs.length > 0) {
-                  const r = injectLabsIntoCronicos(labs);
-                  vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
-                  // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
-                  // muestra), deja de ser persistente (los avisos persistentes sin cerrar
-                  // reaparecen horas después desde el Centro de actividades de Windows) y
-                  // dice lo que NO se pudo llenar, para que el médico lo revise.
-                  const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
-                    + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
-                  notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
-                    `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
-                    false, "athenea|" + docId + "|" + todayStamp());
-              }
+          const labs = await getAtheneaLabsAuto(docId);
+          if (labs && labs.length > 0) {
+              const r = injectLabsIntoCronicos(labs);
+              vglLog("ATHENEA", "LabsAutoInjected", { docId, totalLabs: labs.length, injectedCount: r.count, pendientes: r.pendientes, sinCasilla: r.sinCasilla.length });
+              // v11.0.1 — El aviso ya no lleva la cédula (viaja en el uid, que no se
+              // muestra), deja de ser persistente (los avisos persistentes sin cerrar
+              // reaparecen horas después desde el Centro de actividades de Windows) y
+              // dice lo que NO se pudo llenar, para que el médico lo revise.
+              const extra = (r.pendientes ? `\n${r.pendientes} analito(s) aún pendientes en el laboratorio (no se escribieron).` : "")
+                + (r.sinCasilla.length ? `\nSin casilla en esta vista: ${r.sinCasilla.join(", ")}.` : "");
+              notify("VERDE", "🧪 Paraclínicos Athenea Auto-Cargados",
+                `Se encontraron ${labs.length} resultados.\nSe diligenciaron ${r.count} casillas. Verifique las fechas antes de guardar.${extra}`,
+                false, "athenea|" + docId + "|" + todayStamp());
           }
       } catch (e) {
           console.warn("[Vigilante Robot Athenea] No se pudieron auto-cargar los paraclínicos:", e);
@@ -758,33 +1000,61 @@
 
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
-          btn.innerHTML = "⏳ Buscando idSolicitud en Athenea...";
-
-          let idSolicitud = await getAtheneaIdSolicitudAuto(docId);
-          const idSol = idSolicitud; // v12.0.0: contrato normalizado (número o null)
-
-          // v11.0.1 — SIN prompt(). Escribir a mano un "idSolicitud" traía a esta historia
-          // clínica los resultados de la solicitud que fuera — es decir, los de CUALQUIER
-          // otro paciente — y se escribían sin ninguna comprobación de identidad.
-          if (!idSol) {
-              btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-              alert("No se pudo resolver la solicitud de laboratorio del paciente abierto"
-                + (docId ? " (cédula " + docId + ")" : "")
-                + ".\n\nConsulte los resultados directamente en Athenea. No se diligenció ninguna casilla.");
+          if (!docId) {
+              alert("No se pudo determinar el paciente abierto en esta historia clínica.");
               return;
           }
-
-          btn.innerHTML = "⏳ Consultando laboratorios...";
+          btn.innerHTML = "⏳ Buscando en Athenea...";
           try {
-              const labs = await fetchAtheneaLabs(idSol);
+              const labs = await getAtheneaLabsAuto(docId);
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
                     + "\n\nRevise las fechas de toma antes de guardar la historia.");
+              } else if (atheneaSesionViva === false) {
+                  // v12.3.15 — La causa más común de "sin resultados" es que NO HAY SESIÓN
+                  // en Athenea: su cookie es DE SESIÓN pura (muere al cerrar el navegador)
+                  // y el formulario de login no ofrece "recordarme" — verificado en la
+                  // captura real: solo Usuario, Password y token CSRF. Ningún latido puede
+                  // resucitar una cookie que ya no existe, así que en vez de un aviso sin
+                  // salida se ofrece abrir el portal aquí mismo; al volver, el latido en
+                  // cadencia rápida detecta la sesión nueva y el robot reintenta solo.
+                  // v12.3.16 — Si el médico configuró el auto-inicio, se intenta aquí mismo y
+                  // se reintenta la búsqueda una vez, sin abrir otra pestaña ni pedir nada.
+                  const idm = state.activeDoctor && state.activeDoctor.id;
+                  if (S.atheneaAutoLogin && atheneaCredsGet(idm)) {
+                      btn.innerHTML = "🔑 Iniciando sesión en Athenea…";
+                      const okl = await atheneaAutoLogin();
+                      if (okl) {
+                          btn.innerHTML = "⏳ Reintentando…";
+                          const labs2 = await getAtheneaLabsAuto(docId);
+                          if (labs2 && labs2.length > 0) {
+                              const r2 = injectLabsIntoCronicos(labs2);
+                              alert("✅ Sesión iniciada y " + labs2.length + " analitos encontrados: " + r2.count + " casillas diligenciadas en la Ruta Crónicos."
+                                + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
+                                + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
+                                + "\n\nRevise las fechas de toma antes de guardar la historia.");
+                          } else {
+                              alert("Sesión de Athenea iniciada, pero no se encontraron laboratorios para el paciente (cédula " + docId + ").");
+                          }
+                      } else {
+                          alert("❌ No se pudo iniciar sesión automáticamente en Athenea. Revise sus credenciales en Ajustes o inicie sesión a mano.");
+                      }
+                  } else if (confirm("🔑 La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios."
+                    + "\n\n¿Abrir Athenea ahora para iniciar sesión?"
+                    + "\n\nAl volver a esta pestaña, el Vigilante reintentará solo en menos de un minuto.")) {
+                      window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank");
+                  }
               } else {
-                  alert("⚠️ No se encontraron laboratorios en esa solicitud.");
+                  // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
+                  // historia clínica los resultados de CUALQUIER otro paciente, sin
+                  // comprobación de identidad. Este mensaje cubre tanto "no se encontró
+                  // el paciente en Athenea" como "se encontró pero sin resultados": en
+                  // ambos casos no se diligenció nada y hay que revisar a mano.
+                  alert("⚠️ No se encontraron laboratorios para el paciente abierto (cédula " + docId + ") en Athenea."
+                    + "\n\nConsulte los resultados directamente en el portal. No se diligenció ninguna casilla.");
               }
           } catch (e) {
               alert("❌ Error al consultar Athenea: " + e);
@@ -795,23 +1065,25 @@
       document.body.appendChild(btn);
   }
 
-  // Observador de mutaciones DOM eficiente para disparo automático del Robot Athenea
-  let labMutationObs = null;
-  function initLabMutationObserver() {
-      if (labMutationObs || typeof MutationObserver === "undefined") return;
-      labMutationObs = new MutationObserver(debounceVgl(() => {
-          if (location.href.includes("Morbilidad") || document.querySelector("a#pes") || document.querySelector(".text-muted")) {
-              createLabInjectorUI();
-          }
-      }, 300));
-      if (document.body) {
-          labMutationObs.observe(document.body, { childList: true, subtree: true });
-      }
-  }
+  // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
+  // Observaba document.body ENTERO con { childList: true, subtree: true }: en la SPA de
+  // Angular de Everest eso son cientos de mutaciones por minuto, y CADA ráfaga despertaba
+  // un debounce de 300 ms solo para decidir si tocaba crear el botón Auto-Labs — CPU
+  // quemada vigilando el universo para una pregunta que se responde con un getElementById.
+  // La misma validación viaja ahora en el bucle tick() ya existente (rama "historia", en
+  // TODA pestaña, SIN condicionar a leader: el observador también corría en todas): la
+  // llamada es barata porque createLabInjectorUI es idempotente con su botón (si
+  // #vgl-lab-injector ya existe no crea nada) y el robot automático conserva intacta su
+  // semántica de una-vez-por-paciente (la guarda lastAutoFetchedDoc de
+  // autoFetchAtheneaLabsForActivePatient, que corre ANTES de esa comprobación a
+  // propósito: así un cambio de paciente en la misma historia sí re-dispara la búsqueda).
+  // Se conserva ESTA única llamada de arranque —reemplazo del bootstrap del observador—
+  // para que el botón aparezca sin esperar el primer tick cuando el script se instala
+  // ya dentro de una historia clínica abierta.
   if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", initLabMutationObserver);
-  } else {
-      initLabMutationObserver();
+      document.addEventListener("DOMContentLoaded", () => { if (seccionActiva() === "historia") createLabInjectorUI(); });
+  } else if (seccionActiva() === "historia") {
+      createLabInjectorUI();
   }
 
 
@@ -915,12 +1187,37 @@
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
+    atheneaAutoLogin: false,  // v12.3.16 — OPT-IN: iniciar sesión solo en Athenea con credenciales guardadas por médico (apagado de fábrica)
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
   function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
-  function writeJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
+  // ~40% más viejo de las estadísticas y bitácoras DEL PROPIO script (deja 18 de los
+  // 30 días), reutilizando purgeOld y purgeEventDays con ventana reducida. Jamás toca
+  // claves ajenas de Everest. Los literales "vgl_stats"/18 (en vez de STATS_KEY /
+  // KEEP_DAYS*0.6) son a propósito: permiten que la purga funcione incluso si la
+  // cuota se llena durante el arranque, antes de que esas constantes se declaren.
+  function purgaPorCuota() {
+    try {
+      const dias = 18; // = KEEP_DAYS(30) * 0.6 — conserva solo lo más reciente
+      try { const a = readJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
+      try { purgeEventDays(dias); } catch (e) {}
+      if (!quotaAvisada) { quotaAvisada = true; console.warn("[Vigilante] Almacenamiento del navegador lleno (QuotaExceeded): se purgó lo más viejo de los registros propios (vgl_*) y se reintenta la escritura."); }
+    } catch (e) {}
+  }
+  function writeJSON(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+    catch (e) {
+      // QuotaExceededError (e.name), code 22, o cualquier otro fallo de setItem:
+      // una purga de emergencia y UN único reintento; si vuelve a fallar, false como
+      // siempre. En el banco de pruebas el localStorage simulado nunca lanza, así
+      // que esta ruta solo corre en el navegador real.
+      purgaPorCuota();
+      try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e2) { return false; }
+    }
+  }
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
   // Migración desde v4.x: la ventana emergente se guardaba en una clave aparte.
   try { const viejo = localStorage.getItem("vgl_popup"); if (viejo !== null && !("popup" in (readJSON(SETTINGS_KEY, {}) || {}))) S.popup = viejo === "1"; } catch (e) {}
@@ -962,11 +1259,31 @@
     const sDoc = String(docId);
     if (!p.citas.includes(sDoc)) { p.citas.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
   }
-  function markOrdenesCreadasHoy(docId) {
+  // v12.3.x — "ID y bloqueo de seguridad": además del booleano de dedup (p.ordenes, ya
+  // existente), se guarda el/los agrupador(es) REALES que Everest asignó a la orden —
+  // el mismo id que usa el propio botón oficial para reimprimir o reenviar. Con esto el
+  // botón deshabilitado en el panel y el envío por correo saben CUÁL orden ya existe,
+  // no solo QUE existe. Reemplaza a guardarOrdenEnMemoriaLocal (nunca se implementó:
+  // era un `if (typeof ... === 'function')` que siempre evaluaba false, código muerto).
+  function markOrdenesCreadasHoy(docId, agrupadores) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    if (!p.ordenes.includes(sDoc)) { p.ordenes.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
+    if (!p.ordenes.includes(sDoc)) p.ordenes.push(sDoc);
+    if (agrupadores && agrupadores.length) {
+      if (!p.ordenesDetalle) p.ordenesDetalle = {};
+      const previos = (p.ordenesDetalle[sDoc] && p.ordenesDetalle[sDoc].agrupadores) || [];
+      p.ordenesDetalle[sDoc] = { agrupadores: [...new Set(previos.concat(agrupadores))], ts: Date.now() };
+    }
+    writeJSON(PROC_KEY, p);
+    state.lastSignature = "";
+    repaint();
+  }
+  // Detalle de la(s) orden(es) ya generadas hoy para este paciente — null si no hay.
+  function ordenesDetalleHoy(docId) {
+    if (!docId) return null;
+    const p = getProcessedToday();
+    return (p.ordenesDetalle && p.ordenesDetalle[String(docId)]) || null;
   }
   function applySettings() {
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
@@ -1810,8 +2127,9 @@
     purgeOld(a); writeJSON(STATS_KEY, a);
     frCache.dia = "";   // invalida el contador en memoria que usa la barra de estadísticas
   }
-  function purgeOld(obj) {
-    const lim = new Date(); lim.setDate(lim.getDate() - KEEP_DAYS);
+  function purgeOld(obj, dias) {
+    // "dias" es opcional: solo la purga de emergencia por cuota llena lo pasa (18).
+    const lim = new Date(); lim.setDate(lim.getDate() - (dias || KEEP_DAYS));
     for (const k of Object.keys(obj)) { const d = new Date(k + "T00:00:00"); if (!isFinite(d) || d < lim) delete obj[k]; }
   }
   function lastDays(n) {
@@ -1831,9 +2149,12 @@
     if (!evBuffer.length) return;
     try {
       const d = evDia || todayStamp(), k = evKey(d);
-      const hoy = (readJSON(k, []) || []).concat(evBuffer);
+      const pend = evBuffer;
       evBuffer = [];
-      writeJSON(k, hoy.length > 3000 ? hoy.slice(-3000) : hoy);
+      const hoy = (readJSON(k, []) || []).concat(pend);
+      // writeJSON ya trae purga de emergencia + reintento si la cuota está llena.
+      // Si aun así falla, la tanda vuelve a la cola (tope 200) en vez de perderse.
+      if (!writeJSON(k, hoy.length > 3000 ? hoy.slice(-3000) : hoy)) evBuffer = pend.concat(evBuffer).slice(-200);
     } catch (e) { evBuffer = []; }
   }
   function logEvent(ev) {
@@ -1852,9 +2173,10 @@
   }
   function eventsOf(day) { evFlush(); return readJSON(evKey(day), []) || []; }
   // Limpieza de días viejos: una sola vez al arrancar, no en cada evento.
-  function purgeEventDays() {
+  function purgeEventDays(dias) {
     try {
-      const lim = new Date(); lim.setDate(lim.getDate() - KEEP_DAYS);
+      // "dias" es opcional: solo la purga de emergencia por cuota llena lo pasa (18).
+      const lim = new Date(); lim.setDate(lim.getDate() - (dias || KEEP_DAYS));
       const viejas = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
@@ -2428,10 +2750,12 @@
       if (!t) {
         t = document.createElement("div");
         t.id = "vgl-sp";
-        t.style.cssText = "position:fixed;bottom:20px;right:20px;z-index:2147483647;max-width:440px;background:#0B1220;color:#F1F5F9;border:1px solid #3B4B63;border-left:6px solid #10B981;border-radius:10px;padding:12px 34px 12px 14px;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.5);cursor:pointer;transition:opacity 0.25s ease,transform 0.25s ease;opacity:0;transform:translateY(10px);";
+        /* HUD OLED autónomo: #vgl-sp vive fuera de #vgl-root (sin tokens ni .perf a mano), así que
+           valores literales y CERO efectos pesados: sin backdrop-filter ni animaciones en bucle. */
+        t.style.cssText = "position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px);";
 
         const closeBtn = document.createElement("span");
-        closeBtn.style.cssText = "position:absolute;top:8px;right:10px;font-size:14px;font-weight:bold;color:#94A3B8;cursor:pointer;line-height:1;";
+        closeBtn.style.cssText = "position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px;";
         closeBtn.textContent = "×";
         closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
         t.appendChild(closeBtn);
@@ -2545,6 +2869,10 @@
       if (!S.recordatorioPym) return;
       const doc = extractPacienteAbierto(); if (!doc) return;
       const key = normalizeKey(doc); if (!key) return;
+      // v12.3.x — Claramente conectado con markOrdenesCreadasHoy: si las órdenes de este
+      // paciente ya se generaron HOY desde el panel, lo que pedía el recordatorio ya se
+      // pidió — insistir con el cartel grande sería ruido, no ayuda.
+      if (isOrdenesCreadasHoy(doc)) return;
       const pend = getActivities(key); if (!pend.length) return;
       const uid = "pymrem|" + key;
       if (avisoYaVisto(uid)) return;
@@ -2731,10 +3059,14 @@
       const c = COLORS[color] || COLORS.AZUL;
       ov = document.createElement("div"); ov.id = "vgl-modal";
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<div class="vgl-modal-card" style="border-color:${c}">
-          <div class="vgl-modal-dot" style="background:${c};box-shadow:0 0 22px ${c}"></div>
+      // [v12.3.13] El CSS estático de este cartel vive al final de la hoja maestra de buildOverlay()
+      // (se inyecta UNA vez, no en cada alerta). El único valor dinámico —el color del estado— entra
+      // aquí como custom property inline (--ac / --ac-rgb) sobre la tarjeta; las reglas de la hoja
+      // maestra lo consumen con var(), de modo que el estilo computado es idéntico al de antes.
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);border-color:rgba(var(--ac-rgb),.60)">
+          <div class="vgl-modal-dot" style="background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85)"></div>
           <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
-          <button class="vgl-modal-ok" style="background:${c}">Entendido</button>
+          <button class="vgl-modal-ok" style="background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35)">Entendido</button>
         </div>`;
       ov.querySelector(".vgl-modal-t").textContent = title;
       ov.querySelector(".vgl-modal-b").textContent = body;
@@ -2757,10 +3089,12 @@
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
       if (isLight()) ov.classList.add("light");
       const chips = actividades.map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
+      // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
+      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pym-card">
-          <div class="vgl-pym-ic">🩺</div>
-          <div class="vgl-pym-t">Actividades preventivas pendientes</div>
-          <div class="vgl-pym-n"></div>
+          <div class="vgl-pym-ic" style="text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)">🩺</div>
+          <div class="vgl-pym-t" style="font-size:12.5px;font-weight:800;color:var(--c-recordatorio);letter-spacing:1.1px;text-transform:uppercase">Actividades preventivas pendientes</div>
+          <div class="vgl-pym-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)"></div>
           <div class="vgl-pym-lead">Se sugiere revisar y solicitar las siguientes actividades de prevención:</div>
           <div class="vgl-pym-list">${chips}</div>
           <div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
@@ -2782,10 +3116,12 @@
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pes-modal";
       if (isLight()) ov.classList.add("light");
+      // [v12.3.13] El CSS de esta alerta vive al final de la hoja maestra de buildOverlay():
+      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pes-card">
-          <div class="vgl-pes-ic">🫀</div>
-          <div class="vgl-pes-t">Prioridad de Atención: Riesgo Cardiovascular</div>
-          <div class="vgl-pes-n"></div>
+          <div class="vgl-pes-ic" style="text-shadow:0 0 14px rgba(var(--rgb-pes),.45)">🫀</div>
+          <div class="vgl-pes-t" style="font-size:12.5px;font-weight:800;color:var(--c-pes);letter-spacing:1.1px;text-transform:uppercase">Prioridad de Atención: Riesgo Cardiovascular</div>
+          <div class="vgl-pes-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)"></div>
           <div class="vgl-pes-lead">Este paciente tiene un <b>seguimiento pendiente</b> en el programa de protección cardiovascular. Se recomienda priorizar la valoración cardiovascular durante la consulta de hoy.</div>
           <div class="vgl-pes-foot">Este recordatorio no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pes-ok">Entendido</button>
@@ -2881,7 +3217,12 @@
       const col = COLORS[color] || COLORS.AZUL, tint = TINT[color] || TINT.AZUL;
       const icon = { ROJO: "⛔", MORADO: "⏳", AMBAR: "⚠", VERDE: "✅", AZUL: "🛡️" }[color] || "🛡️";
       const t = document.createElement("div"); t.className = "vgl-toast";
-      t.innerHTML = `<div class="vgl-toast-ic" style="background:${tint};color:${col}"></div><div class="vgl-toast-main"><div class="vgl-toast-title"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      // [v12.3.13] El CSS estático del toast vive al final de la hoja maestra de buildOverlay()
+      // (antes CADA toast traía su propia copia y el motor la re-parseaba por aviso). El único
+      // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
+      // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
+      // de modo que el estilo computado es idéntico al de antes.
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);flex:0 0 5px;align-self:stretch;border-radius:var(--r-pill);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:0 0 12px rgba(var(--tk),.70),0 0 3px rgba(var(--tk),.90)"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25)"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});font-size:14.5px;letter-spacing:.2px;text-shadow:0 0 16px rgba(var(--tk),.35)"></div><div class="vgl-toast-b" style="font-size:12.5px"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
@@ -3012,12 +3353,15 @@
   //  Si algo no encaja (campos irreconocibles, respuesta vacía, error de red),
   //  se vuelve solo al método de siempre. Nunca se queda sin vigilar.
   // =====================================================================
-  const API = { url: "", visto: 0, campos: null, fallos: 0, ok: 0, ultimo: 0, enVuelo: false, ms: 0, noF0: false };
+  const API = { url: "", visto: 0, campos: null, fallos: 0, ok: 0, ultimo: 0, enVuelo: false, ms: 0, noF0: false, medicoId: 0 };
   const API_RE = /\/ObtenerConsultas\?/i;
   // Vocabulario de estados que el script sabe interpretar. Si lo que llega no se
   // parece a esto, el API se descarta y se sigue por el camino de siempre.
   const EST_RE = /en sala|sin presentar|atendid|pendiente|confirmad|cancelad|agendad|asignad|no asisti|inasist|reprogram|programad|espera|admitid|admision|llamad|triage|ausente/i;
-  try { API.url = localStorage.getItem("vgl_api_url") || ""; } catch (e) {}
+  try {
+    API.url = localStorage.getItem("vgl_api_url") || "";
+    API.medicoId = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
+  } catch (e) {}
   function apiRecordar(url) {
     try {
       if (!url || !API_RE.test(url)) return;
@@ -3025,8 +3369,45 @@
       if (abs === API.url) { API.visto = Date.now(); return; }
       API.url = abs; API.visto = Date.now(); API.fallos = 0;
       localStorage.setItem("vgl_api_url", abs);
+      // v12.3.6 — Se etiqueta la URL aprendida con el médico bajo el cual se aprendió.
+      // Ver invalidarApiSiCambioMedico() para el porqué: en un equipo de consultorio
+      // compartido, esta URL trae el profesionalId de OTRO médico y no debe reusarse.
+      API.medicoId = (state.activeDoctor && state.activeDoctor.id) || 0;
+      try { localStorage.setItem("vgl_api_medico", String(API.medicoId)); } catch (e2) {}
       console.log("[Vigilante] llamada de agenda aprendida");
     } catch (e) {}
+  }
+  // v12.3.6 — DESCUBIERTO EN CONSULTORIO: el panel se quedaba mostrando "Última
+  // lectura... vuelve a Citas del día" de forma PERSISTENTE (no transitoria) en el
+  // equipo de un médico, incluso estando en Historia Clínica un buen rato — la
+  // condición en la que el modo API en segundo plano está diseñado para funcionar
+  // (ver el comentario "MODO LIGERO" en tick()).
+  //
+  // Causa: API.url guarda la URL COMPLETA de ObtenerConsultas, con el profesionalId
+  // del médico que la generó, en localStorage — GLOBAL al equipo, no por médico. En
+  // un consultorio compartido, si el Dr. A la dejó aprendida y luego entra la Dra. B,
+  // Vigilante seguía reintentando la URL de A con la SESIÓN de B: el servidor la
+  // rechaza, apiSano() exige menos de 2 fallos para confiar en el API (línea de
+  // apiSano más abajo) y el modo API queda inhabilitado hasta que alguien note el
+  // problema — el mismo patrón de fuga de identidad entre médicos ya corregido para
+  // el agendamiento en v12.3.1/v12.3.2, aquí en la LECTURA de la agenda.
+  //
+  // Se limpia el estado del API en cuanto se identifica a un médico DISTINTO de aquel
+  // bajo el que se aprendió la URL: Everest la vuelve a enseñar sola (apiObservar ya
+  // está siempre activo) la próxima vez que ese médico visite "Citas del día", sin
+  // que nadie tenga que reinstalar ni tocar Ajustes.
+  function invalidarApiSiCambioMedico(nuevoId) {
+    if (!(nuevoId > 0)) return;
+    if (API.medicoId > 0 && API.medicoId !== nuevoId) {
+      purgarApiUrl("pertenecía al médico id " + API.medicoId + ", ahora en sesión id " + nuevoId);
+      state.apiCitas = null; state.apiEn = 0;
+    }
+    // Se etiqueta (o re-etiqueta) siempre con el médico ya resuelto: cubre tanto el
+    // caso de arriba como el de una URL aprendida ANTES de que la identidad se
+    // resolviera (apiRecordar la marcó con medicoId=0 por no saberlo aún) — de aquí
+    // en adelante ya queda protegida frente al próximo cambio de médico.
+    API.medicoId = nuevoId;
+    try { localStorage.setItem("vgl_api_medico", String(nuevoId)); } catch (e) {}
   }
   // Segunda vía para aprender la llamada, SIN interceptar nada: el navegador ya
   // guarda todas las peticiones de la pestaña en su registro de rendimiento. Sirve
@@ -3124,10 +3505,10 @@
       const r = lista[i] || {}, min = parseHoraMin(r[c.hora]);
       if (min != null) buenas++;
       citas.push({
-        hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] == null ? "" : r[c.hora])),
-        doc_id: extractDoc(String(c.doc ? (r[c.doc] == null ? "" : r[c.doc]) : "")),
+        hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] ?? "")),
+        doc_id: extractDoc(String(c.doc ? (r[c.doc] ?? "") : "")),
         nombre: limpio(c.nombres.map((k) => r[k]).filter(Boolean).join(" ")) || "Paciente Everest",
-        modalidad: "", estado: limpio(String(r[c.estado] == null ? "" : r[c.estado])) || "Pendiente", index: i,
+        modalidad: "", estado: limpio(String(r[c.estado] ?? "")) || "Pendiente", index: i,
       });
     }
     // GUARDAS. Si algo no cuadra NO se usa el API: más vale seguir por el camino
@@ -3182,14 +3563,39 @@
       const txt = (await leerConTope(r, API_MAX) || "").trim();
       API.ms = Date.now() - t0;
       if (!txt) { API.fallos = 0; return []; }        // cuerpo vacío: agenda vacía, no es un fallo
+      // v12.3.7 — BUG REAL encontrado al reforzar esto: si citas===null, el código de
+      // antes SOLO retornaba cuando fallos llegaba a valer EXACTAMENTE 3 — pero como no
+      // había return en los casos 1 y 2, la ejecución SEGUÍA de largo hasta "fallos = 0;
+      // ok++; return citas" (con citas=null), que BORRABA el contador que se acababa de
+      // subir y contaba la falla como un ÉXITO. fallos jamás llegaba a 3 de verdad: la
+      // rama de recuperación era código muerto, y apiSano() (que exige ok>0) se daba por
+      // buena con un API que en realidad llevaba fallando desde el principio.
       const citas = apiParse(apiLista(JSON.parse(txt)));
-      if (citas === null) { API.fallos++; if (API.fallos === 3) return null; }
+      if (citas === null) {
+        API.fallos++;
+        if (API.fallos >= 3) purgarApiUrl("la respuesta ya no tiene la forma esperada");
+        return null;
+      }
       API.fallos = 0; API.ok++;
       return citas;
     } catch (e) {
       API.fallos++;
+      if (API.fallos >= 3) purgarApiUrl((e && e.message) || String(e));
       return null;
     } finally { clearTimeout(corte); API.enVuelo = false; }
+  }
+  // v12.3.7 — Antes se insistía contra la MISMA url hasta 5 fallos y luego se esperaban
+  // 5 minutos completos, una y otra vez, contra una url que —salvo un corte de red
+  // pasajero— casi nunca se recupera sola (sesión caída, médico distinto, o Everest
+  // cambió la forma de la llamada). A los 3 fallos SEGUIDOS se olvida la URL entera: la
+  // próxima vez que la propia Everest haga esa llamada (apiObservar está siempre activo),
+  // se vuelve a aprender sin que nadie tenga que esperar ni volver a "Citas del día" a la
+  // fuerza. Generaliza invalidarApiSiCambioMedico() a CUALQUIER causa de fallo repetido,
+  // no solo el cambio de médico.
+  function purgarApiUrl(motivo) {
+    console.warn("[Vigilante] se descarta la llamada de agenda aprendida tras fallos repetidos (" + motivo + ").");
+    API.url = ""; API.fallos = 0; API.ok = 0; API.medicoId = 0;
+    try { localStorage.removeItem("vgl_api_url"); localStorage.removeItem("vgl_api_medico"); } catch (e) {}
   }
   // ¿Se puede intentar el API? Tras 5 fallos seguidos se deja descansar, pero se
   // reintenta cada 5 min: una caída pasajera (reinicio del servidor, corte de la VPN)
@@ -3203,25 +3609,51 @@
   // Con un frenado creciente clásico, rendirse costaba un cuarto de hora.
   const apiEspera = (base) => (API.fallos >= 5 ? 300000 : API.fallos ? Math.min(30000, 5000 * (1 + API.fallos)) : Math.max(4000, base));
 
-  // ---- Sondeo del API en MODO LIGERO (v7.3.1) ----
+  // ---- Sondeo del API en MODO LIGERO (v7.3.1, umbrales v12.3.8) ----
   // Ritmo adaptativo, calcado del que usaba el clon pero sin clon: rápido SOLO
   // cuando una cita está cerca de la tolerancia (que es cuando puede colarse un
   // fraude), y muy tranquilo el resto del día. Cada consulta son unos pocos kB.
+  //
+  // v12.3.8 — Pedido explícito del médico: cadencia prudente casi todo el día y
+  // "cada 5 segundos" desde el minuto 5 de gracia. La política se rediseñó ASIMÉTRICA
+  // (el esquema anterior era ±2.5/±10 simétrico alrededor del cruce): el riesgo real —
+  // que alguien pase la cita a "En Sala"/"Atendido" tapando una llegada tardía — ocurre
+  // DESPUÉS del cruce de la tolerancia, no antes. Con tolerancia=6 (por defecto),
+  // resta=1 equivale exactamente al "minuto 5 de gracia".
+  //
+  // El "elapsed" se recalcula EN VIVO desde hora_texto en vez de usar el congelado del
+  // último snapshot: con un "Refresco" alto en Ajustes, el snapshot puede tener minutos
+  // de edad y la ventana crítica se evaluaría con datos viejos justo cuando más importa.
+  function vivoElapsed(a) {
+    return a && a.hora_texto ? elapsedMin(a.hora_texto, Date.now()) : ((a && a.elapsed) || 0);
+  }
   function apiCadencia() {
+    const TOL = CONFIG.TOLERANCIA_MIN;
+    const SIN_PENDIENTES = 90000; // 90s — ninguna cita "Sin presentarse" vigente: cero riesgo real
+    const LEJANO         = 45000; // 45s — a más de 10 min del cruce; aquí vive casi toda la jornada
+    const APROXIMACION   = 15000; // 15s — bisagra antes del cruce y vigilancia sostenida mucho después
+    const RECIENTE       = 8000;  // 8s  — 2..15 min DESPUÉS del cruce: la franja de las ediciones tardías
+    const CRITICA        = 5000;  // 5s  — minuto 5 de gracia → 2 min tras el cruce (piso real del sistema)
+    const ABANDONO_MIN   = 60;    // >1h "Sin presentarse" sin editar: ya no cuenta (antes 25 min, pero
+                                  // ese corte dejaba al no-show viejo INFLANDO "pendientes" para siempre
+                                  // y el sistema jamás volvía al reposo de 90s)
     const lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
-    let cerca = Infinity, pendientes = 0;
+    let pendientes = 0, mejor = Infinity;
     for (const a of lst) {
       const s = (a.estado || "").toLowerCase();
-      if (s.includes("atendido") || s.includes("en sala")) continue;  // ya resuelta
+      if (s.includes("atendido") || s.includes("en sala")) continue;  // resuelta: no aporta riesgo
+      const resta = TOL - vivoElapsed(a);        // + = falta para el cruce, − = ya lo cruzó (min)
+      if (resta < -ABANDONO_MIN) continue;       // abandonada hace horas: se deja de vigilar
       pendientes++;
-      const resta = CONFIG.TOLERANCIA_MIN - (a.elapsed || 0);
-      if (resta < -25) continue;                                      // muy pasada: ya no cambiará
-      cerca = Math.min(cerca, Math.abs(resta));
+      let cad;
+      if (resta > 10)        cad = LEJANO;
+      else if (resta > 1)    cad = APROXIMACION; // 9 min de margen antes de la ventana crítica
+      else if (resta >= -2)  cad = CRITICA;      // ventana crítica: minuto 5 → 2 min tras el cruce
+      else if (resta >= -15) cad = RECIENTE;     // recién cruzada: máxima probabilidad de edición tardía
+      else                   cad = APROXIMACION; // −60..−15: vigilancia sostenida sin urgencia
+      if (cad < mejor) mejor = cad;
     }
-    if (!pendientes) return 60000;    // nada pendiente: 1 vez por minuto (ver llegar al primero)
-    if (cerca <= 2.5) return 6000;    // ventana crítica de la tolerancia
-    if (cerca <= 10) return 18000;
-    return 45000;
+    return pendientes ? mejor : SIN_PENDIENTES;
   }
   function tickApi() {
     if (!apiUtil()) return;
@@ -3234,6 +3666,37 @@
       if (citas) { state.apiCitas = citas; state.apiEn = Date.now(); }
     });
   }
+  // v12.3.8 — BOMBA DE VENTANA CRÍTICA. Dos huecos que ningún umbral de apiCadencia()
+  // puede cerrar por sí solo, señalados por la auditoría del diseño:
+  //  (a) el "Refresco" de Ajustes (2–120s) gobierna tick(): con Refresco=30s, el
+  //      "cada 5 segundos" de la ventana crítica jamás se cumplía en la práctica;
+  //  (b) la entrada a la ventana se detectaba recién en el siguiente tick programado.
+  // Este bucle propio de 5s corre SIEMPRE, pero su chequeo es unas comparaciones sobre
+  // ≤20 citas (nada de red): solo cuando de verdad hay una cita en ventana crítica
+  // dispara tickApi() — ignorando el Refresco configurado — y al ENTRAR a la ventana
+  // fuerza una lectura INMEDIATA (API.ultimo=0 salta la espera de cadencia).
+  // No duplica peticiones: tickApi() ya se protege solo con API.enVuelo + API.ultimo.
+  let _criticoPrev = false;
+  function hayVentanaCritica() {
+    const TOL = CONFIG.TOLERANCIA_MIN;
+    const lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
+    for (const a of lst) {
+      const s = (a.estado || "").toLowerCase();
+      if (s.includes("atendido") || s.includes("en sala")) continue;
+      const resta = TOL - vivoElapsed(a);
+      if (resta <= 1 && resta >= -2) return true;
+    }
+    return false;
+  }
+  setInterval(() => {
+    try {
+      if (!state.leader) return;
+      const crit = hayVentanaCritica();
+      if (crit && !_criticoPrev) API.ultimo = 0;   // lectura inmediata al ENTRAR a la ventana
+      if (crit) tickApi();
+      _criticoPrev = crit;
+    } catch (e) {}
+  }, 5000);
 
 
   // ---- Overlay ----
@@ -3255,62 +3718,109 @@
     const style = document.createElement("style");
     style.textContent = `
       /* ================================================================
-         VIGILANTE DE AGENDA v8.2.0 — Rediseño de Confort Clínico (R1)
-         [UI-CSS] Tipografía adaptativa, WCAG AA/AAA, ergonomía visual
+         VIGILANTE DE AGENDA — HUD ESPACIAL 2026 (Spatial UI · Frost Glass)
+         [UI-CSS] OLED + triaje neón-pastel · Bento · WCAG AAA · spring
+         Todo efecto pesado se apaga bajo .perf y prefers-reduced-motion
       ================================================================ */
 
-      /* ---- Design tokens — Modo Oscuro (default) ---- */
+      /* ---- Design tokens — Modo Oscuro OLED (default) ---- */
       #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
-        --bg:rgba(22,24,29,.94);
-        --bg-sidebar:rgba(15,17,21,.80);
-        --bg2:rgba(255,255,255,.06);
-        --bg3:rgba(255,255,255,.10);
-        --bg4:rgba(255,255,255,.18);
-        /* Colores de alerta suavizados (WCAG compliant) */
-        --c-rojo:#e54d42;
-        --c-morado:#9333ea;
-        --c-ambar:#d97706;
-        --c-verde:#10b981;
-        --c-azul:#2563eb;
-        --c-recordatorio:#0d9488;
-        --c-pes:#be185d;
-        --r-chip:10px;--r-card:14px;--r-surface:18px;
-        --fg:#ffffff;--fg2:rgba(241,245,249,.88);--fg3:#94a3b8;
-        --line:rgba(255,255,255,.09);--edge:rgba(255,255,255,.16);
-        --edge-side:rgba(255,255,255,.10);
-        --toast:rgba(30,34,42,.97);
+        /* Vidrio frost sobre negro OLED */
+        --bg:rgba(9,11,17,.84);
+        --bg-sidebar:rgba(5,7,12,.66);
+        --bg2:rgba(255,255,255,.055);
+        --bg3:rgba(255,255,255,.095);
+        --bg4:rgba(255,255,255,.17);
+        --bg-solid:#0b0e15;
+        /* Triaje neón-pastel — AAA (>=7:1) sobre fondo OLED */
+        --c-rojo:#ff8177;
+        --c-morado:#c9a2ff;
+        --c-ambar:#ffc46b;
+        --c-verde:#4ff0b8;
+        --c-azul:#7cb8ff;
+        --c-recordatorio:#54e6d4;
+        --c-pes:#ff9ec4;
+        /* Canales RGB para veladuras y glows: rgba(var(--rgb-x),alfa) */
+        --rgb-rojo:255,129,119;
+        --rgb-morado:201,162,255;
+        --rgb-ambar:255,196,107;
+        --rgb-verde:79,240,184;
+        --rgb-azul:124,184,255;
+        --rgb-recordatorio:84,230,212;
+        --rgb-pes:255,158,196;
+        /* Radios orgánicos 16–24 */
+        --r-chip:16px;--r-card:20px;--r-surface:24px;--r-field:16px;--r-pill:999px;
+        /* Tinta */
+        --fg:#f7fafc;--fg2:rgba(226,232,240,.90);--fg3:#9aa7ba;
+        --line:rgba(255,255,255,.08);--edge:rgba(255,255,255,.15);
+        --edge-side:rgba(255,255,255,.09);
+        --toast:rgba(13,16,24,.94);
+        /* Física spring + vidrio frost */
+        --spring:cubic-bezier(0.34, 1.56, 0.64, 1);
+        --ease-out:cubic-bezier(.2,.9,.3,1);
+        --glass:blur(24px) saturate(190%);
+        --glass-deep:blur(30px) saturate(210%);
+        /* Capas de sombra ambiental + inner-glow (delimitar sin líneas) */
+        --glow-edge:inset 0 1px 0 rgba(255,255,255,.13),inset 0 0 0 1px rgba(255,255,255,.04);
         --shadow-panel:
-          0 0 0 1px rgba(255,255,255,.12),
-          0 4px 18px rgba(0,0,0,.22),
-          0 28px 80px rgba(0,0,0,.65),
-          inset 0 1px 0 rgba(255,255,255,.12);
-        --shadow-card:0 2px 8px rgba(0,0,0,.25);
-        --shadow-card-hover:0 8px 24px rgba(0,0,0,.40);
+          0 0 0 1px rgba(255,255,255,.10),
+          0 2px 6px rgba(0,0,0,.35),
+          0 12px 32px rgba(0,0,0,.45),
+          0 42px 110px rgba(2,4,10,.78),
+          inset 0 1px 0 rgba(255,255,255,.13),
+          inset 0 0 36px rgba(124,184,255,.05);
+        --shadow-card:
+          0 1px 2px rgba(0,0,0,.28),
+          0 6px 18px rgba(0,0,0,.26),
+          inset 0 1px 0 rgba(255,255,255,.07);
+        --shadow-card-hover:
+          0 4px 10px rgba(0,0,0,.32),
+          0 18px 44px rgba(0,0,0,.48),
+          inset 0 1px 0 rgba(255,255,255,.11);
+        --shadow-float:
+          0 10px 28px rgba(0,0,0,.45),
+          0 34px 90px rgba(2,4,10,.70);
         --font-stack:system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       }
 
-      /* ---- Modo Claro ---- */
+      /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-dock.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light{
-        --bg:rgba(248,250,252,.95);
-        --bg-sidebar:rgba(241,245,249,.92);
-        --bg2:rgba(0,0,0,.04);--bg3:rgba(0,0,0,.07);--bg4:rgba(0,0,0,.12);
-        --c-rojo:#dc2626;--c-morado:#7e22ce;--c-ambar:#b45309;
-        --c-verde:#059669;--c-azul:#1d4ed8;--c-recordatorio:#0f766e;
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light{
+        --bg:rgba(250,250,253,.86);
+        --bg-sidebar:rgba(243,245,250,.80);
+        --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
+        --bg-solid:#f6f7fb;
+        /* Triaje profundo — AAA sobre cerámica clara */
+        --c-rojo:#991b1b;--c-morado:#5b21b6;--c-ambar:#92400e;
+        --c-verde:#065f46;--c-azul:#1e40af;--c-recordatorio:#115e59;
         --c-pes:#9d174d;
-        --fg:#0f172a;--fg2:rgba(30,41,59,.82);--fg3:#64748b;
-        --line:rgba(0,0,0,.08);--edge:rgba(0,0,0,.14);--edge-side:rgba(0,0,0,.11);
-        --toast:rgba(255,255,255,.98);
+        --rgb-rojo:153,27,27;--rgb-morado:91,33,182;--rgb-ambar:146,64,14;
+        --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
+        --rgb-pes:157,23,77;
+        --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#5b6b80;
+        --line:rgba(15,23,42,.08);--edge:rgba(15,23,42,.13);--edge-side:rgba(15,23,42,.10);
+        --toast:rgba(255,255,255,.94);
+        --glow-edge:inset 0 1px 0 rgba(255,255,255,.90),inset 0 0 0 1px rgba(255,255,255,.35);
         --shadow-panel:
-          0 0 0 1px rgba(0,0,0,.10),
-          0 4px 16px rgba(0,0,0,.08),
-          0 28px 80px rgba(0,0,0,.18),
-          inset 0 1px 0 rgba(255,255,255,.80);
-        --shadow-card:0 1px 5px rgba(0,0,0,.10);
-        --shadow-card-hover:0 6px 20px rgba(0,0,0,.16);
+          0 0 0 1px rgba(15,23,42,.08),
+          0 2px 6px rgba(15,23,42,.06),
+          0 14px 36px rgba(15,23,42,.10),
+          0 42px 110px rgba(15,23,42,.16),
+          inset 0 1px 0 rgba(255,255,255,.85);
+        --shadow-card:
+          0 1px 2px rgba(15,23,42,.06),
+          0 5px 14px rgba(15,23,42,.07),
+          inset 0 1px 0 rgba(255,255,255,.75);
+        --shadow-card-hover:
+          0 4px 10px rgba(15,23,42,.08),
+          0 16px 40px rgba(15,23,42,.14),
+          inset 0 1px 0 rgba(255,255,255,.85);
+        --shadow-float:
+          0 10px 28px rgba(15,23,42,.14),
+          0 34px 90px rgba(15,23,42,.20);
       }
 
-      /* ---- Panel Raíz ---- */
+      /* ---- Panel Raíz — losa de vidrio espacial ---- */
       #vgl-root{
         position:fixed;bottom:22px;right:22px;
         width:690px;max-width:calc(100vw - 28px);
@@ -3319,9 +3829,11 @@
         display:flex;flex-direction:column;
         overflow:hidden;
         border-radius:var(--r-surface);
-        background:var(--bg);
-        -webkit-backdrop-filter:blur(18px) saturate(180%);
-        backdrop-filter:blur(18px) saturate(180%);
+        background:
+          linear-gradient(165deg,rgba(124,184,255,.07),rgba(201,162,255,.035) 42%,rgba(0,0,0,0) 72%),
+          var(--bg);
+        -webkit-backdrop-filter:var(--glass-deep);
+        backdrop-filter:var(--glass-deep);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-panel);
         color:var(--fg);
@@ -3330,6 +3842,16 @@
         font-size:14px; /* Base 14px */
         line-height:1.45;
       }
+      /* Aurora ambiental decorativa (se apaga en .perf y al arrastrar) */
+      #vgl-root::before{
+        content:"";position:absolute;inset:-30%;z-index:-1;pointer-events:none;
+        background:
+          radial-gradient(42% 34% at 16% 6%,rgba(124,184,255,.11),transparent 62%),
+          radial-gradient(36% 30% at 90% 10%,rgba(201,162,255,.09),transparent 64%),
+          radial-gradient(46% 40% at 80% 98%,rgba(79,240,184,.06),transparent 66%);
+        filter:blur(28px);
+      }
+      #vgl-root.light::before{opacity:.5}
       #vgl-root.min{
         height:48px !important;
         max-height:48px !important;
@@ -3343,12 +3865,43 @@
       @media (max-width:720px){
         #vgl-root{width:calc(100vw - 20px);right:10px;bottom:10px}
       }
+      /* MODO RENDIMIENTO / arrastre: cero efectos pesados */
       #vgl-root.vgl-dragging,#vgl-root.perf{
         backdrop-filter:none;-webkit-backdrop-filter:none;
         will-change: transform;
       }
-      #vgl-dock.perf{backdrop-filter:none;-webkit-backdrop-filter:none}
-      #vgl-root *{box-sizing:border-box}
+      #vgl-root.vgl-dragging::before{content:none}
+      #vgl-root.perf{
+        background:var(--bg-solid);
+        box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50);
+      }
+      #vgl-root.perf::before{content:none}
+      #vgl-root.perf *,#vgl-root.perf *::before,#vgl-root.perf *::after{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;filter:none !important;
+      }
+      #vgl-root.perf .vgl-card,#vgl-root.perf .vgl-card:hover{transform:none;box-shadow:none}
+      #vgl-root.perf #vgl-sidebar{background:var(--bg-solid)}
+      #vgl-dock.perf{
+        backdrop-filter:none;-webkit-backdrop-filter:none;
+        background:var(--bg-solid);
+        box-shadow:0 0 0 1px var(--edge),0 10px 26px rgba(0,0,0,.45);
+      }
+      #vgl-dock.perf *{animation:none !important;transition:none !important;filter:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-root,#vgl-root *,#vgl-root *::before,#vgl-root *::after,
+        #vgl-dock,#vgl-dock *,#vgl-toasts *,
+        #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
+        #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
+        #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *{
+          animation:none !important;transition:none !important;
+        }
+      }
+      /* Reset defensivo contra herencias del host */
+      #vgl-root *,#vgl-dock *,#vgl-toasts *,
+      #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
+      #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *{box-sizing:border-box}
 
       /* Blindaje contra estilos globales de Everest */
       #vgl-root b,#vgl-root i,#vgl-root small,#vgl-root mark,
@@ -3356,19 +3909,19 @@
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
 
-      /* Foco de teclado */
+      /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
       .vgl-btn-action:focus-visible{
         outline:2px solid var(--c-azul);outline-offset:2px
       }
       .vgl-sw:focus-within i{outline:2px solid var(--c-azul);outline-offset:2px}
 
-      /* ---- Header ---- */
+      /* ---- Header — barra de mando ---- */
       #vgl-head{
         height:48px;display:flex;align-items:center;gap:12px;
         padding:0 16px;cursor:move;user-select:none;
         border-bottom:1px solid var(--line);
-        background:linear-gradient(rgba(255,255,255,.04),rgba(255,255,255,0));
+        background:linear-gradient(rgba(255,255,255,.05),rgba(255,255,255,0));
         flex:0 0 auto;
       }
       #vgl-tls{display:flex !important;align-items:center !important;gap:8px !important;margin-right:8px !important;flex-shrink:0 !important}
@@ -3380,33 +3933,33 @@
         padding:0 !important;margin:0 !important;box-sizing:border-box !important;
         display:inline-block !important;flex:0 0 12px !important;
         aspect-ratio:1 / 1 !important;
-        transition:filter .15s, transform .15s !important;
+        transition:filter .18s var(--ease-out), transform .18s var(--spring) !important;
         appearance:none !important;-webkit-appearance:none !important;
-        outline:none !important;box-shadow:none !important;
+        outline:none !important;
         line-height:1 !important;overflow:hidden !important;
       }
-      .vgl-tl:hover{filter:brightness(1.15) !important;transform:scale(1.10) !important}
-      .vgl-tl.close{background:#e54d42 !important}
-      .vgl-tl.min{background:#d97706 !important}
-      .vgl-tl.zoom{background:#10b981 !important}
+      .vgl-tl:hover{filter:brightness(1.2) !important;transform:scale(1.18) !important}
+      .vgl-tl.close{background:var(--c-rojo) !important;box-shadow:0 0 8px rgba(var(--rgb-rojo),.55) !important}
+      .vgl-tl.min{background:var(--c-ambar) !important;box-shadow:0 0 8px rgba(var(--rgb-ambar),.55) !important}
+      .vgl-tl.zoom{background:var(--c-verde) !important;box-shadow:0 0 8px rgba(var(--rgb-verde),.55) !important}
       #vgl-title{
         flex:1;text-align:center;font-weight:700;font-size:16px; /* Título 16px */
-        letter-spacing:.2px;color:var(--fg);opacity:.95;
+        letter-spacing:.3px;color:var(--fg);opacity:.96;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       }
       #vgl-title small{
         opacity:.60;font-weight:500;margin-left:6px;font-size:12px /* Mínimo 12px */
       }
       #vgl-dot{
-        width:9px;height:9px;border-radius:50%;background:#94a3b8;
+        width:9px;height:9px;border-radius:50%;background:var(--fg3);
         flex:0 0 auto;transition:background .3s,box-shadow .3s
       }
-      #vgl-dot.bg{background:var(--c-verde);box-shadow:0 0 8px rgba(16,185,129,.85)}
-      #vgl-dot.page{background:var(--c-azul);box-shadow:0 0 8px rgba(37,99,235,.75)}
-      #vgl-dot.stale{background:var(--c-ambar);box-shadow:0 0 8px rgba(217,119,6,.75)}
+      #vgl-dot.bg{background:var(--c-verde);box-shadow:0 0 10px rgba(var(--rgb-verde),.9)}
+      #vgl-dot.page{background:var(--c-azul);box-shadow:0 0 10px rgba(var(--rgb-azul),.85)}
+      #vgl-dot.stale{background:var(--c-ambar);box-shadow:0 0 10px rgba(var(--rgb-ambar),.85)}
       @keyframes vglPulse{
-        0%,100%{box-shadow:0 0 8px rgba(16,185,129,.85),0 0 0 0 rgba(16,185,129,.45)}
-        50%{box-shadow:0 0 8px rgba(16,185,129,.85),0 0 0 6px rgba(16,185,129,0)}
+        0%,100%{box-shadow:0 0 10px rgba(var(--rgb-verde),.9),0 0 0 0 rgba(var(--rgb-verde),.45)}
+        50%{box-shadow:0 0 10px rgba(var(--rgb-verde),.9),0 0 0 7px rgba(var(--rgb-verde),0)}
       }
       #vgl-dot.bg{animation:vglPulse 2.4s ease-out infinite}
 
@@ -3415,58 +3968,61 @@
         display:flex;flex:1 1 auto;overflow:hidden;min-height:0;
       }
 
-      /* ---- Sidebar izquierdo ---- */
+      /* ---- Sidebar izquierdo — costado frost ---- */
       #vgl-sidebar{
         width:195px;flex-shrink:0;
         display:flex;flex-direction:column;gap:0;
         border-right:1px solid var(--edge-side);
-        background:var(--bg-sidebar);
+        background:linear-gradient(180deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 42%),var(--bg-sidebar);
         overflow-y:auto;overflow-x:hidden;
-        padding:12px 10px 14px;
-        -webkit-backdrop-filter:blur(22px) saturate(200%);
-        backdrop-filter:blur(22px) saturate(200%);
+        padding:14px 12px 16px;
+        -webkit-backdrop-filter:var(--glass);
+        backdrop-filter:var(--glass);
       }
       #vgl-sidebar::-webkit-scrollbar{width:0}
 
       /* Buscador */
-      #vgl-find{margin-bottom:10px}
+      #vgl-find{margin-bottom:12px}
       #vgl-q{
         width:100%;appearance:none;
-        border:1px solid var(--edge);background:var(--bg3);
-        color:var(--fg);border-radius:10px;padding:8px 12px;
+        border:1px solid var(--edge);background:var(--bg2);
+        color:var(--fg);border-radius:var(--r-field);padding:9px 14px;
         font-size:13px;font-family:inherit;outline:none;
         line-height:1.4;
+        box-shadow:var(--glow-edge);
+        transition:border-color .18s var(--ease-out),box-shadow .18s var(--ease-out);
       }
       #vgl-q:focus{
-        border-color:var(--c-azul);
-        box-shadow:0 0 0 3px rgba(37,99,235,.22);
+        border-color:rgba(var(--rgb-azul),.65);
+        box-shadow:0 0 0 3px rgba(var(--rgb-azul),.22),var(--glow-edge);
       }
       #vgl-q::placeholder{color:var(--fg3)}
 
       /* Etiqueta de sección */
       .vgl-sb-lbl{
-        font-size:12px;font-weight:700;letter-spacing:.5px; /* Mínimo 12px */
+        font-size:12px;font-weight:700;letter-spacing:.9px; /* Mínimo 12px */
         color:var(--fg3);text-transform:uppercase;
         padding:0 4px;margin-bottom:6px;margin-top:8px;
       }
 
       /* Filtros */
-      #vgl-filters{display:flex;flex-direction:column;gap:3px;margin-bottom:12px}
+      #vgl-filters{display:flex;flex-direction:column;gap:4px;margin-bottom:14px}
       .vgl-fchip{
         cursor:pointer;font-size:13px;font-weight:500;
-        padding:8px 12px;border-radius:9px;
+        padding:8px 12px;border-radius:var(--r-chip);
         background:transparent;color:var(--fg2);
         border:0;text-align:left;font-family:inherit;
-        transition:background .13s,color .13s;
+        transition:background .16s var(--ease-out),color .16s var(--ease-out),transform .24s var(--spring);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
       }
-      .vgl-fchip:hover{background:var(--bg3);color:var(--fg)}
+      .vgl-fchip:hover{background:var(--bg3);color:var(--fg);transform:translateX(2px)}
       .vgl-fchip.sel{
-        background:rgba(37,99,235,.18);color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
         font-weight:700;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),var(--glow-edge);
       }
-      #vgl-root.light .vgl-fchip.sel{color:#1d4ed8}
+      #vgl-root.light .vgl-fchip.sel{color:var(--c-azul)}
 
       /* Stats */
       #vgl-stats{
@@ -3478,15 +4034,16 @@
       #vgl-stats:empty{display:none;border-top:none;padding-top:0}
       .vgl-stat{
         display:flex;align-items:center;gap:8px;
-        font-size:12px;font-weight:500;color:var(--fg2); /* Mínimo 12px */
-        padding:5px 6px;border-radius:7px;
+        font-size:12px;font-weight:600;color:var(--fg2); /* Mínimo 12px */
+        padding:5px 6px;border-radius:var(--r-chip);
         line-height:1.4;
       }
-      .vgl-stat b{font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums;margin-left:auto}
+      .vgl-stat b{font-weight:800;color:var(--fg);font-variant-numeric:tabular-nums;margin-left:auto}
       .vgl-stat .vgl-d{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
       .vgl-stat.hot{
-        background:rgba(229,77,66,.18);color:var(--c-rojo);
-        font-weight:700;padding:6px 8px;border-radius:9px;
+        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo);
+        font-weight:800;padding:6px 8px;border-radius:var(--r-chip);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.30);
       }
       .vgl-stat.hot b{color:var(--c-rojo)}
 
@@ -3496,26 +4053,30 @@
         border-top:1px solid var(--line);padding-top:12px;
       }
       .vgl-sb-btn{
-        appearance:none;border:0;border-radius:10px;
+        appearance:none;border:0;border-radius:var(--r-chip);
         padding:9px 12px;font-size:13px;font-weight:500;
         cursor:pointer;color:var(--fg);background:var(--bg2);
-        transition:background .15s,transform .1s;
+        transition:background .16s var(--ease-out),transform .24s var(--spring),box-shadow .24s var(--ease-out);
         font-family:inherit;text-align:left;
         display:flex;align-items:center;gap:8px;
         line-height:1.4;
+        box-shadow:var(--glow-edge);
       }
-      .vgl-sb-btn:hover{background:var(--bg3)}
+      .vgl-sb-btn:hover{background:var(--bg3);transform:translateY(-1px)}
       .vgl-sb-btn:active{transform:scale(.97)}
       .vgl-sb-btn.primary{
-        background:var(--c-azul);color:#fff;font-weight:600;
-        box-shadow:0 2px 8px rgba(37,99,235,.35);
+        background:linear-gradient(150deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.14));
+        color:var(--c-azul);font-weight:700;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 4px 14px rgba(var(--rgb-azul),.18);
       }
-      .vgl-sb-btn.primary:hover{background:#3b82f6}
+      .vgl-sb-btn.primary:hover{background:linear-gradient(150deg,rgba(var(--rgb-azul),.40),rgba(var(--rgb-azul),.20))}
       .vgl-sb-btn.on{
-        background:rgba(16,185,129,.18);color:var(--c-verde);font-weight:600
+        background:rgba(var(--rgb-verde),.15);color:var(--c-verde);font-weight:700;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35);
       }
       .vgl-sb-btn.off{
-        background:rgba(229,77,66,.20);color:var(--c-rojo);font-weight:600
+        background:rgba(var(--rgb-rojo),.16);color:var(--c-rojo);font-weight:700;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.35);
       }
 
       /* ---- Área Principal ---- */
@@ -3523,79 +4084,85 @@
         flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;
       }
       #vgl-sum{
-        font-size:12.5px;color:var(--fg3);padding:9px 14px; /* Aumentado a 12.5px */
+        font-size:12.5px;color:var(--fg3);padding:9px 16px; /* Aumentado a 12.5px */
         border-bottom:1px solid var(--line);
-        font-weight:500;letter-spacing:.08px;flex:0 0 auto;
+        font-weight:600;letter-spacing:.1px;flex:0 0 auto;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
       }
-      #vgl-sum.warn{color:#d97706}
-      #vgl-sum.error{color:#dc2626}
-      #vgl-root:not(.light) #vgl-sum.warn{color:#fbbf24}
-      #vgl-root:not(.light) #vgl-sum.error{color:#f87171}
+      #vgl-sum.warn{color:var(--c-ambar)}
+      #vgl-sum.error{color:var(--c-rojo)}
+      #vgl-root:not(.light) #vgl-sum.warn{color:var(--c-ambar)}
+      #vgl-root:not(.light) #vgl-sum.error{color:var(--c-rojo)}
 
-      /* Lista de Tarjetas */
+      /* Lista de Tarjetas — bandeja bento */
       #vgl-list{
-        overflow-y:auto;padding:10px 10px;
-        display:flex;flex-direction:column;gap:8px;
+        overflow-y:auto;padding:12px 12px 14px;
+        display:flex;flex-direction:column;gap:10px;
         flex:1 1 auto;
       }
       #vgl-list::-webkit-scrollbar{width:6px}
-      #vgl-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
+      #vgl-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
       #vgl-root.stale #vgl-list{opacity:.75}
 
       #vgl-empty{
         color:var(--fg3);text-align:center;
-        padding:32px 16px;font-size:13px;line-height:1.5;
+        padding:36px 16px;font-size:13px;line-height:1.55;
       }
 
-      /* ---- Tarjetas Paciente ---- */
+      /* ---- Tarjetas Paciente — losas flotantes ---- */
       @keyframes vglSpringIn{
-        from{opacity:0;transform:translateY(6px) scale(.98)}
+        from{opacity:0;transform:translateY(8px) scale(.97)}
         to{opacity:1;transform:none}
       }
       .vgl-card{
-        background:var(--bg2);
+        position:relative;
+        background:linear-gradient(170deg,rgba(255,255,255,.045),rgba(255,255,255,0) 55%),var(--bg2);
         border:1px solid var(--line);
         border-radius:var(--r-card);
         border-left:4px solid transparent;
-        padding:12px 14px 10px; /* Incremento de padding */
+        padding:13px 15px 11px; /* Incremento de padding */
         box-shadow:var(--shadow-card);
-        transition:background .15s,
-                   transform .22s cubic-bezier(0.34,1.56,0.64,1),
-                   box-shadow .22s ease;
-        animation:vglSpringIn .34s cubic-bezier(0.34,1.56,0.64,1) both;
+        transition:background .16s var(--ease-out),
+                   transform .26s var(--spring),
+                   box-shadow .26s var(--ease-out),
+                   border-color .16s var(--ease-out);
+        animation:vglSpringIn .36s var(--spring) both;
       }
       .vgl-card:hover{
-        background:var(--bg3);
+        background:linear-gradient(170deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),var(--bg3);
         transform:translateY(-2px);
         box-shadow:var(--shadow-card-hover);
       }
       .vgl-card.rojo{
-        background:rgba(229,77,66,.14);
-        border-color:rgba(229,77,66,.40);
+        background:linear-gradient(170deg,rgba(var(--rgb-rojo),.16),rgba(var(--rgb-rojo),.07));
+        border-color:rgba(var(--rgb-rojo),.38);
         border-left-color:var(--c-rojo);
+        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-rojo),.10);
       }
-      .vgl-card.rojo:hover{background:rgba(229,77,66,.20)}
+      .vgl-card.rojo:hover{background:linear-gradient(170deg,rgba(var(--rgb-rojo),.22),rgba(var(--rgb-rojo),.10))}
       .vgl-card.morado{
-        background:rgba(147,51,234,.12);
-        border-color:rgba(147,51,234,.35);
+        background:linear-gradient(170deg,rgba(var(--rgb-morado),.14),rgba(var(--rgb-morado),.06));
+        border-color:rgba(var(--rgb-morado),.34);
         border-left-color:var(--c-morado);
+        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-morado),.08);
       }
-      .vgl-card.morado:hover{background:rgba(147,51,234,.18)}
+      .vgl-card.morado:hover{background:linear-gradient(170deg,rgba(var(--rgb-morado),.20),rgba(var(--rgb-morado),.09))}
       .vgl-card.ambar{
-        background:rgba(217,119,6,.12);
-        border-color:rgba(217,119,6,.35);
+        background:linear-gradient(170deg,rgba(var(--rgb-ambar),.14),rgba(var(--rgb-ambar),.06));
+        border-color:rgba(var(--rgb-ambar),.34);
         border-left-color:var(--c-ambar);
+        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-ambar),.08);
       }
-      .vgl-card.ambar:hover{background:rgba(217,119,6,.18)}
+      .vgl-card.ambar:hover{background:linear-gradient(170deg,rgba(var(--rgb-ambar),.20),rgba(var(--rgb-ambar),.09))}
       .vgl-card.pes{
-        background:rgba(190,24,93,.12);
-        border-color:rgba(190,24,93,.38);
+        background:linear-gradient(170deg,rgba(var(--rgb-pes),.14),rgba(var(--rgb-pes),.06));
+        border-color:rgba(var(--rgb-pes),.36);
         border-left-color:var(--c-pes);
+        box-shadow:var(--shadow-card),0 0 26px rgba(var(--rgb-pes),.08);
       }
-      .vgl-card.pes:hover{background:rgba(190,24,93,.18)}
-      .vgl-card.hit{box-shadow:0 0 0 2px rgba(251,191,36,.55)}
+      .vgl-card.pes:hover{background:linear-gradient(170deg,rgba(var(--rgb-pes),.20),rgba(var(--rgb-pes),.09))}
+      .vgl-card.hit{box-shadow:0 0 0 2px rgba(var(--rgb-ambar),.60),var(--shadow-card)}
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
@@ -3610,50 +4177,53 @@
       .vgl-card-btm .vgl-pyms{flex:1 1 auto;min-width:0}
       .vgl-cdot{
         width:10px;height:10px;border-radius:50%;flex:0 0 auto;
-        box-shadow:0 0 5px currentColor;
+        box-shadow:0 0 8px currentColor;
       }
       .vgl-time{
-        font-weight:700;font-size:14px;color:var(--fg); /* Base 14px */
+        font-weight:800;font-size:16px;color:var(--fg); /* Hora protagonista */
         white-space:nowrap;font-variant-numeric:tabular-nums;
+        letter-spacing:.2px;
       }
       .vgl-name{
-        font-size:14px;color:var(--fg);flex:1;min-width:0;font-weight:600; /* Base 14px */
+        font-size:15.5px;color:var(--fg);flex:1;min-width:0;font-weight:600; /* Nombre protagonista */
       }
       .vgl-name b{
-        font-weight:700;color:var(--fg);
+        font-weight:800;color:var(--fg);
         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
         display:inline-block;max-width:100%;vertical-align:bottom;
       }
       .vgl-name mark{
-        background:rgba(251,191,36,.35);color:inherit;
-        border-radius:3px;padding:0 2px
+        background:rgba(var(--rgb-ambar),.30);color:inherit;
+        border-radius:6px;padding:0 3px
       }
-      .vgl-doc{color:var(--fg3);font-size:12px;font-weight:400;flex-shrink:0} /* Mínimo 12px */
+      .vgl-doc{color:var(--fg3);font-size:12px;font-weight:500;flex-shrink:0} /* Mínimo 12px */
 
       /* Badge & Flags */
       .vgl-badge{
-        font-size:12px;font-weight:700;padding:4px 10px; /* Mínimo 12px + padding */
-        border-radius:var(--r-chip);white-space:nowrap;
-        letter-spacing:.18px;color:var(--fg);flex-shrink:0;
+        font-size:12px;font-weight:800;padding:4px 11px; /* Mínimo 12px + padding */
+        border-radius:var(--r-pill);white-space:nowrap;
+        letter-spacing:.2px;color:var(--fg);flex-shrink:0;
         line-height:1.3;
+        box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
       .vgl-flag{
-        font-size:12px;font-weight:800;padding:3px 8px; /* Mínimo 12px */
-        border-radius:var(--r-chip);background:var(--c-rojo);
-        color:#fff;white-space:nowrap;letter-spacing:.3px;flex-shrink:0;
+        font-size:12px;font-weight:800;padding:3px 9px; /* Mínimo 12px */
+        border-radius:var(--r-pill);background:var(--c-rojo);
+        color:var(--bg-solid);white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
+        box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
       }
-      .vgl-flag.pes{background:var(--c-pes)}
+      .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
 
       .vgl-cd{
         font-size:12px;font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
-        padding:3px 8px;border-radius:var(--r-chip);
-        white-space:nowrap;background:var(--bg3);color:var(--fg3);
-        flex-shrink:0;
+        padding:3px 9px;border-radius:var(--r-pill);
+        white-space:nowrap;background:var(--bg3);color:var(--fg2);
+        flex-shrink:0;box-shadow:var(--glow-edge);
       }
-      .vgl-cd.warn{background:rgba(147,51,234,.20);color:#f3e8ff}
-      #vgl-root.light .vgl-cd.warn{color:#6b21a8}
-      .vgl-cd.late{background:rgba(217,119,6,.20);color:#fef3c7}
-      #vgl-root.light .vgl-cd.late{color:#92400e}
+      .vgl-cd.warn{background:rgba(var(--rgb-morado),.18);color:var(--c-morado)}
+      #vgl-root.light .vgl-cd.warn{color:var(--c-morado)}
+      .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar)}
+      #vgl-root.light .vgl-cd.late{color:var(--c-ambar)}
 
       /* Acciones en Tarjeta */
       .vgl-card-actions{
@@ -3661,18 +4231,19 @@
       }
       .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar{
         all:unset;
-        width:28px;height:28px;border-radius:8px;
+        width:30px;height:30px;border-radius:var(--r-chip);
         border:1px solid var(--edge);
         background:var(--bg3);
         font-size:14px;
         display:inline-flex;align-items:center;justify-content:center;
         cursor:pointer;
-        transition:transform .13s cubic-bezier(0.34,1.56,0.64,1),background .13s;
+        transition:transform .2s var(--spring),background .14s var(--ease-out),box-shadow .2s var(--ease-out);
         flex-shrink:0;box-sizing:border-box;
+        box-shadow:var(--glow-edge);
       }
       .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover{
-        transform:scale(1.12);background:var(--bg4);
-        box-shadow:0 2px 8px rgba(0,0,0,.25);
+        transform:scale(1.14);background:var(--bg4);
+        box-shadow:0 4px 12px rgba(0,0,0,.30),var(--glow-edge);
       }
 
       /* Chips PyM */
@@ -3686,35 +4257,38 @@
       }
       .vgl-pyms::-webkit-scrollbar{display:none}
       .vgl-chip{
-        font-size:12px;font-weight:600;padding:3px 10px; /* Mínimo 12px */
-        border-radius:var(--r-chip);
-        background:rgba(37,99,235,.16);color:#2563eb;
+        font-size:12px;font-weight:700;padding:4px 11px; /* Mínimo 12px */
+        border-radius:var(--r-pill);
+        background:rgba(var(--rgb-azul),.14);color:var(--c-azul);
         white-space:nowrap;flex-shrink:0;
         scroll-snap-align:start;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.25);
       }
-      #vgl-root:not(.light) .vgl-chip{color:#60a5fa}
+      #vgl-root:not(.light) .vgl-chip{color:var(--c-azul)}
       .vgl-none{margin-top:6px;font-size:12px;color:var(--fg2);font-style:italic} /* Mínimo 12px */
-      .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:600}
+      .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:700}
 
-      /* ---- Hoja Deslizante (Resumen / Ajustes) ---- */
+      /* ---- Hoja Deslizante (Resumen / Ajustes) — bandeja bento ---- */
       #vgl-sheet{
         display:none;flex:1 1 auto;
-        overflow-y:auto;padding:16px 18px 20px;
-        animation:vglSheet .22s cubic-bezier(.2,.9,.3,1);
+        overflow-y:auto;padding:18px 20px 22px;
+        animation:vglSheet .26s var(--spring);
       }
       #vgl-root.sheet #vgl-list,#vgl-root.sheet #vgl-find{display:none}
       #vgl-root.sheet #vgl-sheet{display:block}
       @keyframes vglSheet{
-        from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}
+        from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}
       }
       .vgl-sh-h{
         display:flex;align-items:center;
-        justify-content:space-between;margin-bottom:14px
+        justify-content:space-between;margin-bottom:16px
       }
-      .vgl-sh-t{font-size:16px;font-weight:700;color:var(--fg)} /* Título 16px */
+      .vgl-sh-t{font-size:17px;font-weight:800;color:var(--fg);letter-spacing:.2px} /* Título */
       .vgl-grp{
-        background:var(--bg2);border:1px solid var(--line);
-        border-radius:var(--r-card);padding:6px 14px;margin-bottom:12px
+        background:linear-gradient(170deg,rgba(255,255,255,.04),rgba(255,255,255,0) 60%),var(--bg2);
+        border:1px solid var(--line);
+        border-radius:var(--r-card);padding:8px 16px;margin-bottom:14px;
+        box-shadow:var(--shadow-card);
       }
       .vgl-fld{
         display:flex;align-items:center;
@@ -3730,386 +4304,433 @@
       .vgl-fld input[type=text],.vgl-fld input[type=number],
       .vgl-fld input[type=time],.vgl-fld select{
         appearance:none;border:1px solid var(--edge);
-        background:var(--bg2);color:var(--fg);border-radius:8px;
-        padding:7px 10px;font-size:13px;font-family:inherit;
+        background:var(--bg2);color:var(--fg);border-radius:var(--r-field);
+        padding:8px 12px;font-size:13px;font-family:inherit;
         outline:none;min-width:100px;max-width:170px;
-        line-height:1.4;
+        line-height:1.4;box-shadow:var(--glow-edge);
+        transition:border-color .16s var(--ease-out),box-shadow .16s var(--ease-out);
       }
-      .vgl-fld input:focus,.vgl-fld select:focus{border-color:var(--c-azul)}
+      .vgl-fld input:focus,.vgl-fld select:focus{
+        border-color:rgba(var(--rgb-azul),.65);
+        box-shadow:0 0 0 3px rgba(var(--rgb-azul),.20),var(--glow-edge)
+      }
 
       /* Interruptor iOS */
       .vgl-sw{position:relative;width:44px;height:26px;flex:0 0 auto;cursor:pointer}
       .vgl-sw input{opacity:0;width:0;height:0;position:absolute}
       .vgl-sw i{
-        position:absolute;inset:0;border-radius:26px;
-        background:var(--bg4);transition:background .18s
+        position:absolute;inset:0;border-radius:var(--r-pill);
+        background:var(--bg4);transition:background .2s var(--ease-out),box-shadow .2s;
+        box-shadow:inset 0 1px 3px rgba(0,0,0,.22)
       }
       .vgl-sw i:after{
         content:"";position:absolute;top:2px;left:2px;
         width:22px;height:22px;border-radius:50%;
         background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);
-        transition:transform .18s
+        transition:transform .24s var(--spring)
       }
-      .vgl-sw input:checked + i{background:var(--c-verde)}
+      .vgl-sw input:checked + i{background:var(--c-verde);box-shadow:0 0 12px rgba(var(--rgb-verde),.30)}
       .vgl-sw input:checked + i:after{transform:translateX(18px)}
 
       /* Botones Hoja */
       .vgl-btn{
-        appearance:none;border:0;border-radius:9px;
-        padding:8px 14px;font-size:13px;font-weight:500;
+        appearance:none;border:0;border-radius:var(--r-chip);
+        padding:8px 15px;font-size:13px;font-weight:600;
         cursor:pointer;color:var(--fg);background:var(--bg3);
-        transition:background .15s,transform .1s;
+        transition:background .15s var(--ease-out),transform .22s var(--spring),box-shadow .22s var(--ease-out);
         font-family:inherit;white-space:nowrap;
-        line-height:1.4;
+        line-height:1.4;box-shadow:var(--glow-edge);
       }
-      .vgl-btn:hover{background:var(--bg4)}
+      .vgl-btn:hover{background:var(--bg4);transform:translateY(-1px)}
       .vgl-btn:active{transform:scale(.96)}
       .vgl-btn.primary{
-        background:var(--c-azul);color:#fff;font-weight:600;
-        box-shadow:0 2px 8px rgba(37,99,235,.4)
+        background:linear-gradient(150deg,rgba(var(--rgb-azul),.32),rgba(var(--rgb-azul),.15));
+        color:var(--c-azul);font-weight:700;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 4px 14px rgba(var(--rgb-azul),.18)
       }
-      .vgl-btn.primary:hover{background:#3b82f6}
-      .vgl-btn.on{background:rgba(16,185,129,.22);color:#047857;font-weight:600}
+      .vgl-btn.primary:hover{background:linear-gradient(150deg,rgba(var(--rgb-azul),.42),rgba(var(--rgb-azul),.22))}
+      .vgl-btn.on{background:rgba(var(--rgb-verde),.16);color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.35)}
       #vgl-root:not(.light) .vgl-btn.on{color:var(--c-verde)}
-      .vgl-btn.off{background:rgba(229,77,66,.25);color:#b91c1c;font-weight:600}
+      .vgl-btn.off{background:rgba(var(--rgb-rojo),.18);color:var(--c-rojo);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.35)}
       #vgl-root:not(.light) .vgl-btn.off{color:var(--c-rojo)}
 
       /* KPIs y Barras */
-      .vgl-bar .vgl-lb{font-size:12px;color:var(--fg3);font-weight:600} /* Mínimo 12px */
-      .vgl-kpi .vgl-l{font-size:12px;color:var(--fg3);margin-top:4px;font-weight:600;letter-spacing:.2px} /* Mínimo 12px */
+      .vgl-bar .vgl-lb{font-size:12px;color:var(--fg3);font-weight:700} /* Mínimo 12px */
+      .vgl-kpi .vgl-l{font-size:12px;color:var(--fg3);margin-top:4px;font-weight:700;letter-spacing:.4px} /* Mínimo 12px */
 
-      /* ---- Pastilla Flotante (Dock) ---- */
+      /* ---- Pastilla Flotante (Dock) — cápsula HUD ---- */
       #vgl-dock{
         position:fixed;bottom:22px;right:22px;z-index:2147483647;
         display:none;align-items:center;gap:10px;cursor:pointer;
-        padding:10px 16px;border-radius:var(--r-surface);
-        background:var(--bg);
-        -webkit-backdrop-filter:blur(18px) saturate(180%);
-        backdrop-filter:blur(18px) saturate(180%);
+        padding:11px 18px;border-radius:var(--r-pill);
+        background:linear-gradient(160deg,rgba(var(--rgb-azul),.08),rgba(0,0,0,0) 60%),var(--bg);
+        -webkit-backdrop-filter:var(--glass);
+        backdrop-filter:var(--glass);
         border:1px solid var(--edge);
-        box-shadow:0 12px 34px rgba(0,0,0,.5);
+        box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.12);
         color:var(--fg);
-        font-family:-apple-system,'Segoe UI',system-ui,sans-serif;
-        font-size:12.5px;font-weight:600;
-        transition:transform .12s
+        font-family:var(--font-stack);
+        font-size:12.5px;font-weight:700;
+        transition:transform .22s var(--spring),box-shadow .22s var(--ease-out)
       }
-      #vgl-dock:hover{transform:translateY(-1px)}
+      #vgl-dock:hover{transform:translateY(-2px)}
       #vgl-dock-dot{
         width:9px;height:9px;border-radius:50%;
         background:var(--c-verde);
-        box-shadow:0 0 8px rgba(16,185,129,.85) /* [UI-CSS] */
+        box-shadow:0 0 10px rgba(var(--rgb-verde),.9) /* [UI-CSS] */
       }
       #vgl-dock b{
-        background:var(--c-rojo);color:#fff;
-        border-radius:var(--r-chip);padding:1px 6px;font-size:12px /* [UI-CSS] */
+        background:var(--c-rojo);color:var(--bg-solid);
+        border-radius:var(--r-pill);padding:1px 7px;font-size:12px;font-weight:800;
+        box-shadow:0 0 10px rgba(var(--rgb-rojo),.40) /* [UI-CSS] */
       }
 
-      /* ---- Toasts ---- */
+      /* ---- Toasts — naipes flotantes ---- */
       #vgl-toasts{
         position:fixed;top:16px;right:16px;z-index:2147483646;
         display:flex;flex-direction:column;gap:10px;
         max-width:390px;
-        font-family:-apple-system,'Segoe UI',system-ui,sans-serif;
+        font-family:var(--font-stack);
         pointer-events:none
       }
       .vgl-toast{
-        display:flex;gap:11px;align-items:flex-start;
-        padding:13px 14px;border-radius:var(--r-card);
+        display:flex;gap:12px;align-items:flex-start;
+        padding:14px 15px;border-radius:var(--r-card);
         pointer-events:auto;color:var(--fg);
-        background:var(--toast);
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
         border:1px solid var(--edge);
-        box-shadow:0 16px 44px rgba(0,0,0,.5);
-        animation:vglToastIn .32s cubic-bezier(.2,.9,.3,1);
+        box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
+        animation:vglToastIn .34s var(--spring);
         cursor:pointer;
       }
       @keyframes vglToastIn{
-        from{opacity:0;transform:translateX(24px) scale(.98)}
+        from{opacity:0;transform:translateX(26px) scale(.97)}
         to{opacity:1;transform:none}
       }
       .vgl-toast-ic{
-        width:34px;height:34px;border-radius:9px;flex:0 0 auto;
-        display:flex;align-items:center;justify-content:center;font-size:18px
+        width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
+        display:flex;align-items:center;justify-content:center;font-size:18px;
+        box-shadow:var(--glow-edge)
       }
       .vgl-toast-main{flex:1;min-width:0}
-      .vgl-toast-title{font-weight:600;font-size:13px;letter-spacing:.1px}
+      .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
         margin-top:3px;font-size:12px;color:var(--fg2);
-        white-space:pre-line;line-height:1.4
+        white-space:pre-line;line-height:1.45
       }
       .vgl-toast-x{
         cursor:pointer;color:var(--fg3);font-size:16px;
-        line-height:1;padding:2px 5px;border-radius:6px
+        line-height:1;padding:2px 6px;border-radius:var(--r-chip);
+        transition:background .14s var(--ease-out),color .14s var(--ease-out)
       }
-      .vgl-toast-x:hover{background:var(--bg4)}
+      .vgl-toast-x:hover{background:var(--bg4);color:var(--fg)}
       .vgl-toast.out{
-        opacity:0;transform:translateX(24px) scale(.98);
+        opacity:0;transform:translateX(26px) scale(.97);
         transition:opacity .25s,transform .25s
       }
 
-      /* ---- Modales (fraude, PyM, PES) — sin cambios estructurales ---- */
+      /* ---- Modales (fraude, PyM, PES) — losas de alerta ---- */
       #vgl-modal{
         position:fixed;inset:0;z-index:2147483647;
         display:flex;align-items:center;justify-content:center;
-        background:rgba(0,0,0,.72);
+        background:rgba(2,4,9,.72);
         animation:vglToastIn .25s ease
       }
       .vgl-modal-card{
-        background:var(--bg);border:2px solid var(--c-rojo);
-        border-radius:var(--r-surface);padding:28px 32px;
+        background:linear-gradient(165deg,rgba(var(--rgb-rojo),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-rojo),.55);
+        border-radius:var(--r-surface);padding:30px 34px;
         max-width:460px;text-align:center;
-        box-shadow:0 30px 80px rgba(0,0,0,.6);
-        font-family:-apple-system,'Segoe UI',system-ui,sans-serif
+        box-shadow:var(--shadow-float),0 0 60px rgba(var(--rgb-rojo),.14),inset 0 1px 0 rgba(255,255,255,.10);
+        font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-modal-dot{width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
-      .vgl-modal-t{font-size:18px;font-weight:700;color:var(--fg);margin-bottom:8px}
-      .vgl-modal-b{font-size:14px;color:var(--fg2);white-space:pre-line;line-height:1.5}
+      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg);margin-bottom:8px;letter-spacing:.2px}
+      .vgl-modal-b{font-size:14px;color:var(--fg2);white-space:pre-line;line-height:1.55}
       .vgl-modal-ok{
-        margin-top:20px;border:0;border-radius:10px;
-        padding:10px 26px;font-size:14px;font-weight:700;
-        color:#001;cursor:pointer;font-family:inherit
+        margin-top:22px;border:0;border-radius:var(--r-chip);
+        padding:11px 28px;font-size:14px;font-weight:800;
+        color:#001;cursor:pointer;font-family:inherit;
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
+      .vgl-modal-ok:hover{transform:scale(1.04);filter:brightness(1.08)}
       #vgl-pym-modal{
         position:fixed;inset:0;z-index:2147483647;
         display:flex;align-items:center;justify-content:center;
-        background:rgba(0,0,0,.55);animation:vglToastIn .25s ease
+        background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
       .vgl-pym-card{
-        background:var(--bg);border:2px solid var(--c-recordatorio);
-        border-radius:var(--r-surface);padding:26px 30px;
+        background:linear-gradient(165deg,rgba(var(--rgb-recordatorio),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-recordatorio),.50);
+        border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
-        box-shadow:0 30px 80px rgba(0,0,0,.5);
-        font-family:-apple-system,'Segoe UI',system-ui,sans-serif
+        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-recordatorio),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-pym-ic{
-        width:44px;height:44px;border-radius:50%;margin:0 auto 12px;
+        width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
-        background:rgba(32,201,181,.16);border:1px solid rgba(32,201,181,.4)
+        background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
+        box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:16px;font-weight:700;color:var(--fg);margin-bottom:2px}
-      .vgl-pym-n{font-size:13px;font-weight:600;color:var(--c-recordatorio);margin-bottom:14px}
+      .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
       .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
       .vgl-pym-list{
-        display:flex;flex-wrap:wrap;gap:6px;
-        justify-content:center;margin-bottom:14px
+        display:flex;flex-wrap:wrap;gap:7px;
+        justify-content:center;margin-bottom:16px
       }
       .vgl-pym-chip{
-        font-size:12px;font-weight:600;padding:5px 12px;
-        border-radius:var(--r-chip);
-        background:rgba(32,201,181,.14);color:var(--fg);
-        border:1px solid rgba(32,201,181,.35)
+        font-size:12px;font-weight:700;padding:6px 13px;
+        border-radius:var(--r-pill);
+        background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
+        border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
       .vgl-pym-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
-        border:0;border-radius:10px;padding:9px 24px;
-        font-size:13px;font-weight:700;color:#001;
-        cursor:pointer;font-family:inherit;background:var(--c-recordatorio)
+        border:0;border-radius:var(--r-chip);padding:10px 26px;
+        font-size:13px;font-weight:800;color:var(--bg-solid);
+        cursor:pointer;font-family:inherit;background:var(--c-recordatorio);
+        box-shadow:0 6px 18px rgba(var(--rgb-recordatorio),.25);
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
+      .vgl-pym-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
       #vgl-pes-modal{
         position:fixed;inset:0;z-index:2147483647;
         display:flex;align-items:center;justify-content:center;
-        background:rgba(0,0,0,.55);animation:vglToastIn .25s ease
+        background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
       .vgl-pes-card{
-        background:var(--bg);border:2px solid var(--c-pes);
-        border-radius:var(--r-surface);padding:26px 30px;
+        background:linear-gradient(165deg,rgba(var(--rgb-pes),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-pes),.50);
+        border-radius:var(--r-surface);padding:28px 32px;
         max-width:420px;text-align:center;
-        box-shadow:0 30px 80px rgba(0,0,0,.5);
-        font-family:-apple-system,'Segoe UI',system-ui,sans-serif
+        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-pes),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-pes-ic{
-        width:44px;height:44px;border-radius:50%;margin:0 auto 12px;
+        width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
-        background:rgba(194,37,92,.16);border:1px solid rgba(194,37,92,.4)
+        background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
+        box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
-      .vgl-pes-t{font-size:16px;font-weight:700;color:var(--fg);margin-bottom:2px}
-      .vgl-pes-n{font-size:13px;font-weight:600;color:var(--c-pes);margin-bottom:14px}
+      .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
       .vgl-pes-lead{
-        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.5
+        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
       }
       .vgl-pes-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
-        border:0;border-radius:10px;padding:9px 24px;
-        font-size:13px;font-weight:700;color:#fff;
-        cursor:pointer;font-family:inherit;background:var(--c-pes)
+        border:0;border-radius:var(--r-chip);padding:10px 26px;
+        font-size:13px;font-weight:800;color:var(--bg-solid);
+        cursor:pointer;font-family:inherit;background:var(--c-pes);
+        box-shadow:0 6px 18px rgba(var(--rgb-pes),.25);
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
+      .vgl-pes-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
 
-      /* ---- Modales de Agendamiento / Ordenamiento ---- */
+      /* ---- Modales de Agendamiento / Ordenamiento — placas bento ---- */
       #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
         position:fixed;top:0;left:0;width:100vw;height:100vh;
-        background:rgba(0,0,0,.8);z-index:2147483647;
+        background:rgba(2,4,9,.74);z-index:2147483647;
         display:flex;align-items:center;justify-content:center;
-        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-        backdrop-filter:blur(8px)
+        font-family:var(--font-stack);
+        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
       }
       .vgl-agm-card{
-        background:#0f172a;color:#f8fafc;
-        border:1px solid rgba(255,255,255,.18);
-        border-radius:18px;width:92%;max-width:580px;
+        background:linear-gradient(160deg,rgba(var(--rgb-azul),.08),rgba(var(--rgb-morado),.04) 45%,rgba(0,0,0,0) 75%),var(--bg-solid);
+        color:var(--fg);
+        border:1px solid var(--edge);
+        border-radius:var(--r-surface);width:92%;max-width:580px;
         max-height:86vh;overflow-y:auto;margin:auto;
-        padding:22px;
-        box-shadow:0 20px 60px rgba(0,0,0,.8);
-        animation:vglSpringIn .28s cubic-bezier(0.34,1.56,0.64,1)
+        padding:24px;
+        box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
+        animation:vglSpringIn .30s var(--spring)
       }
+      .vgl-agm-card::-webkit-scrollbar{width:6px}
+      .vgl-agm-card::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
       #vgl-agendar-modal.light .vgl-agm-card,#vgl-ordenar-modal.light .vgl-agm-card,#vgl-labs-modal.light .vgl-agm-card{
-        background:#ffffff;color:#0f172a;
-        border-color:#cbd5e1;
-        box-shadow:0 20px 50px rgba(0,0,0,.25)
+        background:linear-gradient(160deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 60%),var(--bg-solid);
+        color:var(--fg);
+        border-color:var(--edge);
+        box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.85)
       }
       .vgl-agm-head{
         display:flex;justify-content:space-between;
-        align-items:flex-start;margin-bottom:16px;
-        border-bottom:1px solid rgba(255,255,255,.13);
-        padding-bottom:12px
+        align-items:flex-start;margin-bottom:18px;
+        border-bottom:1px solid var(--line);
+        padding-bottom:14px
       }
-      #vgl-agendar-modal.light .vgl-agm-head,#vgl-ordenar-modal.light .vgl-agm-head,#vgl-labs-modal.light .vgl-agm-head{border-bottom-color:#e2e8f0}
+      #vgl-agendar-modal.light .vgl-agm-head,#vgl-ordenar-modal.light .vgl-agm-head,#vgl-labs-modal.light .vgl-agm-head{border-bottom-color:var(--line)}
       .vgl-agm-title{
-        font-size:18px;font-weight:800;color:#ffffff;
-        display:flex;align-items:center;gap:6px
+        font-size:18px;font-weight:800;color:var(--fg);
+        display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
-      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:#0f172a}
-      .vgl-agm-sub{font-size:13.5px;margin-top:3px;color:#cbd5e1}
-      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:#475569}
-      .vgl-agm-sub b{color:#ffffff;font-weight:700}
-      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:#0f172a}
-      .vgl-agm-sub.med b{color:#60a5fa}
-      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:#1e40af}
+      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
+      .vgl-agm-sub{font-size:13.5px;margin-top:3px;color:var(--fg2)}
+      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2)}
+      .vgl-agm-sub b{color:var(--fg);font-weight:800}
+      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg)}
+      .vgl-agm-sub.med b{color:var(--c-azul)}
+      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul)}
       .vgl-agm-close{
-        background:transparent;border:0;color:#ffffff;
+        background:transparent;border:0;color:var(--fg);
         font-size:22px;font-weight:700;cursor:pointer;
-        opacity:.7;padding:0 4px
+        opacity:.7;padding:0 6px;border-radius:var(--r-chip);
+        transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
-      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:#0f172a}
-      .vgl-agm-close:hover{opacity:1;color:#ef4444}
-      .vgl-agm-sec{margin-bottom:16px}
+      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg)}
+      .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
+      .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
-        font-size:13px;font-weight:800;
-        display:block;margin-bottom:8px;color:#93c5fd
+        font-size:12.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+        display:block;margin-bottom:9px;color:var(--c-azul)
       }
-      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:#1e40af}
-      .vgl-agm-presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul)}
+      .vgl-agm-presets{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
       .vgl-agm-pbtn{
-        background:#1e293b;color:#f8fafc;
-        border:1px solid #475569;
-        border-radius:20px;padding:7px 15px;
-        font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s
+        background:var(--bg2);color:var(--fg);
+        border:1px solid var(--edge);
+        border-radius:var(--r-pill);padding:7px 15px;
+        font-size:12.5px;font-weight:600;cursor:pointer;
+        transition:background .15s var(--ease-out),color .15s var(--ease-out),border-color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
+        box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-pbtn,#vgl-ordenar-modal.light .vgl-agm-pbtn,#vgl-labs-modal.light .vgl-agm-pbtn{
-        background:#f1f5f9;color:#0f172a;border-color:#cbd5e1
+        background:var(--bg2);color:var(--fg);border-color:var(--edge)
       }
-      .vgl-agm-pbtn:hover{background:#334155;color:#ffffff;border-color:#94a3b8}
-      #vgl-agendar-modal.light .vgl-agm-pbtn:hover,#vgl-ordenar-modal.light .vgl-agm-pbtn:hover{background:#e2e8f0;border-color:#94a3b8}
+      .vgl-agm-pbtn:hover{background:var(--bg3);color:var(--fg);border-color:var(--bg4);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-pbtn:hover,#vgl-ordenar-modal.light .vgl-agm-pbtn:hover{background:var(--bg3);border-color:var(--bg4)}
       .vgl-agm-pbtn.active{
-        background:#2563eb!important;color:#ffffff!important;border-color:#3b82f6!important;
-        font-weight:800;box-shadow:0 2px 8px rgba(37,99,235,.5)
+        background:rgba(var(--rgb-azul),.22)!important;color:var(--c-azul)!important;border-color:rgba(var(--rgb-azul),.55)!important;
+        font-weight:800;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),0 4px 14px rgba(var(--rgb-azul),.18)
       }
       .vgl-agm-dinfo{
-        font-size:12.5px;color:#ffffff;
-        background:rgba(16,185,129,.18);border:1px solid #10b981;
-        border-radius:8px;padding:8px 12px;margin-top:6px;font-weight:600
+        font-size:12.5px;color:var(--fg);
+        background:rgba(var(--rgb-verde),.13);border:1px solid rgba(var(--rgb-verde),.45);
+        border-radius:var(--r-field);padding:9px 13px;margin-top:7px;font-weight:600
       }
-      .vgl-agm-dinfo b{color:#34d399}
-      .vgl-agm-dinfo span{color:#a7f3d0!important}
+      .vgl-agm-dinfo b{color:var(--c-verde)}
+      .vgl-agm-dinfo span{color:var(--c-verde)!important}
       .vgl-agm-slots{
         display:flex;gap:8px;flex-wrap:wrap;
-        max-height:140px;overflow-y:auto;
-        background:#0f172a;padding:10px;
-        border-radius:12px;border:1px solid #334155
+        max-height:150px;overflow-y:auto;
+        background:var(--bg2);padding:12px;
+        border-radius:var(--r-field);border:1px solid var(--line);
+        box-shadow:var(--glow-edge)
       }
+      .vgl-agm-slots::-webkit-scrollbar{width:6px}
+      .vgl-agm-slots::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
       #vgl-agendar-modal.light .vgl-agm-slots{
-        background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.13)
+        background:var(--bg2);border-color:var(--line)
       }
       /* v12.0.0 — Estas tres clases se usaban en el modal pero NUNCA estaban definidas:
          el cartel verde de "Cita asignada exitosamente" salía sin ningún estilo y los
          botones de turno y de plazo perdían el ajuste de línea que tenían en línea. */
       .vgl-msg-success{
-        background:rgba(16,185,129,.25);color:#10b981;font-size:14px;padding:12px;
-        text-align:center;margin-top:14px;border:1px solid #10b981;border-radius:10px;
+        background:rgba(var(--rgb-verde),.16);color:var(--c-verde);font-size:14px;font-weight:700;padding:13px;
+        text-align:center;margin-top:14px;border:1px solid rgba(var(--rgb-verde),.50);border-radius:var(--r-field);
+        box-shadow:0 0 22px rgba(var(--rgb-verde),.12);
       }
       .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
       .vgl-agm-pbtn.vgl-sm{font-size:12px;padding:3px 9px}
       .vgl-agm-sbtn{
-        background:#1e293b;color:#ffffff;
-        border:1px solid #475569;
-        border-radius:16px;padding:7px 14px;
+        background:var(--bg2);color:var(--fg);
+        border:1px solid var(--edge);
+        border-radius:var(--r-pill);padding:7px 14px;
         font-size:12.5px;font-weight:700;
-        cursor:pointer;transition:all .15s
+        cursor:pointer;
+        transition:background .15s var(--ease-out),border-color .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
+        box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-sbtn,#vgl-ordenar-modal.light .vgl-agm-sbtn,#vgl-labs-modal.light .vgl-agm-sbtn{
-        background:#f1f5f9;color:#0f172a;border-color:#cbd5e1
+        background:var(--bg2);color:var(--fg);border-color:var(--edge)
       }
-      .vgl-agm-sbtn:hover{background:#334155;border-color:#94a3b8;color:#ffffff}
+      .vgl-agm-sbtn:hover{background:var(--bg3);border-color:var(--bg4);color:var(--fg)}
       .vgl-agm-sbtn.active{
-        background:#10b981!important;color:#ffffff!important;border-color:#10b981!important;
-        transform:scale(1.05);box-shadow:0 2px 8px rgba(16,185,129,.5)
+        background:rgba(var(--rgb-verde),.20)!important;color:var(--c-verde)!important;border-color:rgba(var(--rgb-verde),.60)!important;
+        transform:scale(1.05);box-shadow:0 0 14px rgba(var(--rgb-verde),.25)
       }
       .vgl-agm-loading{
-        font-size:12.5px;color:rgba(255,255,255,.8);padding:6px;font-style:italic
+        font-size:12.5px;color:var(--fg2);padding:6px;font-style:italic
       }
       .vgl-agm-err{
-        font-size:12.5px;color:#e54d42; /* [UI-CSS] */
-        background:rgba(229,77,66,.15);border:1px solid rgba(229,77,66,.3); /* [UI-CSS] */
-        padding:8px 10px;border-radius:8px;font-weight:600
+        font-size:12.5px;color:var(--c-rojo); /* [UI-CSS] */
+        background:rgba(var(--rgb-rojo),.13);border:1px solid rgba(var(--rgb-rojo),.35); /* [UI-CSS] */
+        padding:9px 11px;border-radius:var(--r-field);font-weight:700
       }
       .vgl-agm-check-lbl{
         display:flex;align-items:center;gap:10px;
         font-size:13.5px;font-weight:700;margin-bottom:8px;
-        cursor:pointer;color:#ffffff
+        cursor:pointer;color:var(--fg)
       }
       .vgl-agm-input{
         width:100%;box-sizing:border-box;
-        background:#2c2c2e;color:#ffffff;
-        border:1px solid rgba(255,255,255,.22);
-        border-radius:10px;padding:10px 12px;
-        font-size:12.5px;font-family:inherit;resize:none
+        background:var(--bg2);color:var(--fg);
+        border:1px solid var(--edge);
+        border-radius:var(--r-field);padding:11px 13px;
+        font-size:12.5px;font-family:inherit;resize:none;
+        box-shadow:var(--glow-edge);
+        transition:border-color .16s var(--ease-out),box-shadow .16s var(--ease-out)
+      }
+      .vgl-agm-input:focus{
+        border-color:rgba(var(--rgb-azul),.60);
+        box-shadow:0 0 0 3px rgba(var(--rgb-azul),.18),var(--glow-edge);
+        outline:none
       }
       #vgl-agendar-modal.light .vgl-agm-input{
-        background:#ffffff;color:#1c1c1e;border-color:rgba(0,0,0,.22)
+        background:var(--bg2);color:var(--fg);border-color:var(--edge)
       }
       .vgl-agm-foot{
         display:flex;justify-content:flex-end;gap:12px;
-        margin-top:20px;
-        border-top:1px solid rgba(255,255,255,.13);padding-top:14px
+        margin-top:22px;
+        border-top:1px solid var(--line);padding-top:16px
       }
-      #vgl-agendar-modal.light .vgl-agm-foot{border-top-color:rgba(0,0,0,.13)}
-      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:#1c1c1e}
-      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:#555555}
-      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:#065f46}
+      #vgl-agendar-modal.light .vgl-agm-foot{border-top-color:var(--line)}
+      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:var(--fg2)}
+      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde)}
       .vgl-agm-btn{
-        border:0;border-radius:12px;padding:10px 20px;
-        font-size:13.5px;font-weight:700;cursor:pointer;transition:all .15s
+        border:0;border-radius:var(--r-chip);padding:11px 22px;
+        font-size:13.5px;font-weight:800;cursor:pointer;
+        transition:background .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out),color .15s var(--ease-out)
       }
-      .vgl-agm-btn.sec{background:rgba(255,255,255,.15);color:#ffffff}
-      .vgl-agm-btn.sec:hover{background:rgba(255,255,255,.25)}
+      .vgl-agm-btn.sec{background:var(--bg3);color:var(--fg)}
+      .vgl-agm-btn.sec:hover{background:var(--bg4)}
       .vgl-agm-btn.pri{
-        background:linear-gradient(135deg,#10b981,#1b8a36); /* [UI-CSS] */
-        color:#ffffff;box-shadow:0 4px 14px rgba(16,185,129,.4) /* [UI-CSS] */
+        background:linear-gradient(135deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.16)); /* [UI-CSS] */
+        color:var(--c-verde);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.45),0 6px 18px rgba(var(--rgb-verde),.16) /* [UI-CSS] */
       }
+      .vgl-agm-btn.pri:hover{transform:translateY(-1px)}
       .vgl-agm-btn.pri:disabled{
-        background:rgba(255,255,255,.15);color:rgba(255,255,255,.4);
-        box-shadow:none;cursor:not-allowed
+        background:var(--bg2);color:var(--fg3);
+        box-shadow:none;cursor:not-allowed;transform:none
       }
 
-      /* Items de Órdenes PyM */
+      /* Items de Órdenes PyM — celdas bento */
       .vgl-ord-item {
-        background: rgba(255,255,255,.06);
-        border: 1px solid rgba(255,255,255,.16);
-        border-radius: 12px;
-        padding: 12px 14px;
+        background: linear-gradient(170deg,rgba(255,255,255,.04),rgba(255,255,255,0) 55%),var(--bg2);
+        border: 1px solid var(--line);
+        border-radius: var(--r-field);
+        padding: 13px 15px;
         width: 100%;
         box-sizing: border-box;
-        transition: all .18s ease;
+        transition: background .16s var(--ease-out),border-color .16s var(--ease-out),box-shadow .2s var(--ease-out),transform .22s var(--spring);
+        box-shadow: var(--glow-edge);
       }
       .vgl-ord-item:hover {
-        background: rgba(255,255,255,.10);
-        border-color: #60a5fa; /* [UI-CSS] */
+        background: linear-gradient(170deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg3);
+        border-color: rgba(var(--rgb-azul),.50); /* [UI-CSS] */
+        transform: translateY(-1px);
       }
       #vgl-agendar-modal.light .vgl-ord-item {
-        background: #f8fafc;
-        border-color: #cbd5e1;
+        background: var(--bg2);
+        border-color: var(--line);
       }
       #vgl-agendar-modal.light .vgl-ord-item:hover {
-        background: #f1f5f9;
-        border-color: #0056b3;
+        background: var(--bg3);
+        border-color: rgba(var(--rgb-azul),.50);
       }
       .vgl-ord-label {
         display: flex;
@@ -4125,40 +4746,579 @@
         height: 18px;
         margin-top: 2px;
         cursor: pointer;
+        accent-color: var(--c-azul);
       }
       .vgl-ord-content {
         flex: 1 1 auto;
         min-width: 0;
       }
       .vgl-ord-title {
-        color: #ffffff;
+        color: var(--fg);
         font-size: 13.5px;
         font-weight: 700;
-        line-height: 1.4;
+        line-height: 1.45;
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-title {
-        color: #0f172a;
+        color: var(--fg);
       }
       .vgl-ord-cie {
-        color: #60a5fa; /* [UI-CSS] */
+        color: var(--c-azul); /* [UI-CSS] */
         font-weight: 800;
         white-space: nowrap;
       }
       #vgl-agendar-modal.light .vgl-ord-cie {
-        color: #0056b3;
+        color: var(--c-azul);
       }
       .vgl-ord-cups {
         font-size: 12px; /* [UI-CSS] */
-        color: rgba(255,255,255,.75);
+        color: var(--fg2);
         font-weight: 400;
         margin-top: 4px;
         line-height: 1.45;
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-cups {
-        color: #475569;
+        color: var(--fg2);
       }
+
+      /* ==== [v12.3.13] CSS del modal de laboratorios — antes inline en openLaboratoriosModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-labs-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:14px}
+      #vgl-labs-modal .vgl-labs-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-verde);background:rgba(var(--rgb-verde),.12);
+        border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
+      }
+      #vgl-labs-modal .vgl-labs-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
+      }
+      #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
+      #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde)}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde)}
+
+      /* ---- Celda bento de fuente + botón portal ---- */
+      #vgl-labs-modal .vgl-labs-srcbar{
+        display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between;
+        background:linear-gradient(165deg,rgba(var(--rgb-azul),.10),rgba(var(--rgb-azul),.02) 70%),var(--bg2);
+        border:1px solid rgba(var(--rgb-azul),.28);border-radius:var(--r-card);
+        padding:12px 16px;box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:12.5px;color:var(--fg2);line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
+      #vgl-labs-modal .vgl-labs-portal{
+        text-decoration:none;display:inline-flex;align-items:center;gap:7px;
+        background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
+        color:var(--c-azul);font-size:12.5px;font-weight:800;
+        padding:9px 16px;border-radius:var(--r-pill);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
+      }
+      #vgl-labs-modal .vgl-labs-portal:hover{transform:translateY(-1px);filter:brightness(1.08)}
+
+      /* ---- Contenedor de resultados ---- */
+      #vgl-labs-modal #vgl-labs-content{background:rgba(0,0,0,.22);border-color:var(--line);padding:0 10px 10px}
+      #vgl-labs-modal.light #vgl-labs-content{background:rgba(15,23,42,.035)}
+      #vgl-labs-modal .vgl-agm-loading{display:flex;align-items:center;gap:10px;padding:18px 8px;font-size:13px;animation:vglLabsPulse 1.6s ease-in-out infinite}
+      @keyframes vglLabsPulse{0%,100%{opacity:.55}50%{opacity:1}}
+      #vgl-labs-modal .vgl-labs-empty{
+        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2);
+        border-radius:var(--r-card);padding:22px 20px;text-align:center;
+        font-size:13px;font-weight:600;line-height:1.6;box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
+
+      /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
+      #vgl-labs-modal .vgl-labs-table{width:100%;border-collapse:separate;border-spacing:0 7px;text-align:left}
+      #vgl-labs-modal .vgl-labs-table thead th{
+        position:sticky;top:0;z-index:2;background:var(--bg-solid);
+        font-size:10.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
+        color:var(--fg3);text-align:left;padding:12px 12px 9px;
+        border-bottom:1px solid var(--edge)
+      }
+      #vgl-labs-modal .vgl-labs-tr td{
+        background:var(--bg2);padding:11px 12px;vertical-align:middle;
+        transition:background-color .15s var(--ease-out)
+      }
+      #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
+      #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
+      #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
+      #vgl-labs-modal .vgl-labs-date{font-size:11.5px;color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-exam{font-size:13px;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-val{
+        font-size:15.5px;font-weight:900;letter-spacing:-.2px;color:var(--fg);
+        font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:90px
+      }
+      #vgl-labs-modal .vgl-labs-ref{font-size:11px;color:var(--fg3);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-src{
+        display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+        font-size:10.5px;font-weight:800;letter-spacing:.4px;
+        padding:4px 10px;border-radius:var(--r-pill);
+        background:var(--bg3);color:var(--fg2);box-shadow:var(--glow-edge)
+      }
+      #vgl-labs-modal .vgl-labs-src.athenea{
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
+      }
+
+      /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert:hover td{background:rgba(var(--rgb-rojo),.15)}
+      #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td:first-child{box-shadow:inset 3px 0 0 var(--c-rojo)}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo);text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
+      #vgl-labs-modal.light .vgl-labs-alert .vgl-labs-val{text-shadow:none}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val::before{content:"▲ ";font-size:10px;vertical-align:2px}
+
+      @media (prefers-reduced-motion:reduce){
+        #vgl-labs-modal,#vgl-labs-modal *{animation:none!important;transition:none!important}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-labs-modal,
+      #vgl-root.perf~#vgl-labs-modal *,
+      #vgl-root.perf~#vgl-labs-modal *::before,
+      #vgl-root.perf~#vgl-labs-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-labs-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-labs-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-srcbar,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-src,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-empty,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-kicker,
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal{box-shadow:none}
+      #vgl-root.perf~#vgl-labs-modal .vgl-labs-portal:hover{transform:none}
+
+      /* ==== [v12.3.13] CSS del modal de agendamiento — antes inline en openAgendamientoModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Bento grid (micro-grilla asimétrica 12 col) ---- */
+      #vgl-agendar-modal .vgl-agm-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;align-items:stretch}
+      #vgl-agendar-modal .vgl-agm-c5{grid-column:span 5}
+      #vgl-agendar-modal .vgl-agm-c6{grid-column:span 6}
+      #vgl-agendar-modal .vgl-agm-c7{grid-column:span 7}
+      #vgl-agendar-modal .vgl-agm-c12{grid-column:span 12}
+      @media (max-width:640px){
+        #vgl-agendar-modal .vgl-agm-c5,#vgl-agendar-modal .vgl-agm-c6,#vgl-agendar-modal .vgl-agm-c7{grid-column:span 12}
+      }
+      #vgl-agendar-modal .vgl-agm-cell{
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 62%),var(--bg2);
+        border:1px solid var(--line);border-radius:var(--r-card);padding:16px;min-width:0;
+        box-shadow:var(--glow-edge);
+        transition:border-color .18s var(--ease-out),box-shadow .22s var(--ease-out),transform .22s var(--spring)
+      }
+      #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
+      #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
+      #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
+      #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
+
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
+      #vgl-agendar-modal .vgl-agm-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-azul);background:rgba(var(--rgb-azul),.12);
+        border:1px solid rgba(var(--rgb-azul),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-azul),.10)
+      }
+      #vgl-agendar-modal .vgl-agm-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-azul),.25)
+      }
+      #vgl-agendar-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-agendar-modal .vgl-agm-sub{margin-top:5px}
+
+      /* ---- Pasos numerados como fichas ---- */
+      #vgl-agendar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+      #vgl-agendar-modal .vgl-agm-step{
+        flex:none;display:inline-flex;align-items:center;justify-content:center;
+        width:21px;height:21px;border-radius:var(--r-pill);
+        font-size:11px;font-weight:900;color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.15);border:1px solid rgba(var(--rgb-azul),.42);
+        box-shadow:0 0 12px rgba(var(--rgb-azul),.14)
+      }
+
+      /* ---- Horarios como grilla de losetas ---- */
+      #vgl-agendar-modal .vgl-agm-slots{
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:9px;
+        max-height:224px;padding:12px;border-radius:var(--r-field)
+      }
+      #vgl-agendar-modal .vgl-agm-slots .vgl-agm-loading,
+      #vgl-agendar-modal .vgl-agm-slots .vgl-agm-err{grid-column:1/-1}
+      #vgl-agendar-modal .vgl-agm-sbtn{
+        border-radius:var(--r-field);padding:9px 11px;min-height:38px;
+        white-space:normal;line-height:1.4;text-align:center
+      }
+      #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
+
+      /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
+      #vgl-agendar-modal .vgl-agm-cell-sms{
+        background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
+        border-color:rgba(var(--rgb-azul),.36);
+        box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
+      #vgl-agendar-modal .vgl-agm-cell-lab{
+        background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
+        border-color:rgba(var(--rgb-verde),.34);
+        box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
+      #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
+      /* v12.3.x — Se extiende a #vgl-ordenar-modal (antes solo agendar) para la sección de
+         envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
+      #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
+        display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+        margin-top:8px;font-size:12px;color:var(--fg2)
+      }
+      #vgl-agendar-modal .vgl-agm-fieldrow>label, #vgl-ordenar-modal .vgl-agm-fieldrow>label{
+        flex:none;font-weight:800;font-size:11px;letter-spacing:.6px;
+        text-transform:uppercase;color:var(--c-azul)
+      }
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
+      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:11.5px;font-style:italic;color:var(--fg3)}
+      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
+      #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
+      #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-check-lbl input[type=checkbox]{accent-color:var(--c-verde)}
+      #vgl-agendar-modal #vgl-agm-obs{border-radius:var(--r-card);padding:13px 15px;min-height:58px}
+
+      /* ---- Pie flotante (sticky glass) ---- */
+      #vgl-agendar-modal .vgl-agm-foot{
+        position:sticky;bottom:10px;z-index:5;
+        margin:18px 2px 2px;padding:12px 14px;
+        background:var(--bg);
+        border:1px solid var(--edge);border-radius:var(--r-card);
+        backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
+        box-shadow:var(--shadow-float)
+      }
+      @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
+        #vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid)}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-agendar-modal,
+      #vgl-root.perf~#vgl-agendar-modal *,
+      #vgl-root.perf~#vgl-agendar-modal *::before,
+      #vgl-root.perf~#vgl-agendar-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-agendar-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell,
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-cell:hover{box-shadow:none;transform:none}
+      #vgl-root.perf~#vgl-agendar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
+
+      /* ==== [v12.3.13] CSS del modal de ordenamiento PyM — antes inline en openOrdenamientoModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
+      #vgl-ordenar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
+      #vgl-ordenar-modal .vgl-agm-kicker{
+        display:inline-flex;align-items:center;gap:7px;
+        font-size:10.5px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.12);
+        border:1px solid rgba(var(--rgb-morado),.32);border-radius:var(--r-pill);
+        padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-morado),.10)
+      }
+      #vgl-ordenar-modal .vgl-agm-patient{
+        font-size:25px;font-weight:900;letter-spacing:-.4px;line-height:1.12;
+        color:var(--fg);overflow-wrap:anywhere;
+        text-shadow:0 0 30px rgba(var(--rgb-morado),.25)
+      }
+      #vgl-ordenar-modal.light .vgl-agm-patient{text-shadow:none}
+      #vgl-ordenar-modal .vgl-agm-sub{margin-top:5px}
+
+      /* ---- Rótulo de sección con ficha de conteo ---- */
+      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado)}
+      #vgl-ordenar-modal .vgl-agm-step{
+        flex:none;display:inline-flex;align-items:center;justify-content:center;
+        min-width:21px;height:21px;padding:0 6px;border-radius:var(--r-pill);
+        font-size:11px;font-weight:900;color:var(--c-morado);
+        background:rgba(var(--rgb-morado),.15);border:1px solid rgba(var(--rgb-morado),.42);
+        box-shadow:0 0 12px rgba(var(--rgb-morado),.14)
+      }
+
+      /* ---- Lista de actividades como micro-grilla bento ---- */
+      #vgl-ordenar-modal #vgl-ord-list{
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;
+        align-items:stretch;max-height:340px;overflow-y:auto;padding:4px 4px 8px
+      }
+      #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar{width:6px}
+      #vgl-ordenar-modal #vgl-ord-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
+      #vgl-ordenar-modal .vgl-ord-item{
+        height:100%;border-radius:var(--r-card);padding:13px 14px;
+        transition:background .16s var(--ease-out),border-color .16s var(--ease-out),box-shadow .2s var(--ease-out),transform .22s var(--spring)
+      }
+      #vgl-ordenar-modal .vgl-ord-item:hover{
+        border-color:rgba(var(--rgb-morado),.50);box-shadow:var(--shadow-card);transform:translateY(-1px)
+      }
+      /* Marcada para generar => celda respira en VERDE (mismo color del botón primario) */
+      #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked){
+        background:linear-gradient(165deg,rgba(var(--rgb-verde),.14),rgba(var(--rgb-verde),.03) 70%),var(--bg2);
+        border-color:rgba(var(--rgb-verde),.45);
+        box-shadow:var(--glow-edge),0 0 22px rgba(var(--rgb-verde),.10)
+      }
+      #vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:disabled){opacity:.55}
+      /* Borde transparente de reserva: cuando el JS pinta el borde rojo de fallo
+         sobre el label, no hay salto de layout */
+      #vgl-ordenar-modal .vgl-ord-label{gap:11px;border:1px solid transparent;border-radius:var(--r-field);padding:1px}
+      #vgl-ordenar-modal .vgl-ord-chk{width:19px;height:19px;accent-color:var(--c-verde)}
+      #vgl-ordenar-modal .vgl-ord-chk:focus-visible{outline:2px solid rgba(var(--rgb-verde),.80);outline-offset:2px;border-radius:4px}
+      #vgl-ordenar-modal .vgl-ord-title{font-size:13.5px;line-height:1.4}
+      #vgl-ordenar-modal .vgl-ord-cie{
+        display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.5px;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-pill);
+        padding:1px 8px;margin-left:2px;white-space:nowrap;vertical-align:1px
+      }
+      /* CUPS como chips pastilla */
+      #vgl-ordenar-modal .vgl-ord-cups{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px}
+      #vgl-ordenar-modal .vgl-ord-cupk{
+        flex:none;font-size:9.5px;font-weight:800;letter-spacing:1.2px;
+        text-transform:uppercase;color:var(--fg3)
+      }
+      #vgl-ordenar-modal .vgl-ord-cup{
+        display:inline-flex;align-items:baseline;gap:5px;min-width:0;
+        font-size:11px;font-weight:600;line-height:1.35;color:var(--fg2);
+        background:var(--bg2);border:1px solid var(--line);
+        border-radius:var(--r-field);padding:2px 9px;box-shadow:var(--glow-edge)
+      }
+      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
+      /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
+      /* v12.3.x — Caption de trazabilidad: qué actividad REAL del Excel de PyM disparó
+         cada paquete sugerido. Mismo tratamiento visual que .vgl-ord-sexwarn, en acento
+         morado informativo (no es una advertencia, es la fuente del dato). */
+      #vgl-ordenar-modal .vgl-ord-pymsrc{
+        font-size:11.5px;font-weight:700;line-height:1.45;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+      }
+      #vgl-ordenar-modal .vgl-ord-sexwarn{
+        font-size:11.5px;font-weight:700;line-height:1.45;
+        color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
+        border:1px solid rgba(var(--rgb-rojo),.40);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+        box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
+      }
+
+      /* ---- Pie flotante (sticky glass) ---- */
+      #vgl-ordenar-modal .vgl-agm-foot{
+        position:sticky;bottom:10px;z-index:5;
+        margin:18px 2px 2px;padding:12px 14px;
+        background:var(--bg);
+        border:1px solid var(--edge);border-radius:var(--r-card);
+        backdrop-filter:var(--glass);-webkit-backdrop-filter:var(--glass);
+        box-shadow:var(--shadow-float)
+      }
+      @supports not ((backdrop-filter:blur(4px)) or (-webkit-backdrop-filter:blur(4px))){
+        #vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid)}
+      }
+
+      /* ---- MODO RENDIMIENTO: cero efectos pesados nuevos ---- */
+      #vgl-root.perf~#vgl-ordenar-modal,
+      #vgl-root.perf~#vgl-ordenar-modal *,
+      #vgl-root.perf~#vgl-ordenar-modal *::before,
+      #vgl-root.perf~#vgl-ordenar-modal *::after{
+        animation:none!important;transition:none!important;
+        backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+        filter:none!important;text-shadow:none!important
+      }
+      #vgl-root.perf~#vgl-ordenar-modal{background:rgba(2,4,9,.86)}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-card{box-shadow:0 0 0 1px var(--edge),0 16px 44px rgba(0,0,0,.50)}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item,
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:hover,
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-item:has(.vgl-ord-chk:checked),
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-cup{box-shadow:none;transform:none}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-ord-sexwarn{box-shadow:none}
+      #vgl-root.perf~#vgl-ordenar-modal .vgl-agm-foot{background:var(--bg-solid);box-shadow:0 0 0 1px var(--edge)}
+
+      /* ==== [v12.3.13] CSS del cartel modal de alerta (bigAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada alerta. El color del estado NO se interpola en el CSS: el elemento raíz del cartel lo fija inline como custom property (--ac / --ac-rgb) y estas reglas lo consumen con var(), así el estilo computado queda idéntico ==== */
+      /* Frost sobre Everest + entrada spring; todo se apaga en .perf y reduced-motion */
+      #vgl-modal{backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%)}
+      @keyframes vglModalPop{from{opacity:0;transform:translateY(24px) scale(.92)}to{opacity:1;transform:none}}
+      @keyframes vglModalBeacon{
+        0%,100%{box-shadow:0 0 0 0 rgba(var(--ac-rgb),.50),0 0 22px rgba(var(--ac-rgb),.85)}
+        50%{box-shadow:0 0 0 14px rgba(var(--ac-rgb),0),0 0 30px rgba(var(--ac-rgb),.95)}
+      }
+      #vgl-modal .vgl-modal-card{
+        animation:vglModalPop .44s var(--spring) both;
+        background:linear-gradient(165deg,rgba(var(--ac-rgb),.16),rgba(0,0,0,0) 55%),var(--bg-solid);
+        box-shadow:var(--shadow-float),0 0 90px rgba(var(--ac-rgb),.22),var(--glow-edge);
+      }
+      #vgl-modal .vgl-modal-dot{animation:vglModalBeacon 1.6s ease-in-out infinite}
+      #vgl-modal .vgl-modal-t{font-size:22px;letter-spacing:.3px}
+      #vgl-modal .vgl-modal-b{font-size:15px}
+      #vgl-modal .vgl-modal-ok:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
+      #vgl-root.perf~#vgl-modal,#vgl-root.perf~#vgl-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-modal .vgl-modal-card{box-shadow:0 0 0 1px rgba(var(--ac-rgb),.55),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-modal .vgl-modal-dot,
+      #vgl-root.perf~#vgl-modal .vgl-modal-ok{box-shadow:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-modal,#vgl-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS del recordatorio modal de PyM (pymAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* Frost + entrada spring; jerarquía: el nombre del paciente manda. Apagado en .perf/reduced-motion */
+      #vgl-pym-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
+      @keyframes vglPymPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
+      #vgl-pym-modal .vgl-pym-card{animation:vglPymPop .42s var(--spring) both}
+      #vgl-pym-modal .vgl-pym-chip{transition:transform .18s var(--spring),box-shadow .18s var(--ease-out),background .18s var(--ease-out)}
+      #vgl-pym-modal .vgl-pym-chip:hover{
+        transform:translateY(-2px) scale(1.04);
+        background:rgba(var(--rgb-recordatorio),.22);
+        box-shadow:0 4px 14px rgba(var(--rgb-recordatorio),.28);
+      }
+      #vgl-pym-modal .vgl-pym-ok:focus-visible{outline:2px solid var(--c-recordatorio);outline-offset:3px}
+      #vgl-root.perf~#vgl-pym-modal,#vgl-root.perf~#vgl-pym-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-card{box-shadow:0 0 0 1px rgba(var(--rgb-recordatorio),.45),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-ic,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-chip:hover,
+      #vgl-root.perf~#vgl-pym-modal .vgl-pym-ok{box-shadow:none !important;transform:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-pym-modal,#vgl-pym-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS de la alerta de prioridad cardiovascular (abandonoPESAlert) — antes inline en cada innerHTML; se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
+      /* Frost + entrada spring + latido del icono; jerarquía: nombre del paciente arriba de todo. Apagado en .perf/reduced-motion */
+      #vgl-pes-modal{backdrop-filter:blur(12px) saturate(140%);-webkit-backdrop-filter:blur(12px) saturate(140%)}
+      @keyframes vglPesPop{from{opacity:0;transform:translateY(22px) scale(.93)}to{opacity:1;transform:none}}
+      @keyframes vglPesBeat{
+        0%,100%{transform:scale(1)}
+        12%{transform:scale(1.14)}
+        24%{transform:scale(1)}
+        36%{transform:scale(1.08)}
+        48%{transform:scale(1)}
+      }
+      #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
+      #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
+      #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-card{box-shadow:0 0 0 1px rgba(var(--rgb-pes),.45),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-ic,
+      #vgl-root.perf~#vgl-pes-modal .vgl-pes-ok{box-shadow:none !important;transform:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-pes-modal,#vgl-pes-modal *{animation:none !important;transition:none !important}
+      }
+
+      /* ==== [v12.3.13] CSS de los avisos toast (_renderToast) — antes inline en CADA toast (una copia por aviso); se movió aquí para inyectarse UNA vez. El color del estado NO se interpola en el CSS: cada pieza del toast lo fija inline como custom property (--tk) y con var(--c-*) directo, así el estilo computado queda idéntico ==== */
+      /* Apagado total de efectos en modo rendimiento (#vgl-root precede a #vgl-toasts en body) */
+      #vgl-root.perf~#vgl-toasts .vgl-toast,#vgl-root.perf~#vgl-toasts .vgl-toast *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-toasts .vgl-toast{
+        background:var(--toast);
+        box-shadow:0 0 0 1px var(--edge),0 10px 26px rgba(0,0,0,.45);
+      }
+      #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-rail,
+      #vgl-root.perf~#vgl-toasts .vgl-toast .vgl-toast-ic{box-shadow:none !important}
+
+      /* ==== [v12.3.13] CSS del Resumen del turno — antes inline en renderResumen(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura de la hoja ==== */
+      /* [HUD-2026] Resumen del turno — bento de estadísticas. Scope estricto: #vgl-root #vgl-sheet. */
+      #vgl-root #vgl-sheet .vgl-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+      #vgl-root #vgl-sheet .vgl-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:18px 10px 15px;border-radius:var(--r-card);background:linear-gradient(165deg,rgba(var(--kpi-rgb),.16),rgba(var(--kpi-rgb),.04) 72%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.22),var(--shadow-card);transition:transform .24s var(--spring),box-shadow .24s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-kpi:hover{transform:translateY(-2px);box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.36),0 10px 26px rgba(var(--kpi-rgb),.13),var(--shadow-card-hover)}
+      #vgl-root #vgl-sheet .vgl-kpi-rojo{--kpi-rgb:var(--rgb-rojo)}
+      #vgl-root #vgl-sheet .vgl-kpi-ambar{--kpi-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-kpi-verde{--kpi-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-kpi .vgl-n{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.5px;color:rgb(var(--kpi-rgb));text-shadow:0 0 18px rgba(var(--kpi-rgb),.35)}
+      #vgl-root #vgl-sheet .vgl-kpi .vgl-l{color:var(--fg2);letter-spacing:.6px;margin-top:7px}
+      #vgl-root #vgl-sheet .vgl-tile-chart{padding:14px 16px 12px}
+      #vgl-root #vgl-sheet .vgl-chart-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--fg3);font-weight:700;letter-spacing:.4px}
+      #vgl-root #vgl-sheet .vgl-leg{display:flex;gap:12px;flex-wrap:wrap}
+      #vgl-root #vgl-sheet .vgl-leg-i{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--fg2);letter-spacing:0}
+      #vgl-root #vgl-sheet .vgl-leg-i i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--lg-rgb));box-shadow:0 0 8px rgba(var(--lg-rgb),.55)}
+      #vgl-root #vgl-sheet .vgl-lg-verde{--lg-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-lg-ambar{--lg-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-lg-rojo{--lg-rgb:var(--rgb-rojo)}
+      #vgl-root #vgl-sheet .vgl-bars{display:flex;align-items:flex-end;gap:8px;height:84px;margin-top:12px}
+      #vgl-root #vgl-sheet .vgl-bar{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%;padding:4px 2px 3px;border-radius:12px;transition:background .18s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-bar:hover{background:var(--bg2)}
+      #vgl-root #vgl-sheet .vgl-bar:last-child .vgl-lb{color:var(--fg)}
+      #vgl-root #vgl-sheet .vgl-col{display:flex;flex-direction:column-reverse;width:20px;gap:2px}
+      #vgl-root #vgl-sheet .vgl-col:empty::after{content:"";display:block;height:3px;border-radius:2px;background:var(--bg3)}
+      #vgl-root #vgl-sheet .vgl-seg{width:100%;border-radius:5px;min-height:2px}
+      #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:15px;font-weight:800;color:var(--fg);background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
+      /* [v12.3.13] .vgl-fld tiene métricas DISTINTAS en Resumen (11px, gap heredado 12px) y en Ajustes (12px, gap 14px).
+         Antes nunca convivían (cada hoja traía su bloque de estilos y solo existía uno en el DOM); ya consolidadas en esta
+         hoja única, la regla posterior pisaría a la anterior. El :has() reproduce esa exclusividad: solo aplica la regla
+         de la hoja que está realmente montada (.vgl-kpis solo existe en Resumen, .vgl-set-cap solo en Ajustes). */
+      #vgl-root #vgl-sheet:has(.vgl-kpis) .vgl-fld{margin:0 -8px;padding:11px 8px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
+      #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
+      #vgl-root.perf #vgl-sheet .vgl-kpi,#vgl-root.perf #vgl-sheet .vgl-kpi:hover{transform:none;box-shadow:inset 0 0 0 1px rgba(var(--kpi-rgb),.25)}
+      #vgl-root.perf #vgl-sheet .vgl-seg{box-shadow:none!important}
+      #vgl-root.perf #vgl-sheet .vgl-leg-i i,#vgl-root.perf #vgl-sheet .vgl-count{box-shadow:none}
+      @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}#vgl-root #vgl-sheet .vgl-kpi:hover{transform:none}}
+
+      /* ==== [v12.3.13] CSS de Ajustes — antes inline en renderSettings(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura de la hoja ==== */
+      /* [HUD-2026] Ajustes — celdas claras + switches grandes. Scope estricto: #vgl-root #vgl-sheet. */
+      #vgl-root #vgl-sheet .vgl-set-cap{display:flex;align-items:center;gap:8px;padding:12px 0 7px;font-size:12px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:var(--fg3)}
+      #vgl-root #vgl-sheet .vgl-set-cap i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--cap-rgb));box-shadow:0 0 10px rgba(var(--cap-rgb),.55)}
+      #vgl-root #vgl-sheet .vgl-cap-azul{--cap-rgb:var(--rgb-azul)}
+      #vgl-root #vgl-sheet .vgl-cap-ambar{--cap-rgb:var(--rgb-ambar)}
+      #vgl-root #vgl-sheet .vgl-cap-verde{--cap-rgb:var(--rgb-verde)}
+      #vgl-root #vgl-sheet .vgl-cap-recordatorio{--cap-rgb:var(--rgb-recordatorio)}
+      #vgl-root #vgl-sheet .vgl-cap-morado{--cap-rgb:var(--rgb-morado)}
+      /* [v12.3.13] Mismo caso que arriba: la variante de .vgl-fld de Ajustes solo aplica cuando la hoja montada es Ajustes */
+      #vgl-root #vgl-sheet:has(.vgl-set-cap) .vgl-fld{margin:0 -8px;padding:12px 8px;gap:14px;border-radius:12px;border-bottom:1px solid var(--line);transition:background .16s var(--ease-out)}
+      #vgl-root #vgl-sheet .vgl-fld:last-child{border-bottom:0}
+      #vgl-root #vgl-sheet .vgl-fld:hover{background:var(--bg2)}
+      #vgl-root #vgl-sheet .vgl-sw{width:54px;height:32px}
+      #vgl-root #vgl-sheet .vgl-sw i:after{width:26px;height:26px;top:3px;left:3px}
+      #vgl-root #vgl-sheet .vgl-sw input:checked + i:after{transform:translateX(22px)}
+      #vgl-root #vgl-sheet .vgl-fld input[type=range]{accent-color:var(--c-azul);width:180px;max-width:180px;height:28px;cursor:pointer;background:transparent;border:0;box-shadow:none;padding:0}
+      #vgl-root #vgl-sheet .vgl-fld input:disabled{opacity:.55;cursor:not-allowed}
+      #vgl-root #vgl-sheet .vgl-grp-tec{background:linear-gradient(170deg,rgba(var(--rgb-morado),.07),rgba(var(--rgb-morado),0) 55%),var(--bg2);box-shadow:inset 0 0 0 1px rgba(var(--rgb-morado),.16),var(--shadow-card)}
+      #vgl-root #vgl-sheet #c-export-logs{background:linear-gradient(150deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.15));color:var(--c-verde);font-weight:700;box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.40)}
+      #vgl-root.perf #vgl-sheet .vgl-set-cap i{box-shadow:none}
+      @media (prefers-reduced-motion:reduce){#vgl-root #vgl-sheet *{transition:none!important;animation:none!important}}
+
+      /* ==== [v12.3.15] BLINDAJE TIPOGRÁFICO contra los estilos globales de Everest ==== */
+      /* Descubierto con un pantallazo real del consultorio: los textos que confiaban en
+         HERENCIA (p. ej. el <span> de .vgl-agm-check-lbl hereda color:var(--fg)) salían
+         en el azul corporativo de Everest, ilegible sobre nuestros paneles oscuros: la
+         hoja global de Everest trae reglas DIRECTAS sobre span/label/b, y un valor
+         directo siempre le gana a uno heredado, por baja que sea su especificidad. En el
+         preview sintético del rediseño (sin el CSS de Everest) esto era invisible.
+         La armadura: forzar color:inherit SOLO en los elementos SIN clase (los únicos
+         que dependen de herencia) dentro de cada contenedor nuestro. Con el ID del
+         contenedor le gana a cualquier regla sin ID de Everest; con :where() aporta
+         especificidad CERO extra, así TODAS nuestras reglas internas de acento (fechas
+         verdes, etiquetas azules, notas) le siguen ganando sin tocarlas. */
+      #vgl-root :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-dock :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-toasts :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-pym-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -4261,6 +5421,13 @@
         if (PAGEWIN.UsuarioLogin && !state.activeDoctor.name) {
           state.activeDoctor.name = String(PAGEWIN.UsuarioLogin).trim();
         }
+        // v12.3.1 — Si la página publica el LOGIN, no hay que esperar a que la aplicación
+        // llame a GetUsuarioPerfil por su cuenta: se consulta activamente (una sola vez,
+        // resolverMedicoPorPerfil ya deduplica) para fijar id y nombre del médico.
+        if (PAGEWIN.UsuarioLogin && (!state.activeDoctor.id || state.activeDoctor.id === 0)) {
+          loginVisto = String(PAGEWIN.UsuarioLogin).trim();
+          resolverMedicoPorPerfil(loginVisto);
+        }
       }
     } catch (e) {}
     if (!srcStr || typeof srcStr !== "string") return;
@@ -4270,11 +5437,16 @@
       // del PACIENTE (APIEnvioCorreo, APIHCHealth/Morbilidad) o de otro usuario (digiturno).
       // El "médico activo" podía acabar siendo el identificador de un paciente, y con él se
       // creaban las citas y las órdenes.
-      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/(APIAcceso|ApiIntegracionEverestDigiturno)\//i;
+      // v12.3.1 — Se retira ApiIntegracionEverestDigiturno de la lista: el propio comentario
+      // de arriba documenta que su "UsuarioId" es el de OTRO usuario, y aun así seguía en la
+      // lista blanca. Y el id raspado ya NO pisa uno existente: la ficha de GetUsuarioPerfil
+      // es autoritativa, y un eco de las llamadas del propio Vigilante (que viajan con el
+      // S.medicoId manual de Ajustes) no debe sobrescribirla.
+      const ORIGEN_FIABLE = /^https:\/\/neps\.everestintelligent\.com\/apiviva\/APIAcceso\//i;
       const uIdM = ORIGEN_FIABLE.test(srcStr) ? (/UsuarioId=(\d+)/i.exec(srcStr) || /"usuarioId":\s*(\d+)/i.exec(srcStr)) : null;
       if (uIdM && uIdM[1]) {
         const id = parseInt(uIdM[1], 10);
-        if (id > 0) state.activeDoctor.id = id;
+        if (id > 0 && !state.activeDoctor.id) { state.activeDoctor.id = id; state.lastSignature = ""; }
       }
       const uNameM = /UsuarioNombreCompleto=([^&]+)/i.exec(srcStr) || /"usuarioNombreCompleto":\s*"([^"]+)"/i.exec(srcStr);
       if (uNameM && uNameM[1]) {
@@ -4296,7 +5468,24 @@
       // Aquí se detecta el <login> cuando la propia aplicación llama a ese endpoint y se
       // consulta una sola vez para resolver id y nombre de forma autoritativa.
       const perfilM = /\/apiviva\/APIAcceso\/api\/ParametrizacionLista\/GetUsuarioPerfil\/([^/?#]+)/i.exec(srcStr);
-      if (perfilM && perfilM[1]) resolverMedicoPorPerfil(decodeURIComponent(perfilM[1]));
+      if (perfilM && perfilM[1]) { loginVisto = decodeURIComponent(perfilM[1]); resolverMedicoPorPerfil(loginVisto); }
+
+      // v12.3.1 — MECANISMO PRIMARIO para cualquier médico. GetUsuarioPerfil no aparece
+      // en NINGUNA captura posterior al login (solo ocurre —si ocurre— en el bootstrap),
+      // así que esperar únicamente por él dejaba el id en 0 en los equipos ajenos y
+      // BuscarPaciente con UsuarioId=0 "no encontraba" a ningún paciente. Pero la
+      // aplicación SÍ pasa el LOGIN de la sesión como parámetro en otras llamadas
+      // (capturado en consultorio: APIMedicoHealth/api/Medico/ObtenerEspecialidadMedico
+      // ?login=bpalencia al pulsar "Nueva orden"). Cualquier "login=" dentro de /apiviva/
+      // es el del usuario en sesión; se resuelve por la misma puerta autoritativa
+      // (GetUsuarioPerfil) antes de usarse para nada.
+      if (!state.activeDoctor.id) {
+        const loginM = /\/apiviva\/[^?#\s"']+\?[^#\s"']*\blogin=([^&#\s"']+)/i.exec(srcStr);
+        if (loginM && loginM[1]) {
+          const lg = decodeURIComponent(loginM[1]).trim();
+          if (lg) { loginVisto = lg; resolverMedicoPorPerfil(lg); }
+        }
+      }
     } catch (e) {}
   }
 
@@ -4304,23 +5493,59 @@
   // activo. Es de SOLO LECTURA y no bloquea nada: si falla, el panel sigue avisando de que
   // no identificó la agenda propia y el médico puede escribir su nombre en Ajustes.
   let perfilPedido = "";
+  let loginVisto = "";   // v12.3.1 — último login de sesión visto en la red (para reintentos)
+  let idRetryAt = 0;     // v12.3.1 — sello del último reintento de identidad desde tick()
   async function resolverMedicoPorPerfil(login) {
     if (!login || perfilPedido === login) return;
     perfilPedido = login;
     try {
       const r = await pageFetchJson(`/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/${encodeURIComponent(login)}`);
       const d = r && r.data;
-      if (!d) return;
+      const id = d ? parseInt(d.id, 10) : 0;
+      // v12.3.1 — Sin ficha con id se LIBERA el login para poder reintentar: antes un
+      // único fallo (red caída, 4xx) vetaba ese login de por vida de la pestaña.
+      if (!(id > 0)) { perfilPedido = ""; return; }
       const nombre = String(d.nombreCompleto || "").trim();
-      const id = parseInt(d.id, 10);
       if (nombre.length > 3) state.activeDoctor.name = nombre;
-      if (id > 0) state.activeDoctor.id = id;
-      if (nombre || id) {
-        console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
-        state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
-      }
-    } catch (e) { console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
+      invalidarApiSiCambioMedico(id);   // v12.3.6 — antes de fijar el id nuevo, purgar el de otro médico
+      state.activeDoctor.id = id;
+      console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
+      state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
+    } catch (e) { perfilPedido = ""; console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }
   }
+
+  // v12.3.2 — IDENTIDAD DESDE EL ALMACENAMIENTO DEL CLIENTE (volcado real del 2026-08-10
+  // en el equipo de otro profesional). Everest guarda en localStorage la ficha de la
+  // sesión: user = {userId, userIdIdentity, username, ...} y jwt (JWT cuyo sub es ese
+  // mismo userIdIdentity), y además deja la cookie UsuarioMedico=<login>. El login NUNCA
+  // se usa directamente: se pasa por GetUsuarioPerfil (validación de backend), así que un
+  // almacenamiento rancio de un médico anterior en un equipo compartido no puede firmar
+  // nada por sí solo. Coherencia extra: si hay jwt, user.username solo se acepta cuando
+  // jwt.sub coincide con user.userIdIdentity (el jwt es el token vivo de ESTA sesión).
+  function identidadDesdeCliente() {
+    if (state.activeDoctor.id) return;
+    try {
+      let login = "";
+      let u = null;
+      try { u = JSON.parse(localStorage.getItem("user") || "null"); } catch (e) {}
+      let jwtSub = "";
+      try {
+        const seg = String(localStorage.getItem("jwt") || "").trim().split(".");
+        if (seg.length === 3) jwtSub = String((JSON.parse(atob(seg[1].replace(/-/g, "+").replace(/_/g, "/"))) || {}).sub || "");
+      } catch (e) {}
+      if (u && u.username && (!jwtSub || !u.userIdIdentity || String(u.userIdIdentity).toLowerCase() === jwtSub.toLowerCase())) {
+        login = String(u.username).trim();
+      }
+      if (!login) {
+        const ckM = /(?:^|;\s*)UsuarioMedico=([^;]+)/.exec(document.cookie || "");
+        if (ckM && ckM[1]) login = decodeURIComponent(ckM[1]).trim();
+      }
+      if (login) { loginVisto = login; resolverMedicoPorPerfil(login); }
+    } catch (e) {}
+  }
+  // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
+  // sesión ya existe a document-start; el timeout evita depender del orden de las const).
+  try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
   function calcBusinessTargetDate(monthsToAdd, daysToAdd) {
@@ -4816,28 +6041,36 @@
 
     const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
 
+    // [UI-CSS] HUD Espacial 2026 — placa de laboratorios. Desde v12.3.13 el CSS de este
+    // modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez en
+    // document.head: antes iba en un <style> inline aquí dentro del innerHTML y el motor
+    // lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
+    // CADA selector sigue anclado a #vgl-labs-modal, así que nada se fuga fuera del modal
+    // aunque la hoja sea global. Modo rendimiento: el modal cuelga de document.body
+    // (fuera de #vgl-root), así que los efectos pesados nuevos se apagan con el
+    // combinador de hermanos #vgl-root.perf ~ #vgl-labs-modal (#vgl-root se inserta en
+    // body ANTES que el modal).
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
         <div class="vgl-agm-head">
-          <div>
-            <div class="vgl-agm-title">🧪 Exámenes de Laboratorio — Portal Athenea Soluciones</div>
-            <div class="vgl-agm-sub">Paciente: <b>${escapeHtml(patientName)}</b> (Cédula: <b>${escapeHtml(apt.doc_id)}</b>)</div>
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-labs-kicker">🧪 Exámenes de Laboratorio · Portal Athenea Soluciones</div>
+            <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
           <button class="vgl-agm-close" id="vgl-labs-x">✕</button>
         </div>
 
-        <div class="vgl-agm-sec" style="margin-bottom:12px">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
-            <span style="font-size:12.5px;color:var(--fg2)"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b></span>
-            <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;background:#2563eb;color:#ffffff;font-size:12.5px;padding:6px 12px;border-radius:8px">
-              🌐 Abrir en Portal Athenea (Auto-Login)
-            </a>
-          </div>
+        <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
+          <span class="vgl-labs-srclbl"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b></span>
+          <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
+            🌐 Abrir en Portal Athenea (Auto-Login)
+          </a>
         </div>
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Resultados de Paraclínicos (Búsqueda Prioritaria en Athenea Soluciones):</label>
-          <div id="vgl-labs-content" class="vgl-agm-slots" style="max-height:380px;overflow-y:auto;display:block">
+          <div id="vgl-labs-content" class="vgl-agm-slots" style="max-height:420px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámen de laboratorios en Portal Athenea Soluciones...</div>
           </div>
         </div>
@@ -4850,7 +6083,14 @@
 
     document.body.appendChild(modal);
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
+    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
+    // la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -4870,24 +6110,22 @@
 
     const todosLabs = [];
 
-    // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES VIA BRIDGE / API
+    // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
+    // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
     try {
-      const atheneaData = await getAtheneaIdSolicitudAuto(apt.doc_id);
-      // v12.0.0 — Antes se comprobaba `atheneaData.idSolicitud` sobre un valor que ya era
-      // un número: la condición NUNCA se cumplía y esta consulta jamás llegaba a ejecutarse.
-      if (atheneaData) {
-        const labsArr = await fetchAtheneaLabs(atheneaData);
-        if (labsArr && labsArr.length) {
-          labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
-        }
+      const labsArr = await getAtheneaLabsAuto(apt.doc_id);
+      if (labsArr && labsArr.length) {
+        labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
       }
     } catch (e) {
-      console.warn("[Vigilante Labs] Error consultando Athenea Bridge:", e);
+      console.warn("[Vigilante Labs] Error consultando Athenea:", e);
     }
+    if (!vivo()) return;
 
     // 2. BÚSQUEDA SECUNDARIA EN COMPLEMENTO (ANNAR / CITI)
     try {
       let pId = await apiAccesoBuscarPaciente(apt.doc_id);
+      if (!vivo()) return;
       if (pId) {
         const [annarRes, citiRes] = await Promise.all([
           apiAccesoObtenerLaboratoriosAnnar(pId).catch(() => null),
@@ -4899,6 +6137,7 @@
         if (citiList && citiList.length) citiList.forEach(item => todosLabs.push({ origen: "Citi", ...item }));
       }
     } catch (e) {}
+    if (!vivo()) return;
 
     // v12.0.0 — RETIRADOS los "datos clínicos de muestra". Cuando la consulta real no
     // devolvía nada, se inventaban SIETE resultados de laboratorio (glicemia 98 mg/dL,
@@ -4906,7 +6145,7 @@
     // tabla y con la misma etiqueta "Athenea (Principal)" que los reales: el médico no
     // tenía forma de distinguirlos. Ahora, sin resultados, se dice que no los hay.
     if (!todosLabs.length) {
-      contentEl.innerHTML = `<div class="vgl-agm-err" style="background:rgba(255,255,255,.05);color:inherit;border-color:rgba(255,255,255,.1)">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+      contentEl.innerHTML = `<div class="vgl-agm-err vgl-labs-empty">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
       return;
     }
 
@@ -4928,25 +6167,25 @@
       const esAlerta = String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal");
 
       return `
-        <tr style="border-bottom:1px solid rgba(255,255,255,.08)">
-          <td style="padding:8px;font-size:12px;opacity:.85">${escapeHtml(String(fecha))}</td>
-          <td style="padding:8px;font-size:12.5px;font-weight:600">${escapeHtml(String(examen))}</td>
-          <td style="padding:8px;font-size:12.5px;color:${esAlerta ? "#ef4444" : "inherit"};font-weight:700">${escapeHtml(String(resultado))}</td>
-          <td style="padding:8px;font-size:11.5px;opacity:.7">${escapeHtml(String(referencia))}</td>
-          <td style="padding:8px;font-size:11px"><span style="background:${lab.origen.includes("Athenea") ? "rgba(37,99,235,.35)" : "rgba(255,255,255,.1)"};color:${lab.origen.includes("Athenea") ? "#93c5fd" : "#fff"};padding:3px 7px;border-radius:4px;font-weight:600">${escapeHtml(lab.origen)}</span></td>
+        <tr class="vgl-labs-tr${esAlerta ? " vgl-labs-alert" : ""}">
+          <td class="vgl-labs-date">${escapeHtml(String(fecha))}</td>
+          <td class="vgl-labs-exam">${escapeHtml(String(examen))}</td>
+          <td class="vgl-labs-val">${escapeHtml(String(resultado))}</td>
+          <td class="vgl-labs-ref">${escapeHtml(String(referencia))}</td>
+          <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(lab.origen)}</span></td>
         </tr>
       `;
     }).join("");
 
     contentEl.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;text-align:left">
+      <table class="vgl-labs-table">
         <thead>
-          <tr style="border-bottom:2px solid rgba(255,255,255,.15);font-size:11.5px;color:var(--fg2);text-transform:uppercase">
-            <th style="padding:8px">Fecha</th>
-            <th style="padding:8px">Examen / Paraclínico</th>
-            <th style="padding:8px">Resultado</th>
-            <th style="padding:8px">Ref. / Rango</th>
-            <th style="padding:8px">Fuente</th>
+          <tr>
+            <th>Fecha</th>
+            <th>Examen / Paraclínico</th>
+            <th>Resultado</th>
+            <th>Ref. / Rango</th>
+            <th>Fuente</th>
           </tr>
         </thead>
         <tbody>
@@ -4975,90 +6214,104 @@
     let selectedEspName = "Medicina General (Control)";
 
     // [COPY-UX] Modal de agendamiento de cita de control y remisión a especialidades RCV
+    // [UI-CSS] HUD Espacial 2026 — placa bento del agendamiento. Desde v12.3.13 el CSS de
+    // este modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez
+    // en document.head: antes iba en un <style> inline aquí dentro del innerHTML y el
+    // motor lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
+    // CADA selector sigue anclado a #vgl-agendar-modal, así que nada se fuga fuera del
+    // modal aunque la hoja sea global. Modo rendimiento: los modales cuelgan de
+    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
+    // con el combinador de hermanos #vgl-root.perf ~ #vgl-agendar-modal (#vgl-root se
+    // inserta en body ANTES que el modal).
     modal.innerHTML = `
-      <div class="vgl-agm-card" style="max-width:650px">
+      <div class="vgl-agm-card" style="max-width:720px">
         <div class="vgl-agm-head">
-          <div>
-            <div class="vgl-agm-title">📅 Programación de Cita / Remisión RCV</div>
-            <div class="vgl-agm-sub">Paciente: <b>${escapeHtml(patientName)}</b> (${escapeHtml(apt.doc_id)})</div>
-            <div class="vgl-agm-sub" style="opacity:.85">Médico: <b>${escapeHtml(doctorName)}</b></div>
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-agm-kicker">📅 Programación de Cita · Remisión RCV</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
           <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
         </div>
 
-        <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">1. Seleccione la especialidad o servicio a agendar / remitir:</label>
-          <div class="vgl-agm-presets" id="vgl-esp-presets" style="flex-wrap:wrap;gap:6px">
-            <button class="vgl-agm-pbtn active" data-esp="12" data-name="Medicina General (Control)">🩺 Med. General (Control)</button>
-            <button class="vgl-agm-pbtn" data-esp="46" data-name="Psicología">🧠 Psicología</button>
-            <button class="vgl-agm-pbtn" data-esp="14" data-name="Odontología">🦷 Odontología</button>
+        <div class="vgl-agm-grid">
+          <div class="vgl-agm-cell vgl-agm-c5">
+            <label class="vgl-agm-lbl"><span class="vgl-agm-step">1</span>Especialidad o servicio a agendar / remitir</label>
+            <div class="vgl-agm-presets" id="vgl-esp-presets" style="flex-wrap:wrap;gap:6px">
+              <button class="vgl-agm-pbtn active" data-esp="12" data-name="Medicina General (Control)">🩺 Med. General (Control)</button>
+              <button class="vgl-agm-pbtn" data-esp="46" data-name="Psicología">🧠 Psicología</button>
+              <button class="vgl-agm-pbtn" data-esp="14" data-name="Odontología">🦷 Odontología</button>
+            </div>
           </div>
-        </div>
 
-        <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">2. Seleccione el plazo y explore la fecha objetivo (±3 días hábiles):</label>
-          <div class="vgl-agm-presets" id="vgl-time-presets">
-            <button class="vgl-agm-pbtn" data-m="0" data-d="15">15 días</button>
-            <button class="vgl-agm-pbtn active" data-m="1" data-d="0">1 mes</button>
-            <button class="vgl-agm-pbtn" data-m="2" data-d="0">2 meses</button>
-            <button class="vgl-agm-pbtn" data-m="3" data-d="0">3 meses</button>
-            <button class="vgl-agm-pbtn" data-m="4" data-d="0">4 meses</button>
-            <button class="vgl-agm-pbtn" data-m="5" data-d="0">5 meses</button>
-            <button class="vgl-agm-pbtn" data-m="6" data-d="0">6 meses</button>
+          <div class="vgl-agm-cell vgl-agm-c7">
+            <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±3 días hábiles)</label>
+            <div class="vgl-agm-presets" id="vgl-time-presets">
+              <button class="vgl-agm-pbtn" data-m="0" data-d="15">15 días</button>
+              <button class="vgl-agm-pbtn active" data-m="1" data-d="0">1 mes</button>
+              <button class="vgl-agm-pbtn" data-m="2" data-d="0">2 meses</button>
+              <button class="vgl-agm-pbtn" data-m="3" data-d="0">3 meses</button>
+              <button class="vgl-agm-pbtn" data-m="4" data-d="0">4 meses</button>
+              <button class="vgl-agm-pbtn" data-m="5" data-d="0">5 meses</button>
+              <button class="vgl-agm-pbtn" data-m="6" data-d="0">6 meses</button>
+            </div>
+            <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
+            <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px">Calculando fecha deseada...</div>
           </div>
-          <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
-          <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px">Calculando fecha deseada...</div>
-        </div>
 
-        <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">3. Horarios disponibles en la agenda del servicio seleccionada:</label>
-          <div id="vgl-agm-slots" class="vgl-agm-slots"><div class="vgl-agm-loading">Consultando horarios disponibles...</div></div>
-        </div>
-
-        <div class="vgl-agm-sec">
-          <!-- v12.1.0 — Selector de PROGRAMA. Confirmado con la captura del consultorio:
-               la aplicación oficial muestra aquí un desplegable con los programas del
-               paciente y el médico ELIGE uno; ese identificador viaja como ProgramaId en
-               AsignarTurno. No se puede deducir: en la captura, para una agenda de HTA el
-               médico eligió "Nefroprotección". Por eso se pregunta, igual que Everest. -->
-          <div id="vgl-agm-prog-box" style="display:none;margin-bottom:10px">
-            <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:</label>
-            <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
+          <div class="vgl-agm-cell vgl-agm-c12">
+            <label class="vgl-agm-lbl"><span class="vgl-agm-step">3</span>Horarios disponibles en la agenda del servicio</label>
+            <div id="vgl-agm-slots" class="vgl-agm-slots"><div class="vgl-agm-loading">Consultando horarios disponibles...</div></div>
           </div>
-          <label class="vgl-agm-check-lbl">
-            <input type="checkbox" id="vgl-agm-pym-chk" checked>
-            <span>¿Es cita para actividades del programa RCV / Prevención?</span>
-          </label>
+
+          <div class="vgl-agm-cell vgl-agm-c12 vgl-agm-cell-flat">
+            <!-- v12.1.0 — Selector de PROGRAMA. Confirmado con la captura del consultorio:
+                 la aplicación oficial muestra aquí un desplegable con los programas del
+                 paciente y el médico ELIGE uno; ese identificador viaja como ProgramaId en
+                 AsignarTurno. No se puede deducir: en la captura, para una agenda de HTA el
+                 médico eligió "Nefroprotección". Por eso se pregunta, igual que Everest. -->
+            <div id="vgl-agm-prog-box" style="display:none;margin-bottom:10px">
+              <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:</label>
+              <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
+            </div>
+            <label class="vgl-agm-check-lbl">
+              <input type="checkbox" id="vgl-agm-pym-chk" checked>
+              <span>¿Es cita para actividades del programa RCV / Prevención?</span>
+            </label>
+          </div>
+
           <!-- v12.2.0 — El SMS ya no sale a ciegas. Se muestra el celular registrado, se
                puede corregir antes de confirmar y se puede desmarcar. Motivo: en las
                telemetrías del propio consultorio hay un mismo celular registrado para DOS
                pacientes distintos; enviando sin mirar, uno recibiría el aviso de la cita
                del otro, con su nombre y su fecha. La aplicación oficial también lo enseña
                antes de enviar. -->
-          <div id="vgl-agm-sms-box" style="margin-top:8px;padding:10px;background:rgba(37,99,235,.12);border:1px solid #2563eb;border-radius:8px">
-            <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
+          <div id="vgl-agm-sms-box" class="vgl-agm-cell vgl-agm-c6 vgl-agm-cell-sms">
+            <label class="vgl-agm-check-lbl">
               <input type="checkbox" id="vgl-agm-sms-chk" checked>
               <span>📱 Enviar SMS de recordatorio al paciente</span>
             </label>
-            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc;flex-wrap:wrap">
-              <label for="vgl-agm-sms-tel" style="color:#93c5fd;font-weight:700">Celular:</label>
-              <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;padding:5px 9px;font-size:13px" placeholder="cargando…">
-              <span id="vgl-agm-sms-nota" style="opacity:.8"></span>
+            <div class="vgl-agm-fieldrow">
+              <label for="vgl-agm-sms-tel">Celular:</label>
+              <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;flex:1;padding:7px 11px;font-size:13px" placeholder="cargando…">
+              <span id="vgl-agm-sms-nota"></span>
             </div>
           </div>
-          <div class="vgl-lab-box" style="margin-top:8px;padding:10px;background:rgba(16,185,129,.14);border:1px solid #10b981;border-radius:8px">
-            <label class="vgl-agm-check-lbl" style="color:#ffffff;font-weight:700">
-              <input type="checkbox" id="vgl-agm-lab-chk" disabled style="accent-color:#10b981">
-              <span>🧪 Pre-agendar Toma de Muestras (5 días hábiles antes: <b id="vgl-lab-date-lbl" style="color:#34d399">--/--/----</b>)</span>
+
+          <div class="vgl-lab-box vgl-agm-cell vgl-agm-c6 vgl-agm-cell-lab">
+            <label class="vgl-agm-check-lbl">
+              <input type="checkbox" id="vgl-agm-lab-chk" disabled>
+              <span>🧪 Pre-agendar Toma de Muestras (5 días hábiles antes: <b id="vgl-lab-date-lbl">--/--/----</b>)</span>
             </label>
-            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:12px;color:#f8fafc">
-              <label for="vgl-agm-lab-time-sel" style="color:#93c5fd;font-weight:700">Hora del Laboratorio:</label>
-              <select id="vgl-agm-lab-time-sel" class="vgl-agm-input" style="width:auto;padding:4px 8px;font-size:12px;border-radius:6px;background:#1e293b;color:#ffffff;border-color:#475569">
+            <div class="vgl-agm-fieldrow">
+              <label for="vgl-agm-lab-time-sel">Hora del Laboratorio:</label>
+              <select id="vgl-agm-lab-time-sel" class="vgl-agm-input" style="width:auto;flex:1;padding:7px 9px;font-size:12px">
                 <option value="">⏳ Consultando disponibilidades en AppCita...</option>
               </select>
             </div>
           </div>
-          <textarea id="vgl-agm-obs" class="vgl-agm-input" placeholder="Observaciones de la cita (ej. REMISION RCV CON CONTROL)..." rows="2" style="margin-top:6px"></textarea>
+
+          <textarea id="vgl-agm-obs" class="vgl-agm-input vgl-agm-c12" placeholder="Observaciones de la cita (ej. REMISION RCV CON CONTROL)..." rows="2"></textarea>
         </div>
 
         <div class="vgl-agm-foot">
@@ -5083,7 +6336,14 @@
     const slotsEl = modal.querySelector("#vgl-agm-slots");
     const dayChipsEl = modal.querySelector("#vgl-day-chips");
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
+    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
+    // la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -5100,7 +6360,7 @@
       selectedTurnoObj = null;
       confirmBtn.disabled = true;
       confirmBtn.textContent = "✓ Sí, Crear Cita";
-      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${selectedDateInfo.fmt}</b> <span style="color:#a7f3d0">(${selectedDateInfo.lbl})</span>`;
+      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${selectedDateInfo.fmt}</b> <span style="color:var(--c-verde)">(${selectedDateInfo.lbl})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
       if (labLbl) labLbl.textContent = `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
@@ -5113,6 +6373,7 @@
         try {
           const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${suggestedLab.iso}`;
           const resAg = await gmPostJson(urlTurnos, {});
+          if (!vivo()) return;
           // v11.0.1 — Guarda de respuesta obsoleta: si el médico ya pulsó otro chip de
           // fecha mientras esta consulta viajaba, sus horas pertenecen a otro día y no
           // deben pintarse (la ruta principal ya tenía esta guarda; aquí faltaba).
@@ -5135,6 +6396,7 @@
             }
           }
         } catch(e) {
+          if (!vivo()) return;
           if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo conectar con AppCita</option>`;
           if (labChk) { labChk.checked = false; labChk.disabled = true; }
         }
@@ -5151,10 +6413,18 @@
       if (!pacienteIdAcceso) {
         pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
       }
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
 
       if (!pacienteIdAcceso) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ No se encontró el paciente en el sistema de agenda con el documento ${escapeHtml(apt.doc_id)}.</div>`;
+        // v12.3.1 — BuscarPaciente exige el UsuarioId del profesional: con UsuarioId=0
+        // "no encuentra" a NADIE. Si esa es la causa, decirlo con claridad — el mensaje
+        // genérico culpaba al paciente y en el equipo de otro médico fallaban todos.
+        if (!(state.activeDoctor.id || S.medicoId)) {
+          slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ El panel aún no identifica su usuario de Everest, y sin él la búsqueda de pacientes no funciona. Abra <b>Ajustes</b> y escriba <b>su identificador de médico</b>, o use una vez la agenda oficial de Everest para que se detecte solo.</div>`;
+        } else {
+          slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ No se encontró el paciente en el sistema de agenda con el documento ${escapeHtml(apt.doc_id)}.</div>`;
+        }
         return;
       }
 
@@ -5165,6 +6435,7 @@
         progCargados = true;
         try {
           const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          if (!vivo()) return;
           const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
           const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
           if (progs.length && box && sel) {
@@ -5193,6 +6464,7 @@
       }
 
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
 
@@ -5233,6 +6505,7 @@
 
       const turnosAcumulados = [];
       for (const ag of agendasFiltradas.slice(0, 5)) {
+        if (!vivo()) return;
         if (token !== _cargarHorasToken) return;
         const agendaId = ag.agendaId || ag.id || ag.AgendaId || ag.idAgenda || ag.IdAgenda || ag.AGendadId;
         const nombreProf = ag.medico || ag.usuarioNombreCompleto || ag.nombreMedico || ag.profesional || ag.nombre || "Profesional";
@@ -5250,6 +6523,7 @@
         }
       }
 
+      if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
 
       if (!turnosAcumulados.length) {
@@ -5384,14 +6658,18 @@
       const d = res && res.data;
       const ok = !!(res && res.error === false && d && (Number(d.radicado) > 0 || /Agendada Correctamente/i.test(String(d.motivo || ""))));
       if (ok) {
-        confirmBtn.style.background = "#10b981"; // [UI-CSS]
-        confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
+        // v12.3.14 — La cita YA quedó creada en el servidor: el registro y el estado de
+        // abajo corren siempre; lo único que se salta si el modal fue cerrado es pintarlo.
+        if (vivo()) {
+          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
 
-        const successMsg = document.createElement("div");
-        successMsg.className = "vgl-agm-dinfo";
-        successMsg.className = "vgl-msg-success"; // [UI-CSS]
-        successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${selectedDateInfo.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
-        modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+          const successMsg = document.createElement("div");
+          successMsg.className = "vgl-agm-dinfo";
+          successMsg.className = "vgl-msg-success"; // [UI-CSS]
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${selectedDateInfo.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+        }
 
         markCitaAgendadaHoy(apt.doc_id);
         // v11.0.1 — persist=false y uid estable: los avisos persistentes que nadie cierra
@@ -5415,8 +6693,10 @@
 
         setTimeout(() => closeMod(), 2600);
       } else {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Crear Cita";
+        if (vivo()) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "✓ Reintentar Crear Cita";
+        }
         const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
         alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Verifique en Everest antes de reintentar.");
       }
@@ -5625,6 +6905,76 @@
     return pageFetchJson(path, { method: "POST", body: JSON.stringify(payload) });
   }
 
+  // =====================================================================
+  //  v12.3.x — ENVÍO DE LA ORDEN POR CORREO AL PACIENTE
+  //
+  //  Contrato REAL, no inventado: reconstruido a partir de telemetría de red genuina
+  //  capturada en consultorio el 8 de agosto de 2026 (VIGILANTE_AGENDA_RESCATE/
+  //  everest_telemetry_PRO_*.json — decenas de envíos reales, mismo patrón repetido),
+  //  la MISMA vía que usa el botón oficial de Everest para esto:
+  //   1. GET /apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos
+  //         ?PacienteId=<id>&Agrupador=<agrupador>   (genera el link/PDF de la orden;
+  //         se observó SIEMPRE antes del envío — best-effort: si falla, no bloquea)
+  //   2. GET /apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento
+  //         ?Grupo=<agrupador>&Correo=<correo>&UsuarioId=<idMedico>
+  //  Mismo origen que Everest (neps.everestintelligent.com): fetch normal, no
+  //  GM_xmlhttpRequest — eso es solo para el puente a Athenea (otro dominio).
+  //  La telemetría de origen NUNCA grabó el cuerpo de la respuesta (herramienta de
+  //  captura sin registro de body): la validación de éxito es por status HTTP, con un
+  //  diagnóstico de una sola vez que confirmará su forma exacta en el primer uso real.
+  // =====================================================================
+
+  // Recursivo, mismo patrón que extractPatientId: la respuesta de GuardarOrdenamiento
+  // ya expone `agrupador` directo o en `.data.agrupador` (ver el manejo de éxito más
+  // abajo); este extractor cubre además cualquier variante de mayúsculas o anidación.
+  function extractAgrupador(res) {
+    if (!res) return null;
+    if (typeof res === "number" && res > 0) return String(res);
+    if (typeof res === "string" && res.trim()) return res.trim();
+    if (Array.isArray(res) && res.length > 0) return extractAgrupador(res[0]);
+    if (typeof res === "object") {
+      const direct = res.agrupador || res.Agrupador || res.grupo || res.Grupo || res.idAgrupador || res.IdAgrupador;
+      if (direct) return String(direct).trim();
+      if (res.data) { const fromData = extractAgrupador(res.data); if (fromData) return fromData; }
+      for (const k of Object.keys(res)) {
+        if (k !== "data" && (Array.isArray(res[k]) || (res[k] && typeof res[k] === "object"))) {
+          const fromSub = extractAgrupador(res[k]);
+          if (fromSub) return fromSub;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Best-effort: genera el link/PDF de impresión de la orden. Un fallo aquí NO debe
+  // impedir el envío del correo (el paso se observó siempre antes, pero su función es
+  // preparar el documento, no autorizar el envío).
+  async function apiOrdenamientoGenerarLinks(pacienteId, agrupador) {
+    try {
+      await pageFetchJson(
+        `/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=${encodeURIComponent(pacienteId)}&Agrupador=${encodeURIComponent(agrupador)}`,
+        { method: "GET", __idempotent: true }
+      );
+    } catch (e) { console.warn("[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):", e); }
+  }
+
+  let _diagEnvioCorreoLogged = false;
+  async function apiEnviarOrdenPorCorreo(agrupador, correo, usuarioId) {
+    try {
+      const f = FETCH0 || window.fetch;
+      const url = location.origin + "/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento"
+        + "?Grupo=" + encodeURIComponent(agrupador) + "&Correo=" + encodeURIComponent(correo) + "&UsuarioId=" + encodeURIComponent(usuarioId);
+      const resp = await f(url, { headers: { "Accept": "application/json" } });
+      if (!_diagEnvioCorreoLogged) {
+        _diagEnvioCorreoLogged = true;
+        let cuerpo = "";
+        try { cuerpo = await resp.clone().text(); } catch (e) {}
+        console.log("[Vigilante] EnviarEmailOrdenamiento — diagnóstico único: status=" + resp.status + " cuerpo=" + cuerpo.slice(0, 300));
+      }
+      return !!(resp && resp.ok);
+    } catch (e) { console.warn("[Vigilante PyM] no se pudo enviar la orden por correo:", e); return false; }
+  }
+
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
   async function openOrdenamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -5654,11 +7004,23 @@
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
 
     const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-    const activePymText = stripToAlphanum((apt.pym || []).join(" "));
-    const matchedPackages = PYM_CATALOG.filter((pkg) => {
-      if (!apt.pym || !apt.pym.length) return false;
-      return pkg.keywords.some((kw) => activePymText.includes(stripToAlphanum(kw)));
-    });
+    // v12.3.x — Antes solo se sabía SI había coincidencia con la base de PyM (booleano);
+    // ahora se guarda también CUÁL actividad concreta del Excel del SharePoint la
+    // disparó — "el nombre de la prueba que toca enviarle al paciente según los xlsx",
+    // tal como se pidió. Esa etiqueta (activityLabel, viene de FRIENDLY/friendly() en la
+    // lectura del Excel) YA EXISTÍA en apt.pym — se usaba para emparejar por dentro, pero
+    // nunca se le mostraba al médico en el modal de Órdenes. Coincidencia por etiqueta
+    // INDIVIDUAL (no por el texto de todas juntas): más preciso, y permite saber cuál
+    // etiqueta específica corresponde a cuál paquete cuando el paciente tiene varias.
+    const pymPorPaquete = new Map();
+    for (const pkg of PYM_CATALOG) {
+      const coincidencias = (apt.pym || []).filter((etiqueta) => {
+        const et = stripToAlphanum(etiqueta);
+        return pkg.keywords.some((kw) => et.includes(stripToAlphanum(kw)));
+      });
+      if (coincidencias.length) pymPorPaquete.set(pkg, coincidencias);
+    }
+    const matchedPackages = PYM_CATALOG.filter((pkg) => pymPorPaquete.has(pkg));
 
     // v11.0.1 — Cuando NO hay coincidencia con el PyM del paciente se siguen mostrando
     // todas las actividades, pero DESMARCADAS. Antes salían las 10 premarcadas y un solo
@@ -5672,21 +7034,32 @@
     const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
 
     // [COPY-UX] Modal de generación de órdenes de prevención
+    // [UI-CSS] HUD Espacial 2026 — placa bento del ordenamiento PyM, misma familia visual
+    // que el agendamiento. Desde v12.3.13 el CSS de este modal vive al FINAL de la hoja
+    // maestra que buildOverlay() inyecta UNA sola vez en document.head: antes iba en un
+    // <style> inline aquí dentro del innerHTML y el motor lo re-parseaba en CADA apertura
+    // del modal (thrashing de recálculo de estilos). CADA selector sigue anclado a
+    // #vgl-ordenar-modal, así que nada se fuga fuera del modal aunque la hoja sea global.
+    // Acento del modal: MORADO (PyM); estado "marcado para generar": VERDE (enlaza con el
+    // botón primario); choque de sexo: ROJO. Modo rendimiento: el modal cuelga de
+    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
+    // con el combinador de hermanos #vgl-root.perf ~ #vgl-ordenar-modal (#vgl-root se
+    // inserta en body ANTES que el modal).
     modal.innerHTML = `
-      <div class="vgl-agm-card" style="max-width:620px">
+      <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
-          <div>
-            <div class="vgl-agm-title">📋 Generación de Órdenes de Prevención</div>
-            <div class="vgl-agm-sub">Paciente: <b>${escapeHtml(patientName)}</b> (${escapeHtml(apt.doc_id)})</div>
-            <div class="vgl-agm-sub med">Médico: <b>${escapeHtml(doctorName)}</b></div>
+          <div style="min-width:0">
+            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
+            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
           <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
         </div>
 
         <div class="vgl-agm-sec">
-          <label class="vgl-agm-lbl">Seleccione las actividades de prevención a solicitar para el paciente:</label>
-          ${hayCoincidencia ? "" : `<div class="vgl-agm-err" style="margin-bottom:8px">No se detectaron actividades pendientes en la base de prevención para este paciente. Las opciones salen <b>sin marcar</b>: seleccione manualmente lo que corresponda.</div>`}
-          <div id="vgl-ord-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:4px">
+          <label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Seleccione las actividades de prevención a solicitar para el paciente:</label>
+          ${hayCoincidencia ? "" : `<div class="vgl-agm-err" style="margin-bottom:10px">No se detectaron actividades pendientes en la base de prevención para este paciente. Las opciones salen <b>sin marcar</b>: seleccione manualmente lo que corresponda.</div>`}
+          <div id="vgl-ord-list">
             ${pkgsToRender.map((pkg, idx) => {
               // v12.0.0 — El \`checked\` era INCONDICIONAL: sin coincidencia con la base
               // salían las 10 actividades premarcadas y un solo clic en "Generar" creaba
@@ -5696,15 +7069,17 @@
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
               const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
               const marcar = hayCoincidencia && !chocaSexo;
+              const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               return `
               <div class="vgl-ord-item">
                 <label class="vgl-ord-label">
                   <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
-                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">[CIE-10: ${escapeHtml(pkg.cie10)}]</span></div>
-                    ${chocaSexo ? `<div class="vgl-ord-cups" style="color:#e54d42;font-weight:700">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
+                    <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
+                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
-                      CUPS: ${pkg.cups.map((c) => `<b>${escapeHtml(c.codigo)}</b> (${escapeHtml(c.desc)})`).join(" · ")}
+                      <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}
                     </div>
                   </div>
                 </label>
@@ -5727,7 +7102,15 @@
     const confirmBtn = modal.querySelector("#vgl-ord-confirm");
     const chks = modal.querySelectorAll(".vgl-ord-chk");
 
+    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
+    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
+    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
+    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
+    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
+    let cerrado = false;
+    const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
+      cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
@@ -5755,6 +7138,7 @@
       const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(apt.doc_id);
       if (!pacienteIdOrd) {
         alert("No se pudo localizar al paciente en el sistema de órdenes con la cédula " + apt.doc_id); // [COPY-UX]
+        if (!vivo()) return;
         confirmBtn.disabled = false;
         confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
         return;
@@ -5767,7 +7151,7 @@
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
         const pkg = pkgsToRender[i];
-        confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
+        if (vivo()) confirmBtn.textContent = `⏳ Generando ${pkg.cie10}... (${creadasCount + fallidasCount + 1}/${selectedBoxes.length})`;
 
         const dxId = await apiOrdenamientoObtenerDx(pkg.cie10);
         if (!dxId) { console.warn("[Vigilante PyM] No Dx para", pkg.cie10); fallidasCount++; continue; }
@@ -5796,37 +7180,83 @@
           creadasCount++;
           const agp = agpReal;
           agrupadores.push(agp);
-          c.checked = false; // Desmarcar exitoso
-          c.disabled = true; // Deshabilitar
-          c.closest("label").style.opacity = "0.5";
-          c.closest("label").style.textDecoration = "line-through";
+          if (vivo()) {
+            c.checked = false; // Desmarcar exitoso
+            c.disabled = true; // Deshabilitar
+            c.closest("label").style.opacity = "0.5";
+            c.closest("label").style.textDecoration = "line-through";
+          }
         } else {
           fallidasCount++;
-          c.closest("label").style.border = "1px solid #e54d42"; // Marcar fallido en ROJO // [UI-CSS]
+          if (vivo()) c.closest("label").style.border = "1px solid #e54d42"; // Marcar fallido en ROJO // [UI-CSS]
         }
       }
 
       if (creadasCount > 0 && fallidasCount === 0) {
-        confirmBtn.style.background = "#10b981"; // [UI-CSS]
-        confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
+        // v12.3.14 — Las órdenes YA quedaron creadas en el servidor: el registro y el
+        // estado de abajo corren siempre; solo el pintado se salta si el modal fue cerrado.
+        const agrupadoresUnicos = [...new Set(agrupadores)];
+        if (vivo()) {
+          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
 
-        const successMsg = document.createElement("div");
-        successMsg.className = "vgl-agm-dinfo";
-        successMsg.className = "vgl-msg-success"; // [UI-CSS]
-        successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
-        modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+          const successMsg = document.createElement("div");
+          successMsg.className = "vgl-agm-dinfo";
+          successMsg.className = "vgl-msg-success"; // [UI-CSS]
+          successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
+          modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
-        const creadosPkgs = selectedBoxes.map((c) => pkgsToRender[parseInt(c.getAttribute("data-idx"), 10)]).filter(Boolean);
-        try { if (typeof guardarOrdenEnMemoriaLocal === 'function') guardarOrdenEnMemoriaLocal(apt.doc_id, creadosPkgs); } catch (e) {}
+          // v12.3.x — Envío de la orden al correo del paciente. Contrato real, ver
+          // apiEnviarOrdenPorCorreo. El correo se pide DESPUÉS de generar las órdenes,
+          // como se pidió: nunca antes, para no bloquear la creación si en ese momento
+          // no se tiene el correo del paciente a mano.
+          const mailBox = document.createElement("div");
+          mailBox.className = "vgl-ord-mailbox";
+          mailBox.innerHTML = `
+            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <div class="vgl-agm-fieldrow">
+              <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
+              <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
+            </div>
+            <div id="vgl-ord-mail-status" class="vgl-agm-sub"></div>
+          `;
+          modal.querySelector(".vgl-agm-card").appendChild(mailBox);
+          const mailInput = mailBox.querySelector("#vgl-ord-mail-input");
+          const mailBtn = mailBox.querySelector("#vgl-ord-mail-send");
+          const mailStatus = mailBox.querySelector("#vgl-ord-mail-status");
+          mailBtn.addEventListener("click", async () => {
+            const correo = (mailInput.value || "").trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "⚠ Escriba un correo válido."; return; }
+            mailBtn.disabled = true; mailBtn.textContent = "⏳ Enviando...";
+            const uIdEnvio = state.activeDoctor.id || S.medicoId || 0;
+            let okCount = 0;
+            for (const agp of agrupadoresUnicos) {
+              await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp);
+              const ok = await apiEnviarOrdenPorCorreo(agp, correo, uIdEnvio);
+              if (ok) okCount++;
+            }
+            vglLog("ORDEN", "EnviarPorCorreoIntentado", { agrupadores: agrupadoresUnicos.length, ok: okCount });
+            if (!vivo()) return;
+            mailBtn.disabled = false; mailBtn.textContent = "Enviar";
+            mailStatus.textContent = okCount === agrupadoresUnicos.length
+              ? `✅ Orden(es) enviada(s) a ${correo}.`
+              : (okCount > 0 ? `⚠ Se enviaron ${okCount} de ${agrupadoresUnicos.length} orden(es). Verifique en el portal de Everest.` : "❌ No se pudo enviar la orden por correo. Verifique el correo o inténtelo desde el portal.");
+          });
+        }
 
-        markOrdenesCreadasHoy(apt.doc_id);
+        // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
+        // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
+        // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
+        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos);
         notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
         bumpStat("atiempo");
-
-        setTimeout(() => closeMod(), 2600);
+        // v12.3.x — Ya NO se cierra sola a los 2.6 s: el médico necesita tiempo para
+        // escribir el correo del paciente y confirmar el envío. Se cierra con ✕/Cancelar.
       } else {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        if (vivo()) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = "✓ Reintentar Generar Órdenes";
+        }
         alert("No se pudieron generar las órdenes en el sistema de órdenes."); // [COPY-UX]
       }
     });
@@ -5925,26 +7355,28 @@
     const dow = ["do", "lu", "ma", "mi", "ju", "vi", "sá"];
     const bars = dias.map((d) => {
       const t = new Date(d.fecha + "T00:00:00");
-      const seg = (n, c) => (n ? `<div class="vgl-seg" style="height:${Math.max(2, Math.round((n / max) * 52))}px;background:${c}" title="${n}"></div>` : "");
+      const seg = (n, c) => (n ? `<div class="vgl-seg" style="height:${Math.max(2, Math.round((n / max) * 52))}px;background:${c};box-shadow:0 0 9px ${c}55" title="${n}"></div>` : "");
       return `<div class="vgl-bar"><div class="vgl-col">${seg(d.atiempo, COLORS.VERDE)}${seg(d.inasistencia, COLORS.AMBAR)}${seg(d.fraude, COLORS.ROJO)}</div><span class="vgl-lb">${dow[t.getDay()]} ${t.getDate()}</span></div>`;
     }).join("");
+    // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
+    // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Resumen del turno") + `
       <div class="vgl-kpis">
-        <div class="vgl-kpi"><div class="vgl-n" style="color:${COLORS.ROJO}">${hoy.fraude || 0}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
-        <div class="vgl-kpi"><div class="vgl-n" style="color:${COLORS.AMBAR}">${hoy.inasistencia || 0}</div><div class="vgl-l">INASISTENCIAS</div></div>
-        <div class="vgl-kpi"><div class="vgl-n" style="color:${COLORS.VERDE}">${hoy.atiempo || 0}</div><div class="vgl-l">A TIEMPO</div></div>
+        <div class="vgl-kpi vgl-kpi-rojo"><div class="vgl-n">${hoy.fraude || 0}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
+        <div class="vgl-kpi vgl-kpi-ambar"><div class="vgl-n">${hoy.inasistencia || 0}</div><div class="vgl-l">INASISTENCIAS</div></div>
+        <div class="vgl-kpi vgl-kpi-verde"><div class="vgl-n">${hoy.atiempo || 0}</div><div class="vgl-l">A TIEMPO</div></div>
       </div>
-      <div class="vgl-grp" style="padding:8px 12px 10px">
-        <div style="font-size:12px;color:var(--fg3);font-weight:600;letter-spacing:.3px">ÚLTIMOS 7 DÍAS</div> <!-- [UI-CSS] -->
+      <div class="vgl-grp vgl-tile-chart">
+        <div class="vgl-chart-cap"><span>ÚLTIMOS 7 DÍAS</span><span class="vgl-leg"><span class="vgl-leg-i"><i class="vgl-lg-verde"></i>A tiempo</span><span class="vgl-leg-i"><i class="vgl-lg-ambar"></i>Inasistencia</span><span class="vgl-leg-i"><i class="vgl-lg-rojo"></i>Extemporánea</span></span></div> <!-- [UI-CSS] -->
         <div class="vgl-bars">${bars}</div>
       </div>
       <div class="vgl-grp">
-        <div class="vgl-fld"><label>Eventos registrados hoy<span class="vgl-hint">Cambios de estado y alertas, con hora exacta.</span></label><b style="font-variant-numeric:tabular-nums">${evs.length}</b></div>
+        <div class="vgl-fld"><label>Eventos registrados hoy<span class="vgl-hint">Cambios de estado y alertas, con hora exacta.</span></label><b class="vgl-count">${evs.length}</b></div>
         <div class="vgl-fld"><label>Reporte de auditoría<span class="vgl-hint">Archivo .csv que se abre en Excel. No sale del computador.</span></label><button class="vgl-btn primary" id="vgl-exp">Descargar</button></div>
         <div class="vgl-fld"><label>Copiar resumen<span class="vgl-hint">Para pegarlo en un correo o en el acta del turno.</span></label><button class="vgl-btn" id="vgl-copy">Copiar</button></div>
       </div>
       <div class="vgl-grp">
-        <div class="vgl-fld"><label>Archivo PyM en uso<span class="vgl-hint">${escapeHtml(state.pymFile || "ninguno")}</span></label><b style="font-variant-numeric:tabular-nums">${state.pym.size}</b></div>
+        <div class="vgl-fld"><label>Archivo PyM en uso<span class="vgl-hint">${escapeHtml(state.pymFile || "ninguno")}</span></label><b class="vgl-count">${state.pym.size}</b></div>
         <div class="vgl-fld"><label>Diagnóstico técnico<span class="vgl-hint">Sin datos de pacientes. Úsalo si algo deja de funcionar.</span></label><button class="vgl-btn" id="vgl-diag">Diag</button></div>
       </div>`;
     wireClose();
@@ -5978,13 +7410,22 @@
     const isDevMode = !!S.opcionesTecnicas;
     const devStyle = isDevMode ? "" : 'style="display:none;"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
+    // v12.3.16 — Estado de las credenciales de Athenea para el médico en turno (sin exponer valores).
+    const _athId = state.activeDoctor && state.activeDoctor.id;
+    const athEstado = !_athId
+      ? "<b>Primero abre 'Citas del día' una vez para que el panel detecte tu ID de médico.</b>"
+      : (atheneaCredsGet(_athId) ? "<b>✅ Credenciales guardadas para tu ID.</b>" : "<b>Sin credenciales guardadas todavía.</b>");
+    // [v12.3.13] El CSS de esta hoja vive al final de la hoja maestra de buildOverlay(): se
+    // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Ajustes") + `
       <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-azul"><i></i>Apariencia</div>
         <div class="vgl-fld"><label>Tema<span class="vgl-hint">"Automático" sigue el modo claro/oscuro del sistema operativo.</span></label>
           <select id="c-tema"><option value="oscuro">Oscuro</option><option value="claro">Claro</option><option value="auto">Automático</option></select></div>
         <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Desactiva los efectos visuales complejos para mejorar la fluidez en equipos con recursos limitados.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
       </div>
       <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
         <div class="vgl-fld"><label>Sonido<span class="vgl-hint">Un tono distinto por tipo de notificación.</span></label>${sw("c-snd", S.sonido)}</div>
         <div class="vgl-fld"><label>Volumen</label><input type="range" id="c-vol" min="2" max="60" value="${Math.round(S.volumen * 100)}"></div>
         <div class="vgl-fld"><label>Repetir alerta sonora<span class="vgl-hint">La notificación de atención no confirmada repite el sonido cada 9 s hasta su reconocimiento.</span></label>${sw("c-ins", S.insistir)}</div>
@@ -5993,13 +7434,24 @@
         <div class="vgl-fld"><label>Ventana emergente<span class="vgl-hint">Muestra alertas flotantes del sistema operativo.</span></label>${sw("c-pop", S.popup)}</div>
       </div>
       <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
         <div class="vgl-fld"><label>Recordatorio al abrir la historia<span class="vgl-hint">Aviso al abrir la historia clínica si existen actividades preventivas pendientes.</span></label>${sw("c-pymrem", S.recordatorioPym)}</div>
         <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
+      <!-- v12.3.16 — Auto-inicio de sesión en Athenea (OPT-IN, por médico). -->
+      <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Athenea</div>
+        <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">⚠️ Guarda tu usuario y contraseña de Athenea EN ESTE EQUIPO para reconectar solo cuando la sesión caiga. El almacén del navegador NO está cifrado: úsalo únicamente en un equipo personal, nunca en uno compartido. Tus credenciales se guardan por médico y solo se usan cuando TÚ estás en sesión. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin === true)}</div>
+        <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">Se guarda solo en este navegador, asociado a tu ID de médico.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
+        <div class="vgl-fld"><label>Contraseña de Athenea<span class="vgl-hint">No se muestra ni se registra en ningún log. Déjala vacía si solo quieres cambiar el usuario.</span></label><input type="password" id="c-athpass" autocomplete="new-password" placeholder="••••••••" value=""></div>
+        <div class="vgl-fld"><label>Guardar credenciales<span class="vgl-hint">Guárdalas para el médico en turno (${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "sin detectar"))}).</span></label><button class="vgl-btn" id="c-athsave">Guardar</button></div>
+        <div class="vgl-fld"><label>Borrar mis credenciales<span class="vgl-hint">Elimina de este equipo las credenciales de Athenea guardadas para tu ID.</span></label><button class="vgl-btn off" id="c-athclear">Borrar</button></div>
+      </div>
       <!-- v12.0.0 — Controles operativos: SIEMPRE visibles para el médico -->
       <div class="vgl-grp">
+        <div class="vgl-set-cap vgl-cap-recordatorio"><i></i>Operación</div>
         <div class="vgl-fld"><label>Actualizar lista de prevención<span class="vgl-hint" id="c-basen">Busca ahora mismo la versión más reciente de la lista de PyM.</span></label><button class="vgl-btn" id="c-basego">Buscar</button></div>
         <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el almacenamiento para renovar la sesión si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
         <div class="vgl-fld"><label>Su identificador de médico<span class="vgl-hint">Solo si el panel no lo detecta solo. Sin él no se pueden crear citas ni órdenes: aparece detectado como <b>${escapeHtml(String(state.activeDoctor.id || S.medicoId || "— sin detectar —"))}</b>.</span></label><input type="number" id="c-medid" min="0" value="${escapeHtml(String(S.medicoId || ""))}" placeholder="(automático)"></div>
@@ -6007,7 +7459,8 @@
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
-      <div class="vgl-grp" ${devStyle}>
+      <div class="vgl-grp vgl-grp-tec" ${devStyle}>
+        <div class="vgl-set-cap vgl-cap-morado"><i></i>Opciones técnicas</div>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
         <div class="vgl-fld"><label>Probar avisos<span class="vgl-hint">Dispara una notificación de prueba.</span></label><button class="vgl-btn" id="c-test">Probar</button></div>
@@ -6024,7 +7477,7 @@
         <div class="vgl-fld"><label>Probar comunicación<span class="vgl-hint" id="c-repn">Realiza una prueba de conexión con el servidor de reportes.</span></label><button class="vgl-btn" id="c-repgo">Probar</button></div>
         <div class="vgl-fld"><label>Dirección del servidor de reportes<span class="vgl-hint">URL de servicio de datos.</span></label><input type="text" id="c-repurl" placeholder="(predeterminado)" value="${escapeHtml(S.reporteUrl)}"></div>
         <div class="vgl-fld"><label>Restablecer configuración<span class="vgl-hint">Restaura las opciones del sistema a sus valores predeterminados.</span></label><button class="vgl-btn off" id="c-reset">Restablecer</button></div>
-        <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs" style="background:#10b981">📥 Descargar Bitácora (.json)</button></div>
+        <div class="vgl-fld"><label>📦 Bitácora de Telemetría Real<span class="vgl-hint">Descarga todos los eventos registrados hoy para depuración en vivo.</span></label><button class="vgl-btn" id="c-export-logs">📥 Descargar Bitácora (.json)</button></div>
       </div>`;
     wireClose();
     const q = (id) => el.sheet.querySelector(id);
@@ -6046,6 +7499,34 @@
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => abandonoPESAlert("Paciente de prueba"));
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
+    // v12.3.16 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
+    // comportamiento; las credenciales se guardan aparte, por ID de médico, y nunca se
+    // registran en consola ni en telemetría.
+    bind("#c-athlogin", "atheneaAutoLogin", (n) => n.checked);
+    const athSave = q("#c-athsave");
+    if (athSave) athSave.addEventListener("click", () => {
+      const id = state.activeDoctor && state.activeDoctor.id;
+      if (!id) { alert("Aún no se detecta tu ID de médico. Abre 'Citas del día' una vez para que el panel te identifique y vuelve a guardar."); return; }
+      const uNode = q("#c-athuser"), pNode = q("#c-athpass");
+      const u = (uNode && uNode.value || "").trim();
+      const p = (pNode && pNode.value) || "";
+      if (!u || !p) { alert("Escribe tu usuario y contraseña de Athenea antes de guardar."); return; }
+      const okg = atheneaCredsSet(id, u, p);
+      if (pNode) pNode.value = "";   // no dejar la contraseña en el DOM tras guardar
+      alert(okg
+        ? "✅ Credenciales de Athenea guardadas SOLO en este equipo, para tu ID de médico. El inicio de sesión automático se activará cuando la sesión de Athenea caiga."
+        : "❌ No se pudieron guardar las credenciales.");
+      renderSettings();
+    });
+    const athClear = q("#c-athclear");
+    if (athClear) athClear.addEventListener("click", () => {
+      const id = state.activeDoctor && state.activeDoctor.id;
+      if (id && !atheneaCredsGet(id)) { alert("No hay credenciales guardadas para tu ID."); return; }
+      if (!confirm("¿Borrar de este equipo tus credenciales de Athenea guardadas?")) return;
+      atheneaCredsClear(id || null);
+      alert("🗑️ Credenciales de Athenea borradas de este equipo.");
+      renderSettings();
+    });
     bind("#c-medid", "medicoId", (n) => parseInt(n.value, 10) || 0);
     bind("#c-mednom", "medicoNombre", (n) => String(n.value || "").trim());
     // v12.0.0 — El deslizador de Volumen se pintaba pero NO estaba enlazado a nada: moverlo
@@ -6279,7 +7760,7 @@
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
       // v7.8: sin base cargada NO se dice "Al día" (era mentira piadosa): se dice la verdad.
       const pyms = a.pym.length
-        ? `<div class="vgl-pyms">${a.pym.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}</div>`
+        ? `<div class="vgl-pyms">${a.pym.map((p) => `<span class="vgl-chip" style="font-size:12.5px;padding:5px 12px">${escapeHtml(p)}</span>`).join("")}</div>`
         : (!state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
           : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
                    : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
@@ -6291,34 +7772,43 @@
       const pesFlag = esPes ? `<span class="vgl-flag pes">❤ SEGUIMIENTO CARDIOVASCULAR</span>` : ""; // [COPY-UX]
       // v8.0.0: Botones de acción — icon-only con tooltip (Zero-Waste layout)
       const agendarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? `<button class="vgl-btn-agendar" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`
+        ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`
         : "";
+      // v12.3.x — "ID y bloqueo de seguridad": una vez el panel confirma que las órdenes
+      // de este paciente ya se generaron y (si aplica) se enviaron por correo HOY, el
+      // botón se deshabilita — evita la duplicación de ordenamientos por doble clic o
+      // por reabrir el paciente más tarde en la misma jornada. Se reactiva solo al
+      // cruzar la medianoche (mismo reloj que getProcessedToday/diaNuevo).
+      const ordDetalleHoy = a.doc_id ? ordenesDetalleHoy(a.doc_id) : null;
+      const yaOrdenadoHoy = a.doc_id ? isOrdenesCreadasHoy(a.doc_id) : false;
       const ordenarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? `<button class="vgl-btn-ordenar" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`
+        ? (yaOrdenadoHoy
+            ? `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Órdenes PyM ya generadas hoy para ${escapeHtml(a.nombre)}" title="✅ Órdenes PyM ya generadas hoy${ordDetalleHoy && ordDetalleHoy.agrupadores && ordDetalleHoy.agrupadores.length ? " — agrupador(es): " + escapeHtml(ordDetalleHoy.agrupadores.join(", ")) : ""}. Bloqueado para evitar duplicados.">📋</button>`
+            : `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`)
         : "";
       const labsBtn = a.doc_id
-        ? `<button class="vgl-btn-labs" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
+        ? `<button class="vgl-btn-labs vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
       const actions = (agendarBtn || ordenarBtn || labsBtn)
-        ? `<span class="vgl-card-actions">${agendarBtn}${ordenarBtn}${labsBtn}</span>`
+        ? `<span class="vgl-card-actions" style="gap:8px">${agendarBtn}${ordenarBtn}${labsBtn}</span>`
         : "";
       card.innerHTML = `
-        <div class="vgl-card-top">
-          <div class="vgl-card-time-wrap">
-            <span class="vgl-cdot" style="background:${col};box-shadow:0 0 8px ${col}"></span>
-            <span class="vgl-time">${escapeHtml(a.hora_texto)}</span>
+        <div class="vgl-card-top" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"});gap:10px">
+          <div class="vgl-card-time-wrap" style="gap:10px">
+            <span class="vgl-cdot" style="width:11px;height:11px;background:var(--tc,${col});box-shadow:0 0 10px var(--tc,${col})"></span>
+            <span class="vgl-time" style="font-size:22px;font-weight:900;letter-spacing:.4px">${escapeHtml(a.hora_texto)}</span>
             ${countdown(a)}
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}
-            <span class="vgl-badge" style="background:${tint};color:${col}">${escapeHtml(a.estado)}</span>
+            <span class="vgl-badge" style="background:rgba(var(--trgb),.16);color:var(--tc,${col});box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32);font-size:12.5px;padding:5px 12px">${escapeHtml(a.estado)}</span>
           </div>
         </div>
-        <div class="vgl-card-mid">
-          <div class="vgl-name" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
-          ${a.doc_id ? `<span class="vgl-doc">CC ${highlight(String(a.doc_id))}</span>` : ""}
+        <div class="vgl-card-mid" style="margin-top:9px;gap:10px">
+          <div class="vgl-name" style="font-size:18px;font-weight:800;line-height:1.25" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
+          ${a.doc_id ? `<span class="vgl-doc" style="background:var(--bg2);padding:3px 10px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);font-variant-numeric:tabular-nums">CC ${highlight(String(a.doc_id))}</span>` : ""}
         </div>
-        <div class="vgl-card-btm">
+        <div class="vgl-card-btm" style="margin-top:7px;gap:10px">
           ${pyms}
           ${actions}
         </div>`;
@@ -6383,63 +7873,114 @@
     try {
       const leader = heartbeat();
       diaNuevo();                                    // reinicio limpio si el turno cruzó la medianoche
-      // v7.8.1: fuera de agenda del día / historia clínica, NO se vigila — ni lectura
-      // de DOM, ni sondeo del API, ni panel abierto. Se recoge sola a la pastilla
-      // flotante (el "×" real del usuario NO se toca: autoDocked distingue uno de otro)
-      // y se restaura sola al volver a una de las dos vistas permitidas. heartbeat() y
-      // diaNuevo() SIEMPRE corren primero (baratos, importantes: continuidad del
-      // liderazgo entre pestañas y limpieza de medianoche aunque el médico esté en
-      // otra pantalla en ese instante).
+      // v7.8.1: fuera de agenda del día / historia clínica, el panel no se repinta —
+      // se recoge sola a la pastilla flotante (el "×" real del usuario NO se toca:
+      // autoDocked distingue uno de otro) y se restaura sola al volver a una de las
+      // dos vistas permitidas. heartbeat() y diaNuevo() SIEMPRE corren primero
+      // (baratos, importantes: continuidad del liderazgo entre pestañas y limpieza de
+      // medianoche aunque el médico esté en otra pantalla en ese instante).
+      // v12.3.11 — Antes, "otra" también apagaba el sondeo del API y el sniff de la
+      // llamada aprendida (return inmediato, antes de llegar al bloque "leader" de
+      // más abajo). Ninguno de los dos toca el DOM de Everest: son solo red y JSON,
+      // así que salir a Órdenes, RCV o cualquier otra pantalla los dejaba sin correr
+      // sin ninguna razón real — la causa de que el panel pidiera "vuelve a Citas del
+      // día" incluso con el modo API ya aprendido. Ahora solo el repintado (que sí
+      // depende del DOM de cada vista) se queda condicionado a estar en agenda/historia.
       const secc = seccionActiva();
-      if (secc === "otra") {
+      const enVistaVigilada = secc !== "otra";
+      if (!enVistaVigilada) {
         if (state.lastSeccion !== "otra" && el.root && winState !== "dock") {
           state.autoDocked = true;
           setWinState("dock", true);
         }
-        state.lastSeccion = secc;
-        return;
+      } else if (state.autoDocked) {
+        // Al volver a una sección permitida, se restaura la ÚLTIMA ventana que el
+        // médico eligió de verdad (state.userWinState) — no siempre "full": si la
+        // había dejado minimizada, sigue minimizada; si la había cerrado a mano, ver
+        // más abajo.
+        state.autoDocked = false; setWinState(state.userWinState, true);
       }
       state.lastSeccion = secc;
-      // Al volver a una sección permitida, se restaura la ÚLTIMA ventana que el médico
-      // eligió de verdad (state.userWinState) — no siempre "full": si la había dejado
-      // minimizada, sigue minimizada; si la había cerrado a mano, ver más abajo.
-      if (state.autoDocked) { state.autoDocked = false; setWinState(state.userWinState, true); }
-      const now = new Date();
-      // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
-      // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
-      // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
-      let data = null, source = null;
-      if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
-        data = { visible: true, citas: state.apiCitas }; source = "api";
-      }
-      if (!data || !data.citas.length) {
-        const dPag = extractAgenda(document);
-        if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
-      }
-      if (data && data.citas.length) {
-        const processed = data.citas.map((a) => colorAndAlert(a, now));
-        if (!state.summarized) {
-          // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
-          state.summarized = true;
-          processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          if (leader) helloOncePerDay(processed);
-        } else if (leader) {
-          processed.forEach(maybeNotify);
+
+      // v12.3.14 — Disparo del Robot Athenea SIN MutationObserver global: la pregunta
+      // que el observador erradicado respondía quemando CPU en cada mutación de la SPA
+      // se contesta aquí por el precio de un getElementById por tick. Corre en TODA
+      // pestaña (SIN condicionar a leader, igual que corría el observador) y es barata:
+      // createLabInjectorUI es idempotente con su botón y el robot automático conserva
+      // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
+      if (secc === "historia") createLabInjectorUI();
+
+      if (enVistaVigilada) {
+        const now = new Date();
+        // v7.3 MODO LIGERO: primero el API (unos kB por consulta, con la sesión ya
+        // abierta: funciona aunque la pestaña esté en una historia clínica) y, como
+        // respaldo, la página que el usuario tiene delante. SIN clon de fondo.
+        let data = null, source = null;
+        if (leader && apiSano() && state.apiCitas && Date.now() - (state.apiEn || 0) < 180000) {
+          data = { visible: true, citas: state.apiCitas }; source = "api";
         }
-        state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) share(processed);
-        render(processed, source, now);
-      } else if (state.shared && Date.now() - state.shared.t < 60000) {
-        render(state.shared.list, "compartido", new Date(state.shared.t));
-      } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
-      else { render([], null, null); }
-      // Vía directa, SIEMPRE al final (haya datos o no): si aún no se aprendió la
-      // llamada se busca en el registro de rendimiento; si ya se aprendió, se sondea.
+        if (!data || !data.citas.length) {
+          const dPag = extractAgenda(document);
+          if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
+        }
+        if (data && data.citas.length) {
+          const processed = data.citas.map((a) => colorAndAlert(a, now));
+          if (!state.summarized) {
+            // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
+            state.summarized = true;
+            processed.forEach((a) => state.notified.set(a.key, nkey(a)));
+            if (leader) helloOncePerDay(processed);
+          } else if (leader) {
+            processed.forEach(maybeNotify);
+          }
+          state.lastSnapshot = { at: now, list: processed, source };
+          if (leader) share(processed);
+          render(processed, source, now);
+        } else if (state.shared && Date.now() - state.shared.t < 60000) {
+          render(state.shared.list, "compartido", new Date(state.shared.t));
+        } else if (state.lastSnapshot) { render(state.lastSnapshot.list, null, state.lastSnapshot.at); }
+        else { render([], null, null); }
+      }
+
+      // Vía directa, SIEMPRE al final (haya datos o no, y en TODA la aplicación desde
+      // v12.3.11): si aún no se aprendió la llamada se busca en el registro de
+      // rendimiento; si ya se aprendió, se sondea.
       if (leader) {
         if (!API.url) apiSniffPerf(window);
         tickApi();
-        checkRecordatorioPym();
-        checkAbandonoPES();
+        // v12.3.5 — Latido de sesión de Athenea, cada 3 min: bien por debajo del ~5 min
+        // reportado en consultorio, deja margen para que la expiración deslizante nunca
+        // llegue a cumplirse mientras el navegador siga abierto.
+        // v12.3.12 — El latido corre en TODA la aplicación, no solo en agenda/historia.
+        // Confirmado con un log real de consultorio: el flujo automático de labs funcionó
+        // varias veces seguidas y, un rato después, el modal manual encontró la sesión de
+        // Athenea CADUCADA — el tiempo que la médica pasó en otras pantallas de Everest
+        // dejó al latido apagado y la expiración deslizante se cumplió. Igual que el
+        // sondeo del API en v12.3.11: es red pura (GM_xmlhttpRequest), no toca el DOM de
+        // Everest, así que no había razón real para condicionarlo a la vista activa.
+        // v12.3.15 — Cadencia adaptativa del latido: 3 min bastan cuando la sesión está
+        // viva (solo hay que impedir que el timeout deslizante se cumpla), pero cuando
+        // está CAÍDA se sondea cada 45 s: así, tras el login manual del médico en la
+        // otra pestaña, la restauración se detecta en menos de un minuto y el robot
+        // reanuda solo (ver el reset de lastAutoFetchedDoc en atheneaKeepAlive).
+        if (Date.now() - atheneaKeepAliveAt > (atheneaSesionViva === false ? 45000 : 180000)) {
+          atheneaKeepAliveAt = Date.now();
+          atheneaKeepAlive();
+        }
+        if (enVistaVigilada) {
+          // v12.3.1 — Reintento de identidad, mismo patrón que apiSniffPerf: mientras el
+          // médico no esté identificado, cada 30 s se re-consultan los globales de la
+          // página y, si ya se vio un login en la red pero su resolución falló, se vuelve
+          // a intentar (resolverMedicoPorPerfil deduplica los intentos en vuelo).
+          if (!state.activeDoctor.id && Date.now() - idRetryAt > 30000) {
+            idRetryAt = Date.now();
+            captureDoctorInfo("");
+            identidadDesdeCliente();
+            if (loginVisto) resolverMedicoPorPerfil(loginVisto);
+          }
+          checkRecordatorioPym();
+          checkAbandonoPES();
+        }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }
   }
