@@ -117,6 +117,69 @@ module.exports = {
       t.igual(mockDOM["fechaResultGlicemia"].value, "", "No debe inventar la fecha de hoy");
     });
 
+    t.caso("injectLabsIntoCronicos: una casilla que YA tiene valor se RESPETA — ni el valor ni su fecha se tocan (Incidente v12.3.34: el robot pisaba lo del médico)", () => {
+      mockDOM = {
+        "resultadoGlicemia": { value: "120" },
+        "fechaResultGlicemia": { value: "2026-01-01" }
+      };
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const r = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoGlicemia"].value, "120", "el valor que ya estaba escrito manda");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2026-01-01", "su fecha tampoco se toca");
+      t.igual(r.count, 0, "no cuenta como diligenciada");
+      t.igual(r.respetadas, 1, "y se informa como respetada");
+    });
+
+    t.caso("injectLabsIntoCronicos: una FECHA corregida a mano por el médico no se pisa aunque el valor esté vacío (v12.3.35 — revisión adversarial)", () => {
+      mockDOM = {
+        "resultadoGlicemia": { value: "" },
+        "fechaResultGlicemia": { value: "2026-02-02" }
+      };
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const r = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "el valor vacío sí se diligencia");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2026-02-02", "la fecha del médico queda intacta");
+      t.igual(r.count, 1);
+    });
+
+    t.caso("injectLabsIntoCronicos: si el valor ya escrito ES el de Athenea, un reintento completa la fecha que quedó vacía (v12.3.35)", () => {
+      mockDOM = {
+        "resultadoGlicemia": { value: "7.1" },
+        "fechaResultGlicemia": { value: "" }
+      };
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const r = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "el valor no se reescribe");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2023-05-05", "pero la fecha faltante sí se completa");
+      t.igual(r.count, 0);
+      t.igual(r.respetadas, 1);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: extrae la fecha de la TARJETA solo con fecha única y año coincidente (v12.3.35 — única fuente de fecha confirmada en campo)", () => {
+      const conFecha = testApi._atheneaExtraerSolicitudes(
+        '<div>Solicitud 4321 · 05/03/2026 · LAB</div><form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>');
+      t.igual(conFecha.length, 1);
+      t.igual(conFecha[0].fechaIso, "2026-03-05", "una sola fecha y su año calza con el de la solicitud");
+      const ambigua = testApi._atheneaExtraerSolicitudes(
+        '<div>Del 01/02/2026 al 05/03/2026</div><form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>');
+      t.igual(ambigua[0].fechaIso, null, "dos fechas en la tarjeta = ambigüedad = sin fecha, jamás adivinar");
+      const anoAjeno = testApi._atheneaExtraerSolicitudes(
+        '<div>05/03/2025</div><form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>');
+      t.igual(anoAjeno[0].fechaIso, null, "la fecha no es del año de la solicitud: se descarta");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: la fecha DESPUÉS del formulario también cuenta (v12.3.36 — disposición real de la tarjeta confirmada en campo)", () => {
+      // El diagnóstico de la .35 mostró que antes del <form> solo hay apertura de
+      // tarjeta ("<div class=card>...") y la fecha visible viene después, dentro de
+      // la misma tarjeta — exactamente esta estructura.
+      const html = '<div class="card">\r\n  <div class="card-body p-5">\r\n' +
+        '<form id="7368152026" data-modulo="LAB" action="/Resultados/Reporte"></form>' +
+        '<h5>Solicitud 736815</h5><span>Fecha: 05/08/2026</span></div></div>';
+      const out = testApi._atheneaExtraerSolicitudes(html);
+      t.igual(out.length, 1);
+      t.igual(out[0].fechaIso, "2026-08-05");
+    });
+
     t.caso("injectLabsIntoCronicos: sinCasilla acumula analitos válidos sin destino en el DOM", () => {
       mockDOM = {};
       const labs = [{ codigo: "903843", nombre: "HEMOGLOBINA GLICOSILADA", Resultado: "7.1", Fecha: "2023-01-01" }];
