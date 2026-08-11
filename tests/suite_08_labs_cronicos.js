@@ -93,7 +93,11 @@ module.exports = {
       t.igual(mockDOM["resultadoColesterolTotal"].value, "");
     });
 
-    t.caso("injectLabsIntoCronicos: Primer valor gana en colisión", () => {
+    t.caso("injectLabsIntoCronicos: en colisión gana la fecha MÁS RECIENTE, no el primero de la lista (v12.5.6, pedido del médico)", () => {
+      // Antes ganaba "el primero de la lista" asumiendo que Athenea siempre entrega de
+      // más reciente a más antigua — un supuesto de orden, no una comparación real de
+      // fechas. Aquí el duplicado MÁS VIEJO va primero en labsArray a propósito: si el
+      // fix funciona, igual gana el de fecha 2023-01-02 (el más reciente de verdad).
       mockDOM = {
         "resultadoGlicemia": { value: "" },
         "fechaResultGlicemia": { value: "" }
@@ -104,8 +108,22 @@ module.exports = {
       ];
       const res = testApi.injectLabsIntoCronicos(labs);
       t.igual(res.count, 1, "Solo debe inyectar uno");
-      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "El primer valor debe prevalecer");
-      t.igual(mockDOM["fechaResultGlicemia"].value, "2023-01-01", "Debe usar la fecha del primer resultado");
+      t.igual(mockDOM["resultadoGlicemia"].value, "9.9", "gana el resultado con la fecha más reciente, aunque llegue segundo en la lista");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2023-01-02", "la fecha escrita es la del resultado más reciente");
+    });
+
+    t.caso("injectLabsIntoCronicos: en colisión, un resultado CON fecha le gana a uno SIN fecha (sin importar el orden)", () => {
+      mockDOM = {
+        "resultadoGlicemia": { value: "" },
+        "fechaResultGlicemia": { value: "" }
+      };
+      const labs = [
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" }
+      ];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoGlicemia"].value, "6.6", "el resultado con fecha conocida es más informativo y gana");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2024-06-01");
     });
 
     t.caso("injectLabsIntoCronicos: Sin fecha real, la casilla de fecha queda vacía", () => {

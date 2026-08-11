@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.5
+// @version      12.5.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,26 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.6 — 11-08-2026: EN COLISIÓN DE ANALITOS, GANA LA FECHA MÁS RECIENTE (pedido
+  explícito del médico). injectLabsIntoCronicos escribía la casilla con el PRIMER
+  resultado del mismo analito que encontraba en labsArray, asumiendo que Athenea
+  siempre entrega las solicitudes de más reciente a más antigua — un supuesto de
+  ORDEN, nunca comparado contra las fechas reales. Ahora se agrupan primero TODOS los
+  candidatos de cada uno de los 13 analitos del whitelist (PTH, Fósforo, Albúmina y
+  Hemoglobina incluidos) y gana el que tenga la fecha ISO más reciente: un resultado
+  CON fecha siempre le gana a uno sin fecha, y entre dos con fecha manda la mayor
+  (empate o ambos sin fecha: se conserva el primero visto, estable). No cambia nada
+  del resto de las reglas ya existentes (casilla del médico sagrada, fecha solo se
+  completa si está vacía, etc.) — solo decide CUÁL repetición es la vigente antes de
+  aplicarlas.
+  Pendiente (bloqueado, a la espera de que el médico entregue la fórmula de
+  Cockcroft-Gault y confirme cómo se determina el "programa" del paciente en Everest):
+  estadificación renal para exigir/omitir PTH, Fósforo y Albúmina según estadio ERC, y
+  contrastar la fecha más reciente contra la VIGENCIA administrativa por examen que el
+  médico ya entregó (tablas de control DM2/HTA/ERC del manual de programas especiales).
 */
 
 /*
@@ -532,7 +552,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1686,6 +1706,17 @@
           reclamar();
       };
 
+      // v12.5.6 — CAMBIO PEDIDO POR EL MÉDICO: antes "el primero de la lista gana" (el
+      // resto se descartaba con solo un aviso), asumiendo que Athenea siempre entrega las
+      // solicitudes de más reciente a más antigua — un supuesto de ORDEN, no una
+      // comparación real de fechas. Ahora se recorre TODO labsArray primero, se agrupan
+      // los candidatos por analito, y GANA la repetición con la FECHA más reciente de
+      // verdad (una con fecha siempre le gana a una sin fecha; entre dos con fecha, la
+      // mayor ISO gana; empate o ambas sin fecha, se conserva la primera vista, estable).
+      // Con la ventana de Athenea ya acotada por tarjeta (v12.5.5), varias solicitudes del
+      // mismo analito ya no se cruzan entre sí — esto solo decide, con evidencia real,
+      // cuál de ellas es la vigente para escribir en Crónicos.
+      const candidatosPorClave = new Map();
       labsArray.forEach(lab => {
           if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
               try {
@@ -1719,20 +1750,23 @@
           // para no perder los resultados cualitativos legítimos ("Negativo", "Normal").
           if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientes++; return; }
 
-          // v11.0.1 — Si dos analitos distintos caen en la misma casilla (p. ej. creatinina
-          // en suero y creatinina en orina), manda el PRIMERO y se avisa por consola en vez
-          // de sobrescribir en silencio con el equivocado.
-          if (yaEscritas.has(matched.resultId)) {
-            if (!_avisoCasillaYaEscrita.has(matched.key)) { _avisoCasillaYaEscrita.add(matched.key); console.warn("[Vigilante] casilla ya escrita, se conserva el primer valor:", matched.key); }
-            return;
+          const fechaInfo = _extractAtheneaFecha(lab);
+          const resultDate = fechaInfo ? fechaInfo.iso : null;
+          const previo = candidatosPorClave.get(matched.key);
+          if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) {
+              // Repetición del mismo analito con fecha igual, más vieja, o sin fecha frente
+              // a un candidato que ya tiene una: se descarta, avisando una sola vez.
+              if (!_avisoCasillaYaEscrita.has(matched.key)) { _avisoCasillaYaEscrita.add(matched.key); console.warn("[Vigilante] repetición del mismo analito, se conserva la fecha más reciente:", matched.key); }
+              return;
           }
+          candidatosPorClave.set(matched.key, { lab, matched, resultVal, fechaInfo, resultDate });
+      });
 
+      candidatosPorClave.forEach(({ lab, matched, resultVal, fechaInfo, resultDate }) => {
           // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la
           // trae: eso convertía un resultado de hace meses en uno "de hoy" dentro de la
           // historia clínica. Si no hay fecha real, la casilla queda vacía para que el
           // médico la escriba.
-          const fechaInfo = _extractAtheneaFecha(lab);
-          const resultDate = fechaInfo ? fechaInfo.iso : null;
           if (fechaInfo && !_diagLabFechaKeyFound && !_CAMPOS_FECHA_CONOCIDOS.includes(fechaInfo.key)) {
               _diagLabFechaKeyFound = true;
               console.log("[Vigilante] fecha de Athenea detectada por forma del valor, clave real:", fechaInfo.key, "→", fechaInfo.iso);
@@ -1780,7 +1814,6 @@
               const mismoValor = valorActual !== "" && valorActual === String(resultVal).trim();
               if (valorActual !== "" && !mismoValor) {
                   respetadas++;
-                  yaEscritas.add(matched.resultId);
                   return;
               }
               if (valorActual === "") {
@@ -1789,7 +1822,6 @@
               } else {
                   respetadas++;
               }
-              yaEscritas.add(matched.resultId);
           } else {
               sinCasilla.push(matched.key);   // el campo no existe en esta vista: hay que avisarlo
               return;
