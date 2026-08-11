@@ -10,7 +10,7 @@ module.exports = {
     "apiRecordar", "apiSniffPerf", "apiObservar", "apiLista", "apiCampos",
     "apiParse", "leerConTope", "apiLeerAgenda", "apiCadencia", "tickApi",
     "apiUtil", "apiSano", "apiEspera",
-    "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto",
+    "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
     "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
     "apiAccesoObtenerTurnos"
@@ -459,15 +459,15 @@ module.exports = {
       t.cierto(hayTexto(e.c, "NO se agendó"), "avisa al médico para que lo haga a mano");
     });
 
-    await t.casoAsync("apiLaboratorioAgendarAuto: agenda el turno EXACTO elegido y solo canta éxito si el servidor acepta", async () => {
+    await t.casoAsync("apiLaboratorioAgendarAuto: agenda el turno EXACTO elegido y solo canta éxito si el servidor acepta (respuesta real: error:false + radicado, plano)", async () => {
       const e = entornoApi();
       e.setGm((o) => {
         if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
-        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"resultado":"ok"}' });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":13525848}' });
       });
       const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
       t.cierto(ok);
-      t.igual(e.reg.gm.length, 2);
+      t.igual(e.reg.gm.length, 2, "sin celular no se llama al SMS: se queda en las 2 llamadas de siempre");
       const urlBook = e.reg.gm[1].url;
       t.cierto(urlBook.indexOf("https://appcita.viva1a.com.co:8051/") === 0, "va por GM al dominio de AppCita");
       t.cierto(urlBook.includes("AgendaId=555"), "usa el agendaId del turno real, no uno cableado");
@@ -475,10 +475,74 @@ module.exports = {
       t.cierto(urlBook.includes("Identificacion=123456"));
       t.cierto(urlBook.includes("FechaCita=2026-08-14"));
       t.cierto(urlBook.includes("Telefono=0"), "sin teléfono cableado: manda 0 como la app oficial");
+      t.cierto(urlBook.includes("NombrePaciente=%20"), "espacio CODIFICADO, igual que la captura real del front (Incidente v12.3.31)");
       t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
+      t.cierto(hayTexto(e.c, "NO recibe SMS"), "sin celular conocido, el aviso sigue diciéndolo");
     });
 
-    await t.casoAsync("apiLaboratorioAgendarAuto: si el servidor rechaza la cita, NO se da por agendada", async () => {
+    t.caso("normalizeHora: iguala '6:40:00', '06:40:00' y '06:40' al mismo turno (Incidente v12.3.32 — captura real: la hora rechazada aparecía como libre)", () => {
+      const e = entornoApi();
+      t.igual(e.c.api.normalizeHora("6:40:00"), "06:40");
+      t.igual(e.c.api.normalizeHora("06:40:00"), "06:40");
+      t.igual(e.c.api.normalizeHora("06:40"), "06:40");
+      t.igual(e.c.api.normalizeHora("14:05:30"), "14:05");
+      t.igual(e.c.api.normalizeHora(""), "", "sin hora no inventa nada");
+      t.igual(e.c.api.normalizeHora("sin-hora"), "sin-hora", "lo que no parece hora se devuelve tal cual para que la comparación falle honestamente");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: agenda aunque la hora venga en formato distinto ('6:40:00' del servidor vs '06:40:00' elegida) (Incidente v12.3.32)", async () => {
+      const e = entornoApi();
+      const turnosFormatoRaro = { turnos: [{ Hora: "6:40:00", AgendaId: 777 }] };
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(turnosFormatoRaro) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":222}' });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "06:40:00");
+      t.cierto(ok, "mismo turno, distinto formato: debe agendar, no rechazar");
+      t.cierto(e.reg.gm[1].url.includes("AgendaId=777"));
+      // v12.3.33 — hallado en revisión adversarial: la hora enviada debe ser LA DEL TURNO
+      // recién consultado (Hora="6:40:00", tal cual, como hace el front oficial), no el
+      // string viejo del modal ("06:40:00") con un formato que ese turno nunca tuvo.
+      t.cierto(e.reg.gm[1].url.includes("Hora=6%3A40%3A00"), "manda la hora del turno real, no la del modal");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: si el servicio de SMS responde error, NO se anuncia 'Se envió SMS' (Incidente v12.3.33)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":333}' });
+        else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 500, responseText: "gateway caido" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3194194489");
+      t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
+      t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
+      t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: usa AgendaId (mayúsculas) del turno — el nombre real confirmado contra el front de AppCita (Incidente v12.3.31)", async () => {
+      const e = entornoApi();
+      const turnosMayus = { turnos: [{ Hora: "10:00", AgendaId: 999 }] };
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(turnosMayus) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":111}' });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "10:00");
+      t.cierto(ok);
+      t.cierto(e.reg.gm[1].url.includes("AgendaId=999"), "toma el AgendaId real, no un id inventado ni undefined");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: HTTP 200 con error:true en el cuerpo NO se da por agendada (éxito estricto, Incidente v12.3.31)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":true,"mensaje":"cupo ocupado"}' });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
+      t.falso(ok, "un HTTP 200 que trae error:true en el cuerpo no debe contarse como éxito");
+      t.cierto(hayTexto(e.c, "No se pudo confirmar"), "el médico se entera de que debe agendar a mano");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: si el servidor rechaza la cita (fallo de transporte), NO se da por agendada", async () => {
       const e = entornoApi();
       e.setGm((o) => {
         if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
@@ -487,6 +551,24 @@ module.exports = {
       const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
       t.falso(ok);
       t.cierto(hayTexto(e.c, "No se pudo confirmar"), "el médico se entera de que debe agendar a mano");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: con celular conocido, envía el SMS con codigoCita=radicado (no AgendaId) (Incidente v12.3.31)", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: JSON.stringify(TURNOS_LAB) });
+        else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":13525848}' });
+        else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 200, responseText: "{}" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "319 419-4489");
+      t.cierto(ok);
+      t.igual(e.reg.gm.length, 3, "esta vez sí llama al SMS además de las 2 de siempre");
+      const urlSms = e.reg.gm[2].url;
+      t.cierto(urlSms.startsWith("https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio"));
+      t.cierto(urlSms.includes("Celular=3194194489"), "el celular se limpia de espacios y guiones antes de mandarlo");
+      t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
+      t.cierto(urlSms.includes("codigoSede=378"));
+      t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
     });
 
     // ---------- apiDigiturnoFinalizarTicket ----------

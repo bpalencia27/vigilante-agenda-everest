@@ -11,6 +11,7 @@ module.exports = {
   cubre: [
     "readJSON", "writeJSON", "saveSettings", "getProcessedToday",
     "isCitaAgendadaHoy", "isOrdenesCreadasHoy", "markCitaAgendadaHoy", "markOrdenesCreadasHoy",
+    "isLabAgendadaHoy", "markLabAgendadaHoy", "citaAgendadaFechaHoy",
     "applySettings", "darkPreferred", "isLight", "applyTheme", "restartPolling",
   ],
 
@@ -118,10 +119,47 @@ module.exports = {
       t.igual(c.env.storage.getItem(PROC_KEY), null, "el registro diario no debe existir");
     });
 
+    // ------------------------------------------------------------------
+    //  v12.3.28 — bloqueo independiente cita de control / toma de muestras
+    // ------------------------------------------------------------------
+    t.caso("markCitaAgendadaHoy: con fechaIso la recuerda; una marca vieja sin ella no la borra", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      t.igual(A.citaAgendadaFechaHoy("789"), null, "sin marcar, no hay fecha");
+      A.markCitaAgendadaHoy("789", "2026-11-10");
+      t.cierto(A.isCitaAgendadaHoy("789"));
+      t.igual(A.citaAgendadaFechaHoy("789"), "2026-11-10");
+      t.igual(A.citaAgendadaFechaHoy("999999999"), null, "otro paciente no se contamina");
+      A.markCitaAgendadaHoy("789");   // llamada vieja, sin segundo argumento
+      t.igual(A.citaAgendadaFechaHoy("789"), "2026-11-10", "la fecha previa se conserva");
+    });
+
+    t.caso("isLabAgendadaHoy / markLabAgendadaHoy: bloqueo independiente de la cita de control", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      t.falso(A.isLabAgendadaHoy(null));
+      t.falso(A.isLabAgendadaHoy("321"), "documento nunca marcado");
+      A.markCitaAgendadaHoy("321", "2026-11-10");
+      t.cierto(A.isCitaAgendadaHoy("321"));
+      t.falso(A.isLabAgendadaHoy("321"), "marcar la cita de control NO marca el laboratorio");
+      A.markLabAgendadaHoy(321);                       // número a propósito: debe normalizar a texto
+      t.cierto(A.isLabAgendadaHoy("321"), "debe encontrarla como texto");
+      t.cierto(A.isLabAgendadaHoy(321), "y también como número");
+      A.markLabAgendadaHoy("321");                      // segunda vez: no debe duplicar
+      t.igual(A.getProcessedToday().labs, ["321"], "sin duplicados en el registro persistido");
+    });
+
+    t.caso("markLabAgendadaHoy: con documento vacío no escribe nada", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markLabAgendadaHoy("");
+      A.markLabAgendadaHoy(null);
+      t.igual(c.env.storage.getItem(PROC_KEY), null, "el registro diario no debe existir");
+    });
+
     t.caso("marcas de ayer no cuentan hoy (el reset diario protege de falsos positivos)", () => {
-      A.writeJSON(PROC_KEY, { dia: "2020-01-01", citas: ["777"], ordenes: ["777"] });
+      A.writeJSON(PROC_KEY, { dia: "2020-01-01", citas: ["777"], ordenes: ["777"], labs: ["777"], citasDetalle: { "777": { fechaIso: "2020-01-05", ts: 1 } } });
       t.falso(A.isCitaAgendadaHoy("777"));
       t.falso(A.isOrdenesCreadasHoy("777"));
+      t.falso(A.isLabAgendadaHoy("777"), "el reset diario también protege al bloqueo de laboratorio");
+      t.igual(A.citaAgendadaFechaHoy("777"), null, "y a la fecha recordada de la cita de control");
     });
 
     // ------------------------------------------------------------------
