@@ -93,7 +93,7 @@ module.exports = {
     t.caso("_atheneaExtraerSolicitudes: raspa la hora pegada a la fecha de la tarjeta", () => {
       const html = '<div class="card">11/08/2026 7:35 a. m.<form action="/Resultados/Reporte" id="5552026" data-modulo="LAB"></form></div>';
       const r = api._atheneaExtraerSolicitudes(html);
-      t.igual(r, [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: "2026-08-11", horaTxt: "07:35" }]);
+      t.igual(r, [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: "2026-08-11", horaTxt: "07:35", hash: null, token: null }]);
     });
 
     t.caso("_atheneaExtraerSolicitudes: dos horas distintas junto a la misma fecha = ninguna (no adivinar)", () => {

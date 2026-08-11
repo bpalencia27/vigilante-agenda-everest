@@ -26,7 +26,8 @@ module.exports = {
   nombre: "Puente Athenea y credenciales (Suite 18)",
   cubre: [
     "_atheneaToken", "_atheneaIdPaciente", "_atheneaCedulaCoincide",
-    "_atheneaExtraerSolicitudes", "_atheneaMultipart", "_atheneaPareceLogin",
+    "_atheneaExtraerSolicitudes", "_parseFechaEspanolLike", "_fechaDesdeNumeroSolicitud",
+    "_atheneaMultipart", "_atheneaPareceLogin",
     "_gmReq", "getAtheneaSolicitudesAuto", "getAtheneaLabsAuto",
     "atheneaKeepAlive", "atheneaAutoLogin",
     "atheneaCredsGet", "atheneaCredsSet", "atheneaCredsClear",
@@ -143,14 +144,14 @@ module.exports = {
       const out = api._atheneaExtraerSolicitudes(html);
       // v12.3.35 — fechaIso: null cuando la tarjeta no muestra ninguna fecha reconocible.
       t.igual(out, [
-        { idSolicitud: 111, ano: 2025, modulo: "LAB", fechaIso: null, horaTxt: null },
-        { idSolicitud: 222, ano: 2024, modulo: "PAT", fechaIso: null, horaTxt: null },
+        { idSolicitud: 111, ano: 2025, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null },
+        { idSolicitud: 222, ano: 2024, modulo: "PAT", fechaIso: null, horaTxt: null, hash: null, token: null },
       ]);
     });
 
     t.caso("_atheneaExtraerSolicitudes: sin data-modulo, asume LAB por defecto", () => {
       const html = `<form id="3332026" action="/Resultados/Reporte"></form>`;
-      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 333, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null }]);
+      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 333, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null }]);
     });
 
     t.caso("_atheneaExtraerSolicitudes: ignora formularios que no apuntan a /Resultados/Reporte", () => {
@@ -161,6 +162,88 @@ module.exports = {
     t.caso("_atheneaExtraerSolicitudes: HTML vacío o sin formularios -> arreglo vacío, nunca lanza", () => {
       t.igual(api._atheneaExtraerSolicitudes(""), []);
       t.noLanza(() => api._atheneaExtraerSolicitudes("<div>nada</div>"));
+    });
+
+    // =====================================================================
+    // v12.5.4 — Fecha REAL de Athenea: "vie. 15 may. 2026 07:31 a. m." (texto plano,
+    // confirmado con captura de pantalla y volcado de HTML en consultorio real).
+    // =====================================================================
+    t.caso("_parseFechaEspanolLike: reconoce día de la semana + día + mes en letras + año, con hora", () => {
+      t.igual(api._parseFechaEspanolLike("vie. 15 may. 2026 07:31 a. m."), [{ iso: "2026-05-15", hora: "07:31" }]);
+      t.igual(api._parseFechaEspanolLike("sáb. 25 abr. 2026 07:06 a. m."), [{ iso: "2026-04-25", hora: "07:06" }]);
+      t.igual(api._parseFechaEspanolLike("mar. 3 feb. 2026 08:06 a. m."), [{ iso: "2026-02-03", hora: "08:06" }]);
+      t.igual(api._parseFechaEspanolLike("vie. 26 dic. 2025 08:11 a. m."), [{ iso: "2025-12-26", hora: "08:11" }]);
+    });
+
+    t.caso("_parseFechaEspanolLike: hora p. m. convierte a 24h; sin hora adjunta, hora null", () => {
+      t.igual(api._parseFechaEspanolLike("jue. 1 oct. 2026 03:15 p. m."), [{ iso: "2026-10-01", hora: "15:15" }]);
+      t.igual(api._parseFechaEspanolLike("jue. 1 oct. 2026"), [{ iso: "2026-10-01", hora: null }]);
+    });
+
+    t.caso("_parseFechaEspanolLike: rechaza una fecha imposible (31 de febrero) en vez de normalizarla en silencio", () => {
+      t.igual(api._parseFechaEspanolLike("dom. 31 feb. 2026 07:00 a. m."), []);
+    });
+
+    t.caso("_parseFechaEspanolLike: sin coincidencia -> arreglo vacío, nunca lanza", () => {
+      t.igual(api._parseFechaEspanolLike("texto sin ninguna fecha"), []);
+      t.noLanza(() => api._parseFechaEspanolLike(""));
+    });
+
+    t.caso("_fechaDesdeNumeroSolicitud: los 6 primeros dígitos de 'Numero:' son año-mes-día (verificado 4/4 en campo)", () => {
+      t.igual(api._fechaDesdeNumeroSolicitud("Numero: 26051503125"), "2026-05-15");
+      t.igual(api._fechaDesdeNumeroSolicitud("Numero: 26042502051"), "2026-04-25");
+      t.igual(api._fechaDesdeNumeroSolicitud("Numero: 26020304371"), "2026-02-03");
+      t.igual(api._fechaDesdeNumeroSolicitud("Numero: 25122602509"), "2025-12-26");
+    });
+
+    t.caso("_fechaDesdeNumeroSolicitud: mes o día fuera de rango, o sin 'Numero:' -> null (nunca adivina)", () => {
+      t.igual(api._fechaDesdeNumeroSolicitud("Numero: 26139903125"), null); // mes 13, día 99
+      t.igual(api._fechaDesdeNumeroSolicitud("sin numero aquí"), null);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: tarjeta REAL de Athenea (formato español + Numero de respaldo) -> fecha y hora correctas", () => {
+      // HTML condensado de la captura real de consultorio (2026-08-11), sin las rutas
+      // SVG de los íconos (no aportan nada a la extracción).
+      const html = `
+        <div class="card text-dark bg-succes mb-5">
+          <div class="card-header p-10"><strong>SOLICITUD DE LABORATORIO</strong></div>
+          <div class="card-body p-10">
+            <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+            <div class="card-title no-margin">Numero: 26051503125</div>
+            <div class="card-title no-margin">Estado: Solicitud Completa</div>
+          </div>
+          <div class="card-footer no-padding">
+            <span class="p-10" data-toggle="collapse" onclick="getDetalleSolicitud(this, 'LAB', 846567, 2026, 'True' )" href="#collapse8465672026LAB">Ver Resumen</span>
+            <form id="8465672026" data-modulo="LAB" action="/Resultados/Reporte" method="post">
+              <input type="hidden" id="hash" name="hash" value="AED1F6E0B7E9" />
+              <button type="submit" class="btn btn-primary float-right btn-xs">Ver Informe</button>
+              <input name="__RequestVerificationToken" type="hidden" value="TOKEN-XYZ" />
+            </form>
+          </div>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out, [{ idSolicitud: 846567, ano: 2026, modulo: "LAB", fechaIso: "2026-05-15", horaTxt: "07:31", hash: "AED1F6E0B7E9", token: "TOKEN-XYZ" }]);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: si el texto en español y el 'Numero' de la MISMA tarjeta discrepan, se descarta la fecha entera", () => {
+      // Numero dice 2026-05-16 (día 16), el texto dice día 15: conflicto real entre
+      // las dos fuentes -> mejor ninguna fecha que arriesgar cuál tiene razón.
+      const html = `
+        <div class="card">
+          <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a. m.</strong></div>
+          <div class="card-title no-margin">Numero: 26051603125</div>
+          <form id="8465672026" data-modulo="LAB" action="/Resultados/Reporte"></form>
+        </div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].fechaIso, null, "conflicto entre las dos fuentes -> sin fecha");
+      t.igual(out[0].horaTxt, null);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes: solo 'Numero' (sin el texto en español) -> respaldo válido, sin hora", () => {
+      const html = `<div class="card">Numero: 26051503125<form id="8465672026" data-modulo="LAB" action="/Resultados/Reporte"></form></div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out[0].fechaIso, "2026-05-15");
+      t.igual(out[0].horaTxt, null, "el campo Numero no trae hora");
     });
 
     // =====================================================================
@@ -481,7 +564,7 @@ module.exports = {
       const e = entornoAthenea();
       e.setPlan(planFeliz);
       const r = await e.c.api.getAtheneaSolicitudesAuto(DOC);
-      t.igual(r, { idPaciente: "999", solicitudes: [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null }] });
+      t.igual(r, { idPaciente: "999", solicitudes: [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null, hash: null, token: null }] });
       t.igual(e.llamadas.length, 3);
       t.igual(e.llamadas[0].method, "GET");
       t.cierto(e.llamadas[0].url.includes("/Resultados/BusquedaPaciente"));
@@ -559,6 +642,46 @@ module.exports = {
       t.cierto(e.llamadas[3].url.includes("consultaDetalleSolicitud"));
       const cuerpo = JSON.parse(e.llamadas[3].data);
       t.igual(cuerpo, { idSolicitud: 555, ano: 2026, modulo: "LAB" });
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto v12.5.4: la tarjeta REAL (fecha en español + Numero + hash/token) llega completa a cada analito", async () => {
+      // Extremo a extremo con el formato REAL confirmado en consultorio (2026-08-11):
+      // getAtheneaSolicitudesAuto -> _atheneaExtraerSolicitudes (fecha en español +
+      // verificación cruzada con "Numero") -> fetchAtheneaLabs -> cada analito hereda
+      // __vglFechaSolicitud/__vglHoraSolicitud (para la casilla de Crónicos) y
+      // __vglHash/__vglToken/__vglModulo (para el botón "Ver informe" del modal).
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({
+          status: 200,
+          responseText: `CC: ${DOC}
+            <div class="card">
+              <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+              <div class="card-title no-margin">Numero: 26051503125</div>
+              <form id="8465672026" data-modulo="LAB" action="/Resultados/Reporte">
+                <input type="hidden" id="hash" name="hash" value="HASHREAL123" />
+                <input name="__RequestVerificationToken" type="hidden" value="TOKENREAL456" />
+              </form>
+            </div>`,
+        });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "2009", NombreParametro: "COLESTEROL TOTAL", Resultado: "159" }]) }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs.length, 1);
+      t.igual(labs[0].__vglFechaSolicitud, "2026-05-15");
+      t.igual(labs[0].__vglHoraSolicitud, "07:31");
+      t.igual(labs[0].__vglHash, "HASHREAL123");
+      t.igual(labs[0].__vglToken, "TOKENREAL456");
+      t.igual(labs[0].__vglModulo, "LAB");
+      // Y la casilla de Crónicos recibe justo esa fecha, como cualquier otra fuente.
+      t.igual(e.c.api._extractAtheneaFecha(labs[0]).iso, "2026-05-15");
     });
 
     await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> [] sin llegar nunca a pedir detalle", async () => {

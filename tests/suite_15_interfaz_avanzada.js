@@ -59,7 +59,7 @@ module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
     "createLabInjectorUI", "setWinState", "buildOverlay",
-    "openLaboratoriosModal", "openAgendamientoModal", "openOrdenamientoModal",
+    "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openOrdenamientoModal",
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
@@ -500,6 +500,14 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes("vgl-labs-tr vgl-labs-alert"), "un resultado que la fuente declara Elevado lleva la clase de resalte en rojo (vgl-labs-alert; el color vive en la hoja de estilos, no inline)");
     });
 
+    await t.casoAsync("openLaboratoriosModal v12.5.4: sin hash/token en la tarjeta, la fila NO ofrece 'Ver informe'", async () => {
+      const modal = ultimoModal("vgl-labs-modal");
+      const contenido = modal.querySelector("#vgl-labs-content");
+      // OJO: 'class="vgl-labs-pdf"' (con la comilla de cierre) para no confundir el
+      // BOTÓN con la celda contenedora 'vgl-labs-pdfcol', que siempre está presente.
+      t.falso(contenido.innerHTML.includes('class="vgl-labs-pdf"'), "el fixture base no trae hash/token: sin botón");
+    });
+
     await t.casoAsync("openLaboratoriosModal: clic en el fondo cierra el modal (bgClick → closeMod)", async () => {
       const modal = ultimoModal("vgl-labs-modal");
       disparar(modal, "click", { target: modal });
@@ -514,6 +522,122 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes("No se encontraron paraclínicos recientes"));
       t.cierto(contenido.innerHTML.includes("No se muestra ningún resultado de ejemplo"));
       labsSinDatos = false;
+    });
+
+    // v12.5.4 — Instancia SEPARADA con la tarjeta REAL (fecha en español + hash/token),
+    // para probar que "Ver informe" aparece en la tabla con los datos correctos (el
+    // clic real que dispara abrirInformeAthenea() se prueba aparte, más abajo).
+    const cModal2 = cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        const url = String(o.url || "");
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          o.onload({
+            status: 200,
+            responseText: `CC 12345678
+              <div class="card">
+                <div class="card-text no-margin"><strong>vie. 15 may. 2026 07:31 a.&nbsp;m.</strong></div>
+                <div class="card-title no-margin">Numero: 26051503125</div>
+                <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte">
+                  <input type="hidden" id="hash" name="hash" value="HASHBTN" />
+                  <input name="__RequestVerificationToken" type="hidden" value="TOKENBTN" />
+                </form>
+              </div>`,
+          });
+        } else if (url.includes("consultaDetalleSolicitud")) {
+          o.onload({ status: 200, responseText: JSON.stringify({ dataObject: JSON.stringify([{ NombreParametro: "CREATININA", Resultado: "1.2" }]) }) });
+        } else if (url.endsWith("/Resultados/Reporte")) {
+          o.onload({ status: 200, response: { tipo: "pdf-simulado" } });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
+    enriquecerDom(cModal2);
+
+    await t.casoAsync("openLaboratoriosModal v12.5.4: CON hash/token en la tarjeta, la fila SÍ ofrece 'Ver informe' con los datos correctos", async () => {
+      // v12.5.4 — El DOM simulado del banco (harness.js) no parsea innerHTML de verdad
+      // (querySelector devuelve un stub en blanco, no un nodo real de la cadena
+      // asignada): por eso esta prueba verifica el HTML tal cual se envía al navegador
+      // real —incluidos los atributos data-hash/data-token— en vez de simular un clic
+      // sobre un botón que el DOM falso no puede reconstruir. El clic real y el POST
+      // resultante se prueban por separado, llamando a abrirInformeAthenea() directo
+      // (ver más abajo) — es la misma función que ese clic dispara en el navegador.
+      await cModal2.api.openLaboratoriosModal({ doc_id: "12345678", nombre: "ANA PEREZ" });
+      const modal = cModal2.env.doc.body.children.filter((n) => n.id === "vgl-labs-modal").pop();
+      const contenido = modal.querySelector("#vgl-labs-content");
+      t.cierto(contenido.innerHTML.includes('class="vgl-labs-pdf"'), "con hash/token, el botón sí aparece");
+      t.cierto(contenido.innerHTML.includes('data-hash="HASHBTN"'));
+      t.cierto(contenido.innerHTML.includes('data-token="TOKENBTN"'));
+      t.cierto(contenido.innerHTML.includes('data-modulo="LAB"'));
+    });
+
+    // ================= abrirInformeAthenea (misma función que dispara el clic real) =================
+    t.caso("abrirInformeAthenea: sin hash o sin token, no toca la red", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      let llamado = false;
+      c.env.win.GM_xmlhttpRequest = () => { llamado = true; };
+      c.api.abrirInformeAthenea(null, "T", "LAB");
+      c.api.abrirInformeAthenea("H", null, "LAB");
+      t.falso(llamado);
+    });
+
+    await t.casoAsync("abrirInformeAthenea: éxito — POST correcto (hash/modulo/token, form-urlencoded, responseType blob) y el botón se reactiva", async () => {
+      const llamadas = [];
+      const c = cargar({ silencioso: true, gmxhr: (o) => { llamadas.push(o); o.onload({ status: 200, response: { simulado: true } }); } });
+      enriquecerDom(c);
+      const btnFalso = { disabled: false, textContent: "📄" };
+      // v12.5.4 — El mock de GM_xmlhttpRequest de este banco responde SÍNCRONAMENTE
+      // (a diferencia del navegador real): para cuando abrirInformeAthenea() retorna,
+      // el ciclo deshabilitar→pedir→reactivar ya corrió completo. Por eso aquí solo se
+      // verifica el estado FINAL (reactivado) — el estado transitorio "⏳ deshabilitado"
+      // sí ocurre en el navegador real (btn.disabled=true se fija ANTES del
+      // GM_xmlhttpRequest, ver el código fuente), simplemente este mock no deja verlo.
+      c.api.abrirInformeAthenea("HASHREAL", "TOKENREAL", "LAB", btnFalso);
+      await esperar(20);
+      t.igual(llamadas.length, 1);
+      t.igual(llamadas[0].method, "POST");
+      t.igual(llamadas[0].url, "https://medicosviva1a.atheneasoluciones.com/Resultados/Reporte");
+      t.igual(llamadas[0].responseType, "blob");
+      t.igual(llamadas[0].headers["Content-Type"], "application/x-www-form-urlencoded");
+      t.cierto(llamadas[0].data.includes("hash=HASHREAL"));
+      t.cierto(llamadas[0].data.includes("modulo=LAB"));
+      t.cierto(llamadas[0].data.includes("__RequestVerificationToken=TOKENREAL"));
+      t.igual(btnFalso.disabled, false, "se reactiva tras la respuesta");
+      t.igual(btnFalso.textContent, "📄");
+    });
+
+    await t.casoAsync("abrirInformeAthenea: HTTP de error -> el botón se reactiva y no queda colgado en 'cargando'", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => o.onload({ status: 500, response: null }) });
+      enriquecerDom(c);
+      const btnFalso = { disabled: true, textContent: "⏳" };
+      c.api.abrirInformeAthenea("H", "T", "LAB", btnFalso);
+      await esperar(20);
+      t.igual(btnFalso.disabled, false);
+      t.igual(btnFalso.textContent, "📄");
+    });
+
+    await t.casoAsync("abrirInformeAthenea: fallo de red (onerror) -> el botón también se reactiva", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => o.onerror("sin red") });
+      enriquecerDom(c);
+      const btnFalso = { disabled: true, textContent: "⏳" };
+      c.api.abrirInformeAthenea("H", "T", "LAB", btnFalso);
+      await esperar(20);
+      t.igual(btnFalso.disabled, false);
+      t.igual(btnFalso.textContent, "📄");
+    });
+
+    await t.casoAsync("abrirInformeAthenea: se agota el tiempo (ontimeout) -> el botón también se reactiva", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => o.ontimeout && o.ontimeout() });
+      enriquecerDom(c);
+      const btnFalso = { disabled: true, textContent: "⏳" };
+      c.api.abrirInformeAthenea("H", "T", "LAB", btnFalso);
+      await esperar(20);
+      t.igual(btnFalso.disabled, false);
+      t.igual(btnFalso.textContent, "📄");
     });
 
     // ================= openAgendamientoModal =================

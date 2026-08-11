@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.3
+// @version      12.5.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,33 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.4 — LA FECHA DE ATHENEA, RESUELTA DE VERDAD (11-08-2026). Cierre de la cadena de
+  diagnósticos de campo iniciada en v12.5.3: capturas de red confirmaron que el informe
+  PDF es una imagen escaneada sin una sola letra de texto (0 operadores BT, los 7 streams
+  fallan al descomprimir como deflate — no hay nada que leer ahí). Pero una captura de
+  pantalla real de consultorio reveló que la fecha SIEMPRE estuvo en el HTML que el
+  script ya descarga, en texto plano, dentro de cada tarjeta de solicitud — el problema
+  nunca fue DÓNDE buscar (ya se había ensanchado la ventana en v12.5.3), fue QUÉ patrón
+  buscar: Athenea la escribe como "vie. 15 may. 2026 07:31 a. m." (día de la semana +
+  día + MES EN LETRAS ESPAÑOLAS + año), un formato que ningún patrón numérico podía
+  reconocer. Se agrega _parseFechaEspanolLike para ese formato exacto.
+  Verificación cruzada añadida (nunca como única fuente): la misma tarjeta trae
+  "Numero: 26051503125" — confirmado 4/4 contra fechas reales que los 6 primeros
+  dígitos son año-mes-día. Si el texto en español y el Numero DISCREPAN, se descarta la
+  fecha entera en vez de adivinar cuál tiene razón (misma filosofía "antes casilla
+  vacía que dato inventado" de siempre). Con esto, el pipeline COMPLETO que ya existía
+  desde v12.4.x (getAtheneaLabsAuto → __vglFechaSolicitud/__vglHoraSolicitud →
+  _extractAtheneaFecha → injectLabsIntoCronicos) empieza a funcionar de punta a punta
+  sin ningún cambio adicional: la fecha real llega sola a la casilla de Crónicos.
+  Bono: se extrae también hash+token de cada tarjeta (los mismos campos que el propio
+  botón "Ver Informe" de Athenea envía a /Resultados/Reporte, confirmado con captura de
+  red real) y se agrega un botón 📄 en la tabla de laboratorios del modal que abre ese
+  PDF real con un clic — no reemplaza la fecha (el PDF no tiene texto legible), es solo
+  un atajo para que el médico vea el documento oficial sin navegar Athenea a mano.
+  Banco: 564 comprobaciones, cobertura 291/317 (91.8%).
 */
 
 /*
@@ -476,7 +503,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -906,7 +933,56 @@
   // varias columnas de estado/sede/médico antes de la celda de acciones puede ser larga)
   // y esta vez se vuelca el texto CRUDO —no solo lo que el regex reconoció— para poder
   // leerlo directamente y no seguir adivinando un formato de fecha a ciegas.
+  // v12.5.4 — RESUELTO CON EVIDENCIA DE CAMPO REAL (2026-08-11): el volcado crudo de la
+  // v12.5.3 mostró la tarjeta completa. La fecha SIEMPRE estuvo ahí, en texto plano,
+  // dentro de <div class="card-text no-margin"> — el problema nunca fue la ventana, fue
+  // el PATRÓN: Athenea la escribe como "vie. 15 may. 2026 07:31 a. m." (día de la semana
+  // abreviado + día + MES EN LETRAS ESPAÑOLAS + año), un formato que ningún patrón
+  // numérico (dd/mm/aaaa, aaaa-mm-dd) podía reconocer jamás. Se añade
+  // _parseFechaEspanolLike para ese formato. Como verificación cruzada adicional (no
+  // como única fuente): la misma tarjeta trae "Numero: 26051503125", donde los 6
+  // primeros dígitos son año-mes-día — confirmado 4/4 contra fechas reales de una
+  // captura de pantalla. Si el texto en español y el Numero DISCREPAN, se descarta la
+  // fecha entera en vez de adivinar cuál de las dos tiene razón.
   let _diagFechaSolicitudHtmlLogged = 0; // contador (hasta 2 muestras), no booleano
+  const MESES_ES_ABR = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, oct: 10, nov: 11, dic: 12 };
+  function _parseFechaEspanolLike(texto) {
+    const out = [];
+    const re = /\b(?:lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\.?\s+(\d{1,2})\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\.?\s+(20\d{2})\b/gi;
+    let mm;
+    while ((mm = re.exec(texto))) {
+      const mesNum = MESES_ES_ABR[mm[2].toLowerCase()];
+      if (!mesNum) continue;
+      const dia = Number(mm[1]), anio = Number(mm[3]);
+      // Fecha real (rechaza "31 feb", etc.) — new Date normaliza desbordes en silencio,
+      // así que se comprueba que lo que salió sea EXACTAMENTE lo que se pidió.
+      const d = new Date(anio, mesNum - 1, dia);
+      if (d.getFullYear() !== anio || d.getMonth() !== mesNum - 1 || d.getDate() !== dia) continue;
+      const iso = `${anio}-${String(mesNum).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+      let hora = null;
+      const resto = texto.slice(mm.index + mm[0].length);
+      const hm = /^[\s,]*\b(\d{1,2}):(\d{2})(?::\d{2})?\s*([ap])\.?\s?m\.?/i.exec(resto);
+      if (hm) {
+        let h = Number(hm[1]); const min = Number(hm[2]);
+        const ap = hm[3].toLowerCase();
+        if (ap === "p" && h < 12) h += 12;
+        if (ap === "a" && h === 12) h = 0;
+        if (h >= 0 && h <= 23 && min >= 0 && min <= 59) hora = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+      }
+      out.push({ iso, hora });
+    }
+    return out;
+  }
+  // Verificación cruzada (nunca única fuente): "Numero: 26051503125" -> aaMMdd + consecutivo.
+  function _fechaDesdeNumeroSolicitud(texto) {
+    const m = /\bNumero\s*:\s*(\d{2})(\d{2})(\d{2})\d+\b/i.exec(texto);
+    if (!m) return null;
+    const mesN = Number(m[2]), diaN = Number(m[3]), anio = 2000 + Number(m[1]);
+    if (mesN < 1 || mesN > 12 || diaN < 1 || diaN > 31) return null;
+    const d = new Date(anio, mesN - 1, diaN);
+    if (d.getFullYear() !== anio || d.getMonth() !== mesN - 1 || d.getDate() !== diaN) return null;
+    return `${anio}-${m[2]}-${m[3]}`;
+  }
   function _atheneaExtraerSolicitudes(html) {
     const out = [];
     const re = /<form\b[^>]*action=["']\/Resultados\/Reporte["'][^>]*>/gi;
@@ -953,24 +1029,60 @@
           return fh;
         }).filter(Boolean);
         const encontradas = [...new Set(parseadas.map((p) => p.iso))];
-        if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) {
+        // v12.5.4 — Fuente REAL confirmada en campo: el texto en español de la tarjeta.
+        const esp = _parseFechaEspanolLike(ventana);
+        const espIsos = [...new Set(esp.map((p) => p.iso))];
+        const numeroIso = _fechaDesdeNumeroSolicitud(ventana);
+
+        if (espIsos.length === 1 && espIsos[0].startsWith(idM[2] + "-")) {
+          // Si el "Numero" de la misma tarjeta también se reconoce y NO coincide con
+          // el texto en español, algo no cuadra entre las dos fuentes: mejor ninguna
+          // fecha que arriesgar cuál de las dos tiene razón.
+          if (!numeroIso || numeroIso === espIsos[0]) {
+            fechaIso = espIsos[0];
+            const horas = [...new Set(esp.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
+            if (horas.length === 1) horaTxt = horas[0];
+          }
+        } else if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) {
+          // Respaldo: formato numérico dd/mm/aaaa o aaaa-mm-dd, por si Athenea lo llega
+          // a usar en algún otro punto de la tarjeta.
           fechaIso = encontradas[0];
-          // Horas vistas junto a ESA fecha: una sola distinta = confiable; varias = nada.
           const horas = [...new Set(parseadas.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
           if (horas.length === 1) horaTxt = horas[0];
+        } else if (numeroIso && numeroIso.startsWith(idM[2] + "-")) {
+          // Último respaldo: solo el consecutivo de "Numero" (sin hora — ese campo no la trae).
+          fechaIso = numeroIso;
         }
         if (_diagFechaSolicitudHtmlLogged < 2) {
           _diagFechaSolicitudHtmlLogged++;
           // Posición del formulario DENTRO de `ventana` (que arranca en `desde`): todo lo
           // que hay antes de ese punto es "antes del formulario" en el HTML real.
           const posFormEnVentana = m.index - desde;
-          console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud #" + _diagFechaSolicitudHtmlLogged + " — fechas reconocibles:", encontradas,
+          console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud #" + _diagFechaSolicitudHtmlLogged + " — fechas reconocibles (numérico):", encontradas,
+            "· español:", espIsos, "· Numero:", numeroIso || "NINGUNO",
             "· aceptada:", fechaIso || "NINGUNA", "· hora:", horaTxt || "NINGUNA",
             "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)),
             "· ANTES del formulario (crudo, últimos 1500 caracteres):", JSON.stringify(ventana.slice(Math.max(0, posFormEnVentana - 1500), posFormEnVentana)));
         }
       } catch (e) {}
-      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt });
+      // v12.5.4 — Extrae hash + token CSRF de ESTA tarjeta: son los dos campos que el
+      // propio botón "Ver Informe" de Athenea envía a /Resultados/Reporte (confirmado
+      // con una captura de red real, 2026-08-11). El informe demostró ser una imagen
+      // escaneada SIN texto (ni un solo operador BT en todo el PDF, los 7 streams son
+      // binarios no-deflate) — la fecha no se puede leer de ahí, pero con estos dos
+      // campos el médico puede abrir el PDF real con un clic en vez de navegar Athenea
+      // a mano. El orden de los atributos varía entre campos (visto en campo: "hash"
+      // trae type/id/name/value, el token trae name/type/value), así que se prueban
+      // ambos órdenes.
+      let hash = null, token = null;
+      try {
+        const tras = html.slice(m.index + tag.length, m.index + tag.length + 1500);
+        const hM = /<input[^>]*\bname=["']hash["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']hash["']/i.exec(tras);
+        const tM = /<input[^>]*\bname=["']__RequestVerificationToken["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']__RequestVerificationToken["']/i.exec(tras);
+        if (hM) hash = hM[1];
+        if (tM) token = tM[1];
+      } catch (e) {}
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt, hash, token });
     }
     return out;
   }
@@ -1194,6 +1306,11 @@
             // v12.4.0 — la hora raspada de la tarjeta acompaña a su fecha, si existe.
             if (s.horaTxt) a.__vglHoraSolicitud = s.horaTxt;
           }
+        });
+        // v12.5.4 — hash/token de ESTA solicitud, para el botón "Ver informe" del modal
+        // de laboratorios: abre el PDF real con un clic en vez de navegar Athenea a mano.
+        if (s.hash && s.token && Array.isArray(arr)) arr.forEach((a) => {
+          if (a && typeof a === "object") { a.__vglHash = s.hash; a.__vglToken = s.token; a.__vglModulo = s.modulo; }
         });
         return arr;
       }).catch(() => [])
@@ -5861,6 +5978,14 @@
         background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
       }
+      /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
+      #vgl-labs-modal .vgl-labs-pdfcol{text-align:center;width:1%}
+      #vgl-labs-modal .vgl-labs-pdf{
+        all:unset;cursor:pointer;font-size:16px;padding:4px 8px;border-radius:var(--r-chip);
+        transition:transform .15s var(--ease-out),background .15s var(--ease-out)
+      }
+      #vgl-labs-modal .vgl-labs-pdf:hover{background:var(--bg3);transform:scale(1.12)}
+      #vgl-labs-modal .vgl-labs-pdf:disabled{opacity:.5;cursor:wait}
 
       /* ---- Alerta roja neón: SOLO donde la fuente lo declara ---- */
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
@@ -7320,6 +7445,14 @@
       // marca en rojo lo que la PROPIA fuente declara elevado o anormal; el resto va en
       // color de texto neutro, sin insinuar nada.
       const esAlerta = String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal");
+      // v12.5.4 — Botón "Ver informe": abre el PDF real de Athenea con un clic (hash +
+      // token ya raspados de la tarjeta de la solicitud). El informe resultó ser una
+      // imagen escaneada sin texto legible por máquina (confirmado en campo), así que
+      // esto NO reemplaza la fecha/hora ya extraídas — es solo un atajo para que el
+      // médico vea el documento oficial sin navegar todo el portal a mano.
+      const btnInforme = (lab.__vglHash && lab.__vglToken)
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        : "";
 
       return `
         <tr class="vgl-labs-tr${esAlerta ? " vgl-labs-alert" : ""}">
@@ -7328,6 +7461,7 @@
           <td class="vgl-labs-val">${escapeHtml(String(resultado))}</td>
           <td class="vgl-labs-ref">${escapeHtml(String(referencia))}</td>
           <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(lab.origen)}</span></td>
+          <td class="vgl-labs-pdfcol">${btnInforme}</td>
         </tr>
       `;
     }).join("");
@@ -7341,6 +7475,7 @@
             <th>Resultado</th>
             <th>Ref. / Rango</th>
             <th>Fuente</th>
+            <th>Informe</th>
           </tr>
         </thead>
         <tbody>
@@ -7348,6 +7483,64 @@
         </tbody>
       </table>
     `;
+    // v12.5.4 — Un solo listener delegado (la tabla se reconstruye por completo en cada
+    // refresco de contentEl.innerHTML, así que enganchar por fila individual se perdería).
+    const tabla = contentEl.querySelector(".vgl-labs-table");
+    if (tabla) tabla.addEventListener("click", (e) => {
+      const btn = e.target.closest(".vgl-labs-pdf");
+      if (!btn) return;
+      abrirInformeAthenea(btn.dataset.hash, btn.dataset.token, btn.dataset.modulo, btn);
+    });
+  }
+
+  // v12.5.4 — Abre el informe (PDF) real de Athenea con un clic: el mismo POST que hace
+  // el propio botón "Ver Informe" del portal, con el hash+token ya raspados de la
+  // tarjeta de la solicitud. NO lee ni interpreta el PDF (demostrado en campo: es una
+  // imagen escaneada sin texto) — solo se lo entrega al médico para que lo vea él mismo.
+  // La pestaña se abre en blanco de forma SÍNCRONA con el clic (antes de cualquier
+  // await): los navegadores bloquean window.open() disparado desde dentro de una
+  // promesa, aunque haya sido un clic real del usuario el que la inició.
+  function abrirInformeAthenea(hash, token, modulo, btn) {
+    if (!hash || !token) return;
+    const pestana = window.open("", "_blank");
+    if (btn) { btn.disabled = true; btn.textContent = "⏳"; }
+    const restaurar = () => { if (btn) { btn.disabled = false; btn.textContent = "📄"; } };
+    if (typeof GM_xmlhttpRequest === "undefined") {
+      restaurar();
+      if (pestana) pestana.close();
+      alert("No se pudo abrir el informe: falta el permiso de red del script.");
+      return;
+    }
+    GM_xmlhttpRequest({
+      method: "POST",
+      url: "https://medicosviva1a.atheneasoluciones.com/Resultados/Reporte",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      data: "hash=" + encodeURIComponent(hash) + "&modulo=" + encodeURIComponent(modulo || "LAB") + "&__RequestVerificationToken=" + encodeURIComponent(token),
+      responseType: "blob",
+      timeout: 30000,
+      onload: (r) => {
+        restaurar();
+        if (r.status < 200 || r.status >= 300 || !r.response) {
+          if (pestana) pestana.close();
+          alert("No se pudo obtener el informe de Athenea (HTTP " + r.status + "). Verifique la sesión e inténtelo desde el portal.");
+          return;
+        }
+        try {
+          const url = URL.createObjectURL(r.response);
+          if (pestana && !pestana.closed) pestana.location.href = url;
+          else window.open(url, "_blank");
+          // El blob permanece disponible mientras la pestaña lo necesite; se libera
+          // solo tras un margen amplio (evita revocar la URL mientras aún se está
+          // renderizando en la pestaña nueva).
+          setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
+        } catch (e) {
+          if (pestana) pestana.close();
+          alert("No se pudo mostrar el informe: " + e);
+        }
+      },
+      onerror: () => { restaurar(); if (pestana) pestana.close(); alert("No se pudo conectar con Athenea para traer el informe."); },
+      ontimeout: () => { restaurar(); if (pestana) pestana.close(); alert("Athenea no respondió a tiempo al pedir el informe."); },
+    });
   }
 
   // Modal interactivo de Agendamiento Exprés y Remisiones RCV en 1-Clic
