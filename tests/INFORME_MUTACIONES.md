@@ -30,13 +30,13 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 925 | `if (yaEscritas.has(matched.resultId)) { console.warn` &rarr; `if (!yaEscritas.has(matched.resultId)) { console.warn` | No | - |
 | 941 | `count++;` &rarr; `count += 2;` | No | - |
 | 952 | `return { count, pendientes, sinCasilla };` &rarr; `return { count: 0, pendientes: 0, sinCasilla: [] };` | No | - |
-| 111 | `if (an < 2000 || an > 2100) return null;` &rarr; `if (an < 2000 || an > 2000) return null;` | No | - |
+| 1247 | `if (!docId) return false;` &rarr; `if (docId) return false;` | No | - |
 | 1257 | `if (!docId) return;` &rarr; `if (docId) return;` | No | - |
 | 1260 | `if (!p.citas.includes(sDoc)) { p.citas.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }` &rarr; `if (p.citas.includes(sDoc)) { p.citas.push(sDoc); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }` | No | - |
 | 1260 | `p.citas.push(sDoc);` &rarr; `p.citas.pop();` | No | - |
 | 1260 | `state.lastSignature = "";` &rarr; `state.lastSignature = "dummy";` | No | - |
 | 1269 | `if (!docId) return;` &rarr; `if (docId) return;` | No | - |
-| 121 | `return null;` &rarr; `return false;` | No | - |
+| 2011 | `} catch (err) {` &rarr; `} catch (err) { return; }` | No | - |
 | 2725 | `const ok = await loadPymBase(baseIntentos < 3).catch(() => false);` &rarr; `const ok = await loadPymBase(baseIntentos < 3).catch(() => true);` | Sí | Falta aserción que verifique el estado alterado o la acción por defecto tras atrapar un error específico en la API externa/localStorage. |
 | 3581 | `} catch (e) {` &rarr; `} catch (e) { return true;` | No | - |
 | 104 | `if (!d || isNaN(d)) return null;` &rarr; `if (!d && isNaN(d)) return null;` | No | - |
@@ -44,8 +44,3 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 110 | `if (an < 100) an += 2000;` &rarr; `if (an > 100) an += 2000;` | No | - |
 | 111 | `if (an < 2000 || an > 2100) return null;` &rarr; `if (an < 2000 || an > 2000) return null;` | No | - |
 | 121 | `return null;` &rarr; `return false;` | No | - |
-| 85 | `const p = s.split('/');` &rarr; `const p = s.split('-');` | No | - |
-| 106 | `const p = s.split('-');` &rarr; `const p = s.split('/');` | No | - |
-| 112 | `return new Date(an, mes - 1, dia);` &rarr; `return new Date(an, mes, dia);` | No | - |
-| 119 | `return new Date(an, mes - 1, dia);` &rarr; `return new Date(an, mes, dia);` | No | - |
-| 120 | `} catch (e) { return null; }` &rarr; `} catch (e) {}` | Sí | Falta probar adivinarFecha con una entrada que arroje una excepción nativa para verificar el catch. |
