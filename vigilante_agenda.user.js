@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.18
+// @version      12.3.19
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -336,7 +336,7 @@
     });
     return; // No ejecutar la lógica de Everest en la web de Athenea
   }
-  const VERSION = "12.3.18";
+  const VERSION = "12.3.19";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6149,8 +6149,20 @@
       return;
     }
 
+    // v12.3.19 — Confirmado en consultorio real (captura de pantalla): la tabla del
+    // modal (esta función, DISTINTA de injectLabsIntoCronicos y su propio diagnóstico
+    // de v12.3.10) mostró 5/5 resultados de Athenea con "Sin fecha" pese a que
+    // NombreParametro/Resultado sí se reconocieron. Los 4 nombres de campo de fecha ya
+    // probados aquí no calzan con el objeto real de Athenea. En vez de adivinar un
+    // quinto nombre, se vuelca UNA sola vez (por apertura de modal) las claves reales
+    // del primer resultado de Athenea sin fecha reconocida.
+    let diagFechaModalLogged = false;
     let rowsHtml = todosLabs.map(lab => {
       const fecha = lab.fecha || lab.fechaResultado || lab.Fecha || lab.fechaOrden || "Sin fecha";
+      if (fecha === "Sin fecha" && !diagFechaModalLogged && String(lab.origen || "").includes("Athenea")) {
+        diagFechaModalLogged = true;
+        console.warn("[Vigilante Labs] diagnóstico: no se reconoció el campo de fecha en la tabla del modal. Claves disponibles:", Object.keys(lab), lab);
+      }
       // v12.0.0 — Se añade NombreParametro al principio: es el campo con el que Athenea
       // nombra el examen (el mismo que ya lee _matchLabInWhitelist). Sin él, TODA fila
       // venida de Athenea se pintaba con el texto genérico "Paraclínico".
