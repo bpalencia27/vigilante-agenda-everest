@@ -128,5 +128,38 @@ module.exports = {
       t.cierto(c.api.__state.notified.has("123@08:00 AM"));
     });
 
+    // ---------- v12.4.0: rescate de las guardias originales del VERDE (v8.2.0) ----------
+    // El efecto observable de una notificación VERDE es bumpStat("atiempo") en vgl_stats:
+    // no depende de mockear Notification ni los canales de sonido.
+    const atiempoHoy = (c) => {
+      try {
+        const a = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}");
+        const d = c.api.todayStamp();
+        return (a[d] && a[d].atiempo) || 0;
+      } catch (e) { return 0; }
+    };
+
+    t.caso("maybeNotify v12.4: SIEMBRA SILENCIOSA — el primer VERDE visto al arrancar NO notifica", () => {
+      const c = cargar();
+      const a = { hora_texto: "08:00 AM", doc_id: "123", estado: "En sala", color: "VERDE", reason: "", arrival: true, key: "123@08:00 AM", nombre: "JUAN", elapsed: 1 };
+      c.api.maybeNotify(a); // primera vez que se ve este paciente: solo siembra
+      t.igual(atiempoHoy(c), 0, "un paciente que YA estaba En Sala al abrir el panel no suena");
+    });
+
+    t.caso("maybeNotify v12.4: la llegada EN VIVO (arrival) sí notifica; un VERDE sin arrival, no", () => {
+      const c = cargar();
+      const base = { hora_texto: "08:00 AM", doc_id: "123", key: "123@08:00 AM", nombre: "JUAN", elapsed: 1, reason: "" };
+      // tick 1: sin presentarse (siembra)
+      c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      // tick 2: pasó a En Sala EN VIVO → notifica
+      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });
+      t.igual(atiempoHoy(c), 1, "la transición vista en directo cuenta como 'confirmó a tiempo'");
+      // otro paciente cuyo VERDE llega SIN arrival (p. ej. desde 'Atendido'): silencio
+      const b = { hora_texto: "09:00 AM", doc_id: "456", key: "456@09:00 AM", nombre: "ANA", elapsed: 1, reason: "" };
+      c.api.maybeNotify({ ...b, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      c.api.maybeNotify({ ...b, estado: "Atendido", color: "VERDE", arrival: false });
+      t.igual(atiempoHoy(c), 1, "VERDE sin llegada en vivo no suma otro aviso");
+    });
+
   }
 };

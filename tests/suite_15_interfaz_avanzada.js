@@ -625,12 +625,22 @@ module.exports = {
       // Mujer con mamografía y PSA en su PyM: la mamografía se premarca, el PSA no
       await cOrd.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía", "PSA prostata"] });
       const modal = ultimoOrd();
-      t.cierto(modal.innerHTML.includes("Detección temprana de cáncer de mama"));
-      t.cierto(modal.innerHTML.includes("Antígeno Específico de Próstata"));
+      t.cierto(modal.innerHTML.includes("Mamografía (Mamografía Bilateral)"));
+      t.cierto(modal.innerHTML.includes("PSA (antígeno de próstata)"));
       t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "la mamografía (compatible) sale premarcada");
       t.igual(modal.innerHTML.split(" checked").length - 1, 1, "solo una casilla premarcada");
       t.cierto(modal.innerHTML.includes("Actividad propia del sexo M"), "el PSA advierte el choque con el sexo F registrado");
       t.falso(modal.innerHTML.includes("No se detectaron actividades pendientes"), "con coincidencia no sale el aviso de sin-coincidencia");
+    });
+
+    await t.casoAsync("openOrdenamientoModal v12.4: la etiqueta oficial 'Tamización cardiometabólica' premarca Z108 (antes el género -a/-o la dejaba por fuera)", async () => {
+      await cOrd.api.openOrdenamientoModal({ doc_id: "888", nombre: "PEDRO RUIZ", sexo: "M", pym: ["Tamización cardiometabólica"] });
+      const modal = ultimoOrd();
+      t.cierto(modal.innerHTML.includes("CIE-10 Z108"), "el paquete de tamización cardiometabólica se ofrece");
+      t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "y sale premarcado por la coincidencia con el PyM");
+      t.cierto(modal.innerHTML.includes("903816"), "con el LDL 903816 de la tabla oficial (pacientes sanos)");
+      t.falso(modal.innerHTML.includes("Hepatitis C"), "las ETS descartadas no se ofrecen");
+      t.falso(modal.innerHTML.includes("VDRL"), "las ETS descartadas no se ofrecen");
     });
   },
 };

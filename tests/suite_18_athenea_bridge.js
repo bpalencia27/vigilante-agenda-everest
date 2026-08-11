@@ -143,14 +143,14 @@ module.exports = {
       const out = api._atheneaExtraerSolicitudes(html);
       // v12.3.35 — fechaIso: null cuando la tarjeta no muestra ninguna fecha reconocible.
       t.igual(out, [
-        { idSolicitud: 111, ano: 2025, modulo: "LAB", fechaIso: null },
-        { idSolicitud: 222, ano: 2024, modulo: "PAT", fechaIso: null },
+        { idSolicitud: 111, ano: 2025, modulo: "LAB", fechaIso: null, horaTxt: null },
+        { idSolicitud: 222, ano: 2024, modulo: "PAT", fechaIso: null, horaTxt: null },
       ]);
     });
 
     t.caso("_atheneaExtraerSolicitudes: sin data-modulo, asume LAB por defecto", () => {
       const html = `<form id="3332026" action="/Resultados/Reporte"></form>`;
-      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 333, ano: 2026, modulo: "LAB", fechaIso: null }]);
+      t.igual(api._atheneaExtraerSolicitudes(html), [{ idSolicitud: 333, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null }]);
     });
 
     t.caso("_atheneaExtraerSolicitudes: ignora formularios que no apuntan a /Resultados/Reporte", () => {
@@ -505,7 +505,7 @@ module.exports = {
       const e = entornoAthenea();
       e.setPlan(planFeliz);
       const r = await e.c.api.getAtheneaSolicitudesAuto(DOC);
-      t.igual(r, { idPaciente: "999", solicitudes: [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: null }] });
+      t.igual(r, { idPaciente: "999", solicitudes: [{ idSolicitud: 555, ano: 2026, modulo: "LAB", fechaIso: null, horaTxt: null }] });
       t.igual(e.llamadas.length, 3);
       t.igual(e.llamadas[0].method, "GET");
       t.cierto(e.llamadas[0].url.includes("/Resultados/BusquedaPaciente"));

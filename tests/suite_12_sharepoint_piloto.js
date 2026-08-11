@@ -21,7 +21,7 @@ function bufCSV() { return new TextEncoder().encode(CSV_PILOTO).buffer; }
 function paqueteV3(extraMeta) {
   return JSON.stringify(Object.assign({
     v: 3,
-    labels: ["Tamización de VIH", "Valoración integral de salud"],
+    labels: ["VIH", "Valoración integral de salud"],
     p: "5150076:0.1|300123:0",
     t: "5150076,300123,777",
     ab: "777",
@@ -229,7 +229,7 @@ module.exports = {
       c.ctx.TextDecoder = TextDecoder;                    // el sandbox no trae TextDecoder
       const idx = await c.api.readPym("pym.csv", bufCSV());
       t.igual(idx.map.size, 1, "solo la cédula con algo pendiente entra al mapa");
-      t.igual(idx.map.get("5150076"), ["Tamización de VIH"]);
+      t.igual(idx.map.get("5150076"), ["VIH"]);
       t.igual(idx.todos.size, 2, "todas las cédulas de la hoja, tengan o no pendientes");
       t.cierto(idx.todos.has("99887766"));
       t.cierto(idx.abandono.has("99887766"), "ABANDONADOS_PES='Si' debe quedar registrado");
@@ -276,8 +276,8 @@ module.exports = {
       t.igual(await c.api.pilotoDesdeCache(), true);
       const st = c.api.__state;
       t.igual(st.pym.size, 2);
-      t.igual(st.pym.get("5150076"), ["Tamización de VIH", "Valoración integral de salud"]);
-      t.igual(st.pym.get("300123"), ["Tamización de VIH"]);
+      t.igual(st.pym.get("5150076"), ["VIH", "Valoración integral de salud"]);
+      t.igual(st.pym.get("300123"), ["VIH"]);
       t.cierto(st.pymTodos.has("777"));
       t.cierto(st.pymAbandono.has("777"));
       t.igual(st.pymMTime, "2026-08-01T10:00:00Z");
@@ -392,7 +392,7 @@ module.exports = {
       const st = c.api.__state;
       t.igual(st.pymFallback, true, "es la piloto, no el PyM del día");
       t.igual(st.pymFile, "base_piloto.csv (base piloto — aún no llega la de hoy)");
-      t.igual(st.pym.get("5150076"), ["Tamización de VIH"]);
+      t.igual(st.pym.get("5150076"), ["VIH"]);
       t.igual(st.pymFP, "base_piloto.csv|T-DESC", "la huella usa el nombre crudo + mtime real");
       t.igual(cont.meta, 1, "metadatos primero, para guardar la copia con el mtime verdadero");
       t.igual(cont.descargas, 1);
@@ -488,7 +488,7 @@ module.exports = {
       c.api.schedulePymBase();
       await esperar(() => String(c.api.__state.pymFile).indexOf("base piloto") >= 0, 4000, "la carga programada de la piloto");
       t.igual(cont.descargas, 1);
-      t.igual(c.api.__state.pym.get("5150076"), ["Tamización de VIH"]);
+      t.igual(c.api.__state.pym.get("5150076"), ["VIH"]);
     });
 
     // ---------- spToast / dismissSpToast ----------
@@ -533,7 +533,7 @@ module.exports = {
       c.api.loadPymFile({ name: "PYM_MANUAL.csv" });
       await esperar(() => c.api.__state.pymFile === "PYM_MANUAL.csv", 3000, "la carga manual del CSV");
       t.igual(c.api.__state.pymFallback, false, "«Abrir PyM» manda: deja de ser respaldo");
-      t.igual(c.api.__state.pym.get("5150076"), ["Tamización de VIH"]);
+      t.igual(c.api.__state.pym.get("5150076"), ["VIH"]);
       t.cierto(c.api.__state.pymAbandono.has("99887766"));
     });
   },

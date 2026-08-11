@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.3.37
+// @version      12.4.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -54,6 +54,45 @@
 // archivo completo, subir @version, "Update secret gist") — nada más que hacer en
 // los consultorios. Guía completa: 3_ACTUALIZAR_TODOS_LOS_EQUIPOS.txt
 // ----------------------------------------------------------------------------
+
+/*
+  v12.4.0 — RONDA DEL 11-08-2026 (pedidos del consultorio, decisiones del médico A/B/C/D)
+  1. AGENDA BLINDADA ("solo aparece 5:30 PM"): en Medicina General ya se consultan TODAS
+     las agendas propias del médico en el día (antes .find() se quedaba con la primera y
+     una jornada partida perdía la otra media agenda). Diagnóstico en consola de agendas
+     recibidas/del día/propias + distribución de estados de turnos, y detector de "agenda
+     congelada" (mismos turnos para fechas distintas ⇒ advertencia visible).
+  2. CUPO EN TIEMPO REAL (cita principal, patrón del laboratorio): antes de AsignarTurno
+     se re-consulta la agenda; si la hora elegida ya no está activa, NO se dispara la
+     escritura: se recargan los horarios y se avisa "esa hora ya no está disponible".
+     Tras un rechazo del servidor también se refrescan los horarios.
+  3. PANEL PyM: los chips envuelven en varias líneas (adiós scroll horizontal con máscara
+     que cortaba el último chip), letra 11.5px, y los nombres son LOS DE LA TABLA OFICIAL
+     de CUPS. Optometría (AV) y Odontología (OD) salen del panel; siguen como pendientes
+     en el aviso al abrir la historia, que ahora: muestra SOLO lo que queda pendiente si
+     el médico ya ordenó desde el panel (markOrdenesCreadasHoy guarda las actividades
+     cubiertas), y se repinta ROSA (--c-pes) con abandono del programa cardiovascular.
+  4. TABLA OFICIAL DE CUPS en PYM_CATALOG: Z108 con LDL 903816 (tamizaje de SANOS; el
+     903817 queda solo en el RCV exprés de crónicos ERC/HTA/DM2 — aclarado en consulta);
+     fuera Hepatitis C (906225) y VDRL (906039): de las ETS solo se tamiza VIH. Keyword
+     'cardiometabolic' arregla el premarcado de Z108 que el género -a/-o dejaba inerte.
+  5. PyM DIARIO CON PARADA: se busca el Agenda_Dia_CMB de hoy cada 10 min durante toda la
+     jornada (mientras tanto manda la base piloto), y en cuanto el REAL de hoy carga, la
+     re-búsqueda PARA (debeBuscarPymDiario) — pedido explícito; «Abrir PyM» siempre manda.
+  6. PUNTUALIDAD RESCATADA (semántica original v8.2.0, decisión A): siembra silenciosa +
+     VERDE solo en llegada EN VIVO (a.arrival por fin se consume); textos precisos y
+     neutros — ROJO "Confirmación extemporánea", MORADO "última llamada ~1 min", ÁMBAR
+     "venció el tiempo de gracia".
+  7. HORA DE ATHENEA DE PUNTA A PUNTA: _parseFechaHoraLike conserva {fecha, hora} en ISO,
+     /Date(ms)/ y dd/mm/aaaa (cuyo ancla $ hacía que "11/08/2026 07:35" cayera a "Sin
+     fecha" — bug real corregido); el raspado de la tarjeta captura la hora del portal
+     (única e inequívoca o nada); la tabla del modal muestra "dd/mm/aaaa · HH:MM" y las
+     casillas inyectadas en Crónicos llevan tooltip "Athenea: fecha a las HH:MM" (el
+     <input type=date> de Everest no puede almacenar hora). Diagnóstico nuevo: si la
+     fecha se reconoce pero ninguna fuente trae hora, la consola lo dice con las claves
+     reales del analito.
+  Banco: 520 comprobaciones (26 nuevas, suite_21), cobertura 282/308 (91.6%).
+*/
 
 /*
   v12.0.0 — UNIFICACIÓN DE LOS DOS LINAJES
@@ -768,6 +807,7 @@
       if (!idM) continue;
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
       let fechaIso = null;
+      let horaTxt = null; // v12.4.0 — hora que el portal muestra junto a la fecha, si existe
       try {
         // v12.3.36 — CONFIRMADO con el diagnóstico de campo de la .35: la ventana previa
         // al formulario solo contiene la apertura de la tarjeta ("<div class=card>...");
@@ -778,19 +818,26 @@
         const desde = Math.max(0, m.index - 400);
         const hasta = Math.min(html.length, m.index + tag.length + 700);
         const ventana = html.slice(desde, hasta);
-        const encontradas = [...new Set(
-          (ventana.match(/\b\d{1,2}\/\d{1,2}\/20\d{2}\b|\b20\d{2}-\d{2}-\d{2}\b/g) || [])
-            .map((s) => _parseFechaLike(s)).filter(Boolean)
-        )];
-        if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) fechaIso = encontradas[0];
+        // v12.4.0 — La HORA ya no se descarta: el regex captura la fecha CON su hora
+        // adyacente si el portal la pinta ("11/08/2026 7:35 a. m."). Misma filosofía de
+        // no adivinar: la hora solo se acepta si viene PEGADA a la única fecha aceptada.
+        const brutas = ventana.match(/(?:\b\d{1,2}\/\d{1,2}\/20\d{2}|\b20\d{2}-\d{2}-\d{2})(?:[ ,·T]{1,3}\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]\.?\s?m\.?)?)?/gi) || [];
+        const parseadas = brutas.map((s) => _parseFechaHoraLike(s)).filter(Boolean);
+        const encontradas = [...new Set(parseadas.map((p) => p.iso))];
+        if (encontradas.length === 1 && encontradas[0].startsWith(idM[2] + "-")) {
+          fechaIso = encontradas[0];
+          // Horas vistas junto a ESA fecha: una sola distinta = confiable; varias = nada.
+          const horas = [...new Set(parseadas.filter((p) => p.iso === fechaIso && p.hora).map((p) => p.hora))];
+          if (horas.length === 1) horaTxt = horas[0];
+        }
         if (!_diagFechaSolicitudHtmlLogged) {
           _diagFechaSolicitudHtmlLogged = true;
           console.log("[Vigilante Athenea] diagnóstico tarjeta de solicitud — fechas reconocibles:", encontradas,
-            "· aceptada:", fechaIso || "NINGUNA",
+            "· aceptada:", fechaIso || "NINGUNA", "· hora:", horaTxt || "NINGUNA",
             "· tras el formulario:", JSON.stringify(html.slice(m.index + tag.length, m.index + tag.length + 240)));
         }
       } catch (e) {}
-      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso });
+      out.push({ idSolicitud: parseInt(idM[1], 10), ano: parseInt(idM[2], 10), modulo: modM ? modM[1] : "LAB", fechaIso, horaTxt });
     }
     return out;
   }
@@ -996,7 +1043,11 @@
     const listas = await Promise.all(porLab.map((s) =>
       fetchAtheneaLabs(s.idSolicitud, s.ano).then((arr) => {
         if (s.fechaIso && Array.isArray(arr)) arr.forEach((a) => {
-          if (a && typeof a === "object" && !("__vglFechaSolicitud" in a)) a.__vglFechaSolicitud = s.fechaIso;
+          if (a && typeof a === "object" && !("__vglFechaSolicitud" in a)) {
+            a.__vglFechaSolicitud = s.fechaIso;
+            // v12.4.0 — la hora raspada de la tarjeta acompaña a su fecha, si existe.
+            if (s.horaTxt) a.__vglHoraSolicitud = s.horaTxt;
+          }
         });
         return arr;
       }).catch(() => [])
@@ -1117,30 +1168,52 @@
   // la contiene. De paso corrige un bug latente: si la fecha llegaba como "15/03/2026",
   // un <input type="date"> la rechazaba en silencio aunque el campo SÍ se hubiera
   // encontrado, porque ese control exige el formato ISO aaaa-mm-dd exacto.
-  function _parseFechaLike(v) {
+  // v12.4.0 — LA HORA YA NO SE TIRA A LA BASURA. Antes, cada rama de _parseFechaLike
+  // truncaba a aaaa-mm-dd: un ISO "2026-08-11T07:35" perdía las 07:35, un /Date(ms)/
+  // descartaba horas y minutos que el timestamp SÍ contiene, y — el peor caso, bug real —
+  // "11/08/2026 07:35" no casaba con NINGUNA rama (la de dd/mm/aaaa estaba anclada con $)
+  // y terminaba como "Sin fecha": la hora no solo se perdía, se llevaba la fecha entera.
+  // Ahora el parseador devuelve {iso, hora} y todos los consumidores conservan ambas.
+  // La hora se valida (0-23:0-59) y acepta el formato del portal ("7:35 a. m.").
+  function _parseFechaHoraLike(v) {
       if (v === null || v === undefined) return null;
       const s = String(v).trim();
       if (!s) return null;
+      const horaDe = (resto) => {
+          const hm = String(resto || "").match(/^[T ,·]{1,3}(\d{1,2}):(\d{2})(?::\d{2})?(?:\s*(a|p)\.?\s?m\.?)?/i);
+          if (!hm) return null;
+          let h = Number(hm[1]); const min = Number(hm[2]);
+          if (hm[3]) { const ap = hm[3].toLowerCase(); if (ap === "p" && h < 12) h += 12; if (ap === "a" && h === 12) h = 0; }
+          if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+          return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+      };
       // v12.3.33 — hallado en revisión adversarial: sin frontera al final ni validación de
       // rango, un folio como "2026-08-1234567" se leía como la fecha 2026-08-12 y
       // "2026-99-99" pasaba entero. Se exige que tras el día NO siga otro dígito y que
       // mes/día estén en rango — igual de estricto que la rama dd/mm/aaaa de abajo.
       let m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/);
-      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31) return `${m[1]}-${m[2]}-${m[3]}`;
+      if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[3]) >= 1 && Number(m[3]) <= 31)
+          return { iso: `${m[1]}-${m[2]}-${m[3]}`, hora: horaDe(s.slice(m[0].length)) };
       if (m) return null;
       m = s.match(/^\/Date\((-?\d+)/);
       if (m) {
           const d = new Date(Number(m[1]));
-          if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          return null;
+          if (isNaN(d.getTime())) return null;
+          const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          // Muchos backend ASP.NET mandan la medianoche exacta cuando solo guardan la
+          // FECHA: una 00:00 en punto no se muestra como hora (sería inventar precisión).
+          const hh = d.getHours(), mi = d.getMinutes();
+          return { iso, hora: (hh === 0 && mi === 0) ? null : `${String(hh).padStart(2, "0")}:${String(mi).padStart(2, "0")}` };
       }
-      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?!\d)/);
       if (m) {
           const dd = m[1].padStart(2, "0"), mm = m[2].padStart(2, "0");
-          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31) return `${m[3]}-${mm}-${dd}`;
+          if (Number(mm) >= 1 && Number(mm) <= 12 && Number(dd) >= 1 && Number(dd) <= 31)
+              return { iso: `${m[3]}-${mm}-${dd}`, hora: horaDe(s.slice(m[0].length)) };
       }
       return null;
   }
+  function _parseFechaLike(v) { const r = _parseFechaHoraLike(v); return r ? r.iso : null; }
 
   // v12.3.33 — BLOQUEANTE hallado en revisión adversarial de v12.3.32: heredar CUALQUIER
   // valor con pinta de fecha del nivel superior de la respuesta era peligrosísimo — si el
@@ -1154,17 +1227,21 @@
       if (!res || typeof res !== "object") return null;
       for (const k of Object.keys(res)) {
           if (!/^fecha[_ ]?(solicitud|toma|muestra|orden)/i.test(k)) continue;
-          const iso = _parseFechaLike(res[k]);
-          if (iso) return { iso, key: k };
+          const fh = _parseFechaHoraLike(res[k]);
+          if (fh) return { iso: fh.iso, hora: fh.hora, key: k };
       }
       return null;
   }
 
+  // v12.4.0 — Devuelve {iso, hora, key}: la hora viaja junto a la fecha desde CUALQUIER
+  // fuente que la contenga (campo del analito, envoltorio, o la tarjeta del portal vía
+  // __vglFechaSolicitud/__vglHoraSolicitud). Si ninguna fuente la trae, hora es null y
+  // la interfaz muestra solo la fecha — nunca se inventa.
   function _extractAtheneaFecha(lab) {
       if (!lab || typeof lab !== "object") return null;
       for (const k of _CAMPOS_FECHA_CONOCIDOS) {
-          const iso = _parseFechaLike(lab[k]);
-          if (iso) return { iso, key: k };
+          const fh = _parseFechaHoraLike(lab[k]);
+          if (fh) return { iso: fh.iso, hora: fh.hora, key: k };
       }
       // Sin match por nombre: se recorren las demás claves buscando un valor con forma
       // de fecha. Se prefiere una clave que además CONTENGA "fecha" en el nombre, para
@@ -1174,15 +1251,19 @@
       // analito, se llame como se llame, siga ganando.
       let candidato = null;
       for (const k of Object.keys(lab)) {
-          if (_CAMPOS_FECHA_CONOCIDOS.includes(k) || k === "__vglFechaSolicitud") continue;
-          const iso = _parseFechaLike(lab[k]);
-          if (!iso) continue;
-          if (/fecha/i.test(k)) return { iso, key: k };
-          if (!candidato) candidato = { iso, key: k };
+          if (_CAMPOS_FECHA_CONOCIDOS.includes(k) || k === "__vglFechaSolicitud" || k === "__vglHoraSolicitud") continue;
+          const fh = _parseFechaHoraLike(lab[k]);
+          if (!fh) continue;
+          if (/fecha/i.test(k)) return { iso: fh.iso, hora: fh.hora, key: k };
+          if (!candidato) candidato = { iso: fh.iso, hora: fh.hora, key: k };
       }
       if (candidato) return candidato;
-      const isoSol = _parseFechaLike(lab.__vglFechaSolicitud);
-      return isoSol ? { iso: isoSol, key: "__vglFechaSolicitud" } : null;
+      const fhSol = _parseFechaHoraLike(lab.__vglFechaSolicitud);
+      if (!fhSol) return null;
+      // La hora de la tarjeta del portal (si el raspado la encontró) acompaña a la fecha
+      // de la solicitud; una hora ya presente en el valor de la fecha gana sobre ella.
+      const horaSol = fhSol.hora || (typeof lab.__vglHoraSolicitud === "string" && /^\d{2}:\d{2}$/.test(lab.__vglHoraSolicitud) ? lab.__vglHoraSolicitud : null);
+      return { iso: fhSol.iso, hora: horaSol, key: "__vglFechaSolicitud" };
   }
 
   function injectLabsIntoCronicos(labsArray) {
@@ -1366,6 +1447,18 @@
           if (dateInput && resultDate && String(dateInput.value == null ? "" : dateInput.value).trim() === "") {
               setNgValue(dateInput, resultDate);
           }
+          // v12.4.0 — La casilla de fecha de Everest es <input type="date"> y NO puede
+          // llevar hora. Cuando Athenea la trae, se deja visible como tooltip en ambas
+          // casillas (pasar el mouse la muestra): el médico ya no tiene que abrir el
+          // portal solo para saber a qué hora fue la toma.
+          try {
+              if (fechaInfo && fechaInfo.hora) {
+                  const p = fechaInfo.iso.split("-");
+                  const titulo = `Athenea: ${p[2]}/${p[1]}/${p[0]} a las ${fechaInfo.hora}`;
+                  if (dateInput && !dateInput.title) dateInput.title = titulo;
+                  if (inputEl && !inputEl.title) inputEl.title = titulo;
+              }
+          } catch (e) {}
       });
       return { count, pendientes, sinCasilla, respetadas };
   }
@@ -1753,15 +1846,22 @@
   // botón deshabilitado en el panel y el envío por correo saben CUÁL orden ya existe,
   // no solo QUE existe. Reemplaza a guardarOrdenEnMemoriaLocal (nunca se implementó:
   // era un `if (typeof ... === 'function')` que siempre evaluaba false, código muerto).
-  function markOrdenesCreadasHoy(docId, agrupadores) {
+  // v12.4.0 — Además de los agrupadores, se guardan las ACTIVIDADES del Excel que cada
+  // orden cubrió (las etiquetas de pymPorPaquete): así el aviso al abrir la historia
+  // puede mostrar SOLO lo que sigue pendiente (p. ej. las remisiones AV/OD, que no se
+  // ordenan desde el panel) en vez de callarse del todo.
+  function markOrdenesCreadasHoy(docId, agrupadores, actividades) {
     if (!docId) return;
     const p = getProcessedToday();
     const sDoc = String(docId);
     if (!p.ordenes.includes(sDoc)) p.ordenes.push(sDoc);
-    if (agrupadores && agrupadores.length) {
+    if ((agrupadores && agrupadores.length) || (actividades && actividades.length)) {
       if (!p.ordenesDetalle) p.ordenesDetalle = {};
-      const previos = (p.ordenesDetalle[sDoc] && p.ordenesDetalle[sDoc].agrupadores) || [];
-      p.ordenesDetalle[sDoc] = { agrupadores: [...new Set(previos.concat(agrupadores))], ts: Date.now() };
+      const det = p.ordenesDetalle[sDoc] || {};
+      det.agrupadores = [...new Set((det.agrupadores || []).concat(agrupadores || []))];
+      if (actividades && actividades.length) det.actividades = [...new Set((det.actividades || []).concat(actividades))];
+      det.ts = Date.now();
+      p.ordenesDetalle[sDoc] = det;
     }
     writeJSON(PROC_KEY, p);
     state.lastSignature = "";
@@ -1843,17 +1943,23 @@
   //  - Tamización cérvix: el TIPO de prueba (VPH / citología-CCU) se funde en el mismo
   //    chip cuando el dato lo trae — ver PRUEBA_CERVIX y detalleTipoCervix() más abajo.
   // [COPY-UX] Diccionario clínico simplificado para actividades de prevención
+  // v12.4.0 — Los nombres de los tamizajes ahora son LOS DE LA TABLA OFICIAL de CUPS de
+  // la IPS ("ACTIVIDAD SUSCEPTIBLE"): el mismo nombre que ve el médico en el panel es el
+  // que encabeza el paquete de ordenamiento (PYM_CATALOG), sin traducciones intermedias.
+  // Las remisiones (PF/AV/OD) y la valoración integral no están en esa tabla y conservan
+  // su etiqueta clínica. Hepatitis B/C y VDRL siguen con nombre por si el médico las
+  // desoculta en Ajustes, aunque de fábrica quedan excluidas (solo se tamiza VIH en ETS).
   const FRIENDLY = {
-    VALORACION_INTEGRAL: "Valoración integral de salud", TAMIZACION_CMB: "Tamización de riesgo cardiometabólico",
+    VALORACION_INTEGRAL: "Valoración integral de salud", TAMIZACION_CMB: "Tamización cardiometabólica",
     CITA_PF: "Remisión a Planificación Familiar", CITA_AV: "Remisión a Optometría", CITA_OD: "Remisión a Odontología",
-    TAMIZACION_CERVIX: "Tamización de cérvix", TAMIZACION_PROSTATA: "Tamización de próstata",
-    PRUEBA_CERVIX: "Tamización de cérvix", TAMIZACION_MAMA: "Tamización de mama (examen clínico + mamografía)",
-    TAMIZACION_COLON: "Tamización de cáncer de colon (sangre oculta en materia fecal)",
+    TAMIZACION_CERVIX: "Cáncer de cuello uterino", TAMIZACION_PROSTATA: "PSA (antígeno de próstata)",
+    PRUEBA_CERVIX: "Cáncer de cuello uterino", TAMIZACION_MAMA: "Mamografía",
+    TAMIZACION_COLON: "SOMF (sangre oculta en materia fecal)",
     TAMIZACION_HEPC: "Tamización de Hepatitis C", TAMIZACION_HEPB: "Tamización de Hepatitis B",
-    TAMIZACION_VDRL: "Tamización de Sífilis", TAMIZACION_HB: "Tamización de Hemoglobina",
-    TAMIZACION_VIH: "Tamización de VIH", TAMIZACION_HTO: "Tamización de Hematocrito",
-    "Último VIH": "Tamización de VIH", "Ultimo VIH": "Tamización de VIH",
-    "Última SOMF": "Tamización de cáncer de colon", "Ultima SOMF": "Tamización de cáncer de colon",
+    TAMIZACION_VDRL: "Tamización de Sífilis", TAMIZACION_HB: "Hemoglobina",
+    TAMIZACION_VIH: "VIH", TAMIZACION_HTO: "Hematocrito",
+    "Último VIH": "VIH", "Ultimo VIH": "VIH",
+    "Última SOMF": "SOMF (sangre oculta en materia fecal)", "Ultima SOMF": "SOMF (sangre oculta en materia fecal)",
   };
   // [COPY-UX] Detalle clínico de la prueba de cérvix
   function detalleTipoCervix(valorCrudo) {
@@ -1873,7 +1979,7 @@
   };
 
   const rawState = {
-    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", historical: new Map(),
+    pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "", historical: new Map(),
     fraudWatch: new Set(), alertedFraud: new Set(), warnedTimes: new Set(),
     lastSignature: "", minimized: false, lastSnapshot: null,
     notified: new Map(), summarized: false, osNotif: false,
@@ -2036,6 +2142,25 @@
     return CONFIG.EXCLUDE_PYM.some((k) => hay.includes(k));
   }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
+  // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS del panel, por pedido
+  // del consultorio: saturaban la fila y no son órdenes que se generen desde ahí. SIGUEN
+  // en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra como pendientes.
+  function isPanelHiddenActivity(label) { return /optometr|odontolog/i.test(stripAccents(String(label || ""))); }
+  function panelActivities(list) { return (list || []).filter((l) => !isPanelHiddenActivity(l)); }
+  // v12.4.0 — Pendientes que QUEDAN para el aviso de la historia: todo lo del índice PyM
+  // menos las actividades cuyas órdenes ya se generaron HOY desde el panel (el detalle
+  // por actividad lo guarda markOrdenesCreadasHoy). Si el médico no ha ordenado nada,
+  // devuelve la lista completa. Con órdenes de una versión vieja (sin detalle de
+  // actividades) se asume que cubrieron lo ordenable y quedan solo remisiones/valoración.
+  function pymPendientesRestantes(docId) {
+    const pend = getActivities(docId);
+    if (!pend.length) return pend;
+    const det = ordenesDetalleHoy(docId);
+    if (!det) return pend;
+    const cubiertas = det.actividades || [];
+    if (!cubiertas.length) return pend.filter((l) => /optometr|odontolog|planificaci|valoraci/i.test(stripAccents(String(l || ""))));
+    return pend.filter((l) => !cubiertas.includes(l));
+  }
 
   // v7.8: el indexado ya no recibe la tabla entera — es INCREMENTAL. El lector en
   // streaming le entrega una fila a la vez y la fila se descarta al instante: nunca
@@ -2089,7 +2214,7 @@
             // Con el TIPO de prueba disponible, ese detalle manda sobre el valor crudo
             // de Tamizacion_cervix (que normalmente es solo "Susceptible"/"Pendiente"
             // y no aporta nada que el médico no sepa ya).
-            label = "Tamización cérvix — " + detalleCervix;
+            label = "Cáncer de cuello uterino — " + detalleCervix;
             cervixYaAgregado = true;
           } else {
             const clave = String(celda);
@@ -2111,7 +2236,7 @@
         // Tamizacion_cervix NO estaba pendiente en esa fila (p. ej. datos inconsistentes
         // entre columnas). No se pierde la información: se agrega igual.
         if (detalleCervix && !cervixYaAgregado) {
-          const label = "Tamización cérvix — " + detalleCervix;
+          const label = "Cáncer de cuello uterino — " + detalleCervix;
           if (!bucket.includes(label)) bucket.push(label);
         }
         // Solo se guardan los pacientes que SÍ tienen algo pendiente. Así el número que
@@ -2541,10 +2666,22 @@
   }
   function afterPymLoaded(fileName) {
     state.pymFile = fileName;
+    // v12.4.0 — Día en que se aplicó ESTA carga: con él, la re-búsqueda del diario sabe
+    // distinguir "ya tengo el PyM real DE HOY" (parar) de "sigo con el de ayer" (buscar).
+    state.pymDia = todayStamp();
     if (state.lastSnapshot) state.lastSnapshot.list.forEach((a) => { a.pym = getActivities(a.doc_id); });
     state.lastSignature = ""; tick();
     // [COPY-UX]
     setSummary(`Actividades preventivas cargadas: ${state.pym.size} paciente(s) — ${fileName}`);
+  }
+  // v12.4.0 — ¿Hay que seguir BUSCANDO el Agenda_Dia_CMB de hoy en SharePoint? Sí,
+  // mientras no esté cargado el PyM REAL DE HOY: sin nada cargado, con la base piloto
+  // (fallback), o con un PyM que se cargó otro día (pestaña que cruzó la medianoche).
+  // En cuanto el real de hoy está puesto, la re-búsqueda PARA (pedido explícito del
+  // consultorio: el archivo lo suben en el transcurso de la mañana; buscarlo cada 10
+  // minutos solo tiene sentido hasta encontrarlo).
+  function debeBuscarPymDiario() {
+    return !state.pymFile || state.pymFallback === true || state.pymDia !== todayStamp();
   }
   // Huella de un archivo PyM: identifica "el mismo archivo" sin depender solo de la fecha.
   function pymFP(name, mtime) { return String(name || "") + "|" + String(mtime || ""); }
@@ -3397,16 +3534,18 @@
       if (!S.recordatorioPym) return;
       const doc = extractPacienteAbierto(); if (!doc) return;
       const key = normalizeKey(doc); if (!key) return;
-      // v12.3.x — Claramente conectado con markOrdenesCreadasHoy: si las órdenes de este
-      // paciente ya se generaron HOY desde el panel, lo que pedía el recordatorio ya se
-      // pidió — insistir con el cartel grande sería ruido, no ayuda.
-      if (isOrdenesCreadasHoy(doc)) return;
-      const pend = getActivities(key); if (!pend.length) return;
+      // v12.4.0 — Antes, con las órdenes del panel ya generadas, el aviso se CALLABA del
+      // todo; ahora muestra SOLO lo que queda pendiente (típicamente las remisiones a
+      // Optometría/Odontología, que no se ordenan desde el panel). Si no queda nada,
+      // sigue sin molestar. Y si el paciente está en abandono del programa de riesgo
+      // cardiovascular, el cuadro entero se repinta de rosa (mismo color del panel).
+      const pend = pymPendientesRestantes(doc); if (!pend.length) return;
       const uid = "pymrem|" + key;
       if (avisoYaVisto(uid)) return;
       avisoMarcarVisto(uid);
       const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
-      pymAlert(cita ? cita.nombre : "", pend);
+      const esPes = S.abandonoPES !== false && state.pymAbandono && state.pymAbandono.has(key);
+      pymAlert(cita ? cita.nombre : "", pend, esPes);
     } catch (e) {}
   }
 
@@ -3610,12 +3749,20 @@
   function acknowledge() { stopNag(); stopFlash(); const m = document.getElementById("vgl-modal"); if (m) m.remove(); }
 
   // [COPY-UX] Recordatorio modal de actividades de prevención
-  function pymAlert(nombre, actividades) {
+  function pymAlert(nombre, actividades, esPes) {
     try {
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
       if (isLight()) ov.classList.add("light");
+      // v12.4.0 — Abandono del programa de riesgo cardiovascular: el cuadro entero se
+      // repinta con el ROSA del panel (--c-pes). Basta con re-apuntar las dos variables
+      // de color que usa todo el CSS del recordatorio: hereda a chips, botón y borde.
+      if (esPes) {
+        ov.classList.add("pes");
+        ov.style.setProperty("--rgb-recordatorio", "var(--rgb-pes)");
+        ov.style.setProperty("--c-recordatorio", "var(--c-pes)");
+      }
       const chips = actividades.map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
       // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
       // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
@@ -3794,27 +3941,33 @@
   // se cierra solo (los persistentes sin cerrar quedan en el Centro de actividades de
   // Windows y REAPARECEN horas después como fantasmas).
   // [COPY-UX] Mensajes de notificación clínica
+  // v12.4.0 — Rescate de la semántica de puntualidad (elegida por el médico 2026-08-11):
+  // VERDE = llegó/confirmó a tiempo (solo la transición EN VIVO, ver maybeNotify);
+  // MORADO = queda ~1 minuto de los 6 de gracia sin confirmar; AMBAR = vencieron los 6
+  // minutos sin confirmar; ROJO = confirmación extemporánea (después de la gracia).
+  // Lenguaje preciso pero clínico-neutro: sin la palabra "FRAUDE" en pantalla.
   const NOTIFY = {
-    ROJO: { icon: "⛔", label: "Atención registrada sin ingreso previo confirmado", sound: true, persist: true },
-    MORADO: { icon: "⏳", label: "Próximo a vencer tiempo de espera en consulta", persist: false },
-    AMBAR: { icon: "⚠", label: "Registro de inasistencia en consulta", persist: false },
-    VERDE: { icon: "✅", label: "Paciente disponible en sala de espera", persist: false },
+    ROJO: { icon: "⛔", label: "Confirmación extemporánea: ingreso después del tiempo de gracia", sound: true, persist: true },
+    MORADO: { icon: "⏳", label: "Última llamada: ~1 minuto para confirmar la llegada", persist: false },
+    AMBAR: { icon: "⚠", label: "Inasistencia: venció el tiempo de gracia sin confirmar", persist: false },
+    VERDE: { icon: "✅", label: "Paciente confirmó a tiempo (En Sala)", persist: false },
   };
   // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
   function nkey(a) { return a.color === "MORADO" ? "MORADO:" + (a.reason || "") : a.color; }
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
     if (a.color === "MORADO" && a.reason !== "tiempo") return;
-
-    // Para la notificación VERDE (llegada a tiempo en sala):
-    // Si el paciente está En Sala y aún no hemos notificado su llegada hoy, notificar SIEMPRE.
-    if (a.color === "VERDE") {
-      const uidVerde = a.key + "|VERDE_NOTIFIED";
-      if (avisoYaVisto(uidVerde)) return;
-      avisoMarcarVisto(uidVerde);
-    } else {
-      if (prev === undefined) return;
-    }
+    // v12.4.0 — Rescate de las DOS guardias originales (v8.2.0/bea69e6), perdidas en la
+    // refactorización v11.0 y consolidada la pérdida en la unificación v12.0.0:
+    //  (1) SIEMBRA SILENCIOSA: la primera pasada tras arrancar solo registra el estado
+    //      que ya existía — un paciente que YA estaba "En Sala" al abrir el panel no
+    //      dispara el aviso verde (no fue una llegada que el vigilante haya visto).
+    //  (2) El VERDE exige LLEGADA EN VIVO: solo la transición hacia "En Sala" observada
+    //      en directo (a.arrival, que colorAndAlert calculaba desde entonces sin que
+    //      nadie la leyera) genera "confirmó a tiempo". Decidido por el médico el
+    //      2026-08-11 frente a la alternativa "primer verde visto" (VERDE_NOTIFIED).
+    if (prev === undefined) return;
+    if (a.color === "VERDE" && !a.arrival) return;
 
     const cfg = NOTIFY[a.color]; if (!cfg) return;
     bumpStat(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima");
@@ -4779,31 +4932,23 @@
       }
 
       /* Chips PyM */
+      /* v12.4.0 — La fila ya NO se desplaza en horizontal (los chips quedaban cortados o
+         escondidos tras la máscara de degradado, reportado en consultorio con captura):
+         ahora ENVUELVE en varias líneas y el texto completo de cada actividad (con los
+         nombres de la tabla oficial de CUPS, más largos) se ve entero. La letra baja de
+         12.5px inline a 11.5px de clase — verificado el pedido "siento que las letras
+         están muy grandes". */
       .vgl-pyms{
         margin-top:8px;
-        display:flex;flex-wrap:nowrap;
-        overflow-x:auto;gap:6px;
-        scroll-snap-type:x mandatory;
-        -ms-overflow-style:none;scrollbar-width:none;
+        display:flex;flex-wrap:wrap;
+        gap:5px;
         padding-bottom:2px;
       }
-      /* v12.3.24 — La fila SIEMPRE fue de desplazamiento horizontal (nunca de ajuste de
-         línea): con más chips o texto de los que caben, el último quedaba cortado a la
-         mitad justo en el borde, sin ninguna pista de que hay más deslizando a la
-         derecha — se veía roto en vez de "hay más". La clase .vgl-scroll-more la agrega
-         render() SOLO cuando de verdad sobra contenido (scrollWidth > clientWidth): con
-         todo visible no hay máscara, para no oscurecer el último chip sin motivo. */
-      .vgl-pyms.vgl-scroll-more{
-        mask-image:linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
-        -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 22px), transparent 100%);
-      }
-      .vgl-pyms::-webkit-scrollbar{display:none}
       .vgl-chip{
-        font-size:12px;font-weight:700;padding:4px 11px; /* Mínimo 12px */
+        font-size:11.5px;font-weight:700;padding:3px 9px;
         border-radius:var(--r-pill);
         background:rgba(var(--rgb-azul),.14);color:var(--c-azul);
-        white-space:nowrap;flex-shrink:0;
-        scroll-snap-align:start;
+        white-space:normal;line-height:1.35;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.25);
       }
       #vgl-root:not(.light) .vgl-chip{color:var(--c-azul)}
@@ -6833,15 +6978,27 @@
     // quinto nombre, se vuelca UNA sola vez (por apertura de modal) las claves reales
     // del primer resultado de Athenea sin fecha reconocida.
     let diagFechaModalLogged = false;
+    let diagHoraModalLogged = false; // v12.4.0
     let rowsHtml = todosLabs.map(lab => {
       // v12.3.30 — misma detección por forma de valor que injectLabsIntoCronicos (ver
       // _extractAtheneaFecha): los 4 nombres de campo ya probados aquí no existen en el
       // objeto real de Athenea, así que se busca la fecha por su forma, no por su nombre.
       const fechaInfo = _extractAtheneaFecha(lab);
-      const fecha = fechaInfo ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; })() : "Sin fecha";
+      // v12.4.0 — La HORA acompaña a la fecha en la tabla cuando alguna fuente la trae
+      // (campo del analito, envoltorio o la tarjeta del portal). Sin hora real, solo fecha.
+      const fecha = fechaInfo
+        ? (() => { const p = fechaInfo.iso.split("-"); return `${p[2]}/${p[1]}/${p[0]}` + (fechaInfo.hora ? ` · ${fechaInfo.hora}` : ""); })()
+        : "Sin fecha";
       if (fecha === "Sin fecha" && !diagFechaModalLogged && String(lab.origen || "").includes("Athenea")) {
         diagFechaModalLogged = true;
         console.warn("[Vigilante Labs] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en la tabla del modal. Claves disponibles:", Object.keys(lab), lab);
+      }
+      // v12.4.0 — Diagnóstico de HORA (una vez por apertura): si la fecha sí se reconoce
+      // pero ninguna fuente trae hora, la consola lo dice con las claves reales — es la
+      // evidencia para decidir si Athenea la publica en otro campo o no existe.
+      if (fechaInfo && !fechaInfo.hora && !diagHoraModalLogged && String(lab.origen || "").includes("Athenea")) {
+        diagHoraModalLogged = true;
+        console.log("[Vigilante Labs] diagnóstico hora: la fecha se reconoció (clave '" + fechaInfo.key + "') pero SIN hora en ninguna fuente. Claves del analito:", Object.keys(lab));
       }
       // v12.0.0 — Se añade NombreParametro al principio: es el campo con el que Athenea
       // nombra el examen (el mismo que ya lee _matchLabInWhitelist). Sin él, TODA fila
@@ -7025,6 +7182,13 @@
     let pacienteIdAcceso = null;
     let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
+    // v12.4.0 — Contexto del turno elegido (agenda y fecha reales de donde salió): lo
+    // necesita la verificación en tiempo real del cupo justo antes de confirmar.
+    let selectedTurnoCtx = null;
+    // v12.4.0 — Detector de agenda congelada: si Everest devuelve EXACTAMENTE los mismos
+    // turnos para fechas distintas, la agenda que llega está incompleta o el servidor
+    // ignora la fecha — se le advierte al médico en vez de presentarlo como normal.
+    const _turnosVistosPorFecha = new Map();
 
     const xBtn = modal.querySelector("#vgl-agm-x");
     const cancelBtn = modal.querySelector("#vgl-agm-cancel");
@@ -7056,6 +7220,7 @@
       if (!selectedDateInfo) return;
       const token = ++_cargarHorasToken;
       selectedTurnoObj = null;
+      selectedTurnoCtx = null;
       confirmBtn.disabled = true;
       confirmBtn.textContent = "✓ Sí, Crear Cita";
       dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${selectedDateInfo.fmt}</b> <span style="color:var(--c-verde)">(${selectedDateInfo.lbl})</span>`;
@@ -7156,21 +7321,37 @@
         // OJO: con el nombre vacío, `nm.includes("")` sería SIEMPRE cierto y elegiría la
         // primera agenda de la lista (la de otro profesional). Sin nombre no se filtra.
         const toks = normMedDoc.split(/\s+/).filter(Boolean);
-        const miAgenda = !normMedDoc ? null : agendasDelDia.find((a) => {
+        // v12.4.0 — BLINDAJE "solo aparece 5:30 PM": antes se usaba .find() — la PRIMERA
+        // agenda propia del día y las demás a la basura. Con jornada partida (mañana +
+        // tarde = dos agendas el mismo día), el médico veía únicamente los turnos de la
+        // agenda que el servidor listara primero (p. ej. la de tarde con un solo cupo a
+        // las 17:30) y "su agenda" parecía tener un único horario, todos los días.
+        // Ahora se consultan TODAS las agendas propias del día.
+        const misAgendas = !normMedDoc ? [] : agendasDelDia.filter((a) => {
           const nm = stripAccents(String(a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre || "").toLowerCase());
           return nm.includes(normMedDoc) || (toks.length > 0 && toks.every((tok) => tok.length > 2 && nm.includes(tok)));
         });
         // v11.0.1 — Antes, si no se reconocía la agenda propia se caía EN SILENCIO a las
         // agendas de TODOS los profesionales, y la etiqueta del turno ocultaba el nombre
         // en Medicina General: el médico podía agendar en la agenda de otro sin notarlo.
-        if (miAgenda) agendasFiltradas = [miAgenda];
+        if (misAgendas.length) agendasFiltradas = misAgendas;
         else avisoAgendaAjena = "⚠ No se identificó su agenda propia. Los turnos de abajo pueden ser de OTRO profesional — verifique el nombre antes de confirmar.";
       }
+
+      // v12.4.0 — Evidencia en consola para diagnosticar agendas incompletas: cuántas
+      // agendas llegaron, de qué fechas, y cuántas son del médico. Sin datos de paciente.
+      try {
+        console.log("[Vigilante Agendamiento] diagnóstico agendas:", {
+          fechaPedida: selectedDateInfo.fmt, recibidas: agendas.length, delDia: agendasDelDia.length,
+          propias: agendasFiltradas === agendasDelDia ? 0 : agendasFiltradas.length,
+          fechasRecibidas: [...new Set(agendas.map((a) => String(a.fechaAgenda || "").trim()))].slice(0, 12),
+        });
+      } catch (e) {}
 
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
 
       const turnosAcumulados = [];
-      for (const ag of agendasFiltradas.slice(0, 5)) {
+      for (const ag of agendasFiltradas.slice(0, 8)) {
         if (!vivo()) return;
         if (token !== _cargarHorasToken) return;
         const agendaId = ag.agendaId || ag.id || ag.AgendaId || ag.idAgenda || ag.IdAgenda || ag.AGendadId;
@@ -7185,7 +7366,7 @@
         const resTurnos = await apiAccesoObtenerTurnos(agendaId, selectedDateInfo.fmt, pacienteIdAcceso);
         const turnos = extractAgendasList(resTurnos);
         if (turnos && turnos.length) {
-          turnos.forEach((t) => turnosAcumulados.push({ turno: t, profesional: nombreProf, sede: ag.sede || "", fecha: ag.fechaAgenda || selectedDateInfo.fmt }));
+          turnos.forEach((t) => turnosAcumulados.push({ turno: t, agendaId, profesional: nombreProf, sede: ag.sede || "", fecha: ag.fechaAgenda || selectedDateInfo.fmt }));
         }
       }
 
@@ -7204,6 +7385,13 @@
         const e = String((x.turno && x.turno.estado) || "ACT").toUpperCase().trim();
         return e === "" || e === "ACT";
       });
+      // v12.4.0 — Distribución de estados en consola: si un día "lleno salvo las 5:30 PM"
+      // es real o es un estado de cupo que el filtro no reconoce, esta línea lo delata.
+      try {
+        const dist = {};
+        turnosAcumulados.forEach((x) => { const e = String((x.turno && x.turno.estado) || "(sin estado)").toUpperCase().trim() || "(vacío)"; dist[e] = (dist[e] || 0) + 1; });
+        console.log("[Vigilante Agendamiento] turnos del", selectedDateInfo.fmt, "→ total:", turnosAcumulados.length, "· libres:", turnosLibres.length, "· estados:", dist);
+      } catch (e) {}
       if (!turnosLibres.length) {
         slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${selectedDateInfo.fmt} pero ninguno está activo. Elija otro día.</div>`;
         return;
@@ -7214,7 +7402,26 @@
         w.textContent = avisoAgendaAjena;
         slotsEl.appendChild(w);
       }
-      turnosLibres.forEach(({ turno: t, profesional, sede, fecha }) => {
+      // v12.4.0 — Detector de agenda congelada: la firma de los turnos (ids ordenados) se
+      // compara entre fechas distintas dentro del mismo modal. Si DOS fechas devuelven
+      // exactamente los mismos turnos, el servidor está ignorando la fecha pedida o la
+      // agenda llega incompleta — se advierte en pantalla y en consola, porque "el mismo
+      // único cupo de 5:30 PM todos los días" es exactamente esa firma repetida.
+      try {
+        const firma = turnosLibres.map(({ turno: t }) => String(t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno || "")).sort().join(",");
+        for (const [fechaPrev, firmaPrev] of _turnosVistosPorFecha) {
+          if (fechaPrev !== selectedDateInfo.fmt && firmaPrev === firma && firma) {
+            const w2 = document.createElement("div");
+            w2.className = "vgl-agm-err";
+            w2.textContent = `⚠ Everest devolvió LOS MISMOS turnos para el ${fechaPrev} y el ${selectedDateInfo.fmt}. La agenda puede estar llegando incompleta — verifique en la agenda oficial antes de confiar en estos horarios.`;
+            slotsEl.appendChild(w2);
+            console.warn("[Vigilante Agendamiento] agenda congelada: firma de turnos idéntica entre fechas", fechaPrev, "y", selectedDateInfo.fmt, "→", firma);
+            break;
+          }
+        }
+        _turnosVistosPorFecha.set(selectedDateInfo.fmt, firma);
+      } catch (e) {}
+      turnosLibres.forEach(({ turno: t, agendaId, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
         // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
         // Medicina General, que es justo donde el fallback podía colar otra agenda).
@@ -7227,6 +7434,7 @@
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           selectedTurnoObj = t;
+          selectedTurnoCtx = { agendaId, fecha: selectedDateInfo.fmt, horaTxt }; // v12.4.0
           confirmBtn.disabled = false;
           confirmBtn.textContent = `✓ Sí, Crear Cita en ${selectedEspName} (${horaTxt})`;
         });
@@ -7366,6 +7574,41 @@
       confirmBtn.textContent = "⏳ Asignando cita...";
 
       const turnoId = selectedTurnoObj.turnoId || selectedTurnoObj.id || selectedTurnoObj.TurnoId || selectedTurnoObj.idTurno || selectedTurnoObj.IdTurno;
+
+      // v12.4.0 — VERIFICACIÓN EN TIEMPO REAL DEL CUPO (el mismo patrón que ya usaba el
+      // laboratorio): justo antes de confirmar se re-consulta la agenda; si el turno
+      // elegido ya no está activo (otro usuario lo tomó entre el listado y el clic), NO
+      // se dispara AsignarTurno: se recargan los horarios frescos y se le dice al médico
+      // que elija otra hora. Si la re-consulta falla por red (null), se sigue adelante:
+      // el servidor sigue siendo la compuerta final y un fallo de red no debe bloquear.
+      if (selectedTurnoCtx && selectedTurnoCtx.agendaId) {
+        confirmBtn.textContent = "⏳ Verificando que el cupo siga disponible...";
+        const fresco = await apiAccesoObtenerTurnos(selectedTurnoCtx.agendaId, selectedTurnoCtx.fecha, pacienteIdAcceso);
+        if (!vivo()) return;
+        const listaFresca = extractAgendasList(fresco);
+        if (Array.isArray(listaFresca) && listaFresca.length) {
+          const sigueLibre = listaFresca.some((t) => {
+            const idT = t.turnoId || t.id || t.TurnoId || t.idTurno || t.IdTurno;
+            const e = String((t && t.estado) || "ACT").toUpperCase().trim();
+            return String(idT) === String(turnoId) && (e === "" || e === "ACT");
+          });
+          if (!sigueLibre) {
+            vglLog("APPCITA", "TurnoYaNoDisponible", { turnoId });
+            const horaPerdida = selectedTurnoCtx.horaTxt || "elegida";
+            selectedTurnoObj = null; selectedTurnoCtx = null;
+            await cargarHoras(); // repinta los cupos REALES del momento (la hora tomada ya no aparece)
+            if (vivo()) {
+              const w = document.createElement("div");
+              w.className = "vgl-agm-err";
+              w.textContent = `⚠ La hora ${horaPerdida} ya no está disponible: acaba de ser tomada por otro usuario. Los horarios se actualizaron — elija otra hora.`;
+              slotsEl.prepend(w);
+              confirmBtn.disabled = true;
+              confirmBtn.textContent = "✓ Sí, Crear Cita";
+            }
+            return;
+          }
+        }
+      }
       const isPyM = !!modal.querySelector("#vgl-agm-pym-chk").checked;
       const obsInput = modal.querySelector("#vgl-agm-obs").value || "";
       const obs = selectedEspId === 12 ? obsInput : `REMISION A ${selectedEspName.toUpperCase()}. ${obsInput}`.trim();
@@ -7456,7 +7699,11 @@
           confirmBtn.textContent = "✓ Reintentar Crear Cita";
         }
         const errMsg = (res && res.mensaje) || (d && d.motivo) || "Sin respuesta del sistema de agenda."; // [COPY-UX]
-        alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Verifique en Everest antes de reintentar.");
+        alert("No se pudo confirmar la creación de la cita: " + errMsg + "\n\nLa cita NO se dio por creada. Se actualizaron los horarios disponibles — verifique y elija de nuevo.");
+        // v12.4.0 — Tras un rechazo del servidor (cupo tomado, agenda cerrada…) los
+        // horarios en pantalla ya son viejos: se refrescan solos para que el médico
+        // elija sobre cupos REALES en vez de reintentar a ciegas el mismo turno.
+        if (vivo()) { selectedTurnoObj = null; selectedTurnoCtx = null; try { cargarHoras(); } catch (e) {} }
       }
     });
 
@@ -7684,10 +7931,19 @@
         { codigo: "907106", desc: "Uroanálisis / Parcial de Orina" }
       ]
     },
+    // v12.4.0 — Paquetes alineados con la TABLA OFICIAL de CUPS de la IPS (actividad
+    // susceptible → CUPS → diagnóstico CIE-10). Los títulos son los mismos nombres que
+    // muestran los chips del panel (FRIENDLY). Cambios de esta versión:
+    //  · Z108 vuelve al 903816 (LDL SEMIAUTOMATIZADO) porque el tamizaje cardiometabólico
+    //    es para pacientes SANOS y ese es su CUPS en la tabla oficial; el 903817 queda
+    //    SOLO en el paquete RCV exprés de arriba (crónicos ERC/HTA/DM2) — aclarado por
+    //    el médico del programa el 2026-08-11.
+    //  · Se RETIRAN los paquetes de Hepatitis C (906225) y VDRL (906039): por decisión
+    //    del programa se descartan todas las ETS excepto VIH.
     {
       cie10: "Z124",
-      titulo: "Detección temprana de cáncer de cuello uterino (Citología / ADN VPH)",
-      keywords: ["cervix", "citologia", "ccu", "cuello uterino", "vph", "tamizar con ccu"],
+      titulo: "Cáncer de cuello uterino (Citología / ADN VPH)",
+      keywords: ["cuello uterino", "cervix", "citologia", "ccu", "vph", "tamizar con ccu"],
       cups: [
         { codigo: "908890", desc: "Deteccion Virus Del Papiloma Humano Por Pruebas Moleculares (Especifico)" },
         { codigo: "898001", desc: "Estudio de coloracion basica en citologia vaginal tumoral o funcional" },
@@ -7696,19 +7952,19 @@
     },
     {
       cie10: "Z113",
-      titulo: "Tamización de VIH (Anticuerpos VIH 1 y 2)",
-      keywords: ["vih", "inmunodeficiencia", "hiv", "tamización vih"],
+      titulo: "VIH (Anticuerpos VIH 1 y 2)",
+      keywords: ["vih", "inmunodeficiencia", "hiv"],
       cups: [
         { codigo: "906249", desc: "Virus De Inmunodeficiencia Humana 1 Y 2 Anticuerpos" }
       ]
     },
     {
       cie10: "Z108",
-      titulo: "Evaluación de riesgo cardiovascular y metabólico (Perfil lipídico, Creatinina, Parcial de orina, Glicemia)",
-      keywords: ["cardiometabolica", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
+      titulo: "Tamización cardiometabólica (Perfil lipídico, Creatinina, Parcial de orina, Glicemia)",
+      keywords: ["cardiometabolic", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
-        { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL] Automatizado" }, // v11.0.1: 903816 no es el CUPS que emite Everest en campo
+        { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" }, // tabla oficial: CMB de pacientes sanos (903817 es de crónicos, ver RCV exprés)
         { codigo: "903818", desc: "Colesterol Total" },
         { codigo: "903895", desc: "Creatinina En Suero U Otros Fluidos" },
         { codigo: "907106", desc: "Uroanalisis" },
@@ -7718,7 +7974,7 @@
     },
     {
       cie10: "Z123",
-      titulo: "Detección temprana de cáncer de mama (Mamografía Bilateral)",
+      titulo: "Mamografía (Mamografía Bilateral)",
       keywords: ["mamografia", "mama", "seno"],
       cups: [
         { codigo: "876802", desc: "Mamografia Bilateral" }
@@ -7726,7 +7982,7 @@
     },
     {
       cie10: "Z125",
-      titulo: "Antígeno Específico de Próstata (PSA)",
+      titulo: "PSA (antígeno de próstata)",
       keywords: ["psa", "prostata"],
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
@@ -7734,31 +7990,15 @@
     },
     {
       cie10: "Z121",
-      titulo: "Detección de sangre oculta en materia fecal",
-      keywords: ["omf", "sangre oculta", "materia fecal"],
+      titulo: "SOMF (sangre oculta en materia fecal)",
+      keywords: ["somf", "omf", "sangre oculta", "materia fecal", "colon"],
       cups: [
         { codigo: "907009", desc: "Sangre Oculta En Materia Fecal (Determinacion De Hemoglobina Humana Especifica)" }
       ]
     },
     {
-      cie10: "Z113",
-      titulo: "Prueba de Anticuerpos Hepatitis C",
-      keywords: ["hepatitis", "hepa"],
-      cups: [
-        { codigo: "906225", desc: "Hepatitis C Anticuerpo Semiautomatizado O Automatizado" }
-      ]
-    },
-    {
-      cie10: "Z113",
-      titulo: "Prueba de VDRL / Treponema Pallidum",
-      keywords: ["vdrl", "treponema", "sifilis"],
-      cups: [
-        { codigo: "906039", desc: "Treponema Pallidum Anticuerpos (Prueba Treponemica) Manual O Semiautomatizado O Automatizada" }
-      ]
-    },
-    {
       cie10: "Z103",
-      titulo: "Examen de Hemoglobina y Hematocrito",
+      titulo: "Hemoglobina y Hematocrito",
       keywords: ["hemoglobina", "hematocrito"],
       cups: [
         { codigo: "902213", desc: "Hemoglobina" },
@@ -8134,6 +8374,7 @@
       let creadasCount = 0;
       let agrupadores = [];
       let fallidasCount = 0;
+      const actividadesCubiertas = []; // v12.4.0 — etiquetas del Excel cubiertas por las órdenes creadas
 
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
@@ -8167,6 +8408,7 @@
           creadasCount++;
           const agp = agpReal;
           agrupadores.push(agp);
+          actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false; // Desmarcar exitoso
             c.disabled = true; // Deshabilitar
@@ -8234,7 +8476,7 @@
         // v12.3.x — "ID y bloqueo de seguridad": se guardan los agrupadores reales junto
         // con la marca "ya ordenado hoy" — de aquí lee el botón 📋 de la tarjeta (se
         // deshabilita) y checkRecordatorioPym (se calla la alerta grande de PyM).
-        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos);
+        markOrdenesCreadasHoy(apt.doc_id, agrupadoresUnicos, [...new Set(actividadesCubiertas)]);
         notify("VERDE", "✅ Órdenes PyM Generadas", `Paciente: ${patientName}\n${creadasCount} orden(es) creadas en el sistema de órdenes.`, true); // [COPY-UX]
         bumpStat("atiempo");
         // v12.3.x — Ya NO se cierra sola a los 2.6 s: el médico necesita tiempo para
@@ -8746,9 +8988,15 @@
       // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
       // v7.8: sin base cargada NO se dice "Al día" (era mentira piadosa): se dice la verdad.
-      const pyms = a.pym.length
-        ? `<div class="vgl-pyms">${a.pym.map((p) => `<span class="vgl-chip" style="font-size:12.5px;padding:5px 12px">${escapeHtml(p)}</span>`).join("")}</div>`
-        : (!state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
+      // v12.4.0 — Los chips del panel EXCLUYEN Optometría/Odontología (van en el aviso al
+      // abrir la historia); si al paciente SOLO le quedan esas, se dice — no un falso
+      // "al día". El tamaño del texto ahora lo gobierna la clase .vgl-chip (fila que
+      // envuelve, texto completo visible), sin estilo inline que la pise.
+      const pymsPanel = panelActivities(a.pym);
+      const pyms = pymsPanel.length
+        ? `<div class="vgl-pyms">${pymsPanel.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}</div>`
+        : (a.pym.length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
+          : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
           : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
                    : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
       // Bandera de fraude EXPLÍCITA en texto (no solo color): así no depende de memorizar
@@ -8829,15 +9077,8 @@
       fragment.appendChild(card);
     }
     el.list.appendChild(fragment);
-    // v12.3.24 — Recién attachado al DOM real es cuando scrollWidth/clientWidth quedan
-    // correctos (en el fragment desconectado ambos dan 0). Se marca SOLO la fila de chips
-    // que de verdad se corta, para que la máscara de "hay más" (CSS de arriba) no oscurezca
-    // el último chip en pacientes con pocas actividades, donde todo ya cabe.
-    try {
-      el.list.querySelectorAll(".vgl-pyms").forEach((p) => {
-        p.classList.toggle("vgl-scroll-more", p.scrollWidth > p.clientWidth + 1);
-      });
-    } catch (e) {}
+    // v12.4.0 — Retirada la medición scrollWidth/clientWidth y la máscara "hay más"
+    // (v12.3.24): la fila de chips ahora envuelve en varias líneas y nada queda oculto.
   }
   // Refresca SOLO el texto de la cuenta regresiva de cada tarjeta ya pintada. Cuesta unos
   // pocos microsegundos frente a recrear la lista entera.
@@ -9205,17 +9446,18 @@
       if (heartbeat()) { const ok = await loadPymDiario(true).catch(() => false); if (!ok) schedulePymBase(); }
       else schedulePymBase();
     }, 4000);
-    // v7.8.1: SIEMPRE se vuelve a listar la carpeta (una consulta de ~60 filas, unos KB —
-    // barato) aunque el PyM real de hoy ya esté cargado. Antes ("v7.7.1: deja de revisar")
-    // el chequeo se APAGABA por completo en cuanto cargaba el de hoy — así que una
-    // corrección subida a mediodía con el MISMO nombre (mtime nuevo), o un archivo
-    // equivocado cargado a mano con «Abrir PyM», quedaban pegados el resto del turno SIN
-    // ninguna forma de corregirse solos (hallazgo de la auditoría adversarial). La huella
-    // nombre+fecha-de-modificación (pymFP, dentro de loadPymDiario) sigue siendo la que
-    // decide si hace falta VOLVER A DESCARGAR — solo cambia que ahora sí se vuelve a mirar.
+    // v12.4.0 — BÚSQUEDA ACTIVA DEL DIARIO, CON PARADA. Cada 10 minutos, durante toda la
+    // jornada, se busca el Agenda_Dia_CMB de HOY en SharePoint — pero SOLO mientras no
+    // esté cargado (sin nada, con la base piloto de respaldo, o con el PyM de otro día).
+    // El archivo lo suben en el transcurso de la mañana: mientras tanto manda la piloto,
+    // y en cuanto el real aparece, loadPymDiario reemplaza TODO (applyPymIdx → panel
+    // repintado con los datos nuevos) y esta re-búsqueda se detiene sola — pedido
+    // explícito del consultorio (2026-08-11). Nota: la revisión "¿subieron una
+    // corrección a mediodía?" de v7.8.1 se sacrifica a propósito con esta parada; si un
+    // archivo cargado resulta equivocado, «Abrir PyM» manual sigue mandando siempre.
     setInterval(() => {
       if (!heartbeat()) return;
-      loadPymDiario(true);
+      if (debeBuscarPymDiario()) loadPymDiario(true);
       // v7.8.1: si después de todo esto sigue sin haber NADA cargado (ni PyM de hoy ni
       // piloto — p. ej. los 3 intentos del arranque se agotaron por una falla pasajera de
       // red a las 6 a.m.), se reintenta la piloto aquí. Sin esto, la promesa de "si no
