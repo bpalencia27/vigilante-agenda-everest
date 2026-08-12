@@ -55,6 +55,47 @@ module.exports = {
       t.igual(c.api.__state.leader, true);
     });
 
+    // ---------- __VGL_DIAG__ (v12.5.14) ----------
+    // No está en `cubre`: se asigna a window.__VGL_DIAG__ (no una `function NOMBRE`
+    // declarada), así que el cargador del banco no la expone en `api` — se prueba
+    // directo contra c.env.win, que es donde de verdad vive (F12 la llama ahí).
+    t.caso("__VGL_DIAG__: refleja el estado real sin lanzar y sin exponer datos de paciente", () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(typeof c.env.win.__VGL_DIAG__ === "function", "se asigna a window al cargar el script, sin esperar a boot()");
+      const d = c.env.win.__VGL_DIAG__();
+      t.igual(d.seccion, "otra", "DOM falso del arnés: ninguna vista reconocida");
+      t.igual(d.apiUrlAprendida, false, "sin localStorage previo, el API aún no se aprendió");
+      t.igual(d.apiOk, 0);
+      t.igual(d.apiFallos, 0);
+      t.igual(d.apiUtil, false, "sin URL aprendida, apiUtil() es falso");
+      t.igual(d.apiSano, false);
+      t.igual(d.ultimoSnapshotHaceMs, null, "sin snapshot todavía");
+      // Nada de nombres, cédulas ni listas de pacientes en el diagnóstico.
+      const plano = JSON.stringify(d);
+      t.falso(/[a-zñáéíóú]{4,}\s[A-ZÑÁÉÍÓÚ]{2,}/.test(plano), "no debe verse texto con forma de nombre de paciente");
+    });
+
+    t.caso("__VGL_DIAG__: tras tomar el liderazgo, refleja latidoLiderPropio y esLider", () => {
+      const c = cargar({ silencioso: true });
+      c.api.heartbeat(); // esta pestaña toma el mando (sin latido previo)
+      const d = c.env.win.__VGL_DIAG__();
+      t.cierto(d.esLider, "state.leader quedó en true tras heartbeat()");
+      t.cierto(d.latidoLiderPropio, "el latido en localStorage es el de esta pestaña (TABID)");
+      t.cierto(typeof d.latidoLiderHaceMs === "number" && d.latidoLiderHaceMs >= 0);
+    });
+
+    t.caso("__VGL_DIAG__: nunca lanza aunque algo interno falle (localStorage roto)", () => {
+      const c = cargar({ silencioso: true });
+      const originalGetItem = c.env.win.localStorage.getItem;
+      c.env.win.localStorage.getItem = () => { throw new Error("boom"); };
+      let d;
+      t.noLanza(() => { d = c.env.win.__VGL_DIAG__(); });
+      c.env.win.localStorage.getItem = originalGetItem;
+      // El try/catch interno de heartbeat-beat ya protege esta parte puntual, así que
+      // no debe reventar el diagnóstico entero por un solo localStorage caído.
+      t.cierto(d && typeof d === "object");
+    });
+
     t.caso("share: sin BroadcastChannel no lanza y no ensucia state.shared", () => {
       const c = cargar({ silencioso: true });
       t.noLanza(() => c.api.share([{ key: "x@07:00", color: "VERDE" }]));

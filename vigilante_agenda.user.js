@@ -5252,6 +5252,39 @@
   // Con un frenado creciente clásico, rendirse costaba un cuarto de hora.
   const apiEspera = (base) => (API.fallos >= 5 ? 300000 : API.fallos ? Math.min(30000, 5000 * (1 + API.fallos)) : Math.max(4000, base));
 
+  // v12.5.14 — DIAGNÓSTICO EN VIVO, pedido para investigar el aviso "Última lectura...
+  // vuelve a Citas del día" pegado durante minutos fuera de esa vista (reportado en
+  // consultorio: 19 min de atraso con el médico en Historia Clínica). Sin esto había que
+  // adivinar entre 3 causas posibles (API nunca aprendido en esta pestaña, API fallando
+  // en racha, o esta pestaña sin el liderazgo de vigilancia) sin poder verlas — se expone
+  // en window para pegarlo desde F12 en el momento exacto en que se congela. NINGÚN dato
+  // de paciente: solo contadores, banderas y "hace cuántos ms", nunca nombres ni cédulas.
+  window.__VGL_DIAG__ = function () {
+    try {
+      const ahora = Date.now();
+      let beat = null;
+      try { beat = JSON.parse(localStorage.getItem(LEADER_KEY) || "null"); } catch (e) {}
+      return {
+        seccion: seccionActiva(),
+        esLider: !!state.leader,
+        latidoLiderPropio: !!(beat && beat.id === TABID),
+        latidoLiderHaceMs: beat ? (ahora - beat.t) : null,
+        apiUrlAprendida: !!API.url,
+        apiOk: API.ok,
+        apiFallos: API.fallos,
+        apiEnVuelo: !!API.enVuelo,
+        apiUtil: apiUtil(),
+        apiSano: apiSano(),
+        apiUltimoIntentoHaceMs: API.ultimo ? (ahora - API.ultimo) : null,
+        apiCitasFrescasHaceMs: state.apiEn ? (ahora - state.apiEn) : null,
+        ultimoSnapshotHaceMs: (state.lastSnapshot && state.lastSnapshot.at) ? (ahora - state.lastSnapshot.at.getTime()) : null,
+        ultimoSnapshotFuente: (state.lastSnapshot && state.lastSnapshot.source) || null,
+        compartidoDeOtraPestañaHaceMs: (state.shared && state.shared.t) ? (ahora - state.shared.t) : null,
+        refrescoConfiguradoMs: CONFIG.POLL_MS,
+      };
+    } catch (e) { return { error: String(e) }; }
+  };
+
   // ---- Sondeo del API en MODO LIGERO (v7.3.1, umbrales v12.3.8) ----
   // Ritmo adaptativo, calcado del que usaba el clon pero sin clon: rápido SOLO
   // cuando una cita está cerca de la tolerancia (que es cuando puede colarse un
