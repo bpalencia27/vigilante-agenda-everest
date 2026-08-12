@@ -188,29 +188,57 @@ programa»). **Jamás inferir "hipertenso sin diabetes" del silencio**: un pacie
 cargados no es un paciente sin diabetes, y ofrecerle un cupo adicional por omisión es
 exactamente el error que este proyecto no comete.
 
-### D3-bis — Motor de recomendación por perfil: escalera de precedencia explícita
-El módulo debe **encontrar la cita recomendada**, no filtrar la agenda. Un único componente
-—llamémoslo `perfilPaciente(etiquetas)` → `recomendacionHorario(perfil, turnosDelDia)`—
-resuelve los dos casos con la misma maquinaria.
+### D3-bis — Motor de recomendación por perfil: DOS EJES INDEPENDIENTES
+El módulo debe **encontrar la cita recomendada**, no filtrar la agenda.
 
-**Escalera de precedencia** (se evalúa de arriba abajo; el primero que casa manda):
+Confirmado con el médico (13-08-2026): nefroprotección **no tiene preferencia de horario
+propia**; si además hay diabetes, mandan las reglas de la diabetes. Eso descarta el modelo de
+escalera única —donde un perfil «gana» y anula a los demás— porque produciría justo el error
+contrario: un nefroprotegido diabético se quedaría sin su franja recomendada.
 
-| # | Perfil | Etiquetas | Recomendación | Cupos adicionales (7:30…) |
-|---|---|---|---|---|
-| 1 | `NEFROPROTECCION` | contiene `nefroprotección` | **sin regla de horario definida — PREGUNTAR** | ❌ no se recomiendan (es enfermedad renal) |
-| 2 | `DIABETICO` | contiene `diabetes` **o** `HTA+DM` | **primera mitad de la jornada** (AM 06:00–09:00 · PM 13:00–16:00), repintada, con una hora elegida como sugerida | ❌ no se recomiendan (tiene diabetes) |
-| 3 | `HIPERTENSO` | contiene `hipertensión` y ninguna de las anteriores | horario normal | ✅ **se recomiendan** — es el perfil objetivo |
-| 4 | `SIN_ETIQUETA` | ninguna reconocida | sin recomendación de perfil | ➖ visibles, sin recomendar |
+Son **dos preguntas separadas**, que se responden por separado sobre la MISMA lista de
+etiquetas. Un paciente puede responder distinto a cada una y eso es normal, no un conflicto.
 
-Por qué en ese orden: `HTA+DM` casa con hipertensión **y** con diabetes a la vez; sin una
-escalera explícita el resultado dependería del orden del arreglo, que es exactamente el tipo
-de azar que produce un error clínico silencioso. La diabetes gana sobre la hipertensión
-porque la instrucción del médico es explícita, y la nefroprotección gana sobre todo porque es
-el único criterio que **excluye** los cupos adicionales por sí solo.
+#### Eje A — ¿A qué hora le conviene? (recomendación de franja)
 
-**Reglas de comportamiento, para los cuatro perfiles por igual:**
+| Condición sobre las etiquetas | Recomendación |
+|---|---|
+| Contiene `diabetes` **o** `HTA+DM` | **Primera mitad de la jornada** (AM 06:00–09:00 · PM 13:00–16:00), repintada, con una hora preseleccionada |
+| No contiene diabetes | Sin preferencia de franja — horario normal |
+
+**La diabetes es la única que impone franja.** `nefroprotección` sola, `hipertensión` sola, o
+ambas juntas → sin preferencia. `nefroprotección` **+** diabetes → primera mitad, igual que
+cualquier diabético: la nefroprotección no anula nada en este eje.
+
+#### Eje B — ¿Puede usar los cupos adicionales (7:30 / 9:30 / 11:30 / 1:30 / 3:30 / 5:30)?
+
+| Condición sobre las etiquetas | Cupos adicionales |
+|---|---|
+| `hipertensión` **y** sin diabetes **y** sin nefroprotección | ✅ **Recomendados** — es el perfil objetivo |
+| Contiene `diabetes` o `HTA+DM` | ❌ No recomendados (tiene diabetes) |
+| Contiene `nefroprotección` | ❌ No recomendados (enfermedad renal) |
+| Sin etiqueta reconocida | ➖ Visibles, sin recomendar |
+
+**Este eje es una lista de exclusiones, no un escalafón.** Basta UNA condición excluyente para
+que los cupos dejen de recomendarse; no importa el orden en que se evalúen. Esa propiedad es
+deliberada: elimina la clase entera de bugs donde el resultado depende del orden del arreglo.
+
+**Ejemplos resueltos, para que no haya interpretación:**
+
+| Etiquetas | Eje A (franja) | Eje B (cupos adicionales) |
+|---|---|---|
+| `Hipertensión` | sin preferencia | ✅ recomendados |
+| `HTA+DM` | primera mitad | ❌ |
+| `Diabetes` | primera mitad | ❌ |
+| `Nefroprotección` | sin preferencia | ❌ |
+| `Hipertensión` + `Nefroprotección` | sin preferencia | ❌ |
+| `Nefroprotección` + `Diabetes` | **primera mitad** | ❌ |
+| `Nefroprotección` + `HTA+DM` | **primera mitad** | ❌ |
+| (ninguna / desconocida) | sin recomendación | ➖ visibles |
+
+**Reglas de comportamiento, para todos los perfiles por igual:**
 - **Nada se oculta ni se deshabilita.** Todas las horas disponibles siguen siendo elegibles.
-- La recomendación es **realce + preselección**, y el médico puede cambiarla con un clic.
+- La recomendación es **realce + preselección**; el médico la cambia con un clic.
 - Cada realce lleva **su razón visible** («recomendado: perfil diabético · primera mitad de la
   jornada»). Un color sin explicación es justo lo que hoy hace el panel «ambiguo y confuso».
 - **Excepción de escasez** (requisito 6): si NO hay cupos normales en ningún día de la
@@ -225,11 +253,11 @@ jornada AM; los de 13:00–16:00, primera mitad de la PM. Si un día solo tiene 
 la recomendación es 13:00–16:00 y no existe la de mañana. Prohibido asumir que toda agenda
 empieza a las 6.
 
-**Colisión de realces.** 7:30 es cupo adicional **y** cae dentro de 06:00–09:00. Como los
-perfiles 1 y 2 no reciben recomendación de cupo adicional, la colisión casi no ocurre; pero
-debe estar definida igual: **manda el realce del perfil** (primera mitad) y el cupo adicional
-conserva su marca de «adicional» como información secundaria. Nunca dos realces compitiendo
-por el mismo espacio visual.
+**Colisión de realces.** 7:30 es cupo adicional **y** cae dentro de 06:00–09:00. Un paciente
+nunca recibe los dos realces a la vez (quien tiene franja recomendada es diabético, y un
+diabético no recibe cupos adicionales), salvo bajo la excepción de escasez. En ese caso manda
+el realce del perfil y la marca de «adicional» queda como información secundaria. Nunca dos
+realces compitiendo por el mismo espacio visual.
 
 ### D4 — Las horas adicionales se detectan normalizando, no comparando cadenas.
 7:30, 9:30, 11:30 son AM; 1:30, 3:30, 5:30 son **PM (13:30, 15:30, 17:30)**. La API entrega
@@ -384,17 +412,33 @@ probables por unidad: `perfilPaciente(etiquetas)` (puro, sin DOM ni red) y
 `recomendacionHorario(perfil, turnosDelDia)` (puro). El emparejamiento de cadenas **normaliza
 tildes, mayúsculas y separadores** (lección de v12.6.8). Cero PHI en logs.
 
-**Pruebas mínimas — la escalera de precedencia es el corazón de esto:**
-- `["Hipertensión"]` → `HIPERTENSO` → recomienda cupos adicionales.
-- `["HTA+DM"]` y `["HTA + DM"]` y `["hta/dm"]` → `DIABETICO` (no `HIPERTENSO`) → primera mitad, **sin** cupos adicionales.
-- `["Diabetes"]` → `DIABETICO`.
-- `["Hipertensión","Nefroprotección"]` → `NEFROPROTECCION` gana → **sin** cupos adicionales, aunque también sea hipertenso.
-- `["Hipertensión","Diabetes"]` → `DIABETICO`.
+**Pruebas mínimas — los DOS EJES se prueban por separado, y la tabla de ejemplos resueltos
+de D3-bis se convierte en una prueba por fila. Ninguna fila puede quedar sin cubrir.**
+
+*Eje A (franja):*
+- `["Diabetes"]`, `["HTA+DM"]`, `["HTA + DM"]`, `["hta/dm"]` → primera mitad.
+- `["Hipertensión"]`, `["Nefroprotección"]`, `["Hipertensión","Nefroprotección"]` → sin preferencia.
+- **`["Nefroprotección","Diabetes"]` y `["Nefroprotección","HTA+DM"]` → primera mitad.** Es la
+  fila que el médico corrigió expresamente: la nefroprotección **no** anula la regla de la
+  diabetes. Prueba obligatoria y con nombre explícito.
+
+*Eje B (cupos adicionales):*
+- `["Hipertensión"]` → ✅ único caso que los recomienda.
+- Cualquier lista con diabetes → ❌. Cualquier lista con nefroprotección → ❌.
+- **Independencia del orden:** `["Nefroprotección","Hipertensión"]` y `["Hipertensión","Nefroprotección"]` dan idéntico resultado en ambos ejes.
+
+*Transversales:*
 - `[]` / `null` / etiqueta desconocida → `SIN_ETIQUETA`: muestra todo, no recomienda, **no bloquea**.
-- **Una capa que falle en red nunca degrada a `HIPERTENSO`** (sería ofrecer un cupo adicional a un diabético por un fallo de red).
-- Cambiar `#vgl-agm-prog-sel` recalcula la recomendación.
+- **Un fallo de red nunca degrada al perfil que MÁS permite.** Si la clasificación no se pudo
+  obtener, el resultado es `SIN_ETIQUETA`, jamás «hipertenso apto»: sería ofrecerle un cupo
+  adicional a un diabético por culpa de una petición caída.
+- Cambiar `#vgl-agm-prog-sel` recalcula ambos ejes.
 - Escasez: sin cupos normales en toda la ventana, los adicionales se ofrecen a cualquier perfil **rotulados como excepción**.
 - Ninguna hora disponible queda deshabilitada en ningún perfil.
+
+**Mutación obligatoria de este agente:** hacer que la nefroprotección anule la franja de la
+diabetes (volver al modelo de escalera). Debe caer la prueba de `["Nefroprotección","Diabetes"]`.
+Si sobrevive, esa prueba no existe de verdad.
 
 ### C5 · CSS y tokens
 Todo el CSS nuevo. Verifica la trampa v12.6.6 (tokens en las cuatro listas). Claro y oscuro.
@@ -464,22 +508,23 @@ Estas quedaron sin definir al cerrar el encargo. El orquestador las lleva al mé
 primera entrega**, y mientras tanto se implementa el comportamiento seguro indicado. Ningún
 agente puede resolverlas por su cuenta.
 
-1. **`nefroprotección`: ¿qué horario se le recomienda?** Se sabe que **no** recibe los cupos
-   adicionales (es enfermedad renal), pero no se dijo qué franja prefiere.
-   *Mientras tanto:* horario normal, sin recomendación de franja, con la razón visible.
-2. **¿Un nefroprotegido que además es diabético debe recibir la primera mitad de la jornada?**
-   La escalera actual pone nefroprotección arriba, así que hoy **no** la recibiría.
-   *Mientras tanto:* se sigue la escalera y se rotula el perfil compuesto para que se note.
-3. **¿Las etiquetas vienen de `programasPaciente[].descripcion` o de otra fuente?** Y sobre
+> ✅ **RESUELTAS por el médico el 13-08-2026** (ya incorporadas a D3-bis, no vuelvas a preguntarlas):
+> - *Nefroprotección* no tiene preferencia de horario propia; si además hay diabetes, aplican
+>   las reglas de la diabetes.
+> - Un nefroprotegido **diabético SÍ** recibe la primera mitad de la jornada.
+>
+> Por eso el modelo dejó de ser una escalera de precedencia y pasó a **dos ejes independientes**.
+
+1. **¿Las etiquetas vienen de `programasPaciente[].descripcion` o de otra fuente?** Y sobre
    todo, **¿con qué cadenas exactas?** Lo resuelve el diagnóstico de A3.
    *Mientras tanto:* motor construido con las cadenas como parámetro configurable.
-4. **¿"Primera mitad" incluye el borde?** ¿Las 09:00 y las 16:00 están dentro o fuera?
+2. **¿"Primera mitad" incluye el borde?** ¿Las 09:00 y las 16:00 están dentro o fuera?
    *Mientras tanto:* **inclusivo** (09:00 dentro, 09:20 fuera), fijado con prueba explícita
    para que cambiarlo sea un renglón.
-5. **¿Cuál de las horas de la primera mitad se preselecciona** cuando hay varias libres — ¿la
+3. **¿Cuál de las horas de la primera mitad se preselecciona** cuando hay varias libres — ¿la
    más temprana, la más cercana al día sugerido, la menos ocupada?
    *Mientras tanto:* la más temprana disponible, por ser la más predecible para el médico.
-6. **La excepción de escasez** (ofrecer cupos adicionales a cualquiera): ¿se activa cuando no
+4. **La excepción de escasez** (ofrecer cupos adicionales a cualquiera): ¿se activa cuando no
    hay cupos en **ningún** día de la ventana, o basta con que no los haya en el día sugerido?
    *Mientras tanto:* ninguno en toda la ventana — el criterio más estricto.
 
@@ -488,8 +533,9 @@ agente puede resolverlas por su cuenta.
 # 5. DEFINICIÓN DE HECHO
 
 - [ ] Los 10 puntos del §2 atendidos, o declarados como bloqueados con la razón y la pregunta.
-- [ ] Los cuatro perfiles (`HIPERTENSO`, `DIABETICO`, `NEFROPROTECCION`, `SIN_ETIQUETA`) probados uno por uno, incluidos los compuestos.
-- [ ] La escalera de precedencia cubierta con prueba por cada peldaño, y una mutación que la desordene tumbando una prueba.
+- [ ] **Cada fila de la tabla de ejemplos resueltos de D3-bis tiene su prueba**, incluidas las combinadas.
+- [ ] Los dos ejes probados por separado, y verificada la **independencia del orden** de las etiquetas.
+- [ ] Mutación que devuelva el modelo a una escalera (nefroprotección anulando diabetes) tumbando su prueba.
 - [ ] Ninguna hora disponible queda oculta o deshabilitada en ningún perfil.
 - [ ] `node tests/runner.js` verde; ninguna prueba existente debilitada o borrada.
 - [ ] Cada cambio con prueba nueva **y** mutación documentada que la tumba.
