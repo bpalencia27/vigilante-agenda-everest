@@ -278,6 +278,36 @@ module.exports = {
       t.igual(c.api.__state.notified.size, 1, "sin cambios de estado no aparecen entradas nuevas");
     });
 
+    // v12.5.14 — Reportado en consultorio: el saludo diario (y los avisos en general)
+    // llegaban también con la pestaña líder abierta en .../viva/Acceso/. Con el mismo
+    // DOM de agenda visible de la prueba anterior, si la ruta es Acceso el saludo NO
+    // debe salir (aunque siga sembrando notified con normalidad).
+    t.caso("tick: fuera del módulo HCHealth (Acceso) no dispara el saludo diario", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      const contenedor = {
+        querySelector: (sel) => ({
+          ".status-label": { textContent: "Atendido" },
+          ".text-muted": { textContent: "12345678" },
+          ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
+          ".fw-bold.mb-0": { textContent: "Presencial" },
+        }[sel] || null),
+      };
+      const nodoHora = {
+        textContent: "07:00 AM",
+        closest: () => contenedor,
+        parentElement: null,
+        ownerDocument: { body: c.env.doc.body },
+      };
+      c.env.doc.querySelector = (sel) => (sel === ".labelHora" || sel === ".status-label") ? {} : null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".labelHora" ? [nodoHora] : []);
+
+      c.api.tick();
+      t.igual(c.api.__state.summarized, true, "sigue sembrando el estado con normalidad");
+      t.igual(c.api.__state.notified.size, 1, "la cita se siembra igual, sin depender del módulo");
+      t.igual(c.env.almacen["vgl_hello"], undefined, "el saludo diario NO sale: la pestaña líder está en Acceso, no en HCHealth");
+    });
+
     // ---------- downloadDiagnostic ----------
     t.caso("downloadDiagnostic: genera el archivo sanitizado y lo descarga en local", () => {
       const c = cargar({ silencioso: true });

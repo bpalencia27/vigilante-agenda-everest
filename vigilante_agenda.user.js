@@ -4445,6 +4445,23 @@
   //  Fuera de las dos, tick() se apaga entero (DOM, API, panel) y se recoge a la
   //  pastilla flotante; al volver, se restaura sola.
   // =====================================================================
+  // =====================================================================
+  //  MÓDULO CLÍNICO (HCHealth) vs. OTROS MÓDULOS DE EVEREST (v12.5.14)
+  //  Reportado en consultorio: los avisos (Windows/toast/sonido/cartel) llegaban
+  //  también con la pestaña líder abierta en .../viva/Acceso/ — un módulo de Everest
+  //  totalmente distinto (asignación/reserva de turnos), sin nada que ver con la
+  //  agenda del día que el Vigilante vigila. Los avisos deben vivir SOLO dentro del
+  //  módulo clínico HCHealth (.../viva/HCHealth/...), que es donde corren tanto
+  //  "Citas del día" y la Historia Clínica como las demás pantallas del médico
+  //  (Órdenes, RCV) que v12.3.21 ya dejaba notificar. Se distingue por el segmento
+  //  de ruta, no por marcadores de DOM: seccionActiva() ya sirve para eso, pero es
+  //  deliberadamente angosta (solo reconoce agenda/historia, no Órdenes ni RCV).
+  // =====================================================================
+  function _enModuloHCHealth() {
+    try { return /\/viva\/HCHealth(\/|$)/i.test(location.pathname); }
+    catch (e) { return false; }
+  }
+
   function seccionActiva() {
     try {
       if (document.getElementById("anamesis")) return "historia";
@@ -4996,6 +5013,11 @@
     if (a.color === "VERDE" && !a.arrival) return;
 
     const cfg = NOTIFY[a.color]; if (!cfg) return;
+    // v12.5.14 — El estado ya quedó anotado arriba (state.notified), así que la
+    // transición no se pierde: si el médico está fuera del módulo clínico HCHealth
+    // (p. ej. en Acceso), el aviso audible/visual se suprime aquí, pero al volver a
+    // HCHealth el panel refleja el color real de inmediato sin reabrir el aviso.
+    if (!_enModuloHCHealth()) return;
     bumpStat(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima");
     if (a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
@@ -10557,7 +10579,7 @@
           // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
           state.summarized = true;
           processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          if (leader) helloOncePerDay(processed);
+          if (leader && _enModuloHCHealth()) helloOncePerDay(processed);
         } else if (leader) {
           processed.forEach(maybeNotify);
         }

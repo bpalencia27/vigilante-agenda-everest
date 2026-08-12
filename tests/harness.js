@@ -80,7 +80,7 @@ function crearEntorno(opciones) {
   const doc = crearDom();
 
   const win = {
-    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", search: "", hash: "" },
+    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/HCHealth/", search: "", hash: "" },
     navigator: { userAgent: "node-test", locks: null },
     document: doc,
     localStorage: storage,

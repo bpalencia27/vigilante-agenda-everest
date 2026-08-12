@@ -162,6 +162,34 @@ module.exports = {
     });
 
     // =====================================================================
+    // v12.5.14 — Reportado en consultorio: los avisos llegaban también con la
+    // pestaña líder abierta en .../viva/Acceso/ (asignación de turnos), un
+    // módulo de Everest sin nada que ver con la agenda del día. maybeNotify
+    // debe seguir anotando el estado (state.notified) para no perder la
+    // transición, pero SUPRIMIR el aviso audible/visual fuera de HCHealth.
+    // =====================================================================
+    t.caso("maybeNotify: fuera de HCHealth (Acceso) no notifica, pero sí anota el estado", () => {
+      const c = cargar();
+      c.env.win.location.pathname = "/viva/Acceso/";
+      const base = { hora_texto: "08:00 AM", doc_id: "789", key: "789@08:00 AM", nombre: "LUIS", elapsed: 1, reason: "" };
+      c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });      // siembra
+      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, pero fuera de HCHealth
+      t.igual(atiempoHoy(c), 0, "el aviso se suprime mientras la pestaña líder está en Acceso");
+      t.igual(c.api.__state.notified.get("789@08:00 AM"), c.api.nkey({ color: "VERDE", reason: "" }), "el estado sí quedó anotado, sin duplicar el aviso al volver a HCHealth");
+    });
+
+    t.caso("maybeNotify: al volver a HCHealth, la MISMA transición ya anotada no vuelve a notificar (no hay aviso fantasma tardío)", () => {
+      const c = cargar();
+      c.env.win.location.pathname = "/viva/Acceso/";
+      const a = { hora_texto: "09:00 AM", doc_id: "321", key: "321@09:00 AM", nombre: "ANA", elapsed: 1, reason: "" };
+      c.api.maybeNotify({ ...a, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // suprimido: Acceso
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // mismo color: nkey ya coincide, no reprocesa
+      t.igual(atiempoHoy(c), 0, "no reaparece como aviso tardío: la transición ya se había anotado");
+    });
+
+    // =====================================================================
     // v12.5.7 — checkLabsVencidos: aviso ROJO de laboratorios RCV sin resultado en 180
     // días. Lee SOLO lo que el robot de Athenea ya pre-cargó (_labsPrefetch) — nunca
     // dispara su propia consulta. Mismo patrón "una vez por paciente por día" que

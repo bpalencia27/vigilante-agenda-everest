@@ -13,7 +13,7 @@ module.exports = {
   nombre: "Extracción del DOM de Everest (Suite 14)",
   cubre: [
     "firstMatch", "containerOf", "extractAgenda", "seccionActiva",
-    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf"
+    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth"
   ],
 
   pruebas(t, api, env, cargar) {
@@ -164,6 +164,34 @@ module.exports = {
       const c = cargar({ silencioso: true });
       c.env.doc.getElementById = () => { throw new Error("DOM roto"); };
       t.igual(c.api.seccionActiva(), "otra");
+    });
+
+    // ---------- _enModuloHCHealth ----------
+    // Reportado en consultorio: los avisos (Windows/toast/sonido) llegaban también
+    // con la pestaña líder abierta en .../viva/Acceso/, un módulo de Everest sin
+    // nada que ver con la agenda del día. _enModuloHCHealth distingue por ruta
+    // (location.pathname), no por marcadores de DOM.
+    t.caso("_enModuloHCHealth: true dentro de /viva/HCHealth/", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      t.cierto(c.api._enModuloHCHealth());
+      // también dentro de subrutas del mismo módulo (Órdenes, RCV, etc.)
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      t.cierto(c.api._enModuloHCHealth());
+    });
+
+    t.caso("_enModuloHCHealth: false en /viva/Acceso/ (asignación/reserva de turnos)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      t.falso(c.api._enModuloHCHealth());
+    });
+
+    t.caso("_enModuloHCHealth: false sin coincidencia y ante una excepción del DOM", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/otra/ruta/cualquiera";
+      t.falso(c.api._enModuloHCHealth());
+      Object.defineProperty(c.env.win.location, "pathname", { get() { throw new Error("roto"); } });
+      t.falso(c.api._enModuloHCHealth());
     });
 
     // ---------- extractPacienteAbierto ----------
