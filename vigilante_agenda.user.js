@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.12
+// @version      12.5.13
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,37 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.13 — 12-08-2026: IMPRIMIR DIRECTO — RECORDATORIO DE CITA Y ORDEN DE PYM. Pedido
+  explícito del médico: hasta ahora los dos primeros botones del panel (agendar cita de
+  control y generar órdenes PyM) solo ofrecían enviar por correo/SMS, sin opción directa de
+  imprimir. Contrato REAL, no inventado: capturado con el grabador de red del propio
+  proyecto (GRABADOR_1/2), justo tras crear una cita y una orden reales y hacer clic en el
+  botón "Imprimir" oficial de Everest en cada caso.
+  - Cita de control: GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita
+    ?CitaId=<radicado>&Eps=<nombre EPS>&nombreCompleto=<nombre completo>&swVirtual=false.
+    CitaId es el radicado que devuelve AsignarTurno para ESTA cita puntual — nunca "la
+    última cita en pantalla". Eps/nombreCompleto se toman del mismo
+    BuscarPacienteDetallado que ya se llamaba para los programas del paciente (sin
+    consulta extra). Nuevo botón "🖨️ Imprimir recordatorio de cita", visible solo tras
+    crear la cita con éxito (openAgendamientoModal).
+  - Orden de PyM: GET /apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC
+    ?Agrupador=<agrupador>&idPaciente=<id>&NumAutorizacion=<numeroAutorizacion> — la
+    misma ruta relativa que devuelve ConsultarOrdenamientosPaciente para cada orden,
+    resuelta contra la base del propio módulo de ordenamiento. agrupador y
+    numeroAutorizacion YA llegan en la respuesta de GuardarOrdenamiento (agrupador
+    directo, numeroAutorizacion en ordenAuth[0]): no hace falta una segunda consulta
+    solo para imprimir. Un botón "🖨️ Orden <agrupador>" por cada agrupador ÚNICO
+    generado en esa corrida (openOrdenamientoModal).
+  Ambos abren la URL real en una pestaña nueva (mismo patrón que abrirInformeAthenea): es
+  el navegador el que decide qué hacer con la respuesta (PDF nativo o una página que
+  dispara su propio print()). Sin ID real (cita no creada / orden no generada), ninguno
+  de los dos abre nada — nunca se imprime "lo último en pantalla".
+  Pendiente, sin tocar: el interruptor NORMAL/ANORMAL del uroanálisis (ver v12.5.11) sigue
+  esperando el HTML real de ese control específico.
+  Banco: 628/628 (6 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -693,7 +724,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.12";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.13";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7741,6 +7772,31 @@
         return res;
       }
 
+  // v12.5.13 — IMPRIMIR RECORDATORIO DE CITA (pedido explícito del médico: hasta ahora solo
+  // se enviaba por SMS/se veía en pantalla, sin opción directa de imprimir).
+  //
+  // Contrato REAL, no inventado: capturado con el grabador de red del propio proyecto justo
+  // tras un AsignarTurno exitoso y un clic en el botón "Imprimir" oficial de Everest —
+  //   GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita
+  //       ?CitaId=<radicado>&Eps=<nombre EPS>&nombreCompleto=<nombre completo>&swVirtual=false
+  // CitaId es el `radicado` que devuelve AsignarTurno para ESTA cita puntual (nunca "la última
+  // cita en pantalla"): así no hay forma de imprimir el recordatorio de un paciente distinto.
+  // swVirtual=false: este flujo (openAgendamientoModal) solo crea citas PRESENCIAL, igual que
+  // el propio AsignarTurno de aquí arriba — no hay evidencia (ni necesidad) de la variante
+  // virtual todavía. La respuesta capturada llegó con status 0/cuerpo vacío (la pestaña se
+  // abrió antes de que la petición terminara de bajar) — igual que el resto de los enlaces de
+  // impresión de Everest en este script, se abre en una pestaña nueva y es el navegador el que
+  // decide qué hacer con la respuesta (PDF nativo o una página que dispara su propio print()).
+  function imprimirRecordatorioCita(citaId, epsNombre, nombreCompleto) {
+    if (!citaId) return;
+    const url = location.origin + "/apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita"
+      + "?CitaId=" + encodeURIComponent(citaId)
+      + "&Eps=" + encodeURIComponent(epsNombre || "")
+      + "&nombreCompleto=" + encodeURIComponent(nombreCompleto || "")
+      + "&swVirtual=false";
+    window.open(url, "_blank");
+  }
+
   // [BLINDADO v8.2.0 DOM-04] Extractor universal de Agendas movido a scope de módulo.
   // Antes estaba declarado como function DENTRO de cargarHoras() (bloque async), lo que
   // produce comportamiento ambiguo de hoisting en modo estricto según el motor JS.
@@ -8256,6 +8312,12 @@
     let selectedDateInfo = null;
     let selectedLabDateInfo = null; // v12.3.20 — día elegido para la toma de muestras (editable con chips)
     let pacienteIdAcceso = null;
+    // v12.5.13 — Eps/nombreCompleto del paciente, capturados del mismo BuscarPacienteDetallado
+    // que ya se llamaba para los programas (más abajo): son exactamente los parámetros que pide
+    // ImprimirRecordatorioCita (ver imprimirRecordatorioCita), así que no hace falta una consulta
+    // aparte solo para imprimir.
+    let pacienteEpsNombre = "";
+    let pacienteNombreCompleto = "";
     let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
     // v12.4.0 — Contexto del turno elegido (agenda y fecha reales de donde salió): lo
@@ -8343,6 +8405,8 @@
         try {
           const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
           if (!vivo()) return;
+          pacienteEpsNombre = (det && det.data && det.data.eps && det.data.eps.nombre) || "";
+          pacienteNombreCompleto = (det && det.data && det.data.nombreCompleto) || "";
           const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
           const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
           if (progs.length && box && sel) {
@@ -8757,6 +8821,17 @@
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
           successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+
+          // v12.5.13 — Imprimir el recordatorio de ESTA cita puntual (ver imprimirRecordatorioCita).
+          const printBtn = document.createElement("button");
+          printBtn.className = "vgl-agm-btn sec";
+          printBtn.style.marginTop = "10px";
+          printBtn.textContent = "🖨️ Imprimir recordatorio de cita";
+          printBtn.addEventListener("click", () => {
+            uxTrack("cita.imprimir");
+            imprimirRecordatorioCita(d.radicado, pacienteEpsNombre, pacienteNombreCompleto || patientName);
+          });
+          modal.querySelector(".vgl-agm-card").appendChild(printBtn);
         }
 
         markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso);
@@ -9276,6 +9351,32 @@
     } catch (e) { console.warn("[Vigilante PyM] no se pudo enviar la orden por correo:", e); return false; }
   }
 
+  // v12.5.13 — IMPRIMIR ORDEN DE PYM (pedido explícito del médico: hasta ahora solo se
+  // enviaba por correo, sin opción directa de imprimir).
+  //
+  // Contrato REAL, no inventado: capturado con el grabador de red del propio proyecto. Tras
+  // GuardarOrdenamiento (ver apiOrdenamientoGuardar), ConsultarOrdenamientosPaciente devuelve
+  // cada orden con su propio campo de descarga:
+  //   "url": "ReportePdf/GenerarOrdenHC?Agrupador=<agrupador>&idPaciente=<id>&NumAutorizacion=<numeroAutorizacion>"
+  // — una ruta RELATIVA a la base del propio módulo de ordenamiento (se resuelve aquí contra
+  // location.origin + "/apiviva/APIOrdenamientoHealth/", la misma base que usan todas las
+  // demás llamadas de este módulo). `agrupador` y `numeroAutorizacion` YA llegan en la
+  // respuesta de GuardarOrdenamiento —agrupador directo, numeroAutorizacion en
+  // ordenAuth[0]— así que no hace falta una segunda consulta solo para imprimir. El clic real
+  // de Everest fue sobre un <a> (navegación de página, no XHR): abrir esta misma URL en una
+  // pestaña nueva reproduce exactamente ese comportamiento.
+  // Si Everest cambia esta ruta relativa (no confirmada más allá de esta captura), la pestaña
+  // simplemente mostrará un 404 del propio Everest — nunca se inventa un agrupador ni un
+  // NumAutorizacion que no vengan de la respuesta real del servidor.
+  function imprimirOrdenPyM(pacienteId, agrupador, numeroAutorizacion) {
+    if (!agrupador) return;
+    const url = location.origin + "/apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC"
+      + "?Agrupador=" + encodeURIComponent(agrupador)
+      + "&idPaciente=" + encodeURIComponent(pacienteId || "")
+      + "&NumAutorizacion=" + encodeURIComponent(numeroAutorizacion || "");
+    window.open(url, "_blank");
+  }
+
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
   async function openOrdenamientoModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
@@ -9476,6 +9577,8 @@
       let agrupadores = [];
       let fallidasCount = 0;
       const actividadesCubiertas = []; // v12.4.0 — etiquetas del Excel cubiertas por las órdenes creadas
+      // v12.5.13 — numeroAutorizacion por agrupador, para imprimirOrdenPyM (ver esa función).
+      const numAutPorAgrupador = new Map();
 
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
@@ -9509,6 +9612,13 @@
           creadasCount++;
           const agp = agpReal;
           agrupadores.push(agp);
+          // v12.5.13 — numeroAutorizacion viene en ordenAuth[0] de la MISMA respuesta de
+          // GuardarOrdenamiento (ver contrato real en imprimirOrdenPyM); si un paquete trae
+          // varios CUPS, ordenAuth trae uno por CUPS pero comparten el mismo numeroAutorizacion
+          // a nivel de agrupador en la única captura real disponible — se usa el primero.
+          const ordenAuth = resOrd.ordenAuth || (resOrd.data && resOrd.data.ordenAuth);
+          const numAutReal = (Array.isArray(ordenAuth) && ordenAuth[0] && ordenAuth[0].numeroAutorizacion) || "";
+          if (numAutReal) numAutPorAgrupador.set(agp, numAutReal);
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false; // Desmarcar exitoso
@@ -9535,6 +9645,27 @@
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
           successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
+
+          // v12.5.13 — Imprimir directamente la(s) orden(es) recién creada(s). Contrato real,
+          // ver imprimirOrdenPyM. Un botón por agrupador ÚNICO de ESTA corrida — nunca una
+          // orden vieja de otra sesión ni de otro paciente.
+          const printBox = document.createElement("div");
+          printBox.className = "vgl-ord-printbox";
+          printBox.innerHTML = `<label class="vgl-agm-lbl" style="margin-top:14px">🖨️ Imprimir la(s) orden(es)</label>`;
+          const printRow = document.createElement("div");
+          printRow.className = "vgl-agm-fieldrow";
+          agrupadoresUnicos.forEach((agp) => {
+            const printBtn = document.createElement("button");
+            printBtn.className = "vgl-agm-btn sec";
+            printBtn.textContent = "🖨️ Orden " + agp;
+            printBtn.addEventListener("click", () => {
+              uxTrack("ordenes.imprimir");
+              imprimirOrdenPyM(pacienteIdOrd, agp, numAutPorAgrupador.get(agp));
+            });
+            printRow.appendChild(printBtn);
+          });
+          printBox.appendChild(printRow);
+          modal.querySelector(".vgl-agm-card").appendChild(printBox);
 
           // v12.3.x — Envío de la orden al correo del paciente. Contrato real, ver
           // apiEnviarOrdenPorCorreo. El correo se pide DESPUÉS de generar las órdenes,

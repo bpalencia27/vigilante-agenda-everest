@@ -63,7 +63,7 @@ module.exports = {
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
-    "refrescarCuentas",
+    "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -905,6 +905,73 @@ module.exports = {
       t.cierto(modal.innerHTML.includes("903816"), "con el LDL 903816 de la tabla oficial (pacientes sanos)");
       t.falso(modal.innerHTML.includes("Hepatitis C"), "las ETS descartadas no se ofrecen");
       t.falso(modal.innerHTML.includes("VDRL"), "las ETS descartadas no se ofrecen");
+    });
+
+    // ================= v12.5.13 — imprimir recordatorio de cita / orden PyM =================
+    // Contrato real, capturado con el grabador de red del propio proyecto (12-08-2026):
+    // GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita?CitaId=...&Eps=...
+    //     &nombreCompleto=...&swVirtual=false   (tras un AsignarTurno exitoso + clic real en
+    //     "Imprimir" de Everest)
+    // GET /apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC?Agrupador=...&idPaciente=...
+    //     &NumAutorizacion=...   (el propio campo "url" que devuelve
+    //     ConsultarOrdenamientosPaciente para cada orden, resuelto contra la base del módulo)
+    function mockOpen(c) {
+      const llamadas = [];
+      c.env.win.open = (url, target) => { llamadas.push({ url, target }); return { closed: false }; };
+      return llamadas;
+    }
+
+    t.caso("imprimirRecordatorioCita: reproduce la URL real capturada (CitaId=radicado, Eps y nombreCompleto codificados)", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirRecordatorioCita(7813686, "NUEVA EPS ", "MARIA LUZMILA CARMONA CARMONA");
+      t.igual(llamadas.length, 1, "abre exactamente una pestaña");
+      t.igual(llamadas[0].target, "_blank");
+      const u = new URL(llamadas[0].url);
+      t.cierto(u.pathname.endsWith("/apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita"), "misma ruta que capturó el grabador");
+      t.igual(u.searchParams.get("CitaId"), "7813686", "CitaId es el radicado de ESTA cita, no 'la última en pantalla'");
+      t.igual(u.searchParams.get("Eps"), "NUEVA EPS ");
+      t.igual(u.searchParams.get("nombreCompleto"), "MARIA LUZMILA CARMONA CARMONA");
+      t.igual(u.searchParams.get("swVirtual"), "false", "este flujo solo crea citas PRESENCIAL");
+    });
+
+    t.caso("imprimirRecordatorioCita: sin CitaId (cita que no llegó a crearse) no abre nada", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirRecordatorioCita(null, "NUEVA EPS", "ALGUIEN");
+      c.api.imprimirRecordatorioCita(undefined, "NUEVA EPS", "ALGUIEN");
+      c.api.imprimirRecordatorioCita(0, "NUEVA EPS", "ALGUIEN");
+      t.igual(llamadas.length, 0, "nunca imprime el recordatorio de una cita que no se confirmó");
+    });
+
+    t.caso("imprimirOrdenPyM: reproduce la URL real capturada (Agrupador/idPaciente/NumAutorizacion)", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319");
+      t.igual(llamadas.length, 1);
+      t.igual(llamadas[0].target, "_blank");
+      const u = new URL(llamadas[0].url);
+      t.cierto(u.pathname.endsWith("/apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC"), "misma ruta relativa que devuelve ConsultarOrdenamientosPaciente, resuelta contra la base del módulo");
+      t.igual(u.searchParams.get("Agrupador"), "1226085057", "el agrupador de ESTA orden, nunca una anterior");
+      t.igual(u.searchParams.get("idPaciente"), "331897");
+      t.igual(u.searchParams.get("NumAutorizacion"), "1226085057319");
+    });
+
+    t.caso("imprimirOrdenPyM: sin agrupador (orden que no llegó a crearse) no abre nada", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirOrdenPyM(331897, null, "1226085057319");
+      c.api.imprimirOrdenPyM(331897, "", "1226085057319");
+      t.igual(llamadas.length, 0, "nunca imprime una orden que no se confirmó con el servidor");
+    });
+
+    t.caso("imprimirOrdenPyM: sin numeroAutorizacion todavía imprime (el agrupador es lo que identifica la orden)", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirOrdenPyM(331897, "1226085057", "");
+      t.igual(llamadas.length, 1);
+      const u = new URL(llamadas[0].url);
+      t.igual(u.searchParams.get("NumAutorizacion"), "", "campo vacío en vez de un valor inventado");
     });
   },
 };
