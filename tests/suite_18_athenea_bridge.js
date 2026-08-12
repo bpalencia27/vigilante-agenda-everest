@@ -498,6 +498,14 @@ module.exports = {
       t.igual(e.llamadas.length, 0);
     });
 
+    t.caso("atheneaAutoLogin v12.5.8: sin credenciales guardadas, el motivo ya NO es mudo — se explica por consola (reportado en campo: 'el auto-login no hace nada y nadie dice por qué')", async () => {
+      const e = entornoAthenea();
+      const logs = espiarConsola(e.c);
+      const r = await e.c.api.atheneaAutoLogin();
+      t.falso(r);
+      t.cierto(logs.some((l) => l.includes("NO tiene guardada la cuenta compartida")), "el camino sin credenciales debe decir exactamente qué falta y dónde se guarda");
+    });
+
     await t.casoAsync("atheneaAutoLogin: (c) éxito — GET trae el token, POST con Usuario/Password/token y una respuesta sin login = sesión iniciada", async () => {
       const e = entornoAthenea();
       e.setPlan((o) => {

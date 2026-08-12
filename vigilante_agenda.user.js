@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.7
+// @version      12.5.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,19 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.8 — 11-08-2026: EL AUTO-LOGIN DE ATHENEA YA NO FALLA EN SILENCIO. Reportado en
+  campo con consola real: la sesión caía, el latido intentaba el auto-inicio y "no pasaba
+  nada" — sin una sola línea que dijera por qué. Los tres caminos mudos de
+  atheneaAutoLogin ahora explican su motivo: (1) SIN credencial guardada en ESTE equipo
+  (la causa del reporte: la cuenta compartida se guarda una sola vez POR COMPUTADOR en
+  Ajustes y jamás viaja con el script — en un equipo recién actualizado ese paso manual
+  sigue pendiente), avisa por consola Y con una notificación ámbar una vez al día con la
+  instrucción exacta; (2) /Account/Login con HTTP distinto de 200, lo dice como
+  transitorio; (3) página de login sin token CSRF reconocible, lo dice como posible
+  cambio del portal. Ningún cambio de comportamiento de login en sí — solo visibilidad.
 */
 
 /*
@@ -580,7 +593,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1292,14 +1305,27 @@
     if (!S.atheneaAutoLogin) return false;
     if (atheneaLoginBloqueado || atheneaLoginEnVuelo) return false;
     const cred = atheneaCredsGet();
-    if (!cred) return false;
+    // v12.5.8 — Reportado en campo (11-08-2026): la sesión caía, el auto-login "no hacía
+    // nada" y NADIE decía por qué — este return era 100% mudo. La causa real: en ESTE
+    // computador nunca se había guardado la credencial compartida (vive SOLO en el
+    // almacén local de cada equipo, a propósito — jamás viaja con el script). Ahora lo
+    // dice claro, una vez al día, con la instrucción exacta de qué hacer.
+    if (!cred) {
+      console.warn("[Vigilante Athenea] auto-login: este equipo NO tiene guardada la cuenta compartida de Athenea — se guarda una sola vez en Ajustes → «Auto-inicio de sesión en Athenea». Sin eso, el login debe hacerse a mano.");
+      notify("AMBAR", "🔑 Athenea: falta guardar la cuenta compartida en ESTE equipo",
+        "El auto-inicio de sesión está activado pero este computador no tiene guardada la cuenta compartida de Athenea (se guarda una sola vez por equipo, en Ajustes → «Auto-inicio de sesión en Athenea»). Mientras tanto, inicia sesión a mano en medicosviva1a.atheneasoluciones.com.",
+        false, "athenea_sin_creds|" + todayStamp());
+      return false;
+    }
     atheneaLoginEnVuelo = true;
     try {
       const BASE = "https://medicosviva1a.atheneasoluciones.com";
       const g = await _gmReq({ method: "GET", url: BASE + "/Account/Login" });
-      if (g.status !== 200) return false;                       // error transitorio: no se bloquea
+      // v12.5.8 — Estos dos returns eran mudos: desde la consola era imposible saber si el
+      // auto-login siquiera lo intentó. Ahora cada camino dice qué pasó.
+      if (g.status !== 200) { console.warn("[Vigilante Athenea] auto-login: /Account/Login respondió HTTP " + g.status + " (transitorio, se reintenta en el próximo latido)."); return false; }
       const token = _atheneaToken(g.responseText);
-      if (!token) return false;
+      if (!token) { console.warn("[Vigilante Athenea] auto-login: la página de login no trae el token CSRF reconocible (¿cambió el formulario de Athenea?)."); return false; }
       // Contrato confirmado en HAR real: application/x-www-form-urlencoded; éxito = 302 a /Resultados.
       // La contraseña NUNCA se registra en consola ni en telemetría.
       const cuerpo = "Usuario=" + encodeURIComponent(cred.u) + "&Password=" + encodeURIComponent(cred.p) + "&__RequestVerificationToken=" + encodeURIComponent(token);
