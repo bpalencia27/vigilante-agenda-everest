@@ -46,3 +46,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 121 | `return null;` &rarr; `return false;` | No | - |
 
 | 10984 | `(a.estado && a.estado.toLowerCase().includes("atendido") ? " atendido" : "")` &rarr; `(a.estado && a.estado.toLowerCase().includes("en sala") ? " atendido" : "")` | No | - |
+| 11005 | `const atendidoLeyenda = esAtendido && a.color !== "ROJO";` &rarr; `const atendidoLeyenda = false;` | No | - |

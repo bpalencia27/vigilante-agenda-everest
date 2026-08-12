@@ -331,6 +331,24 @@ module.exports = {
       t.cierto(cf.includes("atendido") && cf.includes("rojo"), "El fraude mantiene ambas clases, para que CSS priorice el rojo");
     });
 
+    t.caso("badge de estado: Atendido usa el color EXCLUSIVO --c-atendido, distinto del verde de En sala; el fraude conserva el rojo", () => {
+      vaciarLista();
+      const citaSala = { key: "sala2", doc_id: "1", nombre: "A", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      const citaAtendido = { key: "ate2", doc_id: "2", nombre: "B", hora_texto: "07:20", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0 };
+      const citaFraude = { key: "fra2", doc_id: "3", nombre: "C", hora_texto: "07:40", estado: "Atendido", color: "ROJO", pym: [], elapsed: 0 };
+
+      cv.api.__state.lastSignature = ""; // fuerza repintado
+      cv.api.render([citaSala, citaAtendido, citaFraude], "api", new Date());
+
+      const hSala = lista.children[0].innerHTML;
+      const hAtendido = lista.children[1].innerHTML;
+      const hFraude = lista.children[2].innerHTML;
+
+      t.falso(hSala.includes("--c-atendido"), "En sala sigue con el color de puntualidad (--tc), no el exclusivo");
+      t.cierto(hAtendido.includes("--c-atendido"), "Atendido (sin fraude) sí lleva el color exclusivo en el badge");
+      t.falso(hFraude.includes("--c-atendido"), "El fraude NO se disfraza del color de atendido: manda el rojo de alerta");
+    });
+
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());

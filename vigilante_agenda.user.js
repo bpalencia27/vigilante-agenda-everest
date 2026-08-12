@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.9
+// @version      12.7.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.7.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5980,6 +5980,13 @@
         --c-azul:#7cb8ff;
         --c-recordatorio:#54e6d4;
         --c-pes:#ff9ec4;
+        /* v13.0.0 — Atendido y En Sala pasan los dos por colorAndAlert como VERDE (mismo
+           eje de puntualidad): el badge de estado se veía IGUAL para ambos, y la única
+           diferencia era la atenuación de la tarjeta completa (fácil de pasar por alto
+           con el zoom del médico). Un tono EXCLUSIVO — que ningún otro estado ni el eje
+           de fraude usa — para que el badge/borde de "Atendido" se lea sin ambigüedad,
+           sin tocar el punto de puntualidad (--tc) que sigue reflejando SOLO fraude/demora. */
+        --c-atendido:#9aa7c7;
         /* Canales RGB para veladuras y glows: rgba(var(--rgb-x),alfa) */
         --rgb-rojo:255,129,119;
         --rgb-morado:201,162,255;
@@ -5988,6 +5995,7 @@
         --rgb-azul:124,184,255;
         --rgb-recordatorio:84,230,212;
         --rgb-pes:255,158,196;
+        --rgb-atendido:154,167,199;
         /* Radios orgánicos 16–24 */
         --r-chip:16px;--r-card:20px;--r-surface:24px;--r-field:16px;--r-pill:999px;
         /* Tinta */
@@ -6033,10 +6041,10 @@
         /* Triaje profundo — AAA sobre cerámica clara */
         --c-rojo:#991b1b;--c-morado:#5b21b6;--c-ambar:#92400e;
         --c-verde:#065f46;--c-azul:#1e40af;--c-recordatorio:#115e59;
-        --c-pes:#9d174d;
+        --c-pes:#9d174d;--c-atendido:#475569;
         --rgb-rojo:153,27,27;--rgb-morado:91,33,182;--rgb-ambar:146,64,14;
         --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
-        --rgb-pes:157,23,77;
+        --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#5b6b80;
         --line:rgba(15,23,42,.08);--edge:rgba(15,23,42,.13);--edge-side:rgba(15,23,42,.10);
         --toast:rgba(255,255,255,.94);
@@ -6409,7 +6417,10 @@
       }
       .vgl-card.pes:hover{background:linear-gradient(170deg,rgba(var(--rgb-pes),.20),rgba(var(--rgb-pes),.09))}
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(var(--rgb-ambar),.60),var(--shadow-card)}
-      .vgl-card.atendido:not(.rojo){opacity:0.6;filter:grayscale(60%);}
+      /* v13.0.0 — Además de atenuar (opacidad+grises), el borde izquierdo pasa al tono
+         EXCLUSIVO --c-atendido: así la tarjeta se distingue de "En sala" (mismo verde en
+         el badge) incluso antes de leer el texto. El fraude (.rojo) nunca entra aquí. */
+      .vgl-card.atendido:not(.rojo){opacity:0.6;filter:grayscale(60%);border-left-color:var(--c-atendido)}
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
@@ -10984,7 +10995,16 @@
       // clase propia). Verde/azul se quedan sin tinte: son estados resueltos/informativos.
       const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
       const esPes = tieneAbandonoPES(a);
-      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "") + (a.estado && a.estado.toLowerCase().includes("atendido") ? " atendido" : "");
+      const esAtendido = !!(a.estado && a.estado.toLowerCase().includes("atendido"));
+      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "") + (esAtendido ? " atendido" : "");
+      // v13.0.0 — El badge de estado usaba el mismo verde de puntualidad (--tc) que "En
+      // sala": aquí, y SOLO aquí (nunca en --tc/el punto, que sigue siendo el eje de
+      // fraude de colorAndAlert), Atendido cambia a --c-atendido — color que ningún otro
+      // estado usa — para que la leyenda "Atendido" se lea sin confundirse con "En sala".
+      // El fraude (ROJO) manda: si está marcado como fraude, se queda con el rojo de alerta.
+      const atendidoLeyenda = esAtendido && a.color !== "ROJO";
+      const badgeCol = atendidoLeyenda ? "var(--c-atendido)" : `var(--tc,${col})`;
+      const badgeRgba = (alfa) => atendidoLeyenda ? `rgba(var(--rgb-atendido),${alfa})` : `rgba(var(--trgb),${alfa})`;
       // Tres lecturas distintas y honestas: tiene pendientes / está al día / NO cruza
       // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
@@ -11062,7 +11082,7 @@
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}
-            <span class="vgl-badge" style="background:rgba(var(--trgb),.16);color:var(--tc,${col});box-shadow:inset 0 0 0 1px rgba(var(--trgb),.32);font-size:12.5px;padding:5px 12px">${escapeHtml(a.estado)}</span>
+            <span class="vgl-badge" style="background:${badgeRgba(".16")};color:${badgeCol};box-shadow:inset 0 0 0 1px ${badgeRgba(".32")};font-size:12.5px;padding:5px 12px">${escapeHtml(a.estado)}</span>
           </div>
         </div>
         <div class="vgl-card-mid" style="margin-top:9px;gap:10px">
