@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.4
+// @version      12.6.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -141,14 +141,15 @@
     BuscarPacienteDetallado que ya se llamaba para los programas del paciente (sin
     consulta extra). Nuevo botón "🖨️ Imprimir recordatorio de cita", visible solo tras
     crear la cita con éxito (openAgendamientoModal).
-  - Orden de PyM: GET /apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC
-    ?Agrupador=<agrupador>&idPaciente=<id>&NumAutorizacion=<numeroAutorizacion> — la
-    misma ruta relativa que devuelve ConsultarOrdenamientosPaciente para cada orden,
-    resuelta contra la base del propio módulo de ordenamiento. agrupador y
-    numeroAutorizacion YA llegan en la respuesta de GuardarOrdenamiento (agrupador
-    directo, numeroAutorizacion en ordenAuth[0]): no hace falta una segunda consulta
-    solo para imprimir. Un botón "🖨️ Orden <agrupador>" por cada agrupador ÚNICO
-    generado en esa corrida (openOrdenamientoModal).
+  - Orden de PyM (CORREGIDO en v12.6.5): la URL de impresión NO se arma aquí — la
+    devuelve el propio Everest en el cuerpo de
+    GET /apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos
+    ?PacienteId=<id>&Agrupador=<agrupador>, que además es el paso que genera el
+    reporte en el servidor. La URL real capturada es
+    /apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=<agrupador>&idPaciente=<id>
+    (otro módulo, otra grafía y sin NumAutorizacion: reconstruirla a mano daba 404).
+    Un botón "🖨️ Orden <agrupador>" por cada agrupador ÚNICO generado en esa corrida
+    (openOrdenamientoModal).
   Ambos abren la URL real en una pestaña nueva (mismo patrón que abrirInformeAthenea): es
   el navegador el que decide qué hacer con la respuesta (PDF nativo o una página que
   dispara su propio print()). Sin ID real (cita no creada / orden no generada), ninguno
@@ -239,6 +240,30 @@
   saldrá) y se actualiza en vivo al marcar/desmarcar la casilla o corregir el celular.
   Cero llamadas nuevas: solo hace visible lo que ya ocurría.
   Banco: 663/663 (2 comprobaciones nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.5 — 12-08-2026: IMPRIMIR ORDEN DE PYM — LA URL REAL, LA QUE DEVUELVE EVEREST.
+  La corrección de v12.6.2 (llamar a GenerarLinksImpresionOrdenamientos ANTES de abrir la
+  orden) era necesaria pero no suficiente: el 404 seguía porque la URL que se abría estaba
+  RECONSTRUIDA a mano. La grabación real del médico (GRABADOR, botón "Imprimir" oficial de
+  Everest) muestra que ese mismo endpoint devuelve la URL de impresión en el cuerpo de la
+  respuesta, ya lista:
+    GET /apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos
+        ?PacienteId=<id>&Agrupador=<agrupador>
+    -> https://neps.everestintelligent.com/apiviva/APIImpresion/reportepdf/GenerarOrdenHC
+       ?Agrupador=<agrupador>&idPaciente=<id>
+  Es decir: OTRO módulo (APIImpresion, no APIOrdenamientoHealth), otra grafía
+  (reportepdf en minúsculas) y SIN el parámetro NumAutorizacion. Las tres cosas juntas
+  explican el 404 exacto de la captura. Ya no se reconstruye nada: se usa la URL que el
+  servidor devuelve (_urlImpresionOrdenPyM la extrae venga como texto plano, como cadena
+  JSON o dentro de un objeto). La reconstrucción queda solo como último recurso, y ahora
+  con la ruta correcta de la captura. Como el cuerpo NO siempre es JSON, la llamada dejó
+  de pasar por pageFetchJson (que hace resp.json() y descartaba la respuesta entera al no
+  poder parsearla) y lee el cuerpo como texto, igual que apiEnviarOrdenPorCorreo.
+  Retirado NumAutorizacion de imprimirOrdenPyM y el mapa numAutPorAgrupador que solo
+  existía para alimentarlo: la URL real de Everest no lo lleva.
+  Banco: 665/665 (4 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -807,7 +832,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9680,22 +9705,52 @@
   // Best-effort: genera el link/PDF de impresión de la orden. Un fallo aquí NO debe
   // impedir el envío del correo (el paso se observó siempre antes, pero su función es
   // preparar el documento, no autorizar el envío).
+  // v12.6.5 — La respuesta ya NO pasa por pageFetchJson. La grabación real del consultorio
+  // muestra que este endpoint contesta la URL de impresión en el cuerpo, en texto plano
+  // (no un objeto JSON): resp.json() lanzaba, pageFetchJson lo tomaba por error de red,
+  // reintentaba y terminaba devolviendo null — por eso "no traía nada" en v12.6.2. Se lee
+  // el cuerpo como texto y se intenta parsear como JSON solo por si Everest lo envuelve
+  // (mismo patrón directo que apiEnviarOrdenPorCorreo).
   async function apiOrdenamientoGenerarLinks(pacienteId, agrupador) {
     try {
-      const res = await pageFetchJson(
-        `/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=${encodeURIComponent(pacienteId)}&Agrupador=${encodeURIComponent(agrupador)}`,
-        { method: "GET", __idempotent: true }
-      );
-      // v12.6.2 — Diagnóstico único: nunca se había mirado esta respuesta (antes se descartaba
-      // entera). El nombre del endpoint ("generar los ENLACES de impresión") sugiere que trae
-      // la URL real y lista para imprimir — si es así, el próximo reporte del médico con esto
-      // en la consola permite dejar de RECONSTRUIR la URL de GenerarOrdenHC a mano y usar la
-      // que Everest ya devuelve aquí.
+      const f = FETCH0 || window.fetch;
+      const url = location.origin + "/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos"
+        + "?PacienteId=" + encodeURIComponent(pacienteId) + "&Agrupador=" + encodeURIComponent(agrupador);
+      const resp = await f(url, { headers: { "Accept": "application/json" } });
+      let cuerpo = "";
+      try { cuerpo = await resp.text(); } catch (e) {}
+      let res = null;
+      try { res = JSON.parse(cuerpo); } catch (e) { res = cuerpo ? String(cuerpo).trim() : null; }
       if (!_diagGenerarLinksLogged) { _diagGenerarLinksLogged = true; console.log("[Vigilante PyM] GenerarLinksImpresionOrdenamientos — diagnóstico único:", res); }
       return res;
     } catch (e) { console.warn("[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):", e); return null; }
   }
   let _diagGenerarLinksLogged = false;
+
+  // v12.6.5 — Extrae la URL de impresión de lo que devuelva GenerarLinksImpresionOrdenamientos.
+  // En la captura real llega como texto plano ("https://..."), pero se aceptan también las
+  // formas habituales de este backend (cadena JSON, objeto con url/enlace/link, arreglo)
+  // porque el contrato solo está confirmado en UNA grabación. Solo se acepta una URL
+  // absoluta http(s): si viene cualquier otra cosa, se devuelve null y el llamador usa su
+  // propio respaldo — nunca se navega a un texto que no sea una URL de verdad.
+  function _urlImpresionOrdenPyM(res) {
+    const esUrl = (s) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
+    if (!res) return null;
+    if (esUrl(res)) return res.trim();
+    if (Array.isArray(res)) {
+      for (const it of res) { const u = _urlImpresionOrdenPyM(it); if (u) return u; }
+      return null;
+    }
+    if (typeof res === "object") {
+      for (const k of ["url", "Url", "URL", "enlace", "Enlace", "link", "Link", "ruta", "Ruta"]) {
+        if (esUrl(res[k])) return String(res[k]).trim();
+      }
+      for (const k of Object.keys(res)) {
+        if (res[k] && typeof res[k] === "object") { const u = _urlImpresionOrdenPyM(res[k]); if (u) return u; }
+      }
+    }
+    return null;
+  }
 
   let _diagEnvioCorreoLogged = false;
   async function apiEnviarOrdenPorCorreo(agrupador, correo, usuarioId) {
@@ -9717,37 +9772,32 @@
   // v12.5.13 — IMPRIMIR ORDEN DE PYM (pedido explícito del médico: hasta ahora solo se
   // enviaba por correo, sin opción directa de imprimir).
   //
-  // Contrato REAL, no inventado: capturado con el grabador de red del propio proyecto. Tras
-  // GuardarOrdenamiento (ver apiOrdenamientoGuardar), ConsultarOrdenamientosPaciente devuelve
-  // cada orden con su propio campo de descarga:
-  //   "url": "ReportePdf/GenerarOrdenHC?Agrupador=<agrupador>&idPaciente=<id>&NumAutorizacion=<numeroAutorizacion>"
-  // — una ruta RELATIVA a la base del propio módulo de ordenamiento (se resuelve aquí contra
-  // location.origin + "/apiviva/APIOrdenamientoHealth/", la misma base que usan todas las
-  // demás llamadas de este módulo). `agrupador` y `numeroAutorizacion` YA llegan en la
-  // respuesta de GuardarOrdenamiento —agrupador directo, numeroAutorizacion en
-  // ordenAuth[0]— así que no hace falta una segunda consulta solo para imprimir. El clic real
-  // de Everest fue sobre un <a> (navegación de página, no XHR): abrir esta misma URL en una
-  // pestaña nueva reproduce exactamente ese comportamiento.
-  // Si Everest cambia esta ruta relativa (no confirmada más allá de esta captura), la pestaña
-  // simplemente mostrará un 404 del propio Everest — nunca se inventa un agrupador ni un
-  // NumAutorizacion que no vengan de la respuesta real del servidor.
+  // Contrato REAL, no inventado: capturado con el grabador de red del propio proyecto.
   //
-  // v12.6.2 — CORREGIDO: reportado en consultorio, el botón daba 404 real de Everest.
-  // Causa real (no adivinada): GenerarOrdenHC exige que el reporte YA esté generado en el
+  // v12.6.2 — Primera corrección: GenerarOrdenHC exige que el reporte YA esté generado en el
   // servidor. El flujo de "Enviar por correo" (ver el botón de correo en openOrdenamientoModal)
-  // SÍ llama primero a GenerarLinksImpresionOrdenamientos (ver apiOrdenamientoGenerarLinks) —
+  // SÍ llamaba primero a GenerarLinksImpresionOrdenamientos (ver apiOrdenamientoGenerarLinks) —
   // el nombre del endpoint es literal: "generar los ENLACES de impresión" — antes de enviar; el
   // botón de Imprimir, agregado en v12.5.13, nunca hacía esa llamada. `pestanaExistente` (mismo
   // patrón que abrirInformeAthenea): la pestaña se abre EN BLANCO de forma síncrona en el clic
   // real del médico (para no chocar con el bloqueador de ventanas emergentes del navegador) y
-  // se navega a la URL real recién que GenerarLinksImpresionOrdenamientos confirma que el
-  // reporte ya existe.
-  function imprimirOrdenPyM(pacienteId, agrupador, numeroAutorizacion, pestanaExistente) {
+  // se navega a la URL real recién que GenerarLinksImpresionOrdenamientos responde.
+  //
+  // v12.6.5 — Segunda corrección, y la que faltaba: la URL NO se arma aquí. La grabación del
+  // clic en el botón "Imprimir" OFICIAL de Everest muestra que GenerarLinksImpresionOrdenamientos
+  // devuelve la URL ya lista en el cuerpo de su respuesta:
+  //   https://<host>/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=<agrupador>&idPaciente=<id>
+  // La que se reconstruía a mano (/apiviva/APIOrdenamientoHealth/ReportePdf/... con
+  // &NumAutorizacion=) apuntaba a otro módulo, con otra grafía y un parámetro de más: ese era
+  // el 404 de la captura del médico. Ahora `urlServidor` (lo que devolvió Everest, extraído por
+  // _urlImpresionOrdenPyM) manda; la reconstrucción queda solo como último recurso si esa
+  // llamada falla, y ya con la ruta correcta de la captura. NumAutorizacion se retiró: la URL
+  // real de Everest no lo lleva.
+  function imprimirOrdenPyM(pacienteId, agrupador, pestanaExistente, urlServidor) {
     if (!agrupador) { if (pestanaExistente && !pestanaExistente.closed) pestanaExistente.close(); return; }
-    const url = location.origin + "/apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC"
+    const url = urlServidor || (location.origin + "/apiviva/APIImpresion/reportepdf/GenerarOrdenHC"
       + "?Agrupador=" + encodeURIComponent(agrupador)
-      + "&idPaciente=" + encodeURIComponent(pacienteId || "")
-      + "&NumAutorizacion=" + encodeURIComponent(numeroAutorizacion || "");
+      + "&idPaciente=" + encodeURIComponent(pacienteId || ""));
     if (pestanaExistente && !pestanaExistente.closed) pestanaExistente.location.href = url;
     else window.open(url, "_blank");
   }
@@ -9952,8 +10002,8 @@
       let agrupadores = [];
       let fallidasCount = 0;
       const actividadesCubiertas = []; // v12.4.0 — etiquetas del Excel cubiertas por las órdenes creadas
-      // v12.5.13 — numeroAutorizacion por agrupador, para imprimirOrdenPyM (ver esa función).
-      const numAutPorAgrupador = new Map();
+      // v12.6.5 — RETIRADO el mapa numAutPorAgrupador (v12.5.13): existía solo para armar la
+      // URL de impresión con &NumAutorizacion, y la URL real de Everest no lo lleva.
 
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
@@ -9987,13 +10037,6 @@
           creadasCount++;
           const agp = agpReal;
           agrupadores.push(agp);
-          // v12.5.13 — numeroAutorizacion viene en ordenAuth[0] de la MISMA respuesta de
-          // GuardarOrdenamiento (ver contrato real en imprimirOrdenPyM); si un paquete trae
-          // varios CUPS, ordenAuth trae uno por CUPS pero comparten el mismo numeroAutorizacion
-          // a nivel de agrupador en la única captura real disponible — se usa el primero.
-          const ordenAuth = resOrd.ordenAuth || (resOrd.data && resOrd.data.ordenAuth);
-          const numAutReal = (Array.isArray(ordenAuth) && ordenAuth[0] && ordenAuth[0].numeroAutorizacion) || "";
-          if (numAutReal) numAutPorAgrupador.set(agp, numAutReal);
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false; // Desmarcar exitoso
@@ -10044,8 +10087,11 @@
               printBtn.disabled = true;
               const textoOriginal = printBtn.textContent;
               printBtn.textContent = "⏳ Preparando...";
-              try { await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp); } catch (e) {}
-              imprimirOrdenPyM(pacienteIdOrd, agp, numAutPorAgrupador.get(agp), pestana);
+              // v12.6.5 — Esa misma respuesta TRAE la URL de impresión (ver
+              // apiOrdenamientoGenerarLinks): se usa la del servidor, no una armada aquí.
+              let urlServidor = null;
+              try { urlServidor = _urlImpresionOrdenPyM(await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp)); } catch (e) {}
+              imprimirOrdenPyM(pacienteIdOrd, agp, pestana, urlServidor);
               if (vivo()) { printBtn.disabled = false; printBtn.textContent = textoOriginal; }
             });
             printRow.appendChild(printBtn);

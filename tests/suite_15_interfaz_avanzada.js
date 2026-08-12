@@ -63,7 +63,7 @@ module.exports = {
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
-    "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM",
+    "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita",
   ],
 
@@ -1038,9 +1038,10 @@ module.exports = {
     // GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita?CitaId=...&Eps=...
     //     &nombreCompleto=...&swVirtual=false   (tras un AsignarTurno exitoso + clic real en
     //     "Imprimir" de Everest)
-    // GET /apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC?Agrupador=...&idPaciente=...
-    //     &NumAutorizacion=...   (el propio campo "url" que devuelve
-    //     ConsultarOrdenamientosPaciente para cada orden, resuelto contra la base del módulo)
+    // GET /apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=...&idPaciente=...
+    //     — v12.6.5: esta URL la DEVUELVE Everest en el cuerpo de
+    //     GenerarLinksImpresionOrdenamientos; no se arma aquí. Lo de abajo solo cubre el
+    //     respaldo para cuando esa llamada falla.
     function mockOpen(c) {
       const llamadas = [];
       c.env.win.open = (url, target) => { llamadas.push({ url, target }); return { closed: false }; };
@@ -1070,34 +1071,63 @@ module.exports = {
       t.igual(llamadas.length, 0, "nunca imprime el recordatorio de una cita que no se confirmó");
     });
 
-    t.caso("imprimirOrdenPyM: reproduce la URL real capturada (Agrupador/idPaciente/NumAutorizacion)", () => {
+    // v12.6.5 — La URL que manda es la que devuelve el servidor. Esta prueba es la que
+    // cierra el 404 reportado en consultorio: si alguien vuelve a anteponer la URL armada
+    // a mano, aquí se ve.
+    t.caso("imprimirOrdenPyM: usa TAL CUAL la URL que devolvió Everest, sin reconstruir nada", () => {
       const c = cargar();
       const llamadas = mockOpen(c);
-      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319");
+      const urlReal = "https://neps.everestintelligent.com/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=1226085275&idPaciente=801848";
+      c.api.imprimirOrdenPyM(331897, "1226085057", null, urlReal);
+      t.igual(llamadas.length, 1);
+      t.igual(llamadas[0].target, "_blank");
+      t.igual(llamadas[0].url, urlReal, "byte a byte la del servidor: ni el agrupador ni el paciente del llamador la pisan");
+    });
+
+    t.caso("imprimirOrdenPyM: sin URL del servidor, el respaldo usa la ruta REAL capturada (APIImpresion, sin NumAutorizacion)", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      c.api.imprimirOrdenPyM(331897, "1226085057");
       t.igual(llamadas.length, 1);
       t.igual(llamadas[0].target, "_blank");
       const u = new URL(llamadas[0].url);
-      t.cierto(u.pathname.endsWith("/apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC"), "misma ruta relativa que devuelve ConsultarOrdenamientosPaciente, resuelta contra la base del módulo");
+      t.cierto(u.pathname.endsWith("/apiviva/APIImpresion/reportepdf/GenerarOrdenHC"), "el módulo real de la captura — /apiviva/APIOrdenamientoHealth/ReportePdf/ daba 404");
       t.igual(u.searchParams.get("Agrupador"), "1226085057", "el agrupador de ESTA orden, nunca una anterior");
       t.igual(u.searchParams.get("idPaciente"), "331897");
-      t.igual(u.searchParams.get("NumAutorizacion"), "1226085057319");
+      t.igual(u.searchParams.get("NumAutorizacion"), null, "la URL real de Everest NO lleva este parámetro");
     });
 
     t.caso("imprimirOrdenPyM: sin agrupador (orden que no llegó a crearse) no abre nada", () => {
       const c = cargar();
       const llamadas = mockOpen(c);
-      c.api.imprimirOrdenPyM(331897, null, "1226085057319");
-      c.api.imprimirOrdenPyM(331897, "", "1226085057319");
+      c.api.imprimirOrdenPyM(331897, null);
+      c.api.imprimirOrdenPyM(331897, "");
       t.igual(llamadas.length, 0, "nunca imprime una orden que no se confirmó con el servidor");
     });
 
-    t.caso("imprimirOrdenPyM: sin numeroAutorizacion todavía imprime (el agrupador es lo que identifica la orden)", () => {
+    // v12.6.5 — _urlImpresionOrdenPyM: el cuerpo real capturado es texto plano, pero el
+    // contrato solo está confirmado en UNA grabación; se aceptan las envolturas habituales
+    // de este backend y se rechaza cualquier cosa que no sea una URL absoluta de verdad
+    // (nunca se navega a un texto suelto).
+    t.caso("_urlImpresionOrdenPyM: extrae la URL venga como texto plano, en objeto o en arreglo", () => {
       const c = cargar();
-      const llamadas = mockOpen(c);
-      c.api.imprimirOrdenPyM(331897, "1226085057", "");
-      t.igual(llamadas.length, 1);
-      const u = new URL(llamadas[0].url);
-      t.igual(u.searchParams.get("NumAutorizacion"), "", "campo vacío en vez de un valor inventado");
+      const urlReal = "https://neps.everestintelligent.com/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=1226085275&idPaciente=801848";
+      t.igual(c.api._urlImpresionOrdenPyM(urlReal), urlReal, "el caso real capturado: texto plano");
+      t.igual(c.api._urlImpresionOrdenPyM("  " + urlReal + "\n"), urlReal, "sin espacios ni salto de línea alrededor");
+      t.igual(c.api._urlImpresionOrdenPyM({ url: urlReal }), urlReal);
+      t.igual(c.api._urlImpresionOrdenPyM({ Enlace: urlReal }), urlReal);
+      t.igual(c.api._urlImpresionOrdenPyM({ data: { link: urlReal } }), urlReal);
+      t.igual(c.api._urlImpresionOrdenPyM([{ url: urlReal }]), urlReal);
+    });
+
+    t.caso("_urlImpresionOrdenPyM: lo que no es una URL absoluta devuelve null (se usa el respaldo, no se navega a un texto suelto)", () => {
+      const c = cargar();
+      t.igual(c.api._urlImpresionOrdenPyM(null), null);
+      t.igual(c.api._urlImpresionOrdenPyM(""), null);
+      t.igual(c.api._urlImpresionOrdenPyM("ok"), null, "un 'ok' del servidor no es una URL");
+      t.igual(c.api._urlImpresionOrdenPyM("ReportePdf/GenerarOrdenHC?Agrupador=1"), null, "una ruta relativa tampoco");
+      t.igual(c.api._urlImpresionOrdenPyM({ error: true, mensaje: "no se pudo" }), null);
+      t.igual(c.api._urlImpresionOrdenPyM([]), null);
     });
 
     // =====================================================================
@@ -1115,7 +1145,7 @@ module.exports = {
       const c = cargar();
       const llamadas = mockOpen(c);
       const pestana = { closed: false, location: {} };
-      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319", pestana);
+      c.api.imprimirOrdenPyM(331897, "1226085057", pestana);
       t.igual(llamadas.length, 0, "no abre una pestaña nueva: reutiliza la que ya recibió");
       t.cierto(!!pestana.location.href, "navega la pestaña existente a la URL real");
       const u = new URL(pestana.location.href);
@@ -1126,7 +1156,7 @@ module.exports = {
       const c = cargar();
       const llamadas = mockOpen(c);
       const pestanaCerrada = { closed: true };
-      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319", pestanaCerrada);
+      c.api.imprimirOrdenPyM(331897, "1226085057", pestanaCerrada);
       t.igual(llamadas.length, 1, "si el médico cerró la pestaña en blanco, se abre una nueva");
     });
 
@@ -1134,7 +1164,7 @@ module.exports = {
       const c = cargar();
       let cerrada = false;
       const pestana = { closed: false, close: () => { cerrada = true; } };
-      c.api.imprimirOrdenPyM(331897, null, "1226085057319", pestana);
+      c.api.imprimirOrdenPyM(331897, null, pestana);
       t.cierto(cerrada);
     });
 
