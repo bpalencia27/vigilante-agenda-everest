@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.1
+// @version      12.6.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -180,6 +180,27 @@
   reconocimiento del uroanálisis por componentes y su agrupación en el modal de
   laboratorios (ver commits previos de esta misma rama).
   Banco: 649/649.
+*/
+
+/*
+  v12.6.2 — 12-08-2026: IMPRIMIR ORDEN DE PYM — CORREGIDO EL 404 REAL. Reportado en
+  consultorio con captura de pantalla: el botón "🖨️ Orden <agrupador>" (v12.5.13) abría una
+  pestaña con "HTTP ERROR 404" de neps.everestintelligent.com.
+  Causa real, no adivinada: GenerarOrdenHC exige que el reporte YA esté generado en el
+  servidor. El flujo de "Enviar por correo" (mismo modal) SÍ llamaba primero a
+  GenerarLinksImpresionOrdenamientos (api/Morbilidad — nombre literal: "generar los ENLACES
+  de impresión") antes de enviar; el botón de Imprimir, agregado después, nunca hacía esa
+  llamada — construía la URL de GenerarOrdenHC directo con los datos de la creación de la
+  orden y la abría sin más. imprimirOrdenPyM ahora acepta una pestaña ya abierta (mismo
+  patrón que abrirInformeAthenea): se abre en blanco de forma SÍNCRONA en el clic real del
+  médico —para no chocar con el bloqueador de ventanas emergentes del navegador, que trata
+  un window.open() disparado después de un await como no venido de una acción directa del
+  usuario— y se navega a la URL real recién cuando GenerarLinksImpresionOrdenamientos
+  confirma que el reporte ya existe.
+  apiOrdenamientoGenerarLinks ya no descarta su respuesta en silencio: la devuelve y la
+  vuelca una única vez a consola (diagnóstico) — si trae un enlace directo y listo para
+  usar, la próxima captura del médico permite dejar de reconstruir la URL a mano.
+  Banco: 658/658 (5 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -748,7 +769,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9542,12 +9563,20 @@
   // preparar el documento, no autorizar el envío).
   async function apiOrdenamientoGenerarLinks(pacienteId, agrupador) {
     try {
-      await pageFetchJson(
+      const res = await pageFetchJson(
         `/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos?PacienteId=${encodeURIComponent(pacienteId)}&Agrupador=${encodeURIComponent(agrupador)}`,
         { method: "GET", __idempotent: true }
       );
-    } catch (e) { console.warn("[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):", e); }
+      // v12.6.2 — Diagnóstico único: nunca se había mirado esta respuesta (antes se descartaba
+      // entera). El nombre del endpoint ("generar los ENLACES de impresión") sugiere que trae
+      // la URL real y lista para imprimir — si es así, el próximo reporte del médico con esto
+      // en la consola permite dejar de RECONSTRUIR la URL de GenerarOrdenHC a mano y usar la
+      // que Everest ya devuelve aquí.
+      if (!_diagGenerarLinksLogged) { _diagGenerarLinksLogged = true; console.log("[Vigilante PyM] GenerarLinksImpresionOrdenamientos — diagnóstico único:", res); }
+      return res;
+    } catch (e) { console.warn("[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):", e); return null; }
   }
+  let _diagGenerarLinksLogged = false;
 
   let _diagEnvioCorreoLogged = false;
   async function apiEnviarOrdenPorCorreo(agrupador, correo, usuarioId) {
@@ -9583,13 +9612,25 @@
   // Si Everest cambia esta ruta relativa (no confirmada más allá de esta captura), la pestaña
   // simplemente mostrará un 404 del propio Everest — nunca se inventa un agrupador ni un
   // NumAutorizacion que no vengan de la respuesta real del servidor.
-  function imprimirOrdenPyM(pacienteId, agrupador, numeroAutorizacion) {
-    if (!agrupador) return;
+  //
+  // v12.6.2 — CORREGIDO: reportado en consultorio, el botón daba 404 real de Everest.
+  // Causa real (no adivinada): GenerarOrdenHC exige que el reporte YA esté generado en el
+  // servidor. El flujo de "Enviar por correo" (ver el botón de correo en openOrdenamientoModal)
+  // SÍ llama primero a GenerarLinksImpresionOrdenamientos (ver apiOrdenamientoGenerarLinks) —
+  // el nombre del endpoint es literal: "generar los ENLACES de impresión" — antes de enviar; el
+  // botón de Imprimir, agregado en v12.5.13, nunca hacía esa llamada. `pestanaExistente` (mismo
+  // patrón que abrirInformeAthenea): la pestaña se abre EN BLANCO de forma síncrona en el clic
+  // real del médico (para no chocar con el bloqueador de ventanas emergentes del navegador) y
+  // se navega a la URL real recién que GenerarLinksImpresionOrdenamientos confirma que el
+  // reporte ya existe.
+  function imprimirOrdenPyM(pacienteId, agrupador, numeroAutorizacion, pestanaExistente) {
+    if (!agrupador) { if (pestanaExistente && !pestanaExistente.closed) pestanaExistente.close(); return; }
     const url = location.origin + "/apiviva/APIOrdenamientoHealth/ReportePdf/GenerarOrdenHC"
       + "?Agrupador=" + encodeURIComponent(agrupador)
       + "&idPaciente=" + encodeURIComponent(pacienteId || "")
       + "&NumAutorizacion=" + encodeURIComponent(numeroAutorizacion || "");
-    window.open(url, "_blank");
+    if (pestanaExistente && !pestanaExistente.closed) pestanaExistente.location.href = url;
+    else window.open(url, "_blank");
   }
 
   // Modal interactivo de Generación de Órdenes PyM en 1-Clic
@@ -9873,9 +9914,20 @@
             const printBtn = document.createElement("button");
             printBtn.className = "vgl-agm-btn sec";
             printBtn.textContent = "🖨️ Orden " + agp;
-            printBtn.addEventListener("click", () => {
+            printBtn.addEventListener("click", async () => {
               uxTrack("ordenes.imprimir");
-              imprimirOrdenPyM(pacienteIdOrd, agp, numAutPorAgrupador.get(agp));
+              // v12.6.2 — pestaña en blanco SÍNCRONA en el clic real (evita el bloqueador de
+              // ventanas emergentes: un window.open() tras un await ya no cuenta como gesto
+              // directo del usuario para el navegador) — se navega recién cuando
+              // GenerarLinksImpresionOrdenamientos confirma que el reporte existe en el
+              // servidor (ver imprimirOrdenPyM).
+              const pestana = window.open("", "_blank");
+              printBtn.disabled = true;
+              const textoOriginal = printBtn.textContent;
+              printBtn.textContent = "⏳ Preparando...";
+              try { await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp); } catch (e) {}
+              imprimirOrdenPyM(pacienteIdOrd, agp, numAutPorAgrupador.get(agp), pestana);
+              if (vivo()) { printBtn.disabled = false; printBtn.textContent = textoOriginal; }
             });
             printRow.appendChild(printBtn);
           });

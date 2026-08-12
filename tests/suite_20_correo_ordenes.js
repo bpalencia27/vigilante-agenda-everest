@@ -26,11 +26,16 @@ module.exports = {
     // ---------- apiOrdenamientoGenerarLinks (best-effort) ----------
     await t.casoAsync("apiOrdenamientoGenerarLinks: llama la URL real y nunca lanza aunque falle", async () => {
       let vista = null;
-      const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } }; } });
-      await c.api.apiOrdenamientoGenerarLinks(540174, "1226083463");
+      const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ enlace: "ok" }), text: async () => "{}", clone() { return this; } }; } });
+      const res = await c.api.apiOrdenamientoGenerarLinks(540174, "1226083463");
       t.cierto(vista.includes("/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos"));
       t.cierto(vista.includes("PacienteId=540174"));
       t.cierto(vista.includes("Agrupador=1226083463"));
+      // v12.6.2 — Reportado en consultorio: el botón de Imprimir daba 404 real de Everest
+      // porque nunca esperaba este paso (que SÍ genera el reporte en el servidor) antes de
+      // abrir GenerarOrdenHC. La respuesta ya no se descarta — queda disponible para quien
+      // la llame (imprimirOrdenPyM la espera antes de navegar la pestaña).
+      t.igual(res, { enlace: "ok" }, "la respuesta real ya no se descarta en silencio");
 
       // best-effort real: si la red falla, la función NO debe lanzar — si lanzara, el
       // await de abajo propagaría el error y t.casoAsync marcaría esta prueba como

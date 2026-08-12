@@ -1084,5 +1084,43 @@ module.exports = {
       const u = new URL(llamadas[0].url);
       t.igual(u.searchParams.get("NumAutorizacion"), "", "campo vacío en vez de un valor inventado");
     });
+
+    // =====================================================================
+    // v12.6.2 — Reportado en consultorio: el botón de Imprimir daba 404 REAL de Everest
+    // (captura adjunta: HTTP ERROR 404 de neps.everestintelligent.com). Causa real: la
+    // pestaña se abría directo hacia GenerarOrdenHC sin haber llamado antes a
+    // GenerarLinksImpresionOrdenamientos (el paso que genera el reporte en el servidor —
+    // el flujo de "Enviar por correo" ya lo hacía, el de Imprimir no). imprimirOrdenPyM
+    // ahora acepta una pestaña YA ABIERTA (mismo patrón que abrirInformeAthenea): se abre
+    // en blanco de forma síncrona en el clic real, y se navega recién cuando el paso de
+    // generación termina — evita el bloqueador de ventanas emergentes de un window.open()
+    // disparado después de un await.
+    // =====================================================================
+    t.caso("imprimirOrdenPyM: con una pestaña ya abierta, navega ESA pestaña en vez de abrir una nueva", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      const pestana = { closed: false, location: {} };
+      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319", pestana);
+      t.igual(llamadas.length, 0, "no abre una pestaña nueva: reutiliza la que ya recibió");
+      t.cierto(!!pestana.location.href, "navega la pestaña existente a la URL real");
+      const u = new URL(pestana.location.href);
+      t.igual(u.searchParams.get("Agrupador"), "1226085057");
+    });
+
+    t.caso("imprimirOrdenPyM: pestaña ya abierta pero CERRADA por el médico -> abre una nueva en su lugar", () => {
+      const c = cargar();
+      const llamadas = mockOpen(c);
+      const pestanaCerrada = { closed: true };
+      c.api.imprimirOrdenPyM(331897, "1226085057", "1226085057319", pestanaCerrada);
+      t.igual(llamadas.length, 1, "si el médico cerró la pestaña en blanco, se abre una nueva");
+    });
+
+    t.caso("imprimirOrdenPyM: sin agrupador, si había una pestaña en blanco ya abierta, se cierra (nunca queda una pestaña vacía huérfana)", () => {
+      const c = cargar();
+      let cerrada = false;
+      const pestana = { closed: false, close: () => { cerrada = true; } };
+      c.api.imprimirOrdenPyM(331897, null, "1226085057319", pestana);
+      t.cierto(cerrada);
+    });
   },
 };
