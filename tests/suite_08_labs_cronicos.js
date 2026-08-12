@@ -4,7 +4,7 @@ module.exports = {
     "_matchLabInWhitelist", "_findLabField",
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
-    "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto",
+    "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito"
   ],
@@ -422,6 +422,93 @@ module.exports = {
       // viejo, en vez de OMITIRSE, se colaba como "respetada" nº 2 y el banco seguía verde
       // (mutante confirmado en revisión adversarial).
       t.igual(res.respetadas, 1, "solo Nitritos se respeta; el HEMOGLOBINA viejo se OMITE por dedup, no se cuenta");
+    });
+
+    // =====================================================================
+    // v12.6.7 — Reportado en consultorio con captura: el script marcó SI en
+    // "¿Uroanálisis?" y dejó TODO el bloque vacío — ni el resultado, ni la fecha, ni las
+    // 7 casillas de componente. Causa: el "SI" se marcaba DESPUÉS de recorrer los labs e
+    // intentar escribir cada casilla, y esas casillas solo existen en el DOM cuando el
+    // interruptor está en SI (Angular las monta con *ngIf). En la primera visita, por
+    // tanto, no existía ninguna. Estas pruebas fijan el ORDEN: primero el click, después
+    // la escritura. La casilla falsa de abajo solo "aparece" una vez marcado el SI —
+    // igual que el *ngIf real—, así que si alguien vuelve a invertir el orden, aquí se ve.
+    // =====================================================================
+    t.caso("injectLabsIntoCronicos v12.6.7: marca SI ANTES de buscar las casillas (si no, el bloque *ngIf ni existe)", () => {
+      mockDOM = {};
+      let siMarcado = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const radioNo = { checked: false, parentElement: { textContent: "NO" }, click: () => {} };
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi, radioNo];
+        // El bloque del uroanálisis NO existe hasta que el SI está marcado.
+        if (sel === 'input[placeholder]') return siMarcado ? [inputSangre] : [];
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(siMarcado, "se pulsó SI");
+      t.cierto(res.uroanalisisMarcado, "y se reporta como marcado en esta corrida");
+      t.igual(inputSangre.value, "NEGATIVO", "la casilla se llenó en la MISMA corrida: el SI fue primero");
+      t.igual(res.count, 1);
+      t.falso(res.sinCasilla.includes("URO_SANGRE"), "ya no se reporta 'sin casilla' por un bloque que el propio script hace aparecer");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.6.7: sin ningún componente REAL no se marca SI (un PENDIENTE no cuenta)", () => {
+      mockDOM = {};
+      let siMarcado = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? [radioSi] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(siMarcado, "un resultado PENDIENTE no autoriza a marcar SI en la historia");
+      t.falso(res.uroanalisisMarcado);
+    });
+
+    // El click en SI y el re-render del *ngIf de Angular no ocurren en el mismo tick de
+    // JS: aunque el orden ya sea el correcto, la casilla puede no existir todavía en ese
+    // instante. Reintento acotado (300 ms y 900 ms) y se abandona — nunca un sondeo eterno.
+    // El arnés recorta todo setTimeout del script a 1 ms, así que aquí no se mide tiempo:
+    // se cuenta cuántas veces se ha ido a buscar la casilla. Aparece recién en la TERCERA
+    // búsqueda (síncrona + reintento 1 + reintento 2), que es justo lo que prueba que los
+    // DOS reintentos existen.
+    await t.casoAsync("injectLabsIntoCronicos v12.6.7: si Angular tarda en montar la casilla, el reintento la completa", async () => {
+      mockDOM = {};
+      let siMarcado = false, busquedas = 0;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
+        if (sel === 'input[placeholder]') { busquedas++; return busquedas >= 3 ? [inputSangre] : []; }
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }
+      ]);
+      t.cierto(siMarcado);
+      t.igual(inputSangre.value, "", "en la corrida síncrona la casilla aún no existía");
+      t.cierto(res.sinCasilla.includes("URO_SANGRE"), "y se reportó como sin casilla en ese momento");
+      await new Promise((r) => setTimeout(r, 60));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputSangre.value, "NEGATIVO", "el reintento la completó cuando Angular la montó");
+      t.igual(busquedas, 3, "una búsqueda síncrona y exactamente DOS reintentos: acotado, nunca un sondeo eterno");
+    });
+
+    t.caso("_hayComponenteUroReal: distingue componente real de pendiente, vacío y de analito ajeno al parcial", () => {
+      t.cierto(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "" }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "HEMOGRAMA", Resultado: "8500" }]), "los leucocitos del hemograma NO son del parcial de orina");
+      t.falso(testApi._hayComponenteUroReal([]));
+      t.falso(testApi._hayComponenteUroReal(null));
     });
 
     t.caso("_findUroInput y _canonTexto: placeholder normalizado (tildes, espacios dobles, bordes) y null si no existe", () => {

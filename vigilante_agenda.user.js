@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.6
+// @version      12.6.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -296,6 +296,30 @@
      La prueba nueva ejercita el PUNTO DE USO (el botón "Enviar" del modal), no solo la
      función de red: por eso la mutación al id del médico ahora se cae.
   Banco: 667/667 (3 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.7 — 12-08-2026: EL UROANÁLISIS SE COMPLETA DE VERDAD. ORDEN CORREGIDO.
+  Reportado en consultorio con captura: el script marcó "SI" en "¿Uroanálisis?" y dejó el
+  bloque ENTERO vacío — ni resultado, ni fecha, ni las 7 casillas de componente (Nitritos,
+  Sangre, Hematíes, Glucosuria, Leucocitos, Cilindros, Proteinuria).
+  Causa real, no adivinada: el "SI" se marcaba AL FINAL de injectLabsIntoCronicos, después
+  de recorrer los laboratorios e intentar escribir cada casilla. Pero esas casillas solo
+  existen en el DOM cuando el interruptor está en SI — Angular monta el bloque con *ngIf.
+  Es decir: en la primera visita se buscaban 7 casillas que el propio script todavía no
+  había hecho aparecer, todas se anotaban como "sin casilla" y nunca se reintentaban.
+  El médico lo había dicho literalmente: "recuerda que primero debe darse clic al botón SÍ".
+  - Nueva _hayComponenteUroReal(labsArray): responde SOLO con datos, sin tocar el DOM, si
+    Athenea trajo al menos un componente real del parcial (no vacío, no PENDIENTE). Con
+    eso el "SI" se marca ANTES de buscar la primera casilla.
+  - Reintento acotado también para las 7 casillas de componente (300 ms y 900 ms, y se
+    abandona): el re-render del *ngIf no es síncrono con el click. Ya existía para el par
+    resultado/fecha desde v12.5.12; ahora cubre el bloque completo. Se guarda el valor del
+    analito MÁS RECIENTE, nunca uno viejo, y se escribe solo en casilla vacía.
+  Sin cambios en las reglas sagradas: verbatim de Athenea, jamás en casilla ya escrita.
+  El interruptor NORMAL/ANORMAL sigue SIN automatizarse — es interpretación clínica y no
+  hay evidencia de la semántica del control: ante la duda, decide el médico.
+  Banco: 671/671 (4 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -864,7 +888,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1112,6 +1136,23 @@
       if (/ORINA|URINAR|UROAN/.test(padre)) return true;
       const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));
       return /\bORINA\b/.test(nombre) || /GLUCOSURIA|PROTEINURIA|NITRITO|CILINDRO|ESTERASA LEUCOCITARIA/.test(nombre);
+  }
+
+  // v12.6.7 — ¿Athenea trajo al menos UN componente real del parcial de orina? Se
+  // responde ANTES de tocar el DOM, mirando solo los datos. Hasta v12.6.6 esto se
+  // averiguaba SOBRE LA MARCHA, mientras se intentaba escribir cada casilla, y por eso el
+  // "SI" se marcaba DESPUÉS de haber buscado las 7 casillas: como Angular las monta con
+  // *ngIf solo cuando "¿Uroanálisis?" está en SI, en la primera visita NINGUNA existía
+  // todavía y todas se iban a "sin casilla" en silencio. Es exactamente lo que reportó el
+  // médico con captura: el script marcaba SI y dejaba el bloque entero vacío.
+  function _hayComponenteUroReal(labsArray) {
+      if (!Array.isArray(labsArray)) return false;
+      return labsArray.some((lab) => {
+          if (!lab || !_esAnalitoDeOrina(lab) || !_matchUroComponente(lab)) return false;
+          const v = lab.Resultado || lab.resultado || lab.valor;
+          if (!v) return false;
+          return !(Number(lab.idEstado) === 1 || String(v).trim().toUpperCase() === "PENDIENTE");
+      });
   }
 
   function _matchUroComponente(lab) {
@@ -2175,6 +2216,15 @@
       // las solicitudes llegan de más reciente a más antigua, así que el primero ES el
       // resultado más reciente y los anteriores se omiten (pedido explícito del médico).
       const escritorPorMarca = new Map();
+      // v12.6.7 — El "SI" se marca AQUÍ, antes de buscar una sola casilla: es lo que hace
+      // aparecer el bloque entero (Angular lo monta con *ngIf). El orden anterior —marcar
+      // al final— garantizaba que la primera corrida no encontrara ninguna de las 7
+      // casillas de componente.
+      uroanalisisConfirmadoReal = _hayComponenteUroReal(labsArray);
+      const uroanalisisMarcado = uroanalisisConfirmadoReal ? _marcarUroanalisisSi() : false;
+      // Casillas que no existían ni siquiera después de marcar SI: se reintentan abajo,
+      // porque el re-render del *ngIf no es síncrono con el click.
+      const reintentosOrina = new Map();
       const inyectarComponenteOrina = (lab) => {
           const nombreCanon = _canonTexto(lab.NombreParametro || lab.nombre || lab.examen);
           const comp = _matchUroComponente(lab);
@@ -2209,6 +2259,9 @@
           const inputEl = _findUroInput(comp.placeholder);
           if (!inputEl) {
               if (!sinCasilla.includes(marca)) sinCasilla.push(marca);
+              // El primero que llega es el más reciente (ver arriba): es el que se
+              // reintentará, nunca uno más viejo.
+              if (!reintentosOrina.has(marca)) reintentosOrina.set(marca, { comp, resultVal });
               return;
           }
           const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
@@ -2239,11 +2292,11 @@
           if (!_matchLabInWhitelist(lab) && _esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
       });
 
-      // v12.5.11 — Con al menos un componente real confirmado, se marca "SI" en el
-      // interruptor "¿Uroanálisis?" — solo si el médico no lo había elegido ya (ver
-      // _marcarUroanalisisSi). El interruptor NORMAL/ANORMAL sigue SIN automatizarse:
-      // misma regla de la casa de siempre, ante la duda no se inventa.
-      const uroanalisisMarcado = uroanalisisConfirmadoReal ? _marcarUroanalisisSi() : false;
+      // v12.5.11 — Con al menos un componente real confirmado se marca "SI" en el
+      // interruptor "¿Uroanálisis?", solo si el médico no lo había elegido ya (ver
+      // _marcarUroanalisisSi). Desde v12.6.7 eso ocurre ARRIBA, antes de buscar casillas.
+      // El interruptor NORMAL/ANORMAL sigue SIN automatizarse: misma regla de la casa,
+      // ante la duda no se inventa.
 
       // v12.5.6 — CAMBIO PEDIDO POR EL MÉDICO: antes "el primero de la lista gana" (el
       // resto se descartaba con solo un aviso), asumiendo que Athenea siempre entrega las
@@ -2363,6 +2416,30 @@
       // "sin casilla" ya se mostró) — el médico la llena a mano o vuelve a pulsar
       // Auto-Labs (con SI ya marcado, el camino genérico de arriba la encuentra directo).
       // Mismas reglas sagradas de siempre: verbatim, solo si la casilla sigue vacía.
+      // v12.6.7 — Mismo reintento acotado para las 7 casillas de COMPONENTE (Nitritos,
+      // Sangre, Hematíes, Glucosuria, Leucocitos, Cilindros, Proteinuria). Ya se marcó SI
+      // arriba, pero el re-render del *ngIf de Angular no es síncrono con el click: si en
+      // esa misma corrida las casillas aún no existían, se vuelven a buscar dos veces
+      // (300 ms y 900 ms) y se abandona. Reglas de siempre: verbatim, solo en casilla
+      // vacía, y nunca un valor más viejo (se guardó el primero, que es el más reciente).
+      if (uroanalisisMarcado && reintentosOrina.size) {
+          const intentarOrina = (intento) => {
+              let escritas = 0;
+              for (const [marca, r] of [...reintentosOrina]) {
+                  const el = _findUroInput(r.comp.placeholder);
+                  if (!el) continue;
+                  reintentosOrina.delete(marca);
+                  const actual = String(el.value == null ? "" : el.value).trim();
+                  if (actual === "") { setNgValue(el, r.resultVal); escritas++; }
+              }
+              if (escritas) console.log("[Vigilante] uroanálisis: " + escritas + " casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).");
+              if (!reintentosOrina.size) return;
+              if (intento < 2) setTimeout(() => intentarOrina(intento + 1), 600);
+              else console.warn("[Vigilante] uroanálisis: estas casillas de componente no aparecieron tras marcar SI:", [...reintentosOrina.keys()].join(", "));
+          };
+          setTimeout(() => intentarOrina(1), 300);
+      }
+
       const uroCandidato = candidatosPorClave.get("UROANALISIS");
       if (uroCandidato && sinCasilla.includes("UROANALISIS") && uroanalisisMarcado) {
           const { matched, resultVal, resultDate } = uroCandidato;
