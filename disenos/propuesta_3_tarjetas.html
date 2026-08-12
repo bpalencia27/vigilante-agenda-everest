@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>B3 - Tarjetas por Día</title>
+    <style>
+        :root {
+            --bg-solid: #fcfcfc; --fg: #222; --bg2: #fff; --bg3: #eee;
+            --c-blue: #0077ff; --c-sug: #eef5ff; --c-sug-border: #0077ff;
+            --c-green: #117711; --c-purple: #771177;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-solid: #121212; --fg: #f0f0f0; --bg2: #1e1e1e; --bg3: #2d2d2d;
+                --c-blue: #3388ff; --c-sug: #002244; --c-sug-border: #3388ff;
+                --c-green: #33aa33; --c-purple: #aa33aa;
+            }
+        }
+        body { font-family: system-ui, sans-serif; background: var(--bg-solid); color: var(--fg); padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+        .card { background: var(--bg2); border: 1px solid var(--bg3); border-radius: 12px; padding: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card.sugerido { border: 2px solid var(--c-sug-border); background: var(--c-sug); position: relative; }
+        .card.sugerido::before { content: "DÍA SUGERIDO"; position: absolute; top: -10px; left: 10px; background: var(--c-sug-border); color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
+        .card-title { font-size: 16px; font-weight: bold; margin-bottom: 12px; border-bottom: 1px solid var(--bg3); padding-bottom: 8px; }
+        .slots-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .slot { padding: 6px; text-align: center; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+        .slot.normal { background: var(--bg3); }
+        .slot.adicional { background: transparent; border-color: var(--c-purple); color: var(--c-purple); position: relative; }
+        .slot.adicional::after { content: "+"; position: absolute; top: -4px; right: -4px; background: var(--c-purple); color: white; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; line-height: 14px; }
+        .slot.franja { background: var(--c-green); color: white; font-weight: bold; }
+        .perfil-section { margin-bottom: 40px; }
+        .perfil-title { background: var(--fg); color: var(--bg-solid); padding: 8px; border-radius: 4px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1>Propuesta B3: Tarjetas por Día</h1>
+
+    <div class="perfil-section">
+        <h3 class="perfil-title">1. HIPERTENSO</h3>
+        <p>Los cupos adicionales tienen un indicador "+".</p>
+        <div class="grid">
+            <div class="card"><div class="card-title">Lunes 10</div><div class="slots-grid"><div class="slot adicional" title="Cupo adicional">7:30</div><div class="slot normal">8:00</div></div></div>
+            <div class="card sugerido"><div class="card-title">Martes 11</div><div class="slots-grid"><div class="slot adicional" title="Cupo adicional">7:30</div><div class="slot normal">8:00</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3 class="perfil-title">2. DIABETICO</h3>
+        <p>Franja destacada en bloque de color sólido.</p>
+        <div class="grid">
+            <div class="card sugerido"><div class="card-title">Martes 11</div><div class="slots-grid"><div class="slot franja">8:00</div><div class="slot franja">8:20</div><div class="slot normal">10:00</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3 class="perfil-title">3. NEFROPROTECCION</h3>
+        <div class="grid">
+            <div class="card sugerido"><div class="card-title">Martes 11</div><div class="slots-grid"><div class="slot normal">8:00</div><div class="slot normal">8:20</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3 class="perfil-title">4. SIN ETIQUETA</h3>
+        <div class="grid">
+            <div class="card sugerido"><div class="card-title">Martes 11</div><div class="slots-grid"><div class="slot normal">7:30</div><div class="slot normal">8:00</div></div></div>
+        </div>
+    </div>
+</body>
+</html>

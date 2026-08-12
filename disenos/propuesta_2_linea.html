@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>B2 - Línea de Tiempo</title>
+    <style>
+        :root {
+            --bg-solid: #ffffff; --fg: #333333; --bg2: #f5f5f5; --bg3: #e0e0e0;
+            --c-blue: #0055cc; --c-sug: #fff7d6; --c-sug-border: #ffd700;
+            --c-red: #cc0000; --c-green: #008800; --c-purple: #880088;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-solid: #1a1a1a; --fg: #e0e0e0; --bg2: #2a2a2a; --bg3: #3a3a3a;
+                --c-blue: #4499ff; --c-sug: #332d00; --c-sug-border: #ccaa00;
+            }
+        }
+        body { font-family: system-ui, sans-serif; background: var(--bg-solid); color: var(--fg); padding: 20px; }
+        .timeline { display: flex; overflow-x: auto; padding: 10px 0; gap: 8px; align-items: flex-start; }
+        .day { flex: 0 0 120px; background: var(--bg2); padding: 8px; border-radius: 8px; border: 1px solid var(--bg3); }
+        .day.sugerido { background: var(--c-sug); border: 2px solid var(--c-sug-border); flex: 0 0 160px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .day-header { font-weight: bold; border-bottom: 1px solid var(--bg3); margin-bottom: 8px; padding-bottom: 4px; }
+        .sugerido .day-header::after { content: " ★ Sugerido"; color: var(--c-sug-border); font-size: 0.8em; }
+        .slots { display: flex; flex-direction: column; gap: 4px; }
+        .slot { padding: 4px; border-radius: 4px; font-size: 12px; text-align: center; cursor: pointer; }
+        .slot.normal { background: var(--bg3); }
+        .slot.adicional { border: 1px dashed var(--c-purple); color: var(--c-purple); background: transparent; }
+        .slot.adicional::after { content: " (Cupo Extra)"; font-size: 9px; }
+        .slot.franja { background: var(--c-green); color: white; border: 1px solid var(--c-green); }
+        .slot.franja::before { content: "✓ "; }
+        .perfil-section { margin-bottom: 30px; border-left: 4px solid var(--c-blue); padding-left: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Propuesta B2: Línea de Tiempo</h1>
+    <p>Eje continuo, día sugerido como ancla central grande.</p>
+
+    <div class="perfil-section">
+        <h3>1. HIPERTENSO (Cupos adicionales 7:30, 9:30...)</h3>
+        <div class="timeline">
+            <div class="day"><div class="day-header">Lun 10</div><div class="slots"><div class="slot adicional">7:30</div><div class="slot normal">8:00</div></div></div>
+            <div class="day sugerido"><div class="day-header">Mar 11</div><div class="slots"><div class="slot adicional">7:30</div><div class="slot normal">8:00</div></div></div>
+            <div class="day"><div class="day-header">Mié 12</div><div class="slots"><div class="slot adicional">7:30</div><div class="slot normal">8:00</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>2. DIABETICO (Franja recomendada PM)</h3>
+        <div class="timeline">
+            <div class="day sugerido"><div class="day-header">Mar 11</div><div class="slots"><div class="slot normal">8:00</div><div class="slot franja">13:00</div><div class="slot franja">13:20</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>3. NEFROPROTECCION (Sin adicionales, sin franja)</h3>
+        <div class="timeline">
+            <div class="day sugerido"><div class="day-header">Mar 11</div><div class="slots"><div class="slot normal">8:00</div><div class="slot normal">8:20</div></div></div>
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>4. SIN ETIQUETA</h3>
+        <div class="timeline">
+            <div class="day sugerido"><div class="day-header">Mar 11</div><div class="slots"><div class="slot normal">7:30</div><div class="slot normal">8:00</div></div></div>
+        </div>
+    </div>
+</body>
+</html>

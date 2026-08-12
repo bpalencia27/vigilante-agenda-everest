@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>B1 - Densidad Clínica</title>
+    <style>
+        :root {
+            --bg-solid: #ffffff;
+            --fg: #333333;
+            --bg2: #f0f0f0;
+            --bg3: #e0e0e0;
+            --c-blue: #0066cc;
+            --c-red: #cc0000;
+            --c-green: #008800;
+            --c-purple: #880088;
+            --r-surface: 8px;
+            --r-chip: 4px;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-solid: #1a1a1a;
+                --fg: #e0e0e0;
+                --bg2: #2a2a2a;
+                --bg3: #3a3a3a;
+                --c-blue: #4499ff;
+                --c-red: #ff4444;
+                --c-green: #44bb44;
+                --c-purple: #bb44bb;
+            }
+        }
+        body { font-family: system-ui, sans-serif; background: var(--bg-solid); color: var(--fg); padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; }
+        .day { background: var(--bg2); padding: 4px; border-radius: var(--r-chip); text-align: center; font-size: 11px; }
+        .day.sugerido { background: var(--c-blue); color: #fff; font-weight: bold; transform: scale(1.05); border: 2px solid var(--fg); }
+        .slot { display: inline-block; padding: 2px; margin: 1px; border-radius: 2px; font-size: 9px; cursor: pointer; }
+        .slot.normal { background: var(--bg3); }
+        .slot.adicional { border: 1px solid var(--c-purple); color: var(--c-purple); background: transparent; }
+        .slot.franja { background: var(--c-green); color: #fff; }
+        .perfil-section { margin-bottom: 40px; border: 1px solid var(--bg3); padding: 10px; border-radius: var(--r-surface); }
+        .loading { font-style: italic; color: var(--c-blue); }
+        h3 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>Propuesta B1: Densidad Clínica</h1>
+    <p>Todos los días visibles sin scroll.</p>
+
+    <div class="perfil-section">
+        <h3>1. HIPERTENSO (Cupos adicionales recomendados)</h3>
+        <div class="grid">
+            <div class="day"><div class="title">Lun 10</div><div class="slots"><span class="slot adicional">7:30</span><span class="slot normal">8:00</span></div></div>
+            <div class="day sugerido"><div class="title">Mar 11 (Objetivo)</div><div class="slots"><span class="slot adicional">7:30</span><span class="slot normal">8:00</span></div></div>
+            <div class="day"><div class="title">Mié 12</div><div class="slots"><span class="slot adicional">7:30</span><span class="slot normal">8:00</span></div></div>
+            <!-- ... -->
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>2. DIABETICO (Franja AM o PM recomendada)</h3>
+        <div class="grid">
+            <div class="day"><div class="title">Lun 10</div><div class="slots"><span class="slot franja">8:00</span><span class="slot franja">8:20</span><span class="slot normal">10:00</span></div></div>
+            <div class="day sugerido"><div class="title">Mar 11 (Objetivo)</div><div class="slots"><span class="slot franja">8:00</span><span class="slot franja">8:20</span><span class="slot normal">10:00</span></div></div>
+            <div class="day"><div class="title">Mié 12</div><div class="slots"><span class="slot franja">8:00</span><span class="slot franja">8:20</span><span class="slot normal">10:00</span></div></div>
+            <!-- ... -->
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>3. NEFROPROTECCION (Sin preferencia, sin adicionales)</h3>
+        <div class="grid">
+            <div class="day"><div class="title">Lun 10</div><div class="slots"><span class="slot normal">8:00</span><span class="slot normal">8:20</span></div></div>
+            <div class="day sugerido"><div class="title">Mar 11 (Objetivo)</div><div class="slots"><span class="slot normal">8:00</span><span class="slot normal">8:20</span></div></div>
+            <div class="day"><div class="title">Mié 12</div><div class="slots"><span class="slot normal">8:00</span><span class="slot normal">8:20</span></div></div>
+            <!-- ... -->
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>4. SIN ETIQUETA (Comportamiento por defecto)</h3>
+        <div class="grid">
+            <div class="day"><div class="title">Lun 10</div><div class="slots"><span class="slot normal">7:30</span><span class="slot normal">8:00</span></div></div>
+            <div class="day sugerido"><div class="title">Mar 11 (Objetivo)</div><div class="slots"><span class="slot normal">7:30</span><span class="slot normal">8:00</span></div></div>
+            <div class="day"><div class="title">Mié 12</div><div class="slots"><span class="slot normal">7:30</span><span class="slot normal">8:00</span></div></div>
+            <!-- ... -->
+        </div>
+    </div>
+
+    <div class="perfil-section">
+        <h3>Estados Especiales</h3>
+        <p><strong>Cargando:</strong> <span class="loading">Consultando disponibilidad (4/16 días)...</span></p>
+        <p><strong>0 días disponibles:</strong> Excepción de escasez. Todos los perfiles ven los cupos adicionales rotulados como excepción.</p>
+    </div>
+</body>
+</html>

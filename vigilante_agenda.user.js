@@ -6364,6 +6364,96 @@
   // turno. Comparar las cadenas crudas hacía que un turno perfectamente libre se declarara
   // "ya no disponible" (captura real: el toast listaba como libre la MISMA hora que decía
   // ocupada). Se normaliza a "HH:MM" (cero a la izquierda, sin segundos) antes de comparar.
+
+  // --- T3: Motor de recomendación por perfil (puro) ---
+  function perfilPaciente(etiquetas) {
+    if (!etiquetas || !Array.isArray(etiquetas)) return { franja: "sin_preferencia", adicionales: "visibles", id: "SIN_ETIQUETA" };
+
+    let hasDiab = false;
+    let hasNefro = false;
+    let hasHta = false;
+
+    for (const et of etiquetas) {
+      if (!et) continue;
+      const str = et.toLowerCase().replace(/\s+/g, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (str.includes("hta+dm") || str.includes("htadm") || str.includes("hta/dm") || str === "diabetes") hasDiab = true;
+      else if (str === "hipertension") hasHta = true;
+      else if (str === "nefroproteccion") hasNefro = true;
+    }
+
+    // Si no reconoció ninguna etiqueta de las nuestras, es SIN_ETIQUETA
+    if (!hasDiab && !hasNefro && !hasHta) {
+      return { franja: "sin_preferencia", adicionales: "visibles", id: "SIN_ETIQUETA" };
+    }
+
+    // Eje A: Franja
+    const franja = hasDiab ? "primera_mitad" : "sin_preferencia";
+
+    // Eje B: Adicionales
+    let adicionales = "visibles";
+    if (hasDiab || hasNefro) adicionales = "no_recomendados";
+    else if (hasHta) adicionales = "recomendados";
+
+    // ID compuesto solo para debug (no se usa para lógica)
+    const id = hasDiab ? (hasNefro ? "NEFRO+DIAB" : "DIAB") : (hasNefro ? (hasHta ? "NEFRO+HTA" : "NEFRO") : (hasHta ? "HTA" : "SIN_ETIQUETA"));
+
+    return { franja, adicionales, id };
+  }
+
+  function recomendacionHorario(perfil, turnosDelDia) {
+    if (!turnosDelDia || !turnosDelDia.length) return null;
+
+    // D3-bis: Detectar jornadas reales del día
+    let minAM = Infinity, maxAM = -Infinity, minPM = Infinity, maxPM = -Infinity;
+
+    const pares = turnosDelDia.map(t => {
+      const hn = normalizeHora(t.hora || t.horaTexto || t.Hora || "");
+      const [h, m] = hn.split(":").map(Number);
+      return { hn, h, m, original: t };
+    }).filter(p => !isNaN(p.h));
+
+    // Orden ascendente por hora normalizada
+    pares.sort((a, b) => a.h - b.h || a.m - b.m);
+
+    for (const p of pares) {
+      if (p.h < 12) {
+        if (p.h < minAM) minAM = p.h;
+        if (p.h > maxAM) maxAM = p.h;
+      } else {
+        if (p.h < minPM) minPM = p.h;
+        if (p.h > maxPM) maxPM = p.h;
+      }
+    }
+
+    let hasAM = minAM !== Infinity;
+    let hasPM = minPM !== Infinity;
+
+    // Bordes estandar de la "primera mitad"
+    const amStart = 6, amEndH = 9, amEndM = 0;
+    const pmStart = 13, pmEndH = 16, pmEndM = 0;
+
+    // Determinar turnos sugeridos si el perfil lo pide
+    let sugeridos = [];
+    if (perfil.franja === "primera_mitad") {
+      if (hasAM) {
+         sugeridos = sugeridos.concat(pares.filter(p => p.h >= amStart && (p.h < amEndH || (p.h === amEndH && p.m <= amEndM))));
+      }
+      if (hasPM) {
+         sugeridos = sugeridos.concat(pares.filter(p => p.h >= pmStart && (p.h < pmEndH || (p.h === pmEndH && p.m <= pmEndM))));
+      }
+    }
+
+    // Preseleccionar el PRIMERO disponible si hay recomendados
+    const recomendado = sugeridos.length > 0 ? sugeridos[0].original : null;
+
+    return {
+       jornadaAM: hasAM,
+       jornadaPM: hasPM,
+       sugeridos: sugeridos.map(s => s.hn),
+       horaRecomendada: recomendado
+    };
+  }
+
   function normalizeHora(h) {
     const m = /(\d{1,2}):(\d{2})/.exec(String(h || ""));
     if (!m) return String(h || "").trim();
@@ -6622,7 +6712,84 @@
   }
 
   // Genera un rango de ±3 días hábiles alrededor de la fecha calculada
-  function calcTargetDateRange(monthsToAdd, daysToAdd) {
+
+  // Genera un rango de ±7 días hábiles + sábados candidatos
+  function calcTargetDateRangeExtended(monthsToAdd, daysToAdd) {
+    const baseObj = calcBusinessTargetDate(monthsToAdd, daysToAdd);
+    const baseDate = new Date(baseObj.dateObj);
+    const pad = (n) => String(n).padStart(2, "0");
+
+    const getInfo = (dt, isCenter) => {
+      const yyyy = dt.getFullYear();
+      const mm = pad(dt.getMonth() + 1);
+      const dd = pad(dt.getDate());
+      const dayShort = dt.toLocaleDateString("es-CO", { weekday: "short" }).replace(".", "");
+      const dayCap = dayShort.charAt(0).toUpperCase() + dayShort.slice(1);
+      return {
+        iso: `${yyyy}-${mm}-${dd}`,
+        fmt: `${dd}/${mm}/${yyyy}`,
+        shortLbl: `${dayCap} ${dd}/${mm}`,
+        lbl: dt.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+        isCenter: !!isCenter,
+        dateObj: new Date(dt),
+      };
+    };
+
+    const prevDays = [];
+    let curPrev = new Date(baseDate);
+    let bizDaysPrev = 0;
+    while (bizDaysPrev < 7) {
+      curPrev.setDate(curPrev.getDate() - 1);
+      if (curPrev.getDay() !== 0) { // incluir sábados pero no contarlos como hábiles
+        if (curPrev.getDay() !== 6) bizDaysPrev++;
+        prevDays.unshift(getInfo(curPrev, false));
+      }
+    }
+
+    const nextDays = [];
+    let curNext = new Date(baseDate);
+    let bizDaysNext = 0;
+    while (bizDaysNext < 7) {
+      curNext.setDate(curNext.getDate() + 1);
+      if (curNext.getDay() !== 0) {
+        if (curNext.getDay() !== 6) bizDaysNext++;
+        nextDays.push(getInfo(curNext, false));
+      }
+    }
+
+    return [...prevDays, getInfo(baseDate, true), ...nextDays];
+  }
+
+  const _agendaCache = new Map();
+  async function pollDayAgenda(pacienteId, iso, espId) {
+    const key = pacienteId + '|' + iso + '|' + espId;
+    if (_agendaCache.has(key)) {
+      const entry = _agendaCache.get(key);
+      if (Date.now() - entry.ts < 600000) { // 10 min TTL
+        return entry.promise;
+      }
+    }
+
+    const p = (async () => {
+      const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${iso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
+      const path2 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${iso}&ProgramaId=0&PuntoAtencionId=0&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
+      try {
+        const res = await pageFetchJson(path1, { method: "POST", body: "{}", __idempotent: true });
+        const list = extractAgendasList(res);
+        if (list && list.length) return res;
+      } catch (e) {}
+      try {
+        return await pageFetchJson(path2, { method: "POST", body: "{}", __idempotent: true });
+      } catch (e) {
+        return {};
+      }
+    })();
+
+    _agendaCache.set(key, { ts: Date.now(), promise: p });
+    return p;
+  }
+
+function calcTargetDateRange(monthsToAdd, daysToAdd) {
     const baseObj = calcBusinessTargetDate(monthsToAdd, daysToAdd);
     const baseDate = new Date(baseObj.dateObj);
     const pad = (n) => String(n).padStart(2, "0");
@@ -7135,7 +7302,7 @@
         } catch (e) { console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e); }
       }
 
-      const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
+      const resAgendas = await pollDayAgenda(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
       if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
@@ -7220,15 +7387,90 @@
         w.textContent = avisoAgendaAjena;
         slotsEl.appendChild(w);
       }
+
+      // --- T5: RECOMENDACIÓN DE HORARIO Y LENGUAJE VISUAL B3 ---
+      let etiquetasParaPerfil = [];
+      const sel = modal.querySelector("#vgl-agm-prog-sel");
+      if (sel) {
+          // El perfil de recomendación en el eje A (franja) y B (adicionales) evalúa TODA la lista
+          // de programas que tiene el paciente, no solo el que seleccionó el médico para cargar la cita.
+          const opts = Array.from(sel.querySelectorAll("option"));
+          if (opts.length) {
+              etiquetasParaPerfil = opts.map(o => o.textContent.trim());
+          }
+      }
+
+      const perfilPacienteObj = perfilPaciente(etiquetasParaPerfil);
+      const rec = recomendacionHorario(perfilPacienteObj, turnosLibres.map(x => x.turno));
+      const recomendadosPorPerfil = rec ? rec.sugeridos : [];
+      const cuposAdicionales = ["07:30", "09:30", "11:30", "13:30", "15:30", "17:30"];
+
+      // Excepción de escasez: se detecta si no hay cupos normales
+      const esEscasez = turnosLibres.every(x => {
+         const hn = normalizeHora(x.turno.hora || x.turno.horaTexto || x.turno.Hora || "");
+         return cuposAdicionales.includes(hn);
+      });
+
+      let franjaLblMostrada = false;
+      if (rec && rec.sugeridos && rec.sugeridos.length > 0) {
+          const w = document.createElement("div");
+          w.className = "vgl-agm-kicker";
+          w.style.color = "var(--c-verde)";
+          w.style.marginTop = "8px";
+          w.textContent = `💡 Franja recomendada (${perfilPacienteObj.franja.replace("_", " ")}): preseleccionada automáticamente.`;
+          slotsEl.appendChild(w);
+      } else if (perfilPacienteObj.id !== "SIN_ETIQUETA") {
+          const w = document.createElement("div");
+          w.className = "vgl-agm-kicker";
+          w.style.color = "var(--c-morado)";
+          w.style.marginTop = "8px";
+          w.textContent = `👁 Perfil detectado: ${perfilPacienteObj.id} (sin franja prioritaria).`;
+          slotsEl.appendChild(w);
+      }
+
+      if (esEscasez && turnosLibres.length > 0) {
+          const w = document.createElement("div");
+          w.className = "vgl-agm-err";
+          w.style.background = "rgba(var(--rgb-ambar), 0.1)";
+          w.style.borderColor = "var(--c-ambar)";
+          w.style.color = "var(--c-ambar)";
+          w.textContent = "⚠ Excepción de escasez: no hay cupos normales en este día, se habilitan los cupos adicionales.";
+          slotsEl.appendChild(w);
+      }
+
+      let btnToClick = null;
+
       turnosLibres.forEach(({ turno: t, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
-        // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
-        // Medicina General, que es justo donde el fallback podía colar otra agenda).
+        const hn = normalizeHora(horaTxt);
         const labelCompleto = `✓ ${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
+
+        let extraClasses = "";
+        let prefix = "";
+
+        const isAdicional = cuposAdicionales.includes(hn);
+        const isRecomendadoFranja = recomendadosPorPerfil.includes(hn);
+
+        if (isRecomendadoFranja) {
+           extraClasses = " franja";
+           prefix = "<b>[Sugerido]</b> ";
+           // Si además es adicional, prioriza franja visualmente (Regla colisión D3)
+        } else if (isAdicional) {
+           if (perfilPacienteObj.adicionales === "recomendados" || esEscasez) {
+              extraClasses = " adicional";
+              prefix = "<b>[+]</b> ";
+           }
+        }
+
         const btn = document.createElement("button");
-        btn.className = "vgl-agm-sbtn";
-        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "");
-        btn.innerHTML = labelCompleto;
+        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") + extraClasses;
+
+        // title explicativo
+        if (extraClasses.includes("franja")) btn.title = "Recomendado: perfil diabético · primera mitad de la jornada";
+        else if (extraClasses.includes("adicional") && esEscasez) btn.title = "Cupo adicional (ofrecido por excepción de escasez)";
+        else if (extraClasses.includes("adicional")) btn.title = "Cupo adicional recomendado";
+
+        btn.innerHTML = prefix + labelCompleto;
         btn.addEventListener("click", () => {
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
@@ -7236,8 +7478,20 @@
           confirmBtn.disabled = false;
           confirmBtn.textContent = `✓ Sí, Crear Cita en ${selectedEspName} (${horaTxt})`;
         });
+
+        if (!btnToClick && isRecomendadoFranja && rec.horaRecomendada === t) {
+            btnToClick = btn;
+        }
+
         slotsEl.appendChild(btn);
       });
+
+      if (btnToClick) {
+         // Auto-select
+         btnToClick.click();
+         btnToClick.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
     }
 
     // v12.3.20 — Consulta los turnos de laboratorio REALES para selectedLabDateInfo (no
@@ -7319,26 +7573,136 @@
       cargarHorasLab();
     }
 
-    function renderDayChips(m, d) {
-      const range = calcTargetDateRange(m, d);
-      dayChipsEl.innerHTML = "";
 
-      range.forEach((item) => {
-        const btn = document.createElement("button");
-        btn.className = "vgl-agm-pbtn" + (item.isCenter ? " active" : "");
-        btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
-        btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
-        btn.addEventListener("click", () => {
-          dayChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
-          btn.classList.add("active");
-          selectedDateInfo = item;
+    async function renderDayChips(m, d) {
+      if (!pacienteIdAcceso) {
+          // Fallback if patient ID is not loaded yet
+          const range = calcTargetDateRange(m, d);
+          dayChipsEl.innerHTML = "";
+          range.forEach((item) => {
+            const btn = document.createElement("button");
+            btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
+            btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+            btn.addEventListener("click", () => {
+              dayChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+              btn.classList.add("active");
+              selectedDateInfo = item;
+              cargarHoras();
+            });
+            dayChipsEl.appendChild(btn);
+            if (item.isCenter) selectedDateInfo = item;
+          });
           cargarHoras();
-        });
-        dayChipsEl.appendChild(btn);
-        if (item.isCenter) selectedDateInfo = item;
-      });
-      cargarHoras();
+          return;
+      }
+
+      const fullRange = calcTargetDateRangeExtended(m, d);
+      const token = ++_cargarHorasToken;
+      dayChipsEl.innerHTML = "<div style='color:var(--c-blue);font-style:italic;font-size:12px;padding:4px'>⏳ Consultando disponibilidad...</div>";
+      slotsEl.innerHTML = "";
+
+      const MAX_CONCURRENCY = 5;
+      let inFlight = 0;
+      let queue = [...fullRange];
+      let totalFetched = 0;
+      let availableDays = [];
+
+      const flush = () => {
+         if (token !== _cargarHorasToken || !vivo()) return;
+
+         if (availableDays.length === 0) {
+            if (queue.length > 0 || inFlight > 0) {
+               // Aún consultando
+               dayChipsEl.innerHTML = `<div style='color:var(--c-blue);font-style:italic;font-size:12px;padding:4px'>⏳ Buscando cupos (${totalFetched}/${fullRange.length})...</div>`;
+            } else {
+               // Terminó el sondeo y no hay días, degradación a ventana actual
+               dayChipsEl.innerHTML = "";
+               const fallback = calcTargetDateRange(m, d);
+               fallback.forEach((item) => {
+                 const btn = document.createElement("button");
+                 btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
+                 btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+                 btn.addEventListener("click", () => {
+                   dayChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+                   btn.classList.add("active");
+                   selectedDateInfo = item;
+                   cargarHoras();
+                 });
+                 dayChipsEl.appendChild(btn);
+                 if (item.isCenter) selectedDateInfo = item;
+               });
+
+               slotsEl.innerHTML = "<div class='vgl-agm-err'>⚠️ EXCEPCIÓN DE ESCASEZ: No hay cupos disponibles en toda la ventana (±7 hábiles).</div>";
+            }
+            return;
+         }
+
+         // Ordenar días disponibles por fecha
+         availableDays.sort((a,b) => a.dateObj - b.dateObj);
+
+         dayChipsEl.innerHTML = "";
+         let hasActive = false;
+
+         availableDays.forEach((item) => {
+            const btn = document.createElement("button");
+            const isSel = (selectedDateInfo && item.iso === selectedDateInfo.iso) || (!selectedDateInfo && item.isCenter);
+            if (isSel) hasActive = true;
+            btn.className = "vgl-agm-pbtn vgl-sm" + (isSel ? " active" : "");
+            btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+
+            btn.addEventListener("click", () => {
+              dayChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+              btn.classList.add("active");
+              selectedDateInfo = item;
+              cargarHoras();
+            });
+            dayChipsEl.appendChild(btn);
+
+            if (isSel && !selectedDateInfo) {
+               selectedDateInfo = item;
+               cargarHoras();
+            }
+         });
+
+         // If no selectedDateInfo yet, select the first available
+         if (!hasActive && availableDays.length > 0) {
+             const firstBtn = dayChipsEl.querySelector(".vgl-agm-pbtn");
+             if (firstBtn) firstBtn.classList.add("active");
+             selectedDateInfo = availableDays[0];
+             cargarHoras();
+         }
+
+         if (queue.length > 0 || inFlight > 0) {
+            const sp = document.createElement("div");
+            sp.style.cssText = 'display:inline-block; margin-left:8px; font-size:11px; color:var(--c-blue); align-self:center';
+            sp.innerText = `⏳ (${totalFetched}/${fullRange.length})`;
+            dayChipsEl.appendChild(sp);
+         }
+      };
+
+      const processNext = async () => {
+         if (token !== _cargarHorasToken || !vivo() || queue.length === 0) return;
+         inFlight++;
+         const item = queue.shift();
+
+         try {
+             const res = await pollDayAgenda(pacienteIdAcceso, item.iso, selectedEspId);
+             const list = extractAgendasList(res);
+             if (list && list.length > 0) {
+                 availableDays.push(item);
+             }
+         } catch(e) {}
+
+         totalFetched++;
+         inFlight--;
+         flush();
+         processNext();
+      };
+
+      flush();
+      for(let i=0; i<MAX_CONCURRENCY; i++) processNext();
     }
+
 
     // Eventos para cambiar de Especialidad RCV
     modal.querySelectorAll("#vgl-esp-presets .vgl-agm-pbtn").forEach((eb) => {
