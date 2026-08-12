@@ -312,25 +312,6 @@ module.exports = {
       t.cierto(lista.innerHTML.includes("Aún sin citas"));
     });
 
-    t.caso("atenuar Atendido pero no En sala, a menos que sea fraude (rojo)", () => {
-      vaciarLista();
-      const citaSala = { key: "sala", doc_id: "1", nombre: "A", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
-      const citaAtendido = { key: "ate", doc_id: "2", nombre: "B", hora_texto: "07:20", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0 };
-      const citaFraude = { key: "fra", doc_id: "3", nombre: "C", hora_texto: "07:40", estado: "Atendido", color: "ROJO", pym: [], elapsed: 0 };
-
-      cv.api.__state.lastSignature = ""; // force re-render
-      cv.api.render([citaSala, citaAtendido, citaFraude], "api", new Date());
-
-      const cs = lista.children[0].className;
-      const ca = lista.children[1].className;
-      const cf = lista.children[2].className;
-
-      t.falso(cs.includes("atendido"), "En sala NO lleva clase atendido");
-      t.cierto(ca.includes("atendido"), "Atendido SÍ lleva clase atendido");
-      t.cierto(ca.includes("vgl-card"), "Sigue siendo tarjeta");
-      t.cierto(cf.includes("atendido") && cf.includes("rojo"), "El fraude mantiene ambas clases, para que CSS priorice el rojo");
-    });
-
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());

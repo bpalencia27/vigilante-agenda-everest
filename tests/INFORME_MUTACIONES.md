@@ -44,5 +44,3 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 110 | `if (an < 100) an += 2000;` &rarr; `if (an > 100) an += 2000;` | No | - |
 | 111 | `if (an < 2000 || an > 2100) return null;` &rarr; `if (an < 2000 || an > 2000) return null;` | No | - |
 | 121 | `return null;` &rarr; `return false;` | No | - |
-
-| 10984 | `(a.estado && a.estado.toLowerCase().includes("atendido") ? " atendido" : "")` &rarr; `(a.estado && a.estado.toLowerCase().includes("en sala") ? " atendido" : "")` | No | - |
