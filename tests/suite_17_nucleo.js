@@ -308,6 +308,24 @@ module.exports = {
       t.igual(c.env.almacen["vgl_hello"], undefined, "el saludo diario NO sale: la pestaña líder está en Acceso, no en HCHealth");
     });
 
+    // v12.5.14 — tick() dispara la cola de avisos pendientes (_flushAvisosPendientes) en
+    // TODA pestaña que esté en HCHealth, aunque no tenga marcadores de agenda/historia en
+    // el DOM (p. ej. una pantalla de Órdenes/RCV dentro del mismo módulo clínico).
+    t.caso("tick: en HCHealth (aunque la sección sea 'otra') dispara los avisos que quedaron en cola", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
+      let notifCount = 0;
+      c.env.win.Notification = class { constructor() { notifCount++; } };
+      c.env.win.Notification.permission = "granted";
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "queued|ROJO", flashText: "t" });
+
+      c.api.tick();
+      t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
+      t.igual(notifCount, 1, "el aviso en cola se dispara igual, porque la pestaña SÍ está en HCHealth");
+      const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
+      t.igual(cola.length, 0, "la cola quedó vacía");
+    });
+
     // ---------- downloadDiagnostic ----------
     t.caso("downloadDiagnostic: genera el archivo sanitizado y lo descarga en local", () => {
       const c = cargar({ silencioso: true });

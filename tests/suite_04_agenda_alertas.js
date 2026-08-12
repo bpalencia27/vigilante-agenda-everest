@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto"],
+  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -164,29 +164,62 @@ module.exports = {
     // =====================================================================
     // v12.5.14 — Reportado en consultorio: los avisos llegaban también con la
     // pestaña líder abierta en .../viva/Acceso/ (asignación de turnos), un
-    // módulo de Everest sin nada que ver con la agenda del día. maybeNotify
-    // debe seguir anotando el estado (state.notified) para no perder la
-    // transición, pero SUPRIMIR el aviso audible/visual fuera de HCHealth.
+    // módulo de Everest sin nada que ver con la agenda del día. El aviso
+    // SIEMPRE debe dispararse (nunca perderse) — solo debe MOSTRARSE dentro
+    // del módulo clínico HCHealth: si ninguna pestaña está ahí en el instante
+    // de la transición, queda en cola y se dispara en cuanto una lo esté.
     // =====================================================================
-    t.caso("maybeNotify: fuera de HCHealth (Acceso) no notifica, pero sí anota el estado", () => {
+    t.caso("maybeNotify: fuera de HCHealth (Acceso) NO muestra el aviso, pero SIEMPRE lo audita y lo deja en cola", () => {
       const c = cargar();
       c.env.win.location.pathname = "/viva/Acceso/";
+      let notifCount = 0;
+      c.env.win.Notification = class { constructor() { notifCount++; } };
+      c.env.win.Notification.permission = "granted";
       const base = { hora_texto: "08:00 AM", doc_id: "789", key: "789@08:00 AM", nombre: "LUIS", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });      // siembra
       c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, pero fuera de HCHealth
-      t.igual(atiempoHoy(c), 0, "el aviso se suprime mientras la pestaña líder está en Acceso");
-      t.igual(c.api.__state.notified.get("789@08:00 AM"), c.api.nkey({ color: "VERDE", reason: "" }), "el estado sí quedó anotado, sin duplicar el aviso al volver a HCHealth");
+      t.igual(atiempoHoy(c), 1, "la auditoría (bumpStat) SIEMPRE se registra, con la hora real de la transición");
+      t.igual(notifCount, 0, "el aviso visible/audible NO se muestra mientras la pestaña líder está en Acceso");
+      const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
+      t.igual(cola.length, 1, "el aviso queda en cola, no se pierde");
+      t.igual(cola[0].uid, "789@08:00 AM|VERDE");
     });
 
-    t.caso("maybeNotify: al volver a HCHealth, la MISMA transición ya anotada no vuelve a notificar (no hay aviso fantasma tardío)", () => {
+    t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
       const c = cargar();
       c.env.win.location.pathname = "/viva/Acceso/";
+      let notifCount = 0;
+      c.env.win.Notification = class { constructor() { notifCount++; } };
+      c.env.win.Notification.permission = "granted";
       const a = { hora_texto: "09:00 AM", doc_id: "321", key: "321@09:00 AM", nombre: "ANA", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...a, estado: "Sin presentarse", color: "AZUL", arrival: false });
-      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // suprimido: Acceso
+      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // encolado: la pestaña líder está en Acceso
+      t.igual(notifCount, 0, "todavía no se muestra");
+
       c.env.win.location.pathname = "/viva/HCHealth/";
-      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // mismo color: nkey ya coincide, no reprocesa
-      t.igual(atiempoHoy(c), 0, "no reaparece como aviso tardío: la transición ya se había anotado");
+      c.api._flushAvisosPendientes();
+      t.igual(notifCount, 1, "en cuanto una pestaña está en HCHealth, el aviso pendiente se dispara");
+      const colaTrasFlush = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
+      t.igual(colaTrasFlush.length, 0, "la cola queda vacía tras el flush");
+
+      // Dos pestañas en HCHealth notando la cola casi al mismo tiempo: crossTabDup (misma
+      // guardia del "doble-líder transitorio") evita que el paquete completo se repita —
+      // el problema original que llevó al diseño de un solo líder. Se comprueba por la
+      // marca que deja crossTabDup (namespace "full|"), no solo por notifCount: notify()
+      // ya tiene su PROPIA guardia interna (avisoYaVisto) que enmascararía la ausencia de
+      // esta si solo se mirara notifCount.
+      c.api._dispararAvisoReal({ color: "VERDE", title: "x", body: "y", persist: false, uid: "321@09:00 AM|VERDE", flashText: "x" });
+      t.igual(notifCount, 1, "el mismo aviso disparado por otra pestaña casi al mismo tiempo no se repite");
+      t.cierto(c.api.crossTabDup("full|321@09:00 AM|VERDE"), "_dispararAvisoReal marcó crossTabDup en el namespace 'full|' al disparar la primera vez");
+    });
+
+    t.caso("_flushAvisosPendientes: fuera de HCHealth no toca la cola", () => {
+      const c = cargar();
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "x|ROJO", flashText: "t" });
+      c.api._flushAvisosPendientes();
+      const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
+      t.igual(cola.length, 1, "sin ninguna pestaña en HCHealth, el aviso sigue esperando en cola");
     });
 
     // =====================================================================

@@ -4997,6 +4997,46 @@
   };
   // Clave de notificación: el MORADO se distingue por motivo (tiempo vs 3+ PyM) para no confundirlos.
   function nkey(a) { return a.color === "MORADO" ? "MORADO:" + (a.reason || "") : a.color; }
+  // =====================================================================
+  //  COLA DE AVISOS PENDIENTES (v12.5.14)
+  //  Reportado en consultorio: el aviso audible/visual (Windows/toast/sonido/cartel)
+  //  llegaba también con la pestaña líder abierta en .../viva/Acceso/ — un módulo de
+  //  Everest sin nada que ver con la agenda del día. Pero SIEMPRE debe dispararse, no
+  //  perderse: solo debe vivir dentro del módulo clínico HCHealth. Si ninguna pestaña
+  //  está ahí en el instante de la transición, el aviso queda en cola (localStorage:
+  //  cruza pestañas y sobrevive a que la pestaña líder se cierre) y se dispara —UNA
+  //  sola vez— en cuanto CUALQUIER pestaña (líder o no) note que está en HCHealth.
+  //  crossTabDup() en _dispararAvisoReal es la misma guardia ya usada para el
+  //  "doble-líder transitorio": si dos pestañas en HCHealth notan la cola casi al
+  //  mismo tiempo, solo la primera dispara el paquete completo (sonido, cartel,
+  //  ventana emergente) — así NO se repite el aviso en todas las pestañas abiertas,
+  //  el problema original que llevó al diseño de un solo líder.
+  // =====================================================================
+  const AVISOS_PENDIENTES_KEY = "vgl_avisos_pendientes";
+  function _encolarAvisoPendiente(p) {
+    try {
+      const cola = readJSON(AVISOS_PENDIENTES_KEY, []) || [];
+      if (cola.some((x) => x && x.uid === p.uid)) return;    // ya en cola: no duplicar
+      cola.push(p);
+      writeJSON(AVISOS_PENDIENTES_KEY, cola.slice(-50));      // tope defensivo
+    } catch (e) {}
+  }
+  function _flushAvisosPendientes() {
+    if (!_enModuloHCHealth()) return;
+    let cola;
+    try { cola = readJSON(AVISOS_PENDIENTES_KEY, []) || []; } catch (e) { return; }
+    if (!cola.length) return;
+    try { writeJSON(AVISOS_PENDIENTES_KEY, []); } catch (e) {}
+    cola.forEach(_dispararAvisoReal);
+  }
+  function _dispararAvisoReal(p) {
+    if (crossTabDup("full|" + p.uid)) return;   // dos pestañas en HCHealth a la vez: solo dispara la primera
+    notify(p.color, p.title, p.body, p.persist, p.uid);
+    if (p.color === "ROJO") { startNag("ROJO"); bigAlert("ROJO", p.title, p.body); }
+    else playTone(p.color);
+    startFlash(p.flashText, p.color);
+    popupAlert(p.color, p.title, p.body);
+  }
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
     if (a.color === "MORADO" && a.reason !== "tiempo") return;
@@ -5013,20 +5053,15 @@
     if (a.color === "VERDE" && !a.arrival) return;
 
     const cfg = NOTIFY[a.color]; if (!cfg) return;
-    // v12.5.14 — El estado ya quedó anotado arriba (state.notified), así que la
-    // transición no se pierde: si el médico está fuera del módulo clínico HCHealth
-    // (p. ej. en Acceso), el aviso audible/visual se suprime aquí, pero al volver a
-    // HCHealth el panel refleja el color real de inmediato sin reabrir el aviso.
-    if (!_enModuloHCHealth()) return;
+    // bumpStat/logEvent quedan SIEMPRE, con la hora REAL de la transición (auditoría de
+    // puntualidad/fraude) — no dependen de en qué módulo esté el médico en este instante.
     bumpStat(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima");
     if (a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     const body = `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`;
-    notify(a.color, title, body, cfg.persist, a.key + "|" + a.color);
-    if (a.color === "ROJO") { startNag("ROJO"); bigAlert("ROJO", title, body); }
-    else playTone(a.color);
-    startFlash(`${cfg.icon} ${a.estado} · ${a.hora_texto}`, a.color);
-    popupAlert(a.color, title, body);
+    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}` };
+    if (_enModuloHCHealth()) _dispararAvisoReal(payload);
+    else _encolarAvisoPendiente(payload);
   }
   function updateBell() {
     const b = document.getElementById("vgl-bell"); if (!b) return;
@@ -10551,6 +10586,13 @@
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
       if (secc === "historia") createLabInjectorUI();
 
+      // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
+      // dispara los avisos que quedaron en cola mientras ninguna pestaña estaba ahí (ver
+      // _encolarAvisoPendiente/_dispararAvisoReal). Corre en TODA pestaña, sin condicionar
+      // a leader: si el médico tiene la agenda en una pestaña no-líder, el aviso debe
+      // salir ahí igual, no solo en la pestaña que hace el sondeo del API.
+      _flushAvisosPendientes();
+
       // v12.3.21 — Antes, aunque tickApi() ya sondea el API en TODA la aplicación desde
       // v12.3.11 (más abajo), el PROCESADO de esa respuesta —calcular colores, disparar
       // maybeNotify— solo corría dentro de enVistaVigilada. Reportado en consultorio: con
@@ -10579,7 +10621,12 @@
           // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
           state.summarized = true;
           processed.forEach((a) => state.notified.set(a.key, nkey(a)));
-          if (leader && _enModuloHCHealth()) helloOncePerDay(processed);
+          // v12.5.14 — helloOncePerDay ya se auto-protege contra duplicados entre pestañas
+          // (localStorage "vgl_hello" por día): no depende de "leader" para eso. Quitar esa
+          // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña
+          // esté en HCHealth, aunque la pestaña líder (la que sondea el API) esté en otro
+          // módulo de Everest en ese momento.
+          if (_enModuloHCHealth()) helloOncePerDay(processed);
         } else if (leader) {
           processed.forEach(maybeNotify);
         }
