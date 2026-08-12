@@ -312,17 +312,46 @@ anclan a ella. El modelo driver/pasajero **describe la práctica real**, no es t
 3. **La lista de exámenes del siguiente control vive en el propio modal**, junto a la FTL, no en
    otra pantalla: es lo que justifica la fecha. Cada examen dice **por qué está ahí** (vencido,
    por vencer, o adelantado para no hacer volver al paciente).
-4. **El paquete se pide a Everest** con `ObtenerPaqueteProgramasCupsByCitaId`, no se reconstruye
-   desde `PYM_CATALOG`. Así, cuando la IPS cambie el paquete, el script se entera solo. `PYM_CATALOG`
-   se conserva como respaldo si el endpoint falla, y **la discrepancia se registra**.
+4. **El paquete oficial es el PUNTO DE PARTIDA, no la autoridad.** (Corregido por el médico el
+   12-08-2026 — la versión anterior de esta decisión estaba equivocada.)
+
+   El paquete HTA que devuelve Everest **contiene exámenes mal escogidos para esta población**, y el
+   médico los **quita** y **añade a mano** los que faltan. Lo que se ordena de verdad es esa lista
+   curada, no la que llega del endpoint.
+
+   Por tanto:
+   - Se usa **`paqueteProgramaId=1` (HTA) como base única**. No hay que perseguir los ids de DM2 ni
+     ERC: se parte de HTA y se cura.
+   - La **lista curada del médico manda** sobre el paquete oficial. El endpoint sirve para dos cosas:
+     resolver los ids internos de CUPS que Everest necesita, y **avisar cuando la IPS cambie el
+     paquete** (si aparece o desaparece un código respecto a la lista curada, se registra y se dice).
+   - **Qué se ordena de esa lista curada lo decide la VIGENCIA de cada analito**, no el paquete: un
+     examen vigente no se pide otra vez salvo por la regla de Cosecha (§9.4).
+
+   ⚠️ **Patrón detectado, pendiente de confirmar:** el paquete trae `903028 MICROALBUMINURIA
+   SEMIAUTOMATIZADA` y en la captura el médico añade a mano «MICROALBUMINURIA **AUTOMATIZADA** EN
+   ORINA PARCIAL» — una variante distinta. Es el mismo tipo de corrección que ya está documentada en
+   v12.4.0 con el LDL (`903816` semiautomatizado para tamizaje de sanos frente a `903817`
+   automatizado para crónicos). **Sospecha razonable, no confirmada:** el paquete oficial trae
+   variantes *semi*automatizadas donde esta población necesita las *automatizadas*. No se implementa
+   nada sobre esta sospecha hasta tener la lista curada real.
 5. **Ordenar: premarcado, nunca automático.** El script deja el ordenamiento listo —paquete +
    pasajeros + lo que el motor añada— con **cada repetición señalada** (Hallazgo C), y el médico
    confirma con un clic. Se conserva `markOrdenesCreadasHoy` con su regla de agrupador real.
 
-## 9.3 Lo que falta capturar antes de implementar R7
+## 9.4 Cosecha — CERRADA por el médico (12-08-2026)
 
-1. **Los `paqueteProgramaId` de los demás paquetes** (DM2, ERC). Solo se conoce `1` = HTA.
+Se adelanta un examen **aún vigente** para que el paciente venga una sola vez, **solo si le queda
+menos del 25 % de su vigencia** — el límite que trae el propio motor. Por encima de eso, el examen
+se deja para su fecha y no se desperdicia.
+
+## 9.5 Lo que falta capturar antes de implementar R7
+
+1. **LA LISTA CURADA REAL — bloqueante.** Los CUPS finales que el médico ordena de verdad, después
+   de quitar del paquete lo que sobra y añadir lo que falta. La captura muestra los NOMBRES de lo
+   añadido (Microalbuminuria automatizada, PTH molécula intacta, Albúmina en suero, Fósforo en
+   suero, Hemoglobina, HbA1c automatizada) pero **no sus códigos CUPS**, y **no muestra qué se
+   quitó**. Sin esa lista no se implementa nada: sería inventar códigos clínicos.
 2. **El contrato exacto del diálogo «Repetirlo»**: qué lo dispara y con qué criterio. Sin esto, el
    script puede señalar repeticiones donde Everest no las vería, o al revés.
-3. **Confirmar con el médico** si el paquete oficial debe ordenarse COMPLETO (incluidos hemograma
-   y los dos CUPS del RAC que hoy faltan) o si él deliberadamente pide menos.
+3. ~~Los `paqueteProgramaId` de DM2 y ERC~~ — **descartado por el médico**: se parte de HTA y se cura.
