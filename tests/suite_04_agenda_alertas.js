@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos"],
+  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -289,6 +289,70 @@ module.exports = {
       t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true));
       t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", [], true));
       t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", null, true));
+    });
+
+    // =====================================================================
+    // v12.5.10 — Reportado desde consultorio con pantallazo: un paciente con PyM
+    // pendiente Y labs RCV vencidos a la vez recibía DOS modales de pantalla completa
+    // superpuestos e ilegibles, porque checkRecordatorioPym/checkAbandonoPES/
+    // checkLabsVencidos corren uno tras otro en el mismo tick sin mirarse entre sí.
+    // otroAvisoDePacienteAbierto() es el guard que evita la superposición.
+    // =====================================================================
+    t.caso("otroAvisoDePacienteAbierto: detecta cualquiera de los tres modales grandes de paciente, y solo esos", () => {
+      const c = cargar({ silencioso: true });
+      t.falso(c.api.otroAvisoDePacienteAbierto(), "sin ningún modal en el DOM, no hay colisión");
+      for (const id of ["vgl-pym-modal", "vgl-pes-modal", "vgl-labsv-modal"]) {
+        c.env.doc.getElementById = (elId) => (elId === id ? {} : null);
+        t.cierto(c.api.otroAvisoDePacienteAbierto(), `debe detectar #${id} abierto`);
+      }
+      c.env.doc.getElementById = (elId) => (elId === "vgl-modal" ? {} : null); // el cartel de fraude no cuenta
+      t.falso(c.api.otroAvisoDePacienteAbierto(), "el cartel de fraude (#vgl-modal) es otra familia, no debe bloquear");
+    });
+
+    t.caso("checkAbandonoPES: si el aviso de labs vencidos ya está en pantalla, se pospone en vez de superponerse", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "999888777";
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pymAbandono = new Set([key]);
+      // Paciente abierto + #vgl-labsv-modal ya en el DOM: simula que checkLabsVencidos
+      // disparó primero en este mismo tick, tal como ocurrió en el pantallazo real.
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return elTexto("");
+        if (id === "vgl-labsv-modal") return {};
+        return null;
+      };
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
+      const uid = "pes|" + key;
+
+      c.api.checkAbandonoPES();
+      t.falso(c.api.avisoYaVisto(uid), "con otro modal ya abierto, el aviso de PES NO se marca como visto todavía");
+
+      // El médico cierra el aviso de labs vencidos con "Entendido": el siguiente tick
+      // ya no encuentra colisión y el aviso de PES sale por su cuenta, sin perderse.
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : null);
+      c.api.checkAbandonoPES();
+      t.cierto(c.api.avisoYaVisto(uid), "sin colisión, el aviso de PES se muestra y queda marcado como visto");
+    });
+
+    await t.casoAsync("checkLabsVencidos: si el aviso de PyM ya está en pantalla para el mismo paciente, se pospone (reproduce el pantallazo real)", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+
+      // #vgl-pym-modal ya en el DOM: el recordatorio de PyM disparó primero en este tick.
+      const getIdOriginal = c.env.doc.getElementById;
+      c.env.doc.getElementById = (id) => (id === "vgl-pym-modal" ? {} : getIdOriginal(id));
+      c.api.checkLabsVencidos();
+      t.falso(c.api.avisoYaVisto(uid), "con el aviso de PyM ya abierto, labs vencidos NO se superpone");
+
+      // El médico cierra el aviso de PyM: el siguiente tick ya puede mostrar labs vencidos.
+      c.env.doc.getElementById = getIdOriginal;
+      c.api.checkLabsVencidos();
+      t.cierto(c.api.avisoYaVisto(uid), "sin colisión, labs vencidos se muestra y queda marcado como visto");
     });
 
   }

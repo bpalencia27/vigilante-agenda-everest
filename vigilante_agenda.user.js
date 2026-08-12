@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.9
+// @version      12.5.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,22 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.10 — 12-08-2026: LOS AVISOS GRANDES DE PACIENTE YA NO SE SUPERPONEN. Pantallazo
+  real de consultorio: un paciente con PyM pendiente (Tamización de VIH) Y labs RCV
+  vencidos (Uroanálisis) a la vez mostraba los DOS modales de pantalla completa AL MISMO
+  TIEMPO, uno encima del otro — nombre del paciente duplicado, pie de página duplicado,
+  botón "Entendido" duplicado, ilegible. Causa: checkRecordatorioPym, checkAbandonoPES y
+  checkLabsVencidos corren uno tras otro en el mismo tick (10091), cada uno decide por su
+  cuenta si le toca mostrar SU modal, y ninguno mira si otro de los tres ya está abierto.
+  Nuevo guard otroAvisoDePacienteAbierto() (mira #vgl-pym-modal/#vgl-pes-modal/
+  #vgl-labsv-modal en el DOM): si cualquiera de los otros dos ya está en pantalla, el
+  tercero NO se marca como visto todavía y se pospone — el siguiente tick (por defecto
+  5 s) lo reintenta solo, y en cuanto el médico cierra el primero con "Entendido" el
+  siguiente sale por su cuenta. Ningún aviso se pierde, solo se ponen en fila. El cartel
+  de fraude (#vgl-modal) es una familia aparte y no entra en este guard.
 */
 
 /*
@@ -639,7 +655,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4249,6 +4265,20 @@
       return "";
     } catch (e) { return ""; }
   }
+  // v12.5.10 — Los tres avisos grandes de paciente (PyM, abandono PES, labs RCV vencidos)
+  // se calculan por separado y podian coincidir en el MISMO tick para el mismo paciente
+  // (p. ej. PyM pendiente + labs vencidos a la vez): cada check creaba su propio overlay
+  // de pantalla completa sin mirar si otro ya estaba abierto, y los dos quedaban
+  // superpuestos e ilegibles (reportado en consultorio con pantallazo). Este guard hace
+  // que, si ya hay uno de los tres en pantalla, los demas NO se marquen como vistos
+  // todavia (avisoMarcarVisto se salta) — el siguiente tick (cada 2-120s, por defecto 5s)
+  // los reintenta solo, y en cuanto el medico cierra el primero con "Entendido" el
+  // siguiente aparece por su cuenta. Nunca se pierde un aviso, solo se ponen en fila.
+  function otroAvisoDePacienteAbierto() {
+    return !!(document.getElementById("vgl-pym-modal") ||
+      document.getElementById("vgl-pes-modal") ||
+      document.getElementById("vgl-labsv-modal"));
+  }
   // Una vez por paciente por día: se apoya en el mismo registro (avisoYaVisto/Marcar)
   // que ya usan las notificaciones — nada nuevo que mantener.
   function checkRecordatorioPym() {
@@ -4264,6 +4294,7 @@
       const pend = pymPendientesRestantes(doc); if (!pend.length) return;
       const uid = "pymrem|" + key;
       if (avisoYaVisto(uid)) return;
+      if (otroAvisoDePacienteAbierto()) return;
       avisoMarcarVisto(uid);
       const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
       const esPes = S.abandonoPES !== false && state.pymAbandono && state.pymAbandono.has(key);
@@ -4547,6 +4578,7 @@
       if (!state.pymAbandono || !state.pymAbandono.has(key)) return;
       const uid = "pes|" + key;
       if (avisoYaVisto(uid)) return;
+      if (otroAvisoDePacienteAbierto()) return;
       avisoMarcarVisto(uid);
       const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
       abandonoPESAlert(cita ? cita.nombre : "");
@@ -4599,6 +4631,7 @@
       const key = normalizeKey(doc); if (!key) return;
       const uid = "labsv|" + key;
       if (avisoYaVisto(uid)) return;
+      if (otroAvisoDePacienteAbierto()) return;
       avisoMarcarVisto(uid);
       const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
       labsVencidosAlert(cita ? cita.nombre : "", faltantes);
