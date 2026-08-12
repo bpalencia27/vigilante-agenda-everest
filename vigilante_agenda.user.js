@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.6
+// @version      12.5.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,34 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.7 — 11-08-2026: AVISO ROJO DE LABORATORIOS RCV SIN RESULTADO EN 180 DÍAS (pedido
+  explícito del médico, simplifica el enfoque de estadificación renal por Cockcroft-Gault
+  que se había planteado antes — queda pendiente para otra sesión si se retoma). A TODO
+  paciente se le busca ahora el resultado MÁS RECIENTE de 7 analitos (Colesterol Total,
+  Colesterol HDL, Triglicéridos, Glucosa en Suero, Uroanálisis, Creatinina en Suero, RAC) y,
+  si a alguno le falta un resultado en los últimos 180 días (ausente o vencido), se avisa en
+  ROJO al abrir la historia — mismo patrón "una vez por paciente por día" que
+  checkRecordatorioPym/checkAbandonoPES, y lee SOLO lo que el robot de Athenea ya
+  pre-cargó (_labsPrefetch), nunca dispara su propia consulta. HbA1c se sigue extrayendo
+  (whitelist de siempre) pero NUNCA entra en esta regla (no todo paciente es diabético);
+  PTH, Hemoglobina, Fósforo y Albúmina tampoco entran: esos solo se autocompletan en
+  Everest si Athenea trae resultado, y si no, se omiten sin aviso — comportamiento que ya
+  existía sin cambios.
+  Piezas nuevas: _ultimaFechaPorAnalito (extraída de injectLabsIntoCronicos, donde vivía
+  inline desde v12.5.6, para reutilizar la misma regla "gana la fecha más reciente"),
+  _analitosRcvVencidos, labsVencidosAlert (modal calcado de abandonoPESAlert con la paleta
+  --c-rojo), checkLabsVencidos, interruptor + botón "Probar" en Ajustes.
+  Revisión adversarial (3 lentes, 3 hallazgos, 3 confirmados, 0 refutados): un resultado
+  NUMÉRICO 0 (p. ej. RAC=0 en un paciente sano) es un valor real, pero `||` lo trataba como
+  ausente (0 es falsy) — con este aviso nuevo, eso se traducía en un falso ROJO pese a
+  existir un resultado vigente; corregido con _valorCrudoLab (solo descarta
+  null/undefined/cadena vacía, nunca un 0 legítimo). Además: prueba reforzada para la
+  mezcla real "1 analito vencido + 6 nunca realizados" en la misma llamada, y prueba de
+  no-excepción para labsVencidosAlert con datos realistas y con lista vacía.
+  Banco: 596 comprobaciones, cobertura 296/322 (91.9%).
 */
 
 /*
@@ -552,7 +580,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1650,6 +1678,48 @@
       return { iso: fhSol.iso, hora: horaSol, key: "__vglFechaSolicitud" };
   }
 
+  // v12.5.7 — Extraído de injectLabsIntoCronicos (donde vivía como "candidatosPorClave")
+  // para reutilizar la MISMA regla en el nuevo aviso de laboratorios RCV vencidos
+  // (checkLabsVencidos): dado un labsArray de Athenea, agrupa por analito del whitelist
+  // sérico y devuelve, para cada uno, el resultado con la fecha MÁS RECIENTE (v12.5.6 —
+  // una fecha real siempre le gana a "sin fecha"; entre dos con fecha, la mayor ISO gana;
+  // empate o ambas sin fecha, se conserva la primera vista, estable). No toca los
+  // componentes de orina (ruta aparte, ver inyectarComponenteOrina) ni cuenta nada más
+  // allá de los pendientes que él mismo descarta.
+  // v12.5.7 — CONFIRMADO en la revisión adversarial: `lab.Resultado || lab.resultado ||
+  // lab.valor` trataba un resultado NUMÉRICO 0 (p. ej. RAC=0 en un paciente sano, un valor
+  // real y clínicamente posible) como si estuviera ausente (0 es falsy en JS) — con el
+  // nuevo aviso de laboratorios vencidos, eso se traducía en un falso aviso ROJO ("nunca
+  // realizado") pese a existir un resultado real. Se descarta SOLO null/undefined/cadena
+  // vacía, nunca un 0 legítimo, conservando el mismo orden de respaldo entre campos.
+  const _valorCrudoLab = (v) => (v === null || v === undefined || String(v).trim() === "") ? undefined : v;
+  function _ultimaFechaPorAnalito(labsArray) {
+      const candidatos = new Map();
+      let pendientesWhitelist = 0;
+      if (!Array.isArray(labsArray)) return { candidatos, pendientesWhitelist };
+      labsArray.forEach((lab) => {
+          const matched = _matchLabInWhitelist(lab);
+          if (!matched) return;
+          const resultVal = _valorCrudoLab(lab.Resultado) ?? _valorCrudoLab(lab.resultado) ?? _valorCrudoLab(lab.valor);
+          if (resultVal === undefined) return;
+          // v11.0.1 — Un analito que aún NO tiene resultado ("PENDIENTE", o estado 1 en
+          // Athenea) no cuenta como candidato: escribirlo sería mostrar un resultado que
+          // todavía no existe.
+          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientesWhitelist++; return; }
+          const fechaInfo = _extractAtheneaFecha(lab);
+          const resultDate = fechaInfo ? fechaInfo.iso : null;
+          const previo = candidatos.get(matched.key);
+          if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) {
+              // Repetición del mismo analito con fecha igual, más vieja, o sin fecha frente
+              // a un candidato que ya tiene una: se descarta, avisando una sola vez.
+              if (!_avisoCasillaYaEscrita.has(matched.key)) { _avisoCasillaYaEscrita.add(matched.key); console.warn("[Vigilante] repetición del mismo analito, se conserva la fecha más reciente:", matched.key); }
+              return;
+          }
+          candidatos.set(matched.key, { lab, matched, resultVal, fechaInfo, resultDate });
+      });
+      return { candidatos, pendientesWhitelist };
+  }
+
   function injectLabsIntoCronicos(labsArray) {
       let count = 0;
       let pendientes = 0;
@@ -1706,18 +1776,9 @@
           reclamar();
       };
 
-      // v12.5.6 — CAMBIO PEDIDO POR EL MÉDICO: antes "el primero de la lista gana" (el
-      // resto se descartaba con solo un aviso), asumiendo que Athenea siempre entrega las
-      // solicitudes de más reciente a más antigua — un supuesto de ORDEN, no una
-      // comparación real de fechas. Ahora se recorre TODO labsArray primero, se agrupan
-      // los candidatos por analito, y GANA la repetición con la FECHA más reciente de
-      // verdad (una con fecha siempre le gana a una sin fecha; entre dos con fecha, la
-      // mayor ISO gana; empate o ambas sin fecha, se conserva la primera vista, estable).
-      // Con la ventana de Athenea ya acotada por tarjeta (v12.5.5), varias solicitudes del
-      // mismo analito ya no se cruzan entre sí — esto solo decide, con evidencia real,
-      // cuál de ellas es la vigente para escribir en Crónicos.
-      const candidatosPorClave = new Map();
-      labsArray.forEach(lab => {
+      // v12.3.37 — Diagnóstico de orina y componentes por su ruta propia (no whitelist
+      // sérico): sigue recorriendo labsArray directamente, sin pasar por el agrupador.
+      labsArray.forEach((lab) => {
           if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
               try {
                   const deOrinaTodos = labsArray.filter(_esAnalitoDeOrina);
@@ -1732,35 +1793,21 @@
                       }))));
               } catch (e) {}
           }
-
-          const matched = _matchLabInWhitelist(lab);
-          if (!matched) {
-              // Filtro estricto: solo los 13 laboratorios autorizados… y, desde v12.3.37,
-              // los componentes del panel de orina por su ruta propia.
-              if (_esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
-              return;
-          }
-
-          const resultVal = lab.Resultado || lab.resultado || lab.valor;
-          if (!resultVal) return;
-
-          // v11.0.1 — Un analito que aún NO tiene resultado ("PENDIENTE", o estado 1 en
-          // Athenea) se estaba escribiendo en la historia clínica COMO SI FUERA un
-          // resultado. Se excluye por valor conocido, no por lista blanca de formatos,
-          // para no perder los resultados cualitativos legítimos ("Negativo", "Normal").
-          if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientes++; return; }
-
-          const fechaInfo = _extractAtheneaFecha(lab);
-          const resultDate = fechaInfo ? fechaInfo.iso : null;
-          const previo = candidatosPorClave.get(matched.key);
-          if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) {
-              // Repetición del mismo analito con fecha igual, más vieja, o sin fecha frente
-              // a un candidato que ya tiene una: se descarta, avisando una sola vez.
-              if (!_avisoCasillaYaEscrita.has(matched.key)) { _avisoCasillaYaEscrita.add(matched.key); console.warn("[Vigilante] repetición del mismo analito, se conserva la fecha más reciente:", matched.key); }
-              return;
-          }
-          candidatosPorClave.set(matched.key, { lab, matched, resultVal, fechaInfo, resultDate });
+          // Filtro estricto: solo los 13 laboratorios autorizados (whitelist sérico, ver
+          // abajo)… y, desde v12.3.37, los componentes del panel de orina por su ruta propia.
+          if (!_matchLabInWhitelist(lab) && _esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
       });
+
+      // v12.5.6 — CAMBIO PEDIDO POR EL MÉDICO: antes "el primero de la lista gana" (el
+      // resto se descartaba con solo un aviso), asumiendo que Athenea siempre entrega las
+      // solicitudes de más reciente a más antigua — un supuesto de ORDEN, no una
+      // comparación real de fechas. Ahora GANA la repetición con la FECHA más reciente de
+      // verdad (v12.5.7 — extraído a _ultimaFechaPorAnalito para compartirlo con el aviso
+      // de laboratorios vencidos). Con la ventana de Athenea ya acotada por tarjeta
+      // (v12.5.5), varias solicitudes del mismo analito ya no se cruzan entre sí — esto
+      // solo decide, con evidencia real, cuál de ellas es la vigente para Crónicos.
+      const { candidatos: candidatosPorClave, pendientesWhitelist } = _ultimaFechaPorAnalito(labsArray);
+      pendientes += pendientesWhitelist;
 
       candidatosPorClave.forEach(({ lab, matched, resultVal, fechaInfo, resultDate }) => {
           // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la
@@ -1857,6 +1904,46 @@
           } catch (e) {}
       });
       return { count, pendientes, sinCasilla, respetadas };
+  }
+
+  // =====================================================================
+  //  v12.5.7 — AVISO DE LABORATORIOS RCV SIN RESULTADO EN 180 DÍAS
+  //  Pedido explícito del médico (11-08-2026): a TODO paciente se le debe buscar el
+  //  analito MÁS RECIENTE de este grupo de 7 — si a alguno le falta un resultado
+  //  vigente (dentro de los últimos 180 días), avisar en ROJO al abrir su historia.
+  //  HbA1c se sigue extrayendo (whitelist de siempre) pero, por pedido explícito,
+  //  NUNCA entra en esta regla de vigencia (no todo paciente es diabético). PTH,
+  //  Hemoglobina, Fósforo y Albúmina NO entran aquí tampoco: esos solo se
+  //  autocompletan en Everest si Athenea los trae, y si no, se omiten sin aviso —
+  //  eso ya lo hace injectLabsIntoCronicos con el whitelist completo, sin cambios.
+  // =====================================================================
+  const RCV_VIGENCIA_DIAS = 180;
+  const RCV_VIGENCIA_KEYS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS", "GLUCOSA", "UROANALISIS", "CREATININA", "RAC"];
+  const RCV_VIGENCIA_NOMBRES = {
+      COLESTEROL_TOTAL: "Colesterol Total",
+      COLESTEROL_HDL: "Colesterol HDL",
+      TRIGLICERIDOS: "Triglicéridos",
+      GLUCOSA: "Glucosa en Suero",
+      UROANALISIS: "Uroanálisis",
+      CREATININA: "Creatinina en Suero",
+      RAC: "RAC (Relación Albúmina/Creatinina)",
+  };
+  // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
+  // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
+  function _analitosRcvVencidos(labsArray, hoyIso) {
+      const hoy = _parseFechaHoraLike(hoyIso);
+      if (!hoy) return [];
+      const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
+      const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : []);
+      const faltantes = [];
+      for (const key of RCV_VIGENCIA_KEYS) {
+          const c = candidatos.get(key);
+          if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
+          const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
+          const dias = Math.round((hoyMs - fechaMs) / 86400000);
+          if (dias > RCV_VIGENCIA_DIAS) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
+      }
+      return faltantes;
   }
 
   // Interfaz de Usuario para activar la inyección
@@ -2129,6 +2216,7 @@
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
     recordatorioPym: true,    // recordatorio (calmado) de PyM pendiente al abrir la historia
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
+    labsVencidos: true,       // aviso ROJO de laboratorios RCV sin resultado en los últimos 180 días (v12.5.7)
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
@@ -4358,6 +4446,58 @@
     } catch (e) {}
   }
 
+  // [COPY-UX] Alerta modal de laboratorios RCV sin resultado vigente (v12.5.7)
+  function labsVencidosAlert(nombre, faltantes, esPrueba) {
+    try {
+      let ov = document.getElementById("vgl-labsv-modal");
+      if (ov) ov.remove();
+      ov = document.createElement("div"); ov.id = "vgl-labsv-modal";
+      if (isLight()) ov.classList.add("light");
+      // El CSS de esta alerta vive al final de la hoja maestra de buildOverlay() (mismo
+      // patrón que el resto de modales): se inyecta UNA vez, aquí solo queda HTML puro.
+      const chips = (faltantes || []).map((f) => `<span class="vgl-labsv-chip">${escapeHtml(f.nombre)}</span>`).join("");
+      ov.innerHTML = `<div class="vgl-labsv-card">
+          <div class="vgl-labsv-ic" style="text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)">🧪</div>
+          <div class="vgl-labsv-t" style="font-size:12.5px;font-weight:800;color:var(--c-rojo);letter-spacing:1.1px;text-transform:uppercase">Laboratorios RCV sin resultado vigente</div>
+          <div class="vgl-labsv-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30)"></div>
+          <div class="vgl-labsv-lead">Este paciente no tiene resultado en los <b>últimos 180 días</b> para:</div>
+          <div class="vgl-labsv-list">${chips}</div>
+          <div class="vgl-labsv-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
+          <button class="vgl-labsv-ok">Entendido</button>
+        </div>`;
+      ov.querySelector(".vgl-labsv-n").textContent = nombre || "Paciente";
+      const ok = ov.querySelector(".vgl-labsv-ok");
+      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
+      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.labsv.entendido"); ov.remove(); });
+      if (!esPrueba) uxTrack("aviso.labsv.mostrado", { n: (faltantes || []).length });
+      document.body.appendChild(ov);
+      try { ok.focus(); } catch (e2) {}
+      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
+      playTone("ROJO");
+    } catch (e) {}
+  }
+  // Una vez por paciente por día, mismo registro de "vistos" que el resto de avisos.
+  // Independiente de PyM/PES: un paciente puede tener cualquier combinación de los tres,
+  // y cada uno sale por separado. Lee SOLO lo que el robot de Athenea ya pre-cargó
+  // (_labsPrefetch) — nunca dispara una consulta propia ni bloquea el tick esperando una;
+  // si la pre-carga de este paciente aún no llegó, simplemente no hay nada que revisar
+  // todavía y el siguiente tick lo reintenta solo.
+  function checkLabsVencidos() {
+    try {
+      if (!S.labsVencidos) return;
+      const doc = extractPacienteAbierto(); if (!doc) return;
+      if (!_labsPrefetch.labs || _labsPrefetch.docId !== doc) return;
+      const faltantes = _analitosRcvVencidos(_labsPrefetch.labs, todayStamp());
+      if (!faltantes.length) return;
+      const key = normalizeKey(doc); if (!key) return;
+      const uid = "labsv|" + key;
+      if (avisoYaVisto(uid)) return;
+      avisoMarcarVisto(uid);
+      const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key);
+      labsVencidosAlert(cita ? cita.nombre : "", faltantes);
+    } catch (e) {}
+  }
+
   // ---- NOTIFICACIONES POR COLORES (recuperado de la v2.5): toast en Windows + respaldo en la página ----
   function colorDot(color) {
     const c = COLORS[color] || COLORS.AZUL;
@@ -5746,6 +5886,51 @@
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
       .vgl-pes-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
+      /* v12.5.7 — Aviso de laboratorios RCV vencidos: mismo esqueleto de tarjeta que el
+         de prioridad cardiovascular (.vgl-pes-*), pero con la lista de chips del
+         recordatorio de PyM (.vgl-pym-*) para enumerar los analitos faltantes, y el rojo
+         de alerta (--c-rojo/--rgb-rojo) en vez del rosa cardiovascular. */
+      #vgl-labsv-modal{
+        position:fixed;inset:0;z-index:2147483647;
+        display:flex;align-items:center;justify-content:center;
+        background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
+      }
+      .vgl-labsv-card{
+        background:linear-gradient(165deg,rgba(var(--rgb-rojo),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-rojo),.50);
+        border-radius:var(--r-surface);padding:28px 32px;
+        max-width:420px;text-align:center;
+        box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
+        font-family:var(--font-stack);color:var(--fg)
+      }
+      .vgl-labsv-ic{
+        width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
+        display:flex;align-items:center;justify-content:center;font-size:22px;
+        background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
+        box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
+      }
+      .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
+      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-labsv-list{
+        display:flex;flex-wrap:wrap;gap:7px;
+        justify-content:center;margin-bottom:16px
+      }
+      .vgl-labsv-chip{
+        font-size:12px;font-weight:700;padding:6px 13px;
+        border-radius:var(--r-pill);
+        background:rgba(var(--rgb-rojo),.13);color:var(--fg);
+        border:1px solid rgba(var(--rgb-rojo),.35)
+      }
+      .vgl-labsv-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-ok{
+        border:0;border-radius:var(--r-chip);padding:10px 26px;
+        font-size:13px;font-weight:800;color:var(--bg-solid);
+        cursor:pointer;font-family:inherit;background:var(--c-rojo);
+        box-shadow:0 6px 18px rgba(var(--rgb-rojo),.25);
+        transition:transform .2s var(--spring),filter .15s var(--ease-out)
+      }
+      .vgl-labsv-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
 
       /* ---- Modales de Agendamiento / Ordenamiento — placas bento ---- */
       #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
@@ -6451,6 +6636,22 @@
       #vgl-root.perf~#vgl-pes-modal .vgl-pes-ok{box-shadow:none !important;transform:none !important}
       @media (prefers-reduced-motion:reduce){
         #vgl-pes-modal,#vgl-pes-modal *{animation:none !important;transition:none !important}
+      }
+      /* v12.5.7 — Mismas animaciones ya definidas arriba (vglPesPop/vglPesBeat son
+         genéricas, no específicas de PES): se reutilizan aquí, sin duplicar keyframes. */
+      #vgl-labsv-modal .vgl-labsv-card{animation:vglPesPop .42s var(--spring) both}
+      #vgl-labsv-modal .vgl-labsv-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-labsv-modal .vgl-labsv-ok:focus-visible{outline:2px solid var(--c-rojo);outline-offset:3px}
+      #vgl-root.perf~#vgl-labsv-modal,#vgl-root.perf~#vgl-labsv-modal *{
+        animation:none !important;transition:none !important;
+        backdrop-filter:none !important;-webkit-backdrop-filter:none !important;
+        text-shadow:none !important;
+      }
+      #vgl-root.perf~#vgl-labsv-modal .vgl-labsv-card{box-shadow:0 0 0 1px rgba(var(--rgb-rojo),.45),0 16px 44px rgba(0,0,0,.50) !important}
+      #vgl-root.perf~#vgl-labsv-modal .vgl-labsv-ic,
+      #vgl-root.perf~#vgl-labsv-modal .vgl-labsv-ok{box-shadow:none !important;transform:none !important}
+      @media (prefers-reduced-motion:reduce){
+        #vgl-labsv-modal,#vgl-labsv-modal *{animation:none !important;transition:none !important}
       }
 
       /* ==== [v12.3.13] CSS de los avisos toast (_renderToast) — antes inline en CADA toast (una copia por aviso); se movió aquí para inyectarse UNA vez. El color del estado NO se interpola en el CSS: cada pieza del toast lo fija inline como custom property (--tk) y con var(--c-*) directo, así el estilo computado queda idéntico ==== */
@@ -9308,6 +9509,7 @@
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
         <div class="vgl-fld"><label>Recordatorio al abrir la historia<span class="vgl-hint">Aviso al abrir la historia clínica si existen actividades preventivas pendientes.</span></label>${sw("c-pymrem", S.recordatorioPym)}</div>
         <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
+        <div class="vgl-fld"><label>Alerta de laboratorios RCV vencidos<span class="vgl-hint">Aviso en rojo al abrir la historia si Colesterol Total/HDL, Triglicéridos, Glucosa, Uroanálisis, Creatinina o RAC no tienen resultado en los últimos 180 días.</span></label>${sw("c-labsv", S.labsVencidos)}</div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
       </div>
@@ -9340,6 +9542,7 @@
         <div class="vgl-fld"><label>Recordatorio de carga PyM<span class="vgl-hint">Hora programada para verificar disponibilidad de la lista de prevención.</span></label><input type="time" id="c-rec" value="${escapeHtml(S.recordatorio)}"></div>
         <div class="vgl-fld"><label>Probar recordatorio<span class="vgl-hint">Muestra una vista previa del aviso de prevención.</span></label><button class="vgl-btn" id="c-pymtest">Probar</button></div>
         <div class="vgl-fld"><label>Probar alerta cardiovascular<span class="vgl-hint">Muestra una vista previa del aviso de prioridad cardiovascular.</span></label><button class="vgl-btn" id="c-pestest">Probar</button></div>
+        <div class="vgl-fld"><label>Probar alerta de laboratorios vencidos<span class="vgl-hint">Muestra una vista previa del aviso de laboratorios RCV sin resultado vigente.</span></label><button class="vgl-btn" id="c-labsvtest">Probar</button></div>
         <div class="vgl-fld"><label>Consulta automática de prevención<span class="vgl-hint">Consulta la lista del día en la plataforma de almacenamiento. En su ausencia, utiliza la base de referencia.</span></label>${sw("c-base", S.baseAuto)}</div>
         <div class="vgl-fld"><label>Enlace de la base de referencia<span class="vgl-hint">${escapeHtml((CONFIG?.SP?.respaldo?.name) || "ninguna")} — Identificador del archivo de referencia.</span></label><input type="text" id="c-fbid" placeholder="(predeterminado)" value="${escapeHtml(S.respaldoId)}"></div>
 <!-- v12.0.0: «Actualizar lista de prevención» y «Sincronizar almacenamiento» se movieron
@@ -9370,6 +9573,11 @@
     const pymBtn = q("#c-pymtest"); if (pymBtn) pymBtn.addEventListener("click", () => { uxTrack("ajustes.probar.pym"); pymAlert("Paciente de prueba", ["Tamización VIH", "Tamización de mama"], false, true); });
     bind("#c-pes", "abandonoPES", (n) => n.checked);
     const pesBtn = q("#c-pestest"); if (pesBtn) pesBtn.addEventListener("click", () => { uxTrack("ajustes.probar.pes"); abandonoPESAlert("Paciente de prueba", true); });
+    bind("#c-labsv", "labsVencidos", (n) => n.checked);
+    const labsvBtn = q("#c-labsvtest"); if (labsvBtn) labsvBtn.addEventListener("click", () => {
+      uxTrack("ajustes.probar.labsv");
+      labsVencidosAlert("Paciente de prueba", RCV_VIGENCIA_KEYS.map((key) => ({ key, nombre: RCV_VIGENCIA_NOMBRES[key] })), true);
+    });
     bind("#c-agend", "agendamientoRapido", (n) => n.checked);
     bind("#c-sms", "smsRecordatorio", (n) => n.checked);
     // v12.5.2 — Auto-inicio de sesión en Athenea. El interruptor solo activa/desactiva el
@@ -9894,6 +10102,7 @@
           }
           checkRecordatorioPym();
           checkAbandonoPES();
+          checkLabsVencidos();
         }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }

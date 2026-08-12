@@ -1,7 +1,7 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym"],
-  pruebas(t, api, env, cargar) {
+  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "fraudSound", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos"],
+  async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
     t.caso("colorAndAlert: un paciente en estado Sin presentarse pasa a AMBAR despues de la gracia (6 min)", () => {
@@ -159,6 +159,136 @@ module.exports = {
       c.api.maybeNotify({ ...b, estado: "Sin presentarse", color: "AZUL", arrival: false });
       c.api.maybeNotify({ ...b, estado: "Atendido", color: "VERDE", arrival: false });
       t.igual(atiempoHoy(c), 1, "VERDE sin llegada en vivo no suma otro aviso");
+    });
+
+    // =====================================================================
+    // v12.5.7 — checkLabsVencidos: aviso ROJO de laboratorios RCV sin resultado en 180
+    // días. Lee SOLO lo que el robot de Athenea ya pre-cargó (_labsPrefetch) — nunca
+    // dispara su propia consulta. Mismo patrón "una vez por paciente por día" que
+    // checkAbandonoPES/checkRecordatorioPym (avisoYaVisto/avisoMarcarVisto).
+    // =====================================================================
+    const DOC_LABSV = "111222333";
+    const elTexto = (txt) => ({ textContent: txt, closest: () => null });
+    function mockPacienteAbierto(c, doc) {
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
+    }
+    // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
+    // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
+    // (vieja -> vencido; reciente -> al día).
+    function planLabsVencidos(fechaAnalito) {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC_LABSV} <form id="5552026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "903818", NombreParametro: "COLESTEROL TOTAL", Resultado: "220", Fecha: fechaAnalito }]) }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+    // Variante "al día": entrega los 7 analitos de la regla de vigencia, todos con la
+    // MISMA fecha reciente — a diferencia de planLabsVencidos (que solo entrega uno, así
+    // que los otros 6 quedarían "faltantes" con toda razón: nunca se consultaron).
+    function planLabsAlDia(fechaAnalito) {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC_LABSV} <form id="5552026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({
+            dataObject: JSON.stringify([
+              { CodigoParametro: "903818", NombreParametro: "COLESTEROL TOTAL", Resultado: "180", Fecha: fechaAnalito },
+              { CodigoParametro: "903815", NombreParametro: "COLESTEROL HDL", Resultado: "45", Fecha: fechaAnalito },
+              { CodigoParametro: "903868", NombreParametro: "TRIGLICERIDOS", Resultado: "150", Fecha: fechaAnalito },
+              { CodigoParametro: "903841", NombreParametro: "GLUCOSA EN SUERO", Resultado: "90", Fecha: fechaAnalito },
+              { CodigoParametro: "907106", NombreParametro: "UROANALISIS", Resultado: "NORMAL", Fecha: fechaAnalito },
+              { CodigoParametro: "903895", NombreParametro: "CREATININA", Resultado: "0.9", Fecha: fechaAnalito },
+              { CodigoParametro: "8779", NombreParametro: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: fechaAnalito },
+            ]),
+          }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+
+    t.caso("checkLabsVencidos: interruptor apagado -> no revisa nada, nunca marca el aviso como visto", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.api.__S.labsVencidos = false;
+      t.noLanza(() => c.api.checkLabsVencidos());
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+      t.falso(c.api.avisoYaVisto(uid));
+    });
+
+    t.caso("checkLabsVencidos: sin paciente abierto -> no revisa nada, nunca lanza", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.getElementById = () => null; // sin #anamesis: no es historia clínica
+      t.noLanza(() => c.api.checkLabsVencidos());
+    });
+
+    t.caso("checkLabsVencidos: paciente abierto pero SIN pre-carga de Athenea todavía (_labsPrefetch vacío) -> no revisa nada, no lanza", () => {
+      // El robot de Athenea (autoFetchAtheneaLabsForActivePatient) puede tardar unos
+      // ticks en resolver; checkLabsVencidos NUNCA debe disparar su propia consulta ni
+      // bloquear esperando una — solo lee lo que ya esté cacheado.
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, DOC_LABSV);
+      t.noLanza(() => c.api.checkLabsVencidos());
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+      t.falso(c.api.avisoYaVisto(uid));
+    });
+
+    await t.casoAsync("checkLabsVencidos: analito RCV vencido de verdad (>180 días, vía autoFetch real) -> dispara el aviso una vez y queda marcado", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+      t.falso(c.api.avisoYaVisto(uid), "todavía no se ha revisado");
+      c.api.checkLabsVencidos();
+      t.cierto(c.api.avisoYaVisto(uid), "el analito vencido (2025-01-01, muy pasados los 180 días) disparó el aviso");
+      // Un segundo llamado el mismo día no debe reventar ni des-marcar el aviso.
+      t.noLanza(() => c.api.checkLabsVencidos());
+      t.cierto(c.api.avisoYaVisto(uid));
+    });
+
+    await t.casoAsync("checkLabsVencidos: analito RCV al día (dentro de 180 días, vía autoFetch real) -> no dispara ningún aviso", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsAlDia("2026-08-01") });
+      mockPacienteAbierto(c, DOC_LABSV);
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+      c.api.checkLabsVencidos();
+      t.falso(c.api.avisoYaVisto(uid), "los 7 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
+    });
+
+    t.caso("labsVencidosAlert: no lanza con una lista real de faltantes, ni con la lista vacía (v12.5.7)", () => {
+      // v12.5.7 — Limitación conocida del banco (documentada también para abrirInformeAthenea
+      // en la suite 15): el DOM simulado NO parsea innerHTML en nodos reales y
+      // querySelector() siempre devuelve null en cualquier elemento recién creado, así que
+      // NINGÚN modal de esta familia (pymAlert/abandonoPESAlert/labsVencidosAlert) puede
+      // verificarse aquí por contenido real del DOM — el propio try/catch interno de la
+      // función es lo que evita que ese null.textContent reviente hacia afuera. Esta prueba
+      // confirma al menos que checkLabsVencidos/labsVencidosAlert nunca dejan escapar una
+      // excepción con datos realistas, incluida la lista vacía (que en producción nunca
+      // debería ocurrir, porque checkLabsVencidos ya filtra faltantes.length antes de
+      // llamar, pero labsVencidosAlert no debe asumirlo).
+      const c = cargar({ silencioso: true });
+      const faltantesReales = [
+        { key: "COLESTEROL_TOTAL", nombre: "Colesterol Total" },
+        { key: "GLUCOSA", nombre: "Glucosa en Suero" },
+        { key: "RAC", nombre: "RAC (Relación Albúmina/Creatinina)" },
+      ];
+      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true));
+      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", [], true));
+      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", null, true));
     });
 
   }

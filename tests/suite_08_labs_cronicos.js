@@ -4,7 +4,8 @@ module.exports = {
     "_matchLabInWhitelist", "_findLabField",
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
-    "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto"
+    "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto",
+    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -524,6 +525,182 @@ module.exports = {
       t.igual(cuentaVolcados(), 1, "el mismo panel no se vuelve a imprimir (control de ruido v12.3.36)");
       c4.api.injectLabsIntoCronicos([{ NombreParametro: "CILINDROS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NO SE OBSERVAN", idEstado: 2 }]);
       t.igual(cuentaVolcados(), 2, "un nombre nuevo (otro paciente del día) sí genera evidencia nueva");
+    });
+
+    // =====================================================================
+    // v12.5.7 — _ultimaFechaPorAnalito (extraído de injectLabsIntoCronicos en v12.5.6)
+    // =====================================================================
+    t.caso("_ultimaFechaPorAnalito: entrada vacía o inválida -> Map vacío, nunca lanza", () => {
+      t.igual(testApi._ultimaFechaPorAnalito(null).candidatos.size, 0);
+      t.igual(testApi._ultimaFechaPorAnalito(undefined).candidatos.size, 0);
+      t.igual(testApi._ultimaFechaPorAnalito([]).candidatos.size, 0);
+      t.noLanza(() => testApi._ultimaFechaPorAnalito("no es un arreglo"));
+    });
+
+    t.caso("_ultimaFechaPorAnalito: analito no-whitelist se ignora; PENDIENTE cuenta pero no compite por la casilla", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { CodigoParametro: "999999", NombreParametro: "ALGO NO AUTORIZADO", Resultado: "1" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "PENDIENTE", idEstado: 1 },
+      ]);
+      t.igual(r.candidatos.size, 0);
+      t.igual(r.pendientesWhitelist, 1);
+    });
+
+    t.caso("_ultimaFechaPorAnalito: entre dos repeticiones del mismo analito, gana la de fecha MÁS RECIENTE (no la primera de la lista)", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2024-01-01" },
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "9.9", Fecha: "2024-06-01" },
+      ]);
+      const c = r.candidatos.get("GLUCOSA");
+      t.igual(c.resultVal, "9.9");
+      t.igual(c.resultDate, "2024-06-01");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: un resultado CON fecha le gana a uno SIN fecha, sin importar el orden", () => {
+      const r1 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+      ]);
+      t.igual(r1.candidatos.get("GLUCOSA").resultVal, "6.6");
+      const r2 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
+      ]);
+      t.igual(r2.candidatos.get("GLUCOSA").resultVal, "6.6");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: un resultado NUMÉRICO 0 es un valor real, no 'ausente' (v12.5.7 — hallazgo de la revisión adversarial)", () => {
+      // RAC=0 en un paciente sano es clínicamente posible: un 0 numérico (JS number, no
+      // el texto "0") es falsy y `||` lo descartaba como si el analito nunca se hubiera
+      // hecho -> _analitosRcvVencidos lo reportaba como "nunca realizado" (falso aviso
+      // ROJO) pese a existir un resultado real y reciente.
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" },
+      ]);
+      const c = r.candidatos.get("RAC");
+      t.cierto(!!c, "un resultado 0 sí debe registrarse como candidato");
+      t.igual(c.resultVal, 0);
+      t.igual(c.resultDate, "2026-08-01");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: cadena vacía sigue tratándose como ausente (distinto de 0 numérico)", () => {
+      const r = testApi._ultimaFechaPorAnalito([{ codigo: "8779", nombre: "RAC", Resultado: "" }]);
+      t.igual(r.candidatos.size, 0);
+    });
+
+    t.caso("_analitosRcvVencidos: un resultado 0 vigente NO dispara el aviso de faltante (v12.5.7)", () => {
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "RAC"), "RAC=0 (10 días de antigüedad) es un resultado real y vigente, no un faltante");
+    });
+
+    // =====================================================================
+    // v12.5.7 — _analitosRcvVencidos: aviso de laboratorios RCV sin resultado en 180 días
+    // (pedido explícito del médico, 11-08-2026). HbA1c se busca en el whitelist pero
+    // NUNCA entra en esta regla (no todo paciente es diabético); PTH/Hemoglobina/
+    // Fósforo/Albúmina tampoco: esos solo autocompletan si Athenea los trae.
+    // =====================================================================
+    const LABS_RCV_AL_DIA = [
+      { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-06-01" },
+      { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "45", Fecha: "2026-06-01" },
+      { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: "2026-06-01" },
+      { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: "2026-06-01" },
+      { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-06-01" },
+      { codigo: "903895", nombre: "CREATININA", Resultado: "0.9", Fecha: "2026-06-01" },
+      { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-06-01" },
+    ];
+
+    t.caso("_analitosRcvVencidos: los 7 analitos con resultado reciente -> ningún faltante", () => {
+      // 2026-08-11 - 2026-06-01 = 71 días, bien dentro de la vigencia de 180.
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11"), []);
+    });
+
+    t.caso("_analitosRcvVencidos: un analito completamente ausente de Athenea aparece como faltante", () => {
+      const sinCreatinina = LABS_RCV_AL_DIA.filter((l) => l.nombre !== "CREATININA");
+      const faltantes = testApi._analitosRcvVencidos(sinCreatinina, "2026-08-11");
+      t.igual(faltantes.length, 1);
+      t.igual(faltantes[0].key, "CREATININA");
+      t.igual(faltantes[0].nombre, "Creatinina en Suero");
+      t.igual(faltantes[0].resultDate, undefined, "sin resultado -> sin fecha que mostrar");
+    });
+
+    t.caso("_analitosRcvVencidos: exactamente 180 días -> TODAVÍA vigente (el límite no cuenta como vencido)", () => {
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-12" }];
+      // 2026-08-11 - 2026-02-12 = 180 días exactos.
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"), "180 días exactos sigue dentro de la vigencia");
+    });
+
+    t.caso("_analitosRcvVencidos: 181 días -> VENCIDO", () => {
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-11" }];
+      // 2026-08-11 - 2026-02-11 = 181 días.
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const f = faltantes.find((x) => x.key === "COLESTEROL_TOTAL");
+      t.cierto(!!f, "181 días ya superó la vigencia de 180");
+      t.igual(f.dias, 181);
+      t.igual(f.resultDate, "2026-02-11");
+    });
+
+    t.caso("_analitosRcvVencidos: mezcla real de faltantes — uno VENCIDO (con resultDate/dias) junto a otros NUNCA REALIZADOS (sin esos campos) en la misma llamada (v12.5.7 — hallazgo de la revisión adversarial)", () => {
+      // Un solo analito presente (y vencido) entre los 7 de la regla produce, en la misma
+      // llamada, 1 faltante "vencido" + 6 faltantes "nunca realizados" — la mezcla real que
+      // ninguna prueba anterior verificaba de punta a punta (longitud total Y forma de cada
+      // tipo de faltante).
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-11" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.igual(faltantes.length, 7, "los 7 analitos de la regla: 1 vencido + 6 nunca realizados");
+      const vencido = faltantes.find((f) => f.key === "COLESTEROL_TOTAL");
+      t.cierto(!!vencido);
+      t.igual(vencido.resultDate, "2026-02-11");
+      t.igual(vencido.dias, 181);
+      const nuncaRealizados = faltantes.filter((f) => f.key !== "COLESTEROL_TOTAL");
+      t.igual(nuncaRealizados.length, 6);
+      t.igual(nuncaRealizados.map((f) => f.key).sort(), ["COLESTEROL_HDL", "CREATININA", "GLUCOSA", "RAC", "TRIGLICERIDOS", "UROANALISIS"], "las 6 claves restantes de RCV_VIGENCIA_KEYS, sin duplicados ni omisiones");
+      for (const f of nuncaRealizados) {
+        t.igual(f.resultDate, undefined, f.key + ": nunca realizado no debe traer resultDate");
+        t.igual(f.dias, undefined, f.key + ": nunca realizado no debe traer dias");
+      }
+    });
+
+    t.caso("_analitosRcvVencidos: entre dos resultados del mismo analito, se juzga la vigencia contra el MÁS RECIENTE", () => {
+      // Uno viejo (hace 2 años, vencido) y uno reciente (hace 10 días, vigente) del mismo
+      // analito: debe ganar el reciente y NO aparecer como faltante.
+      const labs = [
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "220", Fecha: "2024-01-01" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" },
+      ];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"), "el resultado reciente del mismo analito cubre la vigencia");
+    });
+
+    t.caso("_analitosRcvVencidos: HbA1c NUNCA entra en la regla, ni ausente ni vencido", () => {
+      // Ni un solo resultado de HBA1C en toda la lista: si estuviera en la regla,
+      // aparecería como faltante. No debe aparecer jamás.
+      const faltantes = testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "HBA1C"), "HbA1c está excluido de esta regla por pedido explícito del médico");
+    });
+
+    t.caso("_analitosRcvVencidos: PTH, Hemoglobina, Fósforo y Albúmina nunca generan aviso (solo autocompletan)", () => {
+      // Ninguno de los 4 está en LABS_RCV_AL_DIA: si entraran en la regla de vigencia,
+      // los 4 aparecerían como faltantes. Deben quedar completamente fuera.
+      const faltantes = testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11");
+      for (const key of ["PTH", "HEMOGLOBINA", "FOSFORO", "ALBUMINA"]) {
+        t.falso(faltantes.some((f) => f.key === key), key + " no debe entrar nunca en el aviso de vigencia RCV");
+      }
+    });
+
+    t.caso("_analitosRcvVencidos: 'hoy' inválido o ausente -> [] en vez de reventar (nunca adivina una fecha de referencia)", () => {
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "fecha-invalida"), []);
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, ""), []);
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, null), []);
+      t.noLanza(() => testApi._analitosRcvVencidos(null, "2026-08-11"));
+    });
+
+    t.caso("_analitosRcvVencidos: varios analitos ausentes a la vez, todos reportados", () => {
+      const soloColesterol = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
+      const faltantes = testApi._analitosRcvVencidos(soloColesterol, "2026-08-11");
+      t.igual(faltantes.length, 6, "faltan los otros 6 de los 7 (Colesterol Total sí está al día)");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"));
     });
   }
 };
