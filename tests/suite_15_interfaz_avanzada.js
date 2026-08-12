@@ -762,6 +762,21 @@ module.exports = {
       t.cierto(html.includes("CREATININA"), "el analito que sí es un examen aparte se sigue mostrando normal");
     });
 
+    // v12.8.1 — Reportado en consultorio CON CAPTURAS: la tabla salía a una palabra por
+    // línea y las demás columnas parecían vacías. Los componentes ya NO se unen con <br>
+    // (una sola columna altísima dentro de una celda): cada uno es su propio <span> para
+    // que el CSS los reparta en rejilla. Sin esta prueba, cualquier refactor visual futuro
+    // puede volver al <br> y reproducir exactamente el mismo desastre.
+    await t.casoAsync("openLaboratoriosModal v12.8.1: los componentes del uroanálisis van en rejilla (un span cada uno), NUNCA unidos con <br>", async () => {
+      const modal = cModal3.env.doc.body.children.filter((n) => n.id === "vgl-labs-modal").pop();
+      const html = modal.querySelector("#vgl-labs-content").innerHTML;
+      t.cierto(html.includes('<div class="vgl-labs-uro">'), "el bloque multiparamétrico tiene su propio contenedor de rejilla");
+      const spans = (html.match(/class="vgl-labs-uro-i"/g) || []).length;
+      t.igual(spans, 5, "un span por componente del uroanálisis, no un chorizo con <br>");
+      t.falso(html.includes("</b>: AMARILLO<br>"), "los componentes ya no se separan con <br>");
+      t.cierto(html.includes("<b>COLOR</b>: AMARILLO"), "el texto de cada componente no cambió: sigue siendo NOMBRE: VALOR");
+    });
+
     // ================= abrirInformeAthenea (misma función que dispara el clic real) =================
     t.caso("abrirInformeAthenea: sin hash o sin token, no toca la red", () => {
       const c = cargar({ silencioso: true });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.8.0
+// @version      12.8.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.8.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.8.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7196,7 +7196,25 @@
       #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
 
       /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
-      #vgl-labs-modal .vgl-labs-table{width:100%;border-collapse:separate;border-spacing:0 7px;text-align:left}
+      /* v12.8.1 — La tabla salía ilegible en consultorio (capturas del médico): una
+         palabra por línea en la columna Resultado y el resto de columnas aparentemente
+         VACÍAS. Ninguna de las dos cosas era un fallo de datos; eran tres decisiones de
+         CSS sumadas:
+          1) La tarjeta genérica .vgl-agm-card limita a 580px — bien para un formulario,
+             asfixiante para una tabla clínica de 6 columnas. Aquí se ensancha.
+          2) overflow-wrap:anywhere (abajo) SÍ cuenta para el ancho mínimo intrínseco, así
+             que con table-layout:auto el navegador concluía que la columna Resultado podía
+             encogerse hasta un carácter. Se pasa a break-word, que NO afecta ese cálculo, y
+             se fija el reparto con table-layout:fixed.
+          3) vertical-align:middle centraba el contenido de las demás celdas a media altura
+             de una fila de miles de píxeles: seguían ahí, pero fuera de la pantalla. Va a top. */
+      #vgl-labs-modal .vgl-agm-card{max-width:1120px}
+      #vgl-labs-modal .vgl-labs-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0 7px;text-align:left}
+      #vgl-labs-modal .vgl-labs-table th:nth-child(1){width:118px}
+      #vgl-labs-modal .vgl-labs-table th:nth-child(2){width:23%}
+      #vgl-labs-modal .vgl-labs-table th:nth-child(4){width:96px}
+      #vgl-labs-modal .vgl-labs-table th:nth-child(5){width:110px}
+      #vgl-labs-modal .vgl-labs-table th:nth-child(6){width:58px}
       #vgl-labs-modal .vgl-labs-table thead th{
         position:sticky;top:0;z-index:2;background:var(--bg-solid);
         font-size:10.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
@@ -7204,19 +7222,32 @@
         border-bottom:1px solid var(--edge)
       }
       #vgl-labs-modal .vgl-labs-tr td{
-        background:var(--bg2);padding:11px 12px;vertical-align:middle;
+        background:var(--bg2);padding:11px 12px;vertical-align:top;
         transition:background-color .15s var(--ease-out)
       }
       #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
       #vgl-labs-modal .vgl-labs-date{font-size:11.5px;color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
-      #vgl-labs-modal .vgl-labs-exam{font-size:13px;font-weight:700;color:var(--fg);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-exam{font-size:13px;font-weight:700;color:var(--fg);overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
         font-size:15.5px;font-weight:900;letter-spacing:-.2px;color:var(--fg);
-        font-variant-numeric:tabular-nums;overflow-wrap:anywhere;min-width:90px
+        font-variant-numeric:tabular-nums;overflow-wrap:break-word
       }
-      #vgl-labs-modal .vgl-labs-ref{font-size:11px;color:var(--fg3);overflow-wrap:anywhere}
+      #vgl-labs-modal .vgl-labs-ref{font-size:11px;color:var(--fg3);overflow-wrap:break-word}
+      /* v12.8.1 — Panel multiparamétrico (uroanálisis): un uroanálisis son ~30 parámetros,
+         no un valor único. En rejilla auto-ajustable ocupan 2–4 columnas según el ancho
+         disponible y la fila deja de medir varias pantallas. Tipografía de DATO, no de
+         titular: el 15.5px/900 de .vgl-labs-val es para un valor suelto, no para 30. */
+      #vgl-labs-modal .vgl-labs-uro{
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));
+        gap:0 20px;font-size:12.5px;font-weight:600;letter-spacing:0
+      }
+      #vgl-labs-modal .vgl-labs-uro-i{
+        min-width:0;overflow-wrap:break-word;line-height:1.5;
+        padding:3px 0;border-bottom:1px solid var(--line)
+      }
+      #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3);font-weight:800;font-size:11.5px}
       #vgl-labs-modal .vgl-labs-src{
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:10.5px;font-weight:800;letter-spacing:.4px;
@@ -8813,8 +8844,14 @@
       // v12.5.16 — Bloque agrupado: cada componente se escapa POR SEPARADO y se une con
       // <br> (nombre en negrilla · resultado) — nunca se re-escapa el bloque completo,
       // porque eso rompería las etiquetas ya armadas.
+      // v12.8.1 — Los componentes ya NO se unen con <br>: cada uno va en su propio
+      // <span> para que el CSS los pueda repartir en REJILLA de varias columnas. Con
+      // <br> el uroanálisis (~30 parámetros) formaba una sola columna altísima dentro de
+      // una celda de tabla, y la fila crecía tanto que el resto de columnas quedaba fuera
+      // de la pantalla (reportado en consultorio con capturas). El formato del texto de
+      // cada componente NO cambia: sigue siendo "<b>NOMBRE</b>: VALOR".
       const resultadoHtml = esGrupoUro
-        ? lab.__vglGrupoUroComponentes.map((c) => `<b>${escapeHtml(String(c.nombre))}</b>: ${escapeHtml(String(c.resultado))}`).join("<br>")
+        ? `<div class="vgl-labs-uro">${lab.__vglGrupoUroComponentes.map((c) => `<span class="vgl-labs-uro-i"><b>${escapeHtml(String(c.nombre))}</b>: ${escapeHtml(String(c.resultado))}</span>`).join("")}</div>`
         : escapeHtml(String(resultado));
       const referenciaHtml = esGrupoUro
         ? escapeHtml(lab.__vglGrupoUroComponentes.length + " parámetro" + (lab.__vglGrupoUroComponentes.length === 1 ? "" : "s"))
