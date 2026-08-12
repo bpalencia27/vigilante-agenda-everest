@@ -64,6 +64,7 @@ module.exports = {
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM",
+    "_agruparUroanalisisParaTabla",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -450,6 +451,67 @@ module.exports = {
       t.falso(cv.env.doc.body.children.some((n) => n.id === "vgl-labs-modal"), "no se abre ningún modal");
     });
 
+    // ================= _agruparUroanalisisParaTabla (v12.5.16) =================
+    // Reportado en consultorio con el PDF real del laboratorio: un solo examen
+    // "Uroanálisis" (~28 parámetros) se mostraba en el modal como si cada parámetro
+    // fuera un examen independiente. Función pura, sin DOM: se prueba directo.
+    t.caso("_agruparUroanalisisParaTabla: agrupa todos los componentes en UN bloque, conserva el resto tal cual", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "CREATININA", Resultado: "1.2", Fecha: "2026-08-01" },
+        { NombreParametro: "COLOR", NombreParametroPadre: "UROANALISIS", Resultado: "AMARILLO", Fecha: "2026-08-03" },
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+        { NombreParametro: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" },
+      ];
+      const agrupado = c.api._agruparUroanalisisParaTabla(labs);
+      t.igual(agrupado.length, 3, "3 componentes de orina se vuelven UN solo bloque; los otros 2 analitos quedan igual");
+      t.igual(agrupado[0].NombreParametro, "CREATININA", "el analito que no es de orina no se mueve de su posición");
+      const bloque = agrupado.find((l) => Array.isArray(l.__vglGrupoUroComponentes));
+      t.cierto(!!bloque, "hay un bloque agrupado");
+      t.igual(bloque.NombreParametro, "Uroanálisis", "el bloque se presenta como UN examen, no como 'COLOR'/'GLUCOSA'/etc.");
+      t.igual(bloque.__vglGrupoUroComponentes.length, 3);
+      t.cierto(bloque.__vglGrupoUroComponentes.some((x) => x.nombre === "COLOR" && x.resultado === "AMARILLO"));
+      t.cierto(bloque.__vglGrupoUroComponentes.some((x) => x.nombre === "NITRITOS" && x.resultado === "NEGATIVO"));
+      t.igual(agrupado[2].NombreParametro, "COLESTEROL TOTAL", "el otro analito real tampoco se mueve");
+    });
+
+    t.caso("_agruparUroanalisisParaTabla: el bloque toma la FECHA del componente más reciente (misma regla que _ultimaFechaPorAnalito)", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-07-01" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-07-15" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      t.igual(bloque.Fecha, "2026-08-03", "el bloque hereda la fecha del componente más reciente, no del primero de la lista");
+    });
+
+    t.caso("_agruparUroanalisisParaTabla: el bloque hereda hash/token del componente representante, para el botón de informe único", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-07-01", __vglHash: "h1", __vglToken: "t1" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03", __vglHash: "h2", __vglToken: "t2" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      t.igual(bloque.__vglHash, "h2", "el hash/token es del componente MÁS RECIENTE (el mismo que ganó la fecha), no de cualquiera");
+    });
+
+    t.caso("_agruparUroanalisisParaTabla: sin componentes de orina, la lista sale intacta (ni un bloque de más)", () => {
+      const c = cargar();
+      const labs = [{ NombreParametro: "CREATININA", Resultado: "1.2" }, { NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
+      const agrupado = c.api._agruparUroanalisisParaTabla(labs);
+      t.igual(agrupado.length, 2);
+      t.falso(agrupado.some((l) => Array.isArray(l.__vglGrupoUroComponentes)));
+    });
+
+    t.caso("_agruparUroanalisisParaTabla: entrada no-array o vacía no lanza", () => {
+      const c = cargar();
+      t.noLanza(() => c.api._agruparUroanalisisParaTabla(null));
+      t.noLanza(() => c.api._agruparUroanalisisParaTabla(undefined));
+      t.igual(c.api._agruparUroanalisisParaTabla([]).length, 0);
+    });
+
     // Instancia con red simulada: el puente REAL de 3 pasos (BusquedaPaciente ->
     // BuscarPaciente -> DatosPaciente) resuelve idSolicitud=4321/año=2026 para la
     // cédula buscada, Athenea devuelve un analito por consultaDetalleSolicitud, y el
@@ -572,6 +634,55 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes('data-hash="HASHBTN"'));
       t.cierto(contenido.innerHTML.includes('data-token="TOKENBTN"'));
       t.cierto(contenido.innerHTML.includes('data-modulo="LAB"'));
+    });
+
+    // v12.5.16 — Instancia SEPARADA: Athenea devuelve un uroanálisis real de varios
+    // componentes (mismo caso reportado en consultorio, con el PDF real del laboratorio
+    // de referencia) para confirmar que la TABLA del modal ya no los muestra como
+    // exámenes independientes.
+    const cModal3 = cargar({
+      silencioso: true,
+      gmxhr: (o) => {
+        const url = String(o.url || "");
+        if (url.endsWith("/Resultados/BusquedaPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+        } else if (url.endsWith("/Resultados/BuscarPaciente")) {
+          o.onload({ status: 200, responseText: '<input name="IdPaciente" value="55555"><input name="__RequestVerificationToken" value="TOK2">' });
+        } else if (url.endsWith("/Resultados/DatosPaciente")) {
+          o.onload({ status: 200, responseText: 'CC 12345678 <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>' });
+        } else if (url.includes("consultaDetalleSolicitud")) {
+          o.onload({
+            status: 200,
+            responseText: JSON.stringify({
+              dataObject: JSON.stringify([
+                { NombreParametro: "COLOR", NombreParametroPadre: "UROANALISIS", Resultado: "AMARILLO", Fecha: "2026-08-03" },
+                { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+                { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+                { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+                { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+                { NombreParametro: "CREATININA", Resultado: "1.2", Fecha: "2026-08-01" },
+              ]),
+            }),
+          });
+        } else if (o.onerror) { o.onerror("url no simulada"); }
+      },
+    });
+    enriquecerDom(cModal3);
+
+    await t.casoAsync("openLaboratoriosModal v12.5.16: un uroanálisis de varios componentes se muestra como UN solo examen 'Uroanálisis', no cinco filas independientes", async () => {
+      await cModal3.api.openLaboratoriosModal({ doc_id: "12345678", nombre: "ANA PEREZ" });
+      const modal = cModal3.env.doc.body.children.filter((n) => n.id === "vgl-labs-modal").pop();
+      const contenido = modal.querySelector("#vgl-labs-content");
+      const html = contenido.innerHTML;
+      t.cierto(html.includes(">Uroanálisis<"), "aparece como un examen llamado 'Uroanálisis'");
+      t.cierto(html.includes("<b>COLOR</b>: AMARILLO"), "el componente COLOR está DENTRO del bloque, con su resultado");
+      t.cierto(html.includes("<b>NITRITOS</b>: NEGATIVO"));
+      t.cierto(html.includes("5 parámetros"), "dice cuántos componentes incluye en vez de un rango de referencia");
+      // Ninguno de los 5 componentes aparece como nombre de fila propio (serían 5 filas
+      // separadas si el arreglo del bug siguiera activo).
+      t.falso(html.includes("<td class=\"vgl-labs-exam\">COLOR</td>"), "COLOR no es su propia fila/examen");
+      t.falso(html.includes("<td class=\"vgl-labs-exam\">NITRITOS</td>"), "NITRITOS no es su propia fila/examen");
+      t.cierto(html.includes("CREATININA"), "el analito que sí es un examen aparte se sigue mostrando normal");
     });
 
     // ================= abrirInformeAthenea (misma función que dispara el clic real) =================

@@ -909,5 +909,67 @@ module.exports = {
       t.igual(faltantes.length, 6, "faltan los otros 6 de los 7 (Colesterol Total sí está al día)");
       t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"));
     });
+
+    // =====================================================================
+    // v12.5.15 — Reportado en consultorio con el PDF real del laboratorio Y la captura de
+    // Athenea: un uroanálisis SÍ realizado (con ~28 componentes reales: Color, Glucosa,
+    // Nitritos, Sangre, Leucocitos, Hematíes...) aparecía SIEMPRE como "faltante" en el
+    // aviso de vigencia RCV, porque Athenea nunca manda una fila llamada literalmente
+    // "UROANALISIS" — solo las filas de sus componentes, cada una con
+    // NombreParametroPadre="UROANALISIS". _matchLabInWhitelist exige el nombre del panel
+    // completo, así que _analitosRcvVencidos jamás encontraba candidato para esa key.
+    // =====================================================================
+    const LABS_URO_POR_COMPONENTES = (fecha) => [
+      { NombreParametro: "COLOR", NombreParametroPadre: "UROANALISIS", Resultado: "AMARILLO", Fecha: fecha },
+      { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: "30.70", Fecha: fecha },
+      { NombreParametro: "CILINDROS", NombreParametroPadre: "UROANALISIS", Resultado: "0", Fecha: fecha },
+    ];
+
+    t.caso("_analitosRcvVencidos: un uroanálisis real, mandado por componentes (sin fila 'UROANALISIS'), SÍ cuenta como vigente", () => {
+      const labs = [...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"), ...LABS_URO_POR_COMPONENTES("2026-08-01")];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "UROANALISIS"), "con componentes reales y recientes, ya NO debe salir como faltante");
+    });
+
+    t.caso("_analitosRcvVencidos: uroanálisis por componentes VENCIDO (>180 días) sí se reporta, con su fecha real", () => {
+      const labs = [...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"), ...LABS_URO_POR_COMPONENTES("2025-10-01")];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const uro = faltantes.find((f) => f.key === "UROANALISIS");
+      t.cierto(!!uro, "más de 180 días desde el componente más reciente: sigue vencido, no queda invisible");
+      t.igual(uro.resultDate, "2025-10-01");
+    });
+
+    t.caso("_analitosRcvVencidos: solo componentes PENDIENTES/vacíos -> el uroanálisis sigue faltando (sin evidencia real, no se inventa vigencia)", () => {
+      const labs = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1, Fecha: "2026-08-01" },
+      ];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.cierto(faltantes.some((f) => f.key === "UROANALISIS"), "un componente PENDIENTE no es evidencia de un examen ya resuelto");
+    });
+
+    t.caso("injectLabsIntoCronicos: el respaldo por componentes de _analitosRcvVencidos NO se activa aquí — la casilla de resultado general sigue sin recibir el valor de un componente suelto", () => {
+      // Guarda de regresión: _ultimaFechaPorAnalito es compartida por injectLabsIntoCronicos
+      // y por _analitosRcvVencidos. El respaldo por componentes (v12.5.15) es SOLO para
+      // vigencia — si se activara también aquí, el valor de un componente cualquiera (p.
+      // ej. "NEGATIVO" de Sangre) se escribiría como si fuera el resultado GENERAL del
+      // panel, algo que injectLabsIntoCronicos nunca debe hacer (ese resultado general
+      // solo viene de una fila real "UROANALISIS"/"PARCIAL DE ORINA", ver v12.5.12).
+      mockDOM = { resultadoUroanalisis: { value: "" }, fechaResultUroanalisis: { value: "" } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      const res = testApi.injectLabsIntoCronicos(LABS_URO_POR_COMPONENTES("2026-08-01"));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "", "ningún componente suelto debe terminar en la casilla de resultado general");
+      // Sin fallback activado aquí, "UROANALISIS" ni siquiera entra a candidatosPorClave
+      // (no hay fila real del panel completo) — no cuenta como "casilla no encontrada"
+      // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
+      // candidato que buscar casilla para él.
+      t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    });
   }
 };

@@ -979,6 +979,52 @@
       return null;
   }
 
+  // v12.5.16 — AGRUPAR LOS COMPONENTES DEL UROANÁLISIS EN UN SOLO BLOQUE (modal de
+  // Laboratorios, openLaboratoriosModal). Reportado en consultorio con el PDF real del
+  // laboratorio: un solo examen "Uroanálisis" con ~28 parámetros (Color, Glucosa,
+  // Nitritos, Sangre...) se mostraba en esta tabla como si cada parámetro fuera un
+  // examen INDEPENDIENTE — cada uno con su propia fila, su propia fuente y su propio
+  // botón de informe — sin nada que marcara visualmente que eran UN solo resultado de
+  // UN solo examen, a diferencia de los otros 12 analitos del whitelist que sí lo son.
+  // Mismo criterio de agrupación que ya usa el resto del script (_esAnalitoDeOrina): toda
+  // fila que pertenezca al panel de orina se recoge en un único bloque "Uroanálisis" con
+  // todos sus componentes adentro; el resto de la lista no se toca. La fecha del bloque
+  // es la del componente MÁS RECIENTE (misma regla "gana el más reciente" que
+  // _ultimaFechaPorAnalito), y ese mismo componente presta su hash/token de informe (si
+  // los trae) para el botón de PDF del bloque completo.
+  function _agruparUroanalisisParaTabla(todosLabs) {
+      if (!Array.isArray(todosLabs)) return [];
+      const componentes = todosLabs.filter((lab) => _esAnalitoDeOrina(lab));
+      if (!componentes.length) return todosLabs.slice();
+
+      let representante = componentes[0];
+      let mejorFecha = _extractAtheneaFecha(representante);
+      for (let i = 1; i < componentes.length; i++) {
+          const f = _extractAtheneaFecha(componentes[i]);
+          if (f && (!mejorFecha || f.iso > mejorFecha.iso)) { representante = componentes[i]; mejorFecha = f; }
+      }
+
+      const items = componentes.map((c) => ({
+          nombre: c.NombreParametro || c.nombre || c.examen || "",
+          resultado: c.Resultado || c.resultado || c.valor || "—",
+      }));
+      const grupo = Object.assign({}, representante, {
+          NombreParametro: "Uroanálisis",
+          __vglGrupoUroComponentes: items,
+      });
+
+      const salida = [];
+      let insertado = false;
+      todosLabs.forEach((lab) => {
+          if (_esAnalitoDeOrina(lab)) {
+              if (!insertado) { salida.push(grupo); insertado = true; }
+              return;
+          }
+          salida.push(lab);
+      });
+      return salida;
+  }
+
   // Busca la casilla del componente por su placeholder visible (única ancla confirmada).
   function _findUroInput(placeholderCanon) {
       try {
@@ -1918,12 +1964,30 @@
   // realizado") pese a existir un resultado real. Se descarta SOLO null/undefined/cadena
   // vacía, nunca un 0 legítimo, conservando el mismo orden de respaldo entre campos.
   const _valorCrudoLab = (v) => (v === null || v === undefined || String(v).trim() === "") ? undefined : v;
-  function _ultimaFechaPorAnalito(labsArray) {
+  const _WHITELIST_UROANALISIS = WHITELIST_13_LABS.find((w) => w.key === "UROANALISIS");
+  // v12.5.15 — Athenea JAMÁS manda una fila llamada literalmente "UROANALISIS"/"PARCIAL DE
+  // ORINA": manda entre 20 y 30 filas, una por componente (Color, Glucosa, Nitritos,
+  // Sangre, Hematíes...), cada una con NombreParametroPadre="UROANALISIS" (confirmado con
+  // capturas reales del portal Y del PDF oficial del laboratorio en consultorio). Por eso
+  // _matchLabInWhitelist (que exige el NOMBRE del panel completo) nunca encontraba
+  // candidato para la key UROANALISIS aunque el examen SÍ se hubiera hecho — el aviso de
+  // vigencia RCV lo mostraba como faltante siempre, sin excepción.
+  // Segundo parámetro opcional: SOLO checkLabsVencidos (vía _analitosRcvVencidos) lo activa.
+  // injectLabsIntoCronicos NO lo activa a propósito: ese camino ya tiene su propia ruta
+  // dedicada para los componentes (inyectarComponenteOrina/UROANALISIS_COMPONENTES,
+  // v12.3.37) que escribe cada uno en SU casilla; si este respaldo también corriera ahí,
+  // el valor de un componente cualquiera (p. ej. "NEGATIVO" de Sangre) se colaría como si
+  // fuera el resultado general del panel en la casilla resultadoUroanalisis.
+  function _ultimaFechaPorAnalito(labsArray, opciones) {
+      const uroPorComponentes = !!(opciones && opciones.uroanalisisPorComponentes);
       const candidatos = new Map();
       let pendientesWhitelist = 0;
       if (!Array.isArray(labsArray)) return { candidatos, pendientesWhitelist };
       labsArray.forEach((lab) => {
-          const matched = _matchLabInWhitelist(lab);
+          let matched = _matchLabInWhitelist(lab);
+          if (!matched && uroPorComponentes && _WHITELIST_UROANALISIS && _matchUroComponente(lab)) {
+              matched = _WHITELIST_UROANALISIS;
+          }
           if (!matched) return;
           const resultVal = _valorCrudoLab(lab.Resultado) ?? _valorCrudoLab(lab.resultado) ?? _valorCrudoLab(lab.valor);
           if (resultVal === undefined) return;
@@ -2206,7 +2270,7 @@
       const hoy = _parseFechaHoraLike(hoyIso);
       if (!hoy) return [];
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
-      const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : []);
+      const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });
       const faltantes = [];
       for (const key of RCV_VIGENCIA_KEYS) {
           const c = candidatos.get(key);
@@ -8070,7 +8134,12 @@
     // del primer resultado de Athenea sin fecha reconocida.
     let diagFechaModalLogged = false;
     let diagHoraModalLogged = false; // v12.4.0
-    let rowsHtml = todosLabs.map(lab => {
+    let rowsHtml = _agruparUroanalisisParaTabla(todosLabs).map(lab => {
+      // v12.5.16 — El bloque agrupado del uroanálisis (ver _agruparUroanalisisParaTabla)
+      // trae sus componentes en __vglGrupoUroComponentes: el "Resultado" de la fila es la
+      // lista de todos ellos, no un valor único, y la columna de referencia muestra cuántos
+      // parámetros incluye en vez de un rango (cada componente tiene el suyo propio).
+      const esGrupoUro = Array.isArray(lab.__vglGrupoUroComponentes);
       // v12.3.30 — misma detección por forma de valor que injectLabsIntoCronicos (ver
       // _extractAtheneaFecha): los 4 nombres de campo ya probados aquí no existen en el
       // objeto real de Athenea, así que se busca la fecha por su forma, no por su nombre.
@@ -8104,7 +8173,11 @@
       // interpretado: es una afirmación clínica que no le corresponde hacer. Ahora solo
       // marca en rojo lo que la PROPIA fuente declara elevado o anormal; el resto va en
       // color de texto neutro, sin insinuar nada.
-      const esAlerta = String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal");
+      // v12.5.16 — Para el bloque agrupado, "elevado/anormal" se busca en CUALQUIERA de
+      // sus componentes (un solo parámetro alterado ya justifica marcar el bloque entero).
+      const esAlerta = esGrupoUro
+        ? lab.__vglGrupoUroComponentes.some((c) => String(c.resultado).toLowerCase().includes("anormal"))
+        : (String(referencia).toLowerCase().includes("elevado") || String(resultado).toLowerCase().includes("anormal"));
       // v12.5.4 — Botón "Ver informe": abre el PDF real de Athenea con un clic (hash +
       // token ya raspados de la tarjeta de la solicitud). El informe resultó ser una
       // imagen escaneada sin texto legible por máquina (confirmado en campo), así que
@@ -8114,12 +8187,22 @@
         ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
         : "";
 
+      // v12.5.16 — Bloque agrupado: cada componente se escapa POR SEPARADO y se une con
+      // <br> (nombre en negrilla · resultado) — nunca se re-escapa el bloque completo,
+      // porque eso rompería las etiquetas ya armadas.
+      const resultadoHtml = esGrupoUro
+        ? lab.__vglGrupoUroComponentes.map((c) => `<b>${escapeHtml(String(c.nombre))}</b>: ${escapeHtml(String(c.resultado))}`).join("<br>")
+        : escapeHtml(String(resultado));
+      const referenciaHtml = esGrupoUro
+        ? escapeHtml(lab.__vglGrupoUroComponentes.length + " parámetro" + (lab.__vglGrupoUroComponentes.length === 1 ? "" : "s"))
+        : escapeHtml(String(referencia));
+
       return `
         <tr class="vgl-labs-tr${esAlerta ? " vgl-labs-alert" : ""}">
           <td class="vgl-labs-date">${escapeHtml(String(fecha))}</td>
           <td class="vgl-labs-exam">${escapeHtml(String(examen))}</td>
-          <td class="vgl-labs-val">${escapeHtml(String(resultado))}</td>
-          <td class="vgl-labs-ref">${escapeHtml(String(referencia))}</td>
+          <td class="vgl-labs-val">${resultadoHtml}</td>
+          <td class="vgl-labs-ref">${referenciaHtml}</td>
           <td><span class="vgl-labs-src${lab.origen.includes("Athenea") ? " athenea" : ""}">${escapeHtml(lab.origen)}</span></td>
           <td class="vgl-labs-pdfcol">${btnInforme}</td>
         </tr>
