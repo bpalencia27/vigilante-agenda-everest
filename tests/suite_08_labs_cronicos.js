@@ -548,6 +548,95 @@ module.exports = {
       t.falso(radioSi.clicked, "nunca se hizo click porque no hay evidencia de un componente de orina real");
     });
 
+    // ================= v12.5.12 — casilla de RESULTADO del uroanálisis =================
+    // Confirmado en campo: resultadoUroanalisis/fechaResultUroanalisis (los mismos
+    // resultId/dateId que WHITELIST_13_LABS ya tenía) solo existen en el DOM cuando
+    // "¿Uroanálisis?" está en SI (Angular los monta con *ngIf). Si se acaba de marcar SI
+    // en ESTA corrida y la casilla no apareció a tiempo, un único reintento de 300ms (1ms
+    // en el banco, ver harness) la busca de nuevo.
+    function labsUroConResultado(resultado, fecha) {
+      return [
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { NombreParametro: "UROANALISIS", CodigoParametro: "907106", Resultado: resultado, Fecha: fecha },
+      ];
+    }
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: la casilla aparece tras el reintento (Angular tardó en montarla después de marcar SI) -> se completa sola", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.cierto(res.uroanalisisMarcado, "se acaba de marcar SI en esta corrida");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"), "todavía no existía la casilla en el momento síncrono");
+      // Angular ya montó el *ngIf para cuando dispare el reintento.
+      mockDOM.resultadoUroanalisis = { value: "" };
+      mockDOM.fechaResultUroanalisis = { value: "" };
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL", "el reintento encontró la casilla y escribió el resultado verbatim");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10", "y también la fecha, porque estaba vacía");
+    });
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si el interruptor SI YA estaba elegido antes (no se marcó en esta corrida), NO se programa reintento", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro({ siChecked: true }); // el médico ya lo había puesto en SI antes
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.falso(res.uroanalisisMarcado, "ya estaba en SI: esta corrida no lo marcó");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"));
+      mockDOM.resultadoUroanalisis = { value: "" }; // aparece igual, por otra razón cualquiera
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "", "sin reintento programado, la casilla queda vacía hasta el próximo click de Auto-Labs");
+    });
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si entre el click y el reintento el médico YA escribió algo, se respeta (no se pisa)", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.cierto(res.uroanalisisMarcado);
+      mockDOM.resultadoUroanalisis = { value: "ANORMAL — leucocitos +++ (escrito por el médico)" };
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "ANORMAL — leucocitos +++ (escrito por el médico)", "casilla sagrada: el reintento nunca sobrescribe lo que el médico ya haya escrito");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.12: si la casilla YA existe en el momento síncrono (Angular no tardó), se llena de una vez por el camino genérico, sin necesitar reintento", () => {
+      mockDOM = { resultadoUroanalisis: { value: "" }, fechaResultUroanalisis: { value: "" } };
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.sinCasilla.includes("UROANALISIS"), "el camino genérico ya la encontró: no hace falta reintento");
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10");
+    });
+
     t.caso("v12.3.37: padres 'URINARIO' (sedimento/citoquímico) también disparan la guarda de orina", () => {
       t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "SEDIMENTO URINARIO" }));
       t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "CITOQUIMICO URINARIO" }));

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.11
+// @version      12.5.12
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,23 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.12 — 12-08-2026: LA CASILLA DE RESULTADO DEL UROANÁLISIS SE COMPLETA SOLA.
+  Con el HTML real pegado en consultorio se confirmó lo que v12.0.4 nunca pudo ver:
+  `resultadoUroanalisis`/`fechaResultUroanalisis` (los mismos resultId/dateId que
+  WHITELIST_13_LABS ya tenía desde el principio) SÍ existen en el DOM — pero Angular los
+  monta con `*ngIf` solo cuando "¿Uroanálisis?" está en SI. Por eso nunca se encontraban:
+  la vista los oculta hasta que alguien marca SI, y hasta v12.5.11 nadie lo hacía por el
+  médico. Ahora que _marcarUroanalisisSi() ya lo marca (ver esa versión), el camino
+  genérico de injectLabsIntoCronicos encuentra la casilla la mayoría de las veces en la
+  MISMA corrida síncrona. Para el caso en que Angular tarde en re-renderizar el *ngIf
+  (el click y la lectura del DOM ocurren en el mismo tick de JS, sin garantía de que el
+  framework ya haya montado el nodo), se agrega UN reintento corto (300 ms) que solo se
+  dispara si (a) se acaba de marcar SI en esta misma corrida y (b) la casilla no apareció
+  a tiempo — nunca como sondeo general. Mismas reglas sagradas: valor y fecha verbatim de
+  Athenea, solo si la casilla sigue vacía cuando el reintento la encuentra.
 */
 
 /*
@@ -676,7 +693,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.11";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.12";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -837,6 +854,12 @@
     // SI solo. Los 7 resultados detallados (Nitritos, Sangre, etc.) ya se auto-completaban
     // desde v12.3.37 vía UROANALISIS_COMPONENTES/_findUroInput — esto no cambia esa parte,
     // solo agrega el interruptor SI que faltaba antes de esas casillas.
+    // v12.5.12 — resultId/dateId de ESTA entrada (resultadoUroanalisis/
+    // fechaResultUroanalisis) SÍ existen en el DOM real, confirmado con HTML pegado en
+    // consultorio — el "no hay casilla" de v12.0.4 pasaba porque Angular la monta con
+    // *ngIf solo cuando el SI de arriba ya está marcado. Con el SI ya automatizado, este
+    // camino genérico la encuentra solo casi siempre (y hay un reintento corto para
+    // cuando Angular tarda, ver el final de injectLabsIntoCronicos).
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
     // v12.0.5 — CONFIRMADO EN EL CONSULTORIO (10/08/2026), leyendo la etiqueta que
@@ -2087,6 +2110,40 @@
               }
           } catch (e) {}
       });
+
+      // v12.5.12 — CASILLA DE RESULTADO DEL UROANÁLISIS (confirmada en campo, HTML real
+      // pegado en consultorio): `resultadoUroanalisis`/`fechaResultUroanalisis` — los
+      // mismos resultId/dateId que ya llevaba WHITELIST_13_LABS desde siempre — SOLO
+      // existen en el DOM cuando "¿Uroanálisis?" está en SI (Angular la monta con
+      // *ngIf). El bucle de arriba ya intentó escribirla por el camino genérico; si
+      // JUSTO en esta corrida se acaba de hacer click en SI (uroanalisisMarcado), es
+      // posible que Angular todavía no la haya montado en ese mismo instante síncrono.
+      // Un único reintento corto (300 ms) le da tiempo al *ngIf sin bloquear nada: si
+      // para entonces la casilla sigue sin aparecer, se deja como estaba (el aviso
+      // "sin casilla" ya se mostró) — el médico la llena a mano o vuelve a pulsar
+      // Auto-Labs (con SI ya marcado, el camino genérico de arriba la encuentra directo).
+      // Mismas reglas sagradas de siempre: verbatim, solo si la casilla sigue vacía.
+      const uroCandidato = candidatosPorClave.get("UROANALISIS");
+      if (uroCandidato && sinCasilla.includes("UROANALISIS") && uroanalisisMarcado) {
+          const { matched, resultVal, resultDate } = uroCandidato;
+          setTimeout(() => {
+              try {
+                  const inputEl = _findLabField(matched.resultId, matched.altIds);
+                  if (!inputEl) {
+                      console.warn("[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.");
+                      return;
+                  }
+                  const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
+                  if (valorActual !== "") return; // se llenó por otra vía mientras tanto: se respeta
+                  setNgValue(inputEl, resultVal);
+                  const grupo = inputEl.closest ? inputEl.closest(".input-group") : null;
+                  const dateInput = (grupo && grupo.querySelector('input[type="date"]')) || _findLabField(matched.dateId, matched.altDateIds);
+                  if (dateInput && resultDate && String(dateInput.value == null ? "" : dateInput.value).trim() === "") setNgValue(dateInput, resultDate);
+                  console.log("[Vigilante] uroanálisis: casilla de resultado completada tras reintento (Angular tardó en mostrarla después de marcar SI).");
+              } catch (e) {}
+          }, 300);
+      }
+
       return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado };
   }
 
