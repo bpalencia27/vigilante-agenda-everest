@@ -221,3 +221,108 @@ cambiaría, el médico lo revisa, y solo entonces se activa.
    planos, ¿se activa igual?
 4. **Decidir lo de la memoria entre consultas** (punto 3 de §7): sin ella no hay MODO ESTABLE ni
    «FTL previa CUMPLIDA/INCUMPLIDA».
+
+---
+
+# 9. La FTL dentro del modal de agendamiento (encargo del 12-08-2026)
+
+**Lo que pidió el médico:** que el modal de asignación de cita de control **resalte** la fecha de
+laboratorios (FTL) y la fecha de control que calcula el motor —conservando su libre albedrío—, que
+los exámenes del siguiente control **aparezcan de forma prioritaria**, y que el script los ordene
+solo «si es posible».
+
+## 9.1 Evidencia nueva: cómo se ordena de verdad, a mano
+
+Capturado en consultorio (`captura_ordenamiento_paquete_HTA_20260812.json`). El flujo real es:
+
+`Conducta` → botón **Paquetes** → botón **HTA** → añadir a mano lo que falte.
+
+Al pulsar «HTA», Everest llama a un endpoint que **el script no usa hoy**:
+
+```
+GET /apiviva/ApiOrdenamientoHealth/api/Combo/ObtenerPaqueteProgramasCupsByCitaId
+    ?citaID=<citaId en base64>&paqueteProgramaId=1
+```
+
+Devuelve la definición **oficial** del paquete HTA, mantenida por la IPS:
+
+| CUPS | Examen | ¿Lo conoce el script? |
+|---|---|---|
+| 903841 | Glucosa en suero | ✅ |
+| 903818 | Colesterol total | ✅ |
+| 903817 | LDL **automatizado** | ✅ |
+| 903815 | HDL | ✅ |
+| 903868 | Triglicéridos | ✅ |
+| 907106 | Uroanálisis | ✅ |
+| 903895 | Creatinina en suero | ✅ |
+| **902210** | **Hemograma IV** | ❌ **no existe en el script** |
+| **903876** | **Creatinina en orina parcial** | ❌ **no existe en el script** |
+| **903028** | **Microalbuminuria semiautomatizada** | ❌ **no existe en el script** |
+
+**`paqueteProgramaId=1` = HTA.** Los ids de los demás paquetes (DM2, ERC…) **no están capturados**.
+
+### Hallazgo A — El script avisa de un examen que no sabe ordenar
+
+`RAC` está en `RCV_VIGENCIA_KEYS`: el script avisa en rojo cuando vence. Pero **la relación
+albuminuria/creatinina se produce con 903876 + 903028**, y **ninguno de los dos existe en el
+archivo**. Es decir: el script sabe decir «el RAC está vencido» y su paquete de ordenamiento **no
+puede pedirlo**. Por eso en la captura el médico lo añade a mano.
+
+Lo mismo con el hemograma (902210), que el paquete oficial incluye y el script no.
+
+### Hallazgo B — El paquete oficial CORROBORA una decisión ya tomada
+
+El paquete HTA usa **903817 (LDL automatizado)**, no el 903816. Coincide exactamente con la regla
+que el médico ya había fijado en v12.4.0: el 903816 es para tamizaje de **sanos** (Z108) y el
+903817 para **crónicos** (HTA/DM2/ERC). La fuente oficial confirma la distinción.
+
+### Hallazgo C — ⚠️ Everest tiene su propia compuerta antiduplicado, y la API la esquiva
+
+En la captura, al añadir **Microalbuminuria** y **Hemoglobina glicosilada**, Everest interrumpió con
+un diálogo **«¿Repetirlo?» → «Confirmar»**. Al añadir **Albúmina**, con un **«Entendido»**.
+
+Eso es Everest avisando de que ese examen ya está ordenado o vigente, y **exigiendo una decisión
+consciente del médico**.
+
+**El script ordena por API (`apiOrdenamientoGuardar`), no por la interfaz — así que NO ve esos
+diálogos y NO los responde.** Un ordenamiento automático desde el script **se saltaría la compuerta
+antiduplicado del propio Everest**, en silencio.
+
+> **Consecuencia de diseño, no negociable:** si el script va a proponer exámenes, **debe hacer él
+> mismo la comprobación que hace ese diálogo** —cruzar contra
+> `ObtenerOrdenamientoPorPacienteIdVigente` (§1.6 del superprompt v14)— y **mostrar al médico qué
+> está repitiendo y por qué**, antes de que confirme. No basta con replicar los clics.
+
+### Hallazgo D — Los «pasajeros» del motor son reales
+
+Lo que el médico añadió a mano después del paquete fue: **PTH, Albúmina, Fósforo, Hemoglobina** y
+**HbA1c**. Son exactamente los *pasajeros* del motor RCV (§S3) — los que no fijan la fecha pero se
+anclan a ella. El modelo driver/pasajero **describe la práctica real**, no es teoría.
+
+## 9.2 Decisión de diseño para el modal (tarea R7)
+
+**Dos fechas, jerarquía visual clara, cero imposición:**
+
+1. **La FTL y la fecha de control se marcan como sugeridas**, con el porqué a la vista
+   («creatinina vence el 3 de octubre»). Se usa el realce de la cita sugerida que ya está
+   encargado en C2 del brief de agendamiento — **no se inventa un segundo lenguaje visual**.
+2. **El resto del calendario sigue disponible e igual de accesible.** La sugerencia se distingue;
+   no se ocultan ni se degradan las demás opciones. Regla sagrada 4: el script sugiere, el médico
+   decide.
+3. **La lista de exámenes del siguiente control vive en el propio modal**, junto a la FTL, no en
+   otra pantalla: es lo que justifica la fecha. Cada examen dice **por qué está ahí** (vencido,
+   por vencer, o adelantado para no hacer volver al paciente).
+4. **El paquete se pide a Everest** con `ObtenerPaqueteProgramasCupsByCitaId`, no se reconstruye
+   desde `PYM_CATALOG`. Así, cuando la IPS cambie el paquete, el script se entera solo. `PYM_CATALOG`
+   se conserva como respaldo si el endpoint falla, y **la discrepancia se registra**.
+5. **Ordenar: premarcado, nunca automático.** El script deja el ordenamiento listo —paquete +
+   pasajeros + lo que el motor añada— con **cada repetición señalada** (Hallazgo C), y el médico
+   confirma con un clic. Se conserva `markOrdenesCreadasHoy` con su regla de agrupador real.
+
+## 9.3 Lo que falta capturar antes de implementar R7
+
+1. **Los `paqueteProgramaId` de los demás paquetes** (DM2, ERC). Solo se conoce `1` = HTA.
+2. **El contrato exacto del diálogo «Repetirlo»**: qué lo dispara y con qué criterio. Sin esto, el
+   script puede señalar repeticiones donde Everest no las vería, o al revés.
+3. **Confirmar con el médico** si el paquete oficial debe ordenarse COMPLETO (incluidos hemograma
+   y los dos CUPS del RAC que hoy faltan) o si él deliberadamente pide menos.
