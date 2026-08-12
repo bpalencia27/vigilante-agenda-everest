@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.7
+// @version      12.6.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -320,6 +320,29 @@
   El interruptor NORMAL/ANORMAL sigue SIN automatizarse — es interpretación clínica y no
   hay evidencia de la semántica del control: ante la duda, decide el médico.
   Banco: 671/671 (4 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.8 — 12-08-2026: UN SEPARADOR DISTINTO YA NO PIERDE UN RESULTADO.
+  Reportado en consultorio con el PDF real del laboratorio: una paciente con resultado de
+  RAC (RELACION MICROALBUMINURIA CREATININA = 6.93 mg/gr, orden 26080402518) no se
+  completó sola en la Ruta de Crónicos.
+  Causa encontrada: _matchLabInWhitelist comparaba el nombre como TEXTO CRUDO en
+  mayúsculas — sensible a tildes (por eso la entrada de RAC ya tenía que repetir a mano
+  "RELACION"/"RELACIÓN") y sobre todo a la PUNTUACIÓN. El mismo examen viaja con
+  separadores distintos según la vista de la que salga ("RELACION MICROALBUMINURIA
+  CREATININA", ".../CREATININA", "...-CREATININA"), y con un solo carácter de diferencia
+  no casaba con NINGUNA entrada: su resultado no se escribía y el analito desaparecía sin
+  contarse ni avisarse. Nuevo _canonNombreLab: quita tildes y normaliza / - _ , . ; : ( )
+  a espacio, en AMBOS lados de la comparación (nombres Y exclusiones). Es normalización
+  tipográfica, no clínica — no amplía qué examen casa con qué casilla; las guardas que
+  separan creatinina sérica de creatinina en orina, o microalbuminuria (mg/L) de la
+  relación albuminuria/creatinina (mg/g), siguen intactas y con prueba propia.
+  Además, diagnóstico único por sesión: se vuelca a consola qué trajo Athenea que no casó
+  con ningún examen conocido (nombre, padre, código y resultado — nunca datos del
+  paciente). Si vuelve a fallar un analito, el siguiente reporte trae el nombre exacto y
+  se agrega con evidencia. Hasta ahora ese caso era mudo.
+  Banco: 673/673 (2 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -888,7 +911,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1909,9 +1932,22 @@
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
+  // v12.6.8 — Canon para comparar nombres de analito. Hasta v12.6.7 la comparación era
+  // texto crudo en mayúsculas: sensible a tildes (por eso la lista de RAC tenía que
+  // repetir "RELACION"/"RELACIÓN" a mano) y, sobre todo, sensible a la PUNTUACIÓN. El
+  // mismo examen viaja con separadores distintos según de dónde salga —
+  // "RELACION MICROALBUMINURIA CREATININA" en el PDF del laboratorio,
+  // "RELACION MICROALBUMINURIA/CREATININA" o "MICROALBUMINURIA-CREATININA" en otras
+  // vistas — y con un solo carácter de diferencia el analito no casaba con NINGUNA
+  // entrada, así que su resultado no se escribía en la historia. Se normalizan los
+  // separadores a espacio y se quitan las tildes en AMBOS lados de la comparación. Es
+  // normalización tipográfica, no clínica: no amplía qué examen casa con qué casilla, solo
+  // deja de perder el que ya debía casar.
+  const _canonNombreLab = (s) => stripAccents(String(s || "")).toUpperCase().replace(/[\/\-_,.;:()]+/g, " ").replace(/\s+/g, " ").trim();
+
   function _matchLabInWhitelist(lab) {
       const code = String(lab.CodigoParametro || lab.codigo || "").trim();
-      const name = String(lab.NombreParametro || lab.nombre || lab.examen || "").toUpperCase().trim();
+      const name = _canonNombreLab(lab.NombreParametro || lab.nombre || lab.examen);
 
       // v11.0.1 — El código exacto manda SIEMPRE sobre el nombre (antes dependía del
       // orden del recorrido). Solo si ningún código casa se intenta por nombre, y ahí se
@@ -1933,9 +1969,9 @@
           // casaría aquí con la entrada general UROANALISIS y jamás llegaría a su casilla
           // de componente: si el analito mapea a un componente, se deja pasar a esa ruta.
           if (deOrina && item.key === "UROANALISIS" && _matchUroComponente(lab)) continue;
-          if (item.excluye && item.excluye.some((x) => name.includes(x))) continue;
+          if (item.excluye && item.excluye.some((x) => name.includes(_canonNombreLab(x)))) continue;
           for (const n of item.names) {
-              if (name.includes(n)) return item;
+              if (name.includes(_canonNombreLab(n))) return item;
           }
       }
       return null;
@@ -1984,6 +2020,7 @@
   // esta bandera para volcar UNA sola vez las claves reales del primer analito sin
   // fecha reconocida — así la próxima corrida real revela el nombre correcto.
   let _diagLabFechaLogged = false;
+  let _diagLabsSinCasarLogged = false;
   let _diagLabFechaKeyFound = false;
   const _diagLabFechaPorCasilla = new Set();
   // v12.3.36 — Reportado en consultorio con el Administrador de tareas en la mano: la
@@ -2308,6 +2345,30 @@
       // solo decide, con evidencia real, cuál de ellas es la vigente para Crónicos.
       const { candidatos: candidatosPorClave, pendientesWhitelist } = _ultimaFechaPorAnalito(labsArray);
       pendientes += pendientesWhitelist;
+
+      // v12.6.8 — DIAGNÓSTICO ÚNICO POR SESIÓN: qué trajo Athenea que NO casó con ninguno
+      // de los 13 analitos ni con un componente del parcial de orina. Reportado en
+      // consultorio: una paciente con resultado real de RAC (6.93 mg/gr en el PDF del
+      // laboratorio) no se completó en la historia. Un analito que no casa desaparece hoy
+      // en silencio: no se cuenta, no se avisa y no hay forma de saber con qué nombre
+      // exacto llegó. Con esta línea, el siguiente reporte del médico trae el nombre real
+      // y se agrega a la lista con evidencia, nunca por adivinanza. Solo nombre, código y
+      // resultado — jamás datos del paciente.
+      if (!_diagLabsSinCasarLogged) {
+          try {
+              const sinCasar = labsArray.filter((l) => l && !_matchLabInWhitelist(l) && !_matchUroComponente(l));
+              if (sinCasar.length) {
+                  _diagLabsSinCasarLogged = true;
+                  console.log("[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido:",
+                      JSON.stringify(sinCasar.map((l) => ({
+                          nombre: l.NombreParametro || l.nombre || l.examen || "",
+                          padre: l.NombreParametroPadre || l.nombreParametroPadre || "",
+                          codigo: String(l.CodigoParametro || l.codigo || ""),
+                          resultado: String(l.Resultado || l.resultado || l.valor || "")
+                      }))));
+              }
+          } catch (e) {}
+      }
 
       candidatosPorClave.forEach(({ lab, matched, resultVal, fechaInfo, resultDate }) => {
           // v11.0.1 — La fecha ya NO se rellena con la de HOY cuando el laboratorio no la

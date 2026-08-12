@@ -502,6 +502,38 @@ module.exports = {
       t.igual(busquedas, 3, "una búsqueda síncrona y exactamente DOS reintentos: acotado, nunca un sondeo eterno");
     });
 
+    // =====================================================================
+    // v12.6.8 — Reportado en consultorio con el PDF del laboratorio: una paciente con
+    // resultado real de RAC (6.93 mg/gr) no se completó en la historia. El emparejamiento
+    // por nombre era texto crudo: un separador distinto ("/" o "-" en vez de espacio) o
+    // una tilde bastaban para que el analito no casara con NINGUNA entrada y su resultado
+    // se perdiera sin dejar rastro. Normalización tipográfica, no clínica: no se amplía
+    // qué examen casa con qué casilla.
+    // =====================================================================
+    t.caso("_matchLabInWhitelist v12.6.8: el mismo examen casa venga con espacio, barra, guion o tildes", () => {
+      const variantes = [
+        "RELACION MICROALBUMINURIA CREATININA",
+        "RELACION MICROALBUMINURIA/CREATININA",
+        "RELACION MICROALBUMINURIA-CREATININA",
+        "Relación Microalbuminuria / Creatinina",
+        "RELACIÓN ALBÚMINA/CREATININA",
+        "RELACION ALBUMINA CREATININA"
+      ];
+      for (const nombre of variantes) {
+        const m = testApi._matchLabInWhitelist({ NombreParametro: nombre, NombreParametroPadre: "QUIMICA URINARIA" });
+        t.cierto(!!m && m.key === "RAC", "debe casar con RAC: " + nombre);
+      }
+    });
+
+    t.caso("_matchLabInWhitelist v12.6.8: la normalización NO afloja las exclusiones ni mezcla exámenes", () => {
+      // La creatinina sérica y la creatinina EN ORINA siguen siendo distintas (Incidente v11.0.1).
+      const orina = testApi._matchLabInWhitelist({ NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA" });
+      t.falso(orina && orina.key === "CREATININA", "la creatinina en orina no puede caer en la casilla de creatinina sérica");
+      // Y una microalbuminuria a secas no es el cociente RAC.
+      const micro = testApi._matchLabInWhitelist({ NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA" });
+      t.falso(micro && micro.key === "RAC", "la microalbuminuria sola (mg/L) no es la relación albuminuria/creatinina (mg/g)");
+    });
+
     t.caso("_hayComponenteUroReal: distingue componente real de pendiente, vacío y de analito ajeno al parcial", () => {
       t.cierto(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }]));
       t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }]));
