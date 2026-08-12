@@ -343,6 +343,28 @@ module.exports = {
       cv.api.__state.lastSignature = "";
     });
 
+    t.caso("TA: 'Atendido' recibe clase CSS .atendido y se atenúa, salvo que sea fraude (ROJO)", () => {
+      vaciarLista();
+      const citasMix = [
+        { key: "333@08:00 AM", doc_id: "333", nombre: "JUAN", hora_texto: "08:00 AM", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 },
+        { key: "444@08:20 AM", doc_id: "444", nombre: "PEDRO", hora_texto: "08:20 AM", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0 },
+        { key: "555@08:40 AM", doc_id: "555", nombre: "MARIA", hora_texto: "08:40 AM", estado: "Atendido", color: "ROJO", pym: [], elapsed: 0 }
+      ];
+      cv.api.__state.lastSignature = "";
+      cv.api.render(citasMix, "api", new Date());
+      t.igual(lista.children.length, 3, "tres tarjetas");
+
+      const cJuan = lista.children[0];
+      const cPedro = lista.children[1];
+      const cMaria = lista.children[2];
+
+      t.falso(cJuan.className.includes("atendido"), "En sala NO debe tener clase atendido");
+      t.cierto(cPedro.className.includes("atendido"), "Atendido DEBE tener clase atendido para atenuarse");
+      t.falso(cPedro.className.includes("rojo"), "Atendido normal NO debe tener clase rojo");
+      t.cierto(cMaria.className.includes("atendido"), "Atendido con fraude DEBE tener clase atendido");
+      t.cierto(cMaria.className.includes("rojo"), "Atendido con fraude DEBE tener clase rojo para que el CSS gane");
+    });
+
     t.caso("repaint: repinta la lista desde el último snapshot guardado", () => {
       vaciarLista();
       cv.api.__state.lastSnapshot = { list: citas, source: "pagina", at: new Date() };

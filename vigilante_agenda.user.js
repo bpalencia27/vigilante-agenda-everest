@@ -4757,6 +4757,12 @@
       .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar)}
       #vgl-root.light .vgl-cd.late{color:var(--c-ambar)}
 
+
+      .vgl-card.atendido:not(.rojo) {
+        opacity: 0.65;
+        filter: grayscale(0.8);
+      }
+
       /* Acciones en Tarjeta */
       .vgl-card-actions{
         display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;
@@ -8741,7 +8747,8 @@
       // clase propia). Verde/azul se quedan sin tinte: son estados resueltos/informativos.
       const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
       const esPes = tieneAbandonoPES(a);
-      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "");
+      const esAtendido = (a.estado || "").toLowerCase().includes("atendido");
+      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (esAtendido ? " atendido" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "");
       // Tres lecturas distintas y honestas: tiene pendientes / está al día / NO cruza
       // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
