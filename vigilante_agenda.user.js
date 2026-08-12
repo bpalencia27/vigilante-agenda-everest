@@ -6409,6 +6409,7 @@
       }
       .vgl-card.pes:hover{background:linear-gradient(170deg,rgba(var(--rgb-pes),.20),rgba(var(--rgb-pes),.09))}
       .vgl-card.hit{box-shadow:0 0 0 2px rgba(var(--rgb-ambar),.60),var(--shadow-card)}
+      .vgl-card.atendido:not(.rojo){opacity:0.6;filter:grayscale(60%);}
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
@@ -10983,7 +10984,7 @@
       // clase propia). Verde/azul se quedan sin tinte: son estados resueltos/informativos.
       const colorCls = (a.color === "ROJO" || a.color === "MORADO" || a.color === "AMBAR") ? " " + a.color.toLowerCase() : "";
       const esPes = tieneAbandonoPES(a);
-      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "");
+      card.className = "vgl-card" + colorCls + (a.color === "ROJO" ? " rojo" : "") + (esPes ? " pes" : "") + (state.busqueda && matchesSearch(a) ? " hit" : "") + (a.estado && a.estado.toLowerCase().includes("atendido") ? " atendido" : "");
       // Tres lecturas distintas y honestas: tiene pendientes / está al día / NO cruza
       // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
       const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
