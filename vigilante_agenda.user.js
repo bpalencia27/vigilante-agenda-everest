@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.8
+// @version      12.6.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -343,6 +343,33 @@
   paciente). Si vuelve a fallar un analito, el siguiente reporte trae el nombre exacto y
   se agrega con evidencia. Hasta ahora ese caso era mudo.
   Banco: 673/673 (2 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.9 — 12-08-2026: EL TABLERO POR FIN DICE DE QUIÉN ES CADA FILA, Y VE LOS ERRORES.
+  Revisando la Hoja real de Apps Script (34 filas de dos jornadas) salieron tres cosas:
+  1) La columna `equipo` venía VACÍA en TODAS las filas. Dependía de que alguien escribiera
+     a mano el ajuste S.equipo y nadie lo hace: el tablero era un montón de filas anónimas
+     donde no se podía saber si dos venían del mismo consultorio. Nuevo _equipoId(): si el
+     ajuste está vacío se usa un identificador aleatorio y estable creado en ESE navegador
+     — un número de serie sin significado (ni nombre, ni usuario, ni IP, ni huella del
+     navegador), que el médico puede sobrescribir poniéndole nombre al equipo en Ajustes.
+  2) Había filas DUPLICADAS exactas: mismo ts y mismo contenido, recibidas con minutos de
+     diferencia (un reintento de la cola que en realidad sí había llegado). Cada fila lleva
+     ahora `lote`, único por encolado, para que el tablero descarte el duplicado en vez de
+     contar dos veces la misma jornada.
+  3) Solo se reportaba lo que salía BIEN. Un fallo del script en consultorio no dejaba
+     rastro remoto: se sabía de él únicamente si el médico lo contaba. Ahora se enganchan
+     los errores del propio userscript (window.error y promesas sin capturar, filtrados por
+     origen para no subir el ruido de Everest, que es constante): se CUENTAN todos y los 5
+     primeros de cada día viajan con su mensaje saneado — sin URL, sin comillas y con toda
+     tira de 6+ dígitos borrada, así una cédula no sobrevive ni aunque venga dentro del
+     mensaje de error.
+  Y una fila `entorno` una vez al día (versión instalada, navegador, sistema, tamaño de
+  pantalla, zona horaria y gestor de userscripts): sin eso, un fallo reportado no se puede
+  leer, y el tablero mostraba versiones que ya no se reconocían.
+  Cero PHI, como siempre: nada de esto identifica a un paciente ni a una persona.
+  Banco: 677/677 (4 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -911,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4073,11 +4100,121 @@
     try { let g = 0; while (repQ.length && g++ < 10) { if (await repPost(repQ[0])) { repQ.shift(); repQSave(); } else break; } }
     finally { repFlushing = false; }
   }
+  // v12.6.9 — IDENTIFICADOR DE EQUIPO AUTOMÁTICO. Hasta v12.6.8 la columna `equipo` del
+  // tablero salía VACÍA en todas las filas: dependía de que alguien escribiera a mano el
+  // ajuste S.equipo, y nadie lo hace. Sin ese dato el tablero es un montón de filas
+  // anónimas: no se sabe si dos filas son del mismo consultorio o de dos distintos, ni se
+  // puede seguir a un equipo con un fallo concreto. Ahora, si el ajuste está vacío, se usa
+  // un identificador ALEATORIO y estable creado en ESTE navegador. No lleva nada de la
+  // persona ni del equipo real: ni nombre, ni usuario, ni IP, ni huella del navegador —
+  // es un número de serie sin significado, que además el médico puede sobrescribir
+  // poniéndole nombre al equipo en Ajustes.
+  const EQUIPO_ID_KEY = "vgl_equipo_id";
+  function _equipoId() {
+    try {
+      const manual = String(S.equipo || "").trim();
+      if (manual) return manual.slice(0, 40);
+      let id = localStorage.getItem(EQUIPO_ID_KEY);
+      if (!id) {
+        id = "eq-" + Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+        localStorage.setItem(EQUIPO_ID_KEY, id);
+      }
+      return String(id).slice(0, 40);
+    } catch (e) { return ""; }
+  }
+
+  // v12.6.9 — `lote`: identificador único por fila encolada. En la Hoja aparecieron filas
+  // DUPLICADAS exactas (mismo ts, mismo payload, recibidas con minutos de diferencia): un
+  // reintento de la cola que sí llegó la primera vez y volvió a entregarse. Con este
+  // campo el tablero puede descartar el duplicado en vez de contar dos veces la misma
+  // jornada. No cambia nada del envío: solo lo hace identificable.
+  let _loteSeq = 0;
+  function _loteId() {
+    _loteSeq++;
+    return (_equipoId() || "eq") + "-" + Date.now().toString(36) + "-" + _loteSeq;
+  }
+
   function reportar(evento, extra) {
     if (!repOn()) return;
     repQLoad();
-    repQ.push(Object.assign({ token: TABLERO.token, equipo: (S.equipo || "").slice(0, 40), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp() }, extra || {}));
+    repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
     repQSave(); repFlush();
+  }
+
+  // v12.6.9 — ENTORNO, una vez al día. Para leer un fallo reportado hace falta saber sobre
+  // qué corría: versión real instalada (el tablero mostraba versiones que ya no se
+  // reconocían), navegador, sistema, tamaño de pantalla y zona horaria. Todo del entorno
+  // técnico: ninguna de estas piezas identifica a una persona ni a un paciente.
+  function repEntornoDiario() {
+    if (!repOn()) return;
+    try {
+      const k = "vgl_rep_entorno";
+      if (localStorage.getItem(k) === todayStamp()) return;
+      localStorage.setItem(k, todayStamp());
+      const ua = String((navigator && navigator.userAgent) || "");
+      const nav = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox"
+        : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "otro";
+      const so = /Windows NT 10/.test(ua) ? "Windows 10/11" : /Windows/.test(ua) ? "Windows"
+        : /Mac OS X/.test(ua) ? "macOS" : /Android/.test(ua) ? "Android" : /Linux/.test(ua) ? "Linux" : "otro";
+      let zona = "";
+      try { zona = String(Intl.DateTimeFormat().resolvedOptions().timeZone || "").slice(0, 40); } catch (e2) {}
+      reportar("entorno", {
+        nav, so, zona,
+        pantalla: (screen && screen.width ? screen.width + "x" + screen.height : ""),
+        gestor: (typeof GM_info !== "undefined" && GM_info && GM_info.scriptHandler) ? String(GM_info.scriptHandler).slice(0, 20) : ""
+      });
+    } catch (e) {}
+  }
+
+  // v12.6.9 — ERRORES DE VERDAD, no solo clics. Hasta ahora el tablero solo recibía
+  // acciones exitosas: un fallo del script en consultorio no dejaba rastro remoto y solo
+  // se sabía de él cuando el médico lo reportaba a mano. Se cuentan TODOS (contador
+  // agregado en la ventana de uso) y, además, los 5 primeros del día viajan con su
+  // mensaje SANEADO: sin URL completas, sin comillas, y con toda tira de 6+ dígitos
+  // borrada — una cédula no puede sobrevivir ahí ni aunque venga dentro del mensaje.
+  const ERR_MAX_DIA = 5;
+  let _errN = 0, _errDia = "";
+  function _sanearMensajeError(msg) {
+    return String(msg == null ? "" : msg)
+      .replace(/https?:\/\/[^\s)]+/g, "<url>")
+      .replace(/\d{6,}/g, "")
+      .replace(/["'`]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 180);
+  }
+  function reportarError(origen, msg, donde) {
+    try {
+      uxTrack("error." + (origen === "promesa" ? "promesa" : origen === "api" ? "api" : "js"));
+      if (!repOn()) return;
+      const d = todayStamp();
+      if (_errDia !== d) { _errDia = d; _errN = 0; }
+      if (_errN >= ERR_MAX_DIA) return;
+      _errN++;
+      reportar("error", { origen: String(origen || "js").slice(0, 12), msg: _sanearMensajeError(msg), donde: _sanearMensajeError(donde).slice(0, 60) });
+    } catch (e) {}
+  }
+  // Solo se enganchan los errores que salen del PROPIO script: el userscript comparte
+  // ventana con Everest y con Athenea, y subir los errores ajenos llenaría el tablero de
+  // ruido que no podemos arreglar (la consola del consultorio está llena de ellos).
+  function _instalarCazaErrores() {
+    try {
+      window.addEventListener("error", (ev) => {
+        try {
+          const archivo = String((ev && ev.filename) || "");
+          if (!/userscript|vigilante/i.test(archivo)) return;
+          reportarError("js", (ev && ev.message) || "", archivo.split("/").pop() + ":" + ((ev && ev.lineno) || 0));
+        } catch (e) {}
+      });
+      window.addEventListener("unhandledrejection", (ev) => {
+        try {
+          const r = ev && ev.reason;
+          const pila = String((r && r.stack) || "");
+          if (pila && !/userscript|vigilante/i.test(pila)) return;
+          reportarError("promesa", (r && r.message) || r || "", "");
+        } catch (e) {}
+      });
+    } catch (e) {}
   }
   // Resumen del día ANTERIOR, una sola vez (candado por fecha en el navegador).
   function repDailySummary() {
@@ -11320,6 +11457,11 @@
     // 30 minutos. Solo la pestaña líder envía; el toggle vive en Ajustes (uxTelemetria).
     setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
     setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
+    // v12.6.9 — Errores y entorno. La caza de errores se engancha YA (un fallo temprano
+    // es justo el que más falta hace ver); la fila de entorno sale a los 12 s, cuando la
+    // pestaña ya se estabilizó, y solo una vez al día.
+    _instalarCazaErrores();
+    setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue

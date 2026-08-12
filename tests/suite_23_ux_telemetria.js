@@ -3,7 +3,8 @@
 // tablero JAMÁS puede haber datos de paciente — solo nombres fijos de acción y números.
 module.exports = {
   nombre: "Telemetría de uso del panel (v12.5)",
-  cubre: ["uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave"],
+  cubre: ["uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
+    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario"],
   pruebas(t, api, env, cargar) {
 
     // gmxhr que siempre falla: reportar() encola pero repFlush no puede entregar, así
@@ -54,7 +55,58 @@ module.exports = {
       t.igual(acc["cita.creada:12"], 2);
       // La fila lleva SOLO las claves del contrato del tablero: nada de nombres/cédulas.
       const claves = Object.keys(q[0]).sort();
-      t.igual(claves, ["acciones", "deDia", "desde", "dia", "equipo", "evento", "n", "token", "ts", "ver"]);
+      t.igual(claves, ["acciones", "deDia", "desde", "dia", "equipo", "evento", "lote", "n", "token", "ts", "ver"]);
+      // v12.6.9 — `equipo` ya no puede salir vacío: en la Hoja real TODAS las filas venían
+      // sin él (dependía de un ajuste manual que nadie llena) y no había forma de saber si
+      // dos filas eran del mismo consultorio.
+      t.cierto(!!q[0].equipo, "la fila siempre identifica el equipo");
+      t.cierto(!!q[0].lote, "y lleva identificador de lote para descartar duplicados");
+    });
+
+    // =====================================================================
+    // v12.6.9 — Lo que la Hoja real dejó ver: columna `equipo` vacía en todas las filas y
+    // filas DUPLICADAS exactas (mismo ts y mismo payload, entregadas con minutos de
+    // diferencia por un reintento de la cola).
+    // =====================================================================
+    t.caso("equipo: si el ajuste está vacío se usa un id anónimo ESTABLE de este navegador", () => {
+      const c = cargar(cfgRed);
+      c.api.__S.equipo = "";
+      const id1 = c.api._equipoId();
+      t.cierto(!!id1, "nunca vacío");
+      t.igual(c.api._equipoId(), id1, "el mismo navegador siempre reporta el mismo id");
+      t.cierto(/^eq-[a-z0-9]+$/.test(id1), "es un número de serie sin significado, no un dato de la persona");
+      // El nombre que el médico ponga en Ajustes manda sobre el automático.
+      c.api.__S.equipo = "CONSULTORIO 3";
+      t.igual(c.api._equipoId(), "CONSULTORIO 3");
+    });
+
+    t.caso("lote: cada fila encolada lleva un identificador distinto (el tablero puede descartar el duplicado)", () => {
+      const c = cargar(cfgRed);
+      c.api.reportar("prueba", {});
+      c.api.reportar("prueba", {});
+      const q = cola(c);
+      t.igual(q.length, 2);
+      t.cierto(q[0].lote !== q[1].lote, "dos filas distintas nunca comparten lote");
+    });
+
+    t.caso("_sanearMensajeError: sin URL, sin comillas y sin ninguna tira de 6+ dígitos (jamás una cédula)", () => {
+      const c = cargar(cfgRed);
+      const limpio = c.api._sanearMensajeError('Fallo al leer "paciente" 21545051 en https://neps.everestintelligent.com/viva/HCHealth/x?y=1');
+      t.falso(/\d{6,}/.test(limpio), "ninguna tira de 6+ dígitos sobrevive");
+      t.falso(limpio.includes("https://"), "las URL se reemplazan");
+      t.falso(/["'`]/.test(limpio), "sin comillas");
+      t.cierto(limpio.includes("Fallo al leer"), "el mensaje sigue siendo legible");
+      t.cierto(c.api._sanearMensajeError(null) === "");
+    });
+
+    t.caso("reportarError: cuenta TODOS y manda como máximo 5 filas por día", () => {
+      const c = cargar(cfgRed);
+      for (let i = 0; i < 9; i++) c.api.reportarError("js", "algo falló " + i, "vigilante.user.js:1");
+      const filas = cola(c).filter((f) => f.evento === "error");
+      t.igual(filas.length, 5, "tope diario: el tablero no se inunda con el mismo fallo repetido");
+      t.igual(filas[0].origen, "js");
+      const w = JSON.parse(c.env.win.localStorage.getItem("vgl_ux"));
+      t.igual(w.acciones["error.js"], 9, "pero el CONTADOR sí ve los nueve");
     });
 
     t.caso("uxEnviarVentana: ventana vacía o reporte apagado = no se encola nada", () => {
