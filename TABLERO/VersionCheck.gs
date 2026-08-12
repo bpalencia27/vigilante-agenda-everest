@@ -20,7 +20,7 @@
   toda la flota en vez de esperar el ciclo propio de cada Tampermonkey.
 */
 
-const MIN_VERSION = "12.5.2";  // ← CAMBIA ESTO para futuras actualizaciones críticas
+const MIN_VERSION = "12.5.9";  // ← CAMBIA ESTO para futuras actualizaciones críticas
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
 
 function doGet(e) {
