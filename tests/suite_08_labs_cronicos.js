@@ -5,7 +5,7 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab"
+    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -428,6 +428,124 @@ module.exports = {
       t.igual(testApi._findUroInput("RESULTADO CILINDROS"), inputCilindros, "el doble espacio del placeholder real también casa");
       t.igual(testApi._findUroInput("RESULTADO GLUCOSURIA"), null);
       c.env.doc.querySelectorAll = prevQSA;
+    });
+
+    // ================= v12.5.11 — "¿Uroanálisis?" (interruptor SI/NO) =================
+    // Confirmado en consultorio (pantallazo del 12-08-2026): dos radios `name=
+    // "resultadoPrograma.swUroanalisis"`, SIN atributo `value` (Angular los distingue por
+    // FormControl, no por HTML) — la única ancla real es el texto visible del <label> que
+    // envuelve cada radio, igual que _findUroInput usa el placeholder.
+    function crearRadiosUro({ siChecked = false, noChecked = false } = {}) {
+      const radioSi = { checked: siChecked, parentElement: { textContent: " SI " }, clicked: false, click() { this.checked = true; this.clicked = true; } };
+      const radioNo = { checked: noChecked, parentElement: { textContent: " NO " }, clicked: false, click() { this.checked = true; this.clicked = true; } };
+      return { radioSi, radioNo, lista: [radioSi, radioNo] };
+    }
+
+    t.caso("_marcarUroanalisisSi: ningún radio elegido todavía -> marca SI y devuelve true", () => {
+      const { radioSi, radioNo, lista } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(r, "debe reportar que sí marcó");
+      t.cierto(radioSi.clicked, "el radio SI recibe el click");
+      t.falso(radioNo.clicked, "el radio NO no se toca");
+    });
+
+    t.caso("_marcarUroanalisisSi: el médico YA eligió SI -> no lo vuelve a tocar (idempotente) y devuelve false", () => {
+      const { radioSi, lista } = crearRadiosUro({ siChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+      t.falso(radioSi.clicked, "ya estaba marcado por el médico: ni siquiera se vuelve a hacer click");
+    });
+
+    t.caso("_marcarUroanalisisSi: el médico YA eligió NO -> se respeta, jamás se sobrescribe con SI", () => {
+      const { radioSi, radioNo, lista } = crearRadiosUro({ noChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+      t.falso(radioSi.clicked, "el NO del médico es una decisión clínica: no se pisa con SI");
+      t.cierto(radioNo.checked, "el NO del médico sigue intacto");
+    });
+
+    t.caso("_marcarUroanalisisSi: sin radios en esta vista -> no lanza, devuelve false", () => {
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      t.noLanza(() => testApi._marcarUroanalisisSi());
+      c.env.doc.querySelectorAll = () => [];
+      t.falso(testApi._marcarUroanalisisSi());
+      c.env.doc.querySelectorAll = prevQSA;
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: un componente REAL del parcial de orina marca \"SI\" en ¿Uroanálisis? y lo reporta en uroanalisisMarcado", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputNitritos.value, "NEGATIVO", "el componente sí se escribió, como siempre");
+      t.cierto(res.uroanalisisMarcado, "injectLabsIntoCronicos reporta que marcó el interruptor");
+      t.cierto(radioSi.clicked, "y de verdad hizo click en el radio SI");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: SOLO componentes PENDIENTES/vacíos -> NO marca el interruptor (no hay evidencia de que el examen ya se hizo)", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.uroanalisisMarcado, "un resultado PENDIENTE no es evidencia de un uroanálisis ya realizado");
+      t.falso(radioSi.clicked);
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: componente real, pero el médico YA había marcado NO -> se respeta, no se pisa con SI", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, radioNo, lista: radios } = crearRadiosUro({ noChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputNitritos.value, "NEGATIVO", "el componente igual se escribe: eso no depende del interruptor");
+      t.falso(res.uroanalisisMarcado, "el NO del médico es una decisión clínica, no se sobrescribe");
+      t.falso(radioSi.clicked);
+      t.cierto(radioNo.checked);
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: sin ningún componente de orina en labsArray (solo suero) -> no marca el interruptor", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? radios : []);
+      const labs = [{ NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.uroanalisisMarcado);
+      t.falso(radioSi.clicked, "nunca se hizo click porque no hay evidencia de un componente de orina real");
     });
 
     t.caso("v12.3.37: padres 'URINARIO' (sedimento/citoquímico) también disparan la guarda de orina", () => {

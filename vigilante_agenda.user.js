@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.10
+// @version      12.5.11
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,27 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.11 — 12-08-2026: EL BOTÓN AUTO-LABS (ATHENEA) TAMBIÉN MARCA "SI" EN
+  ¿UROANÁLISIS? Pedido del consultorio, con la etiqueta HTML real capturada en campo: el
+  interruptor "¿Uroanálisis?" de la Ruta de Crónicos es un par de radios `name=
+  "resultadoPrograma.swUroanalisis"` SIN atributo `value` (Angular los distingue por
+  FormControl, no por HTML) — la única ancla real es el texto visible del <label> que
+  envuelve cada radio ("SI"/"NO"), igual que _findUroInput ya usa el placeholder para las
+  7 casillas de componentes desde v12.3.37. Nuevo _marcarUroanalisisSi(): busca el radio
+  cuya etiqueta sea "SI" y le hace click, PERO SOLO si el médico no había elegido SI ni NO
+  todavía (si ya eligió cualquiera de los dos, se respeta tal cual — nunca se pisa una
+  decisión clínica ya tomada, ni siquiera para "corregir" un NO). Se dispara en
+  injectLabsIntoCronicos en cuanto Athenea confirma al menos un componente REAL (no vacío,
+  no PENDIENTE) del parcial de orina — la misma condición que ya decide si ese componente
+  se escribe en su casilla — y el resultado queda expuesto en `uroanalisisMarcado` para
+  que el resumen del botón se lo diga al médico.
+  El interruptor NORMAL/ANORMAL sigue SIN automatizarse — es interpretación clínica y la
+  evidencia de DOM que se recibió para ese control coincidía, sin explicación, con la del
+  propio SI/NO de "¿Uroanálisis?"; se pidió confirmación antes de tocarlo, misma regla de
+  la casa de siempre (v11.0.1): ante la duda, se deja al médico, jamás se inventa.
 */
 
 /*
@@ -655,7 +676,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.11";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -810,7 +831,12 @@
     // uroanálisis. Lo que existe es `resultadoPrograma.swUroanalisis`, un par de botones
     // de opción (sí/no), donde no cabe un resultado escrito. Se deja la entrada para que
     // el analito se CUENTE y se avise ("Sin casilla en esta vista: UROANALISIS") en vez de
-    // desaparecer en silencio: el médico sabe así que ese lo registra a mano.
+    // desaparecer en silencio.
+    // v12.5.11 — el par SI/NO en sí YA se automatiza (ver _marcarUroanalisisSi, disparado
+    // desde injectLabsIntoCronicos): con un componente real del parcial de orina, se marca
+    // SI solo. Los 7 resultados detallados (Nitritos, Sangre, etc.) ya se auto-completaban
+    // desde v12.3.37 vía UROANALISIS_COMPONENTES/_findUroInput — esto no cambia esa parte,
+    // solo agrega el interruptor SI que faltaba antes de esas casillas.
     { key: "UROANALISIS", names: ["UROANALISIS", "PARCIAL DE ORINA"], codes: ["2095", "907106"], resultId: "resultadoUroanalisis", dateId: "fechaResultUroanalisis" },
     { key: "GLUCOSA", names: ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"], codes: ["2013", "903841"], resultId: "resultadoGlicemia", dateId: "fechaResultGlicemia" },
     // v12.0.5 — CONFIRMADO EN EL CONSULTORIO (10/08/2026), leyendo la etiqueta que
@@ -908,6 +934,28 @@
           }
       } catch (e) {}
       return null;
+  }
+
+  // v12.5.11 — El interruptor "¿Uroanálisis?" (pedido del consultorio, pantallazo del
+  // 12-08-2026, confirmado en campo): un par de radios `name="resultadoPrograma.
+  // swUroanalisis"`, SI/NO, SIN atributo `value` en el DOM (Angular los distingue por
+  // FormControl, no por HTML) — la única ancla real es el texto visible junto a cada
+  // radio, mismo patrón que _findUroInput usa con el placeholder. Se busca el radio cuya
+  // etiqueta (el texto del <label> que lo envuelve) sea exactamente "SI".
+  // Regla sagrada de siempre: si el médico YA marcó SI o NO, no se toca — solo se marca
+  // cuando NINGÚN radio del par está seleccionado todavía.
+  function _marcarUroanalisisSi() {
+      try {
+          const radios = document.querySelectorAll('input[name="resultadoPrograma.swUroanalisis"]');
+          let yaElegido = false, radioSi = null;
+          for (const el of radios) {
+              if (el.checked) yaElegido = true;
+              if (_canonTexto(el.parentElement && el.parentElement.textContent) === "SI") radioSi = el;
+          }
+          if (yaElegido || !radioSi) return false;
+          radioSi.click();
+          return true;
+      } catch (e) { return false; }
   }
 
   // v12.0.0 (del otro linaje) — Consulta a Athenea con reintento por AÑO. El endpoint exige
@@ -1849,7 +1897,13 @@
       let respetadas = 0;
       const sinCasilla = [];
       const yaEscritas = new Set();
-      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0 };
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false };
+      // v12.5.11 — se enciende en cuanto Athenea confirma AL MENOS un componente real
+      // (no vacío, no PENDIENTE) del parcial de orina — la misma condición que ya decide
+      // si ese componente se escribe en su casilla. Es la evidencia de que el uroanálisis
+      // SÍ se hizo, así que el interruptor SI se marca aunque la casilla puntual de algún
+      // componente no se haya encontrado en esta vista.
+      let uroanalisisConfirmadoReal = false;
 
       // v12.3.37 — Componentes del uroanálisis: cada uno va a SU casilla propia (anclada
       // al placeholder visible), nunca al whitelist de suero. Mismas reglas sagradas del
@@ -1876,6 +1930,7 @@
               return;
           }
           if (!comp) return; // nombre aún sin confirmar: casilla vacía; el diagnóstico de orina ya mostró el nombre real
+          uroanalisisConfirmadoReal = true;
           if (yaEscritas.has(marca)) {
               // Dos analitos DISTINTOS compitiendo por la misma casilla (tira reactiva vs.
               // sedimento, subtipos de cilindros): manda el más reciente y se AVISA una vez
@@ -1920,6 +1975,12 @@
           // abajo)… y, desde v12.3.37, los componentes del panel de orina por su ruta propia.
           if (!_matchLabInWhitelist(lab) && _esAnalitoDeOrina(lab)) inyectarComponenteOrina(lab);
       });
+
+      // v12.5.11 — Con al menos un componente real confirmado, se marca "SI" en el
+      // interruptor "¿Uroanálisis?" — solo si el médico no lo había elegido ya (ver
+      // _marcarUroanalisisSi). El interruptor NORMAL/ANORMAL sigue SIN automatizarse:
+      // misma regla de la casa de siempre, ante la duda no se inventa.
+      const uroanalisisMarcado = uroanalisisConfirmadoReal ? _marcarUroanalisisSi() : false;
 
       // v12.5.6 — CAMBIO PEDIDO POR EL MÉDICO: antes "el primero de la lista gana" (el
       // resto se descartaba con solo un aviso), asumiendo que Athenea siempre entrega las
@@ -2026,7 +2087,7 @@
               }
           } catch (e) {}
       });
-      return { count, pendientes, sinCasilla, respetadas };
+      return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado };
   }
 
   // =====================================================================
@@ -2163,6 +2224,7 @@
                   const r = injectLabsIntoCronicos(labs);
                   uxTrack("labs.autollenado.casillas", { n: r.count });
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
+                    + (r.uroanalisisMarcado ? "\n\n🧪 Se marcó \"SI\" en ¿Uroanálisis? porque Athenea trajo resultados reales del parcial de orina." : "")
                     + (r.respetadas ? "\n\n✋ " + r.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
@@ -2186,6 +2248,7 @@
                           if (labs2 && labs2.length > 0) {
                               const r2 = injectLabsIntoCronicos(labs2);
                               alert("✅ Sesión iniciada y " + labs2.length + " analitos encontrados: " + r2.count + " casillas diligenciadas en la Ruta Crónicos."
+                                + (r2.uroanalisisMarcado ? "\n\n🧪 Se marcó \"SI\" en ¿Uroanálisis? porque Athenea trajo resultados reales del parcial de orina." : "")
                                 + (r2.respetadas ? "\n\n✋ " + r2.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                                 + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
                                 + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
