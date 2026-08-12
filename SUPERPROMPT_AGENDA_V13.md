@@ -6,6 +6,48 @@
 
 ---
 
+# 0-bis. MODO JULES — cómo se ejecuta esto en un agente único
+
+Este documento describe 18 agentes en 5 fases. **Jules no es un orquestador: es UN agente
+asíncrono por tarea.** No le pegues el documento entero esperando que lo ejecute todo — leería
+500 líneas y haría *algo*. El reparto en tareas está en **`JULES_TAREAS_AGENDA_V13.md`**, en
+este mismo repo: una tarea por sesión, en el orden que indica.
+
+**Cada tarea de Jules se resuelve así:** «lee `SUPERPROMPT_AGENDA_V13.md` y ejecuta ÚNICAMENTE
+el agente X». El brief está commiteado, así que no hace falta repetirlo en el prompt.
+
+### Reglas del entorno (léelas antes de tocar nada)
+
+- **Rama base: `claude/pym-agenda-blindaje-v12-4`**, no `main`. El PR va contra esa rama.
+- **El banco corre sin instalar nada:** `node tests/runner.js`. No hay `npm install`, no hay
+  `package.json` con dependencias, no hay framework de pruebas. **No añadas ninguno.**
+- **PROHIBIDO reformatear.** Nada de Prettier, ESLint --fix, reordenar funciones, cambiar
+  comillas, normalizar indentación ni «limpiar» el archivo. `vigilante_agenda.user.js` es un
+  IIFE de ~11.500 líneas: un reformateo produce un diff imposible de revisar y **el PR se
+  descarta entero**, aunque el cambio de fondo fuera correcto.
+- **No añadas herramientas de build, bundlers, TypeScript ni dependencias.** El archivo se
+  copia tal cual a un Gist y Tampermonkey lo ejecuta; cualquier paso de compilación lo rompe.
+- **Ninguna petición real** a Everest, Athenea ni AppCita. Todo con mocks, como las suites
+  existentes. Jules no tiene —ni debe tener— credenciales de la clínica.
+- **Diff mínimo.** Solo lo que pide la tarea. Nada de «de paso arreglé…».
+- **Si Jules te pide aprobar un plan**, ese plan debe incluir explícitamente: (1) qué prueba
+  nueva va a escribir y (2) qué mutación va a aplicar para verificarla. Un plan sin esas dos
+  cosas se rechaza antes de que escriba una línea.
+- **Comentarios en español**, con el estilo de la casa: cada comentario explica el POR QUÉ
+  —el incidente o la restricción que lo motivó—, no el qué.
+
+### Qué hace fallar un PR aunque «las pruebas pasen»
+
+1. El banco trae **menos comprobaciones** que la rama base (parte de 677): se borró o debilitó
+   una prueba.
+2. Falta la **transcripción de mutación** en la descripción del PR.
+3. Un selector, endpoint o regla clínica **sin evidencia citada**.
+4. Cualquier dato de paciente real, en cualquier archivo.
+5. El diff toca algo fuera del alcance de D5.
+6. El archivo aparece reformateado.
+
+---
+
 # 0. CONTEXTO INMUTABLE (ningún agente puede cambiar esto)
 
 **Producto.** `vigilante_agenda.user.js` — userscript de Tampermonkey (IIFE única, sin build,
@@ -67,6 +109,8 @@ Leídas del archivo real (números de línea sobre v12.6.9; verifícalos, no los
 | `#vgl-agm-prog-box` / `#vgl-agm-prog-sel` | :8931 | Desplegable de programa. **Ya se llena** con `programasPaciente[]` filtrando `swProgramaEspecial === true`; el médico ELIGE uno y ese id viaja como `ProgramaId` en `AsignarTurno` |
 | `_cargarHorasToken` | :9039 | Patrón de cancelación de respuestas obsoletas — **respetarlo** |
 | `vivo()` / `closeMod()` | :9027 | Guarda de promesa huérfana: nada se pinta sobre un modal ya cerrado |
+| `colorAndAlert(a, now)` | :5027 | **Asigna VERDE tanto a «En sala» como a «Atendido»** — de ahí que se vean idénticos. El color codifica PUNTUALIDAD (verde a tiempo / rojo fraude / ámbar sin presentarse), no estado de atención |
+| `render()` — `card.innerHTML` | ~:11054 | Tarjeta del paciente: punto de color, hora, `<span class="vgl-badge">` con `a.estado` textual, nombre, CC, chips PyM y botones |
 | Tokens de diseño CSS | ~:5654 | Lista de selectores donde viven `--bg-solid`, `--fg`, `--r-surface`… |
 
 **Trampa conocida (incidente v12.6.6).** Todo overlay que cuelgue de `document.body` fuera de
@@ -103,7 +147,13 @@ sale como texto desnudo sobre Everest. Existe una prueba estructural en
    **13:00–16:00 en la de la tarde**.
 9. En todos los casos **queda disponible elegir cualquier otra hora**. La meta es que el
    módulo **encuentre las citas recomendadas por perfil de paciente**, no que restrinja.
-10. **Analizar qué funcionalidades útiles se podrían agregar** con todo lo que ya se conoce.
+10. **Distinguir de un vistazo al paciente ATENDIDO del que está EN SALA.** Reportado con
+    captura del panel real: hoy lo único que los diferencia es la palabra dentro de la
+    insignia. Todo lo demás —punto de color, tono de la insignia, tratamiento de la tarjeta—
+    es idéntico. El médico necesita una ayuda visual, no leer cada tarjeta.
+    *(Nota de alcance: esto NO es el modal de agendamiento, es la LISTA de tarjetas del panel.
+    Ver D6 y el agente C6.)*
+11. **Analizar qué funcionalidades útiles se podrían agregar** con todo lo que ya se conoce.
 
 ---
 
@@ -265,9 +315,46 @@ realces compitiendo por el mismo espacio visual.
 `normalizeHora`**, que ya resuelve ese lío. Un `includes("7:30")` es motivo de rechazo:
 casaría con `17:30` y con `07:30 PM`.
 
+### D6 — «Atendido» vs «En sala»: hace falta un SEGUNDO eje visual, no repintar el existente.
+Diagnóstico verificado en el código, no supuesto: `colorAndAlert` (:5031-5044) devuelve
+**VERDE para «En sala» y VERDE para «Atendido»**. La tarjeta pinta ese color en el punto, en
+el tinte de la insignia y en el borde. Por eso son gemelas: **el color no codifica el estado
+de atención, codifica la PUNTUALIDAD** — verde llegó bien, rojo fraude extemporáneo, ámbar
+pasó la tolerancia sin presentarse, morado por vencer, azul en espera normal.
+
+Y ese eje **no se puede tocar**: es el que sostiene la detección de fraude, que es la función
+original del Vigilante. Repintar «Atendido» de gris rompería la señal de fraude en pacientes
+ya atendidos (la rama que pinta ROJO cuando alguien pasó de «Sin presentarse» directo a
+«Atendido»), que costó una versión entera arreglar.
+
+**La solución es añadir un segundo eje independiente**, el de *¿requiere acción?*:
+
+| Estado | Significado para el médico | Eje 1 (color = puntualidad) | Eje 2 (atención) |
+|---|---|---|---|
+| **En sala** | **Te está esperando AHORA. Actúa.** | intacto (verde/rojo) | **destacado, activo** |
+| **Atendido** | Hecho. No requiere nada. | intacto (verde/rojo) | **atenuado, cerrado** |
+| Sin presentarse / otros | En curso o pendiente | intacto | neutro |
+
+**Cómo se expresa el eje 2** (lo concreta el diseño de la Fase 1, pero con estas reglas):
+- **Nunca solo con color**: tiene que haber forma, opacidad, peso tipográfico o un icono —
+  el panel se usa con luz de consultorio y hay médicos con daltonismo.
+- «Atendido» se **atenúa** (es trabajo terminado, debe pesar menos visualmente y dejar de
+  competir por la atención), pero **sigue legible** — no se oculta ni se colapsa: el médico
+  necesita poder releerlo y usar sus botones.
+- «En sala» se **destaca**, porque es lo único de la lista que exige una acción inmediata.
+- El **rojo de fraude sigue ganando** sobre cualquier atenuación: un atendido con fraude
+  extemporáneo tiene que seguir gritando. Prueba obligatoria de este caso.
+- Los botones de acción de una tarjeta atenuada **siguen funcionando**. Atenuar es un peso
+  visual, jamás una discapacidad funcional.
+
+**Contar los estados no basta.** El resumen del panel ya dice cuántos hay en sala y cuántos
+atendidos (:10845): el problema no es el conteo, es reconocerlos **dentro de la lista** sin
+leer palabra por palabra.
+
 ### D5 — Alcance cerrado.
 **Se toca:** la ventana de días, el realce del sugerido, el filtrado de días sin agenda, el
-lenguaje visual de los cupos, la clasificación de programa y el CSS del modal.
+lenguaje visual de los cupos, la clasificación de programa, el CSS del modal y —solo para lo
+que pide D6— el **lenguaje visual de la tarjeta en la lista del panel** (`render()`, ~:11054).
 **No se toca:** `AsignarTurno` y su contrato, el flujo de laboratorio, `mostrarPanelPostCita`,
 el SMS, el módulo de órdenes PyM, la telemetría. Si un agente cree que debe tocarlos, lo
 escribe como hallazgo y **para**.
@@ -439,6 +526,25 @@ de D3-bis se convierte en una prueba por fila. Ninguna fila puede quedar sin cub
 **Mutación obligatoria de este agente:** hacer que la nefroprotección anule la franja de la
 diabetes (volver al modelo de escalera). Debe caer la prueba de `["Nefroprotección","Diabetes"]`.
 Si sobrevive, esa prueba no existe de verdad.
+
+### C6 · Atendido vs En sala en la lista del panel (D6)
+**Es la única tarea que NO toca el modal de agendamiento**: vive en `render()` (~:11054) y en
+el CSS de la tarjeta. Por eso puede ir primero — es la mejora que el médico ve el mismo día.
+
+**Prohibido tocar `colorAndAlert`**: el eje de puntualidad/fraude se queda exactamente como
+está. El eje 2 se deriva del `estado` en la capa de pintado, sin alterar la lógica de alertas.
+
+**Pruebas mínimas:**
+- Tarjeta con estado «En sala» → marcador de atención activo; «Atendido» → atenuado; ambos
+  con su color de puntualidad **intacto**.
+- **Un «Atendido» con fraude extemporáneo (color ROJO) NO queda atenuado hasta perderse**: la
+  señal de fraude sigue dominando. Prueba con nombre explícito.
+- Los botones de una tarjeta atenuada siguen presentes y con sus listeners.
+- Un estado desconocido («Confirmada», «Reprogramada»…) no rompe nada y cae en neutro.
+- La distinción **no depende solo del color** (verificar que exista un segundo canal).
+
+**Mutación obligatoria:** hacer que «Atendido» y «En sala» vuelvan a producir el mismo
+tratamiento. Debe caer la prueba de distinción.
 
 ### C5 · CSS y tokens
 Todo el CSS nuevo. Verifica la trampa v12.6.6 (tokens en las cuatro listas). Claro y oscuro.

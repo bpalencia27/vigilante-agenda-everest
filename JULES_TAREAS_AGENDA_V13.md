@@ -19,6 +19,11 @@ Pegar 500 líneas en cada tarea es la forma más fiable de que se pierdan los de
 3. **Cada PR se revisa contra las 6 comprobaciones del final** antes de fusionar. Si una falla,
    se devuelve — no se fusiona «para no perder el avance».
 
+**Orden sugerido:** `TA` → `T0` → `T1` → *(el médico corre el diagnóstico)* → `T2` → *(el
+médico elige maqueta)* → `T3` → `T4` → `T5` → `T6` → `T7` → `T8`. `T9` puede ir en cualquier
+momento: no toca código. **TA va primera a propósito**: es independiente del modal, se revisa
+en diez minutos y le da al médico una mejora visible el mismo día, mientras el resto avanza.
+
 ---
 
 ## PREÁMBULO — pegar SIEMPRE, antes de cada tarea
@@ -59,9 +64,51 @@ REGLAS INNEGOCIABLES:
    QUÉ (el incidente o la restricción que lo motivó), no el qué.
 8. Nunca hagas peticiones reales a los sistemas de la clínica (Everest, Athenea,
    AppCita). Todo se prueba con mocks, como las suites existentes.
+9. PROHIBIDO REFORMATEAR. Nada de Prettier, ESLint --fix, reordenar funciones,
+   cambiar comillas ni normalizar indentación. vigilante_agenda.user.js es un
+   IIFE de ~11.500 líneas: un reformateo produce un diff imposible de revisar y
+   el PR se descarta entero aunque el cambio de fondo sea correcto.
+10. No añadas dependencias, package.json, bundler, TypeScript ni ningún paso de
+    build. El archivo se copia tal cual a un Gist y Tampermonkey lo ejecuta:
+    cualquier compilación lo rompe. El banco corre con `node tests/runner.js` y
+    sin instalar nada.
+11. El PR va contra la rama claude/pym-agenda-blindaje-v12-4, NO contra main.
+12. Si presentas un plan antes de trabajar, tiene que decir explícitamente qué
+    prueba nueva vas a escribir y qué mutación vas a aplicar para verificarla.
 ```
 
 ---
+
+## TA · Atendido vs En sala en la lista del panel — **empezar por aquí**
+
+> **La única tarea que NO toca el modal de agendamiento.** Vive en `render()` y en el CSS de la
+> tarjeta, así que no colisiona con T3–T5 y es la mejora que el médico ve el mismo día.
+> Fusionarla **antes** de T6 (CSS), porque ambas tocan la hoja de estilos.
+
+```
+Ejecuta ÚNICAMENTE el agente C6 del brief, respetando la decisión D6.
+
+Contexto verificado, no lo re-investigues: colorAndAlert (~línea 5031) devuelve
+VERDE tanto para "En sala" como para "Atendido", y la tarjeta pinta ese color en
+el punto, en el tinte de la insignia y en el borde. Por eso se ven idénticas.
+
+PROHIBIDO tocar colorAndAlert. Ese color codifica PUNTUALIDAD (verde a tiempo /
+rojo fraude / ámbar sin presentarse) y sostiene la detección de fraude, que es la
+función original del script. El eje nuevo —"¿requiere acción?"— se deriva del
+estado en la capa de PINTADO, sin alterar la lógica de alertas.
+
+- "En sala" = te está esperando AHORA -> se destaca.
+- "Atendido" = trabajo terminado -> se atenúa, pero SIGUE legible y con sus
+  botones funcionando. Atenuar es peso visual, nunca una discapacidad funcional.
+- La distinción NO puede depender solo del color: forma, opacidad, peso
+  tipográfico o icono. El panel se usa con luz de consultorio y hay médicos con
+  daltonismo.
+- El ROJO de fraude gana sobre cualquier atenuación: un "Atendido" con fraude
+  extemporáneo tiene que seguir gritando. Prueba con nombre explícito para esto.
+
+MUTACIÓN OBLIGATORIA: haz que "Atendido" y "En sala" vuelvan a producir el mismo
+tratamiento visual. Debe caer la prueba de distinción.
+```
 
 ## T0 · Reconocimiento — SOLO LECTURA
 
