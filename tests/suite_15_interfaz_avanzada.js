@@ -64,7 +64,7 @@ module.exports = {
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM",
-    "_agruparUroanalisisParaTabla",
+    "_agruparUroanalisisParaTabla", "mostrarPanelPostCita",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1122,5 +1122,62 @@ module.exports = {
       c.api.imprimirOrdenPyM(331897, null, "1226085057319", pestana);
       t.cierto(cerrada);
     });
+
+    // =====================================================================
+    // v12.6.3 — PANEL FLOTANTE POST-CITA. Reportado en consultorio: #vgl-agendar-modal
+    // se autocierra 2.6 s después de crear la cita (setTimeout(closeMod, 2600)) — sin
+    // tiempo real de leer ni pulsar el botón de imprimir que vivía DENTRO de él.
+    // mostrarPanelPostCita crea un elemento INDEPENDIENTE de ese modal, directo en el
+    // body, que sobrevive a su cierre.
+    // =====================================================================
+    t.caso("mostrarPanelPostCita: sin citaId (cita que no llegó a crearse) no crea nada", () => {
+      const c = cargar();
+      c.api.mostrarPanelPostCita(null, "NUEVA EPS", "ALGUIEN", "fallback");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      t.falso(!!panel, "sin cita creada, no hay recordatorio que imprimir");
+    });
+
+    t.caso("mostrarPanelPostCita: crea un panel independiente en el body, con el nombre del paciente", () => {
+      const c = cargar();
+      enriquecerDom(c);
+      c.api.mostrarPanelPostCita(7813686, "NUEVA EPS", "MARIA LUZMILA CARMONA CARMONA", "fallback");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      t.cierto(!!panel, "el panel queda en el body — no depende de #vgl-agendar-modal ni de que siga abierto");
+      t.cierto(panel.innerHTML.includes("MARIA LUZMILA CARMONA CARMONA"));
+    });
+
+    t.caso("mostrarPanelPostCita: sin nombreCompleto, usa el nombre de respaldo de la tarjeta de agenda", () => {
+      const c = cargar();
+      enriquecerDom(c);
+      c.api.mostrarPanelPostCita(7813686, "NUEVA EPS", "", "CARLOS RUIZ (de la tarjeta)");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      t.cierto(panel.innerHTML.includes("CARLOS RUIZ (de la tarjeta)"));
+    });
+
+    t.caso("mostrarPanelPostCita: el botón de imprimir dispara imprimirRecordatorioCita con los datos de ESTA cita", () => {
+      const c = cargar();
+      enriquecerDom(c);
+      const llamadas = mockOpen(c);
+      c.api.mostrarPanelPostCita(7813686, "NUEVA EPS", "MARIA LUZMILA CARMONA CARMONA", "fallback");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      const printBtn = panel.querySelector("#vgl-postcita-print");
+      disparar(printBtn, "click");
+      t.igual(llamadas.length, 1);
+      const u = new URL(llamadas[0].url);
+      t.cierto(u.pathname.endsWith("/apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita"));
+      t.igual(u.searchParams.get("CitaId"), "7813686");
+      t.igual(u.searchParams.get("nombreCompleto"), "MARIA LUZMILA CARMONA CARMONA");
+    });
+
+    t.caso("mostrarPanelPostCita: el botón de cerrar vacía el panel (mismo patrón que closeSheet)", () => {
+      const c = cargar();
+      enriquecerDom(c);
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE", "fallback");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      const xBtn = panel.querySelector("#vgl-postcita-x");
+      t.noLanza(() => disparar(xBtn, "click"));
+      t.igual(panel.innerHTML, "", "al cerrar, el panel queda vacío");
+    });
+
   },
 };

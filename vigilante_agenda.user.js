@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.2
+// @version      12.6.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -201,6 +201,28 @@
   vuelca una única vez a consola (diagnóstico) — si trae un enlace directo y listo para
   usar, la próxima captura del médico permite dejar de reconstruir la URL a mano.
   Banco: 658/658 (5 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.3 — 12-08-2026: PANEL FLOTANTE POST-CITA (pedido explícito del médico). Reportado
+  en consultorio: al asignar la cita de control, #vgl-agendar-modal se autocierra 2.6 s
+  después (setTimeout(closeMod, 2600)) — sin tiempo real de leer ni pulsar el botón
+  "🖨️ Imprimir recordatorio de cita" (v12.5.13), que vivía DENTRO de ese modal.
+  Nueva mostrarPanelPostCita(citaId, epsNombre, nombreCompleto, patientNameFallback): crea
+  un elemento INDEPENDIENTE del modal, directo en document.body — sobrevive a closeMod() y
+  queda en pantalla (esquina inferior derecha) hasta que el médico lo cierre a mano o pasen
+  5 min sin interacción. El botón de imprimir se movió ahí; el mensaje de éxito dentro del
+  modal (que sí se ve durante los 2.6 s) queda igual.
+  Confirmado con el médico (captura de pantalla + grabación de red real): el checkbox
+  "📱 Enviar SMS de recordatorio al paciente" que vive dentro de #vgl-agendar-modal
+  (ver S.smsRecordatorio, apiAccesoAsignarTurno) YA es el recordatorio de la CITA DE
+  CONTROL — no de laboratorios — y YA envía el SMS automáticamente al crear la cita
+  (contrato confirmado por segunda vez: GET /apiviva/APIAcceso/api/SMS/EnviarSMS
+  ?Telefono=<celular>&AgendaTurnoId=<radicado>). No hace falta agregar nada ahí.
+  Pendiente, sin evidencia todavía: "enviar por correo" el recordatorio de cita de control
+  (a diferencia de las órdenes PyM, no hay una captura real de un endpoint de correo para
+  citas — no se inventa uno).
+  Banco: 663/663 (5 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -769,7 +791,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6623,6 +6645,34 @@
         box-shadow:none;cursor:not-allowed;transform:none
       }
 
+      /* v12.6.3 — Panel flotante POST-cita: reportado en consultorio, el botón de
+         imprimir vivía dentro de #vgl-agendar-modal, que se autocierra 2.6 s después de
+         crear la cita (setTimeout(closeMod, 2600)) — sin tiempo real de pulsarlo. Este
+         panel es independiente del modal (no se cierra con él) y permanece hasta que el
+         médico lo cierre a mano o pasen 5 min sin interacción. */
+      #vgl-postcita-panel{
+        position:fixed;bottom:18px;right:18px;z-index:2147483646;
+        font-family:var(--font-stack);
+        animation:vglToastIn .34s var(--spring)
+      }
+      .vgl-postcita-card{
+        position:relative;min-width:260px;max-width:340px;
+        padding:16px 18px;border-radius:var(--r-card);
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
+        border:1px solid var(--edge);
+        box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
+        color:var(--fg)
+      }
+      .vgl-postcita-x{
+        position:absolute;top:8px;right:10px;
+        background:transparent;border:0;color:var(--fg3);
+        font-size:16px;cursor:pointer;line-height:1;padding:2px
+      }
+      .vgl-postcita-x:hover{color:var(--fg)}
+      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde);margin-bottom:2px}
+      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2);margin-bottom:12px}
+      #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
+
       /* Items de Órdenes PyM — celdas bento */
       .vgl-ord-item {
         background: linear-gradient(170deg,rgba(255,255,255,.04),rgba(255,255,255,0) 55%),var(--bg2);
@@ -8014,6 +8064,37 @@
     window.open(url, "_blank");
   }
 
+  // v12.6.3 — PANEL FLOTANTE POST-CITA (pedido explícito del médico: el botón de imprimir
+  // vivía dentro de #vgl-agendar-modal, que se autocierra 2.6 s después de crear la cita —
+  // sin tiempo real de leerlo ni pulsarlo). Este panel es un elemento INDEPENDIENTE del
+  // modal (no un botón dentro de él), así que sobrevive a closeMod(): sigue en pantalla
+  // hasta que el médico lo cierre a mano o pasen 5 min sin interacción.
+  function mostrarPanelPostCita(citaId, epsNombre, nombreCompleto, patientNameFallback) {
+    if (!citaId) return;
+    try {
+      document.querySelectorAll("#vgl-postcita-panel").forEach((e) => e.remove());
+      const panel = document.createElement("div");
+      panel.id = "vgl-postcita-panel";
+      panel.className = isLight() ? "light" : "";
+      panel.innerHTML = `
+        <div class="vgl-postcita-card">
+          <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar">✕</button>
+          <div class="vgl-postcita-title">✅ Cita creada</div>
+          <div class="vgl-postcita-sub">${escapeHtml(nombreCompleto || patientNameFallback || "")}</div>
+          <button class="vgl-agm-btn sec" id="vgl-postcita-print">🖨️ Imprimir recordatorio de cita</button>
+        </div>
+      `;
+      document.body.appendChild(panel);
+      const cerrar = () => { try { panel.innerHTML = ""; panel.remove(); } catch (e) {} };
+      panel.querySelector("#vgl-postcita-x").addEventListener("click", cerrar);
+      panel.querySelector("#vgl-postcita-print").addEventListener("click", () => {
+        uxTrack("cita.imprimir");
+        imprimirRecordatorioCita(citaId, epsNombre, nombreCompleto);
+      });
+      setTimeout(cerrar, 300000); // 5 min: no queda pegado en pantalla toda la jornada si el médico lo ignora
+    } catch (e) {}
+  }
+
   // [BLINDADO v8.2.0 DOM-04] Extractor universal de Agendas movido a scope de módulo.
   // Antes estaba declarado como function DENTRO de cargarHoras() (bloque async), lo que
   // produce comportamiento ambiguo de hoisting en modo estricto según el motor JS.
@@ -9057,18 +9138,14 @@
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
           successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
-
-          // v12.5.13 — Imprimir el recordatorio de ESTA cita puntual (ver imprimirRecordatorioCita).
-          const printBtn = document.createElement("button");
-          printBtn.className = "vgl-agm-btn sec";
-          printBtn.style.marginTop = "10px";
-          printBtn.textContent = "🖨️ Imprimir recordatorio de cita";
-          printBtn.addEventListener("click", () => {
-            uxTrack("cita.imprimir");
-            imprimirRecordatorioCita(d.radicado, pacienteEpsNombre, pacienteNombreCompleto || patientName);
-          });
-          modal.querySelector(".vgl-agm-card").appendChild(printBtn);
         }
+
+        // v12.6.3 — Reportado en consultorio: este modal se autocierra 2.6 s después de
+        // crear la cita (setTimeout(closeMod, 2600) más abajo), sin tiempo real de leer ni
+        // pulsar el botón de imprimir cuando vivía DENTRO de él. mostrarPanelPostCita es un
+        // panel flotante INDEPENDIENTE del modal: sobrevive a closeMod() y sigue en pantalla
+        // hasta que el médico lo cierre a mano.
+        mostrarPanelPostCita(d.radicado, pacienteEpsNombre, pacienteNombreCompleto || patientName, patientName);
 
         markCitaAgendadaHoy(apt.doc_id, fechaElegida.iso);
         uxTrack("cita.creada:" + selectedEspId);
