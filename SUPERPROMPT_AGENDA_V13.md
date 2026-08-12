@@ -502,31 +502,39 @@ tablero se repite en varios equipos.
 
 ---
 
-# 4-bis. PREGUNTAS ABIERTAS — NO SE RESPONDEN SOLAS
+# 4-bis. DECISIONES CERRADAS Y LA ÚNICA PREGUNTA QUE QUEDA
 
-Estas quedaron sin definir al cerrar el encargo. El orquestador las lleva al médico **en la
-primera entrega**, y mientras tanto se implementa el comportamiento seguro indicado. Ningún
-agente puede resolverlas por su cuenta.
+## Cerradas por el médico (12–13 ago 2026). NO se re-litigan, NO se vuelven a preguntar.
 
-> ✅ **RESUELTAS por el médico el 13-08-2026** (ya incorporadas a D3-bis, no vuelvas a preguntarlas):
-> - *Nefroprotección* no tiene preferencia de horario propia; si además hay diabetes, aplican
->   las reglas de la diabetes.
-> - Un nefroprotegido **diabético SÍ** recibe la primera mitad de la jornada.
->
-> Por eso el modelo dejó de ser una escalera de precedencia y pasó a **dos ejes independientes**.
+Cada una es una **decisión con prueba obligatoria**: si alguien la cambia sin que el médico lo
+pida, tiene que caer una prueba con nombre explícito.
 
-1. **¿Las etiquetas vienen de `programasPaciente[].descripcion` o de otra fuente?** Y sobre
-   todo, **¿con qué cadenas exactas?** Lo resuelve el diagnóstico de A3.
-   *Mientras tanto:* motor construido con las cadenas como parámetro configurable.
-2. **¿"Primera mitad" incluye el borde?** ¿Las 09:00 y las 16:00 están dentro o fuera?
-   *Mientras tanto:* **inclusivo** (09:00 dentro, 09:20 fuera), fijado con prueba explícita
-   para que cambiarlo sea un renglón.
-3. **¿Cuál de las horas de la primera mitad se preselecciona** cuando hay varias libres — ¿la
-   más temprana, la más cercana al día sugerido, la menos ocupada?
-   *Mientras tanto:* la más temprana disponible, por ser la más predecible para el médico.
-4. **La excepción de escasez** (ofrecer cupos adicionales a cualquiera): ¿se activa cuando no
-   hay cupos en **ningún** día de la ventana, o basta con que no los haya en el día sugerido?
-   *Mientras tanto:* ninguno en toda la ventana — el criterio más estricto.
+| # | Decisión | Consecuencia en el código |
+|---|---|---|
+| 1 | **Nefroprotección no tiene preferencia de horario propia.** Si además hay diabetes, aplican las reglas de la diabetes | Modelo de **dos ejes** (D3-bis), no escalera |
+| 2 | **Un nefroprotegido diabético SÍ recibe la primera mitad** de la jornada | Prueba obligatoria de `["Nefroprotección","Diabetes"]` |
+| 3 | **Los bordes van INCLUIDOS**: 09:00 está dentro de la franja AM y 16:00 dentro de la PM | Comparación `>=` / `<=`, con prueba de borde: 09:00 dentro · 09:20 fuera · 16:00 dentro · 16:20 fuera |
+| 4 | **Se preselecciona la PRIMERA hora disponible** de la franja recomendada | Orden ascendente por hora normalizada, no por orden de llegada del API |
+| 5 | **La excepción de escasez exige que no haya cupos normales en NINGÚN día** de la ventana completa | No basta con que falten en el día sugerido; se evalúa tras completar el sondeo de los ~16 días |
+
+**Sobre la nº 5, una advertencia de implementación:** la condición depende del sondeo COMPLETO
+de la ventana, que es asíncrono y progresivo (D2). Prohibido evaluarla con resultados
+parciales — mostraría la excepción y la retiraría al llegar el resto, y el médico habría visto
+un cupo ofrecido que desaparece. Se evalúa **una sola vez, con el sondeo terminado**, y hasta
+entonces la excepción está apagada.
+
+## La única pregunta abierta
+
+1. **¿De dónde salen exactamente las etiquetas y con qué cadenas llegan?** Candidata
+   confirmada en código: `programasPaciente[].descripcion` (:9094). Lo resuelve el script de
+   diagnóstico del agente A3, que el médico corre una vez.
+   *Mientras tanto:* el motor se construye y se prueba con las cadenas **como parámetro
+   configurable**, y el comportamiento por defecto es `SIN_ETIQUETA`. Cuando lleguen las
+   cadenas reales solo hay que rellenar una tabla — no rehacer nada.
+
+**Protocolo si aparece una pregunta nueva:** no se inventa ni se omite. Se declara como
+`{ pregunta, porQueImporta, queSeAsumioMientrasTanto, comoConfirmarlo }`, se sigue con el
+resto, y todas llegan juntas al médico en la entrega.
 
 ---
 
@@ -545,7 +553,40 @@ agente puede resolverlas por su cuenta.
 - [ ] El médico nunca queda sin poder agendar, pase lo que pase con la red.
 - [ ] Versión, changelog, commit, push y archivo entregado.
 
-# 6. PROTOCOLO ANTE LA DUDA
+# 6. EJECUCIÓN EN OTRO ORQUESTADOR (Jules, Antigravity, el que sea)
+
+Este brief es **agnóstico del modelo**: nada aquí depende de un proveedor. Lo que NO es
+agnóstico son las compuertas. Si el orquestador que lo ejecute no las impone solo, **las impone
+el humano**, o el brief se convierte en una sugerencia y el resultado en código sin verificar.
+
+**Las cuatro compuertas son mecánicas — se comprueban sin discutir con nadie:**
+
+1. `node tests/runner.js` sale en verde y con **más** comprobaciones que antes (677 al partir).
+   Un banco que baja de número significa que alguien borró o debilitó una prueba: rechazar.
+2. **Transcripción de mutación por cada cambio.** No vale «probado». Vale: qué línea se rompió,
+   qué prueba cayó, con su nombre, y verde tras restaurar. Sin transcripción, el cambio no se
+   revisa siquiera. *Un agente dirá que las pruebas pasan; lo que no puede fingir es una
+   mutación que tumbe una prueba concreta.*
+3. **Cada selector, endpoint y regla clínica cita su evidencia** (archivo de captura o línea
+   del código actual). Sin cita, se saca del diff. Esta es la compuerta que protege pacientes:
+   un modelo sin la historia de este proyecto inventará selectores plausibles con total
+   naturalidad.
+4. **Cero PHI** en diff, pruebas, commits y logs.
+
+**Reparto por fases, si el trabajo se divide entre herramientas.** Las fases 0, 1 y 4
+(reconocimiento, diseño, backlog) producen texto y maquetas: el error es visible y barato, y
+son las más rentables para delegar. Las fases 2 y 3 tocan el userscript: ahí el arnés de
+pruebas es la red de seguridad, no el modelo.
+
+**Riesgo de fragmentación — el más probable en la práctica.** C1 a C5 tocan TODAS
+`openAgendamientoModal` y la misma hoja de CSS. Ejecutarlas como tareas paralelas
+independientes, cada una en su rama, produce cinco ramas que reescriben el mismo modal y un
+merge imposible. **Ejecutarlas en serie sobre la misma rama**, o partir el archivo por función
+antes de repartir. Esta advertencia vale más que cualquier optimización de coste.
+
+---
+
+# 7. PROTOCOLO ANTE LA DUDA
 
 Si un agente no puede confirmar algo: **no lo inventa, no lo omite en silencio**. Lo declara en
 su salida como `{ pregunta, porQueImporta, queSeAsumioMientrasTanto, comoConfirmarlo }` y sigue
