@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.13
+// @version      12.6.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -156,6 +156,30 @@
   Pendiente, sin tocar: el interruptor NORMAL/ANORMAL del uroanálisis (ver v12.5.11) sigue
   esperando el HTML real de ese control específico.
   Banco: 628/628 (6 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.1 — 12-08-2026: RECONCILIACIÓN CON LA VERSIÓN DESPLEGADA (12.6.0) + AVISOS SOLO EN
+  HCHEALTH. Esta rama y el Gist secreto que Tampermonkey venía sirviendo en producción se
+  habían separado en dos historias divergentes desde un ancestro común (~12.5.9): cada una
+  tenía cambios que la otra no tenía. Confirmado leyendo el código fuente completo de la
+  12.6.0 pegado por el médico. Se portan aquí sus DOS cambios, y el número de versión ya
+  puede subir de nuevo (quedaba retenido a propósito, ver los commits de esta rama entre
+  12.5.9 y 12.5.13, hasta terminar esta reconciliación):
+  - WHITELIST_13_LABS.TRIGLICERIDOS pierde el CUPS 903866 (auditoría cruzada con el
+    Copiloto RCV: ese código es TGP/ALT, no Triglicéridos — un resultado de función
+    hepática que caía por error en esta casilla). Queda solo 903868 (ver v12.0.5).
+  - RAC con albuminuria franca (≥30 mg/g) exige control más frecuente: su vigencia para
+    el aviso ROJO de labs RCV vencidos (v12.5.7) se reduce a la mitad, 90 días en vez de
+    180. Nueva _vigenciaDiasParaAnalito(key, resultValCrudo), usada solo por
+    _analitosRcvVencidos — injectLabsIntoCronicos no cambia.
+  Además, en esta misma versión (no presente en la 12.6.0 desplegada): los avisos
+  (Windows/toast/sonido/cartel) ya solo se MUESTRAN dentro del módulo clínico HCHealth —
+  nunca se pierden, si ninguna pestaña está ahí quedan en cola y se disparan en cuanto una
+  lo esté (ver _encolarAvisoPendiente/_flushAvisosPendientes/_dispararAvisoReal); más el
+  reconocimiento del uroanálisis por componentes y su agrupación en el modal de
+  laboratorios (ver commits previos de esta misma rama).
+  Banco: 649/649.
 */
 
 /*
@@ -724,7 +748,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.13";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -874,7 +898,12 @@
     // por error al RAC. Como el emparejamiento por CÓDIGO manda sobre el nombre, un
     // resultado de TRIGLICÉRIDOS se escribía en la casilla de la relación
     // albuminuria/creatinina: dos analitos distintos, con rangos distintos.
-    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903868", "903866"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
+    // v12.6.0 — auditoría cruzada con el Copiloto (RCV): el CUPS 903866 no es
+    // Triglicéridos, es TGP/ALT (Alanina Aminotransferasa) — un resultado de función
+    // hepática que caía por error en esta casilla. Se retira; 903868 (el CUPS real de
+    // Triglicéridos, confirmado en consultorio, ver v12.0.5 arriba) queda como único
+    // código adicional al genérico 2074.
+    { key: "TRIGLICERIDOS", names: ["TRIGLICERIDOS", "TRIGLICÉRIDOS"], codes: ["2074", "903868"], resultId: "resultadoTrigliceridos", dateId: "fechaResultTrigliceridos" },
     // v12.0.4 — VERIFICADO: en la Ruta de Crónicos NO hay casilla de texto para el
     // uroanálisis. Lo que existe es `resultadoPrograma.swUroanalisis`, un par de botones
     // de opción (sí/no), donde no cabe un resultado escrito. Se deja la entrada para que
@@ -2264,6 +2293,18 @@
       CREATININA: "Creatinina en Suero",
       RAC: "RAC (Relación Albúmina/Creatinina)",
   };
+  // v12.6.0 — RAC (relación albúmina/creatinina) con albuminuria franca (≥30 mg/g) pide
+  // control más frecuente que los demás analitos del grupo: su vigencia se reduce a la
+  // mitad (90 días en vez de 180). Los demás analitos, y un RAC por debajo del umbral,
+  // conservan los 180 días normales.
+  const RAC_VIGENCIA_UMBRAL_ALBUMINURIA = 30; // mg/g
+  function _vigenciaDiasParaAnalito(key, resultValCrudo) {
+      if (key === "RAC") {
+          const n = Number(String(resultValCrudo == null ? "" : resultValCrudo).replace(",", "."));
+          if (Number.isFinite(n) && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
+      }
+      return RCV_VIGENCIA_DIAS;
+  }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
   function _analitosRcvVencidos(labsArray, hoyIso) {
@@ -2277,7 +2318,8 @@
           if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
           const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
           const dias = Math.round((hoyMs - fechaMs) / 86400000);
-          if (dias > RCV_VIGENCIA_DIAS) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, c.resultVal);
+          if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
       }
       return faltantes;
   }

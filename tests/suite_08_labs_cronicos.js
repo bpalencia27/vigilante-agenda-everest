@@ -5,7 +5,8 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi"
+    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_vigenciaDiasParaAnalito"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -58,6 +59,11 @@ module.exports = {
       const trigli = testApi._matchLabInWhitelist({ codigo: "903868", nombre: "TRIGLICERIDOS" });
       t.cierto(!!trigli);
       t.igual(trigli.key, "TRIGLICERIDOS");
+    });
+
+    t.caso("_matchLabInWhitelist: CUPS 903866 (TGP/ALT) ya NO cae en Triglicéridos (v12.6.0 — auditoría cruzada con el Copiloto)", () => {
+      const res = testApi._matchLabInWhitelist({ codigo: "903866", nombre: "TGP" });
+      t.igual(res, null, "903866 es TGP/ALT, ninguno de los 13 analitos autorizados — no debe emparejar con nada");
     });
 
     t.caso("_matchLabInWhitelist: Analito desconocido devuelve null", () => {
@@ -894,6 +900,42 @@ module.exports = {
       for (const key of ["PTH", "HEMOGLOBINA", "FOSFORO", "ALBUMINA"]) {
         t.falso(faltantes.some((f) => f.key === key), key + " no debe entrar nunca en el aviso de vigencia RCV");
       }
+    });
+
+    // =====================================================================
+    // v12.6.0 (portado desde la versión desplegada) — RAC con albuminuria franca
+    // (≥30 mg/g) exige control más frecuente: su vigencia se reduce a la mitad, 90 días
+    // en vez de 180. Los demás analitos, y un RAC por debajo del umbral, no cambian.
+    // =====================================================================
+    t.caso("_vigenciaDiasParaAnalito: RAC bajo (<30 mg/g) conserva los 180 días normales", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "10"), 180);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "29.9"), 180);
+    });
+
+    t.caso("_vigenciaDiasParaAnalito: RAC con albuminuria franca (>=30 mg/g) se reduce a 90 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "30"), 90, "el umbral mismo (30) ya cuenta como franca");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "45,5"), 90, "también reconoce coma decimal (formato de Athenea)");
+    });
+
+    t.caso("_vigenciaDiasParaAnalito: analitos distintos de RAC, y un valor no numérico, conservan 180 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_TOTAL", "999"), 180, "el umbral es exclusivo de RAC");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "no-numerico"), 180, "sin poder leer el valor, nunca se acorta por prudencia");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", null), 180);
+    });
+
+    t.caso("_analitosRcvVencidos: RAC con albuminuria franca (>=30 mg/g) vence a los 90 días, no a los 180", () => {
+      // 2026-08-11 - 2026-05-07 = 96 días: vigente a 180, pero ya vencido a 90 (reducida).
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "35", Fecha: "2026-05-07" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const f = faltantes.find((x) => x.key === "RAC");
+      t.cierto(!!f, "con RAC>=30, 96 días ya superó la vigencia reducida de 90");
+      t.igual(f.dias, 96);
+    });
+
+    t.caso("_analitosRcvVencidos: el mismo RAC (96 días) con valor normal (<30 mg/g) SIGUE vigente (180 días)", () => {
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "12", Fecha: "2026-05-07" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "RAC"), "sin albuminuria franca, 96 días sigue dentro de los 180 normales");
     });
 
     t.caso("_analitosRcvVencidos: 'hoy' inválido o ausente -> [] en vez de reventar (nunca adivina una fecha de referencia)", () => {
