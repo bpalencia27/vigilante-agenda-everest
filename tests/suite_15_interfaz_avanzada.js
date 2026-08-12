@@ -1033,6 +1033,72 @@ module.exports = {
       t.falso(modal.innerHTML.includes("VDRL"), "las ETS descartadas no se ofrecen");
     });
 
+    // =====================================================================
+    // v12.6.6 — El correo de la orden va con UsuarioId = id del PACIENTE. Confirmado en la
+    // grabación real del consultorio: en la MISMA corrida, Everest pide
+    // GenerarLinksImpresionOrdenamientos?PacienteId=801848 y acto seguido
+    // EnviarEmailOrdenamiento?...&UsuarioId=801848, siendo 309 el médico de esa sesión.
+    // Hasta v12.6.5 aquí se mandaba el id del médico. Esta prueba mira el PUNTO DE USO
+    // (el botón "Enviar" del modal), no solo la función de red: el id del paciente sale de
+    // BuscarPaciente de ESA cita, así que cambia de paciente en paciente — por eso se
+    // comprueba contra el id que devolvió el servidor para este documento y se exige que
+    // NO sea el del médico.
+    // =====================================================================
+    await t.casoAsync("openOrdenamientoModal: el correo de la orden viaja con el id del PACIENTE de esa cita, no con el del médico", async () => {
+      const urls = [];
+      const cMail = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url); urls.push(u);
+          if (u.includes("/api/Paciente/BuscarPaciente")) return respuestaJson({ id: 801848 });
+          if (u.includes("ObtenerListadoDiagnostico")) return respuestaJson([{ codigo: "Z108", id: 55, nombre: "TAMIZACION" }]);
+          if (u.includes("ObtenerListadoCupsPorPaciente")) {
+            const cod = /filter=([^&]+)/.exec(u)[1];
+            return respuestaJson([{ codigo: decodeURIComponent(cod), id: 77, nombre: "EXAMEN", descripcion: "EXAMEN" }]);
+          }
+          if (u.includes("GuardarOrdenamiento")) return respuestaJson({ error: false, agrupador: "1226085275" });
+          if (u.includes("GenerarLinksImpresionOrdenamientos")) return respuestaJson({});
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cMail);
+      // El DOM simulado no interpreta innerHTML: las casillas ".vgl-ord-chk" que el modal
+      // pinta no existen como nodos. Se devuelve UNA casilla marcada (la del primer
+      // paquete) para poder ejercitar el flujo real de generación y llegar al correo.
+      const casilla = { checked: true, disabled: false, getAttribute: () => "0", addEventListener: () => {}, closest: () => ({ style: {} }) };
+      const crearMail = cMail.env.doc.createElement;
+      cMail.env.doc.createElement = function (tag) {
+        const e = crearMail(tag);
+        const qsaBase = e.querySelectorAll;
+        e.querySelectorAll = (sel) => (sel === ".vgl-ord-chk" ? [casilla] : qsaBase(sel));
+        return e;
+      };
+      cMail.api.__state.activeDoctor = { id: 309, name: "MEDICO DE PRUEBA" };
+
+      await cMail.api.openOrdenamientoModal({ doc_id: "21545051", nombre: "PACIENTE DE PRUEBA", sexo: "M", pym: ["Tamización cardiometabólica"] });
+      await esperar(80);
+      const modal = cMail.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      disparar(modal.querySelector("#vgl-ord-confirm"), "click");
+      await esperar(80);
+
+      // La caja de correo se consulta desde SU propio nodo (mailBox.querySelector), no
+      // desde el modal: en el DOM simulado cada elemento memoiza sus selectores por
+      // separado, así que hay que llegar por el mismo camino que el script.
+      const card = modal.querySelector(".vgl-agm-card");
+      const mailBox = (card.children || []).find((n) => n.className === "vgl-ord-mailbox");
+      t.cierto(!!mailBox, "tras generar la orden aparece la caja de correo");
+      const mailInput = mailBox.querySelector("#vgl-ord-mail-input");
+      mailInput.value = "paciente@ejemplo.com";
+      disparar(mailBox.querySelector("#vgl-ord-mail-send"), "click");
+      await esperar(120);
+
+      const envio = urls.find((u) => u.includes("EnviarEmailOrdenamiento"));
+      t.cierto(!!envio, "el botón Enviar sí dispara el correo");
+      t.cierto(envio.includes("UsuarioId=801848"), "UsuarioId es el id que BuscarPaciente devolvió para ESTE paciente");
+      t.falso(envio.includes("UsuarioId=309"), "nunca el id del médico");
+    });
+
     // ================= v12.5.13 — imprimir recordatorio de cita / orden PyM =================
     // Contrato real, capturado con el grabador de red del propio proyecto (12-08-2026):
     // GET /apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita?CitaId=...&Eps=...

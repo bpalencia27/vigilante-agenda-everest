@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.5
+// @version      12.6.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -264,6 +264,38 @@
   Retirado NumAutorizacion de imprimirOrdenPyM y el mapa numAutPorAgrupador que solo
   existía para alimentarlo: la URL real de Everest no lo lleva.
   Banco: 665/665 (4 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.6 — 12-08-2026: EL AVISO DE LABS RCV, POR FIN CON SU PROPIA TARJETA + EL CORREO
+  DE LA ORDEN CON EL ID DEL PACIENTE.
+  1) Reportado en consultorio con captura: el aviso "Laboratorios RCV sin resultado
+     vigente" salía como TEXTO SUELTO sobre la historia clínica —sin tarjeta, sin fondo,
+     en el azul heredado de Everest y encimado con el formulario— pese a tener su hoja de
+     estilos completa desde v12.5.7. No era un problema de diseño: #vgl-labsv-modal se
+     cuelga de document.body, fuera de #vgl-root, y NO estaba en la lista de selectores
+     donde se declaran los tokens (--bg-solid, --fg, --r-surface, --font-stack...). Sin
+     tokens, toda declaración con var() es inválida y el navegador la descarta: quedaban
+     solo las literales (padding, max-width, text-align), que es exactamente la pantalla
+     que mandó el médico. El diseño ya existía; nunca le llegaba.
+     El mismo agujero tenía #vgl-postcita-panel (v12.6.3), que habría salido igual de roto
+     la primera vez que apareciera. Ambos entran ahora en las cuatro listas globales:
+     tokens oscuro, tokens claro, prefers-reduced-motion y el reset de box-sizing; y se
+     les extiende el blindaje de color contra los estilos globales de Everest.
+     Prueba nueva ESTRUCTURAL (mira la fuente, no el DOM simulado: el arnés no aplica CSS,
+     así que ninguna prueba de comportamiento puede ver esto): todo overlay creado por el
+     código cuya regla propia lo posiciona con position:fixed debe estar en la lista de
+     tokens. Sirve para cualquier overlay futuro.
+  2) apiEnviarOrdenPorCorreo: `UsuarioId` es el id del PACIENTE, no el del médico.
+     Confirmado en la grabación real: en la misma corrida Everest pide
+     GenerarLinksImpresionOrdenamientos?PacienteId=801848 y acto seguido
+     EnviarEmailOrdenamiento?...&UsuarioId=801848, siendo 309 el médico de esa sesión
+     (mismo patrón en EnviarEmailMedicamento). Se replica lo que hace Everest — el médico
+     no tiene cómo verificar si los correos están llegando. El id sale de BuscarPaciente
+     de ESA cita (pacienteIdOrd), así que cambia de paciente en paciente; nunca es fijo.
+     La prueba nueva ejercita el PUNTO DE USO (el botón "Enviar" del modal), no solo la
+     función de red: por eso la mutación al id del médico ahora se cae.
+  Banco: 667/667 (3 pruebas nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -832,7 +864,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5651,7 +5683,13 @@
       ================================================================ */
 
       /* ---- Design tokens — Modo Oscuro OLED (default) ---- */
-      #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
+      /* v12.6.6 — #vgl-labsv-modal y #vgl-postcita-panel FALTABAN en esta lista. Ambos se
+         cuelgan de document.body, fuera de #vgl-root, así que sin estar aquí no heredaban
+         NINGÚN token: cada var(--bg-solid)/var(--fg)/var(--r-surface) quedaba inválido y el
+         navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
+         pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
+         justo lo que reportó el médico. El diseño ya existía; no llegaba. */
+      #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -5712,7 +5750,7 @@
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-dock.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -5821,20 +5859,26 @@
         #vgl-dock,#vgl-dock *,#vgl-toasts *,
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
-        #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *{
+        #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
+        #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *{
           animation:none !important;transition:none !important;
         }
       }
       /* Reset defensivo contra herencias del host */
       #vgl-root *,#vgl-dock *,#vgl-toasts *,
       #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
-      #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *{box-sizing:border-box}
+      #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *,
+      #vgl-labsv-modal *,#vgl-postcita-panel *{box-sizing:border-box}
 
       /* Blindaje contra estilos globales de Everest */
       #vgl-root b,#vgl-root i,#vgl-root small,#vgl-root mark,
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
+      /* v12.6.6 — mismo blindaje para los dos avisos que viven en document.body: sin esto,
+         Everest pinta de azul cualquier <b>/<span>/<div> suyo que caiga dentro. */
+      #vgl-labsv-modal b,#vgl-labsv-modal span,#vgl-labsv-modal div,
+      #vgl-postcita-panel b,#vgl-postcita-panel span,#vgl-postcita-panel div{color:inherit}
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
@@ -10121,7 +10165,15 @@
             const correo = (mailInput.value || "").trim();
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { mailStatus.textContent = "⚠ Escriba un correo válido."; return; }
             mailBtn.disabled = true; mailBtn.textContent = "⏳ Enviando...";
-            const uIdEnvio = state.activeDoctor.id || S.medicoId || 0;
+            // v12.6.6 — CORREGIDO: `UsuarioId` aquí es el id del PACIENTE, no el del médico.
+            // Confirmado en la grabación real del consultorio (12-08-2026): en la MISMA
+            // corrida, GenerarLinksImpresionOrdenamientos va con PacienteId=801848 y acto
+            // seguido Everest manda EnviarEmailOrdenamiento?...&UsuarioId=801848 — mismo
+            // número — mientras el médico de esa sesión es el 309 (GuardarHCMorbilidad
+            // ?UsuarioId=309, profesionalId=309). El mismo patrón se ve en el envío de
+            // fórmulas (EnviarEmailMedicamento?...&UsuarioId=801848). Se replica lo que
+            // hace Everest: el médico no tiene forma de verificar si los correos llegaron.
+            const uIdEnvio = pacienteIdOrd;
             let okCount = 0;
             for (const agp of agrupadoresUnicos) {
               await apiOrdenamientoGenerarLinks(pacienteIdOrd, agp);

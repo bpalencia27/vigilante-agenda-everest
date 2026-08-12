@@ -52,12 +52,16 @@ module.exports = {
     });
 
     // ---------- apiEnviarOrdenPorCorreo ----------
-    await t.casoAsync("apiEnviarOrdenPorCorreo: URL exacta confirmada por telemetría real, con el correo codificado", async () => {
+    // v12.6.6 — El tercer argumento es el id del PACIENTE, no el del médico. En la grabación
+    // real del consultorio, Everest manda EnviarEmailOrdenamiento?...&UsuarioId=801848 en la
+    // misma corrida en que GenerarLinksImpresionOrdenamientos va con PacienteId=801848,
+    // siendo 309 el médico. Aquí se fija el contrato byte a byte con ese id de paciente.
+    await t.casoAsync("apiEnviarOrdenPorCorreo: URL exacta confirmada por telemetría real (UsuarioId = id del PACIENTE)", async () => {
       let vista = null;
       const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "", clone() { return this; } }; } });
-      const ok = await c.api.apiEnviarOrdenPorCorreo("1226083463", "paciente@ejemplo.com", 515);
+      const ok = await c.api.apiEnviarOrdenPorCorreo("1226083463", "paciente@ejemplo.com", 801848);
       t.cierto(ok, "HTTP 200/ok debe reportar éxito");
-      t.igual(vista, "https://neps.everestintelligent.com/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento?Grupo=1226083463&Correo=paciente%40ejemplo.com&UsuarioId=515");
+      t.igual(vista, "https://neps.everestintelligent.com/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento?Grupo=1226083463&Correo=paciente%40ejemplo.com&UsuarioId=801848");
     });
 
     await t.casoAsync("apiEnviarOrdenPorCorreo: HTTP de error reporta false, sin lanzar", async () => {
