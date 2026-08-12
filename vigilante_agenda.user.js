@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.6.3
+// @version      12.6.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -223,6 +223,22 @@
   (a diferencia de las órdenes PyM, no hay una captura real de un endpoint de correo para
   citas — no se inventa uno).
   Banco: 663/663 (5 pruebas nuevas, verificadas con test de mutación).
+*/
+
+/*
+  v12.6.4 — 12-08-2026: EL SMS DE LA TOMA DE MUESTRAS, VISIBLE DONDE SE AGENDA (pedido
+  explícito del médico: "¿hay opción de enviar el recordatorio de la cita de laboratorios
+  al celular? Es importante tenerlo justo debajo o al lado de la opción de agendamiento").
+  La respuesta es SÍ, y ya existía: apiLaboratorioAgendarAuto recibe el celular y, desde
+  v12.3.31, envía el SMS de AppCita (GET /API/EnviarMensajeTextoLaboratorio?Celular&Fecha
+  &Hora&codigoCita=<radicado>&codigoSede=378) reusando el MISMO número de la casilla
+  "📱 Enviar SMS de recordatorio al paciente" que el médico ya ve y puede corregir arriba.
+  Lo que faltaba era que se VIERA: mirando la casilla de laboratorio no había forma de
+  saber si esa cita también avisaría al paciente. Nueva nota #vgl-agm-lab-sms-nota, dentro
+  de la propia caja de laboratorio, que dice a qué número saldrá el SMS (o por qué no
+  saldrá) y se actualiza en vivo al marcar/desmarcar la casilla o corregir el celular.
+  Cero llamadas nuevas: solo hace visible lo que ya ocurría.
+  Banco: 663/663 (2 comprobaciones nuevas, verificadas con test de mutación).
 */
 
 /*
@@ -791,7 +807,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.6.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6958,6 +6974,7 @@
       }
       #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
       #vgl-agendar-modal #vgl-agm-sms-nota{font-size:11.5px;font-style:italic;color:var(--fg3)}
+      #vgl-agendar-modal .vgl-agm-lab-sms-nota{font-size:11.5px;font-style:italic;color:var(--fg3);margin:2px 0 6px}
       #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
       #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
       #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
@@ -8601,6 +8618,12 @@
               <input type="checkbox" id="vgl-agm-lab-chk" disabled>
               <span>🧪 Pre-agendar Toma de Muestras (sugerido, 5 días hábiles antes: <b id="vgl-lab-date-lbl">--/--/----</b>)</span>
             </label>
+            <!-- v12.6.4 — Pedido explícito del médico: que se vea, justo aquí, si el
+                 paciente también recibirá el SMS de recordatorio de la toma de muestras
+                 (AppCita, EnviarMensajeTextoLaboratorio — ver apiLaboratorioAgendarAuto).
+                 Usa el MISMO celular/casilla de arriba (#vgl-agm-sms-chk/#vgl-agm-sms-tel):
+                 no es un envío aparte, solo se hace visible que también aplica aquí. -->
+            <div id="vgl-agm-lab-sms-nota" class="vgl-agm-lab-sms-nota"></div>
             <!-- v12.3.20 — Si el día sugerido no tiene turnos de laboratorio, antes no había
                  forma de elegir otro: quedaba con la casilla bloqueada y sin salida, a
                  diferencia de la fecha de la cita principal (que sí tiene chips ±3 días). -->
@@ -8748,6 +8771,25 @@
               notaSms.textContent = "— verifíquelo antes de confirmar";
             }
           }
+
+          // v12.6.4 — Pedido explícito del médico: que se vea, junto a la casilla de
+          // laboratorio, si esa cita TAMBIÉN recibe SMS. No es un envío aparte: reusa el
+          // MISMO celular/casilla de arriba, que apiLaboratorioAgendarAuto ya recibe como
+          // parámetro `celular` y ya envía a EnviarMensajeTextoLaboratorio (ver esa función)
+          // — esto solo lo hace visible donde el médico está mirando de verdad. Se
+          // actualiza en vivo si el médico corrige el celular o desmarca la casilla.
+          const notaLabSms = modal.querySelector("#vgl-agm-lab-sms-nota");
+          const actualizarNotaLabSms = () => {
+            if (!notaLabSms) return;
+            const marcado = !!(chkSms && chkSms.checked);
+            const telActual = String((inpTel && inpTel.value) || "").replace(/\D/g, "");
+            notaLabSms.textContent = (marcado && telActual.length >= 7)
+              ? `📱 También se envía SMS de recordatorio al ${telActual} (mismo número de arriba)`
+              : "📱 Sin SMS para esta cita: marque «Enviar SMS de recordatorio» arriba y verifique el celular";
+          };
+          actualizarNotaLabSms();
+          if (chkSms) chkSms.addEventListener("change", actualizarNotaLabSms);
+          if (inpTel) inpTel.addEventListener("input", actualizarNotaLabSms);
         } catch (e) { console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e); }
       }
 

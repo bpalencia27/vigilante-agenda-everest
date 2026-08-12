@@ -842,6 +842,21 @@ module.exports = {
       // El celular del SMS se muestra saneado para que el médico lo verifique
       t.igual(modal.querySelector("#vgl-agm-sms-tel").value, "3001112233");
       t.cierto(modal.querySelector("#vgl-agm-sms-nota").textContent.includes("verifíquelo antes de confirmar"));
+      // v12.6.4 — Pedido explícito del médico: junto a la casilla de laboratorio debe
+      // verse si esa cita TAMBIÉN recibe SMS (mismo celular/casilla de arriba — no es un
+      // envío aparte, ver apiLaboratorioAgendarAuto). Se actualiza en vivo con la casilla
+      // y el celular del SMS general (el DOM simulado del banco no interpreta el atributo
+      // HTML `checked` del innerHTML, así que se fija el estado a mano — igual que ya
+      // hacen otras pruebas de este mismo modal — y se dispara el evento real).
+      const notaLabSms = modal.querySelector("#vgl-agm-lab-sms-nota");
+      const chkSms = modal.querySelector("#vgl-agm-sms-chk");
+      chkSms.checked = true;
+      disparar(chkSms, "change");
+      t.cierto(notaLabSms.textContent.includes("También se envía SMS"));
+      t.cierto(notaLabSms.textContent.includes("3001112233"));
+      chkSms.checked = false;
+      disparar(chkSms, "change");
+      t.cierto(notaLabSms.textContent.includes("Sin SMS para esta cita"), "al desmarcar el SMS general, la nota del laboratorio lo refleja de inmediato");
       // Los turnos del laboratorio de AppCita también llegaron (vía GM)
       t.cierto(modal.querySelector("#vgl-agm-lab-time-sel").innerHTML.includes("06:30 AM"));
       // Elegir el turno habilita el botón de confirmar con la hora a la vista
