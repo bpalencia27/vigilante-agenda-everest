@@ -314,6 +314,22 @@ Están vivas y probadas; **NO se borran** — las reconecta T5:
 clic no genere dos citas o dos órdenes para el mismo paciente. Si los widgets de T5 no los
 replican, **se reabre un riesgo de duplicación que ya se cerró una vez**.
 
+**Y la regla exacta que hay que preservar al migrarlos (verificada línea por línea):** la marca se
+pone **solo cuando Everest confirma que procesó la petición de verdad** — nunca al pulsar, nunca
+«optimistamente»:
+
+| Marca | Se pone solo si… | Línea |
+|---|---|---|
+| `markCitaAgendadaHoy` | `res.error === false` **y** hay `radicado > 0` real de Everest | 9634 |
+| `markOrdenesCreadasHoy` | cada orden trajo su **`agrupador` real** y `fallidasCount === 0` | 10569 |
+| `markLabAgendadaHoy` | la reserva respondió **2xx estricto** | 9663 / 9865 |
+
+Esto **no es opcional ni mejorable**: es el arreglo de un incidente real documentado en v11.0.1
+(«antes bastaba cualquier respuesta sin `error:true` —incluido un cuerpo vacío— para dar la orden
+por creada, mostrar el agrupador falso "OK", marcarla como hecha del día y silenciar el recordatorio
+de PyM»). Un widget que marque antes de la confirmación **bloquea al médico para reintentar una
+cita que nunca se creó**. Si dudas, mira esas cuatro líneas antes de escribir nada.
+
 ⚠️ **El ajuste `S.agendamientoRapido`** (declarado en 2881, interruptor en Ajustes 10761) hoy
 gobierna los botones de agendar y ordenar (compuertas en 11131 y 11151). Si los widgets no lo
 respetan, **el interruptor queda decorativo**: el médico lo apaga y los botones siguen ahí.
@@ -337,12 +353,27 @@ un programa de riesgo cardiovascular. Los dos errores no valen lo mismo. Por tan
 falla, tarda, devuelve algo inesperado o el cruce es ambiguo → **se muestra**, y el banner dice con
 honestidad que no pudo verificar.
 
-**Ventana temporal — decisión del médico, NO de Jules:** las órdenes vigentes duran ~1 año
-(`fechaVencimiento`). Que exista una COLESTEROL TOTAL de hace 6 meses **no significa** que la
-tamización de este año esté hecha. Jules **no decide** ese criterio: implementa la ventana como
-**parámetro configurable** con un valor por defecto conservador (una orden solo «tapa» una
-actividad si se creó **dentro del año calendario en curso**), lo deja documentado y visible en
-Ajustes, y **lo marca como pregunta abierta en el PR**.
+**Ventana temporal — CERRADA por el médico (12 ago 2026):** las órdenes vigentes de Everest duran
+~1 año (`fechaVencimiento`), pero eso es vigencia **administrativa**, no periodicidad clínica. Que
+exista una COLESTEROL TOTAL de hace 6 meses **no significa** que la tamización de este año esté
+hecha. La ventana correcta es la **vigencia clínica del analito**:
+
+- **Riesgo cardiovascular: máximo 180 días** entre repeticiones.
+- **Tamización cardiometabólica en pacientes SANOS:** la periodicidad de la **Resolución 3280 de
+  2018**, que NO se deriva de memoria ni de un PDF — sale de la tabla que ya mantiene el médico.
+
+**El script YA tiene la mitad de esto implementado:** `RCV_VIGENCIA_DIAS = 180` (línea 2566) y
+`RCV_VIGENCIA_KEYS` (2567) con los 7 analitos RCV, más `_vigenciaDiasParaAnalito`, que ya aplica
+el acortamiento cuando RAC ≥ 30. **Reutiliza eso; no escribas una segunda tabla de vigencias.**
+Tener dos sería tener dos verdades.
+
+Para las actividades PyM que NO son de RCV, la periodicidad va como **dato por actividad** en
+`PYM_CATALOG` (campo `vigenciaDias`), no como constante global. Las que el médico no haya
+confirmado se dejan **sin `vigenciaDias`** y esas actividades **siempre cuentan como pendientes**
+(D4: ante la duda, el banner se muestra). Anótalas en el PR para que el médico complete la tabla.
+
+Ver `AUDITORIA_MOTOR_RCV_v68.md` en la raíz: la tabla completa de vigencias por estadio renal está
+ahí, pero **su adopción es un encargo aparte (fases R2/R3) y NO entra en este PR**.
 
 ### D5 — «Difícil de ignorar» ≠ «que estorbe». Jerarquía de intrusión de 3 niveles.
 

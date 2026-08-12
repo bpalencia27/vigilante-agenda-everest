@@ -351,6 +351,59 @@ ya atendidos (la rama que pinta ROJO cuando alguien pasó de «Sin presentarse»
 atendidos (:10845): el problema no es el conteo, es reconocerlos **dentro de la lista** sin
 leer palabra por palabra.
 
+### D7 — Qué agendas se muestran: SOLO el programa RCV. Y NO se filtra por texto.
+
+Decidido por el médico (12 ago 2026). Hoy el modal busca con `ProgramaId=0` (todas). A partir de
+ahora **solo se ofrecen las agendas del programa de riesgo cardiovascular**.
+
+**Cómo se implementa — evidencia real, ya en el repo** (`captura_agendamiento_oficial_20260810.json`):
+el filtro **lo hace el servidor**, no el cliente. En la captura, el médico eligió «HTA - MEDICO» en
+el desplegable de Everest y la petición salió así:
+
+```
+POST /apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles
+     ?PacienteId=…&EspecialidadId=12&FechaDeseada=…&ProgramaId=66&PuntoAtencionId=12…
+```
+
+La respuesta trae 49 registros, **todos** con `"programa":"HTA - MEDICO"`, de **8 médicos
+distintos** — la cifra que dio el médico, confirmada.
+
+⚠️ **TRES TRAMPAS, cada una capaz de arruinar la tarea:**
+
+1. **NO filtres por el campo `etiqueta`.** Existe en la respuesta y está **vacío (`""`) en los 49
+   registros**. El médico lo llama «etiqueta» al hablar, pero el nombre del programa vive en el
+   campo **`programa`**. Filtrar por `etiqueta` devuelve **cero agendas**.
+2. **NO filtres la respuesta por la cadena `"HTA - MEDICO"`.** Se pide con `ProgramaId=66` y ya
+   viene filtrada. El campo `programa` sirve para **verificar**, no para seleccionar.
+3. **`ProgramaId` significa DOS COSAS DISTINTAS** según el endpoint, y confundirlas agenda al
+   paciente en el programa equivocado:
+
+   | Endpoint | Valor real capturado | Qué es |
+   |---|---|---|
+   | `BuscarCitasDisponibles` | **66** | El **programa de la agenda** (HTA - MEDICO). Hoy el script manda `0`. |
+   | `AsignarTurno` | **184216** | La **inscripción del paciente** al programa (lo que el médico elige en «Nefroprotección / Hipertensión»). El script **ya lo manda bien** desde v12.1.0. |
+
+**Esto cierra un pendiente documentado del propio archivo** (cabecera, líneas ~711 y ~756):
+«ProgramaId en AsignarTurno y BuscarCitasDisponibles: la aplicación oficial los envía y el script
+no. Sin más capturas, cambiarlo es más arriesgado que el defecto.» **Ya hay captura.**
+
+**El `66` NO se escribe a pelo.** Es el id en esta sede/EPS y solo hay UNA captura. Va como
+constante configurable (`CONFIG.PROGRAMA_RCV_ID = 66`) y el PR debe advertir que en otra sede puede
+cambiar. Si `BuscarCitasDisponibles` devuelve vacío con ese id, el modal lo dice —
+**nunca cae en silencio a `ProgramaId=0`**, que sería mostrar agendas de otros programas sin avisar.
+
+**Los cupos adicionales** salen del campo **`agenda`**, con tres valores reales capturados:
+`"Normal"` (15), `"Adicional"` (32) y `"Adicional-Staff"` (2). Ese es el campo del Eje B de D3-bis,
+no una deducción por la hora.
+
+**Médicos SIN agenda del programa RCV:** el script sigue sirviéndoles. Pueden agendar con los
+médicos de RCV, **solo para citas de control de riesgo cardiovascular**. No se les oculta el
+agendamiento; se les acota el motivo. (Cómo se detecta que el médico en sesión no tiene agenda
+propia del programa: si `BuscarCitasDisponibles` con su `profesionalId` no devuelve ninguna. Esto
+**no está capturado todavía** — si hace falta, se pide diagnóstico antes de implementarlo.)
+
+---
+
 ### D5 — Alcance cerrado.
 **Se toca:** la ventana de días, el realce del sugerido, el filtrado de días sin agenda, el
 lenguaje visual de los cupos, la clasificación de programa, el CSS del modal y —solo para lo
