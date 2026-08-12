@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.7.0
+// @version      12.8.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.7.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.8.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2959,6 +2959,21 @@
     if (!docId) return false;
     const p = getProcessedToday();
     return !!(p.labs && p.labs.includes(String(docId)));
+  }
+  // v13.0.0 — Dedup del botón "Atender" (abrir Historia Clínica), keyed por citaId — es
+  // una cita puntual, no un paciente: el mismo doc_id puede tener sobrecupo el mismo día
+  // (ver apptKey más abajo) y cada cita necesita su propio guardarHoraApertura.
+  function isAtencionAbiertaHoy(citaId) {
+    if (!citaId) return false;
+    const p = getProcessedToday();
+    return !!(p.atendidos && p.atendidos.includes(String(citaId)));
+  }
+  function markAtencionAbiertaHoy(citaId) {
+    if (!citaId) return;
+    const p = getProcessedToday();
+    const sId = String(citaId);
+    if (!p.atendidos) p.atendidos = [];
+    if (!p.atendidos.includes(sId)) { p.atendidos.push(sId); writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }
   }
   // Fecha (ISO) de la cita de control agendada hoy para este paciente — null si no hay
   // ninguna, o si se agendó antes de esta versión y no quedó guardada.
@@ -5687,8 +5702,13 @@
     // Ojo: excluir al médico y a la especialidad, o el panel mostraría el nombre
     // del profesional en todas las tarjetas en vez del paciente.
     const nombres = claves.filter((k) => /nombre|apellido|paciente/i.test(k) && !/medico|profesional|especial|usuario|sede|eps|entidad|empresa|convenio/i.test(k) && typeof fila[k] === "string");
+    // v13.0.0 — "Atender" (abrir la Historia Clínica real) necesita el CitaId numérico
+    // que usa Everest internamente (ObtenerEstadoCita/guardarHoraApertura), NO el doc_id
+    // (cédula). Confirmado por captura real de /ObtenerConsultas: el campo se llama
+    // LITERALMENTE `citaId` — coincidencia exacta, no heurística, para no adivinar.
+    const citaIdKey = buscar(/^citaid$/i);
     if (!hora || !estado || mejorH < 0.5) return null;
-    return { hora, estado, doc, nombres };
+    return { hora, estado, doc, nombres, citaIdKey };
   }
   // Devuelve: arreglo de citas · [] si la agenda está vacía (dato válido) · null si
   // la respuesta no se entiende (eso sí es un fallo).
@@ -5706,6 +5726,10 @@
         doc_id: extractDoc(String(c.doc ? (r[c.doc] ?? "") : "")),
         nombre: limpio(c.nombres.map((k) => r[k]).filter(Boolean).join(" ")) || "Paciente Everest",
         modalidad: "", estado: limpio(String(r[c.estado] ?? "")) || "Pendiente", index: i,
+        // v13.0.0 — Solo se rellena si /ObtenerConsultas trajo el campo real `citaId`
+        // (ver apiCampos): el camino de respaldo por DOM nunca lo tiene, y sin él el
+        // botón "Atender" no aparece — casilla vacía, nunca un id inventado.
+        citaId: (c.citaIdKey && r[c.citaIdKey] != null) ? (Number(r[c.citaIdKey]) || undefined) : undefined,
       });
     }
     // GUARDAS. Si algo no cuadra NO se usa el API: más vale seguir por el camino
@@ -6487,7 +6511,7 @@
       .vgl-card-actions{
         display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;
       }
-      .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar{
+      .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar,.vgl-btn-atender{
         all:unset;
         width:30px;height:30px;border-radius:var(--r-chip);
         border:1px solid var(--edge);
@@ -6499,7 +6523,7 @@
         flex-shrink:0;box-sizing:border-box;
         box-shadow:var(--glow-edge);
       }
-      .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover{
+      .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover,.vgl-btn-atender:hover{
         transform:scale(1.14);background:var(--bg4);
         box-shadow:0 4px 12px rgba(0,0,0,.30),var(--glow-edge);
       }
@@ -8325,6 +8349,31 @@
     const b64Cita = btoa(String(citaId));
     const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=${uId}&EverestId=${encodeURIComponent(b64Cita)}`;
     try { await pageFetchJson(path); } catch (e) {}
+  }
+
+  // Interfaz API: "Atender" — abre la Historia Clínica real (botón nativo "Historias
+  // Clínicas" de Everest), sin salir del panel.
+  // v13.0.0 — Grabado en consultorio con el grabador de red del proyecto: al pulsar el
+  // botón nativo, Everest dispara ~50 GET en paralelo para poblar el formulario Angular
+  // completo (catálogos de parametrización — parentescos, escolaridades, etc. — y datos
+  // históricos del paciente). De esa cascada, estas DOS son las únicas con efecto/lectura
+  // de estado real:
+  //   1) ObtenerEstadoCita?TurnoId=<CitaId en base64>  — lo primero que Everest consulta.
+  //   2) guardarHoraApertura?CitaId=<CitaId>           — la escritura real: "se abrió
+  //      esta historia" (responde `true`). Mismo patrón btoa() que ya usa
+  //      apiDigiturnoFinalizarTicket para el CitaId en base64.
+  // El resto de la cascada (catálogos para rellenar un formulario que este panel nunca
+  // pinta) NO se replica a propósito: no cambia nada observable sin esa pantalla, y 3 de
+  // esas llamadas fallan (500/500/404) incluso en la captura real de Everest — repetir
+  // ruido ajeno no es "simular", es cargarle trabajo de más al servidor sin motivo.
+  async function apiMedicoAbrirHistoria(citaId) {
+    if (!citaId) return false;
+    const b64Cita = btoa(String(citaId));
+    try { await pageFetchJson(`/apiviva/APIMedicoHealth/api/Medico/ObtenerEstadoCita?TurnoId=${encodeURIComponent(b64Cita)}`); } catch (e) {}
+    try {
+      const r = await pageFetchJson(`/apiviva/APIMedicoHealth/api/Medico/guardarHoraApertura?CitaId=${encodeURIComponent(citaId)}`);
+      return r === true;
+    } catch (e) { console.warn("[Vigilante] guardarHoraApertura falló:", e); return false; }
   }
 
   // Interfaz API: Obtener Laboratorios Annar y Citi por PacienteId
@@ -11070,8 +11119,18 @@
       const labsBtn = a.doc_id
         ? `<button class="vgl-btn-labs vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
-      const actions = (agendarBtn || ordenarBtn || labsBtn)
-        ? `<span class="vgl-card-actions" style="gap:8px">${agendarBtn}${ordenarBtn}${labsBtn}</span>`
+      // v13.0.0 — "Atender": abre la Historia Clínica real (ver apiMedicoAbrirHistoria).
+      // SOLO se ofrece cuando el citaId vino del API directo de Everest (apiParse): el
+      // camino de respaldo por scraping de DOM nunca lo tuvo, y sin él no hay a qué
+      // CitaId apuntar — casilla vacía en vez de un botón que apunte a un id inventado.
+      const yaAbiertoHoy = a.citaId ? isAtencionAbiertaHoy(a.citaId) : false;
+      const atenderBtn = a.citaId
+        ? (esAtendido || yaAbiertoHoy
+            ? `<button class="vgl-btn-atender vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
+            : `<button class="vgl-btn-atender vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
+        : "";
+      const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
+        ? `<span class="vgl-card-actions" style="gap:8px">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
         : "";
       card.innerHTML = `
         <div class="vgl-card-top" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"});gap:10px">
@@ -11100,6 +11159,23 @@
       if (bOrd) bOrd.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.ordenar.abrir"); openOrdenamientoModal(a); });
       const bLabs = card.querySelector(".vgl-btn-labs");
       if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
+      const bAt = card.querySelector(".vgl-btn-atender");
+      // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
+      // la llamada de red directamente: es lo mismo que hace el botón nativo de Everest
+      // al pulsarlo (no pide confirmación tampoco). Se deshabilita YA al pulsar para que
+      // un doble clic no dispare guardarHoraApertura dos veces mientras responde la red.
+      if (bAt) bAt.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (bAt.disabled) return;
+        uxTrack("panel.atender.click");
+        bAt.disabled = true; bAt.style.opacity = ".5"; bAt.style.cursor = "wait";
+        const ok = await apiMedicoAbrirHistoria(a.citaId);
+        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`🩺 Historia clínica abierta para ${a.nombre}.`); }
+        else {
+          bAt.disabled = false; bAt.style.opacity = ""; bAt.style.cursor = "";
+          spToast(`⚠️ No se pudo abrir la historia de ${a.nombre} desde el panel. Ábrala manualmente con "Historias Clínicas".`);
+        }
+      });
       fragment.appendChild(card);
     }
     el.list.appendChild(fragment);

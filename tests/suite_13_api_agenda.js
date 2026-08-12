@@ -11,7 +11,7 @@ module.exports = {
     "apiParse", "leerConTope", "apiLeerAgenda", "apiCadencia", "tickApi",
     "apiUtil", "apiSano", "apiEspera",
     "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
-    "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
+    "apiDigiturnoFinalizarTicket", "apiMedicoAbrirHistoria", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
     "apiAccesoObtenerTurnos"
   ],
@@ -146,6 +146,22 @@ module.exports = {
       t.igual(campos, { hora: "horaCita", estado: "estado", doc: "numeroDocumento", nombres: ["nombrePaciente", "apellidoPaciente"] });
     });
 
+    // v13.0.0 — citaId (para el botón "Atender") se detecta por COINCIDENCIA EXACTA del
+    // nombre del campo, tal como aparece de verdad en /ObtenerConsultas (captura real de
+    // consultorio) — no por heurística, para no adivinar cuál columna es cuál id.
+    t.caso("apiCampos: detecta citaId por coincidencia EXACTA del nombre del campo", () => {
+      const filas = [{ horaCita: "07:00", estado: "EN SALA", citaId: 4334823 }, { horaCita: "07:20", estado: "ATENDIDO", citaId: 4334837 }];
+      t.igual(api.apiCampos(filas).citaIdKey, "citaId");
+      t.igual(api.apiCampos(FILAS).citaIdKey, undefined, "sin ese campo real, no hay a qué apuntar");
+    });
+
+    t.caso("apiParse: cuando la fila trae citaId, lo propaga como número al objeto de la cita", () => {
+      const c2 = cargar({ silencioso: true });
+      const filas = [{ horaCita: "07:00", estado: "EN SALA", numeroDocumento: "1", nombrePaciente: "A", citaId: 4334823 }];
+      const citas = c2.api.apiParse(filas);
+      t.igual(citas[0].citaId, 4334823);
+    });
+
     t.caso("apiCampos: penaliza las columnas de hora de FIN aunque también parezcan horas", () => {
       const filas = [
         { horaCita: "07:00", horaFinal: "07:20", estado: "ATENDIDO" },
@@ -189,6 +205,7 @@ module.exports = {
       t.igual(citas[0].estado, "EN SALA");
       t.igual(citas[0].index, 0);
       t.igual(citas[1].estado, "SIN PRESENTAR");
+      t.igual(citas[0].citaId, undefined, "FILAS no trae citaId real: casilla vacía, nunca un id inventado");
     });
 
     t.caso("apiParse: GUARDA — si los estados dejan de reconocerse, no se usa el API", () => {
@@ -587,6 +604,32 @@ module.exports = {
       await e.c.api.apiDigiturnoFinalizarTicket(null);
       await e.c.api.apiDigiturnoFinalizarTicket(0);
       t.igual(e.reg.fetches.length, 0);
+    });
+
+    // ---------- apiMedicoAbrirHistoria ("Atender" — v13.0.0) ----------
+    await t.casoAsync("apiMedicoAbrirHistoria: dispara ObtenerEstadoCita (TurnoId en base64) y guardarHoraApertura (CitaId en claro) — solo `true` es éxito", async () => {
+      const e = entornoApi();
+      e.setFetch((url) => url.includes("guardarHoraApertura") ? respuestaJson(true)() : respuestaJson({ estado: "x" })());
+      const ok = await e.c.api.apiMedicoAbrirHistoria(4334837);
+      t.cierto(ok, "true de guardarHoraApertura es éxito");
+      t.igual(e.reg.fetches.length, 2, "las dos llamadas con efecto real, no la cascada completa de ~50 catálogos de la grabación");
+      const u1 = e.reg.fetches[0].url, u2 = e.reg.fetches[1].url;
+      t.cierto(u1.includes("/APIMedicoHealth/api/Medico/ObtenerEstadoCita?TurnoId="), "primera llamada: la misma que hace Everest antes de guardar");
+      t.cierto(u1.includes("TurnoId=" + encodeURIComponent(Buffer.from("4334837", "binary").toString("base64"))), "TurnoId en base64 — mismo patrón btoa() que apiDigiturnoFinalizarTicket");
+      t.cierto(u2.includes("/APIMedicoHealth/api/Medico/guardarHoraApertura?CitaId=4334837"), "segunda llamada: CitaId en claro, no en base64");
+    });
+
+    await t.casoAsync("apiMedicoAbrirHistoria: sin citaId no llama a nada", async () => {
+      const e = entornoApi();
+      t.falso(await e.c.api.apiMedicoAbrirHistoria(null));
+      t.falso(await e.c.api.apiMedicoAbrirHistoria(0));
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiMedicoAbrirHistoria: si guardarHoraApertura no responde `true`, es un fallo silencioso (no lanza)", async () => {
+      const e = entornoApi();
+      e.setFetch((url) => url.includes("guardarHoraApertura") ? respuestaJson({ raro: 1 })() : respuestaJson({})());
+      t.falso(await e.c.api.apiMedicoAbrirHistoria(4334837));
     });
 
     // ---------- apiAccesoObtenerLaboratoriosAnnar / Citi ----------

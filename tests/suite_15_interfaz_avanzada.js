@@ -349,6 +349,46 @@ module.exports = {
       t.falso(hFraude.includes("--c-atendido"), "El fraude NO se disfraza del color de atendido: manda el rojo de alerta");
     });
 
+    // ================= botón "Atender" (v13.0.0) =================
+    t.caso('botón Atender: solo aparece cuando la cita trae citaId real (API) — nunca por scraping de DOM', () => {
+      vaciarLista();
+      const conCitaId = { key: "atc1", doc_id: "1", nombre: "A", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4334823 };
+      const sinCitaId = { key: "atc2", doc_id: "2", nombre: "B", hora_texto: "07:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.__state.lastSignature = "";
+      cv.api.render([conCitaId, sinCitaId], "api", new Date());
+      const hCon = lista.children[0].innerHTML, hSin = lista.children[1].innerHTML;
+      t.cierto(hCon.includes('aria-label="Atender: abrir Historia Clínica de'), "con citaId real y sin marcar, el botón está habilitado");
+      t.falso(hSin.includes("vgl-btn-atender"), "sin citaId (p. ej. el camino de respaldo por scraping de DOM) no hay botón: nunca se inventa el id");
+    });
+
+    t.caso("botón Atender: se deshabilita si Everest ya marca Atendido, o si ya se abrió hoy desde el panel", () => {
+      vaciarLista();
+      cv.env.storage.removeItem("vgl_proc_today");
+      const yaAtendido = { key: "atc3", doc_id: "3", nombre: "C", hora_texto: "07:00", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0, citaId: 111 };
+      const abiertoHoy = { key: "atc4", doc_id: "4", nombre: "D", hora_texto: "07:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 222 };
+      cv.api.markAtencionAbiertaHoy(222);
+      cv.api.__state.lastSignature = "";
+      cv.api.render([yaAtendido, abiertoHoy], "api", new Date());
+      const hAtendido = lista.children[0].innerHTML, hAbierto = lista.children[1].innerHTML;
+      t.cierto(hAtendido.includes('aria-label="Historia ya abierta para'), "ya Atendido en Everest: botón visible pero bloqueado");
+      t.cierto(hAbierto.includes('aria-label="Historia ya abierta para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
+    });
+
+    await t.casoAsync("botón Atender: al pulsarlo llama a apiMedicoAbrirHistoria; si no hay éxito, avisa y se reactiva", async () => {
+      vaciarLista();
+      cv.env.storage.removeItem("vgl_proc_today");
+      const cita = { key: "atc5", doc_id: "5", nombre: "E", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 333 };
+      cv.api.__state.lastSignature = "";
+      cv.api.render([cita], "api", new Date());
+      const card = lista.children[0];
+      const bAt = card.querySelector(".vgl-btn-atender");
+      await disparar(bAt, "click", { stopPropagation() {} });
+      // El fetch por defecto del harness responde `{}` (no `true`): guardarHoraApertura
+      // se cuenta como fallo, así que NO debe marcarse como abierta ni quedar bloqueado.
+      t.falso(cv.api.isAtencionAbiertaHoy(333), "sin `true` real del servidor, no se marca como abierta");
+      t.falso(bAt.disabled, "al fallar, el botón se reactiva — no queda bloqueado para siempre por un error de red");
+    });
+
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
