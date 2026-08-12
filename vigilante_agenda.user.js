@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.5.8
+// @version      12.5.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -125,6 +125,52 @@
   directamente en la próxima captura de consola y encontrar el formato real, en vez
   de seguir adivinando un patrón nuevo a ciegas. También captura hasta 2 solicitudes
   distintas por sesión (antes solo 1), para comparar si el patrón es consistente.
+*/
+
+/*
+  v12.5.9 — 11-08-2026: SEGUNDA VARIANTE REAL DE TARJETA DE ATHENEA — LA FECHA DENTRO
+  DEL FORMULARIO. Consola de campo (paciente con 11 solicitudes, modal "Sin fecha" en
+  todos los renglones): Athenea tiene una plantilla donde el <form> de "Ver Informe" NO
+  va al final de la tarjeta sino que la ENVUELVE — la fecha en español y el "Numero" van
+  DENTRO del formulario, después de su apertura, y los formularios de solicitudes
+  consecutivas quedan pegados (</form><form>) sin divs entre ellos. El recorte de
+  v12.5.5 ("la fecha siempre va antes del formulario", cierto solo para la variante
+  clásica) producía aquí DOS fallos a la vez, confirmados en el diagnóstico de consola:
+  la tarjeta quedaba sin su propia fecha (tarjeta #1: español [], ninguna), y esa fecha
+  caía en la ventana TRASERA de la tarjeta SIGUIENTE, que la adoptaba si el año
+  coincidía (tarjeta #2 "aceptó" 2026-08-04 06:02 — fecha de la solicitud 1330106, no
+  de la 763563: la misma clase de contaminación cruzada que v12.5.5 corrigió, por otra
+  vía). La frontera correcta, válida para AMBAS variantes, es el CIERRE </form>: la
+  fecha propia vive siempre entre el cierre del formulario ANTERIOR y el cierre del
+  PROPIO (HTML prohíbe anidar formularios, así que el primer </form> tras cada apertura
+  es inequívocamente el suyo). El hash/token pierde además su tope fijo de 1500: son
+  campos del formulario y el cierre propio los acota exactamente (en la variante
+  envolvente el token va al FINAL y podía quedar fuera del tope).
+  Pruebas: 4 nuevas con la variante envolvente calcada del volcado real (una sola,
+  dos pegadas del mismo año — el repro exacto del fallo de campo —, mezcla de ambas
+  variantes en una página, y envolvente sin fecha junto a vecino con fecha).
+  Revisión adversarial DEL PROPIO FIX (3 lentes, 8 hallazgos, 8 confirmados con repro
+  ejecutable, 0 refutados) — todos corregidos en esta misma versión:
+  · ALTA: el emparejamiento apertura→cierre tomaba CUALQUIER </form> posterior; a un
+    formulario sin cierre (truncado/averiado) se le asignaba el cierre de la tarjeta
+    VECINA — adoptaba su fecha y hasta su hash/token, y la vecina perdía los suyos.
+    Ahora el cierre solo cuenta como propio si queda antes de la apertura siguiente;
+    si no, aplica el respaldo (inicio del siguiente o apertura+1500), nunca la
+    frontera de una vecina.
+  · MEDIA: '</form >' y '</form\n>' (fines de etiqueta válidos en HTML) eran
+    invisibles para el barrido de cierres — ahora /<\/form\s*>/gi, simétrico con la
+    apertura.
+  · MEDIA: un '</form>' dentro de un comentario HTML o de un <script> (marcado
+    legado, string de JS) partía la tarjeta en una frontera falsa — se excluyen las
+    zonas muertas del barrido.
+  · MEDIA: la primera tarjeta no tenía frontera trasera estructural y su ventana de
+    -3000 ingería chrome de página (una "Fecha de impresión" del año en curso podía
+    colarse en una tarjeta sin fecha) — si hay algún </form> antes de la primera
+    tarjeta (p. ej. el __AjaxAntiForgeryForm de ASP.NET), ese cierre es ahora su
+    frontera trasera.
+  · 3 huecos de cobertura clavados con prueba: form ajeno intercalado, respaldo de
+    HTML truncado (era código sin ejercitar), y cierre en mayúsculas </FORM>.
+  Banco: 608 comprobaciones, cobertura 296/323 (91.6%).
 */
 
 /*
@@ -593,7 +639,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.5.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1098,6 +1144,53 @@
     // poder acotar cada ventana exactamente entre la tarjeta anterior y la siguiente —
     // nunca más ancha que la tarjeta propia.
     const matches = [...html.matchAll(re)];
+    // v12.5.9 — SEGUNDA variante REAL de tarjeta, vista en campo (consola del 11-08-2026,
+    // paciente con 11 solicitudes): en esta plantilla de Athenea el <form> NO va al final
+    // de la tarjeta — la ENVUELVE: la fecha en español y el "Numero" van DENTRO del
+    // formulario, después de su etiqueta de apertura, y los formularios de solicitudes
+    // consecutivas quedan pegados uno tras otro (</form><form>) sin divs de tarjeta entre
+    // ellos. El recorte de v12.5.5 ("la fecha siempre va antes del formulario") era cierto
+    // solo para la PRIMERA variante: aquí dejaba a cada tarjeta sin su propia fecha y —
+    // peor — esa fecha caía en la ventana TRASERA de la tarjeta SIGUIENTE, que la adoptaba
+    // si el año coincidía (la fecha de OTRA solicitud del mismo paciente: la misma clase
+    // de bloqueante que v12.5.5 corrigió, por otra vía). La frontera correcta, válida para
+    // AMBAS variantes, es el CIERRE </form>: la fecha propia vive siempre entre el cierre
+    // del formulario ANTERIOR y el cierre del PROPIO (antes de la apertura en la variante
+    // clásica, dentro del formulario en la envolvente) — y como HTML prohíbe anidar
+    // formularios, el primer </form> tras cada apertura es inequívocamente el suyo.
+    // v12.5.9 (revisión adversarial del propio fix, 8/8 confirmados con repro ejecutable):
+    //  · '\s*' antes de '>': '</form >' y '</form\n>' son fines de etiqueta VÁLIDOS en
+    //    HTML que el regex estricto no veía — y un solo cierre invisible desplazaba TODAS
+    //    las fronteras (pérdida de fechas en cascada).
+    //  · Un '</form>' dentro de un comentario HTML o de un <script> (marcado legado,
+    //    string de JS) NO es una frontera real para el navegador, pero sí lo era para el
+    //    barrido crudo: partía la tarjeta en un punto falso (fecha y token perdidos, y la
+    //    cola con la fecha real caía en la ventana de la tarjeta siguiente). Se excluyen.
+    const zonasMuertas = [...html.matchAll(/<!--[\s\S]*?-->|<script\b[\s\S]*?<\/script\s*>/gi)].map((z) => [z.index, z.index + z[0].length]);
+    const enZonaMuerta = (pos) => zonasMuertas.some(([a, b]) => pos >= a && pos < b);
+    const cierresTodos = [...html.matchAll(/<\/form\s*>/gi)].filter((c) => !enZonaMuerta(c.index)).map((c) => c.index + c[0].length);
+    const cierres = matches.map((mm, i) => {
+      // v12.5.9 (hallazgo ALTA de la revisión del fix): el cierre hallado solo es el
+      // PROPIO si queda antes de la apertura del formulario siguiente — sin esta cota, a
+      // un formulario sin cierre (truncado/averiado) se le asignaba el cierre de la
+      // tarjeta VECINA: su ventana abarcaba las dos (fecha y hasta hash/token de OTRA
+      // solicitud adoptados como propios) y la vecina quedaba con ventana vacía (su fecha
+      // existente, perdida en silencio). La igualdad preserva el caso pegado </form><form>.
+      const sigApertura = i < matches.length - 1 ? matches[i + 1].index : Infinity;
+      const c = cierresTodos.find((pos) => pos > mm.index && pos <= sigApertura);
+      if (c !== undefined) return c;
+      // Sin cierre propio (HTML truncado/averiado): cae al inicio del formulario
+      // siguiente o a un tope fijo — nunca a la frontera de una tarjeta vecina.
+      return i < matches.length - 1 ? matches[i + 1].index : Math.min(html.length, mm.index + mm[0].length + 1500);
+    });
+    // v12.5.9 (hallazgo MEDIA): la PRIMERA tarjeta era la única sin frontera trasera
+    // estructural — su ventana de -3000 ingería chrome de página (encabezado, panel), y
+    // una fecha suelta ahí (p. ej. "Fecha de impresión") del año en curso podía colarse
+    // en una tarjeta sin fecha propia. Si la página trae algún </form> ANTES de la
+    // primera tarjeta (p. ej. el __AjaxAntiForgeryForm de ASP.NET), ese cierre es la
+    // frontera trasera del idx 0.
+    let cierreAntesDelPrimero = 0;
+    if (matches.length) { for (const pos of cierresTodos) { if (pos <= matches[0].index) cierreAntesDelPrimero = pos; else break; } }
     for (let idx = 0; idx < matches.length; idx++) {
       const m = matches[idx];
       const tag = m[0];
@@ -1106,27 +1199,13 @@
       const modM = /data-modulo=["']([A-Za-z]+)["']/i.exec(tag);
       let fechaIso = null;
       let horaTxt = null; // v12.4.0 — hora que el portal muestra junto a la fecha, si existe
-      // v12.5.5 — Límites REALES de esta tarjeta: nunca antes de donde termina la tarjeta
-      // anterior, nunca después de donde empieza la siguiente. Junto con los offsets fijos
-      // de abajo (que ahora son un TOPE máximo, no la única guarda), evita que la ventana
-      // se extienda sobre una tarjeta vecina.
-      const limiteAtras = idx > 0 ? matches[idx - 1].index + matches[idx - 1][0].length : 0;
-      const limiteAdelante = idx < matches.length - 1 ? matches[idx + 1].index : html.length;
+      // v12.5.5/12.5.9 — Límites REALES de esta tarjeta: nunca antes del cierre del
+      // formulario anterior, nunca después del cierre del propio.
+      const limiteAtras = idx > 0 ? cierres[idx - 1] : cierreAntesDelPrimero;
+      const limiteAdelante = cierres[idx];
       try {
-        // v12.3.36 — diagnóstico de campo de la .35: en ese momento se creyó que la fecha
-        // iba DESPUÉS del formulario. v12.5.3 dejó por eso un margen fijo hacia adelante.
-        // v12.5.4/12.5.5 — CORRECCIÓN con la tarjeta REAL de consultorio (2026-08-11): la
-        // fecha y el "Numero" van SIEMPRE ANTES del formulario, dentro del card-body; lo
-        // único confirmado después del formulario es un campo oculto sin fecha. Ese margen
-        // hacia adelante ya no aporta nada para la fecha y sí abría una vía de
-        // contaminación cruzada: con tarjetas reales de Athenea pegadas una tras otra, el
-        // margen alcanzaba a rozar el card-body (fecha + Numero) de la tarjeta SIGUIENTE, y
-        // aunque las guardas de unicidad evitan que eso produzca una fecha EQUIVOCADA (la
-        // ambigüedad cae a "sin fecha"), sí perdía en silencio la fecha de tarjetas que sí
-        // la tenían. Por eso ahora la ventana NO se extiende más allá del propio
-        // formulario — todo lo que la tarjeta necesita ya está ANTES.
         const desde = Math.max(0, limiteAtras, m.index - 3000);
-        const hasta = Math.min(html.length, limiteAdelante, m.index + tag.length);
+        const hasta = Math.min(html.length, limiteAdelante);
         // v12.4.1 — La ventana es HTML CRUDO: el designador español "p. m." lleva un
         // espacio duro que ASP.NET encodea como &nbsp;/&#160;/&#8239;. Sin decodificarlo,
         // el regex capturaba "7:35 p." a medias y una toma de las 7:35 PM se mostraba
@@ -1210,12 +1289,14 @@
       // v12.5.5 — ALTA de la revisión adversarial: igual que la fecha, esta búsqueda NO
       // se detenía en el límite de la tarjeta — si la actual no traía su propio hash/token
       // cerca (p. ej. una solicitud sin informe generado aún), el botón "Ver informe" podía
-      // terminar abriendo el PDF de una solicitud VECINA. Se acota al mismo
-      // `limiteAdelante` que ya protege la fecha: nunca cruza a la tarjeta siguiente.
+      // terminar abriendo el PDF de una solicitud VECINA.
+      // v12.5.9 — hash y token son CAMPOS del formulario: viven, por definición, entre su
+      // apertura y su cierre </form> (limiteAdelante). Se quita el tope fijo de 1500: en
+      // la variante envolvente el token va al FINAL del formulario y puede quedar más
+      // lejos; el cierre propio lo acota sin riesgo (los formularios no se anidan).
       let hash = null, token = null;
       try {
-        const trasHasta = Math.min(limiteAdelante, m.index + tag.length + 1500);
-        const tras = html.slice(m.index + tag.length, trasHasta);
+        const tras = html.slice(m.index + tag.length, limiteAdelante);
         const hM = /<input[^>]*\bname=["']hash["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']hash["']/i.exec(tras);
         const tM = /<input[^>]*\bname=["']__RequestVerificationToken["'][^>]*\bvalue=["']([^"']*)["']/i.exec(tras) || /<input[^>]*\bvalue=["']([^"']*)["'][^>]*\bname=["']__RequestVerificationToken["']/i.exec(tras);
         if (hM) hash = hM[1];

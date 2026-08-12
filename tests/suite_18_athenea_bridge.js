@@ -302,6 +302,146 @@ module.exports = {
       t.igual(out[2].fechaIso, "2026-03-20");
     });
 
+    // =====================================================================
+    // v12.5.9 — SEGUNDA variante REAL de tarjeta (consola de campo, 11-08-2026, paciente
+    // con 11 solicitudes): el <form> ENVUELVE el contenido — fecha y "Numero" van DENTRO
+    // del formulario, tras su apertura, y los formularios consecutivos quedan pegados
+    // (</form><form>) sin divs de tarjeta entre ellos. El recorte de v12.5.5 dejaba a
+    // cada tarjeta sin su fecha Y la regalaba a la ventana trasera de la SIGUIENTE.
+    // =====================================================================
+    function tarjetaEnvolvente({ idSolicitud, ano, fechaTxt, hora, numero, hash, token }) {
+      // Calcada del volcado real de consola: hash al inicio, fecha+Numero dentro,
+      // Ver Resumen/Ver Informe, collapse vacío, y el token al FINAL del formulario.
+      return `<form id="${idSolicitud}${ano}" data-modulo="LAB" action="/Resultados/Reporte" method="post">
+          <input type="hidden" id="hash" name="hash" value="${hash}" />
+          <div class="card-text no-margin"><strong>${fechaTxt} ${hora} a.&nbsp;m.</strong></div>
+          <div class="card-title no-margin">Numero: ${numero}</div>
+          <div class="card-title no-margin">Estado: Solicitud Completa</div>
+          <span class="p-10" data-toggle="collapse" onclick="getDetalleSolicitud(this, 'LAB', ${idSolicitud}, ${ano}, 'True' )" href="#collapse${idSolicitud}${ano}LAB"><i class="fa fa-caret-down cursor-pointer" aria-hidden="true"></i> <span class="cursor-pointer">Ver Resumen</span></span>
+          <button type="submit" class="btn btn-primary float-right btn-xs" style=" margin-right: 10px;"><i class="far fa-file-alt"></i> Ver Informe</button>
+          <div class="collapse" id="collapse${idSolicitud}${ano}LAB">
+            <div class="card card-body bg-light p-5" style="width:100%; margin-top: 5px;" id="dv${idSolicitud}${ano}LAB" data-id-Estado="3" data-muestra-pendiente="True"></div>
+          </div>
+          <input name="__RequestVerificationToken" type="hidden" value="${token}" /></form>`;
+    }
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: variante ENVOLVENTE (el form envuelve la tarjeta) -> la fecha DENTRO del formulario sí se extrae, con hora, hash y token", () => {
+      const html = `<div id="solicitudes" class="tab-pane active"><div class="row"><div class="col-md-6 col-xs-12 p-5"><div class="card"><div class="card-body p-5">` +
+        tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-ENV", token: "TOK-ENV" }) +
+        `</div></div></div></div></div>`;
+      const out = api._atheneaExtraerSolicitudes(html);
+      t.igual(out, [{ idSolicitud: 1330106, ano: 2026, modulo: "LAB", fechaIso: "2026-08-04", horaTxt: "06:02", hash: "HASH-ENV", token: "TOK-ENV" }]);
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: 2 tarjetas envolventes PEGADAS (</form><form>) del mismo año -> cada una conserva SU fecha, jamás la de la vecina (repro exacto del fallo de campo)", () => {
+      // En campo: la tarjeta 1 quedaba SIN fecha (su fecha estaba tras la apertura de su
+      // form, fuera de la ventana de v12.5.5) y la tarjeta 2 ADOPTABA la fecha de la 1
+      // (que caía en su ventana trasera con el año coincidente).
+      const c1 = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-1", token: "TOK-1" });
+      const c2 = tarjetaEnvolvente({ idSolicitud: 763563, ano: 2026, fechaTxt: "jue. 12 feb. 2026", hora: "09:15", numero: "26021201234", hash: "HASH-2", token: "TOK-2" });
+      const out = api._atheneaExtraerSolicitudes(c1 + "\r\n" + c2);
+      t.igual(out.length, 2);
+      t.igual(out[0], { idSolicitud: 1330106, ano: 2026, modulo: "LAB", fechaIso: "2026-08-04", horaTxt: "06:02", hash: "HASH-1", token: "TOK-1" }, "la tarjeta 1 recupera SU propia fecha (en campo quedaba sin fecha)");
+      t.igual(out[1], { idSolicitud: 763563, ano: 2026, modulo: "LAB", fechaIso: "2026-02-12", horaTxt: "09:15", hash: "HASH-2", token: "TOK-2" }, "la tarjeta 2 conserva SU fecha (en campo adoptaba la de la tarjeta 1)");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: variante envolvente Y variante clásica MEZCLADAS en la misma página -> ambas extraen bien", () => {
+      const clasica = tarjetaReal({ idSolicitud: 555, ano: 2026, dia: "lun.", mesTxt: "5 ene.", hora: "08:00", numero: "26010512345", hash: "HASH-CLAS", token: "TOK-CLAS" });
+      const envolvente = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-ENV", token: "TOK-ENV" });
+      const out = api._atheneaExtraerSolicitudes(clasica + envolvente);
+      t.igual(out.length, 2);
+      t.igual(out[0].fechaIso, "2026-01-05");
+      t.igual(out[0].hash, "HASH-CLAS");
+      t.igual(out[1].fechaIso, "2026-08-04");
+      t.igual(out[1].hash, "HASH-ENV");
+      t.igual(out[1].token, "TOK-ENV");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: formulario envolvente SIN fecha propia junto a uno CON fecha del mismo año -> el vacío queda sin fecha, nunca hereda la del vecino", () => {
+      const conFecha = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-1", token: "TOK-1" });
+      const sinFecha = `<form id="7635632026" data-modulo="LAB" action="/Resultados/Reporte" method="post"><input type="hidden" id="hash" name="hash" value="HASH-2" /><span>Ver Resumen</span><input name="__RequestVerificationToken" type="hidden" value="TOK-2" /></form>`;
+      const out = api._atheneaExtraerSolicitudes(conFecha + sinFecha);
+      t.igual(out[0].fechaIso, "2026-08-04");
+      t.igual(out[1].fechaIso, null, "sin fecha propia -> sin fecha, aunque el vecino tenga una del mismo año");
+      t.igual(out[1].hash, "HASH-2", "el hash sí es el suyo propio");
+    });
+
+    // =====================================================================
+    // v12.5.9 — Revisión adversarial del propio fix (8/8 confirmados): cada prueba de
+    // este bloque reproduce un hallazgo con repro ejecutable de esa revisión.
+    // =====================================================================
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: cierre '</form >' (espacio antes de '>', válido en HTML) -> las fronteras NO se pierden y ambas tarjetas conservan su fecha", () => {
+      const c1 = tarjetaReal({ idSolicitud: 111, ano: 2026, dia: "lun.", mesTxt: "5 ene.", hora: "08:00", numero: "26010512345", hash: "HASH-A", token: "TOK-A" }).replace(/<\/form>/g, "</form >");
+      const c2 = tarjetaReal({ idSolicitud: 222, ano: 2026, dia: "jue.", mesTxt: "12 feb.", hora: "09:15", numero: "26021212345", hash: "HASH-B", token: "TOK-B" }).replace(/<\/form>/g, "</form\n>");
+      const out = api._atheneaExtraerSolicitudes(c1 + c2);
+      t.igual(out[0].fechaIso, "2026-01-05", "cierre con espacio antes de '>' se reconoce igual");
+      t.igual(out[1].fechaIso, "2026-02-12", "cierre con salto de línea antes de '>' se reconoce igual");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: cierre '</FORM>' en mayúsculas -> se reconoce igual (clava la bandera /i del barrido de cierres)", () => {
+      const c1 = tarjetaReal({ idSolicitud: 111, ano: 2026, dia: "lun.", mesTxt: "5 ene.", hora: "08:00", numero: "26010512345", hash: "HASH-A", token: "TOK-A" }).replace(/<\/form>/g, "</FORM>");
+      const c2 = tarjetaReal({ idSolicitud: 222, ano: 2026, dia: "jue.", mesTxt: "12 feb.", hora: "09:15", numero: "26021212345", hash: "HASH-B", token: "TOK-B" }).replace(/<\/form>/g, "</FORM>");
+      const out = api._atheneaExtraerSolicitudes(c1 + c2);
+      t.igual(out[0].fechaIso, "2026-01-05");
+      t.igual(out[1].fechaIso, "2026-02-12");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: un form AJENO (no /Resultados/Reporte) con su propio </form> antes de las tarjetas -> no desplaza ninguna frontera (hallazgo: el emparejamiento por 'primer cierre posterior' no estaba clavado)", () => {
+      // El __AjaxAntiForgeryForm de ASP.NET MVC es un form real de estas páginas: su
+      // cierre NO debe contarse como frontera de ninguna tarjeta de solicitud.
+      const ajeno = `<form action="/Account/AjaxLogOff" id="__AjaxAntiForgeryForm" method="post"><input name="__RequestVerificationToken" type="hidden" value="TOK-AJENO" /></form>`;
+      const c1 = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-1", token: "TOK-1" });
+      const c2 = tarjetaEnvolvente({ idSolicitud: 763563, ano: 2026, fechaTxt: "jue. 12 feb. 2026", hora: "09:15", numero: "26021201234", hash: "HASH-2", token: "TOK-2" });
+      const out = api._atheneaExtraerSolicitudes(ajeno + c1 + c2);
+      t.igual(out.length, 2, "el form ajeno no produce solicitud (su id no es numérico+año)");
+      t.igual(out[0], { idSolicitud: 1330106, ano: 2026, modulo: "LAB", fechaIso: "2026-08-04", horaTxt: "06:02", hash: "HASH-1", token: "TOK-1" });
+      t.igual(out[1], { idSolicitud: 763563, ano: 2026, modulo: "LAB", fechaIso: "2026-02-12", horaTxt: "09:15", hash: "HASH-2", token: "TOK-2" });
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: formulario intermedio SIN cierre (averiado/truncado) -> NO adopta la fecha ni el hash de la tarjeta vecina, y la vecina conserva los suyos (hallazgo ALTA de la revisión del fix)", () => {
+      // Sin la cota 'cierre <= apertura siguiente', al form averiado se le asignaba el
+      // cierre de la tarjeta VECINA: adoptaba su fecha (2026-08-04 escrita en la solicitud
+      // equivocada) y hasta su hash/token; la vecina quedaba con ventana vacía.
+      const averiado = `<form id="7635632026" data-modulo="LAB" action="/Resultados/Reporte" method="post"><input type="hidden" id="hash" name="hash" value="HASH-AVERIADO" /><span>Ver Resumen</span>`;
+      const intacta = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-OK", token: "TOK-OK" });
+      const out = api._atheneaExtraerSolicitudes(averiado + intacta);
+      t.igual(out[0].fechaIso, null, "el averiado queda sin fecha — jamás con la de la vecina");
+      t.igual(out[0].hash, "HASH-AVERIADO", "conserva su propio hash, no el de la vecina");
+      t.igual(out[0].token, null, "su token se perdió con el truncado: null, no el de la vecina");
+      t.igual(out[1].fechaIso, "2026-08-04", "la tarjeta intacta conserva su propia fecha");
+      t.igual(out[1].hash, "HASH-OK");
+      t.igual(out[1].token, "TOK-OK");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: ÚLTIMO formulario sin cierre (respuesta cortada por la red) -> la fecha se recupera con el tope de apertura+1500 (clava el respaldo, antes código sin cobertura)", () => {
+      const truncada = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-1", token: "TOK-1" }).replace(/<input name="__RequestVerificationToken"[\s\S]*$/, "");
+      const out = api._atheneaExtraerSolicitudes(truncada);
+      t.igual(out[0].fechaIso, "2026-08-04", "la fecha va poco después de la apertura: el tope de +1500 la alcanza");
+      t.igual(out[0].horaTxt, "06:02");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: '</form>' huérfano dentro de un comentario HTML -> NO parte la tarjeta (fecha y token propios intactos)", () => {
+      const c1 = tarjetaEnvolvente({ idSolicitud: 1330106, ano: 2026, fechaTxt: "mar. 4 ago. 2026", hora: "06:02", numero: "26080401234", hash: "HASH-1", token: "TOK-1" })
+        .replace(`<div class="card-text`, `<!-- legado: </form> --><div class="card-text`);
+      const c2 = tarjetaEnvolvente({ idSolicitud: 763563, ano: 2026, fechaTxt: "jue. 12 feb. 2026", hora: "09:15", numero: "26021201234", hash: "HASH-2", token: "TOK-2" });
+      const out = api._atheneaExtraerSolicitudes(c1 + c2);
+      t.igual(out[0].fechaIso, "2026-08-04", "el cierre comentado no es frontera: la fecha propia sigue en la ventana");
+      t.igual(out[0].token, "TOK-1", "el token propio sigue dentro de la frontera real");
+      t.igual(out[1].fechaIso, "2026-02-12");
+    });
+
+    t.caso("_atheneaExtraerSolicitudes v12.5.9: fecha suelta del chrome de página + primera tarjeta SIN fecha propia -> con un </form> previo (form ajeno) la fecha del chrome NO se adopta", () => {
+      // Sin la frontera trasera del idx 0, una "Fecha de impresión" del encabezado (del
+      // año en curso, como toda solicitud reciente) se colaba en una tarjeta sin fecha.
+      const chrome = `<form action="/Account/AjaxLogOff" id="__AjaxAntiForgeryForm" method="post"><span>Fecha de impresión: mar. 4 ago. 2026</span><input name="__RequestVerificationToken" type="hidden" value="TOK-AJENO" /></form>`;
+      const sinFecha = `<form id="7635632026" data-modulo="LAB" action="/Resultados/Reporte" method="post"><input type="hidden" id="hash" name="hash" value="HASH-2" /><span>Ver Resumen</span><input name="__RequestVerificationToken" type="hidden" value="TOK-2" /></form>`;
+      const out = api._atheneaExtraerSolicitudes(chrome + sinFecha);
+      t.igual(out.length, 1);
+      t.igual(out[0].fechaIso, null, "la fecha del encabezado queda tras la frontera del form ajeno: no se adopta");
+      t.igual(out[0].hash, "HASH-2");
+      t.igual(out[0].token, "TOK-2");
+    });
+
     t.caso("_atheneaExtraerSolicitudes: fecha en español con año DISTINTO al declarado por la propia solicitud -> sin fecha (guarda de año, antes sin cobertura de pruebas)", () => {
       // El id de la tarjeta declara 2026, pero el texto en español dice 2025 — no debería
       // pasar jamás en Athenea real, pero si pasara, la guarda de año debe rechazarlo en
