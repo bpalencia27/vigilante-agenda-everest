@@ -1,0 +1,88 @@
+### Qué cambié
+Se añadieron dos casos de prueba asíncronos a `tests/suite_12_sharepoint_piloto.js` para ejercitar flujos de error que no estaban cubiertos en el manejo de la base piloto:
+1. `pilotoDesdeCache`: Simula una caché corrupta que comienza con la firma correcta (`{"v":3`) pero no es JSON válido. Esto lanza una excepción en `unpackPym` y valida que el bloque `catch` retorne `false` preservando el estado limpio.
+2. `schedulePymBase`: Simula que la carga base `loadPymBase` falla por falta de `TextDecoder`. Al rechazar, valida que el encadenamiento `.catch(() => false)` mantenga viva la cadena de reintentos hasta llegar a los 3 intentos completos.
+
+Se registraron además estas dos mutaciones en `tests/INFORME_MUTACIONES.md`.
+
+### Salida completa del runner
+```text
+════════════════════════════════════════════════════════════════
+  PRUEBAS DEL VIGILANTE DE AGENDA
+════════════════════════════════════════════════════════════════
+  funciones alcanzables: 330 de 355
+
+✓ Texto y datos del paciente                41 ok
+✓ Tiempo y fechas                           28 ok
+✓ Excel, caché y SharePoint                 16 ok
+✓ Colores y notificaciones de la agenda     23 ok
+✓ Llamadas a Everest y clínicas             10 ok
+✓ Panel, ajustes, modales                   6 ok
+✓ Lector de Excel (ZIP/XLSX)                13 ok
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado, resultDate = 2023-01-02
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Solicitud 4321 · 05/03/2026 · LAB</div>"
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Del 01/02/2026 al 05/03/2026</div>"
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado, resultDate = null
+[Vigilante] uroanálisis: casilla de resultado completada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado, resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+[Vigilante] diagnóstico fecha — RAC: dateInput NO encontrado, resultDate = null
+✓ Laboratorios Crónicos (Suite 08)          93 ok
+✓ Ajustes y almacén local (Suite 09)        30 ok
+✓ Estadísticas, eventos y auditoría         24 ok
+✓ Cola de reportes al remoto (Suite 11)     21 ok
+✓ SharePoint y caché del piloto (Suite 12)  42 ok
+✓ Lectura directa del API de agenda         56 ok
+✓ Extracción del DOM de Everest (Suite 14)  26 ok
+✓ Interfaz: ventana, hojas y modales        98 ok
+✓ Lectura en flujo del Excel PyM            24 ok
+✓ Núcleo: bucles, latidos y utilidades GM   27 ok
+✓ Puente Athenea y credenciales (Suite 18)  80 ok
+✓ Identidad de API por médico y blindaje de cuota 21 ok
+✓ Correo de órdenes al paciente (Suite 20)  7 ok
+✓ Comparador de fuentes                     1 ok
+✓ v12.4: horas, panel PyM y tabla CUPS      29 ok
+✓ Utilidades Puras                          3 ok
+✓ Telemetría de uso del panel (v12.5)       21 ok
+✓ Motor de perfil (D3-bis)                  12 ok
+✓ Cascada CSS                               2 ok
+✓ El banco se ejecuta de verdad             4 ok
+
+────────────────────────────────────────────────────────────────
+  comprobaciones : 758 pasan
+  funciones cubiertas: 330 / 355  (93.0%)
+────────────────────────────────────────────────────────────────
+
+ [Vigilante] hora no interpretable: invalido
+[Vigilante] La tabla de festivos caducó, hay que actualizarla.
+[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles: [ 'codigo', 'nombre', 'Resultado' ] { codigo: '903841', nombre: 'GLUCOSA', Resultado: '7.1' }
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: GLUCOSA
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: UROANALISIS
+[Vigilante] RAC borrada por Everest, restaurando valor del robot
+```
+
+### Pruebas nuevas
+- `pilotoDesdeCache: caché corrupta (empieza por v3 pero no es JSON) lanza y el catch devuelve false`
+- `schedulePymBase: loadPymBase rechaza (por ej. sin TextDecoder) y la cadena de reintentos se mantiene`
+
+### Mutación aplicada
+1. **Mutación:** Modifiqué L4661 de `vigilante_agenda.user.js` `catch (e) { return false; }` a `return true;`.
+   **Resultado:** El caso nuevo 1 ("caché corrupta") falló (`esperaba false y obtuvo true`). Restaurado correctamente.
+2. **Mutación:** Modifiqué L4908 de `vigilante_agenda.user.js` `.catch(() => false)` a `.catch(() => true)`.
+   **Resultado:** El caso nuevo 2 falló (`esperaba 3 y obtuvo 1`) ya que `cont.descargas` solo registró 1 intento en la cadena. Restaurado correctamente.
+
+### Verificación de alcance
+- Contador de comprobaciones sube de 756 a 758.
+- Suite 12 sube de 40 a 42 comprobaciones.
+- Se añadieron mutaciones al markdown obligatorias, sin saltos de línea incorrectos.
+
+### Hallazgos NO tocados
+- Ninguno, todo según instrucciones.
