@@ -1,0 +1,101 @@
+Implement holidays tracking for 2026 and 2027
+
+## 1. Qué cambié
+- `esFestivo(d)` añadido junto con la constante Set `FESTIVOS` (8100-8126).
+- `calcBusinessTargetDate` actualizado para saltar festivos al mover la fecha objetivo (8148-8150).
+- `calcBusinessDaysBefore` actualizado para excluir festivos (8341).
+- `calcTargetDateRange` actualizado para excluir festivos (8862, 8871).
+- `calcDateRangeAroundIso` actualizado para excluir festivos (8907, 8916).
+
+## 2. Salida COMPLETA del runner
+```
+  PRUEBAS DEL VIGILANTE DE AGENDA
+════════════════════════════════════════════════════════════════
+  funciones alcanzables: 326 de 351
+
+✓ Texto y datos del paciente                41 ok
+[Vigilante] hora no interpretable: invalido
+✓ Tiempo y fechas                           28 ok
+✓ Excel, caché y SharePoint                 16 ok
+✓ Colores y notificaciones de la agenda     23 ok
+[Vigilante] AsignarTurno → {
+  Marcacion: 'NA',
+  Consulta: false,
+  swIsPyM: true,
+  SwProgramaEspecial: true
+}
+✓ Llamadas a Everest y clínicas             1 ok
+✓ Panel, ajustes, modales                   6 ok
+✓ Lector de Excel (ZIP/XLSX)                10 ok
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado, resultDate = 2023-01-02
+[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles: [ 'codigo', 'nombre', 'Resultado' ] { codigo: '903841', nombre: 'GLUCOSA', Resultado: '7.1' }
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Solicitud 4321 · 05/03/2026 · LAB</div>"
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Del 01/02/2026 al 05/03/2026</div>"
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado, resultDate = null
+[Vigilante] uroanálisis: casilla de resultado completada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado, resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: GLUCOSA
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: UROANALISIS
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+✓ Laboratorios Crónicos (Suite 08)          84 ok
+✓ Ajustes y almacén local (Suite 09)        30 ok
+✓ Estadísticas, eventos y auditoría         24 ok
+✓ Cola de reportes al remoto (Suite 11)     21 ok
+✓ SharePoint y caché del piloto (Suite 12)  40 ok
+✓ Lectura directa del API de agenda         56 ok
+✓ Extracción del DOM de Everest (Suite 14)  26 ok
+✓ Interfaz: ventana, hojas y modales        88 ok
+✓ Lectura en flujo del Excel PyM            24 ok
+✓ Núcleo: bucles, latidos y utilidades GM   26 ok
+✓ Puente Athenea y credenciales (Suite 18)  80 ok
+✓ Identidad de API por médico y blindaje de cuota21 ok
+✓ Correo de órdenes al paciente (Suite 20)  7 ok
+✓ Comparador de fuentes                     1 ok
+✓ v12.4: horas, panel PyM y tabla CUPS      29 ok
+✓ Utilidades Puras                          3 ok
+✓ Telemetría de uso del panel (v12.5)       20 ok
+✓ Motor de perfil (D3-bis)                  12 ok
+
+────────────────────────────────────────────────────────────────
+  comprobaciones : 719 pasan
+  funciones cubiertas: 321 / 351  (91.5%)
+
+  sin cubrir (5):
+    _findHbA1cFields, _instalarCazaErrores, openLabSoloModal, boot, _canonNombreLab
+────────────────────────────────────────────────────────────────
+```
+
+## 3. Pruebas nuevas
+- `esFestivo: Un festivo entre semana no es día hábil`: Verifica que el lunes 20 de julio (festivo) retorne true.
+- `esFestivo: Un día normal entre semana sí es hábil`: Verifica que el martes 21 de julio retorne false.
+- `calcBusinessTargetDate: Una fecha objetivo que cae en festivo se desplaza al siguiente día hábil`: Si la fecha objetivo (sumando días) cae en lunes festivo (20 julio), salta al martes 21.
+- `calcBusinessDaysBefore: no cuenta los festivos al contar hacia atrás`: Desde el 21 de julio, retroceder 1 día salta el festivo del 20 y devuelve 17 (viernes).
+- `esFestivo: Un año fuera de la tabla devuelve un resultado y deja el aviso`: 2030 devuelve falso y marca la alerta de que la tabla de festivos caducó.
+- `calcBusinessTargetDate: Festivo pegado a fin de semana salta al martes`: Calculando días posteriores a un viernes, salta sábado, domingo y el lunes festivo (del 17) empezando el rango desde el martes 18.
+- Actualizados los dos tests viejos de `calcBusinessDaysBefore` para reflejar las nuevas caídas debido al 7 de agosto y 1 de enero.
+
+## 4. Mutación aplicada
+- Rompí la línea 8125 de `esFestivo` haciendo que retornara siempre `false` en vez de buscar en el conjunto (`return false;`).
+- Se reportaron fallos en las 6 pruebas de festivos que añadí.
+- Lo documenté como nueva fila de mutación en `tests/INFORME_MUTACIONES.md`.
+- Restauré el archivo a `return FESTIVOS.has(...)` y validé que las pruebas vuelvan a estar en verde total.
+
+## 5. Verificación de alcance
+```
+ tests/INFORME_MUTACIONES.md     |  1 +
+ tests/suite_02_tiempo_fechas.js | 58 ++++++++++++++++++++++++++---
+ vigilante_agenda.user.js        | 41 ++++++++++++++++++---
+ 3 files changed, 94 insertions(+), 6 deletions(-)
+```
+Únicamente se ha modificado el archivo principal, los tests requeridos y el reporte de mutación.
+
+## 6. Hallazgos NO tocados
+Ninguno.
