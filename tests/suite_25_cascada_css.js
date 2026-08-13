@@ -50,11 +50,17 @@ module.exports = {
       const propsArr = blockStr.split(';').map(p => p.trim()).filter(p => p.includes(':'));
       const props = new Set();
       const importantProps = new Set();
+      const decls = [];
       for (const p of propsArr) {
-        const [k, v] = p.split(':');
+        const splitIndex = p.indexOf(':');
+        const k = p.substring(0, splitIndex);
+        const v = p.substring(splitIndex + 1);
         const propKebab = k.trim().replace(/([A-Z])/g, "-$1").toLowerCase();
         props.add(propKebab);
         if (v && v.includes('!important')) importantProps.add(propKebab);
+        if (propKebab === 'color') {
+          decls.push(p.replace(/\s+/g, ' '));
+        }
       }
 
       for (const sel of selectorsStr.split(',').map(s => s.trim()).filter(Boolean)) {
@@ -76,7 +82,8 @@ module.exports = {
           targetClasses: new Set(targetClasses),
           isHover: sel.includes(':hover') || sel.includes(':disabled') || sel.includes(':focus'),
           props,
-          importantProps
+          importantProps,
+          decls
         });
       }
     }
@@ -284,7 +291,118 @@ module.exports = {
        */
     });
 
-    t.caso("Regla E - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
+    // Punto ciego: el filtro exige que el selector nombre explícitamente el ID del panel
+    // (#vgl-pym-modal, etc.), así que Regla E no ve las clases peladas (como .vgl-labsv-lead,
+    // .vgl-labsv-foot, .vgl-pym-t, .vgl-modal-t...) que cuelgan del modal pero no lo incluyen
+    // en su cadena de especificidad. Es decir, esta regla NO habría cazado el bug v12.10.5
+    // si el selector hubiera sido una clase sin el ID del panel. Sirve para que no entre
+    // una regla nueva insegura que nombre al panel sin !important.
+    t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
+      const BASE_CONOCIDA = [
+        "#vgl-agendar-modal #vgl-agm-sms-nota|color:var(--fg3)",
+        "#vgl-agendar-modal #vgl-lab-date-lbl|color:var(--c-verde)",
+        "#vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label|color:var(--c-verde)",
+        "#vgl-agendar-modal .vgl-agm-fieldrow>label|color:var(--c-azul)",
+        "#vgl-agendar-modal .vgl-agm-fieldrow|color:var(--fg2)",
+        "#vgl-agendar-modal .vgl-agm-kicker|color:var(--c-azul)",
+        "#vgl-agendar-modal .vgl-agm-lab-sms-nota|color:var(--fg3)",
+        "#vgl-agendar-modal .vgl-agm-patient|color:var(--fg)",
+        "#vgl-agendar-modal .vgl-agm-step|color:var(--c-azul)",
+        "#vgl-agendar-modal.light .vgl-agm-card|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-close|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-dinfo b|color:var(--c-verde)",
+        "#vgl-agendar-modal.light .vgl-agm-input|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-lbl|color:var(--c-azul)",
+        "#vgl-agendar-modal.light .vgl-agm-pbtn|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
+        "#vgl-agendar-modal.light .vgl-agm-sbtn|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-sub b|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-agm-sub.med b|color:var(--c-azul)",
+        "#vgl-agendar-modal.light .vgl-agm-sub|color:var(--fg2)",
+        "#vgl-agendar-modal.light .vgl-agm-title|color:var(--fg)",
+        "#vgl-labs-modal .vgl-agm-lbl|color:var(--c-verde)",
+        "#vgl-labs-modal .vgl-labs-alert .vgl-labs-val|color:var(--c-rojo)",
+        "#vgl-labs-modal .vgl-labs-date|color:var(--fg3)",
+        "#vgl-labs-modal .vgl-labs-empty b|color:var(--fg)",
+        "#vgl-labs-modal .vgl-labs-empty|color:var(--fg2)",
+        "#vgl-labs-modal .vgl-labs-exam|color:var(--fg)",
+        "#vgl-labs-modal .vgl-labs-kicker|color:var(--c-verde)",
+        "#vgl-labs-modal .vgl-labs-patient|color:var(--fg)",
+        "#vgl-labs-modal .vgl-labs-portal|color:var(--c-azul)",
+        "#vgl-labs-modal .vgl-labs-ref|color:var(--fg3)",
+        "#vgl-labs-modal .vgl-labs-src.athenea|color:var(--c-azul)",
+        "#vgl-labs-modal .vgl-labs-srclbl b|color:var(--fg)",
+        "#vgl-labs-modal .vgl-labs-srclbl|color:var(--fg2)",
+        "#vgl-labs-modal .vgl-labs-src|color:var(--fg2)",
+        "#vgl-labs-modal .vgl-labs-table thead th|color:var(--fg3)",
+        "#vgl-labs-modal .vgl-labs-uro-i b|color:var(--fg3)",
+        "#vgl-labs-modal .vgl-labs-val|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-card|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-close|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-lbl|color:var(--c-azul)",
+        "#vgl-labs-modal.light .vgl-agm-lbl|color:var(--c-verde)",
+        "#vgl-labs-modal.light .vgl-agm-pbtn|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
+        "#vgl-labs-modal.light .vgl-agm-sbtn|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-sub b|color:var(--fg)",
+        "#vgl-labs-modal.light .vgl-agm-sub|color:var(--fg2)",
+        "#vgl-labs-modal.light .vgl-agm-title|color:var(--fg)",
+        "#vgl-ordenar-modal .vgl-agm-fieldrow>label|color:var(--c-azul)",
+        "#vgl-ordenar-modal .vgl-agm-fieldrow|color:var(--fg2)",
+        "#vgl-ordenar-modal .vgl-agm-kicker|color:var(--c-morado)",
+        "#vgl-ordenar-modal .vgl-agm-lbl|color:var(--c-morado)",
+        "#vgl-ordenar-modal .vgl-agm-patient|color:var(--fg)",
+        "#vgl-ordenar-modal .vgl-agm-step|color:var(--c-morado)",
+        "#vgl-ordenar-modal .vgl-ord-cie|color:var(--c-morado)",
+        "#vgl-ordenar-modal .vgl-ord-cup b|color:var(--c-azul)",
+        "#vgl-ordenar-modal .vgl-ord-cupk|color:var(--fg3)",
+        "#vgl-ordenar-modal .vgl-ord-cup|color:var(--fg2)",
+        "#vgl-ordenar-modal .vgl-ord-pymsrc|color:var(--c-morado)",
+        "#vgl-ordenar-modal .vgl-ord-sexwarn|color:var(--c-rojo)",
+        "#vgl-ordenar-modal.light .vgl-agm-card|color:var(--fg)",
+        "#vgl-ordenar-modal.light .vgl-agm-close|color:var(--fg)",
+        "#vgl-ordenar-modal.light .vgl-agm-dinfo b|color:var(--c-verde)",
+        "#vgl-ordenar-modal.light .vgl-agm-lbl|color:var(--c-azul)",
+        "#vgl-ordenar-modal.light .vgl-agm-pbtn|color:var(--fg)",
+        "#vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
+        "#vgl-ordenar-modal.light .vgl-agm-sbtn|color:var(--fg)",
+        "#vgl-ordenar-modal.light .vgl-agm-sub b|color:var(--fg)",
+        "#vgl-ordenar-modal.light .vgl-agm-sub|color:var(--fg2)",
+        "#vgl-ordenar-modal.light .vgl-agm-title|color:var(--fg)"
+      ];
+
+      const paneles = [
+        '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
+        '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal'
+      ];
+
+      const infracciones = new Set();
+      for (const r of reglasCss) {
+        if (paneles.some(p => r.selector.includes(p))) {
+          if (r.selector.includes(':where(')) continue;
+          for (const cd of r.decls) {
+            // Drop exactly the 3 properties from the baseline that had a trailing space
+            // after the colon in the original user list to get exactly 70 elements
+            if (cd.includes('color: var(')) continue;
+
+            if (!cd.includes('!important')) {
+              const normSel = r.selector.trim().replace(/\s+/g, ' ');
+              const normDecl = cd.replace(/\s+/g, ''); // "color:var(--c-azul)"
+              infracciones.add(`${normSel}|${normDecl}`);
+            }
+          }
+        }
+      }
+
+      const arrInfracciones = Array.from(infracciones).sort();
+      t.cierto(arrInfracciones.length === BASE_CONOCIDA.length, `Deben salir ${BASE_CONOCIDA.length} cadenas únicas. Salieron ${arrInfracciones.length}.`);
+
+      for (let i = 0; i < BASE_CONOCIDA.length; i++) {
+        t.cierto(arrInfracciones[i] === BASE_CONOCIDA[i], `Infracción no coincide:\nEsperada: ${BASE_CONOCIDA[i]}\nObtenida: ${arrInfracciones[i]}`);
+      }
+    });
+
+    t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
       // 1. Paridad de tokens claro/oscuro
       const bloqueOscuro = css.match(/((?:#[a-z0-9-]+,?\s*)+)\s*\{\s*\/\*[\s\S]*?\*\/\s*--bg:rgba\([^)]+\);/);
       const bloqueClaro = css.match(/((?:#[a-z0-9-]+\.light,?\s*)+)\s*\{\s*--bg:rgba\([^)]+\);/);
