@@ -1,0 +1,66 @@
+TAREA B1 — Cobertura y blindaje de las guardas de SMS en apiAccesoAsignarTurno
+
+## 1. Qué cambié
+Añadí cinco pruebas automatizadas en la suite `05` (`Llamadas a Everest y clínicas`) para asegurar que el recordatorio vía SMS a los pacientes solo se dispara bajo las condiciones seguras estipuladas en el bloque de `apiAccesoAsignarTurno`. Se probaron las guardas de activación (`smsRecordatorio`), la validez del celular (>= 7 dígitos), la creación real de la cita en el backend y que un posible error de red al contactar la API SMS alerte al médico en lugar de ocultarse. Todo esto se logró montando el entorno con un espía inyectado mediante `cargar({ fetch })`.
+
+## 2. Salida completa del runner
+```
+════════════════════════════════════════════════════════════════
+  PRUEBAS DEL VIGILANTE DE AGENDA
+════════════════════════════════════════════════════════════════
+  funciones alcanzables: 331 de 356
+
+✓ Texto y datos del paciente                41 ok
+✓ Tiempo y fechas                           28 ok
+✓ Excel, caché y SharePoint                 16 ok
+✓ Colores y notificaciones de la agenda     23 ok
+✓ Llamadas a Everest y clínicas             15 ok
+✓ Panel, ajustes, modales                   6 ok
+✓ Lector de Excel (ZIP/XLSX)                13 ok
+✓ Laboratorios Crónicos (Suite 08)          95 ok
+✓ Ajustes y almacén local (Suite 09)        30 ok
+✓ Estadísticas, eventos y auditoría         26 ok
+✓ Cola de reportes al remoto (Suite 11)     21 ok
+✓ SharePoint y caché del piloto (Suite 12)  42 ok
+✓ Lectura directa del API de agenda         56 ok
+✓ Extracción del DOM de Everest (Suite 14)  26 ok
+✓ Interfaz: ventana, hojas y modales        98 ok
+✓ Lectura en flujo del Excel PyM            24 ok
+✓ Núcleo: bucles, latidos y utilidades GM   28 ok
+✓ Puente Athenea y credenciales (Suite 18)  80 ok
+✓ Identidad de API por médico y blindaje de cuota 21 ok
+✓ Correo de órdenes al paciente (Suite 20)  7 ok
+✓ Comparador de fuentes                     1 ok
+✓ v12.4: horas, panel PyM y tabla CUPS      29 ok
+✓ Utilidades Puras                          3 ok
+✓ Telemetría de uso del panel (v12.5)       21 ok
+✓ Motor de perfil (D3-bis)                  15 ok
+✓ Cascada CSS                               5 ok
+✓ El banco se ejecuta de verdad             4 ok
+
+────────────────────────────────────────────────────────────────
+  comprobaciones : 774 pasan
+  funciones cubiertas: 331 / 356  (93.0%)
+────────────────────────────────────────────────────────────────
+```
+
+## 3. Pruebas nuevas
+En `tests/suite_05_api_everest.js`:
+- `apiAccesoAsignarTurno dispara SMS correctamente al paciente (caso base)`
+- `apiAccesoAsignarTurno NO dispara SMS si smsRecordatorio está apagado`
+- `apiAccesoAsignarTurno NO dispara SMS si el celular tiene menos de 7 digitos`
+- `apiAccesoAsignarTurno NO dispara SMS si la cita NO fue creada en el backend`
+- `apiAccesoAsignarTurno no silencia el fallo al enviar el SMS`
+
+## 4. Mutación aplicada
+Las pruebas pasaron el protocolo de mutación (romper, fallar, restaurar):
+1. **L8839** (`&& cel.length >= 7`): Su eliminación provocó que la prueba "(c) menos de 7 digitos" fallara.
+2. **L8839** (`creada &&`): Su eliminación provocó que "(d) NO creada en el backend" fallara.
+3. **L8843** (`.catch((e) => {})` en vez de `console.warn`): Vació el espía de consola y provocó el fallo de "(e) no silencia el fallo".
+Registrado en `tests/INFORME_MUTACIONES.md`.
+
+## 5. Verificación de alcance
+Los contadores de la suite `05` subieron exactamente de 10 a 15, y el total de la base pasó de 769 a 774, cumpliendo con la exigencia. NO se tocó el código de producción.
+
+## 6. Hallazgos NO tocados
+Ninguno en particular; el código base funcionó según lo esperado.
