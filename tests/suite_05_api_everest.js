@@ -192,5 +192,113 @@ module.exports = {
       t.igual(fetchCalls.length, 3);
       t.cierto(fetchCalls.includes(new Date().getFullYear()));
     });
+
+    // --- Pruebas de guardas de SMS (TAREA B1) ---
+    // Montaje común para (a)-(d): mock de fetch que registra URLs
+    await t.casoAsync("apiAccesoAsignarTurno dispara SMS correctamente al paciente (caso base)", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        urls.push(String(url));
+        return respuesta({ error: false, data: { radicado: 123 } });
+      } });
+      c.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c.api.__S.smsRecordatorio = true;
+      c.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      await c.api.apiAccesoAsignarTurno("T1", "P1", "2026-09-15", "obs", false, "NA", null, "3001234567");
+
+      const smsSent = urls.some(u => u.includes("/api/SMS/EnviarSMS") && u.includes("Telefono=3001234567") && u.includes("AgendaTurnoId=T1"));
+      t.cierto(smsSent, "se dispara la URL de EnviarSMS con el teléfono y turno correctos");
+    });
+
+    await t.casoAsync("apiAccesoAsignarTurno NO dispara SMS si smsRecordatorio está apagado", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        urls.push(String(url));
+        return respuesta({ error: false, data: { radicado: 123 } });
+      } });
+      c.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c.api.__S.smsRecordatorio = false; // APAGADO
+      c.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      await c.api.apiAccesoAsignarTurno("T1", "P1", "2026-09-15", "obs", false, "NA", null, "3001234567");
+
+      const smsSent = urls.some(u => u.includes("/api/SMS/EnviarSMS"));
+      t.cierto(!smsSent, "NO sale mensaje a la red");
+    });
+
+    await t.casoAsync("apiAccesoAsignarTurno NO dispara SMS si el celular tiene menos de 7 digitos", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        urls.push(String(url));
+        return respuesta({ error: false, data: { radicado: 123 } });
+      } });
+      c.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c.api.__S.smsRecordatorio = true;
+      c.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      await c.api.apiAccesoAsignarTurno("T1", "P1", "2026-09-15", "obs", false, "NA", null, "12345"); // 5 digitos
+
+      const smsSent = urls.some(u => u.includes("/api/SMS/EnviarSMS"));
+      t.cierto(!smsSent, "NO sale SMS si el celular es muy corto");
+    });
+
+    await t.casoAsync("apiAccesoAsignarTurno NO dispara SMS si la cita NO fue creada en el backend", async () => {
+      const urls = [];
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        urls.push(String(url));
+        return respuesta({ error: true }); // Error al crear cita
+      } });
+      c.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c.api.__S.smsRecordatorio = true;
+      c.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      await c.api.apiAccesoAsignarTurno("T1", "P1", "2026-09-15", "obs", false, "NA", null, "3001234567");
+
+      // Otro caso: radicado = 0
+      const c2 = cargar({ silencioso: true, fetch: async (url) => {
+        urls.push(String(url));
+        return respuesta({ error: false, data: { radicado: 0 } }); // No creada realmente
+      } });
+      c2.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c2.api.__S.smsRecordatorio = true;
+      c2.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      await c2.api.apiAccesoAsignarTurno("T2", "P2", "2026-09-15", "obs", false, "NA", null, "3001234567");
+
+      const smsSent = urls.some(u => u.includes("/api/SMS/EnviarSMS"));
+      t.cierto(!smsSent, "NO sale SMS si error es true o radicado es 0");
+    });
+
+    await t.casoAsync("apiAccesoAsignarTurno no silencia el fallo al enviar el SMS", async () => {
+      const urls = [];
+      const warns = [];
+      const c = cargar({ silencioso: true, fetch: async (url) => {
+        const urlStr = String(url);
+        urls.push(urlStr);
+        if (urlStr.includes("EnviarSMS")) {
+          throw new Error("red caida"); // el fetch falla
+        }
+        return respuesta({ error: false, data: { radicado: 123 } });
+      } });
+      c.api.__state.activeDoctor = { id: 777, name: "MEDICO PRUEBA" };
+      c.api.__S.smsRecordatorio = true;
+      c.env.doc.querySelector = () => ({ getAttribute: () => "tok" });
+
+      // Espiamos console.warn en el contexto VM
+      const warnOrig = c.ctx.console.warn;
+      c.ctx.console.warn = (...args) => {
+        warns.push(args.join(" "));
+        warnOrig.apply(c.ctx.console, args);
+      };
+
+      await c.api.apiAccesoAsignarTurno("T1", "P1", "2026-09-15", "obs", false, "NA", null, "3001234567");
+
+      // el .catch en viglilante no es awaitable en apiAccesoAsignarTurno, así que esperamos un pelín
+      await new Promise(r => setTimeout(r, 45));
+
+      const validWarns = warns.filter(w => w.startsWith("[Vigilante] falló el envío del SMS:"));
+      t.igual(validWarns.length, 1, "hay exactamente 1 warn indicando el fallo de envío");
+    });
   }
 };
