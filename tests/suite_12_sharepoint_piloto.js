@@ -262,6 +262,15 @@ module.exports = {
       t.igual(await c.api.pilotoDesdeCache(), false, "paquete que no empieza por v3 se descarta sin interpretarlo");
     });
 
+    await t.casoAsync("pilotoDesdeCache: caché corrupta (empieza por v3 pero no es JSON) lanza y el catch devuelve false", async () => {
+      const c = cargar({ silencioso: true });
+      c.env.gm["vgl_piloto"] = '{"v":3, ESTO NO ES JSON';
+      t.igual(await c.api.pilotoDesdeCache(), false);
+      t.igual(c.api.__state.pymFile, "");
+      t.igual(c.api.__state.pym.size, 0);
+      t.igual(c.api.__state.pymFallback, false);
+    });
+
     await t.casoAsync("pilotoDesdeCache: si el id guardado no es el del enlace configurado, se rechaza y el estado queda intacto", async () => {
       const c = cargar({ silencioso: true });
       c.env.gm["vgl_piloto"] = paqueteV3({ id: "00000000-0000-0000-0000-000000000000" });
@@ -489,6 +498,16 @@ module.exports = {
       await esperar(() => String(c.api.__state.pymFile).indexOf("base piloto") >= 0, 4000, "la carga programada de la piloto");
       t.igual(cont.descargas, 1);
       t.igual(c.api.__state.pym.get("5150076"), ["VIH"]);
+    });
+
+    await t.casoAsync("schedulePymBase: loadPymBase rechaza (por ej. sin TextDecoder) y la cadena de reintentos se mantiene", async () => {
+      const cont = contadorNuevo("base_piloto.csv", "T");
+      const c = cargar({ silencioso: true, gmxhr: gmxhrPiloto(cont) });
+      c.api.__CONFIG.SP.respaldo = { id: PILOTO_GUID, name: "base_piloto.csv" };
+      c.api.schedulePymBase();
+      await dormir(400);
+      t.igual(cont.descargas, 3);
+      t.igual(c.api.__state.pymFile, "");
     });
 
     // ---------- spToast / dismissSpToast ----------
