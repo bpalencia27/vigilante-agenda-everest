@@ -2454,6 +2454,9 @@
               if (valorActual === "") {
                   setNgValue(inputEl, resultVal);
                   count++;
+                  if (matched.key === "RAC") {
+                      _racGuardia = { activa: true, docId: (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "", valor: resultVal };
+                  }
               } else {
                   respetadas++;
               }
@@ -2620,6 +2623,11 @@
   let _labsPrefetch = { docId: "", labs: null, ts: 0 };
   let _labsAvisoDoc = "";
   const LABS_PREFETCH_TTL_MS = 10 * 60000;
+
+  // v12.6.9 - Guarda para evitar borrado espontáneo de la RAC al editar Creatinina.
+  let _racGuardia = { activa: false, docId: "", valor: "" };
+  function _getRacGuardiaParaTest() { return _racGuardia; }
+  function _setRacGuardiaParaTest(v) { _racGuardia = v; }
 
   async function autoFetchAtheneaLabsForActivePatient() {
       // v11.0.1 — El registro va DESPUÉS de la guarda. Antes se escribía en cada ráfaga del
@@ -11677,7 +11685,7 @@
       // pestaña (SIN condicionar a leader, igual que corría el observador) y es barata:
       // createLabInjectorUI es idempotente con su botón y el robot automático conserva
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
-      if (secc === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); }
+      if (secc === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); checkRacGuardia(); }
 
       // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
       // dispara los avisos que quedaron en cola mientras ninguna pestaña estaba ahí (ver
@@ -11824,6 +11832,21 @@
     setSummary("Diagnóstico descargado (solo local, sin datos de pacientes). Revisa Descargas.");
   }
 
+  function checkRacGuardia() {
+      if (!_racGuardia.activa) return;
+      const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
+      if (docId !== _racGuardia.docId) { _racGuardia.activa = false; return; }
+      const el = _findLabField("resultadoRelacionAlbuminaCreatinina", ["resultadoRAC"]);
+      if (!el) return;
+      const val = String(el.value == null ? "" : el.value).trim();
+      if (val === "") {
+          setNgValue(el, _racGuardia.valor);
+          console.warn("[Vigilante] RAC borrada por Everest, restaurando valor del robot");
+          uxTrack("rac.restaurada");
+      } else if (val !== String(_racGuardia.valor).trim()) {
+          _racGuardia.activa = false;
+      }
+  }
 
   // Recordatorio: si a la hora configurada todavía no hay PyM cargado, avisa (una vez al día).
   function pymReminderCheck() {

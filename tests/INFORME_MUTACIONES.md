@@ -69,3 +69,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 11912 | `if (false) return;` | No | `boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)` |
 | 9752 | v12.10.8: `const esSugerida = !!recHorario.sugerida && normalizeHora(horaTxt) === recHorario.sugerida;` &rarr; `const esSugerida = false;` | No | "un paciente diabético ve 'SUGERIDO' en el turno AM temprano..." — restaurado |
 | 9547 | v12.10.8: `perfilDelPaciente = perfilPaciente(etiquetasPaciente);` &rarr; `perfilDelPaciente = { franja: "primera_mitad", adicionales: [] };` (perfil fijo, ignora las etiquetas reales del paciente) | No | "un paciente sin etiquetas de riesgo no ve ninguna insignia de sugerido..." — restaurado |
+| 11576 | `setNgValue(el, _racGuardia.valor)` &rarr; `_racGuardia.activa = false` (apagar guardia en vez de restaurar) | No | - |
