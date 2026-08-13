@@ -6621,7 +6621,7 @@
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
       .vgl-btn-ambar { background:rgba(var(--rgb-ambar),.14); box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5); }
       .vgl-card-top-t1 { gap:10px; }
-      .vgl-card-time-wrap { gap:10px; }
+      .vgl-card-time-wrap-t1 { gap:10px; }
       .vgl-cdot-t1 { width:11px; height:11px; }
       .vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
       .vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
