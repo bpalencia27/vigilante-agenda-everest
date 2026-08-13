@@ -1,6 +1,17 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
  *
+ * v12.10.12 — 13-08-2026: armarResumen() gana tres cosas, TODAS derivadas de datos que
+ * ya llegaban por `uso_detalle` (cero cambios de esquema): (1) en la tabla por equipo,
+ * "Errores (volumen real)" y "Errores (huellas distintas)" — antes la única columna de
+ * errores era la hoja `error`, capada a 5/día/equipo con detalle, así que un solo bug
+ * repitiendo 200 veces se veía IGUAL que 5 bugs distintos; (2) "Migas" en la lista de
+ * últimos errores; (3) una sección nueva "RUM DEL API DE EVEREST" (latencia y tasa de
+ * éxito por endpoint, agregado de toda la flota). Verificado con una reproducción
+ * standalone de la lógica de agregación en Node (Apps Script no corre aquí) contra
+ * filas realistas de `uso_detalle`, con dos mutaciones deliberadas confirmando que las
+ * aserciones sí las detectan — documentado en tests/INFORME_MUTACIONES.md.
+ *
  * v12.10.11 — 13-08-2026: revisando un export real (106+17+74+546 filas, cinco hojas)
  * se confirmó que la columna "ver" NUNCA llegó legible: Sheets, con la hoja en formato
  * automático y locale es-CO (día/mes/año), interpreta cualquier "N.N.N" como fecha —
@@ -298,12 +309,52 @@ function armarResumen() {
 
   if (!totalReportes) { SpreadsheetApp.getActive().toast("Aún no hay reportes."); return; }
 
+  // v12.10.12 — OBSERVABILIDAD: `uso_detalle` ya trae, SIN ningún cambio de servidor
+  // (viajan por la misma cola "ux" de siempre), el volumen REAL de errores (la hoja
+  // `error` solo guarda los 5/día con detalle), cuántos son huellas distintas, y la
+  // latencia/tasa de éxito del API por endpoint (RUM). Aquí solo se agregan.
+  var erroresVolumenPorEquipo = {}, erroresDistintosPorEquipo = {};
+  var rumPorEndpoint = {}; // { etiqueta: { ok, err, latSuma } }
+  var shUD = ss.getSheetByName("uso_detalle");
+  if (shUD && shUD.getLastRow() > 1) {
+    var vud = shUD.getDataRange().getValues();
+    var hud = vud.shift() || [];
+    var cud = { eq: hud.indexOf("equipo"), accion: hud.indexOf("accion"), conteo: hud.indexOf("conteo") };
+    if (cud.eq >= 0 && cud.accion >= 0 && cud.conteo >= 0) {
+      vud.forEach(function (r) {
+        var eq = (r[cud.eq] || "").toString().trim() || "(anteriores a v12.6.9 · sin equipo)";
+        var accion = (r[cud.accion] || "").toString();
+        var conteo = toNumero(r[cud.conteo]);
+        if (accion === "error.js" || accion === "error.api" || accion === "error.promesa") {
+          erroresVolumenPorEquipo[eq] = (erroresVolumenPorEquipo[eq] || 0) + conteo;
+        } else if (accion === "error.distintos") {
+          erroresDistintosPorEquipo[eq] = (erroresDistintosPorEquipo[eq] || 0) + conteo;
+        } else {
+          // El orden importa: ".ok.total"/".err.total" deben probarse ANTES que ".ok"/".err"
+          // sueltos, porque de lo contrario el sufijo ".total" nunca se distinguiría.
+          var m = /^api\.([a-z0-9_-]+)\.(ok|err)\.total$/.exec(accion);
+          if (m) {
+            var epT = rumPorEndpoint[m[1]] || (rumPorEndpoint[m[1]] = { ok: 0, err: 0, latSuma: 0 });
+            epT.latSuma += conteo;
+            return;
+          }
+          m = /^api\.([a-z0-9_-]+)\.(ok|err)$/.exec(accion);
+          if (m) {
+            var ep = rumPorEndpoint[m[1]] || (rumPorEndpoint[m[1]] = { ok: 0, err: 0, latSuma: 0 });
+            ep[m[2]] += conteo;
+          }
+        }
+      });
+    }
+  }
+
   var out = ss.getSheetByName("resumen_flota") || ss.insertSheet("resumen_flota");
   out.clear();
   out.appendRow(["ESTADO DE LA FLOTA — versión más alta vista: " + versionMasAlta]);
   out.appendRow([
     "Equipo / consultorio", "Versión", "¿Al día?", "Navegador", "Sistema", "Reportes",
-    "Errores", "Fraudes (en vivo)", "Fraudes (acum.)", "Inasistencias (acum.)",
+    "Errores (con detalle, máx. 5/día)", "Errores (volumen real)", "Errores (huellas distintas)",
+    "Fraudes (en vivo)", "Fraudes (acum.)", "Inasistencias (acum.)",
     "A tiempo (acum.)", "Última llamada (acum.)", "Acciones de uso (ux, acum.)",
     "Primer reporte", "Último reporte"
   ]);
@@ -314,24 +365,47 @@ function armarResumen() {
       : (_compararVersion(f.ver, versionMasAlta) >= 0 ? "✅ al día" : "🔴 ATRASADO");
     out.appendRow([
       eq, f.ver, alDia, f.nav, f.so, f.nReportes,
-      f.errores, f.fraudesVivo, f.fraudeAcum, f.inasistAcum,
+      f.errores, erroresVolumenPorEquipo[eq] || 0, erroresDistintosPorEquipo[eq] || 0,
+      f.fraudesVivo, f.fraudeAcum, f.inasistAcum,
       f.atiempoAcum, f.ultimaAcum, f.uxAcum, f.primero, f.ultimo
     ]);
   });
   out.setFrozenRows(2);
 
   // v12.6.9 — Los últimos errores, a la vista. Antes no llegaba ninguno.
+  // v12.10.12 — se agrega "Migas": las últimas acciones antes del fallo.
   var shE = ss.getSheetByName("error");
   if (shE && shE.getLastRow() > 1) {
     out.appendRow([""]);
     out.appendRow(["ÚLTIMOS ERRORES DEL SCRIPT (máx. 50, mensaje saneado, sin datos de paciente)"]);
-    out.appendRow(["Cuándo", "Equipo", "Versión", "Origen", "Mensaje", "Dónde"]);
+    out.appendRow(["Cuándo", "Equipo", "Versión", "Origen", "Mensaje", "Dónde", "Migas (acciones justo antes)"]);
     var ve = shE.getDataRange().getValues();
     var he = ve.shift() || [];
     var cE = { rec: he.indexOf("recibido"), eq: he.indexOf("equipo"), ver: he.indexOf("ver"),
-               org: he.indexOf("origen"), msg: he.indexOf("msg"), donde: he.indexOf("donde") };
+               org: he.indexOf("origen"), msg: he.indexOf("msg"), donde: he.indexOf("donde"), migas: he.indexOf("migas") };
     ve.slice(-50).forEach(function (r) {
-      out.appendRow([_val(r, cE.rec), _val(r, cE.eq), _val(r, cE.ver), _val(r, cE.org), _val(r, cE.msg), _val(r, cE.donde)]);
+      out.appendRow([_val(r, cE.rec), _val(r, cE.eq), _val(r, cE.ver), _val(r, cE.org), _val(r, cE.msg), _val(r, cE.donde), _val(r, cE.migas)]);
+    });
+  }
+
+  // v12.10.12 — RUM del API de Everest, agregado de TODA la flota (viene de
+  // uso_detalle, sin ningún cambio de servidor). Útil para ver, por endpoint, si
+  // algo se puso lento o empezó a fallar más — sin ningún dato de paciente: la
+  // etiqueta es un nombre fijo elegido por el userscript, nunca la URL real.
+  var endpointsRum = Object.keys(rumPorEndpoint).sort();
+  if (endpointsRum.length) {
+    out.appendRow([""]);
+    out.appendRow(["RUM DEL API DE EVEREST (agregado de toda la flota, por endpoint)"]);
+    out.appendRow(["Endpoint", "Llamadas OK", "Llamadas con error", "Tasa de éxito", "Latencia promedio (ms)"]);
+    endpointsRum.forEach(function (ep) {
+      var r = rumPorEndpoint[ep];
+      var totalLlamadas = r.ok + r.err;
+      var tasaExito = totalLlamadas ? Math.round((r.ok / totalLlamadas) * 1000) / 10 + "%" : "—";
+      // La latencia solo suma para las llamadas cuya duración fue > 0 ms (uxTrack no
+      // acumula un 0 exacto); el promedio usa el total de llamadas como denominador
+      // igual — es una aproximación honesta, no una medición exacta por muestra.
+      var latProm = totalLlamadas ? Math.round(r.latSuma / totalLlamadas) : 0;
+      out.appendRow([ep, r.ok, r.err, tasaExito, latProm]);
     });
   }
 
