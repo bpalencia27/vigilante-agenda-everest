@@ -50,3 +50,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 11128 | `? (esAtendido || yaAbiertoHoy` &rarr; `? (false || yaAbiertoHoy` | No | - |
 | 8822 | `<div class="vgl-labs-uro">…<span class="vgl-labs-uro-i">…</span>…</div>` &rarr; `…join("&lt;br&gt;")` (volver al chorizo previo) | No | - |
 | 2844 | `if (actual === "" && guardado !== "") porAplicar.push(...)` &rarr; `if (guardado !== "") porAplicar.push(...)` (rediseño v12.9.0 a plantilla por posición; reemplaza la fila anterior de esta misma pareja de botones) | No | - |
+| 8382 | `const franja = tieneDM ? "primera_mitad" : "sin_preferencia";` &rarr; `const franja = tieneDM && !tieneNefro ? "primera_mitad" : "sin_preferencia";` | No | - |

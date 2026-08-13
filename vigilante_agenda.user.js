@@ -8359,6 +8359,104 @@
     return m[1].padStart(2, "0") + ":" + m[2];
   }
 
+  function perfilPaciente(etiquetas) {
+    if (!etiquetas || !Array.isArray(etiquetas) || etiquetas.length === 0) {
+      return { franja: "sin_preferencia", adicionales: "visibles" };
+    }
+
+    const norm = etiquetas.map(e => {
+      return String(e || "")
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, "")
+        .replace(/\//g, "+");
+    });
+
+    let tieneDM = false;
+    let tieneNefro = false;
+    let tieneHTA = false;
+    let etiquetaReconocida = false;
+
+    for (const e of norm) {
+      if (e.includes("diabetes") || e.includes("hta+dm")) {
+        tieneDM = true;
+        etiquetaReconocida = true;
+      }
+      if (e.includes("nefroproteccion")) {
+        tieneNefro = true;
+        etiquetaReconocida = true;
+      }
+      if (e.includes("hipertension") || e === "hta") {
+        tieneHTA = true;
+        etiquetaReconocida = true;
+      }
+    }
+
+    if (!etiquetaReconocida) {
+      return { franja: "sin_preferencia", adicionales: "visibles" };
+    }
+
+    // D3-bis: La diabetes es la única que impone franja.
+    const franja = tieneDM ? "primera_mitad" : "sin_preferencia";
+
+    // D3-bis: Eje B es una lista de exclusiones.
+    let adicionales = "visibles";
+    if (tieneDM || tieneNefro) {
+      adicionales = false;
+    } else if (tieneHTA) {
+      adicionales = true;
+    }
+
+    return { franja, adicionales };
+  }
+
+  function recomendacionHorario(perfil, turnosDelDia) {
+    if (!perfil || perfil.franja !== "primera_mitad" || !turnosDelDia || turnosDelDia.length === 0) {
+      return { sugerida: null, rangoTexto: null, horasEnFranja: [] };
+    }
+
+    const horasAM = [];
+    const horasPM = [];
+
+    for (const t of turnosDelDia) {
+      const hStr = normalizeHora(t.hora || t.horaTexto || t.Hora || "");
+      if (!hStr) continue;
+      const m = /^(\d{2}):(\d{2})$/.exec(hStr);
+      if (!m) continue;
+
+      const mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+
+      if (mins >= 360 && mins <= 540) horasAM.push({ original: hStr, mins });
+      if (mins >= 780 && mins <= 960) horasPM.push({ original: hStr, mins });
+    }
+
+    const franjas = [];
+    let candidatos = [];
+
+    if (horasAM.length > 0) {
+      franjas.push("AM 06:00–09:00");
+      candidatos = candidatos.concat(horasAM);
+    }
+    if (horasPM.length > 0) {
+      franjas.push("PM 13:00–16:00");
+      candidatos = candidatos.concat(horasPM);
+    }
+
+    if (candidatos.length === 0) {
+      return { sugerida: null, rangoTexto: null, horasEnFranja: [] };
+    }
+
+    candidatos.sort((a, b) => a.mins - b.mins);
+    const sugerida = candidatos[0].original;
+    const horasEnFranja = [...new Set(candidatos.map(c => c.original))];
+
+    return {
+      sugerida,
+      rangoTexto: franjas.join(" y "),
+      horasEnFranja
+    };
+  }
+
   function format12hTime(timeStr) {
     if (!timeStr) return "";
     const parts = String(timeStr).split(":");
