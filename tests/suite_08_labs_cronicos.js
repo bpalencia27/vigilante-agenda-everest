@@ -6,7 +6,7 @@ module.exports = {
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
-    "_vigenciaDiasParaAnalito"
+    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1131,6 +1131,84 @@ module.exports = {
       // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
       // candidato que buscar casilla para él.
       t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    });
+
+    // =====================================================================
+    // _canonNombreLab: Normalización de nombres de analitos
+    // =====================================================================
+    t.caso("_canonNombreLab: normaliza null y undefined a cadena vacía sin fallar", () => {
+      t.igual(testApi._canonNombreLab(null), "");
+      t.igual(testApi._canonNombreLab(undefined), "");
+      t.igual(testApi._canonNombreLab(""), "");
+    });
+
+    t.caso("_canonNombreLab: elimina tildes y convierte a mayúsculas", () => {
+      t.igual(testApi._canonNombreLab("Glucosa"), "GLUCOSA");
+      t.igual(testApi._canonNombreLab("RELACIÓN"), "RELACION");
+      t.igual(testApi._canonNombreLab("ácido úrico"), "ACIDO URICO");
+      t.igual(testApi._canonNombreLab("PROTEÍNAS"), "PROTEINAS");
+    });
+
+    t.caso("_canonNombreLab: convierte separadores especiales a espacios simples", () => {
+      // Test the regex /[\/\-_,.;:()]+/g
+      t.igual(testApi._canonNombreLab("RELACION MICROALBUMINURIA/CREATININA"), "RELACION MICROALBUMINURIA CREATININA");
+      t.igual(testApi._canonNombreLab("MICROALBUMINURIA-CREATININA"), "MICROALBUMINURIA CREATININA");
+      t.igual(testApi._canonNombreLab("A_B,C.D;E:F(G)"), "A B C D E F G");
+    });
+
+    t.caso("_canonNombreLab: recorta espacios múltiples y laterales", () => {
+      t.igual(testApi._canonNombreLab("  DOBLE  ESPACIO  "), "DOBLE ESPACIO");
+      t.igual(testApi._canonNombreLab("RELACION   MICROALBUMINURIA/ CREATININA  "), "RELACION MICROALBUMINURIA CREATININA");
+    });
+
+    // =====================================================================
+    // _findHbA1cFields: Búsqueda específica del input de HbA1c (Evitando colisiones)
+    // =====================================================================
+    t.caso("_findHbA1cFields: encuentra el input correcto por type=number y max=30 y asocia la fecha hermana", () => {
+      // Simular DOM con los dos inputs que colisionan y sus fechas
+      const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", getAttribute: (k) => null, closest: () => null };
+
+      const fakeHbA1cDate = { tagName: "INPUT", type: "date" };
+      const fakeHbA1cGroup = { querySelector: (sel) => (sel === 'input[type="date"]' ? fakeHbA1cDate : null) };
+      const fakeHbA1c = {
+        tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "number",
+        getAttribute: (k) => (k === "max" ? "30" : null),
+        closest: (sel) => (sel === ".input-group" ? fakeHbA1cGroup : null)
+      };
+
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') {
+          return [fakeHemoNormal, fakeHbA1c];
+        }
+        return [];
+      };
+
+      const campos = testApi._findHbA1cFields();
+
+      c.env.doc.querySelectorAll = prevQSA;
+
+      t.igual(campos.resultEl, fakeHbA1c, "debe encontrar el segundo input que tiene type=number y max=30");
+      t.igual(campos.dateEl, fakeHbA1cDate, "debe encontrar el input de fecha hermano dentro del .input-group");
+    });
+
+    t.caso("_findHbA1cFields: retorna nulls si ningún input cumple las condiciones de HbA1c", () => {
+      const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", getAttribute: (k) => null, closest: () => null };
+
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') {
+          return [fakeHemoNormal];
+        }
+        return [];
+      };
+
+      const campos = testApi._findHbA1cFields();
+
+      c.env.doc.querySelectorAll = prevQSA;
+
+      t.igual(campos.resultEl, null, "debe ser null si ninguno tiene type=number y max=30");
+      t.igual(campos.dateEl, null);
     });
   }
 };
