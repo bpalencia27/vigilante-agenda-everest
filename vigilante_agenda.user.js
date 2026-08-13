@@ -9021,6 +9021,51 @@
     return [];
   }
 
+  // [C3] Concurrencia acotada: helper puro para el sondeo de días del modal (D2),
+  // que va a lanzar hasta 18 consultas contra el EHR del consultorio y necesita un
+  // tope real en vez del `Promise.all` a pelo que ya se usa en otras partes del
+  // archivo. Sin llamadores todavía — queda listo para que D2 lo conecte.
+  //   · Devuelve los resultados en el MISMO orden de `items`, sin importar el
+  //     orden real de finalización.
+  //   · Nunca mantiene más de `limite` promesas en vuelo a la vez.
+  //   · Un rechazo individual (incluida una `fn` que lanza de forma síncrona) no
+  //     aborta el lote: cada resultado es {ok:true, valor} o {ok:false, error}.
+  //   · `cancelado` es opcional: si al reclamar la siguiente tarea devuelve verdad,
+  //     esa tarea (y todas las que quedaban por arrancar) no se ejecuta y queda
+  //     como {ok:false, cancelado:true} — las que ya estaban en vuelo terminan
+  //     normalmente, no se interrumpen a medias.
+  //   · `limite <= 0` se trata como 1 (nunca como "sin tope"); `limite >= items.length`
+  //     se comporta como `Promise.all`.
+  async function mapConLimite(items, limite, fn, cancelado) {
+    const lista = Array.isArray(items) ? items : [];
+    const n = lista.length;
+    const resultados = new Array(n);
+    if (n === 0) return resultados;
+    let tope = Math.floor(Number(limite));
+    if (!Number.isFinite(tope) || tope < 1) tope = 1; // limite<=0 (o no numérico) -> 1
+    const nTrabajadores = Math.min(tope, n);
+    let siguiente = 0;
+    async function trabajador() {
+      while (siguiente < n) {
+        const idx = siguiente++;
+        if (typeof cancelado === "function" && cancelado()) {
+          resultados[idx] = { ok: false, cancelado: true };
+          continue;
+        }
+        try {
+          const valor = await fn(lista[idx], idx);
+          resultados[idx] = { ok: true, valor };
+        } catch (error) {
+          resultados[idx] = { ok: false, error };
+        }
+      }
+    }
+    const activos = [];
+    for (let i = 0; i < nTrabajadores; i++) activos.push(trabajador());
+    await Promise.all(activos);
+    return resultados;
+  }
+
   // Genera un rango de ±3 días hábiles alrededor de la fecha calculada
   function calcTargetDateRange(monthsToAdd, daysToAdd) {
     const baseObj = calcBusinessTargetDate(monthsToAdd, daysToAdd);
