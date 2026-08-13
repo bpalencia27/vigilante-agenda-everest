@@ -6,7 +6,7 @@
    "v": "xhr",
    "t": "2026-08-10T16:53:49.589Z",
    "method": "GET",
-   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=32304889&TipoDocumento=CC&epsId=2&UsuarioId=515",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=[REDACTADO]&TipoDocumento=CC&epsId=2&UsuarioId=515",
    "reqBody": null,
    "status": 200,
    "resBody": "{\"error\": false, \"mensaje\": \"el paciente encontrado\", \"data\": {\"error\": false, \"mensaje\": null, \"data\": [{\"id\": 80856, \"tipo_Identificacion\": \"[REDACTADO]\", \"identificacion\": \"[REDACTADO]\", \"primer_Apellido\": \"[REDACTADO]\", \"segundo_Apellido\": \"[REDACTADO]\", \"nombre\": \"[REDACTADO]\", \"genero\": \"\", \"eps\": \"NUEVA EPS \", \"regimen\": \"Contributivo\", \"direccion\": \"[REDACTADO]\", \"fecha_Nacimiento\": \"[REDACTADO]\", \"tipoPlan\": \"BENEFICIARIO\", \"edad\": 0, \"estado\": \"ACTIVO\", \"celular\": \"[REDACTADO]\", \"telefono\": \"[REDACTADO]\", \"municipio\": \"\", \"planes_Medicos\": [{\"fechaAfiliacion\": \"2014-04-02T00:00:00\", \"programa\": \"Nefroprotección\"}, {\"fechaAfiliacion\": \"2026-04-08T00:00:00\", \"programa\": \"Salud Mental\"}, {\"fechaAfiliacion\": \"2026-06-13T09:52:03.66\", \"programa\": \"Hipertensión\"}]}], \"imprimir\": false, \"valor\": 0, \"link\": null}, \"imprimir\": false, \"valor\": 0, \"link\": null}"
@@ -87,7 +87,7 @@
    "v": "xhr",
    "t": "2026-08-10T16:55:11.188Z",
    "method": "GET",
-   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=3504447019&AgendaTurnoId=4335812",
+   "url": "https://neps.everestintelligent.com/apiviva/APIAcceso/api/SMS/EnviarSMS?Telefono=[REDACTADO]&AgendaTurnoId=4335812",
    "reqBody": null,
    "status": 200,
    "resBody": "{\"error\": false, \"mensaje\": \"Se ha enviado un SMS con pasos de redirección\", \"data\": null, \"imprimir\": false, \"valor\": 0, \"link\": null}"
