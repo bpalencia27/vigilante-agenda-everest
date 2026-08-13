@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.10
+// @version      12.10.11
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.11";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2588,6 +2588,70 @@
           if (Number.isFinite(n) && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
       }
       return RCV_VIGENCIA_DIAS;
+  }
+  // v12.10.11 — R1a: las cuatro fórmulas renales puras (TFG por Cockcroft-Gault y por
+  // CKD-EPI 2021, estadificación KDIGO y discordancia entre ambas TFG). Sin DOM, sin red,
+  // sin estado global — la lectura de peso/talla por red y el disparo por paciente/día
+  // son de otro PR (R1b). Aritmética portada tal cual desde el proyecto hermano Copiloto
+  // RCV, ya verificada en producción allí.
+  //
+  // "Femenino" se reconoce con el mismo criterio que ya usa el archivo para el sexo que
+  // reporta BuscarPacienteDetallado (líneas ~9586/10709): primera letra en mayúscula,
+  // "F" o "M" — no se inventa otro criterio aquí.
+  function _esSexoFemenino(sexo) {
+      return String(sexo == null ? "" : sexo).trim().toUpperCase().charAt(0) === "F";
+  }
+  // Cockcroft-Gault usa el peso REAL siempre (decisión clínica ya tomada: es el estadio
+  // administrativo) — nunca peso ideal ni ajustado. Centinela 0 = "no evaluable".
+  function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
+      const edad = Number(edadAnios), peso = Number(pesoKg), creat = Number(creatininaSerica);
+      if (!(edad > 0) || !(peso > 0) || !(creat > 0) || edad >= 140) return 0;
+      let v = ((140 - edad) * peso) / (72 * creat);
+      if (_esSexoFemenino(sexo)) v *= 0.85;
+      return Math.round(v * 10) / 10;
+  }
+  // CKD-EPI 2021 (sin el término de raza, ya retirado). Centinela 0 = "no evaluable".
+  function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
+      const edad = Number(edadAnios), creat = Number(creatininaSerica);
+      if (!(edad > 0) || !(creat > 0)) return 0;
+      const femenino = _esSexoFemenino(sexo);
+      const k = femenino ? 0.7 : 0.9;
+      const a = femenino ? -0.241 : -0.302;
+      const R = creat / k;
+      const F = R <= 1 ? Math.pow(R, a) : Math.pow(R, -1.2);
+      let e = 142 * F * Math.pow(0.9938, edad);
+      if (femenino) e *= 1.012;
+      return Math.round(e * 10) / 10;
+  }
+  // Estadificación KDIGO de la TFG (ml/min/1.73m²) en los seis estadios estándar.
+  function estadioKDIGO(tfg) {
+      const v = Number(tfg);
+      if (v >= 90) return "G1";
+      if (v >= 60) return "G2";
+      if (v >= 45) return "G3a";
+      if (v >= 30) return "G3b";
+      if (v >= 15) return "G4";
+      return "G5";
+  }
+  const KDIGO_POSICION = { G1: 1, G2: 2, G3a: 3, G3b: 4, G4: 5, G5: 6 };
+  // Compara el estadio KDIGO derivado de Cockcroft-Gault contra el derivado de CKD-EPI:
+  // una discordancia de más de 2 estadios es clínicamente relevante (p.ej. TFG conservada
+  // por CG en un paciente de bajo peso muscular que CKD-EPI marca en falla avanzada).
+  // `null` = no evaluable (alguna de las dos TFG es 0/centinela o no es un número).
+  function evaluarDiscordanciaTFG(tfgCG, tfgCKD) {
+      const cg = Number(tfgCG), ckd = Number(tfgCKD);
+      if (!cg || !ckd || !Number.isFinite(cg) || !Number.isFinite(ckd)) return null;
+      const estadioCG = estadioKDIGO(cg), estadioCKD = estadioKDIGO(ckd);
+      const posCG = KDIGO_POSICION[estadioCG], posCKD = KDIGO_POSICION[estadioCKD];
+      const diferenciaEstadios = Math.abs(posCG - posCKD);
+      if (diferenciaEstadios <= 2) return null;
+      return {
+          alerta: true,
+          estadioCG,
+          estadioCKD,
+          diferenciaEstadios,
+          mensaje: "Discordancia entre TFG por Cockcroft-Gault (" + estadioCG + ") y CKD-EPI 2021 (" + estadioCKD + "): diferencia de " + diferenciaEstadios + " estadios KDIGO.",
+      };
   }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
