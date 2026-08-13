@@ -63,3 +63,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 7031 | v12.10.7: `.vgl-labsv-t{...color:var(--c-rojo) !important...}` &rarr; sin `!important` | No | "blindaje !important: título/número de bigAlert, pymAlert, abandonoPESAlert y labsVencidosAlert..." — restaurado |
 | 10797 | v12.10.7: `if (lbl2 && lbl2.classList)` &rarr; `if (lbl2.classList)` (sin el `&&`; esta misma línea ya había reaparecido rota una vez en una ronda de Jules) | No | "guard de classList tras closest(\"label\") siempre cortocircuita con &&..." — restaurado |
 | 7031 | v12.10.7: `color:var(--c-rojo)` &rarr; `color:var(--c-alerta)` (token inventado por Jules que nunca se definió en ningún lado; causaba herencia del azul de Everest) | No | "no debe reaparecer --c-alerta/--rgb-alerta..." — restaurado |
+| 11912 | `if (false) return;` | No | `boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)` |
