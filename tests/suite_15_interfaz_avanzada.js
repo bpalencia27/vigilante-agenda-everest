@@ -202,7 +202,7 @@ module.exports = {
       t.igual(cv.api.__state.sheet, "ajustes");
       t.cierto(hoja.innerHTML.includes("Ajustes"));
       t.cierto(hoja.innerHTML.includes("Modo rendimiento"));
-      t.cierto(hoja.innerHTML.includes('class="vgl-d-none"'), "sin opcionesTecnicas la sección técnica va oculta");
+      t.cierto(hoja.innerHTML.includes('vgl-d-none'), "sin opcionesTecnicas la sección técnica va oculta");
       t.igual(hoja.querySelector("#c-tema").value, "oscuro", "el selector de tema refleja S.tema");
     });
 

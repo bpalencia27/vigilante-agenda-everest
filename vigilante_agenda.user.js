@@ -4917,7 +4917,7 @@
         t.className = "vgl-sp-toast";
 
         const closeBtn = document.createElement("span");
-        closeBtn.style.cssText = "position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px;";
+        closeBtn.className = "vgl-sp-x";
         closeBtn.textContent = "×";
         closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
         t.appendChild(closeBtn);
@@ -6291,15 +6291,15 @@
       .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85)}
       .vgl-modal-ok{background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35)}
 
-      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)}
+      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)}
       .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio);letter-spacing:1.1px;text-transform:uppercase}
       .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)}
 
-      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45)}
+      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);text-shadow:0 0 14px rgba(var(--rgb-pes),.45)}
       .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes);letter-spacing:1.1px;text-transform:uppercase}
       .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)}
 
-      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)}
+      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-alerta),.45);text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)}
       .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-rojo);letter-spacing:1.1px;text-transform:uppercase}
       .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30)}
 
@@ -6869,6 +6869,7 @@
         to{opacity:1;transform:none}
       }
       .vgl-toast-ic{
+        background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25);
         width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:18px;
         box-shadow:var(--glow-edge)
@@ -6876,6 +6877,7 @@
       .vgl-toast-main{flex:1;min-width:0}
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
+        font-size:12.5px;
         margin-top:3px;font-size:12px;color:var(--fg2);
         white-space:pre-line;line-height:1.45
       }
@@ -6898,6 +6900,7 @@
         animation:vglToastIn .25s ease
       }
       .vgl-modal-card{
+        border-color:rgba(var(--ac-rgb),.60);
         background:linear-gradient(165deg,rgba(var(--rgb-rojo),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
         border:1px solid rgba(var(--rgb-rojo),.55);
         border-radius:var(--r-surface);padding:30px 34px;
@@ -6928,14 +6931,14 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-recordatorio),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pym-ic{
+      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
-      .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
+      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg);margin-bottom:14px;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)}
       .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
@@ -6969,14 +6972,14 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-pes),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pes-ic{
+      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
         box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
-      .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
-      .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
+      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg);margin-bottom:14px;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)}
       .vgl-pes-lead{
         font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
       }
@@ -7006,13 +7009,13 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-labsv-ic{
+      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-alerta),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
         box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
       }
-      .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-alerta);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
       .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
       .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
       .vgl-labsv-list{
@@ -7787,7 +7790,7 @@
         48%{transform:scale(1)}
       }
       #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-pes-modal .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
       #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
         animation:none !important;transition:none !important;
@@ -7803,7 +7806,7 @@
       /* v12.5.7 — Mismas animaciones ya definidas arriba (vglPesPop/vglPesBeat son
          genéricas, no específicas de PES): se reutilizan aquí, sin duplicar keyframes. */
       #vgl-labsv-modal .vgl-labsv-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-labsv-modal .vgl-labsv-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-labsv-modal .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-alerta),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-labsv-modal .vgl-labsv-ok:focus-visible{outline:2px solid var(--c-rojo);outline-offset:3px}
       #vgl-root.perf~#vgl-labsv-modal,#vgl-root.perf~#vgl-labsv-modal *{
         animation:none !important;transition:none !important;
@@ -10957,7 +10960,7 @@
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
-      <div class="vgl-grp vgl-grp-tec" ${devStyle}>
+      <div class="vgl-grp vgl-grp-tec ${S.opcionesTecnicas ? '' : 'vgl-d-none'}">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Opciones técnicas</div>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
