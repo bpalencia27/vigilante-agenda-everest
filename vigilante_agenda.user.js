@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.7
+// @version      12.9.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.9.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2760,7 +2760,13 @@
   // v12.9.0 — Pestaña "Revisión por sistema y Examen físico": el médico escribe a mano, en
   // cada consulta, la MISMA frase específica por cada sistema (p. ej. "Piel y faneras:
   // NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "Corazón: NEGATIVO PARA
-  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido.
+  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido. Corrección tras
+  // la primera entrega (que asumía casillas vacías con un solo texto a repetir): el médico
+  // mostró una captura real donde las ~37 casillas de esa pestaña YA tenían, cada una, su
+  // propia frase — nada estaba vacío salvo dos exámenes puntuales no realizados. Lo que hace
+  // falta es una PLANTILLA guardada por posición: capturar hoy, en orden, la frase de cada
+  // casilla, y poder volver a pegarlas — cada una en SU posición — en un paciente nuevo con
+  // esa pestaña en blanco.
   //
   // Diagnóstico real en consultorio (13-08-2026, DIAGNOSTICO_EXAMEN_FISICO.js): 45 de 56
   // campos de esa pestaña comparten LITERALMENTE el mismo id="alert_message" (defecto de
@@ -2771,60 +2777,9 @@
   // un supuesto, no una certeza: si Everest cambiara el orden o el número de casillas entre
   // pacientes (el propio médico mostró que un paciente pediátrico trae secciones adicionales
   // de curvas de crecimiento que uno adulto no tiene), la posición N ya no sería el mismo
-  // sistema. Por eso el botón avisa explícitamente si el número de casillas de hoy no
-  // coincide con lo esperado, en vez de aplicar en silencio.
-  //
-  // v12.10.4 — Se retiraron "💾 Guardar plantilla" / "📋 Aplicar plantilla" (v12.9.0, la
-  // plantilla que se "recordaba" del último paciente vía localStorage) a pedido directo del
-  // médico: solo quiere la plantilla FIJA de normalidad semiológica de abajo, con un único
-  // botón y sin cuadro de confirmación de por medio (sigue sin sobrescribir NUNCA una casilla
-  // con texto — esa regla no se negocia).
-
-  // v12.10.3 — Plantilla de normalidad semiológica FIJA, incluida en el propio script. 19
-  // frases de "Revisión por sistema" seguidas de 17 de "Examen físico" — el médico pidió
-  // omitir MAMAS y GENITO/URINARIO de esa segunda sección porque no las examina de rutina.
-  // Cada texto es SOLO la descripción (Everest ya muestra el nombre del sistema como
-  // etiqueta propia de la casilla, no hace falta repetirlo dentro del texto).
-  const EXAMEN_FISICO_NORMALIDAD_FIJA = [
-      // I. Revisión por sistema (subjetivo) — 19
-      "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.",
-      "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.",
-      "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.",
-      "NEGATIVO PARA PRECORDIALGIA, PALPITACIONES O DISNEA.",
-      "NEGATIVO PARA DISFAGIA O DOLOR FARÍNGEO.",
-      "NEGATIVO PARA TOS, EXPECTORACIÓN O DOLOR PLEURÍTICO.",
-      "NEGATIVO PARA DOLOR PÉLVICO O PESANTEZ.",
-      "SIN HALLAZGOS PATOLÓGICOS REFERIDOS.",
-      "SIN DISURIA, HEMATURIA, POLIURIA NI SECRECIONES.",
-      "SIN POLIDIPSIA, POLIFAGIA NI INTOLERANCIA TÉRMICA.",
-      "SIN EQUIMOSIS, EPISTAXIS NI TENDENCIA AL SANGRADO.",
-      "NEGATIVO PARA FOTOFOBIA, ESCOTOMAS O DOLOR OCULAR.",
-      "NEGATIVO PARA RINORREA, OBSTRUCCIÓN O EPISTAXIS.",
-      "SIN ORTOPNEA, DISNEA PAROXÍSTICA NOCTURNA O EDEMAS.",
-      "HÁBITO INTESTINAL NORMAL. SIN DISPEPSIA NI DOLOR.",
-      "NEGATIVO PARA ARTRALGIAS, MIALGIAS O RIGIDEZ.",
-      "NEGATIVO PARA CEFALEA, PARESTESIAS O SÍNCOPE.",
-      "NEGATIVO PARA APARICIÓN DE MASAS O ADENOMEGALIAS.",
-      "NEGATIVO PARA ASTENIA, ADINAMIA, FIEBRE O PÉRDIDA DE PESO.",
-      // II. Examen físico (objetivo) — 17 (se omiten MAMAS y GENITO/URINARIO a pedido del médico)
-      "BUEN ESTADO GENERAL. ALERTA, ORIENTADO, HIDRATADO, AFEBRIL.",
-      "NORMOCRÓMICA, NORMOTÉRMICA, ELÁSTICA. SIN LESIONES AGUDAS.",
-      "NORMOCÉFALO. SIN PUNTOS DOLOROSOS NI SIGNOS DE TRAUMA.",
-      "MÓVIL, SIMÉTRICO. TIROIDES GRADO 0. SIN ADENOMEGALIAS.",
-      "ISOCÓRICOS, FOTORREACTIVOS. CONJUNTIVAS NORMOCRÓMICAS, ESCLERAS ANICTÉRICAS.",
-      "FOSAS NASALES PERMEABLES. TABIQUE CENTRADO. MUCOSA SANA.",
-      "MUCOSA ORAL HÚMEDA. DENTADURA EN BUEN ESTADO. SIN LESIONES.",
-      "RÍTMICO, SIN SOPLOS NI RUIDOS AGREGADOS. PULSOS SIMÉTRICOS.",
-      "OROFARINGE NORMAL. AMÍGDALAS SIN EXUDADOS NI ERITEMA.",
-      "EXPANSIVIDAD CONSERVADA. MURMULLO VESICULAR NORMAL. SIN AGREGADOS.",
-      "SIMÉTRICA, ESTABLE, NO DOLOROSA A LA MANIOBRA DE COMPRESIÓN.",
-      "PABELLONES NORMALES. CONDUCTOS PERMEABLES. MEMBRANAS ÍNTEGRAS.",
-      "SIMÉTRICO, SIN DEFORMIDADES. DINÁMICA RESPIRATORIA NORMAL.",
-      "BLANDO, DEPRIMIBLE, NO DOLOROSO. SIN VISCEROMEGALIAS NI SIGNOS PERITONEALES.",
-      "ARCOS MÓVILES COMPLETOS. FUERZA 5/5. SIN EDEMAS NI CIANOSIS.",
-      "GLASGOW 15/15. PARES CRANEALES ÍNTEGROS. SIN SIGNOS DE FOCALIDAD.",
-      "LLENADO CAPILAR < 2 SEG. PULSOS DISTALES PRESENTES. SIN VÁRICES.",
-  ];
+  // sistema. Por eso "Aplicar plantilla" avisa explícitamente si el número de casillas no
+  // coincide con el de cuando se guardó, en vez de aplicar en silencio.
+  const EXAMEN_FISICO_PLANTILLA_KEY = "vgl_plantilla_examen_fisico";
 
   function _casillasExamenFisico() {
       return Array.from(document.querySelectorAll('input[id="alert_message"][type="text"]'))
@@ -2832,47 +2787,80 @@
   }
 
   function createExamenFisicoInjectorUI() {
-      if (document.getElementById("vgl-examen-normalidad")) return;
+      if (document.getElementById("vgl-examen-guardar")) return;
 
-      const btnNormalidad = document.createElement("button");
-      btnNormalidad.id = "vgl-examen-normalidad";
-      btnNormalidad.innerHTML = "🩺 Normalidad fija";
-      btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
-      btnNormalidad.className = "vgl-exf-btn vgl-exf-btn-normalidad";
+      const btnGuardar = document.createElement("button");
+      btnGuardar.id = "vgl-examen-guardar";
+      btnGuardar.innerHTML = "💾 Guardar plantilla";
+      btnGuardar.title = "Guarda, en el orden en que aparecen, las frases que ya escribiste en Revisión por sistema / Examen físico de ESTE paciente. Se recuerdan en este navegador para aplicarlas en el próximo paciente.";
+      btnGuardar.className = "vgl-exf-btn vgl-exf-btn-guardar";
 
-      btnNormalidad.onclick = () => {
-          uxTrack("examenFisico.normalidadFija.click");
+      btnGuardar.onclick = () => {
+          uxTrack("examenFisico.plantilla.guardar.click");
           const candidatos = _casillasExamenFisico();
           if (!candidatos.length) {
               alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
               return;
           }
-          // LA CASILLA DEL MÉDICO ES SAGRADA: nunca se sobrescribe una casilla con contenido,
-          // y solo se recorre hasta el menor de los dos tamaños. A pedido del médico, este
-          // botón no pide confirmación — un solo clic — pero la regla de no-sobrescribir no
-          // se negocia.
-          const porAplicar = [];
-          const n = Math.min(candidatos.length, EXAMEN_FISICO_NORMALIDAD_FIJA.length);
-          for (let i = 0; i < n; i++) {
-              const actual = String(candidatos[i].value == null ? "" : candidatos[i].value).trim();
-              if (actual === "") porAplicar.push({ el: candidatos[i], texto: EXAMEN_FISICO_NORMALIDAD_FIJA[i] });
-          }
-          if (!porAplicar.length) {
-              alert("No hay ninguna casilla vacía que la plantilla fija pueda completar en esta pantalla.");
+          const textos = candidatos.map((el) => String(el.value == null ? "" : el.value).trim());
+          const conTexto = textos.filter((t) => t !== "").length;
+          if (!conTexto) {
+              alert("Ninguna de las " + candidatos.length + " casilla(s) tiene texto todavía — escribe primero y luego guarda la plantilla.");
               return;
           }
-          const desajuste = candidatos.length !== EXAMEN_FISICO_NORMALIDAD_FIJA.length;
+          if (!confirm("¿Guardar como plantilla las " + conTexto + " frase(s) que ya escribiste en esta pantalla (de " + candidatos.length + " casillas en total)?\n\nLa próxima vez que uses \"Aplicar plantilla\" en un paciente nuevo, se pegarán en el mismo orden.")) return;
+          writeJSON(EXAMEN_FISICO_PLANTILLA_KEY, { total: candidatos.length, textos, guardadoEn: Date.now() });
+          uxTrack("examenFisico.plantilla.guardada", { n: conTexto, total: candidatos.length });
+          alert("✅ Plantilla guardada: " + conTexto + " frase(s) de " + candidatos.length + " casilla(s).");
+      };
+
+      const btnAplicar = document.createElement("button");
+      btnAplicar.id = "vgl-examen-aplicar";
+      btnAplicar.innerHTML = "📋 Aplicar plantilla";
+      btnAplicar.title = "Pega, casilla por casilla y en el mismo orden, la última plantilla guardada — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
+      btnAplicar.className = "vgl-exf-btn vgl-exf-btn-aplicar";
+
+      btnAplicar.onclick = () => {
+          uxTrack("examenFisico.plantilla.aplicar.click");
+          const plantilla = readJSON(EXAMEN_FISICO_PLANTILLA_KEY, null);
+          if (!plantilla || !Array.isArray(plantilla.textos) || !plantilla.textos.length) {
+              alert("Todavía no hay ninguna plantilla guardada. Usa primero \"💾 Guardar plantilla\" en un paciente con las casillas ya escritas.");
+              return;
+          }
+          const candidatos = _casillasExamenFisico();
+          if (!candidatos.length) {
+              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
+              return;
+          }
+          // v12.9.0 — Nunca se sobrescribe una casilla con contenido (misma regla de Auto-Labs:
+          // LA CASILLA DEL MÉDICO ES SAGRADA), y solo se recorre hasta el menor de los dos
+          // tamaños — si esta pantalla trae MÁS casillas que la plantilla, las de más allá del
+          // final guardado se dejan intactas en vez de adivinar con qué rellenarlas.
+          const porAplicar = [];
+          const n = Math.min(candidatos.length, plantilla.textos.length);
+          for (let i = 0; i < n; i++) {
+              const actual = String(candidatos[i].value == null ? "" : candidatos[i].value).trim();
+              const guardado = String(plantilla.textos[i] || "").trim();
+              if (actual === "" && guardado !== "") porAplicar.push({ el: candidatos[i], texto: guardado });
+          }
+          if (!porAplicar.length) {
+              alert("No hay ninguna casilla vacía que la plantilla pueda completar en esta pantalla.");
+              return;
+          }
+          const desajuste = candidatos.length !== plantilla.total;
           const aviso = desajuste
-            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla fija trae " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
+            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla se guardó con " + plantilla.total + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
             : "";
+          if (!confirm("¿Rellenar " + porAplicar.length + " casilla(s) vacía(s) con la plantilla guardada?" + aviso)) return;
           porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
-          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, desajuste });
-          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla fija de normalidad."
+          uxTrack("examenFisico.plantilla.aplicada", { n: porAplicar.length, desajuste });
+          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla guardada."
             + (candidatos.length - porAplicar.length > 0 ? "\n\n✋ Las demás ya tenían texto o quedan fuera de la plantilla, y se respetaron." : "")
             + aviso);
       };
 
-      document.body.appendChild(btnNormalidad);
+      document.body.appendChild(btnGuardar);
+      document.body.appendChild(btnAplicar);
   }
 
   // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
@@ -4929,7 +4917,7 @@
         t.className = "vgl-sp-toast";
 
         const closeBtn = document.createElement("span");
-        closeBtn.className = "vgl-sp-x";
+        closeBtn.style.cssText = "position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px;";
         closeBtn.textContent = "×";
         closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
         t.appendChild(closeBtn);
@@ -6298,7 +6286,28 @@
       }
       /* Reset defensivo contra herencias del host */
 
+      /* Estilos refactorizados de modales */
+      .vgl-modal-card{border-color:rgba(var(--ac-rgb),.60)}
+      .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85)}
+      .vgl-modal-ok{background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35)}
 
+      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)}
+      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio);letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)}
+
+      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45)}
+      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes);letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)}
+
+      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)}
+      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-rojo);letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30)}
+
+      /* Estilos refactorizados de toasts */
+      .vgl-toast-rail{flex:0 0 5px;align-self:stretch;border-radius:var(--r-pill);box-shadow:0 0 12px rgba(var(--tk),.70),0 0 3px rgba(var(--tk),.90)}
+      .vgl-toast-ic{background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25)}
+      .vgl-toast-title{font-size:14.5px;letter-spacing:.2px;text-shadow:0 0 16px rgba(var(--tk),.35)}
+      .vgl-toast-b{font-size:12.5px}
 
       /* Estilos layout y utilidades JS */
       .vgl-d-none{display:none}
@@ -6321,8 +6330,9 @@
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
       }
       .vgl-lab-inj{bottom:80px;background:var(--c-morado, #8b5cf6)}
-      .vgl-exf-btn{background:var(--c-verde, #16a34a)}
-      .vgl-exf-btn-normalidad{bottom:130px}
+      .vgl-exf-btn{background:var(--c-azul, #0ea5e9)}
+      .vgl-exf-btn-guardar{bottom:130px}
+      .vgl-exf-btn-aplicar{bottom:175px}
 
       #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
       #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
@@ -6334,19 +6344,10 @@
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
-      /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
-         v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
-         especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
-         propia dentro del mismo panel, aunque esa clase fuera más específica en intención.
-         Reportado real en consultorio: ".vgl-postcita-title" (color:var(--c-verde)) y
-         ".vgl-postcita-sub" (color:var(--fg2)) son <div> con clase — la regla vieja los
-         forzaba a color:inherit de todos modos, y como #vgl-postcita-panel cuelga de
-         document.body (no de #vgl-root), ese "inherit" terminaba en el azul de Everest.
-         Verificado en Chromium con el CSS real generado por buildOverlay(). La regla
-         correcta (armadura de v12.3.15, más abajo, con :where()+:not([class]) para no
-         pisar reglas de acento con clase propia) ya existe para esto — solo faltaba
-         incluir ahí estos dos paneles. Se quitó la regla vieja de aquí y se sumaron
-         #vgl-labsv-modal y #vgl-postcita-panel a esa lista. */
+      /* v12.6.6 — mismo blindaje para los dos avisos que viven en document.body: sin esto,
+         Everest pinta de azul cualquier <b>/<span>/<div> suyo que caiga dentro. */
+      #vgl-labsv-modal b,#vgl-labsv-modal span,#vgl-labsv-modal div,
+      #vgl-postcita-panel b,#vgl-postcita-panel span,#vgl-postcita-panel div{color:inherit}
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
@@ -6673,15 +6674,16 @@
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
-      .vgl-card-top.vgl-card-top-t1 { gap:10px; }
-      .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
-      .vgl-cdot.vgl-cdot-t1 { width:11px; height:11px; }
-      .vgl-time.vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
-      .vgl-badge.vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
-      .vgl-card-mid.vgl-card-mid-t1 { margin-top:9px; gap:10px; }
-      .vgl-name.vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
+      .vgl-btn-ambar { background:rgba(var(--rgb-ambar),.14); box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5); }
+      .vgl-card-top-t1 { gap:10px; }
+      .vgl-card-time-wrap-t1 { gap:10px; }
+      .vgl-cdot-t1 { width:11px; height:11px; }
+      .vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
+      .vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
+      .vgl-card-mid-t1 { margin-top:9px; gap:10px; }
+      .vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
       .vgl-doc-t1 { background:var(--bg2); padding:3px 10px; border-radius:var(--r-pill); box-shadow:var(--glow-edge); font-variant-numeric:tabular-nums; }
-      .vgl-card-btm.vgl-card-btm-t1 { margin-top:7px; gap:10px; }
+      .vgl-card-btm-t1 { margin-top:7px; gap:10px; }
 
       .vgl-card-actions{
         display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;
@@ -6701,20 +6703,6 @@
       .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover,.vgl-btn-atender:hover{
         transform:scale(1.14);background:var(--bg4);
         box-shadow:0 4px 12px rgba(0,0,0,.30),var(--glow-edge);
-      }
-      /* v12.10.0 — El ámbar del botón «🧪 falta la toma de muestras» DEBE ir aquí, después de la
-         regla base y de :hover, y con selector COMPUESTO (.vgl-btn-action.vgl-btn-ambar). Antes de
-         T1 esto era estilo inline, que gana a cualquier regla de la hoja; al migrarlo a una clase
-         suelta declarada ANTES de .vgl-btn-action quedó con la MISMA especificidad (0,1,0) que la
-         regla base, así que ganaba la última: el all:unset y el background:var(--bg3) borraban el
-         ámbar y el botón quedaba idéntico al 🗓️ normal. Verificado en Chromium: mismo
-         backgroundColor rgb(22,26,36) y box-shadow "none" en ambos. El médico perdía la única señal
-         de que a esa cita le falta la toma de muestras. El selector compuesto (0,2,0) y la variante
-         :hover (0,3,0) reproducen exactamente lo que hacía el inline: el ámbar manda en ambos estados. */
-      .vgl-btn-action.vgl-btn-ambar,
-      .vgl-btn-action.vgl-btn-ambar:hover{
-        background:rgba(var(--rgb-ambar),.14);
-        box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5);
       }
 
       /* Chips PyM */
@@ -6881,7 +6869,6 @@
         to{opacity:1;transform:none}
       }
       .vgl-toast-ic{
-        background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25);
         width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:18px;
         box-shadow:var(--glow-edge)
@@ -6889,7 +6876,6 @@
       .vgl-toast-main{flex:1;min-width:0}
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
-        font-size:12.5px;
         margin-top:3px;font-size:12px;color:var(--fg2);
         white-space:pre-line;line-height:1.45
       }
@@ -6912,22 +6898,20 @@
         animation:vglToastIn .25s ease
       }
       .vgl-modal-card{
-        border-color:rgba(var(--ac-rgb),.60);
-        background:linear-gradient(165deg,rgba(var(--ac-rgb),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
-        border:1px solid rgba(var(--ac-rgb),.55);
+        background:linear-gradient(165deg,rgba(var(--rgb-rojo),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--rgb-rojo),.55);
         border-radius:var(--r-surface);padding:30px 34px;
         max-width:460px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 60px rgba(var(--ac-rgb),.14),inset 0 1px 0 rgba(255,255,255,.10);
+        box-shadow:var(--shadow-float),0 0 60px rgba(var(--rgb-rojo),.14),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
-      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg) !important;margin-bottom:8px;letter-spacing:.2px}
-      .vgl-modal-b{font-size:14px;color:var(--fg2) !important;white-space:pre-line;line-height:1.55}
+      .vgl-modal-dot{width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
+      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg);margin-bottom:8px;letter-spacing:.2px}
+      .vgl-modal-b{font-size:14px;color:var(--fg2);white-space:pre-line;line-height:1.55}
       .vgl-modal-ok{
-        background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid) !important;box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35);
         margin-top:22px;border:0;border-radius:var(--r-chip);
         padding:11px 28px;font-size:14px;font-weight:800;
-        cursor:pointer;font-family:inherit;
+        color:#001;cursor:pointer;font-family:inherit;
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
       .vgl-modal-ok:hover{transform:scale(1.04);filter:brightness(1.08)}
@@ -6944,15 +6928,15 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-recordatorio),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
+      .vgl-pym-ic{
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
+      .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
+      .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -6963,7 +6947,7 @@
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6985,18 +6969,18 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-pes),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
+      .vgl-pes-ic{
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
         box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
-      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30);margin-bottom:14px}
+      .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
       .vgl-pes-lead{
-        font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
+        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
       }
-      .vgl-pes-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pes-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7022,15 +7006,15 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
+      .vgl-labsv-ic{
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
         box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
       }
-      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-rojo) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30);margin-bottom:14px}
-      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
+      .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
+      .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
+      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
       .vgl-labsv-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -7041,7 +7025,7 @@
         background:rgba(var(--rgb-rojo),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
-      .vgl-labsv-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7247,15 +7231,7 @@
       .vgl-postcita-card{
         position:relative;min-width:260px;max-width:340px;
         padding:16px 18px;border-radius:var(--r-card);
-        /* v12.10.2 — El médico reportó el panel "horrible" en consultorio: se veía mezclado
-           con la fila de la cita en la agenda de Everest, justo debajo. Causa real: --toast
-           es rgba(...,.94) — 94% opaco A PROPÓSITO para los toasts normales (dejan ver un poco
-           la página, efecto vidrio), pero ese 6% de transparencia deja asomar la fila de
-           Everest detrás en esta esquina concreta, donde Everest coloca sus propios botones
-           "Historias Clínicas"/"Consentimientos" por cita. Esta tarjeta necesita leerse sola,
-           sin nada compitiendo detrás: --bg-solid es el mismo token, ya existente en el
-           proyecto, pero SIN alfa — 100% opaco. */
-        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg-solid);
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
         color:var(--fg)
@@ -7266,8 +7242,8 @@
         font-size:16px;cursor:pointer;line-height:1;padding:2px
       }
       .vgl-postcita-x:hover{color:var(--fg)}
-      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
-      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
+      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde);margin-bottom:2px}
+      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2);margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
       /* Items de Órdenes PyM — celdas bento */
@@ -7517,7 +7493,7 @@
       #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
       #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
       #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
-      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-flat {padding:13px 16px}
+      #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
 
       /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
       #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
@@ -7560,20 +7536,20 @@
       #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
 
       /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
-      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms {
+      #vgl-agendar-modal .vgl-agm-cell-sms{
         background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-azul),.36);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms:hover {border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
-      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab {
+      #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
+      #vgl-agendar-modal .vgl-agm-cell-lab{
         background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-verde),.34);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab:hover {border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
-      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-sms {background:rgba(var(--rgb-azul),.07)}
-      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-lab {background:rgba(var(--rgb-verde),.07)}
+      #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
+      #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
       /* v12.3.x — Se extiende a #vgl-ordenar-modal (antes solo agendar) para la sección de
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
@@ -7811,7 +7787,7 @@
         48%{transform:scale(1)}
       }
       #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-pes-modal .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
       #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
         animation:none !important;transition:none !important;
@@ -7827,7 +7803,7 @@
       /* v12.5.7 — Mismas animaciones ya definidas arriba (vglPesPop/vglPesBeat son
          genéricas, no específicas de PES): se reutilizan aquí, sin duplicar keyframes. */
       #vgl-labsv-modal .vgl-labsv-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-labsv-modal .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-labsv-modal .vgl-labsv-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-labsv-modal .vgl-labsv-ok:focus-visible{outline:2px solid var(--c-rojo);outline-offset:3px}
       #vgl-root.perf~#vgl-labsv-modal,#vgl-root.perf~#vgl-labsv-modal *{
         animation:none !important;transition:none !important;
@@ -7936,10 +7912,7 @@
       #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
-      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
-      #vgl-labsv-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
-      #vgl-postcita-panel :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]))
-      {color:inherit}
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -8169,32 +8142,6 @@
   // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
   // sesión ya existe a document-start; el timeout evita depender del orden de las const).
   try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
-  const FESTIVOS = new Set([
-    // 2026
-    "2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03",
-    "2026-05-01", "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29",
-    "2026-07-20", "2026-08-07", "2026-08-17", "2026-10-12",
-    "2026-11-02", "2026-11-16", "2026-12-08", "2026-12-25",
-    // 2027
-    "2027-01-01", "2027-01-11", "2027-03-22", "2027-03-25", "2027-03-26",
-    "2027-05-01", "2027-05-10", "2027-05-31", "2027-06-07", "2027-07-20", "2027-08-07", "2027-08-16", "2027-10-18",
-    "2027-11-01", "2027-11-15", "2027-12-08", "2027-12-25"
-  ]);
-
-  function esFestivo(d) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    if (yyyy > 2027) {
-      if (!state.warnedTimes.has("festivos_caducados")) {
-        state.warnedTimes.add("festivos_caducados");
-        console.warn("[Vigilante] La tabla de festivos caducó, hay que actualizarla.");
-      }
-    }
-    return FESTIVOS.has(`${yyyy}-${mm}-${dd}`);
-  }
-
-
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
   function calcBusinessTargetDate(monthsToAdd, daysToAdd) {
@@ -8212,10 +8159,6 @@
     const day = d.getDay();
     if (day === 6) d.setDate(d.getDate() - 1);
     else if (day === 0) d.setDate(d.getDate() - 2);
-
-    while (esFestivo(d) || d.getDay() === 0 || d.getDay() === 6) {
-      d.setDate(d.getDate() + 1);
-    }
 
     const pad = (n) => String(n).padStart(2, "0");
     const yyyy = d.getFullYear();
@@ -8406,7 +8349,7 @@
     let count = 0;
     while (count < daysBefore) {
       dt.setDate(dt.getDate() - 1);
-      if (dt.getDay() !== 0 && dt.getDay() !== 6 && !esFestivo(dt)) count++;
+      if (dt.getDay() !== 0 && dt.getDay() !== 6) count++;
     }
     const pad = (n) => String(n).padStart(2, "0");
     const yyyy = dt.getFullYear();
@@ -8469,104 +8412,6 @@
     const m = /(\d{1,2}):(\d{2})/.exec(String(h || ""));
     if (!m) return String(h || "").trim();
     return m[1].padStart(2, "0") + ":" + m[2];
-  }
-
-  function perfilPaciente(etiquetas) {
-    if (!etiquetas || !Array.isArray(etiquetas) || etiquetas.length === 0) {
-      return { franja: "sin_preferencia", adicionales: "visibles" };
-    }
-
-    const norm = etiquetas.map(e => {
-      return String(e || "")
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, "")
-        .replace(/\//g, "+");
-    });
-
-    let tieneDM = false;
-    let tieneNefro = false;
-    let tieneHTA = false;
-    let etiquetaReconocida = false;
-
-    for (const e of norm) {
-      if (e.includes("diabetes") || e.includes("hta+dm")) {
-        tieneDM = true;
-        etiquetaReconocida = true;
-      }
-      if (e.includes("nefroproteccion")) {
-        tieneNefro = true;
-        etiquetaReconocida = true;
-      }
-      if (e.includes("hipertension") || e === "hta") {
-        tieneHTA = true;
-        etiquetaReconocida = true;
-      }
-    }
-
-    if (!etiquetaReconocida) {
-      return { franja: "sin_preferencia", adicionales: "visibles" };
-    }
-
-    // D3-bis: La diabetes es la única que impone franja.
-    const franja = tieneDM ? "primera_mitad" : "sin_preferencia";
-
-    // D3-bis: Eje B es una lista de exclusiones.
-    let adicionales = "visibles";
-    if (tieneDM || tieneNefro) {
-      adicionales = false;
-    } else if (tieneHTA) {
-      adicionales = true;
-    }
-
-    return { franja, adicionales };
-  }
-
-  function recomendacionHorario(perfil, turnosDelDia) {
-    if (!perfil || perfil.franja !== "primera_mitad" || !turnosDelDia || turnosDelDia.length === 0) {
-      return { sugerida: null, rangoTexto: null, horasEnFranja: [] };
-    }
-
-    const horasAM = [];
-    const horasPM = [];
-
-    for (const t of turnosDelDia) {
-      const hStr = normalizeHora(t.hora || t.horaTexto || t.Hora || "");
-      if (!hStr) continue;
-      const m = /^(\d{2}):(\d{2})$/.exec(hStr);
-      if (!m) continue;
-
-      const mins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-
-      if (mins >= 360 && mins <= 540) horasAM.push({ original: hStr, mins });
-      if (mins >= 780 && mins <= 960) horasPM.push({ original: hStr, mins });
-    }
-
-    const franjas = [];
-    let candidatos = [];
-
-    if (horasAM.length > 0) {
-      franjas.push("AM 06:00–09:00");
-      candidatos = candidatos.concat(horasAM);
-    }
-    if (horasPM.length > 0) {
-      franjas.push("PM 13:00–16:00");
-      candidatos = candidatos.concat(horasPM);
-    }
-
-    if (candidatos.length === 0) {
-      return { sugerida: null, rangoTexto: null, horasEnFranja: [] };
-    }
-
-    candidatos.sort((a, b) => a.mins - b.mins);
-    const sugerida = candidatos[0].original;
-    const horasEnFranja = [...new Set(candidatos.map(c => c.original))];
-
-    return {
-      sugerida,
-      rangoTexto: franjas.join(" y "),
-      horasEnFranja
-    };
   }
 
   function format12hTime(timeStr) {
@@ -8927,7 +8772,7 @@
     let curPrev = new Date(baseDate);
     while (prevDays.length < 3) {
       curPrev.setDate(curPrev.getDate() - 1);
-      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6 && !esFestivo(curPrev)) {
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6) {
         prevDays.unshift(getInfo(curPrev, false));
       }
     }
@@ -8936,7 +8781,7 @@
     let curNext = new Date(baseDate);
     while (nextDays.length < 3) {
       curNext.setDate(curNext.getDate() + 1);
-      if (curNext.getDay() !== 0 && curNext.getDay() !== 6 && !esFestivo(curNext)) {
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6) {
         nextDays.push(getInfo(curNext, false));
       }
     }
@@ -8972,7 +8817,7 @@
     let curPrev = new Date(baseDate);
     while (prevDays.length < sideCount) {
       curPrev.setDate(curPrev.getDate() - 1);
-      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6 && !esFestivo(curPrev)) {
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6) {
         prevDays.unshift(getInfo(curPrev, false));
       }
     }
@@ -8981,7 +8826,7 @@
     let curNext = new Date(baseDate);
     while (nextDays.length < sideCount) {
       curNext.setDate(curNext.getDate() + 1);
-      if (curNext.getDay() !== 0 && curNext.getDay() !== 6 && !esFestivo(curNext)) {
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6) {
         nextDays.push(getInfo(curNext, false));
       }
     }
@@ -10790,7 +10635,7 @@
           if (vivo()) {
             c.checked = false; // Desmarcar exitoso
             c.disabled = true; // Deshabilitar
-            const lbl = c.closest("label"); if(lbl && lbl.classList) lbl.classList.add("vgl-op-half", "vgl-line-through");
+            const lbl = c.closest("label"); if(lbl.classList) lbl.classList.add("vgl-op-half", "vgl-line-through");
           }
         } else {
           fallidasCount++;
@@ -11112,7 +10957,7 @@
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
-      <div class="vgl-grp vgl-grp-tec ${S.opcionesTecnicas ? '' : 'vgl-d-none'}">
+      <div class="vgl-grp vgl-grp-tec" ${devStyle}>
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Opciones técnicas</div>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
@@ -11487,22 +11332,15 @@
       const labsBtn = a.doc_id
         ? `<button class="vgl-btn-labs vgl-btn-action" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
-      // v13.0.0 — "Atender": SOLO registra en el servidor de Everest la hora de apertura
-      // (guardarHoraApertura), el mismo efecto de red que deja el botón nativo "Historias
-      // Clínicas" — pero, a diferencia del nativo, este botón NUNCA navega ni pinta la
-      // historia clínica en pantalla (decisión original: de la cascada de ~50 peticiones
-      // que dispara el nativo, solo esas dos tienen efecto/lectura real; el resto no pinta
-      // nada sin la vista real montada). El texto de v13.0.0 decía "abre la Historia
-      // Clínica", lo cual era falso desde el primer commit: un médico podía creer que ya
-      // revisó al paciente sin haberlo hecho. v12.10.1 — corregido para decir la verdad.
+      // v13.0.0 — "Atender": abre la Historia Clínica real (ver apiMedicoAbrirHistoria).
       // SOLO se ofrece cuando el citaId vino del API directo de Everest (apiParse): el
       // camino de respaldo por scraping de DOM nunca lo tuvo, y sin él no hay a qué
       // CitaId apuntar — casilla vacía en vez de un botón que apunte a un id inventado.
       const yaAbiertoHoy = a.citaId ? isAtencionAbiertaHoy(a.citaId) : false;
       const atenderBtn = a.citaId
         ? (esAtendido || yaAbiertoHoy
-            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Inicio de atención ya registrado para ${escapeHtml(a.nombre)}" title="✅ Ya se registró en Everest el inicio de atención${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}. Esto NO abrió la historia clínica: úsela con \"Historias Clínicas\".">🩺</button>`
-            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Registrar inicio de atención de ${escapeHtml(a.nombre)} en Everest" title="🩺 Registra en Everest que empezó a atender a ${escapeHtml(a.nombre)}. NO abre la historia clínica — ábrala con el botón nativo \"Historias Clínicas\".">🩺</button>`)
+            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
+            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
         : "";
       const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
         ? `<span class="vgl-card-actions">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
@@ -11536,20 +11374,19 @@
       if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
       const bAt = card.querySelector(".vgl-btn-atender");
       // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
-      // la llamada de red directamente: es lo mismo EFECTO DE RED que deja el botón nativo
-      // de Everest al pulsarlo — pero NO navega ni pinta nada (ver comentario arriba, en la
-      // construcción de atenderBtn). Se deshabilita YA al pulsar para que un doble clic no
-      // dispare guardarHoraApertura dos veces mientras responde la red.
+      // la llamada de red directamente: es lo mismo que hace el botón nativo de Everest
+      // al pulsarlo (no pide confirmación tampoco). Se deshabilita YA al pulsar para que
+      // un doble clic no dispare guardarHoraApertura dos veces mientras responde la red.
       if (bAt) bAt.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (bAt.disabled) return;
         uxTrack("panel.atender.click");
         bAt.disabled = true; bAt.classList.add("vgl-btn-wait");
         const ok = await apiMedicoAbrirHistoria(a.citaId);
-        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`📝 Inicio de atención registrado en Everest para ${a.nombre}. Abra su historia con "Historias Clínicas".`); }
+        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`🩺 Historia clínica abierta para ${a.nombre}.`); }
         else {
           bAt.disabled = false; bAt.classList.remove("vgl-btn-wait");
-          spToast(`⚠️ No se pudo registrar en Everest el inicio de atención de ${a.nombre}. Abra su historia con "Historias Clínicas".`);
+          spToast(`⚠️ No se pudo abrir la historia de ${a.nombre} desde el panel. Ábrala manualmente con "Historias Clínicas".`);
         }
       });
       fragment.appendChild(card);

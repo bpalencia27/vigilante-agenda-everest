@@ -357,7 +357,7 @@ module.exports = {
       cv.api.__state.lastSignature = "";
       cv.api.render([conCitaId, sinCitaId], "api", new Date());
       const hCon = lista.children[0].innerHTML, hSin = lista.children[1].innerHTML;
-      t.cierto(hCon.includes('aria-label="Registrar inicio de atención de'), "con citaId real y sin marcar, el botón está habilitado");
+      t.cierto(hCon.includes('aria-label="Atender: abrir Historia Clínica de'), "con citaId real y sin marcar, el botón está habilitado");
       t.falso(hSin.includes("vgl-btn-atender"), "sin citaId (p. ej. el camino de respaldo por scraping de DOM) no hay botón: nunca se inventa el id");
     });
 
@@ -370,8 +370,8 @@ module.exports = {
       cv.api.__state.lastSignature = "";
       cv.api.render([yaAtendido, abiertoHoy], "api", new Date());
       const hAtendido = lista.children[0].innerHTML, hAbierto = lista.children[1].innerHTML;
-      t.cierto(hAtendido.includes('aria-label="Inicio de atención ya registrado para'), "ya Atendido en Everest: botón visible pero bloqueado");
-      t.cierto(hAbierto.includes('aria-label="Inicio de atención ya registrado para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
+      t.cierto(hAtendido.includes('aria-label="Historia ya abierta para'), "ya Atendido en Everest: botón visible pero bloqueado");
+      t.cierto(hAbierto.includes('aria-label="Historia ya abierta para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
     });
 
     await t.casoAsync("botón Atender: al pulsarlo llama a apiMedicoAbrirHistoria; si no hay éxito, avisa y se reactiva", async () => {
@@ -388,39 +388,6 @@ module.exports = {
       t.falso(cv.api.isAtencionAbiertaHoy(333), "sin `true` real del servidor, no se marca como abierta");
       t.falso(bAt.disabled, "al fallar, el botón se reactiva — no queda bloqueado para siempre por un error de red");
     });
-
-    // v12.10.1 — Incidente real en consultorio: el botón decía "abre la Historia Clínica" y
-    // el aviso de éxito decía "Historia clínica abierta", pero apiMedicoAbrirHistoria() NUNCA
-    // navega ni pinta nada — solo registra un timestamp en el servidor de Everest. El médico
-    // pulsó, vio el mensaje de éxito, y la historia nunca se abrió: creyó (por el propio texto
-    // del script) que había revisado al paciente sin haberlo hecho. Esta prueba impide que
-    // vuelva a redactarse un texto que prometa "abrir"/"abierta" mientras la función solo
-    // registra un timestamp — si en el futuro SÍ se implementa la navegación real, hay que
-    // actualizar esta prueba a la vez que el código, no antes.
-    t.caso("botón Atender: ningún texto visible promete abrir/mostrar la historia clínica (solo registra, no navega)", () => {
-      vaciarLista();
-      cv.env.storage.removeItem("vgl_proc_today");
-      const habilitado = { key: "atc6", doc_id: "6", nombre: "F", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 444 };
-      const bloqueado = { key: "atc7", doc_id: "7", nombre: "G", hora_texto: "07:20", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0, citaId: 555 };
-      cv.api.__state.lastSignature = "";
-      cv.api.render([habilitado, bloqueado], "api", new Date());
-      const hHab = lista.children[0].innerHTML, hBloq = lista.children[1].innerHTML;
-
-      // Frases textuales del incidente real (v13.0.0 original) que NUNCA deben reaparecer —
-      // no se usa una heurística amplia porque el texto honesto ACTUAL dice a propósito
-      // "NO abre la historia clínica", que una heurística ingenua marcaría como falso positivo.
-      const FRASES_FALSAS = [
-        "abrir Historia Clínica de",
-        "abre la Historia Clínica de",
-        "Historia clínica abierta",
-        "Historia clínica ya abierta",
-      ];
-      for (const frase of FRASES_FALSAS) {
-        t.falso(hHab.includes(frase), `el botón habilitado no debe contener "${frase}"`);
-        t.falso(hBloq.includes(frase), `el botón bloqueado no debe contener "${frase}"`);
-      }
-    });
-
 
 
 
@@ -439,39 +406,6 @@ module.exports = {
       );
       t.cierto(stylesProhibidos.length === 0, "No debe haber styles inline salvo variables o badgeRgba, hallados: " + stylesProhibidos.join(", "));
       t.falso(cardHTML.includes('gap:10px'), "no debe haber gap:10px inline");
-    });
-
-    // =====================================================================
-    // v12.10.0 — GUARDA DE CASCADA PARA EL ÁMBAR DEL BOTÓN «FALTA LA TOMA».
-    // Incidente real de T1: al desincrustar el estilo, `.vgl-btn-ambar` quedó como clase
-    // SUELTA declarada ANTES de `.vgl-btn-action`. Ambas tienen especificidad (0,1,0), así
-    // que ganaba la última: el `all:unset` + `background:var(--bg3)` de la regla base
-    // borraban el ámbar y el botón 🧪 quedaba idéntico al 🗓️ normal (verificado en
-    // Chromium: mismo backgroundColor y box-shadow "none"). El médico perdía la única
-    // señal de que a esa cita le falta la toma de muestras — y el banco pasó en VERDE,
-    // porque el DOM de las pruebas no calcula CSS.
-    // Esta prueba no puede calcular cascada, pero sí puede exigir lo único que la hace
-    // inmune al orden: que el ámbar se declare con selector COMPUESTO junto a
-    // .vgl-btn-action, de modo que su especificidad sea siempre mayor que la de la base.
-    t.caso("el ámbar de «falta la toma de muestras» gana a la regla base pase lo que pase (cascada)", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-
-      const sueltas = src.match(/^\s*\.vgl-btn-ambar\s*[,{]/m);
-      t.falso(!!sueltas, "`.vgl-btn-ambar` no puede declararse como clase suelta: la regla base la pisaría");
-
-      const compuesta = /\.vgl-btn-action\.vgl-btn-ambar\s*[,{]/.test(src);
-      t.cierto(compuesta, "el ámbar debe declararse como `.vgl-btn-action.vgl-btn-ambar` (especificidad mayor que la base)");
-
-      const conHover = /\.vgl-btn-action\.vgl-btn-ambar:hover\s*[,{]/.test(src);
-      t.cierto(conHover, "también debe cubrir :hover — antes era inline y el inline también ganaba al hover");
-
-      // Y debe seguir llevando los valores reales de siempre.
-      const iA = src.indexOf(".vgl-btn-action.vgl-btn-ambar");
-      const bloque = src.slice(iA, src.indexOf("}", iA));
-      t.cierto(bloque.includes("rgba(var(--rgb-ambar),.14)"), "conserva el fondo ámbar original");
-      t.cierto(bloque.includes("inset 0 0 0 1px rgba(var(--rgb-ambar),.5)"), "conserva el borde interior ámbar original");
     });
 
 
@@ -634,73 +568,119 @@ module.exports = {
       };
     }
 
-    t.caso("createExamenFisicoInjectorUI: crea un único botón flotante una sola vez", () => {
+    t.caso("createExamenFisicoInjectorUI: crea los dos botones flotantes una sola vez", () => {
       const antes = cv.env.doc.body.children.length;
       cv.api.createExamenFisicoInjectorUI();
-      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
-      t.cierto(!!btnN, "el botón quedó en el body");
-      t.igual(btnN.innerHTML, "🩺 Normalidad fija");
-      t.cierto(typeof btnN.onclick === "function", "el clic queda cableado");
-      cv.env.doc.getElementById = (id) => (id === "vgl-examen-normalidad" ? btnN : null);
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      t.cierto(!!btnG && !!btnA, "los dos botones quedaron en el body");
+      t.igual(btnG.innerHTML, "💾 Guardar plantilla");
+      t.igual(btnA.innerHTML, "📋 Aplicar plantilla");
+      t.cierto(typeof btnG.onclick === "function" && typeof btnA.onclick === "function", "los dos clics quedan cableados");
+      cv.env.doc.getElementById = (id) => (id === "vgl-examen-guardar" ? btnG : null);
       cv.api.createExamenFisicoInjectorUI();
-      t.igual(cv.env.doc.body.children.length, antes + 1, "la segunda llamada no añade botones duplicados");
+      t.igual(cv.env.doc.body.children.length, antes + 2, "la segunda llamada no añade botones duplicados");
     });
 
-    // ================= "Normalidad fija" (v12.10.3, plantilla incluida en el script) =================
-    // v12.10.4 — a pedido directo del médico, este botón es el ÚNICO de la pestaña, pega de
-    // un solo clic (SIN cuadro de confirmación) — pero jamás pisa una casilla con texto.
-    t.caso("Normalidad fija: sin casillas en pantalla, avisa y no revienta", () => {
-      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+    t.caso("Guardar plantilla: sin casillas en pantalla, avisa y no revienta", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
       cv.env.doc.querySelectorAll = () => [];
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btnN.onclick();
+      btnG.onclick();
       t.igual(alertas.length, 1);
       t.cierto(alertas[0].includes("No se encontraron casillas"), "explica que no halló casillas de esta pestaña");
     });
 
-    t.caso("Normalidad fija: un solo clic rellena SOLO las vacías, sin pedir confirmación, respeta las que ya tienen texto", () => {
-      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+    t.caso("Guardar plantilla: todo vacío, no guarda nada y lo dice", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [campoFalso(""), campoFalso("")] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.env.storage.removeItem("vgl_plantilla_examen_fisico");
+      btnG.onclick();
+      t.cierto(alertas[0].includes("Ninguna de las"), "avisa que no hay texto que guardar");
+      t.igual(cv.env.storage.getItem("vgl_plantilla_examen_fisico"), null, "no se escribió ninguna plantilla");
+    });
+
+    t.caso("Guardar plantilla: captura cada frase EN SU POSICIÓN, tal cual como está escrita hoy", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      // v12.9.0 — caso real reportado: cada sistema tiene su PROPIA frase, no un texto único.
+      const piel = campoFalso("NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.");
+      const oido = campoFalso("NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.");
+      const vacia = campoFalso(""); // una casilla sin escribir todavía, se guarda como ""
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [piel, oido, vacia] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnG.onclick();
+      const guardado = JSON.parse(cv.env.storage.getItem("vgl_plantilla_examen_fisico"));
+      t.igual(guardado.total, 3, "guarda el total de casillas vistas, no solo las llenas");
+      t.igual(guardado.textos[0], "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "posición 0 = la frase exacta de Piel");
+      t.igual(guardado.textos[1], "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 = la frase exacta de Oído, DISTINTA de la 0");
+      t.igual(guardado.textos[2], "", "la casilla vacía se guarda como cadena vacía, no se inventa nada");
+      t.cierto(alertas[alertas.length - 1].includes("2 frase(s) de 3 casilla(s)"), "el resumen cuenta frases reales vs. total de casillas");
+    });
+
+    t.caso("Aplicar plantilla: sin plantilla guardada, avisa a guardar una primero", () => {
+      cv.env.storage.removeItem("vgl_plantilla_examen_fisico");
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btnA.onclick();
+      t.cierto(alertas[0].includes("Todavía no hay ninguna plantilla guardada"));
+    });
+
+    t.caso("Aplicar plantilla: rellena SOLO las vacías con la frase de SU posición, respeta las que ya tienen texto", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({
+        total: 3,
+        textos: ["Frase de Piel", "Frase de Oído", "Frase de Boca"],
+        guardadoEn: 1,
+      }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
       const yaEscrita = campoFalso("El médico ya escribió esto y NUNCA se toca");
       const vacia1 = campoFalso("");
       const vacia2 = campoFalso("   "); // solo espacios: cuenta como vacía
-      const oculta = campoFalso("", { oculto: true });
+      const oculta = campoFalso("", { oculto: true }); // offsetParent null: el filtro real la excluye de "candidatos"
       cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [yaEscrita, vacia1, vacia2, oculta] : []);
-      let confirmLlamado = false;
-      cv.ctx.confirm = () => { confirmLlamado = true; return false; }; // si el botón llamara confirm() y devolviera false, esta prueba lo detectaría
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btnN.onclick();
-      t.falso(confirmLlamado, "no pide confirmación — un solo clic aplica de una vez");
-      t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta");
-      t.igual(vacia1.value, "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 vacía recibe la frase fija de SU posición (Oído), no la 0 (Piel, que ya estaba ocupada)");
-      t.igual(vacia2.value, "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.", "posición 2 (solo espacios) también cuenta como vacía y recibe la frase de SU posición (Boca)");
-      t.igual(oculta.value, "", "una casilla oculta no se toca");
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnA.onclick();
+      t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta, NO se pisa con \"Frase de Piel\"");
+      t.igual(vacia1.value, "Frase de Oído", "posición 1 vacía recibe la frase guardada de SU posición (no la 0)");
+      t.igual(vacia2.value, "Frase de Boca", "posición 2 (solo espacios) también cuenta como vacía y recibe su frase");
       t.cierto(vacia1._eventos.includes("input") && vacia1._eventos.includes("change"), "setNgValue disparó input y change");
       t.igual(yaEscrita._eventos.length, 0, "la casilla respetada no dispara ningún evento");
-      cv.ctx.confirm = () => true;
+      t.igual(oculta.value, "", "una casilla oculta no se toca aunque su posición estuviera vacía en la plantilla");
+      t.cierto(alertas.some((a) => a.includes("[confirm]") && a.includes("2 casilla(s)")), "confirma antes de escribir, con la cuenta exacta");
+      t.falso(alertas[alertas.length - 1].includes("⚠️"), "sin aviso de desajuste: 3 candidatos vistos, candidatos.length===3===plantilla.total (oculta no cuenta)");
     });
 
-    t.caso("Normalidad fija: si el número de casillas de hoy no coincide con las 36 de la plantilla fija, avisa el desajuste sin dejar de aplicar", () => {
-      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+    t.caso("Aplicar plantilla: si el número de casillas no coincide con el guardado, avisa el desajuste sin dejar de aplicar", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({ total: 5, textos: ["A", "B", "C", "D", "E"], guardadoEn: 1 }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
       const vacia = campoFalso("");
+      // solo 1 casilla hoy, la plantilla trae 5
       cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btnN.onclick();
-      t.igual(vacia.value, "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "aun con desajuste, sí aplica lo que puede (posición 0)");
-      t.cierto(alertas.some((a) => a.includes("⚠️") && a.includes("1 casilla(s)") && a.includes("36")), "avisa el desajuste con ambas cifras");
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnA.onclick();
+      t.igual(vacia.value, "A", "aun con desajuste, sí aplica lo que puede (posición 0)");
+      t.cierto(alertas.some((a) => a.includes("⚠️") && a.includes("1 casilla(s)") && a.includes("5")), "avisa el desajuste con ambas cifras, en el confirm o en el resumen final");
     });
 
-    t.caso("Normalidad fija: la plantilla trae exactamente 36 frases (19 de revisión por sistema + 17 de examen físico, sin MAMAS ni GENITO/URINARIO)", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const m = src.match(/const EXAMEN_FISICO_NORMALIDAD_FIJA = \[([\s\S]*?)\n  \];/);
-      t.cierto(!!m, "la constante existe en el archivo fuente");
-      const frases = m[1].match(/^\s*"[^"]*"/gm) || [];
-      t.igual(frases.length, 36, "36 frases exactas — a pedido del médico, MAMAS y GENITO/URINARIO quedaron fuera");
-      t.falso(frases.some((f) => /MAMA/i.test(f) || /GENITO/i.test(f)), "ninguna de las 36 frases (comentarios aparte) menciona mamas ni genitourinario");
+    t.caso("Aplicar plantilla: si el médico cancela la confirmación, no escribe nada", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({ total: 1, textos: ["Frase guardada"], guardadoEn: 1 }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const vacia = campoFalso("");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
+      cv.ctx.confirm = () => false;
+      btnA.onclick();
+      t.igual(vacia.value, "", "cancelar la confirmación deja la casilla vacía intacta");
+      t.igual(vacia._eventos.length, 0, "no se disparó ningún evento al cancelar");
+      cv.ctx.confirm = () => true; // se restaura para no afectar pruebas posteriores
     });
 
     // ================= openLaboratoriosModal =================
@@ -1563,126 +1543,6 @@ module.exports = {
       const xBtn = panel.querySelector("#vgl-postcita-x");
       t.noLanza(() => disparar(xBtn, "click"));
       t.igual(panel.innerHTML, "", "al cerrar, el panel queda vacío");
-    });
-
-    // v12.10.2 — Incidente real en consultorio: ".vgl-postcita-title" (color:var(--c-verde))
-    // y ".vgl-postcita-sub" (color:var(--fg2)) se veían del azul corporativo de Everest.
-    // Causa: #vgl-postcita-panel div{color:inherit} (especificidad id+tipo) le ganaba a esas
-    // clases de acento (especificidad solo-clase), y como el panel cuelga de document.body
-    // (no de #vgl-root), ese "inherit" terminaba tomando el color del host. Verificado con
-    // Chromium real sobre el CSS que de verdad genera buildOverlay(). El blindaje correcto
-    // (v12.3.15, más abajo en la hoja) usa :where(...:not([class])...) — cero especificidad
-    // extra, así que nunca le puede ganar a una clase de acento propia — pero
-    // #vgl-postcita-panel y #vgl-labsv-modal se habían quedado fuera de esa lista, con la
-    // regla vieja rota todavía activa para ellos dos.
-    t.caso("blindaje tipográfico: postcita-panel y labsv-modal usan :not([class]), no div/span/b a pelo", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-
-      // La forma vieja y rota NO debe reaparecer para ninguno de los dos paneles.
-      const formaRota = /#vgl-(postcita-panel|labsv-modal)\s+(b|span|div)\s*,\s*#vgl-(postcita-panel|labsv-modal)\s+(b|span|div)/;
-      t.falso(formaRota.test(src), "no debe volver la regla div/span/b a pelo sobre estos paneles");
-
-      // La forma correcta SÍ debe estar: cada panel, con :where(...:not([class])...).
-      t.cierto(/#vgl-postcita-panel\s+:where\([^)]*:not\(\[class\]\)/.test(src), "#vgl-postcita-panel debe usar el blindaje :where()+:not([class])");
-      t.cierto(/#vgl-labsv-modal\s+:where\([^)]*:not\(\[class\]\)/.test(src), "#vgl-labsv-modal debe usar el blindaje :where()+:not([class])");
-    });
-
-    t.caso("blindaje tipográfico: el título y el subtítulo de postcita-panel conservan su clase de acento (no color:inherit directo)", () => {
-      const c = cargar();
-      enriquecerDom(c);
-      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE", "fallback");
-      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
-      t.cierto(panel.innerHTML.includes('class="vgl-postcita-title"'), "el título conserva su clase de acento (verde)");
-      t.cierto(panel.innerHTML.includes('class="vgl-postcita-sub"'), "el subtítulo conserva su clase de acento (gris)");
-    });
-
-    // v12.10.5 — Bug real reportado en consulta (captura): el "lead"/"foot" de la alerta de
-    // laboratorios RCV vencidos se veía en el azul de Everest. Root cause distinto del de
-    // postcita-panel/labsv-modal (título/nombre, arriba): aquí SÍ había un color propio
-    // (var(--fg2)/var(--fg3)) pero SIN !important, así que cualquier regla de Everest con
-    // especificidad ≥10 (o cualquier !important) lo gana sin que exista competencia de
-    // nuestro lado. .vgl-labsv-t/.vgl-labsv-n no se veían afectados porque usan estilo
-    // inline (mayor precedencia que una clase), pero .vgl-labsv-lead/.vgl-labsv-foot solo
-    // tenían la clase — igual que sus gemelos .vgl-pym-lead/-foot y .vgl-pes-lead/-foot
-    // (mismo patrón calcado tres veces) y .vgl-postcita-title/-sub (ya tocados hoy por otro
-    // bug). Fix: !important en el color de estas 8 reglas — verificado con Chromium contra
-    // el CSS real extraído del harness, con una hoja de Everest simulada usando !important
-    // sobre selectores de tipo genéricos (b,div,span,p,small,label).
-    t.caso("blindaje !important: lead/foot de los avisos flotantes y postcita-title/sub no pueden perder su color contra Everest", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const reglas = [
-        [".vgl-pym-lead", "--fg2"],
-        [".vgl-pym-foot", "--fg3"],
-        [".vgl-pes-lead", "--fg2"],
-        [".vgl-pes-foot", "--fg3"],
-        [".vgl-labsv-lead", "--fg2"],
-        [".vgl-labsv-foot", "--fg3"],
-        [".vgl-postcita-title", "--c-verde"],
-        [".vgl-postcita-sub", "--fg2"],
-      ];
-      for (const [clase, token] of reglas) {
-        const re = new RegExp(clase.replace(".", "\\.") + "\\{[^}]*color:var\\(" + token + "\\)\\s*!important");
-        t.cierto(re.test(src), clase + " debe declarar color:var(" + token + ") con !important");
-      }
-    });
-
-    // T2 (migración de estilo inline a clases) le quitó a estos elementos la protección
-    // natural que tenía el estilo inline (inmune a cualquier regla de Everest sin
-    // !important) sin darles ninguna protección nueva — mismo patrón que el hallazgo de
-    // arriba, verificado en Chromium real el mismo día contra bigAlert/pymAlert/
-    // abandonoPESAlert/labsVencidosAlert con una hoja de Everest simulada agresivamente.
-    t.caso("blindaje !important: título/número de bigAlert, pymAlert, abandonoPESAlert y labsVencidosAlert (recién migrados de inline a clase por T2)", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const reglas = [
-        [".vgl-modal-t", "--fg"],
-        [".vgl-modal-b", "--fg2"],
-        [".vgl-pym-t", "--c-recordatorio"],
-        [".vgl-pym-n", "--fg"],
-        [".vgl-pes-t", "--c-pes"],
-        [".vgl-pes-n", "--fg"],
-        [".vgl-labsv-t", "--c-rojo"],
-        [".vgl-labsv-n", "--fg"],
-      ];
-      for (const [clase, token] of reglas) {
-        const re = new RegExp(clase.replace(".", "\\.") + "\\{[^}]*color:var\\(" + token + "\\)\\s*!important");
-        t.cierto(re.test(src), clase + " debe declarar color:var(" + token + ") con !important");
-      }
-      // .vgl-modal-ok mezcla background+color en la misma declaración inline dentro del bloque.
-      t.cierto(/\.vgl-modal-ok\{[^}]*color:var\(--bg-solid\)\s*!important/.test(src), ".vgl-modal-ok debe declarar color:var(--bg-solid) con !important");
-    });
-
-    // El bug real: .vgl-labsv-t/.vgl-labsv-ic usaban var(--c-alerta)/var(--rgb-alerta),
-    // tokens que nunca se definieron en ningún lado del archivo — color inválido, heredaba
-    // lo que fuera del ancestro (el azul de Everest, verificado en Chromium). Debe ser
-    // --c-rojo/--rgb-rojo, el mismo color que ya usa correctamente su hermana .vgl-labsv-n.
-    t.caso("no debe reaparecer --c-alerta/--rgb-alerta (token inventado que nunca se definió)", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.falso(/--c-alerta\b/.test(src), "--c-alerta no debe usarse en ningún lado — no está definido");
-      t.falso(/--rgb-alerta\b/.test(src), "--rgb-alerta no debe usarse en ningún lado — no está definido");
-    });
-
-    // Ordenar PyM (marcado de checkboxes fallidos/exitosos): si closest("label") devuelve
-    // null, leer .classList directamente sobre esa variable revienta ANTES de llegar al
-    // if — el guard debe cortocircuitar con "variable && variable.classList", nunca
-    // "variable.classList" a secas. Ya reapareció una vez (una de las dos ocurrencias
-    // quedó sin el "&&" en una ronda de corrección anterior).
-    t.caso("guard de classList tras closest(\"label\") siempre cortocircuita con && (no revienta con null)", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const ocurrencias = src.match(/const \w+ = c\.closest\("label"\); if\s*\([^)]*\.classList\)/g) || [];
-      t.cierto(ocurrencias.length >= 2, "deben existir las dos ocurrencias conocidas (checkbox exitoso y fallido)");
-      for (const linea of ocurrencias) {
-        t.cierto(/if\s*\(\w+\s*&&\s*\w+\.classList\)/.test(linea), "cada guard debe cortocircuitar con '&&' antes de leer .classList: " + linea);
-      }
     });
 
   },

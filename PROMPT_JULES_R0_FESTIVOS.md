@@ -24,10 +24,9 @@ proceso funciona. Un PR que hace lo pedido y nada más vale más que uno "mejora
   IIFE de ~11.700 líneas**, sin build, sin dependencias, sin `npm install`.
 - Pruebas: `tests/`, sin frameworks. Se corren con **`node tests/runner.js`**.
 - **Rama base: `claude/pym-agenda-blindaje-v12-4`**. NUNCA `main`.
-- El banco parte de **713 comprobaciones** (verificado 13-08-2026, tras fusionarse T1/T2/T3 y
-  varios arreglos el mismo día). Tu PR debe terminar con **714 o más**.
+- El banco parte de **690 comprobaciones**. Tu PR debe terminar con **691 o más**.
 - Antes de empezar: `git fetch origin claude/pym-agenda-blindaje-v12-4` y trabaja desde ahí.
-  Si tu base dice un número muy distinto de 713, estás en un punto viejo — actualiza.
+  Si tu base dice 678 u otra cifra, estás en un punto viejo — actualiza.
 
 Este script lo usan médicos reales en consulta. Un error aquí desplaza citas de pacientes.
 
@@ -68,16 +67,15 @@ devolver booleano.
 
 ### 3.3 Usarla en los CINCO puntos donde hoy se decide "día hábil"
 
-Estas son las líneas exactas, **re-verificadas el 13-08-2026** (las del 12-08 quedaron obsoletas
-por los cambios del mismo día — verifica tú mismo con `grep -n "getDay() !== 0"` antes de tocar
-nada, por si vuelven a moverse):
+Estas son las líneas exactas, verificadas el 12-08-2026. Si no cuadran, busca por el patrón
+`getDay() !== 0 && ... getDay() !== 6` y **avísalo en el PR**:
 
-| Línea | Función (empieza en) | Qué hace hoy |
+| Línea | Función | Qué hace hoy |
 |---|---|---|
-| **8117** | `calcBusinessTargetDate` (8105) | `const day = d.getDay();` — ajusta la fecha objetivo |
-| **8310** | `calcBusinessDaysBefore` (8304) | cuenta días hábiles hacia atrás |
-| **8831** y **8840** | `calcTargetDateRange` (8806) | ventana de días previos / siguientes |
-| **8876** y **8885** | `calcDateRangeAroundIso` (8851) | ventana alrededor de una fecha ISO |
+| **7982** | `calcBusinessTargetDate` (7970) | `const day = d.getDay();` — ajusta la fecha objetivo |
+| **8175** | `calcBusinessDaysBefore` (8169) | cuenta días hábiles hacia atrás |
+| **8598** y **8607** | `calcTargetDateRange` (8573) | ventana de días previos / siguientes |
+| **8643** y **8652** | `calcDateRangeAroundIso` (8618) | ventana alrededor de una fecha ISO |
 
 En cada uno, un día deja de ser hábil **también** si es festivo.
 
@@ -186,7 +184,7 @@ Usa **exactamente** estos seis encabezados, en este orden. Un PR sin alguno se d
 
 Responde estas preguntas **por escrito, para ti mismo**, y si alguna da "no", arréglalo antes:
 
-1. ¿El banco está en **714 o más** comprobaciones, y en verde?
+1. ¿El banco está en **691 o más** comprobaciones, y en verde?
 2. ¿`git diff --stat` muestra **solo** `vigilante_agenda.user.js`, un archivo de `tests/` y
    `tests/INFORME_MUTACIONES.md`?
 3. ¿El diff del userscript son **decenas** de líneas, no cientos? (Si son cientos, reformateaste
