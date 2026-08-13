@@ -1132,6 +1132,8 @@ module.exports = {
       // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
       // candidato que buscar casilla para él.
       t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    });
+
     t.caso("RAC Guardia: restaura la casilla cuando Everest la vacía y se apaga en edición real", () => {
       testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
       const prevQSA = c.env.doc.querySelectorAll;
@@ -1193,7 +1195,6 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
       c.env.doc.querySelector = prevQS;
       c.env.doc.getElementById = prevGetById;
-    });
     });
 
     // =====================================================================
