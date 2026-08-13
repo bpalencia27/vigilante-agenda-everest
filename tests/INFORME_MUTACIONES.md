@@ -4,6 +4,7 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 
 | Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
 |---|---|---|---|
+| 4335 | Vaciar la función `_instalarCazaErrores` | No | `Telemetría de uso del panel (v12.5) -> _instalarCazaErrores: intercepta errores y rechazos solo del script propio` |
 | 932 | `if (!resultDate && !_diagLabFechaLogged) {` &rarr; `if (resultDate && !_diagLabFechaLogged) {` | Sí | Falta asertar que el flag de una-sola-vez `_diagLabFechaLogged` evita desbordar la consola de logs repetidamente. |
 | 2478 | `} catch (e) { return false; }` &rarr; `} catch (e) { return true; }` | Sí | Falta aserción que verifique el estado alterado o la acción por defecto tras atrapar un error específico en la API externa/localStorage. |
 | 2485 | `} catch (e) {}` &rarr; `} catch (e) { return; }` | Sí | Falta una prueba que cubra la ruta de error/excepción simulando un fallo que obligue a pasar por este `catch` específico y aserte que la función continúa su ejecución sin abortar. |
@@ -63,4 +64,6 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 7031 | v12.10.7: `.vgl-labsv-t{...color:var(--c-rojo) !important...}` &rarr; sin `!important` | No | "blindaje !important: título/número de bigAlert, pymAlert, abandonoPESAlert y labsVencidosAlert..." — restaurado |
 | 10797 | v12.10.7: `if (lbl2 && lbl2.classList)` &rarr; `if (lbl2.classList)` (sin el `&&`; esta misma línea ya había reaparecido rota una vez en una ronda de Jules) | No | "guard de classList tras closest(\"label\") siempre cortocircuita con &&..." — restaurado |
 | 7031 | v12.10.7: `color:var(--c-rojo)` &rarr; `color:var(--c-alerta)` (token inventado por Jules que nunca se definió en ningún lado; causaba herencia del azul de Everest) | No | "no debe reaparecer --c-alerta/--rgb-alerta..." — restaurado |
+| 1973 | `_canonNombreLab` (quitar reemplazo de separadores por espacios, `replace(/[\/\-_,.;:()]+/g, " ")`) | No | Falla `_canonNombreLab: convierte separadores especiales a espacios simples` y `_matchLabInWhitelist v12.6.8` |
+| 2034 | `_findHbA1cFields` (cambiar el atributo para validación max de 30 a 20 `el.getAttribute("max") === "20"`) | No | Falla `_findHbA1cFields: encuentra el input correcto por type=number y max=30 y asocia la fecha hermana` |
 | 11912 | `if (false) return;` | No | `boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)` |
