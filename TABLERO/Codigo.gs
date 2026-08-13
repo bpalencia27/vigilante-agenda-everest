@@ -58,6 +58,13 @@
  *     faltan columnas nuevas (`lote`), las AÑADE al encabezado. Sin esto, las filas
  *     nuevas traerían un valor más que columnas y ese dato quedaría sin título.
  *
+ *  6. v12.10.12 — OBSERVABILIDAD (migas de pan + distinción error/bug): la hoja
+ *     `error` gana una columna `migas` — las últimas acciones (nombres fijos, sin
+ *     datos de paciente) que el userscript contó justo antes del fallo, al estilo
+ *     Sentry/Crashlytics. Además, "error.distintos" y las claves "api.<endpoint>.ok"
+ *     / ".err" (con su ".total" en milisegundos, para latencia promedio) llegan por
+ *     la MISMA cola "ux" que ya existía — cero cambios de servidor para esas dos.
+ *
  *  SE CONSERVA de v12.5.2, sin cambios de fondo: sin doGet (el TOKEN vive en texto
  *  plano dentro de un userscript distribuido: un GET con ese token es de facto una
  *  URL de lectura pública), lista blanca de eventos, columnas fijas por hoja,
@@ -78,8 +85,14 @@
  *   "resumen": { deDia, fraude, inasistencia, atiempo, ultima }
  *   "fraude":  { hora, min }                          — SIN datos de paciente
  *   "prueba":  {}                                     — botón "Probar" de Ajustes
- *   "ux":      { deDia, desde, n, acciones }          — telemetría de uso, cada 30 min
- *   "error":   { origen, msg, donde }                 — máx. 5/día por equipo
+ *   "ux":      { deDia, desde, n, acciones }          — telemetría de uso, cada 30 min;
+ *                                                        entre las claves de `acciones`
+ *                                                        pueden venir "error.distintos"
+ *                                                        (huellas de error nuevas hoy) y
+ *                                                        "api.<endpoint>.ok"/".err" con su
+ *                                                        ".total" en ms (latencia RUM)
+ *   "error":   { origen, msg, donde, migas }          — máx. 5/día por equipo; "migas" son
+ *                                                        las últimas acciones antes del fallo
  *   "entorno": { nav, so, zona, pantalla, gestor }    — 1/día por equipo
  */
 var TOKEN = "vgl-2026"; // debe coincidir con TABLERO.token del userscript
@@ -152,8 +165,11 @@ function doPost(e) {
       // El mensaje ya viene saneado del userscript; se vuelve a sanear porque el
       // servidor JAMÁS confía en el emisor: una tira de 6+ dígitos podría ser una
       // cédula y no puede quedar escrita en la Hoja bajo ninguna circunstancia.
-      _hoja(ss, "error", COMUNES_HD.concat(["origen", "msg", "donde"]))
-        .appendRow(comunes.concat([_celda(body.origen, 12), _celda(_sinDigitosLargos(body.msg), 180), _celda(_sinDigitosLargos(body.donde), 60)]));
+      // v12.10.12 — "migas": las acciones (nombres fijos, sin datos de paciente) que
+      // pasaron justo antes del error — mismo saneo que el resto: nunca se confía en
+      // el emisor.
+      _hoja(ss, "error", COMUNES_HD.concat(["origen", "msg", "donde", "migas"]))
+        .appendRow(comunes.concat([_celda(body.origen, 12), _celda(_sinDigitosLargos(body.msg), 180), _celda(_sinDigitosLargos(body.donde), 60), _celda(_sinDigitosLargos(body.migas), 160)]));
     } else if (ev === "entorno") {
       _hoja(ss, "entorno", COMUNES_HD.concat(["nav", "so", "zona", "pantalla", "gestor"]))
         .appendRow(comunes.concat([_celda(body.nav, 20), _celda(body.so, 20), _celda(body.zona, 40), _celda(body.pantalla, 20), _celda(body.gestor, 20)]));

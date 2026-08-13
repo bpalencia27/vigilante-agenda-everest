@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.11
+// @version      12.10.12
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.11";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.12";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4379,7 +4379,17 @@
   // mensaje SANEADO: sin URL completas, sin comillas, y con toda tira de 6+ dígitos
   // borrada — una cédula no puede sobrevivir ahí ni aunque venga dentro del mensaje.
   const ERR_MAX_DIA = 5;
-  let _errN = 0, _errDia = "";
+  let _errN = 0, _errDia = "", _errVistos = null;
+  // v12.10.12 — MIGAS DE PAN (breadcrumbs, al estilo Sentry/Crashlytics): las últimas
+  // acciones que uxTrack() fue contando ANTES del error, para leer "qué pasó justo antes
+  // de romperse" sin ningún dato de paciente — son los mismos nombres FIJOS de acción que
+  // ya viajan sanos por uxTrack, nunca texto libre ni del DOM.
+  const MIGAS_MAX = 8;
+  const _migas = [];
+  function _migaPush(a) {
+    _migas.push(a);
+    if (_migas.length > MIGAS_MAX) _migas.shift();
+  }
   function _sanearMensajeError(msg) {
     return String(msg == null ? "" : msg)
       .replace(/https?:\/\/[^\s)]+/g, "<url>")
@@ -4391,13 +4401,24 @@
   }
   function reportarError(origen, msg, donde) {
     try {
+      // Migas ANTES de que este mismo error entre a la cuenta (si no, la última miga
+      // sería siempre el error que se está reportando, y no diría nada nuevo).
+      const migasAntes = _migas.slice();
       uxTrack("error." + (origen === "promesa" ? "promesa" : origen === "api" ? "api" : "js"));
-      if (!repOn()) return;
       const d = todayStamp();
-      if (_errDia !== d) { _errDia = d; _errN = 0; }
+      if (_errDia !== d) { _errDia = d; _errN = 0; _errVistos = new Set(); }
+      // v12.10.12 — DISTINTOS vs TOTAL: el tope de 5/día limita cuántos errores viajan con
+      // detalle, pero el conteo de "cuántos son la MISMA falla" (huella = origen+dónde, o
+      // el mensaje saneado si no hay "dónde") ya venía perdiéndose por completo. Un solo
+      // bug repitiendo 200 veces y 5 bugs distintos de una vez se veían IGUAL en el
+      // tablero. Este contador (agregado, vía la misma ventana de uxTrack) sobrevive
+      // aunque el tope de detalle ya esté agotado.
+      const huella = (origen || "js") + "|" + (donde ? String(donde).slice(0, 60) : _sanearMensajeError(msg).slice(0, 40));
+      if (!_errVistos.has(huella)) { _errVistos.add(huella); uxTrack("error.distintos"); }
+      if (!repOn()) return;
       if (_errN >= ERR_MAX_DIA) return;
       _errN++;
-      reportar("error", { origen: String(origen || "js").slice(0, 12), msg: _sanearMensajeError(msg), donde: _sanearMensajeError(donde).slice(0, 60) });
+      reportar("error", { origen: String(origen || "js").slice(0, 12), msg: _sanearMensajeError(msg), donde: _sanearMensajeError(donde).slice(0, 60), migas: migasAntes.join(">").slice(0, 160) });
     } catch (e) {}
   }
   // Solo se enganchan los errores que salen del PROPIO script: el userscript comparte
@@ -4473,6 +4494,7 @@
       // o del paciente puede colarse en la clave.
       const a = uxClaveLimpia(accion);
       if (!a) return;
+      _migaPush(a);
       let w = readJSON(UX_KEY, null);
       if (!w || !w.acciones || typeof w.acciones !== "object") w = uxVentanaNueva();
       // Cambio de día con conteos pendientes: la ventana vieja se APARCA (una sola
@@ -4720,6 +4742,7 @@
       if (state.pymFile) return true;
       state.pym = u.map; state.pymTodos = u.todos; state.pymAbandono = u.abandono || new Set(); state.pymMTime = u.meta.mtime || ""; state.pymFP = u.meta.fp || "";
       state.pymFallback = true;
+      uxTrack("pym.fallback.cache");
       afterPymLoaded((u.meta.name || "Base piloto") + " (base piloto — aún no llega la de hoy)");
       return true;
     } catch (e) { return false; }
@@ -4811,6 +4834,7 @@
     // y el panel nunca alcanzaba a avisar "⚠ RESPALDO". Ahora sí marca correctamente que
     // NO es el PyM real del día, para que loadPymDiario() sepa que puede reemplazarla.
     state.pymFallback = true;
+    uxTrack("pym.fallback.red");
     applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (base piloto — aún no llega la de hoy)", (meta && meta.mtime) || "", fb.name);
     notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca el PyM real de hoy en el servidor de datos.", false); // [COPY-UX]
     return true;
@@ -8407,14 +8431,62 @@
     return null;
   }
 
+  // v12.10.12 — RUM (Real User Monitoring) del API de Everest: latencia y tasa de
+  // éxito por endpoint, al estilo de lo que Google/Meta miden de sus propios back-ends.
+  // La etiqueta NUNCA sale de la URL real (que trae cédulas/IDs en query string o hasta
+  // en el propio camino, ej. GetUsuarioPerfil/<login>): es un nombre FIJO de esta lista,
+  // elegido por prueba de pertenencia — si la URL no calza con ninguno, la etiqueta es
+  // "otro". Cero riesgo de fuga aunque la URL traiga cualquier cosa.
+  const RUM_ENDPOINTS = [
+    [/BuscarPacienteDetallado/, "pacienteDetallado"],
+    [/BuscarPaciente/, "buscarPaciente"],
+    [/AgdValidarAgenda/, "validarAgenda"],
+    [/AsignarTurno/, "asignarTurno"],
+    [/BuscarCitasDisponibles/, "citasDisponibles"],
+    [/ObtenerTurnos/, "turnos"],
+    [/GetUsuarioPerfil/, "perfilUsuario"],
+    [/EnviarSMS/, "enviarSms"],
+    [/EnviarEmailOrdenamiento/, "enviarEmailOrden"],
+    [/ObtenerResultadosLaboratorio/, "resultadosLab"],
+    [/GenerarLinksImpresionOrdenamientos/, "linksImpresionOrden"],
+    [/ImprimirRecordatorioCita/, "imprimirRecordatorio"],
+    [/ObtenerConsultas/, "consultas"],
+    [/ObtenerEstadoCita/, "estadoCita"],
+    [/guardarHoraApertura/, "horaApertura"],
+    [/ObtenerListadoCupsPorPaciente/, "listadoCups"],
+    [/ObtenerListadoDiagnostico/, "listadoDiagnostico"],
+    [/GuardarOrdenamiento/, "guardarOrdenamiento"],
+    [/FinalizarTicket/, "finalizarTicket"],
+  ];
+  function _rumEndpointLabel(url) {
+    const u = String(url || "");
+    for (let i = 0; i < RUM_ENDPOINTS.length; i++) if (RUM_ENDPOINTS[i][0].test(u)) return RUM_ENDPOINTS[i][1];
+    return "otro";
+  }
+  // Observador puro: no toca `promesa` (ni su resolución ni su rechazo), solo mira
+  // cuánto tardó y si el resultado fue verdadero (éxito) o falso/null (fallo) — el
+  // mismo criterio que ya usan todos los llamadores reales de pageFetchJson().
+  function _rumTrack(url, t0, promesa) {
+    try {
+      if (S.uxTelemetria === false) return;
+      const etiqueta = _rumEndpointLabel(url);
+      promesa.then(
+        (data) => { try { uxTrack("api." + etiqueta + (data ? ".ok" : ".err"), { n: Date.now() - t0 }); } catch (e) {} },
+        () => { try { uxTrack("api." + etiqueta + ".err", { n: Date.now() - t0 }); } catch (e) {} }
+      ).catch(() => {});
+    } catch (e) {}
+  }
+
   // Wrapper reactivo con GHOST (Deduplicación de Promesas / Promise Pooling)
   async function pageFetchJson(url, options) {
     const key = url + "|" + (options ? JSON.stringify(options) : "");
     if (GHOST.promises.has(key)) return GHOST.promises.get(key);
 
+    const t0 = Date.now();
     const p = _pageFetchJsonCore(url, options).finally(() => {
       GHOST.promises.delete(key);
     });
+    _rumTrack(url, t0, p);
 
     GHOST.promises.set(key, p);
     return p;

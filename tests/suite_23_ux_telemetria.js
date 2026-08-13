@@ -1,11 +1,29 @@
 // Suite 23 — v12.5.0: telemetría de uso del panel (mejora continua).
 // Regla sagrada bajo prueba: en la ventana de conteos y en la fila "ux" que viaja al
 // tablero JAMÁS puede haber datos de paciente — solo nombres fijos de acción y números.
+// Respuesta con la forma completa que espera _pageFetchJsonCore (headers/text/clone
+// incluidos), igual que en suite_05_api_everest.js.
+const respuestaOk = (data) => ({
+  ok: true, status: 200,
+  headers: { get: () => "application/json" },
+  json: async () => data,
+  text: async () => JSON.stringify(data),
+  clone() { return this; },
+});
+const respuesta404 = () => ({
+  ok: false, status: 404,
+  headers: { get: () => "application/json" },
+  json: async () => null,
+  text: async () => "",
+  clone() { return this; },
+});
+
 module.exports = {
   nombre: "Telemetría de uso del panel (v12.5)",
   cubre: ["uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
-    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario", "_instalarCazaErrores"],
-  pruebas(t, api, env, cargar) {
+    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario", "_instalarCazaErrores",
+    "_rumEndpointLabel", "_rumTrack", "_migaPush"],
+  async pruebas(t, api, env, cargar) {
 
     // gmxhr que siempre falla: reportar() encola pero repFlush no puede entregar, así
     // la fila queda VISIBLE en la cola persistente (vgl_repq) para asertarla.
@@ -305,6 +323,92 @@ module.exports = {
       q = cola(c).filter((f) => f.evento === "error");
       t.igual(q.length, 3, "atrapa rechazos sin stack");
       t.cierto(q[2].msg.includes("rechazo string"));
+    });
+
+    // =====================================================================
+    // v12.10.12 — OBSERVABILIDAD: migas de pan, distinción error/bug (huella) y
+    // RUM (latencia + éxito/fallo por endpoint) del API de Everest.
+    // =====================================================================
+    t.caso("reportarError: adjunta las migas (últimas acciones) SIN incluir el propio error como su última miga", () => {
+      const c = cargar(cfgRed);
+      c.api.uxTrack("panel.agendar.abrir");
+      c.api.uxTrack("panel.labs.abrir");
+      c.api.reportarError("js", "algo falló", "vigilante.user.js:99");
+      const fila = cola(c).find((f) => f.evento === "error");
+      t.igual(fila.migas, "panel.agendar.abrir>panel.labs.abrir");
+    });
+
+    t.caso("reportarError: las migas se limitan a las últimas 8 acciones (ring buffer)", () => {
+      const c = cargar(cfgRed);
+      for (let i = 0; i < 10; i++) c.api.uxTrack("accion" + i);
+      c.api.reportarError("js", "algo falló", "vigilante.user.js:100");
+      const fila = cola(c).find((f) => f.evento === "error");
+      t.igual(fila.migas, "accion2>accion3>accion4>accion5>accion6>accion7>accion8>accion9", "solo las últimas 8; las 2 primeras ya se habían descartado del anillo");
+    });
+
+    t.caso("reportarError: 'error.distintos' solo sube con huellas NUEVAS (origen+dónde); mismo origen+dónde no cuenta dos veces", () => {
+      const c = cargar(cfgRed);
+      c.api.reportarError("js", "fallo A", "archivo.js:10");
+      c.api.reportarError("js", "fallo A otra vez", "archivo.js:10"); // misma huella
+      c.api.reportarError("js", "fallo B", "archivo.js:20"); // huella distinta
+      const w = ventana(c);
+      t.igual(w.acciones["error.distintos"], 2, "dos huellas distintas, aunque hayan sido 3 errores en total");
+      t.igual(w.acciones["error.js"], 3, "el contador de volumen (ya existente) sigue viendo los 3");
+    });
+
+    t.caso("reportarError: sin 'dónde' (rechazos de promesa sin pila), la huella cae al mensaje saneado", () => {
+      const c = cargar(cfgRed);
+      c.api.reportarError("promesa", "TypeError: x is not a function", "");
+      c.api.reportarError("promesa", "TypeError: x is not a function", ""); // mismo mensaje -> misma huella
+      c.api.reportarError("promesa", "Error de red distinto", "");
+      t.igual(ventana(c).acciones["error.distintos"], 2);
+    });
+
+    t.caso("reportarError: 'error.distintos' sigue contando aunque ya se agotó el tope de 5 detalles/día", () => {
+      const c = cargar(cfgRed);
+      for (let i = 0; i < 9; i++) c.api.reportarError("js", "fallo " + i, "archivo.js:" + i); // 9 huellas distintas
+      const w = ventana(c);
+      t.igual(w.acciones["error.distintos"], 9, "las 9 huellas se contaron aunque solo 5 viajaron con detalle");
+      t.igual(cola(c).filter((f) => f.evento === "error").length, 5);
+    });
+
+    t.caso("_rumEndpointLabel: reconoce los endpoints conocidos por nombre FIJO — nunca por el contenido real de la URL", () => {
+      const c = cargar(cfgRed);
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=123"), "pacienteDetallado");
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=99887766"), "buscarPaciente", "BuscarPacienteDetallado no debe caer en el genérico BuscarPaciente");
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIAcceso/api/Acceso/AsignarTurno"), "asignarTurno");
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento"), "guardarOrdenamiento");
+      t.igual(c.api._rumEndpointLabel("/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/juan.perez"), "perfilUsuario", "ni siquiera con un login real embebido en el CAMINO se filtra nada: la etiqueta es fija");
+      t.igual(c.api._rumEndpointLabel("/ruta/que/no/existe/en/la/lista"), "otro", "URL desconocida -> 'otro', nunca se inventa una etiqueta nueva");
+      t.igual(c.api._rumEndpointLabel(""), "otro");
+    });
+
+    await t.casoAsync("pageFetchJson/RUM: una llamada exitosa suma api.<endpoint>.ok con su latencia (ms) en .total", async () => {
+      // Retraso REAL (reloj del host, no el setTimeout recortado del sandbox — ver
+      // dormir()/esperar() en suite_12) para que la latencia medida sea > 0 de forma
+      // determinista: uxTrack solo suma a ".total" cuando `n` es verdadero (> 0), así
+      // que una respuesta instantánea (0 ms) no probaría nada sobre esa suma.
+      const fetchConRetraso = () => new Promise((r) => setTimeout(() => r(respuestaOk({ ok: true })), 5));
+      const c = cargar({ silencioso: true, fetch: fetchConRetraso });
+      const res = await c.api.pageFetchJson("/apiviva/APIAcceso/api/Acceso/AsignarTurno", { method: "POST", body: "{}" });
+      t.cierto(!!res, "la llamada real sigue devolviendo su dato de siempre — RUM es puramente observador");
+      const w = ventana(c);
+      t.igual(w.acciones["api.asignarturno.ok"], 1);
+      t.cierto(typeof w.acciones["api.asignarturno.ok.total"] === "number" && w.acciones["api.asignarturno.ok.total"] > 0, "la latencia queda sumada");
+    });
+
+    await t.casoAsync("pageFetchJson/RUM: una llamada que falla (4xx, sin reintento) suma api.<endpoint>.err", async () => {
+      const c = cargar({ silencioso: true, fetch: async () => respuesta404() });
+      const res = await c.api.pageFetchJson("/apiviva/APIAcceso/api/Paciente/BuscarPaciente?identificacion=1");
+      t.igual(res, null, "4xx no se reintenta: la llamada real sigue devolviendo null como siempre");
+      t.igual(ventana(c).acciones["api.buscarpaciente.err"], 1);
+    });
+
+    await t.casoAsync("pageFetchJson/RUM: con el interruptor de telemetría apagado no se registra nada", async () => {
+      const c = cargar({ silencioso: true, fetch: async () => respuestaOk({ ok: true }) });
+      c.api.__S.uxTelemetria = false;
+      await c.api.pageFetchJson("/apiviva/APIAcceso/api/Acceso/AsignarTurno");
+      t.igual(ventana(c), null, "ninguna ventana creada, ni por uxTrack ni por RUM");
     });
   }
 };
