@@ -634,18 +634,20 @@ module.exports = {
       };
     }
 
-    t.caso("createExamenFisicoInjectorUI: crea los dos botones flotantes una sola vez", () => {
+    t.caso("createExamenFisicoInjectorUI: crea los tres botones flotantes una sola vez", () => {
       const antes = cv.env.doc.body.children.length;
       cv.api.createExamenFisicoInjectorUI();
       const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
       const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
-      t.cierto(!!btnG && !!btnA, "los dos botones quedaron en el body");
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      t.cierto(!!btnG && !!btnA && !!btnN, "los tres botones quedaron en el body");
       t.igual(btnG.innerHTML, "💾 Guardar plantilla");
       t.igual(btnA.innerHTML, "📋 Aplicar plantilla");
-      t.cierto(typeof btnG.onclick === "function" && typeof btnA.onclick === "function", "los dos clics quedan cableados");
+      t.igual(btnN.innerHTML, "🩺 Normalidad fija");
+      t.cierto(typeof btnG.onclick === "function" && typeof btnA.onclick === "function" && typeof btnN.onclick === "function", "los tres clics quedan cableados");
       cv.env.doc.getElementById = (id) => (id === "vgl-examen-guardar" ? btnG : null);
       cv.api.createExamenFisicoInjectorUI();
-      t.igual(cv.env.doc.body.children.length, antes + 2, "la segunda llamada no añade botones duplicados");
+      t.igual(cv.env.doc.body.children.length, antes + 3, "la segunda llamada no añade botones duplicados");
     });
 
     t.caso("Guardar plantilla: sin casillas en pantalla, avisa y no revienta", () => {
@@ -747,6 +749,73 @@ module.exports = {
       t.igual(vacia.value, "", "cancelar la confirmación deja la casilla vacía intacta");
       t.igual(vacia._eventos.length, 0, "no se disparó ningún evento al cancelar");
       cv.ctx.confirm = () => true; // se restaura para no afectar pruebas posteriores
+    });
+
+    // ================= "Normalidad fija" (v12.10.3, plantilla incluida en el script) =================
+    t.caso("Normalidad fija: sin casillas en pantalla, avisa y no revienta", () => {
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      cv.env.doc.querySelectorAll = () => [];
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btnN.onclick();
+      t.igual(alertas.length, 1);
+      t.cierto(alertas[0].includes("No se encontraron casillas"), "explica que no halló casillas de esta pestaña");
+    });
+
+    t.caso("Normalidad fija: rellena SOLO las vacías, respeta las que ya tienen texto, sin depender de ninguna plantilla guardada", () => {
+      cv.env.storage.removeItem("vgl_plantilla_examen_fisico"); // no hace falta haber guardado nada antes
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      const yaEscrita = campoFalso("El médico ya escribió esto y NUNCA se toca");
+      const vacia1 = campoFalso("");
+      const vacia2 = campoFalso("   "); // solo espacios: cuenta como vacía
+      const oculta = campoFalso("", { oculto: true });
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [yaEscrita, vacia1, vacia2, oculta] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnN.onclick();
+      t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta");
+      t.igual(vacia1.value, "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 vacía recibe la frase fija de SU posición (Oído), no la 0 (Piel, que ya estaba ocupada)");
+      t.igual(vacia2.value, "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.", "posición 2 (solo espacios) también cuenta como vacía y recibe la frase de SU posición (Boca)");
+      t.igual(oculta.value, "", "una casilla oculta no se toca");
+      t.cierto(alertas.some((a) => a.includes("[confirm]") && a.includes("2 casilla(s)")), "confirma antes de escribir, con la cuenta exacta");
+      t.cierto(alertas[alertas.length - 1].includes("⚠️") && alertas[alertas.length - 1].includes("36"), "aquí SÍ avisa desajuste: 3 casillas de hoy contra las 36 de la plantilla fija (a diferencia de la plantilla guardada, aquí el total esperado es siempre fijo)");
+      cv.ctx.confirm = () => true;
+    });
+
+    t.caso("Normalidad fija: si el número de casillas de hoy no coincide con las 36 de la plantilla fija, avisa el desajuste sin dejar de aplicar", () => {
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      const vacia = campoFalso("");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnN.onclick();
+      t.igual(vacia.value, "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "aun con desajuste, sí aplica lo que puede (posición 0)");
+      t.cierto(alertas.some((a) => a.includes("⚠️") && a.includes("1 casilla(s)") && a.includes("36")), "avisa el desajuste con ambas cifras");
+      cv.ctx.confirm = () => true;
+    });
+
+    t.caso("Normalidad fija: si el médico cancela la confirmación, no escribe nada", () => {
+      const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
+      const vacia = campoFalso("");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
+      cv.ctx.confirm = () => false;
+      btnN.onclick();
+      t.igual(vacia.value, "", "cancelar la confirmación deja la casilla vacía intacta");
+      t.igual(vacia._eventos.length, 0, "no se disparó ningún evento al cancelar");
+      cv.ctx.confirm = () => true; // se restaura para no afectar pruebas posteriores
+    });
+
+    t.caso("Normalidad fija: la plantilla trae exactamente 36 frases (19 de revisión por sistema + 17 de examen físico, sin MAMAS ni GENITO/URINARIO)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const m = src.match(/const EXAMEN_FISICO_NORMALIDAD_FIJA = \[([\s\S]*?)\n  \];/);
+      t.cierto(!!m, "la constante existe en el archivo fuente");
+      const frases = m[1].match(/^\s*"[^"]*"/gm) || [];
+      t.igual(frases.length, 36, "36 frases exactas — a pedido del médico, MAMAS y GENITO/URINARIO quedaron fuera");
+      t.falso(frases.some((f) => /MAMA/i.test(f) || /GENITO/i.test(f)), "ninguna de las 36 frases (comentarios aparte) menciona mamas ni genitourinario");
     });
 
     // ================= openLaboratoriosModal =================

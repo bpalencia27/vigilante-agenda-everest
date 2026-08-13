@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.2
+// @version      12.10.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2781,6 +2781,54 @@
   // coincide con el de cuando se guardó, en vez de aplicar en silencio.
   const EXAMEN_FISICO_PLANTILLA_KEY = "vgl_plantilla_examen_fisico";
 
+  // v12.10.3 — Plantilla de normalidad semiológica FIJA (a pedido directo del médico, no
+  // "recordada" del último paciente como la de arriba: esta va incluida en el propio script).
+  // Mismo supuesto posicional que EXAMEN_FISICO_PLANTILLA_KEY (ver comentario arriba): 19
+  // frases de "Revisión por sistema" seguidas de 17 de "Examen físico" — el médico pidió
+  // omitir MAMAS y GENITO/URINARIO de esa segunda sección porque no las examina de rutina.
+  // Cada texto es SOLO la descripción (Everest ya muestra el nombre del sistema como
+  // etiqueta propia de la casilla, no hace falta repetirlo dentro del texto).
+  const EXAMEN_FISICO_NORMALIDAD_FIJA = [
+      // I. Revisión por sistema (subjetivo) — 19
+      "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.",
+      "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.",
+      "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.",
+      "NEGATIVO PARA PRECORDIALGIA, PALPITACIONES O DISNEA.",
+      "NEGATIVO PARA DISFAGIA O DOLOR FARÍNGEO.",
+      "NEGATIVO PARA TOS, EXPECTORACIÓN O DOLOR PLEURÍTICO.",
+      "NEGATIVO PARA DOLOR PÉLVICO O PESANTEZ.",
+      "SIN HALLAZGOS PATOLÓGICOS REFERIDOS.",
+      "SIN DISURIA, HEMATURIA, POLIURIA NI SECRECIONES.",
+      "SIN POLIDIPSIA, POLIFAGIA NI INTOLERANCIA TÉRMICA.",
+      "SIN EQUIMOSIS, EPISTAXIS NI TENDENCIA AL SANGRADO.",
+      "NEGATIVO PARA FOTOFOBIA, ESCOTOMAS O DOLOR OCULAR.",
+      "NEGATIVO PARA RINORREA, OBSTRUCCIÓN O EPISTAXIS.",
+      "SIN ORTOPNEA, DISNEA PAROXÍSTICA NOCTURNA O EDEMAS.",
+      "HÁBITO INTESTINAL NORMAL. SIN DISPEPSIA NI DOLOR.",
+      "NEGATIVO PARA ARTRALGIAS, MIALGIAS O RIGIDEZ.",
+      "NEGATIVO PARA CEFALEA, PARESTESIAS O SÍNCOPE.",
+      "NEGATIVO PARA APARICIÓN DE MASAS O ADENOMEGALIAS.",
+      "NEGATIVO PARA ASTENIA, ADINAMIA, FIEBRE O PÉRDIDA DE PESO.",
+      // II. Examen físico (objetivo) — 17 (se omiten MAMAS y GENITO/URINARIO a pedido del médico)
+      "BUEN ESTADO GENERAL. ALERTA, ORIENTADO, HIDRATADO, AFEBRIL.",
+      "NORMOCRÓMICA, NORMOTÉRMICA, ELÁSTICA. SIN LESIONES AGUDAS.",
+      "NORMOCÉFALO. SIN PUNTOS DOLOROSOS NI SIGNOS DE TRAUMA.",
+      "MÓVIL, SIMÉTRICO. TIROIDES GRADO 0. SIN ADENOMEGALIAS.",
+      "ISOCÓRICOS, FOTORREACTIVOS. CONJUNTIVAS NORMOCRÓMICAS, ESCLERAS ANICTÉRICAS.",
+      "FOSAS NASALES PERMEABLES. TABIQUE CENTRADO. MUCOSA SANA.",
+      "MUCOSA ORAL HÚMEDA. DENTADURA EN BUEN ESTADO. SIN LESIONES.",
+      "RÍTMICO, SIN SOPLOS NI RUIDOS AGREGADOS. PULSOS SIMÉTRICOS.",
+      "OROFARINGE NORMAL. AMÍGDALAS SIN EXUDADOS NI ERITEMA.",
+      "EXPANSIVIDAD CONSERVADA. MURMULLO VESICULAR NORMAL. SIN AGREGADOS.",
+      "SIMÉTRICA, ESTABLE, NO DOLOROSA A LA MANIOBRA DE COMPRESIÓN.",
+      "PABELLONES NORMALES. CONDUCTOS PERMEABLES. MEMBRANAS ÍNTEGRAS.",
+      "SIMÉTRICO, SIN DEFORMIDADES. DINÁMICA RESPIRATORIA NORMAL.",
+      "BLANDO, DEPRIMIBLE, NO DOLOROSO. SIN VISCEROMEGALIAS NI SIGNOS PERITONEALES.",
+      "ARCOS MÓVILES COMPLETOS. FUERZA 5/5. SIN EDEMAS NI CIANOSIS.",
+      "GLASGOW 15/15. PARES CRANEALES ÍNTEGROS. SIN SIGNOS DE FOCALIDAD.",
+      "LLENADO CAPILAR < 2 SEG. PULSOS DISTALES PRESENTES. SIN VÁRICES.",
+  ];
+
   function _casillasExamenFisico() {
       return Array.from(document.querySelectorAll('input[id="alert_message"][type="text"]'))
           .filter((el) => el.offsetParent !== null);
@@ -2859,8 +2907,46 @@
             + aviso);
       };
 
+      const btnNormalidad = document.createElement("button");
+      btnNormalidad.id = "vgl-examen-normalidad";
+      btnNormalidad.innerHTML = "🩺 Normalidad fija";
+      btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto. Distinta de \"Aplicar plantilla\": esta no depende de haber guardado nada antes.";
+      btnNormalidad.style.cssText = "position:fixed;bottom:220px;left:15px;z-index:9999999;background:#16a34a;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+
+      btnNormalidad.onclick = () => {
+          uxTrack("examenFisico.normalidadFija.click");
+          const candidatos = _casillasExamenFisico();
+          if (!candidatos.length) {
+              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
+              return;
+          }
+          // Misma regla sagrada que "Aplicar plantilla": nunca se sobrescribe una casilla con
+          // contenido, y solo se recorre hasta el menor de los dos tamaños.
+          const porAplicar = [];
+          const n = Math.min(candidatos.length, EXAMEN_FISICO_NORMALIDAD_FIJA.length);
+          for (let i = 0; i < n; i++) {
+              const actual = String(candidatos[i].value == null ? "" : candidatos[i].value).trim();
+              if (actual === "") porAplicar.push({ el: candidatos[i], texto: EXAMEN_FISICO_NORMALIDAD_FIJA[i] });
+          }
+          if (!porAplicar.length) {
+              alert("No hay ninguna casilla vacía que la plantilla fija pueda completar en esta pantalla.");
+              return;
+          }
+          const desajuste = candidatos.length !== EXAMEN_FISICO_NORMALIDAD_FIJA.length;
+          const aviso = desajuste
+            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla fija trae " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
+            : "";
+          if (!confirm("¿Rellenar " + porAplicar.length + " casilla(s) vacía(s) con la plantilla FIJA de normalidad semiológica?" + aviso)) return;
+          porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
+          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, desajuste });
+          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla fija de normalidad."
+            + (candidatos.length - porAplicar.length > 0 ? "\n\n✋ Las demás ya tenían texto o quedan fuera de la plantilla, y se respetaron." : "")
+            + aviso);
+      };
+
       document.body.appendChild(btnGuardar);
       document.body.appendChild(btnAplicar);
+      document.body.appendChild(btnNormalidad);
   }
 
   // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
