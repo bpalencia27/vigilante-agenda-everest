@@ -58,7 +58,7 @@ function respuestaJson(data) {
 module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
-    "createLabInjectorUI", "setWinState", "buildOverlay",
+    "createLabInjectorUI", "createExamenFisicoInjectorUI", "setWinState", "buildOverlay",
     "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openOrdenamientoModal",
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
@@ -518,6 +518,93 @@ module.exports = {
       t.cierto(alertas[0].includes("No se encontraron laboratorios para el paciente abierto (cédula 999888777) en Athenea"), "explica que no encontró laboratorios para el paciente resuelto");
       t.cierto(alertas[0].includes("No se diligenció ninguna casilla"));
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
+    });
+
+    // ================= createExamenFisicoInjectorUI =================
+    // v12.9.0 — Diagnóstico real en consultorio (13-08-2026): 45 de 56 campos de la
+    // pestaña "Revisión por sistema y Examen físico" comparten LITERALMENTE el mismo
+    // id="alert_message" (defecto de Everest). El botón usa querySelectorAll con el
+    // selector de atributo id+type, nunca getElementById (que solo alcanzaría el
+    // primero) — estas pruebas fijan document.querySelectorAll para simular esos
+    // campos duplicados.
+    function campoFalso(valor, opciones) {
+      const o = opciones || {};
+      return {
+        id: "alert_message", type: "text", value: valor,
+        offsetParent: o.oculto ? null : {},
+        _eventos: [],
+        dispatchEvent(ev) { this._eventos.push(ev.type); return true; },
+      };
+    }
+
+    t.caso("createExamenFisicoInjectorUI: crea el botón flotante una sola vez", () => {
+      const antes = cv.env.doc.body.children.length;
+      cv.api.createExamenFisicoInjectorUI();
+      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
+      t.cierto(!!btn, "el botón quedó en el body");
+      t.igual(btn.innerHTML, "📋 NO VALORADO");
+      t.cierto(typeof btn.onclick === "function", "el clic queda cableado");
+      cv.env.doc.getElementById = (id) => (id === "vgl-examen-injector" ? btn : null);
+      cv.api.createExamenFisicoInjectorUI();
+      t.igual(cv.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
+    });
+
+    t.caso("createExamenFisicoInjectorUI: sin casillas en pantalla, avisa y no revienta", () => {
+      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
+      cv.env.doc.querySelectorAll = () => [];
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btn.onclick();
+      t.igual(alertas.length, 1);
+      t.cierto(alertas[0].includes("No se encontraron casillas"), "explica que no halló casillas de esta pestaña");
+    });
+
+    t.caso("createExamenFisicoInjectorUI: todas las casillas ya tienen texto, ninguna se sobrescribe", () => {
+      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
+      const c1 = campoFalso("Sin hallazgos patológicos");
+      const c2 = campoFalso("Normal a la palpación");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [c1, c2] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btn.onclick();
+      t.cierto(alertas[0].includes("2 casilla(s) visibles ya tienen texto"), "cuenta las 2 llenas");
+      t.cierto(alertas[0].includes("no se sobrescribió ninguna"));
+      t.igual(c1.value, "Sin hallazgos patológicos", "no se tocó la casilla con texto");
+      t.igual(c2.value, "Normal a la palpación", "no se tocó la casilla con texto");
+      t.igual(c1._eventos.length, 0, "no se disparó ningún evento sobre una casilla ya llena");
+    });
+
+    t.caso("createExamenFisicoInjectorUI: rellena solo las vacías, respeta las que tienen texto", () => {
+      // setNgValue construye `new Event(...)` para disparar input/change: el DOM falso del
+      // harness no trae Event global (igual que en suite_08), hay que dárselo al contexto.
+      if (!cv.ctx.Event) {
+        cv.ctx.Event = class Event {
+          constructor(type, init) { this.type = type; this.bubbles = (init && init.bubbles) || false; }
+        };
+      }
+      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
+      const conTexto = campoFalso("Ictericia leve");
+      const vacio1 = campoFalso("");
+      const vacio2 = campoFalso("   "); // solo espacios: cuenta como vacía
+      // v12.9.0 — el selector de atributo (id+type="text") ya excluye los "alert_message"
+      // numéricos por construcción del propio selector CSS: el mock los omite del array
+      // devuelto por esa razón. Lo que SÍ hace el código de la pestaña, en JS, es el
+      // filtro por offsetParent — por eso ESTA casilla oculta sí va dentro del array que
+      // devuelve querySelectorAll, para ejercitar ese filtro de verdad.
+      const oculto = campoFalso("", { oculto: true });
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [conTexto, vacio1, vacio2, oculto] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btn.onclick();
+      t.igual(vacio1.value, "NO VALORADO", "casilla vacía rellenada");
+      t.igual(vacio2.value, "NO VALORADO", "casilla con solo espacios tratada como vacía");
+      t.igual(conTexto.value, "Ictericia leve", "casilla con contenido real NUNCA se sobrescribe");
+      t.cierto(vacio1._eventos.includes("input") && vacio1._eventos.includes("change"), "setNgValue disparó input y change");
+      t.igual(conTexto._eventos.length, 0, "la casilla respetada no dispara ningún evento");
+      t.igual(oculto.value, "", "una casilla oculta (offsetParent null) no se toca aunque esté vacía");
+      t.igual(oculto._eventos.length, 0, "la casilla oculta no dispara ningún evento");
+      t.cierto(alertas[0].includes("Se rellenaron 2 casilla(s) vacías"), "cuenta exacta de rellenadas (la oculta no cuenta)");
+      t.cierto(alertas[0].includes("1 ya tenían texto y se respetaron"), "cuenta exacta de respetadas (solo la visible con texto)");
     });
 
     // ================= openLaboratoriosModal =================

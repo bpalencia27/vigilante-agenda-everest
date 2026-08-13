@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.8.1
+// @version      12.9.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.8.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.9.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2757,6 +2757,50 @@
       document.body.appendChild(btn);
   }
 
+  // v12.9.0 — Pestaña "Revisión por sistema y Examen físico": el médico escribía a mano
+  // "NO VALORADO" en cada una de las ~18-27 casillas de esa pestaña, una por una. Pedido
+  // explícito: un botón que lo pegue en las que estén vacías, sin tocar las que ya tengan
+  // texto. Diagnóstico real en consultorio (13-08-2026, DIAGNOSTICO_EXAMEN_FISICO.js): 45
+  // de 56 campos de esa pestaña comparten LITERALMENTE el mismo id="alert_message" (defecto
+  // de Everest, no un elemento compartido) — getElementById solo alcanza el primero, hace
+  // falta querySelectorAll. El resto de campos vistos ahí (signos vitales, IMC, perímetros)
+  // tienen id propio y NO se tocan: este botón filtra por type="text" para no rozarlos.
+  function createExamenFisicoInjectorUI() {
+      if (document.getElementById("vgl-examen-injector")) return;
+
+      const btn = document.createElement("button");
+      btn.id = "vgl-examen-injector";
+      btn.innerHTML = "📋 NO VALORADO";
+      btn.title = "Rellena con \"NO VALORADO\" las casillas de Revisión por sistema y Examen físico que estén VACÍAS en esta pantalla. Nunca sobrescribe una que ya tenga texto.";
+      btn.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#0ea5e9;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+
+      btn.onclick = () => {
+          uxTrack("examenFisico.autollenado.click");
+          // v12.9.0 — Solo type="text" y solo visibles: los "alert_message" tipo number que
+          // aparecen intercalados con los signos vitales son otra cosa (confirmado por el
+          // mismo diagnóstico) y offsetParent===null descarta los de una pestaña oculta.
+          const candidatos = Array.from(document.querySelectorAll('input[id="alert_message"][type="text"]'))
+              .filter((el) => el.offsetParent !== null);
+          const vacios = candidatos.filter((el) => String(el.value == null ? "" : el.value).trim() === "");
+          if (!candidatos.length) {
+              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
+              return;
+          }
+          if (!vacios.length) {
+              alert("Las " + candidatos.length + " casilla(s) visibles ya tienen texto — no se sobrescribió ninguna.");
+              return;
+          }
+          // v12.3.34 (misma regla de la casa que Auto-Labs) — LA CASILLA DEL MÉDICO ES
+          // SAGRADA: se filtró arriba a las vacías, nunca se toca una con contenido.
+          vacios.forEach((el) => setNgValue(el, "NO VALORADO"));
+          uxTrack("examenFisico.autollenado.casillas", { n: vacios.length });
+          alert("✅ Se rellenaron " + vacios.length + " casilla(s) vacías con \"NO VALORADO\"."
+            + (candidatos.length > vacios.length ? "\n\n✋ " + (candidatos.length - vacios.length) + " ya tenían texto y se respetaron." : ""));
+      };
+
+      document.body.appendChild(btn);
+  }
+
   // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
   // Observaba document.body ENTERO con { childList: true, subtree: true }: en la SPA de
   // Angular de Everest eso son cientos de mutaciones por minuto, y CADA ráfaga despertaba
@@ -2773,9 +2817,10 @@
   // para que el botón aparezca sin esperar el primer tick cuando el script se instala
   // ya dentro de una historia clínica abierta.
   if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", () => { if (seccionActiva() === "historia") createLabInjectorUI(); });
+      document.addEventListener("DOMContentLoaded", () => { if (seccionActiva() === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); } });
   } else if (seccionActiva() === "historia") {
       createLabInjectorUI();
+      createExamenFisicoInjectorUI();
   }
 
 
@@ -11304,7 +11349,7 @@
       // pestaña (SIN condicionar a leader, igual que corría el observador) y es barata:
       // createLabInjectorUI es idempotente con su botón y el robot automático conserva
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
-      if (secc === "historia") createLabInjectorUI();
+      if (secc === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); }
 
       // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
       // dispara los avisos que quedaron en cola mientras ninguna pestaña estaba ahí (ver
