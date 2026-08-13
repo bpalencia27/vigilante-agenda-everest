@@ -6615,15 +6615,30 @@
       #vgl-root.light .vgl-cd.late{color:var(--c-ambar)}
 
       /* Acciones en Tarjeta */
+      /* Clases migradas de render() T1 */
+      .vgl-empty-msg { opacity:.7; }
+      .vgl-chip-ocultas { opacity:.75; }
+      .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
+      .vgl-btn-ambar { background:rgba(var(--rgb-ambar),.14); box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5); }
+      .vgl-card-top-t1 { gap:10px; }
+      .vgl-card-time-wrap-t1 { gap:10px; }
+      .vgl-cdot-t1 { width:11px; height:11px; }
+      .vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
+      .vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
+      .vgl-card-mid-t1 { margin-top:9px; gap:10px; }
+      .vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
+      .vgl-doc-t1 { background:var(--bg2); padding:3px 10px; border-radius:var(--r-pill); box-shadow:var(--glow-edge); font-variant-numeric:tabular-nums; }
+      .vgl-card-btm-t1 { margin-top:7px; gap:10px; }
+
       .vgl-card-actions{
-        display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;
+        display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;
       }
       .vgl-btn-action,.vgl-btn-agendar,.vgl-btn-ordenar,.vgl-btn-atender{
         all:unset;
-        width:30px;height:30px;border-radius:var(--r-chip);
+        width:40px;height:40px;border-radius:var(--r-chip);
         border:1px solid var(--edge);
         background:var(--bg3);
-        font-size:14px;
+        font-size:18px;
         display:inline-flex;align-items:center;justify-content:center;
         cursor:pointer;
         transition:transform .2s var(--spring),background .14s var(--ease-out),box-shadow .2s var(--ease-out);
@@ -11178,7 +11193,7 @@
     if (sig === state.lastSignature) { refrescarCuentas(vista); return; }
     state.lastSignature = sig;
     if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">Aún sin citas.<br>Entra una vez a "Citas del día" para leer la agenda.</div>`; return; }
-    if (!vista.length) { el.list.innerHTML = `<div id="vgl-empty">Ninguna cita coincide con el filtro.<br><span style="opacity:.7">${escapeHtml(list.length + " cita(s) ocultas")}</span></div>`; return; }
+    if (!vista.length) { el.list.innerHTML = `<div id="vgl-empty">Ninguna cita coincide con el filtro.<br><span class="vgl-empty-msg">${escapeHtml(list.length + " cita(s) ocultas")}</span></div>`; return; }
     el.list.innerHTML = "";
     const fragment = document.createDocumentFragment();
     for (const a of vista) {
@@ -11211,7 +11226,7 @@
       // él, con el aviso de la historia apagado en Ajustes esas remisiones quedaban
       // invisibles en TODOS los canales (hallazgo de la revisión adversarial).
       const ocultas = a.pym.length - pymsPanel.length;
-      const chipOcultas = ocultas > 0 ? `<span class="vgl-chip" style="opacity:.75">+ remisión AV/OD</span>` : "";
+      const chipOcultas = ocultas > 0 ? `<span class="vgl-chip vgl-chip-ocultas">+ remisión AV/OD</span>` : "";
       const pyms = pymsPanel.length
         ? `<div class="vgl-pyms">${pymsPanel.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipOcultas}</div>`
         : (a.pym.length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
@@ -11237,7 +11252,7 @@
       const soloFaltaLab = citaHechaHoy && !labHechoHoy;
       const agendarBtn = (S.agendamientoRapido !== false && a.doc_id)
         ? (citaHechaHoy && labHechoHoy
-            ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Cita y toma de muestras ya agendadas hoy para ${escapeHtml(a.nombre)}" title="✅ Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.">🗓️</button>`
+            ? `<button class="vgl-btn-agendar vgl-btn-action" disabled aria-label="Cita y toma de muestras ya agendadas hoy para ${escapeHtml(a.nombre)}" title="✅ Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.">🗓️</button>`
             : soloFaltaLab
               // v12.3.30 — antes usaba el verde de "hecho/confirmado" (--rgb-verde) y el
               // mismo 🗓️ de las otras 2 estados para un estado que en realidad significa
@@ -11245,8 +11260,8 @@
               // script, así que aquí decía justo lo contrario de lo que pasa. Ámbar (mismo
               // tono que usa notify("AMBAR", …) para avisos pendientes) + ícono 🧪 propio
               // (igual al de la tooltip) para que se distinga a simple vista del 🗓️ normal.
-              ? `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px;background:rgba(var(--rgb-ambar),.14);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5)" aria-label="Falta agendar toma de muestras para ${escapeHtml(a.nombre)}" title="🧪 Cita de control ya agendada hoy — falta la toma de muestras. Clic para agendarla.">🧪</button>`
-              : `<button class="vgl-btn-agendar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`)
+              ? `<button class="vgl-btn-agendar vgl-btn-action vgl-btn-ambar" aria-label="Falta agendar toma de muestras para ${escapeHtml(a.nombre)}" title="🧪 Cita de control ya agendada hoy — falta la toma de muestras. Clic para agendarla.">🧪</button>`
+              : `<button class="vgl-btn-agendar vgl-btn-action" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`)
         : "";
       // v12.3.x — "ID y bloqueo de seguridad": una vez el panel confirma que las órdenes
       // de este paciente ya se generaron y (si aplica) se enviaron por correo HOY, el
@@ -11257,11 +11272,11 @@
       const yaOrdenadoHoy = a.doc_id ? isOrdenesCreadasHoy(a.doc_id) : false;
       const ordenarBtn = (S.agendamientoRapido !== false && a.doc_id)
         ? (yaOrdenadoHoy
-            ? `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Órdenes PyM ya generadas hoy para ${escapeHtml(a.nombre)}" title="✅ Órdenes PyM ya generadas hoy${ordDetalleHoy && ordDetalleHoy.agrupadores && ordDetalleHoy.agrupadores.length ? " — agrupador(es): " + escapeHtml(ordDetalleHoy.agrupadores.join(", ")) : ""}. Bloqueado para evitar duplicados.">📋</button>`
-            : `<button class="vgl-btn-ordenar vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`)
+            ? `<button class="vgl-btn-ordenar vgl-btn-action" disabled aria-label="Órdenes PyM ya generadas hoy para ${escapeHtml(a.nombre)}" title="✅ Órdenes PyM ya generadas hoy${ordDetalleHoy && ordDetalleHoy.agrupadores && ordDetalleHoy.agrupadores.length ? " — agrupador(es): " + escapeHtml(ordDetalleHoy.agrupadores.join(", ")) : ""}. Bloqueado para evitar duplicados.">📋</button>`
+            : `<button class="vgl-btn-ordenar vgl-btn-action" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`)
         : "";
       const labsBtn = a.doc_id
-        ? `<button class="vgl-btn-labs vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
+        ? `<button class="vgl-btn-labs vgl-btn-action" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
       // v13.0.0 — "Atender": abre la Historia Clínica real (ver apiMedicoAbrirHistoria).
       // SOLO se ofrece cuando el citaId vino del API directo de Everest (apiParse): el
@@ -11270,29 +11285,29 @@
       const yaAbiertoHoy = a.citaId ? isAtencionAbiertaHoy(a.citaId) : false;
       const atenderBtn = a.citaId
         ? (esAtendido || yaAbiertoHoy
-            ? `<button class="vgl-btn-atender vgl-btn-action" style="width:40px;height:40px;font-size:18px;opacity:.4;cursor:not-allowed" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
-            : `<button class="vgl-btn-atender vgl-btn-action" style="width:40px;height:40px;font-size:18px" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
+            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
+            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
         : "";
       const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
-        ? `<span class="vgl-card-actions" style="gap:8px">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
+        ? `<span class="vgl-card-actions">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
         : "";
       card.innerHTML = `
-        <div class="vgl-card-top" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"});gap:10px">
-          <div class="vgl-card-time-wrap" style="gap:10px">
-            <span class="vgl-cdot" style="width:11px;height:11px;background:var(--tc,${col});box-shadow:0 0 10px var(--tc,${col})"></span>
-            <span class="vgl-time" style="font-size:22px;font-weight:900;letter-spacing:.4px">${escapeHtml(a.hora_texto)}</span>
+        <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"})">
+          <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
+            <span class="vgl-cdot vgl-cdot-t1" style="background:var(--tc,${col});box-shadow:0 0 10px var(--tc,${col})"></span>
+            <span class="vgl-time vgl-time-t1">${escapeHtml(a.hora_texto)}</span>
             ${countdown(a)}
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}
-            <span class="vgl-badge" style="background:${badgeRgba(".16")};color:${badgeCol};box-shadow:inset 0 0 0 1px ${badgeRgba(".32")};font-size:12.5px;padding:5px 12px">${escapeHtml(a.estado)}</span>
+            <span class="vgl-badge vgl-badge-t1" style="background:${badgeRgba(".16")};color:${badgeCol};box-shadow:inset 0 0 0 1px ${badgeRgba(".32")}">${escapeHtml(a.estado)}</span>
           </div>
         </div>
-        <div class="vgl-card-mid" style="margin-top:9px;gap:10px">
-          <div class="vgl-name" style="font-size:18px;font-weight:800;line-height:1.25" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
-          ${a.doc_id ? `<span class="vgl-doc" style="background:var(--bg2);padding:3px 10px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);font-variant-numeric:tabular-nums">CC ${highlight(String(a.doc_id))}</span>` : ""}
+        <div class="vgl-card-mid vgl-card-mid-t1">
+          <div class="vgl-name vgl-name-t1" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
+          ${a.doc_id ? `<span class="vgl-doc vgl-doc-t1">CC ${highlight(String(a.doc_id))}</span>` : ""}
         </div>
-        <div class="vgl-card-btm" style="margin-top:7px;gap:10px">
+        <div class="vgl-card-btm vgl-card-btm-t1">
           ${pyms}
           ${actions}
         </div>`;
