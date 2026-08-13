@@ -879,6 +879,36 @@ module.exports = {
       t.igual(r.pendientesWhitelist, 1);
     });
 
+    // Las DOS condiciones del guard de pendientes se prueban por separado a propósito. El
+    // caso de arriba trae idEstado:1 Y Resultado:"PENDIENTE" a la vez, así que romper
+    // cualquiera de las dos ramas seguía pasando por culpa de la otra — la mutación
+    // `idEstado === 1` -> `=== 2` sobrevivía al banco entero (documentado en
+    // INFORME_MUTACIONES.md). Aquí cada rama va sola.
+    t.caso("_ultimaFechaPorAnalito: idEstado 1 con un valor numérico viejo en el campo NO se escribe (es un resultado que aún no existe)", () => {
+      // El caso clínicamente peligroso: Athenea marca el analito como pendiente (estado 1)
+      // pero el campo trae un número —un valor de arrastre, no el resultado de hoy—. Sin el
+      // guard, ese número entraría a la casilla como si fuera el resultado vigente.
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "126", idEstado: 1, Fecha: "2026-08-01" },
+      ]);
+      t.igual(r.candidatos.size, 0, "un analito en estado pendiente jamás compite por la casilla, traiga el valor que traiga");
+      t.falso(r.candidatos.has("GLUCOSA"), "GLUCOSA no queda como candidata");
+      t.igual(r.pendientesWhitelist, 1, "pero sí se cuenta como pendiente para el resumen");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: Resultado 'PENDIENTE' sin idEstado tampoco se escribe (la rama del texto, sola)", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "PENDIENTE", Fecha: "2026-08-01" },
+      ]);
+      t.igual(r.candidatos.size, 0, "sin idEstado, el texto PENDIENTE basta para descartarlo");
+      t.igual(r.pendientesWhitelist, 1);
+      // Y no depende de la caja: Athenea lo manda en minúscula en algunas respuestas.
+      const r2 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "pendiente", Fecha: "2026-08-01" },
+      ]);
+      t.igual(r2.candidatos.size, 0, "'pendiente' en minúscula se descarta igual");
+    });
+
     t.caso("_ultimaFechaPorAnalito: entre dos repeticiones del mismo analito, gana la de fecha MÁS RECIENTE (no la primera de la lista)", () => {
       const r = testApi._ultimaFechaPorAnalito([
         { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2024-01-01" },
