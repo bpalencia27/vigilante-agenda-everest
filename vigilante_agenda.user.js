@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.5
+// @version      12.10.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8132,6 +8132,32 @@
   // Primer intento en cuanto termina de evaluarse el script (el almacenamiento de la
   // sesión ya existe a document-start; el timeout evita depender del orden de las const).
   try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
+  const FESTIVOS = new Set([
+    // 2026
+    "2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03",
+    "2026-05-01", "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29",
+    "2026-07-20", "2026-08-07", "2026-08-17", "2026-10-12",
+    "2026-11-02", "2026-11-16", "2026-12-08", "2026-12-25",
+    // 2027
+    "2027-01-01", "2027-01-11", "2027-03-22", "2027-03-25", "2027-03-26",
+    "2027-05-01", "2027-05-10", "2027-05-31", "2027-06-07", "2027-07-20", "2027-08-07", "2027-08-16", "2027-10-18",
+    "2027-11-01", "2027-11-15", "2027-12-08", "2027-12-25"
+  ]);
+
+  function esFestivo(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    if (yyyy > 2027) {
+      if (!state.warnedTimes.has("festivos_caducados")) {
+        state.warnedTimes.add("festivos_caducados");
+        console.warn("[Vigilante] La tabla de festivos caducó, hay que actualizarla.");
+      }
+    }
+    return FESTIVOS.has(`${yyyy}-${mm}-${dd}`);
+  }
+
+
 
   // Calcula la fecha objetivo sumando meses/días y ajusta a viernes si cae en fin de semana
   function calcBusinessTargetDate(monthsToAdd, daysToAdd) {
@@ -8149,6 +8175,10 @@
     const day = d.getDay();
     if (day === 6) d.setDate(d.getDate() - 1);
     else if (day === 0) d.setDate(d.getDate() - 2);
+
+    while (esFestivo(d) || d.getDay() === 0 || d.getDay() === 6) {
+      d.setDate(d.getDate() + 1);
+    }
 
     const pad = (n) => String(n).padStart(2, "0");
     const yyyy = d.getFullYear();
@@ -8339,7 +8369,7 @@
     let count = 0;
     while (count < daysBefore) {
       dt.setDate(dt.getDate() - 1);
-      if (dt.getDay() !== 0 && dt.getDay() !== 6) count++;
+      if (dt.getDay() !== 0 && dt.getDay() !== 6 && !esFestivo(dt)) count++;
     }
     const pad = (n) => String(n).padStart(2, "0");
     const yyyy = dt.getFullYear();
@@ -8860,7 +8890,7 @@
     let curPrev = new Date(baseDate);
     while (prevDays.length < 3) {
       curPrev.setDate(curPrev.getDate() - 1);
-      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6) {
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6 && !esFestivo(curPrev)) {
         prevDays.unshift(getInfo(curPrev, false));
       }
     }
@@ -8869,7 +8899,7 @@
     let curNext = new Date(baseDate);
     while (nextDays.length < 3) {
       curNext.setDate(curNext.getDate() + 1);
-      if (curNext.getDay() !== 0 && curNext.getDay() !== 6) {
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6 && !esFestivo(curNext)) {
         nextDays.push(getInfo(curNext, false));
       }
     }
@@ -8905,7 +8935,7 @@
     let curPrev = new Date(baseDate);
     while (prevDays.length < sideCount) {
       curPrev.setDate(curPrev.getDate() - 1);
-      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6) {
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6 && !esFestivo(curPrev)) {
         prevDays.unshift(getInfo(curPrev, false));
       }
     }
@@ -8914,7 +8944,7 @@
     let curNext = new Date(baseDate);
     while (nextDays.length < sideCount) {
       curNext.setDate(curNext.getDate() + 1);
-      if (curNext.getDay() !== 0 && curNext.getDay() !== 6) {
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6 && !esFestivo(curNext)) {
         nextDays.push(getInfo(curNext, false));
       }
     }
