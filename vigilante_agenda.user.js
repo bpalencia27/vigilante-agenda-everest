@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.1
+// @version      12.10.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2760,13 +2760,7 @@
   // v12.9.0 — Pestaña "Revisión por sistema y Examen físico": el médico escribe a mano, en
   // cada consulta, la MISMA frase específica por cada sistema (p. ej. "Piel y faneras:
   // NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "Corazón: NEGATIVO PARA
-  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido. Corrección tras
-  // la primera entrega (que asumía casillas vacías con un solo texto a repetir): el médico
-  // mostró una captura real donde las ~37 casillas de esa pestaña YA tenían, cada una, su
-  // propia frase — nada estaba vacío salvo dos exámenes puntuales no realizados. Lo que hace
-  // falta es una PLANTILLA guardada por posición: capturar hoy, en orden, la frase de cada
-  // casilla, y poder volver a pegarlas — cada una en SU posición — en un paciente nuevo con
-  // esa pestaña en blanco.
+  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido.
   //
   // Diagnóstico real en consultorio (13-08-2026, DIAGNOSTICO_EXAMEN_FISICO.js): 45 de 56
   // campos de esa pestaña comparten LITERALMENTE el mismo id="alert_message" (defecto de
@@ -2777,9 +2771,60 @@
   // un supuesto, no una certeza: si Everest cambiara el orden o el número de casillas entre
   // pacientes (el propio médico mostró que un paciente pediátrico trae secciones adicionales
   // de curvas de crecimiento que uno adulto no tiene), la posición N ya no sería el mismo
-  // sistema. Por eso "Aplicar plantilla" avisa explícitamente si el número de casillas no
-  // coincide con el de cuando se guardó, en vez de aplicar en silencio.
-  const EXAMEN_FISICO_PLANTILLA_KEY = "vgl_plantilla_examen_fisico";
+  // sistema. Por eso el botón avisa explícitamente si el número de casillas de hoy no
+  // coincide con lo esperado, en vez de aplicar en silencio.
+  //
+  // v12.10.4 — Se retiraron "💾 Guardar plantilla" / "📋 Aplicar plantilla" (v12.9.0, la
+  // plantilla que se "recordaba" del último paciente vía localStorage) a pedido directo del
+  // médico: solo quiere la plantilla FIJA de normalidad semiológica de abajo, con un único
+  // botón y sin cuadro de confirmación de por medio (sigue sin sobrescribir NUNCA una casilla
+  // con texto — esa regla no se negocia).
+
+  // v12.10.3 — Plantilla de normalidad semiológica FIJA, incluida en el propio script. 19
+  // frases de "Revisión por sistema" seguidas de 17 de "Examen físico" — el médico pidió
+  // omitir MAMAS y GENITO/URINARIO de esa segunda sección porque no las examina de rutina.
+  // Cada texto es SOLO la descripción (Everest ya muestra el nombre del sistema como
+  // etiqueta propia de la casilla, no hace falta repetirlo dentro del texto).
+  const EXAMEN_FISICO_NORMALIDAD_FIJA = [
+      // I. Revisión por sistema (subjetivo) — 19
+      "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.",
+      "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.",
+      "NEGATIVO PARA XEROSTOMÍA, ODINOFAGIA O LESIONES EN MUCOSA.",
+      "NEGATIVO PARA PRECORDIALGIA, PALPITACIONES O DISNEA.",
+      "NEGATIVO PARA DISFAGIA O DOLOR FARÍNGEO.",
+      "NEGATIVO PARA TOS, EXPECTORACIÓN O DOLOR PLEURÍTICO.",
+      "NEGATIVO PARA DOLOR PÉLVICO O PESANTEZ.",
+      "SIN HALLAZGOS PATOLÓGICOS REFERIDOS.",
+      "SIN DISURIA, HEMATURIA, POLIURIA NI SECRECIONES.",
+      "SIN POLIDIPSIA, POLIFAGIA NI INTOLERANCIA TÉRMICA.",
+      "SIN EQUIMOSIS, EPISTAXIS NI TENDENCIA AL SANGRADO.",
+      "NEGATIVO PARA FOTOFOBIA, ESCOTOMAS O DOLOR OCULAR.",
+      "NEGATIVO PARA RINORREA, OBSTRUCCIÓN O EPISTAXIS.",
+      "SIN ORTOPNEA, DISNEA PAROXÍSTICA NOCTURNA O EDEMAS.",
+      "HÁBITO INTESTINAL NORMAL. SIN DISPEPSIA NI DOLOR.",
+      "NEGATIVO PARA ARTRALGIAS, MIALGIAS O RIGIDEZ.",
+      "NEGATIVO PARA CEFALEA, PARESTESIAS O SÍNCOPE.",
+      "NEGATIVO PARA APARICIÓN DE MASAS O ADENOMEGALIAS.",
+      "NEGATIVO PARA ASTENIA, ADINAMIA, FIEBRE O PÉRDIDA DE PESO.",
+      // II. Examen físico (objetivo) — 17 (se omiten MAMAS y GENITO/URINARIO a pedido del médico)
+      "BUEN ESTADO GENERAL. ALERTA, ORIENTADO, HIDRATADO, AFEBRIL.",
+      "NORMOCRÓMICA, NORMOTÉRMICA, ELÁSTICA. SIN LESIONES AGUDAS.",
+      "NORMOCÉFALO. SIN PUNTOS DOLOROSOS NI SIGNOS DE TRAUMA.",
+      "MÓVIL, SIMÉTRICO. TIROIDES GRADO 0. SIN ADENOMEGALIAS.",
+      "ISOCÓRICOS, FOTORREACTIVOS. CONJUNTIVAS NORMOCRÓMICAS, ESCLERAS ANICTÉRICAS.",
+      "FOSAS NASALES PERMEABLES. TABIQUE CENTRADO. MUCOSA SANA.",
+      "MUCOSA ORAL HÚMEDA. DENTADURA EN BUEN ESTADO. SIN LESIONES.",
+      "RÍTMICO, SIN SOPLOS NI RUIDOS AGREGADOS. PULSOS SIMÉTRICOS.",
+      "OROFARINGE NORMAL. AMÍGDALAS SIN EXUDADOS NI ERITEMA.",
+      "EXPANSIVIDAD CONSERVADA. MURMULLO VESICULAR NORMAL. SIN AGREGADOS.",
+      "SIMÉTRICA, ESTABLE, NO DOLOROSA A LA MANIOBRA DE COMPRESIÓN.",
+      "PABELLONES NORMALES. CONDUCTOS PERMEABLES. MEMBRANAS ÍNTEGRAS.",
+      "SIMÉTRICO, SIN DEFORMIDADES. DINÁMICA RESPIRATORIA NORMAL.",
+      "BLANDO, DEPRIMIBLE, NO DOLOROSO. SIN VISCEROMEGALIAS NI SIGNOS PERITONEALES.",
+      "ARCOS MÓVILES COMPLETOS. FUERZA 5/5. SIN EDEMAS NI CIANOSIS.",
+      "GLASGOW 15/15. PARES CRANEALES ÍNTEGROS. SIN SIGNOS DE FOCALIDAD.",
+      "LLENADO CAPILAR < 2 SEG. PULSOS DISTALES PRESENTES. SIN VÁRICES.",
+  ];
 
   function _casillasExamenFisico() {
       return Array.from(document.querySelectorAll('input[id="alert_message"][type="text"]'))
@@ -2787,80 +2832,47 @@
   }
 
   function createExamenFisicoInjectorUI() {
-      if (document.getElementById("vgl-examen-guardar")) return;
+      if (document.getElementById("vgl-examen-normalidad")) return;
 
-      const btnGuardar = document.createElement("button");
-      btnGuardar.id = "vgl-examen-guardar";
-      btnGuardar.innerHTML = "💾 Guardar plantilla";
-      btnGuardar.title = "Guarda, en el orden en que aparecen, las frases que ya escribiste en Revisión por sistema / Examen físico de ESTE paciente. Se recuerdan en este navegador para aplicarlas en el próximo paciente.";
-      btnGuardar.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#0ea5e9;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+      const btnNormalidad = document.createElement("button");
+      btnNormalidad.id = "vgl-examen-normalidad";
+      btnNormalidad.innerHTML = "🩺 Normalidad fija";
+      btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
+      btnNormalidad.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#16a34a;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
 
-      btnGuardar.onclick = () => {
-          uxTrack("examenFisico.plantilla.guardar.click");
+      btnNormalidad.onclick = () => {
+          uxTrack("examenFisico.normalidadFija.click");
           const candidatos = _casillasExamenFisico();
           if (!candidatos.length) {
               alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
               return;
           }
-          const textos = candidatos.map((el) => String(el.value == null ? "" : el.value).trim());
-          const conTexto = textos.filter((t) => t !== "").length;
-          if (!conTexto) {
-              alert("Ninguna de las " + candidatos.length + " casilla(s) tiene texto todavía — escribe primero y luego guarda la plantilla.");
-              return;
-          }
-          if (!confirm("¿Guardar como plantilla las " + conTexto + " frase(s) que ya escribiste en esta pantalla (de " + candidatos.length + " casillas en total)?\n\nLa próxima vez que uses \"Aplicar plantilla\" en un paciente nuevo, se pegarán en el mismo orden.")) return;
-          writeJSON(EXAMEN_FISICO_PLANTILLA_KEY, { total: candidatos.length, textos, guardadoEn: Date.now() });
-          uxTrack("examenFisico.plantilla.guardada", { n: conTexto, total: candidatos.length });
-          alert("✅ Plantilla guardada: " + conTexto + " frase(s) de " + candidatos.length + " casilla(s).");
-      };
-
-      const btnAplicar = document.createElement("button");
-      btnAplicar.id = "vgl-examen-aplicar";
-      btnAplicar.innerHTML = "📋 Aplicar plantilla";
-      btnAplicar.title = "Pega, casilla por casilla y en el mismo orden, la última plantilla guardada — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
-      btnAplicar.style.cssText = "position:fixed;bottom:175px;left:15px;z-index:9999999;background:#0ea5e9;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
-
-      btnAplicar.onclick = () => {
-          uxTrack("examenFisico.plantilla.aplicar.click");
-          const plantilla = readJSON(EXAMEN_FISICO_PLANTILLA_KEY, null);
-          if (!plantilla || !Array.isArray(plantilla.textos) || !plantilla.textos.length) {
-              alert("Todavía no hay ninguna plantilla guardada. Usa primero \"💾 Guardar plantilla\" en un paciente con las casillas ya escritas.");
-              return;
-          }
-          const candidatos = _casillasExamenFisico();
-          if (!candidatos.length) {
-              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
-              return;
-          }
-          // v12.9.0 — Nunca se sobrescribe una casilla con contenido (misma regla de Auto-Labs:
-          // LA CASILLA DEL MÉDICO ES SAGRADA), y solo se recorre hasta el menor de los dos
-          // tamaños — si esta pantalla trae MÁS casillas que la plantilla, las de más allá del
-          // final guardado se dejan intactas en vez de adivinar con qué rellenarlas.
+          // LA CASILLA DEL MÉDICO ES SAGRADA: nunca se sobrescribe una casilla con contenido,
+          // y solo se recorre hasta el menor de los dos tamaños. A pedido del médico, este
+          // botón no pide confirmación — un solo clic — pero la regla de no-sobrescribir no
+          // se negocia.
           const porAplicar = [];
-          const n = Math.min(candidatos.length, plantilla.textos.length);
+          const n = Math.min(candidatos.length, EXAMEN_FISICO_NORMALIDAD_FIJA.length);
           for (let i = 0; i < n; i++) {
               const actual = String(candidatos[i].value == null ? "" : candidatos[i].value).trim();
-              const guardado = String(plantilla.textos[i] || "").trim();
-              if (actual === "" && guardado !== "") porAplicar.push({ el: candidatos[i], texto: guardado });
+              if (actual === "") porAplicar.push({ el: candidatos[i], texto: EXAMEN_FISICO_NORMALIDAD_FIJA[i] });
           }
           if (!porAplicar.length) {
-              alert("No hay ninguna casilla vacía que la plantilla pueda completar en esta pantalla.");
+              alert("No hay ninguna casilla vacía que la plantilla fija pueda completar en esta pantalla.");
               return;
           }
-          const desajuste = candidatos.length !== plantilla.total;
+          const desajuste = candidatos.length !== EXAMEN_FISICO_NORMALIDAD_FIJA.length;
           const aviso = desajuste
-            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla se guardó con " + plantilla.total + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
+            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla fija trae " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
             : "";
-          if (!confirm("¿Rellenar " + porAplicar.length + " casilla(s) vacía(s) con la plantilla guardada?" + aviso)) return;
           porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
-          uxTrack("examenFisico.plantilla.aplicada", { n: porAplicar.length, desajuste });
-          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla guardada."
+          uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, desajuste });
+          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla fija de normalidad."
             + (candidatos.length - porAplicar.length > 0 ? "\n\n✋ Las demás ya tenían texto o quedan fuera de la plantilla, y se respetaron." : "")
             + aviso);
       };
 
-      document.body.appendChild(btnGuardar);
-      document.body.appendChild(btnAplicar);
+      document.body.appendChild(btnNormalidad);
   }
 
   // v12.3.14 — ERRADICADO el MutationObserver global del Robot Athenea (initLabMutationObserver).
@@ -6289,10 +6301,19 @@
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
-      /* v12.6.6 — mismo blindaje para los dos avisos que viven en document.body: sin esto,
-         Everest pinta de azul cualquier <b>/<span>/<div> suyo que caiga dentro. */
-      #vgl-labsv-modal b,#vgl-labsv-modal span,#vgl-labsv-modal div,
-      #vgl-postcita-panel b,#vgl-postcita-panel span,#vgl-postcita-panel div{color:inherit}
+      /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
+         v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
+         especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
+         propia dentro del mismo panel, aunque esa clase fuera más específica en intención.
+         Reportado real en consultorio: ".vgl-postcita-title" (color:var(--c-verde)) y
+         ".vgl-postcita-sub" (color:var(--fg2)) son <div> con clase — la regla vieja los
+         forzaba a color:inherit de todos modos, y como #vgl-postcita-panel cuelga de
+         document.body (no de #vgl-root), ese "inherit" terminaba en el azul de Everest.
+         Verificado en Chromium con el CSS real generado por buildOverlay(). La regla
+         correcta (armadura de v12.3.15, más abajo, con :where()+:not([class]) para no
+         pisar reglas de acento con clase propia) ya existe para esto — solo faltaba
+         incluir ahí estos dos paneles. Se quitó la regla vieja de aquí y se sumaron
+         #vgl-labsv-modal y #vgl-postcita-panel a esa lista. */
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
@@ -6619,15 +6640,15 @@
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
-      .vgl-card-top-t1 { gap:10px; }
-      .vgl-card-time-wrap-t1 { gap:10px; }
-      .vgl-cdot-t1 { width:11px; height:11px; }
-      .vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
-      .vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
-      .vgl-card-mid-t1 { margin-top:9px; gap:10px; }
-      .vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
+      .vgl-card-top.vgl-card-top-t1 { gap:10px; }
+      .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
+      .vgl-cdot.vgl-cdot-t1 { width:11px; height:11px; }
+      .vgl-time.vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
+      .vgl-badge.vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
+      .vgl-card-mid.vgl-card-mid-t1 { margin-top:9px; gap:10px; }
+      .vgl-name.vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
       .vgl-doc-t1 { background:var(--bg2); padding:3px 10px; border-radius:var(--r-pill); box-shadow:var(--glow-edge); font-variant-numeric:tabular-nums; }
-      .vgl-card-btm-t1 { margin-top:7px; gap:10px; }
+      .vgl-card-btm.vgl-card-btm-t1 { margin-top:7px; gap:10px; }
 
       .vgl-card-actions{
         display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;
@@ -6894,7 +6915,7 @@
       }
       .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -6905,7 +6926,7 @@
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6936,9 +6957,9 @@
       .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
       .vgl-pes-lead{
-        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
+        font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
       }
-      .vgl-pes-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pes-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6972,7 +6993,7 @@
       }
       .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
-      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-labsv-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -6983,7 +7004,7 @@
         background:rgba(var(--rgb-rojo),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
-      .vgl-labsv-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7189,7 +7210,15 @@
       .vgl-postcita-card{
         position:relative;min-width:260px;max-width:340px;
         padding:16px 18px;border-radius:var(--r-card);
-        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
+        /* v12.10.2 — El médico reportó el panel "horrible" en consultorio: se veía mezclado
+           con la fila de la cita en la agenda de Everest, justo debajo. Causa real: --toast
+           es rgba(...,.94) — 94% opaco A PROPÓSITO para los toasts normales (dejan ver un poco
+           la página, efecto vidrio), pero ese 6% de transparencia deja asomar la fila de
+           Everest detrás en esta esquina concreta, donde Everest coloca sus propios botones
+           "Historias Clínicas"/"Consentimientos" por cita. Esta tarjeta necesita leerse sola,
+           sin nada compitiendo detrás: --bg-solid es el mismo token, ya existente en el
+           proyecto, pero SIN alfa — 100% opaco. */
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
         color:var(--fg)
@@ -7200,8 +7229,8 @@
         font-size:16px;cursor:pointer;line-height:1;padding:2px
       }
       .vgl-postcita-x:hover{color:var(--fg)}
-      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde);margin-bottom:2px}
-      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2);margin-bottom:12px}
+      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
+      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
       /* Items de Órdenes PyM — celdas bento */
@@ -7451,7 +7480,7 @@
       #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
       #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
       #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
-      #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-flat {padding:13px 16px}
 
       /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
       #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
@@ -7494,20 +7523,20 @@
       #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
 
       /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
-      #vgl-agendar-modal .vgl-agm-cell-sms{
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms {
         background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-azul),.36);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
-      #vgl-agendar-modal .vgl-agm-cell-lab{
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms:hover {border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab {
         background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-verde),.34);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
-      #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
-      #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab:hover {border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-sms {background:rgba(var(--rgb-azul),.07)}
+      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-lab {background:rgba(var(--rgb-verde),.07)}
       /* v12.3.x — Se extiende a #vgl-ordenar-modal (antes solo agendar) para la sección de
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
@@ -7870,7 +7899,10 @@
       #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
-      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-labsv-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-postcita-panel :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]))
+      {color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
