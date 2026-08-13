@@ -60,9 +60,34 @@ lo pidan aparte.
   el nombre de la clase primero; si ya existe, edita esa definición, no agregues
   una segunda.
 
+## Antes de enviar: parte de la punta actual
+
+Esta rama se mueve rápido (hoy se fusionaron 6 PRs en una tarde). Antes de abrir el PR,
+trae la rama base y rebasa tu trabajo encima:
+
+```
+git fetch origin claude/pym-agenda-blindaje-v12-4
+git rebase origin/claude/pym-agenda-blindaje-v12-4
+node tests/runner.js     # debe seguir verde DESPUÉS de rebasar, no solo antes
+```
+
+Dos PRs de hoy llegaron 39 y 8 commits por detrás de la punta: uno de ellos, al rebasarlo,
+resultó tener conflictos reales en tres archivos. Rebasar tú mismo es más barato que
+descubrirlo en la revisión.
+
+`tests/INFORME_MUTACIONES.md` es una tabla que solo crece: agrega tu fila **al final**.
+Si dos tareas paralelas agregan filas, el conflicto es trivial — resuélvelo conservando
+AMBAS filas, nunca descartando la ajena.
+
 ## Pruebas y mutación
 
 - `node tests/runner.js` debe terminar en verde antes de abrir el PR.
+- Un `t.caso` nuevo va como caso HERMANO del anterior, no anidado dentro de su callback.
+  Pasó hoy: faltó un `});` y el caso nuevo quedó dentro del anterior — el banco seguía en
+  verde (JS permite la llamada anidada), pero la prueba nueva dependía en silencio de que
+  la anterior no lanzara antes de esa línea. Comprueba las dos cosas antes de enviar:
+  `node -c tests/<tu_suite>.js` y que el contador de esa suite en la salida del runner
+  subió exactamente en el número de casos que agregaste.
 - Todo cambio de comportamiento requiere mutación verificada: rompe el cambio a
   propósito, confirma que una prueba específica se pone roja, restaura, confirma
   que vuelve a verde. Documenta cada mutación en `tests/INFORME_MUTACIONES.md`
