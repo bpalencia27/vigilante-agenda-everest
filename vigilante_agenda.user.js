@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.7
+// @version      12.10.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7173,6 +7173,15 @@
         background:rgba(var(--rgb-verde),.20)!important;color:var(--c-verde)!important;border-color:rgba(var(--rgb-verde),.60)!important;
         transform:scale(1.05);box-shadow:0 0 14px rgba(var(--rgb-verde),.25)
       }
+      /* v12.10.8 — D3-bis, Eje A: insignia de horario sugerido (escala+borde, mismo
+         lenguaje visual ya decidido en disenos/COMPARACION.md para "el día recomendado").
+         Sin !important a propósito: si el médico la elige, .active (arriba) debe ganar y
+         mostrarse como ELEGIDA, no como sugerida — la sugerencia deja de importar una vez
+         que el médico decide. */
+      .vgl-agm-sbtn-sugerido{
+        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55);
+        transform:scale(1.03);box-shadow:0 0 12px rgba(var(--rgb-ambar),.20)
+      }
       .vgl-agm-loading{
         font-size:12.5px;color:var(--fg2);padding:6px;font-style:italic
       }
@@ -9432,6 +9441,15 @@
     // aparte solo para imprimir.
     let pacienteEpsNombre = "";
     let pacienteNombreCompleto = "";
+    // v12.10.8 — D3-bis: perfil del paciente (perfilPaciente/recomendacionHorario, ya
+    // probadas con mutación en suite_24_motor_perfil.js) calculado UNA vez junto con los
+    // programas — mismo patrón que pacienteEpsNombre/pacienteNombreCompleto de arriba.
+    // Solo se usa el Eje A (franja horaria: "SUGERIDO" en la hora que recomienda para
+    // diabetes/HTA+DM). El Eje B (cupos adicionales) queda sin conectar a propósito: no
+    // hay evidencia real de qué campo de la respuesta de Everest marca una agenda como
+    // "Adicional" (ver BACKLOG_MEJORAS.md #3) — conectarlo a ciegas violaría "casilla
+    // vacía antes que dato inventado".
+    let perfilDelPaciente = null;
     let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;
     // v12.4.0 — Contexto del turno elegido (agenda y fecha reales de donde salió): lo
@@ -9521,6 +9539,13 @@
           if (!vivo()) return;
           pacienteEpsNombre = (det && det.data && det.data.eps && det.data.eps.nombre) || "";
           pacienteNombreCompleto = (det && det.data && det.data.nombreCompleto) || "";
+          // v12.10.8 — D3-bis: TODOS los programas (no solo los swProgramaEspecial===true
+          // que se filtran para el selector de abajo) — perfilPaciente() ya sabe ignorar
+          // lo que no reconoce, y una etiqueta como "Diabetes" puede no venir marcada
+          // como programa especial pese a ser la que decide la franja horaria.
+          const etiquetasPaciente = ((det && det.data && det.data.programasPaciente) || [])
+            .map((p) => p && p.descripcion).filter(Boolean);
+          perfilDelPaciente = perfilPaciente(etiquetasPaciente);
           const progs = ((det && det.data && det.data.programasPaciente) || []).filter((p) => p && p.swProgramaEspecial === true && p.id);
           const box = modal.querySelector("#vgl-agm-prog-box"), sel = modal.querySelector("#vgl-agm-prog-sel");
           if (progs.length && box && sel) {
@@ -9703,14 +9728,23 @@
         }
         _turnosVistosPorFecha.set(claveFecha, firma);
       } catch (e) {}
+      // v12.10.8 — D3-bis, Eje A: la hora que perfilPaciente()+recomendacionHorario()
+      // recomiendan (primera mitad de la jornada, solo si el perfil del paciente la
+      // impone) se resalta con una insignia — nunca se preselecciona ni se oculta el
+      // resto. El médico sigue eligiendo cualquier hora libre con un clic normal.
+      const recHorario = perfilDelPaciente
+        ? recomendacionHorario(perfilDelPaciente, turnosLibres.map((x) => x.turno))
+        : { sugerida: null, rangoTexto: null, horasEnFranja: [] };
       turnosLibres.forEach(({ turno: t, agendaId, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
+        const esSugerida = !!recHorario.sugerida && normalizeHora(horaTxt) === recHorario.sugerida;
         // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
         // Medicina General, que es justo donde el fallback podía colar otra agenda).
-        const labelCompleto = `✓ ${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
+        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : "✓ ") + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
         btn.className = "vgl-agm-sbtn";
-        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "");
+        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") + (esSugerida ? " vgl-agm-sbtn-sugerido" : "");
+        if (esSugerida) btn.title = `Horario sugerido para este paciente (franja ${recHorario.rangoTexto || "recomendada"})`;
         btn.innerHTML = labelCompleto;
         btn.addEventListener("click", () => {
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));

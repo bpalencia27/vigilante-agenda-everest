@@ -1264,6 +1264,84 @@ module.exports = {
       t.cierto(modal.querySelector("#vgl-agm-confirm").textContent.includes("Cita Creada Exitosamente"));
     });
 
+    // v12.10.8 — D3-bis conectado al modal real: perfilPaciente()+recomendacionHorario()
+    // (ya probadas en tests/suite_24_motor_perfil.js) ahora se calculan con las etiquetas
+    // reales del paciente y marcan con "⭐ SUGERIDO" el turno de la franja recomendada —
+    // sin preseleccionarlo ni ocultar el resto (el médico sigue eligiendo cualquiera).
+    await t.casoAsync("openAgendamientoModal — D3-bis: un paciente diabético ve \"SUGERIDO\" en el turno AM temprano, no en el resto", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cDM = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) {
+            return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [
+              { id: 4, descripcion: "Diabetes", swProgramaEspecial: false },
+            ] } });
+          }
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          // Dos turnos libres: uno en la franja AM (06:00-09:00, debe salir SUGERIDO) y
+          // otro fuera de cualquier franja (10:00, no debe llevar insignia).
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [
+            { id: 701, horaTexto: "07:00 AM", estado: "ACT" },
+            { id: 702, horaTexto: "10:00 AM", estado: "ACT" },
+          ] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cDM);
+      cDM.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cDM.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cDM.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const btnAM = [...slots.children].find((n) => (n.innerHTML || "").includes("07:00 AM"));
+      const btnFueraFranja = [...slots.children].find((n) => (n.innerHTML || "").includes("10:00 AM"));
+      t.cierto(!!btnAM && !!btnFueraFranja, "los dos turnos quedaron en pantalla");
+      t.cierto(btnAM.innerHTML.includes("⭐ SUGERIDO"), "el turno AM temprano lleva la insignia de sugerido");
+      t.cierto(btnAM.className.includes("vgl-agm-sbtn-sugerido"), "el turno AM temprano lleva la clase de sugerido");
+      t.falso(btnFueraFranja.innerHTML.includes("SUGERIDO"), "el turno fuera de franja NO lleva insignia");
+      t.falso(btnFueraFranja.className.includes("vgl-agm-sbtn-sugerido"), "el turno fuera de franja NO lleva la clase");
+      // Elegirlo con un clic normal sigue funcionando exactamente igual que cualquier otro.
+      disparar(btnAM, "click");
+      t.cierto(btnAM.classList.contains("active"), "un clic normal SÍ lo selecciona — la insignia no reemplaza la elección del médico");
+      t.igual(modal.querySelector("#vgl-agm-confirm").disabled, false);
+    });
+
+    await t.casoAsync("openAgendamientoModal — D3-bis: un paciente sin etiquetas de riesgo no ve ninguna insignia de sugerido", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cSin = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cSin);
+      cSin.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cSin.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cSin.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const btn = [...slots.children].find((n) => (n.innerHTML || "").includes("07:00 AM"));
+      t.falso(btn.innerHTML.includes("SUGERIDO"), "sin diabetes/HTA+DM no hay franja que imponer, sin insignia");
+    });
+
     // ================= openOrdenamientoModal =================
     await t.casoAsync("openOrdenamientoModal: una cita sin documento solo deja un aviso warn", async () => {
       await cv.api.openOrdenamientoModal({ nombre: "SIN DOC" });
