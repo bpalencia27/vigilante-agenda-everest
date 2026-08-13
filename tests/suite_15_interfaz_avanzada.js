@@ -408,6 +408,39 @@ module.exports = {
       t.falso(cardHTML.includes('gap:10px'), "no debe haber gap:10px inline");
     });
 
+    // =====================================================================
+    // v12.10.0 — GUARDA DE CASCADA PARA EL ÁMBAR DEL BOTÓN «FALTA LA TOMA».
+    // Incidente real de T1: al desincrustar el estilo, `.vgl-btn-ambar` quedó como clase
+    // SUELTA declarada ANTES de `.vgl-btn-action`. Ambas tienen especificidad (0,1,0), así
+    // que ganaba la última: el `all:unset` + `background:var(--bg3)` de la regla base
+    // borraban el ámbar y el botón 🧪 quedaba idéntico al 🗓️ normal (verificado en
+    // Chromium: mismo backgroundColor y box-shadow "none"). El médico perdía la única
+    // señal de que a esa cita le falta la toma de muestras — y el banco pasó en VERDE,
+    // porque el DOM de las pruebas no calcula CSS.
+    // Esta prueba no puede calcular cascada, pero sí puede exigir lo único que la hace
+    // inmune al orden: que el ámbar se declare con selector COMPUESTO junto a
+    // .vgl-btn-action, de modo que su especificidad sea siempre mayor que la de la base.
+    t.caso("el ámbar de «falta la toma de muestras» gana a la regla base pase lo que pase (cascada)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const sueltas = src.match(/^\s*\.vgl-btn-ambar\s*[,{]/m);
+      t.falso(!!sueltas, "`.vgl-btn-ambar` no puede declararse como clase suelta: la regla base la pisaría");
+
+      const compuesta = /\.vgl-btn-action\.vgl-btn-ambar\s*[,{]/.test(src);
+      t.cierto(compuesta, "el ámbar debe declararse como `.vgl-btn-action.vgl-btn-ambar` (especificidad mayor que la base)");
+
+      const conHover = /\.vgl-btn-action\.vgl-btn-ambar:hover\s*[,{]/.test(src);
+      t.cierto(conHover, "también debe cubrir :hover — antes era inline y el inline también ganaba al hover");
+
+      // Y debe seguir llevando los valores reales de siempre.
+      const iA = src.indexOf(".vgl-btn-action.vgl-btn-ambar");
+      const bloque = src.slice(iA, src.indexOf("}", iA));
+      t.cierto(bloque.includes("rgba(var(--rgb-ambar),.14)"), "conserva el fondo ámbar original");
+      t.cierto(bloque.includes("inset 0 0 0 1px rgba(var(--rgb-ambar),.5)"), "conserva el borde interior ámbar original");
+    });
+
 
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
       vaciarLista();

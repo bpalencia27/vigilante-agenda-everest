@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.9.1
+// @version      12.10.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.9.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6619,7 +6619,6 @@
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
-      .vgl-btn-ambar { background:rgba(var(--rgb-ambar),.14); box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5); }
       .vgl-card-top-t1 { gap:10px; }
       .vgl-card-time-wrap-t1 { gap:10px; }
       .vgl-cdot-t1 { width:11px; height:11px; }
@@ -6648,6 +6647,20 @@
       .vgl-btn-action:hover,.vgl-btn-agendar:hover,.vgl-btn-ordenar:hover,.vgl-btn-atender:hover{
         transform:scale(1.14);background:var(--bg4);
         box-shadow:0 4px 12px rgba(0,0,0,.30),var(--glow-edge);
+      }
+      /* v12.10.0 — El ámbar del botón «🧪 falta la toma de muestras» DEBE ir aquí, después de la
+         regla base y de :hover, y con selector COMPUESTO (.vgl-btn-action.vgl-btn-ambar). Antes de
+         T1 esto era estilo inline, que gana a cualquier regla de la hoja; al migrarlo a una clase
+         suelta declarada ANTES de .vgl-btn-action quedó con la MISMA especificidad (0,1,0) que la
+         regla base, así que ganaba la última: el all:unset y el background:var(--bg3) borraban el
+         ámbar y el botón quedaba idéntico al 🗓️ normal. Verificado en Chromium: mismo
+         backgroundColor rgb(22,26,36) y box-shadow "none" en ambos. El médico perdía la única señal
+         de que a esa cita le falta la toma de muestras. El selector compuesto (0,2,0) y la variante
+         :hover (0,3,0) reproducen exactamente lo que hacía el inline: el ámbar manda en ambos estados. */
+      .vgl-btn-action.vgl-btn-ambar,
+      .vgl-btn-action.vgl-btn-ambar:hover{
+        background:rgba(var(--rgb-ambar),.14);
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.5);
       }
 
       /* Chips PyM */
