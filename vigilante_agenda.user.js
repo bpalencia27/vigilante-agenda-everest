@@ -6888,10 +6888,10 @@
         font-family:var(--font-stack);color:var(--fg)
       }
       .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
-      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg);margin-bottom:8px;letter-spacing:.2px}
-      .vgl-modal-b{font-size:14px;color:var(--fg2);white-space:pre-line;line-height:1.55}
+      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg) !important;margin-bottom:8px;letter-spacing:.2px}
+      .vgl-modal-b{font-size:14px;color:var(--fg2) !important;white-space:pre-line;line-height:1.55}
       .vgl-modal-ok{
-        background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35);
+        background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid) !important;box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35);
         margin-top:22px;border:0;border-radius:var(--r-chip);
         padding:11px 28px;font-size:14px;font-weight:800;
         cursor:pointer;font-family:inherit;
@@ -6917,9 +6917,9 @@
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
+      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -6930,7 +6930,7 @@
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6958,12 +6958,12 @@
         background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
         box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
-      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30);margin-bottom:14px}
+      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30);margin-bottom:14px}
       .vgl-pes-lead{
-        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
+        font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
       }
-      .vgl-pes-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pes-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6989,15 +6989,15 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-alerta),.45);
+      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
         box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
       }
-      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-alerta);margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
-      .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30);margin-bottom:14px}
-      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-rojo) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30);margin-bottom:14px}
+      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-labsv-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -7008,7 +7008,7 @@
         background:rgba(var(--rgb-rojo),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
-      .vgl-labsv-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7786,7 +7786,7 @@
       /* v12.5.7 — Mismas animaciones ya definidas arriba (vglPesPop/vglPesBeat son
          genéricas, no específicas de PES): se reutilizan aquí, sin duplicar keyframes. */
       #vgl-labsv-modal .vgl-labsv-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-labsv-modal .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-alerta),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-labsv-modal .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-labsv-modal .vgl-labsv-ok:focus-visible{outline:2px solid var(--c-rojo);outline-offset:3px}
       #vgl-root.perf~#vgl-labsv-modal,#vgl-root.perf~#vgl-labsv-modal *{
         animation:none !important;transition:none !important;
@@ -10622,7 +10622,7 @@
           }
         } else {
           fallidasCount++;
-          if (vivo()) { const lbl2 = c.closest("label"); if(lbl2.classList) lbl2.classList.add("vgl-border-err"); } // Marcar fallido en ROJO // [UI-CSS]
+          if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); } // Marcar fallido en ROJO // [UI-CSS]
         }
       }
 
