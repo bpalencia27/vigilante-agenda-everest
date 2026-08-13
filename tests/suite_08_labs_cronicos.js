@@ -1330,5 +1330,35 @@ module.exports = {
       t.igual(campos.resultEl, null, "debe ser null si ninguno tiene type=number y max=30");
       t.igual(campos.dateEl, null);
     });
+
+    t.caso("el aviso 'no se reconoció ninguna fecha' sale UNA sola vez por sesión", () => {
+      const EventShim = class Event { constructor(tipo, init) { this.type = tipo; this.bubbles = !!(init && init.bubbles); } };
+      const PREFIJO = "[Vigilante] diagnóstico: no se reconoció ninguna fecha";
+
+      const c1 = cargar({ silencioso: true });
+      c1.ctx.Event = EventShim;
+      const warns1 = [];
+      c1.ctx.console = { log: () => {}, warn: (...a) => warns1.push(a.map(String).join(" ")), error: () => {}, info: () => {}, debug: () => {} };
+      const dom1 = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      c1.env.doc.getElementById = (id) => (dom1[id] ? Object.assign(dom1[id], { id, tagName: "INPUT", dispatchEvent: () => {} }) : null);
+      c1.env.doc.querySelectorAll = () => [];
+
+      c1.api.injectLabsIntoCronicos([{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "10" }]);
+      c1.api.injectLabsIntoCronicos([{ codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "10" }]);
+
+      t.igual(warns1.filter((w) => w.indexOf(PREFIJO) === 0).length, 1, "dos laboratorios sin fecha en la misma sesión solo producen UN aviso en consola");
+
+      const c2 = cargar({ silencioso: true });
+      c2.ctx.Event = EventShim;
+      const warns2 = [];
+      c2.ctx.console = { log: () => {}, warn: (...a) => warns2.push(a.map(String).join(" ")), error: () => {}, info: () => {}, debug: () => {} };
+      const dom2 = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      c2.env.doc.getElementById = (id) => (dom2[id] ? Object.assign(dom2[id], { id, tagName: "INPUT", dispatchEvent: () => {} }) : null);
+      c2.env.doc.querySelectorAll = () => [];
+
+      c2.api.injectLabsIntoCronicos([{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "10", Fecha: "2026-08-01" }]);
+
+      t.igual(warns2.filter((w) => w.indexOf(PREFIJO) === 0).length, 0, "laboratorios con fecha NO producen el aviso de fecha no reconocida");
+    });
   }
 };
