@@ -1598,5 +1598,37 @@ module.exports = {
       t.cierto(panel.innerHTML.includes('class="vgl-postcita-sub"'), "el subtítulo conserva su clase de acento (gris)");
     });
 
+    // v12.10.5 — Bug real reportado en consulta (captura): el "lead"/"foot" de la alerta de
+    // laboratorios RCV vencidos se veía en el azul de Everest. Root cause distinto del de
+    // postcita-panel/labsv-modal (título/nombre, arriba): aquí SÍ había un color propio
+    // (var(--fg2)/var(--fg3)) pero SIN !important, así que cualquier regla de Everest con
+    // especificidad ≥10 (o cualquier !important) lo gana sin que exista competencia de
+    // nuestro lado. .vgl-labsv-t/.vgl-labsv-n no se veían afectados porque usan estilo
+    // inline (mayor precedencia que una clase), pero .vgl-labsv-lead/.vgl-labsv-foot solo
+    // tenían la clase — igual que sus gemelos .vgl-pym-lead/-foot y .vgl-pes-lead/-foot
+    // (mismo patrón calcado tres veces) y .vgl-postcita-title/-sub (ya tocados hoy por otro
+    // bug). Fix: !important en el color de estas 8 reglas — verificado con Chromium contra
+    // el CSS real extraído del harness, con una hoja de Everest simulada usando !important
+    // sobre selectores de tipo genéricos (b,div,span,p,small,label).
+    t.caso("blindaje !important: lead/foot de los avisos flotantes y postcita-title/sub no pueden perder su color contra Everest", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const reglas = [
+        [".vgl-pym-lead", "--fg2"],
+        [".vgl-pym-foot", "--fg3"],
+        [".vgl-pes-lead", "--fg2"],
+        [".vgl-pes-foot", "--fg3"],
+        [".vgl-labsv-lead", "--fg2"],
+        [".vgl-labsv-foot", "--fg3"],
+        [".vgl-postcita-title", "--c-verde"],
+        [".vgl-postcita-sub", "--fg2"],
+      ];
+      for (const [clase, token] of reglas) {
+        const re = new RegExp(clase.replace(".", "\\.") + "\\{[^}]*color:var\\(" + token + "\\)\\s*!important");
+        t.cierto(re.test(src), clase + " debe declarar color:var(" + token + ") con !important");
+      }
+    });
+
   },
 };

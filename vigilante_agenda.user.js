@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.4
+// @version      12.10.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6915,7 +6915,7 @@
       }
       .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
-      .vgl-pym-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -6926,7 +6926,7 @@
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6957,9 +6957,9 @@
       .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
       .vgl-pes-lead{
-        font-size:12.5px;color:var(--fg2);margin-bottom:14px;line-height:1.55
+        font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
       }
-      .vgl-pes-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pes-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -6993,7 +6993,7 @@
       }
       .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
       .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
-      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2);margin-bottom:10px}
+      .vgl-labsv-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-labsv-list{
         display:flex;flex-wrap:wrap;gap:7px;
         justify-content:center;margin-bottom:16px
@@ -7004,7 +7004,7 @@
         background:rgba(var(--rgb-rojo),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
-      .vgl-labsv-foot{font-size:12px;color:var(--fg3);margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7229,8 +7229,8 @@
         font-size:16px;cursor:pointer;line-height:1;padding:2px
       }
       .vgl-postcita-x:hover{color:var(--fg)}
-      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde);margin-bottom:2px}
-      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2);margin-bottom:12px}
+      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
+      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
       /* Items de Órdenes PyM — celdas bento */
