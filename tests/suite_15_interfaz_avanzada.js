@@ -1630,5 +1630,60 @@ module.exports = {
       }
     });
 
+    // T2 (migración de estilo inline a clases) le quitó a estos elementos la protección
+    // natural que tenía el estilo inline (inmune a cualquier regla de Everest sin
+    // !important) sin darles ninguna protección nueva — mismo patrón que el hallazgo de
+    // arriba, verificado en Chromium real el mismo día contra bigAlert/pymAlert/
+    // abandonoPESAlert/labsVencidosAlert con una hoja de Everest simulada agresivamente.
+    t.caso("blindaje !important: título/número de bigAlert, pymAlert, abandonoPESAlert y labsVencidosAlert (recién migrados de inline a clase por T2)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const reglas = [
+        [".vgl-modal-t", "--fg"],
+        [".vgl-modal-b", "--fg2"],
+        [".vgl-pym-t", "--c-recordatorio"],
+        [".vgl-pym-n", "--fg"],
+        [".vgl-pes-t", "--c-pes"],
+        [".vgl-pes-n", "--fg"],
+        [".vgl-labsv-t", "--c-rojo"],
+        [".vgl-labsv-n", "--fg"],
+      ];
+      for (const [clase, token] of reglas) {
+        const re = new RegExp(clase.replace(".", "\\.") + "\\{[^}]*color:var\\(" + token + "\\)\\s*!important");
+        t.cierto(re.test(src), clase + " debe declarar color:var(" + token + ") con !important");
+      }
+      // .vgl-modal-ok mezcla background+color en la misma declaración inline dentro del bloque.
+      t.cierto(/\.vgl-modal-ok\{[^}]*color:var\(--bg-solid\)\s*!important/.test(src), ".vgl-modal-ok debe declarar color:var(--bg-solid) con !important");
+    });
+
+    // El bug real: .vgl-labsv-t/.vgl-labsv-ic usaban var(--c-alerta)/var(--rgb-alerta),
+    // tokens que nunca se definieron en ningún lado del archivo — color inválido, heredaba
+    // lo que fuera del ancestro (el azul de Everest, verificado en Chromium). Debe ser
+    // --c-rojo/--rgb-rojo, el mismo color que ya usa correctamente su hermana .vgl-labsv-n.
+    t.caso("no debe reaparecer --c-alerta/--rgb-alerta (token inventado que nunca se definió)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/--c-alerta\b/.test(src), "--c-alerta no debe usarse en ningún lado — no está definido");
+      t.falso(/--rgb-alerta\b/.test(src), "--rgb-alerta no debe usarse en ningún lado — no está definido");
+    });
+
+    // Ordenar PyM (marcado de checkboxes fallidos/exitosos): si closest("label") devuelve
+    // null, leer .classList directamente sobre esa variable revienta ANTES de llegar al
+    // if — el guard debe cortocircuitar con "variable && variable.classList", nunca
+    // "variable.classList" a secas. Ya reapareció una vez (una de las dos ocurrencias
+    // quedó sin el "&&" en una ronda de corrección anterior).
+    t.caso("guard de classList tras closest(\"label\") siempre cortocircuita con && (no revienta con null)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const ocurrencias = src.match(/const \w+ = c\.closest\("label"\); if\s*\([^)]*\.classList\)/g) || [];
+      t.cierto(ocurrencias.length >= 2, "deben existir las dos ocurrencias conocidas (checkbox exitoso y fallido)");
+      for (const linea of ocurrencias) {
+        t.cierto(/if\s*\(\w+\s*&&\s*\w+\.classList\)/.test(linea), "cada guard debe cortocircuitar con '&&' antes de leer .classList: " + linea);
+      }
+    });
+
   },
 };
