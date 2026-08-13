@@ -10,17 +10,21 @@ const { cargar } = require("./harness.js");
 const COL = { ok: "\x1b[32m", mal: "\x1b[31m", dim: "\x1b[90m", tit: "\x1b[36m", fin: "\x1b[0m", ama: "\x1b[33m" };
 
 function crearT() {
-  const res = { pasa: 0, falla: 0, fallos: [], actual: "" };
+  const res = { pasa: 0, falla: 0, fallos: [], actual: "", pendientes: [] };
   const t = {
     caso(desc, fn) {
       res.actual = desc;
       try { fn(); res.pasa++; }
       catch (e) { res.falla++; res.fallos.push({ desc, msg: e.message }); }
     },
-    async casoAsync(desc, fn) {
+    casoAsync(desc, fn) {
       res.actual = desc;
-      try { await fn(); res.pasa++; }
-      catch (e) { res.falla++; res.fallos.push({ desc, msg: e.message }); }
+      const p = (async () => {
+        try { await fn(); res.pasa++; }
+        catch (e) { res.falla++; res.fallos.push({ desc, msg: e.message }); }
+      })();
+      res.pendientes.push(p);
+      return p;
     },
     igual(a, b, nota) {
       const A = JSON.stringify(a), B = JSON.stringify(b);
@@ -72,6 +76,7 @@ async function main() {
     const { t, res } = crearT();
     try { await suite.pruebas(t, api, env, cargar); }
     catch (e) { res.falla++; res.fallos.push({ desc: "(la suite lanzó)", msg: e.message }); }
+    await Promise.all(res.pendientes);
     (suite.cubre || []).forEach(n => cubiertas.add(n));
     tp += res.pasa; tf += res.falla;
     const marca = res.falla ? COL.mal + "✗" : COL.ok + "✓";
