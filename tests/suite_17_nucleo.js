@@ -373,6 +373,34 @@ module.exports = {
       t.falso(texto.includes("12345678"), "no debe viajar ninguna cédula");
     });
 
+    t.caso("downloadDiagnostic: enmascara correctamente los IDs y omite los nombres (cero PHI)", () => {
+      const c = cargar({ silencioso: true });
+      let blobCapturado = null;
+      c.env.win.URL.createObjectURL = (b) => { blobCapturado = b; return "blob:diag"; };
+
+      // Documentos y nombres INVENTADOS (regla de cero PHI)
+      c.api.__state.pym.set("1234567890", ["VIH"]);
+      c.api.__state.pym.set("1112223330", ["Citología"]);
+      c.api.__state.lastSnapshot = { list: [
+        { doc_id: "1234567890", nombre: "PACIENTE FICTICIO UNO" },
+        { doc_id: "9876543210", nombre: "PACIENTE FICTICIO DOS" }
+      ] };
+
+      c.api.downloadDiagnostic();
+      const texto = String(blobCapturado.parts[0]);
+
+      t.falso(texto.includes("1234567890"), "el ID 1 original no debe filtrarse en el texto");
+      t.falso(texto.includes("9876543210"), "el ID 2 original no debe filtrarse en el texto");
+
+      t.cierto(texto.includes("123…(10 díg.)"), "el ID 1 debe estar enmascarado");
+      t.cierto(texto.includes("987…(10 díg.)"), "el ID 2 debe estar enmascarado");
+      t.cierto(texto.includes("COINCIDEN:"), "debe contener la línea de 'COINCIDEN:'");
+
+      // Esta aserción pasa vacuamente porque downloadDiagnostic no vuelca el campo nombre,
+      // no cuenta como cobertura y la mutación no se comprueba contra ella.
+      t.falso(texto.includes("PACIENTE FICTICIO"), "no debe filtrarse ningún nombre");
+    });
+
     // ---------- pymReminderCheck ----------
     t.caso("pymReminderCheck: avisa una sola vez al día y solo pasada la hora configurada", () => {
       const c = cargar({ silencioso: true });
