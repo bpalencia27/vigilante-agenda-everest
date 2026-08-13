@@ -5263,7 +5263,6 @@
   function muted() { return Date.now() < state.muteUntil; }
   function muteFor(min) { state.muteUntil = Date.now() + min * 60000; stopNag(); paintMute(); setSummary("Silenciado " + min + " min. El registro sigue activo."); }
   function unmute() { state.muteUntil = 0; paintMute(); setSummary("Sonido reactivado."); }
-  function fraudSound() { beep(1000, 400, 0); beep(1200, 400, 0.45); }
 
   // =====================================================================
   //  CANALES DE AVISO QUE **NO** DEPENDEN DE WINDOWS

@@ -1,5 +1,18 @@
 /**
  * TABLERO del Vigilante de Agenda — Apps Script (Web App).
+ *
+ * v12.10.11 — 13-08-2026: revisando un export real (106+17+74+546 filas, cinco hojas)
+ * se confirmó que la columna "ver" NUNCA llegó legible: Sheets, con la hoja en formato
+ * automático y locale es-CO (día/mes/año), interpreta cualquier "N.N.N" como fecha —
+ * y nuestro esquema de versión ("12.MINOR.PATCH") encaja de lleno porque "12" también
+ * es un día válido. Confirmado matemáticamente contra 9 patrones reales de la Hoja: los
+ * 9 coinciden exacto con la fórmula inversa día.mes.año. Esto rompía en silencio la
+ * columna "Versión" del propio tablero de flota y explica el "versión más alta vista: 0"
+ * que traía la Hoja real. Dos piezas: `_forzarTextoColumnaVer()` evita que vuelva a pasar
+ * (fuerza texto plano ANTES de escribir), y el menú "Reparar columna 'ver' corrupta en
+ * fecha" recupera lo YA corrompido — la transformación es reversible, no hubo pérdida de
+ * información. Ver el detalle en cada función.
+ *
  * v12.6.9 — 12-08-2026: recibe lo que el userscript v12.6.9 empezó a mandar
  * (identificador de equipo automático, `lote` contra duplicados, errores y entorno)
  * y corrige tres cosas que la Hoja REAL dejó ver al revisar 34 filas de dos jornadas.
@@ -158,8 +171,57 @@ function onOpen() {
     SpreadsheetApp.getUi().createMenu("Vigilante")
       .addItem("Actualizar resumen de flota", "armarResumen")
       .addItem("Limpiar filas duplicadas", "limpiarDuplicados")
+      .addItem("Reparar columna 'ver' corrupta en fecha", "repararVersionesCorruptas")
       .addToUi();
   } catch (e) {}
+}
+
+// =====================================================================
+//  v12.10.11 — REPARAR "ver" YA CONVERTIDA EN FECHA (dato histórico)
+//  A diferencia de un simple cambio de formato, esto SÍ recupera el valor
+//  original: la corrupción es un parseo día.mes.año determinista y por tanto
+//  reversible — no una pérdida de información. Confirmado contra 9 patrones
+//  reales de la Hoja (12.6.9→12/06/2009, 12.10.7→12/10/2007, etc.), los 9
+//  coinciden exacto con la fórmula inversa.
+//  Solo toca celdas que HOY son un objeto Date (paso ya corrompido). Una
+//  celda que ya es texto (arreglada por _forzarTextoColumnaVer en escrituras
+//  nuevas, o ya reparada antes) se deja intacta — la función es idempotente,
+//  se puede correr varias veces sin riesgo.
+//  LÍMITE HONESTO: la fórmula asume que el DÍA reconstruido es el MAJOR de la
+//  versión (cierto para todo lo que se ha desplegado: siempre "12.x.y"). Si
+//  algún día el major cambia a algo que no sea un día de calendario válido
+//  (0 o >31), esa celda no se puede haber corrompido así en primer lugar —
+//  Sheets no la habría convertido a fecha — así que no hay falso positivo.
+// =====================================================================
+function repararVersionesCorruptas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var hojas = ["reportes", "entorno", "uso", "uso_detalle", "resumen", "fraude", "error", "prueba"];
+  var totalReparadas = 0;
+  var detalle = [];
+
+  hojas.forEach(function (nombre) {
+    var sh = ss.getSheetByName(nombre);
+    if (!sh || sh.getLastRow() < 2) return;
+    var vals = sh.getDataRange().getValues();
+    var hd = vals[0] || [];
+    var idxVer = hd.indexOf("ver");
+    if (idxVer < 0) return;
+
+    var reparadasHoja = 0;
+    for (var i = 1; i < vals.length; i++) {
+      var v = vals[i][idxVer];
+      if (Object.prototype.toString.call(v) !== "[object Date]") continue; // ya es texto: no tocar
+      var dd = v.getDate(), mm = v.getMonth() + 1, yy = v.getFullYear() % 100;
+      var reconstruida = dd + "." + mm + "." + yy;
+      sh.getRange(i + 1, idxVer + 1).setNumberFormat("@").setValue(reconstruida);
+      reparadasHoja++;
+    }
+    if (reparadasHoja) { totalReparadas += reparadasHoja; detalle.push(nombre + ": " + reparadasHoja); }
+  });
+
+  SpreadsheetApp.getActive().toast(totalReparadas
+    ? "Versiones reparadas — " + detalle.join(" · ") + ". Vuelve a ejecutar 'Actualizar resumen de flota'."
+    : "No se encontraron celdas de 'ver' corrompidas en fecha (o ya están reparadas).");
 }
 
 // =====================================================================
@@ -344,12 +406,28 @@ function toNumero(val) {
 // v12.6.9 — El encabezado se CREA si la hoja es nueva y se COMPLETA si la hoja ya
 // existía sin las columnas nuevas (`lote`): sin esto, las filas nuevas traerían un
 // valor más que columnas y ese dato quedaría sin título en la Hoja.
+//
+// v12.10.11 — LA VERSIÓN LLEGABA CONVERTIDA EN FECHA. Revisando la Hoja real con 106+17+
+// 74+546 filas se encontró que "ver" NUNCA contiene un valor legible: "12.6.9" se ve como
+// 12/06/2009, "12.10.7" como 12/10/2007, etc. Causa confirmada matemáticamente contra los
+// 9 patrones distintos vistos: con la hoja en formato automático y locale es-CO (DD/MM/AA),
+// Sheets interpreta CUALQUIER texto con forma "N.N.N" como fecha día.mes.año — nuestro
+// esquema de versión (siempre "12.MINOR.PATCH") cae de lleno en ese patrón porque "12" es
+// también un día válido. `_versionValida()`/`_compararVersion()` ya protegían el CÁLCULO de
+// "versión más alta" filtrando estos valores corruptos, pero la Hoja seguía mostrándolos
+// corruptos a simple vista — nadie podía leer qué versión tiene cada equipo. El valor
+// original NO es recuperable una vez que Sheets lo convirtió en fecha (se pierde el string,
+// no es solo un formato de visualización); esto solo evita que seguidores nuevos se dañen.
+// Se fuerza texto plano ('@') en la columna "ver" de toda hoja que la tenga, ANTES de que
+// _hoja() devuelva el objeto — así ninguna escritura futura (appendRow o setValues) puede
+// volver a sufrir el auto-parseo, sin importar qué forme tenga el número de versión.
 function _hoja(ss, nombre, encabezados) {
   var h = ss.getSheetByName(nombre);
   if (!h) {
     h = ss.insertSheet(nombre);
     h.appendRow(encabezados);
     h.setFrozenRows(1);
+    _forzarTextoColumnaVer(h, encabezados);
     return h;
   }
   try {
@@ -360,7 +438,19 @@ function _hoja(ss, nombre, encabezados) {
     }
     if (faltan.length) h.getRange(1, actuales.length + 1, 1, faltan.length).setValues([faltan]);
   } catch (e) {}
+  _forzarTextoColumnaVer(h, encabezados);
   return h;
+}
+
+// Aísla el forzado de formato para que un fallo aquí (hoja protegida, cuota, etc.) nunca
+// tumbe el guardado real de la fila — _hoja() debe seguir devolviendo la hoja igual.
+function _forzarTextoColumnaVer(h, encabezados) {
+  try {
+    var idxVer = encabezados.indexOf("ver");
+    if (idxVer < 0) return;
+    var filas = Math.max(h.getMaxRows() - 1, 1000);
+    h.getRange(2, idxVer + 1, filas, 1).setNumberFormat("@");
+  } catch (e) {}
 }
 
 // Celda de texto segura: tope de longitud + neutralización de fórmulas (=,+,-,@).
