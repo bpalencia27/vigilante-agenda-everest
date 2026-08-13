@@ -243,5 +243,106 @@ module.exports = {
       }
     });
 
+    t.caso("Regla D - toda var(--X) que consume la hoja está declarada", () => {
+      const cssClean = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+      const usadas = new Set();
+      const regexUsadas = /var\(\s*(--[A-Za-z0-9_-]+)/g;
+      let match;
+      while ((match = regexUsadas.exec(cssClean)) !== null) {
+        usadas.add(match[1]);
+      }
+
+      const declaradas = new Set();
+      const regexDeclaradas = /(?:^|[;{,\s])(--[A-Za-z0-9_-]+)\s*:/g;
+      while ((match = regexDeclaradas.exec(cssClean)) !== null) {
+        declaradas.add(match[1]);
+      }
+
+      const faltantes = [];
+      for (const u of usadas) {
+        if (!declaradas.has(u)) {
+          faltantes.push(u);
+        }
+      }
+
+      const esperadas = ['--ac', '--ac-rgb', '--tk'];
+      const faltantesString = faltantes.sort().join(', ');
+      const esperadasString = esperadas.sort().join(', ');
+
+      if (faltantesString !== esperadasString) {
+         throw new Error(`USADAS - DECLARADAS no coincide. Esperadas: {${esperadasString}}, Obtenidas: {${faltantesString}}`);
+      }
+
+      /*
+       * LIMITACIÓN: Esta guarda demuestra que el token está declarado en ALGÚN sitio de la hoja CSS,
+       * NO que llegue al elemento final (un elemento fuera de las listas de ids pasa esta guarda
+       * aunque falle en runtime).
+       * NO se comprueba la dirección inversa (declarada-y-sin-usar) porque hoy hay 15 tokens en
+       * ese caso, entre ellos --rgb-atendido (inyectado desde JS) y tokens de escala tipográfica
+       * y de capas que están pendientes de conectar.
+       */
+    });
+
+    t.caso("Regla E - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
+      // 1. Paridad de tokens claro/oscuro
+      const bloqueOscuro = css.match(/((?:#[a-z0-9-]+,?\s*)+)\s*\{\s*\/\*[\s\S]*?\*\/\s*--bg:rgba\([^)]+\);/);
+      const bloqueClaro = css.match(/((?:#[a-z0-9-]+\.light,?\s*)+)\s*\{\s*--bg:rgba\([^)]+\);/);
+
+      if (!bloqueOscuro || !bloqueClaro) {
+        throw new Error("No se encontraron los bloques de IDs para el modo oscuro o claro");
+      }
+
+      const oscuroIds = [];
+      const regexOscuro = /#([a-z0-9-]+)/g;
+      let match;
+      while ((match = regexOscuro.exec(bloqueOscuro[1])) !== null) {
+        oscuroIds.push(match[1]);
+      }
+
+      const claroIds = [];
+      const regexClaro = /#([a-z0-9-]+)\.light/g;
+      while ((match = regexClaro.exec(bloqueClaro[1])) !== null) {
+        claroIds.push(match[1]);
+      }
+
+      for (const id of oscuroIds) {
+        if (!claroIds.includes(id)) {
+           throw new Error(`El id oscuro #${id} no tiene un gemelo en la lista clara.`);
+        }
+      }
+
+      // 2. Un token por cada color de COLORS
+      const colorsMatch = code.match(/const COLORS = (\{[^\}]+\});/);
+      if (!colorsMatch) throw new Error("No se encontró la declaración de const COLORS");
+
+      // Leer de forma segura las claves de COLORS extrayéndolas del texto
+      const colorsKeys = [];
+      const keysRegex = /([A-Z]+)\s*:/g;
+      while ((match = keysRegex.exec(colorsMatch[1])) !== null) {
+        colorsKeys.push(match[1]);
+      }
+
+      const cssDeclaradas = new Set();
+      const regexDeclaradas = /(?:^|[;{,\s])(--[A-Za-z0-9_-]+)\s*:/g;
+      while ((match = regexDeclaradas.exec(css)) !== null) {
+        cssDeclaradas.add(match[1]);
+      }
+
+      for (const key of colorsKeys) {
+        const cKey = `--c-${key.toLowerCase()}`;
+        const rgbKey = `--rgb-${key.toLowerCase()}`;
+        if (!cssDeclaradas.has(cKey)) throw new Error(`Falta el token ${cKey}`);
+        if (!cssDeclaradas.has(rgbKey)) throw new Error(`Falta el token ${rgbKey}`);
+      }
+
+      /*
+       * Justificación: La línea 11474 usa rgba(var(--trgb),${alfa}) y la 11561
+       * fija --trgb:var(--rgb-${clave}) sin valor de respaldo. Por lo tanto,
+       * una clave nueva en COLORS sin su correspondiente token --rgb-*
+       * volvería inválido ese rgba() y la tarjeta heredaría el azul de Everest.
+       */
+    });
+
   }
 };

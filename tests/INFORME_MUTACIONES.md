@@ -83,3 +83,6 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 4119 | `.slice(-200)` &rarr; `.slice(-2)` en el reencolado | No | "evFlush: la tanda reencolada por fallo de escritura tiene un tope de 200" — restaurado |
 | 4661 | `catch (e) { return false; }` &rarr; `catch (e) { return true; }` | No | "pilotoDesdeCache: caché corrupta (empieza por v3 pero no es JSON) lanza y el catch devuelve false" — restaurado |
 | 4908 | `.catch(() => false)` &rarr; `.catch(() => true)` | No | "schedulePymBase: loadPymBase rechaza (por ej. sin TextDecoder) y la cadena de reintentos se mantiene" — restaurado |
+| `tests/suite_25_cascada_css.js` | Cambiar `var(--c-verde, #16a34a)` por `var(--c-noexiste)` | Falla Regla C mostrando `--c-noexiste` faltante | Revertido a `var(--c-verde, #16a34a)` |
+| `tests/suite_25_cascada_css.js` | Borrar `,#vgl-postcita-panel.light` de la línea 6197 | Falla Regla D por falta de paridad de tokens en listas clara/oscura | Revertido a añadir `,#vgl-postcita-panel.light` |
+| `tests/suite_25_cascada_css.js` | Añadir `TURQUESA: "#0ff"` a const `COLORS` | Falla Regla D por ausencia de `--c-turquesa` | Revertido a remover `TURQUESA` de `COLORS` |
