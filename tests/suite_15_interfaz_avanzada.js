@@ -357,7 +357,7 @@ module.exports = {
       cv.api.__state.lastSignature = "";
       cv.api.render([conCitaId, sinCitaId], "api", new Date());
       const hCon = lista.children[0].innerHTML, hSin = lista.children[1].innerHTML;
-      t.cierto(hCon.includes('aria-label="Atender: abrir Historia Clínica de'), "con citaId real y sin marcar, el botón está habilitado");
+      t.cierto(hCon.includes('aria-label="Registrar inicio de atención de'), "con citaId real y sin marcar, el botón está habilitado");
       t.falso(hSin.includes("vgl-btn-atender"), "sin citaId (p. ej. el camino de respaldo por scraping de DOM) no hay botón: nunca se inventa el id");
     });
 
@@ -370,8 +370,8 @@ module.exports = {
       cv.api.__state.lastSignature = "";
       cv.api.render([yaAtendido, abiertoHoy], "api", new Date());
       const hAtendido = lista.children[0].innerHTML, hAbierto = lista.children[1].innerHTML;
-      t.cierto(hAtendido.includes('aria-label="Historia ya abierta para'), "ya Atendido en Everest: botón visible pero bloqueado");
-      t.cierto(hAbierto.includes('aria-label="Historia ya abierta para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
+      t.cierto(hAtendido.includes('aria-label="Inicio de atención ya registrado para'), "ya Atendido en Everest: botón visible pero bloqueado");
+      t.cierto(hAbierto.includes('aria-label="Inicio de atención ya registrado para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
     });
 
     await t.casoAsync("botón Atender: al pulsarlo llama a apiMedicoAbrirHistoria; si no hay éxito, avisa y se reactiva", async () => {
@@ -388,6 +388,39 @@ module.exports = {
       t.falso(cv.api.isAtencionAbiertaHoy(333), "sin `true` real del servidor, no se marca como abierta");
       t.falso(bAt.disabled, "al fallar, el botón se reactiva — no queda bloqueado para siempre por un error de red");
     });
+
+    // v12.10.1 — Incidente real en consultorio: el botón decía "abre la Historia Clínica" y
+    // el aviso de éxito decía "Historia clínica abierta", pero apiMedicoAbrirHistoria() NUNCA
+    // navega ni pinta nada — solo registra un timestamp en el servidor de Everest. El médico
+    // pulsó, vio el mensaje de éxito, y la historia nunca se abrió: creyó (por el propio texto
+    // del script) que había revisado al paciente sin haberlo hecho. Esta prueba impide que
+    // vuelva a redactarse un texto que prometa "abrir"/"abierta" mientras la función solo
+    // registra un timestamp — si en el futuro SÍ se implementa la navegación real, hay que
+    // actualizar esta prueba a la vez que el código, no antes.
+    t.caso("botón Atender: ningún texto visible promete abrir/mostrar la historia clínica (solo registra, no navega)", () => {
+      vaciarLista();
+      cv.env.storage.removeItem("vgl_proc_today");
+      const habilitado = { key: "atc6", doc_id: "6", nombre: "F", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 444 };
+      const bloqueado = { key: "atc7", doc_id: "7", nombre: "G", hora_texto: "07:20", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0, citaId: 555 };
+      cv.api.__state.lastSignature = "";
+      cv.api.render([habilitado, bloqueado], "api", new Date());
+      const hHab = lista.children[0].innerHTML, hBloq = lista.children[1].innerHTML;
+
+      // Frases textuales del incidente real (v13.0.0 original) que NUNCA deben reaparecer —
+      // no se usa una heurística amplia porque el texto honesto ACTUAL dice a propósito
+      // "NO abre la historia clínica", que una heurística ingenua marcaría como falso positivo.
+      const FRASES_FALSAS = [
+        "abrir Historia Clínica de",
+        "abre la Historia Clínica de",
+        "Historia clínica abierta",
+        "Historia clínica ya abierta",
+      ];
+      for (const frase of FRASES_FALSAS) {
+        t.falso(hHab.includes(frase), `el botón habilitado no debe contener "${frase}"`);
+        t.falso(hBloq.includes(frase), `el botón bloqueado no debe contener "${frase}"`);
+      }
+    });
+
 
 
 

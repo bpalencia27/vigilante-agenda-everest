@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.0
+// @version      12.10.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11389,15 +11389,22 @@
       const labsBtn = a.doc_id
         ? `<button class="vgl-btn-labs vgl-btn-action" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
-      // v13.0.0 — "Atender": abre la Historia Clínica real (ver apiMedicoAbrirHistoria).
+      // v13.0.0 — "Atender": SOLO registra en el servidor de Everest la hora de apertura
+      // (guardarHoraApertura), el mismo efecto de red que deja el botón nativo "Historias
+      // Clínicas" — pero, a diferencia del nativo, este botón NUNCA navega ni pinta la
+      // historia clínica en pantalla (decisión original: de la cascada de ~50 peticiones
+      // que dispara el nativo, solo esas dos tienen efecto/lectura real; el resto no pinta
+      // nada sin la vista real montada). El texto de v13.0.0 decía "abre la Historia
+      // Clínica", lo cual era falso desde el primer commit: un médico podía creer que ya
+      // revisó al paciente sin haberlo hecho. v12.10.1 — corregido para decir la verdad.
       // SOLO se ofrece cuando el citaId vino del API directo de Everest (apiParse): el
       // camino de respaldo por scraping de DOM nunca lo tuvo, y sin él no hay a qué
       // CitaId apuntar — casilla vacía en vez de un botón que apunte a un id inventado.
       const yaAbiertoHoy = a.citaId ? isAtencionAbiertaHoy(a.citaId) : false;
       const atenderBtn = a.citaId
         ? (esAtendido || yaAbiertoHoy
-            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
-            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
+            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Inicio de atención ya registrado para ${escapeHtml(a.nombre)}" title="✅ Ya se registró en Everest el inicio de atención${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}. Esto NO abrió la historia clínica: úsela con \"Historias Clínicas\".">🩺</button>`
+            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Registrar inicio de atención de ${escapeHtml(a.nombre)} en Everest" title="🩺 Registra en Everest que empezó a atender a ${escapeHtml(a.nombre)}. NO abre la historia clínica — ábrala con el botón nativo \"Historias Clínicas\".">🩺</button>`)
         : "";
       const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
         ? `<span class="vgl-card-actions">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
@@ -11431,19 +11438,20 @@
       if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
       const bAt = card.querySelector(".vgl-btn-atender");
       // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
-      // la llamada de red directamente: es lo mismo que hace el botón nativo de Everest
-      // al pulsarlo (no pide confirmación tampoco). Se deshabilita YA al pulsar para que
-      // un doble clic no dispare guardarHoraApertura dos veces mientras responde la red.
+      // la llamada de red directamente: es lo mismo EFECTO DE RED que deja el botón nativo
+      // de Everest al pulsarlo — pero NO navega ni pinta nada (ver comentario arriba, en la
+      // construcción de atenderBtn). Se deshabilita YA al pulsar para que un doble clic no
+      // dispare guardarHoraApertura dos veces mientras responde la red.
       if (bAt) bAt.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (bAt.disabled) return;
         uxTrack("panel.atender.click");
         bAt.disabled = true; bAt.style.opacity = ".5"; bAt.style.cursor = "wait";
         const ok = await apiMedicoAbrirHistoria(a.citaId);
-        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`🩺 Historia clínica abierta para ${a.nombre}.`); }
+        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`📝 Inicio de atención registrado en Everest para ${a.nombre}. Abra su historia con "Historias Clínicas".`); }
         else {
           bAt.disabled = false; bAt.style.opacity = ""; bAt.style.cursor = "";
-          spToast(`⚠️ No se pudo abrir la historia de ${a.nombre} desde el panel. Ábrala manualmente con "Historias Clínicas".`);
+          spToast(`⚠️ No se pudo registrar en Everest el inicio de atención de ${a.nombre}. Abra su historia con "Historias Clínicas".`);
         }
       });
       fragment.appendChild(card);
