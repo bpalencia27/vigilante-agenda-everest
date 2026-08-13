@@ -49,4 +49,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 11005 | `const atendidoLeyenda = esAtendido && a.color !== "ROJO";` &rarr; `const atendidoLeyenda = false;` | No | - |
 | 11128 | `? (esAtendido || yaAbiertoHoy` &rarr; `? (false || yaAbiertoHoy` | No | - |
 | 8822 | `<div class="vgl-labs-uro">…<span class="vgl-labs-uro-i">…</span>…</div>` &rarr; `…join("&lt;br&gt;")` (volver al chorizo previo) | No | - |
-| 2795 | `vacios.forEach((el) => setNgValue(el, "NO VALORADO"));` &rarr; `candidatos.forEach((el) => setNgValue(el, "NO VALORADO"));` | No | - |
+| 2844 | `if (actual === "" && guardado !== "") porAplicar.push(...)` &rarr; `if (guardado !== "") porAplicar.push(...)` (rediseño v12.9.0 a plantilla por posición; reemplaza la fila anterior de esta misma pareja de botones) | No | - |

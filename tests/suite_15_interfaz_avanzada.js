@@ -58,7 +58,7 @@ function respuestaJson(data) {
 module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
-    "createLabInjectorUI", "createExamenFisicoInjectorUI", "setWinState", "buildOverlay",
+    "createLabInjectorUI", "createExamenFisicoInjectorUI", "_casillasExamenFisico", "setWinState", "buildOverlay",
     "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openOrdenamientoModal",
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
@@ -520,13 +520,15 @@ module.exports = {
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
 
-    // ================= createExamenFisicoInjectorUI =================
-    // v12.9.0 — Diagnóstico real en consultorio (13-08-2026): 45 de 56 campos de la
-    // pestaña "Revisión por sistema y Examen físico" comparten LITERALMENTE el mismo
-    // id="alert_message" (defecto de Everest). El botón usa querySelectorAll con el
-    // selector de atributo id+type, nunca getElementById (que solo alcanzaría el
-    // primero) — estas pruebas fijan document.querySelectorAll para simular esos
-    // campos duplicados.
+    // ================= createExamenFisicoInjectorUI (plantilla por posición) =================
+    // v12.9.0 — Diagnóstico real en consultorio (13-08-2026): 45 de 56 campos de la pestaña
+    // "Revisión por sistema y Examen físico" comparten LITERALMENTE el mismo id="alert_message"
+    // (defecto de Everest). Corrección tras la primera entrega: el médico mostró una captura
+    // real donde esas ~37 casillas de texto YA tenían, cada una, su PROPIA frase distinta (no
+    // estaban vacías) — lo que hace falta es guardar esa frase por POSICIÓN y poder repetirla
+    // en un paciente nuevo con la pestaña en blanco. El botón usa querySelectorAll con el
+    // selector de atributo id+type, nunca getElementById (que solo alcanzaría el primero) —
+    // estas pruebas fijan document.querySelectorAll para simular esos campos duplicados.
     function campoFalso(valor, opciones) {
       const o = opciones || {};
       return {
@@ -537,74 +539,128 @@ module.exports = {
       };
     }
 
-    t.caso("createExamenFisicoInjectorUI: crea el botón flotante una sola vez", () => {
+    // setNgValue construye `new Event(...)` para disparar input/change: el DOM falso del
+    // harness no trae Event global (igual que en suite_08), hay que dárselo al contexto
+    // antes de la primera prueba que dispare un clic real.
+    if (!cv.ctx.Event) {
+      cv.ctx.Event = class Event {
+        constructor(type, init) { this.type = type; this.bubbles = (init && init.bubbles) || false; }
+      };
+    }
+
+    t.caso("createExamenFisicoInjectorUI: crea los dos botones flotantes una sola vez", () => {
       const antes = cv.env.doc.body.children.length;
       cv.api.createExamenFisicoInjectorUI();
-      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
-      t.cierto(!!btn, "el botón quedó en el body");
-      t.igual(btn.innerHTML, "📋 NO VALORADO");
-      t.cierto(typeof btn.onclick === "function", "el clic queda cableado");
-      cv.env.doc.getElementById = (id) => (id === "vgl-examen-injector" ? btn : null);
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      t.cierto(!!btnG && !!btnA, "los dos botones quedaron en el body");
+      t.igual(btnG.innerHTML, "💾 Guardar plantilla");
+      t.igual(btnA.innerHTML, "📋 Aplicar plantilla");
+      t.cierto(typeof btnG.onclick === "function" && typeof btnA.onclick === "function", "los dos clics quedan cableados");
+      cv.env.doc.getElementById = (id) => (id === "vgl-examen-guardar" ? btnG : null);
       cv.api.createExamenFisicoInjectorUI();
-      t.igual(cv.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
+      t.igual(cv.env.doc.body.children.length, antes + 2, "la segunda llamada no añade botones duplicados");
     });
 
-    t.caso("createExamenFisicoInjectorUI: sin casillas en pantalla, avisa y no revienta", () => {
-      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
+    t.caso("Guardar plantilla: sin casillas en pantalla, avisa y no revienta", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
       cv.env.doc.querySelectorAll = () => [];
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btn.onclick();
+      btnG.onclick();
       t.igual(alertas.length, 1);
       t.cierto(alertas[0].includes("No se encontraron casillas"), "explica que no halló casillas de esta pestaña");
     });
 
-    t.caso("createExamenFisicoInjectorUI: todas las casillas ya tienen texto, ninguna se sobrescribe", () => {
-      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
-      const c1 = campoFalso("Sin hallazgos patológicos");
-      const c2 = campoFalso("Normal a la palpación");
-      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [c1, c2] : []);
+    t.caso("Guardar plantilla: todo vacío, no guarda nada y lo dice", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [campoFalso(""), campoFalso("")] : []);
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btn.onclick();
-      t.cierto(alertas[0].includes("2 casilla(s) visibles ya tienen texto"), "cuenta las 2 llenas");
-      t.cierto(alertas[0].includes("no se sobrescribió ninguna"));
-      t.igual(c1.value, "Sin hallazgos patológicos", "no se tocó la casilla con texto");
-      t.igual(c2.value, "Normal a la palpación", "no se tocó la casilla con texto");
-      t.igual(c1._eventos.length, 0, "no se disparó ningún evento sobre una casilla ya llena");
+      cv.env.storage.removeItem("vgl_plantilla_examen_fisico");
+      btnG.onclick();
+      t.cierto(alertas[0].includes("Ninguna de las"), "avisa que no hay texto que guardar");
+      t.igual(cv.env.storage.getItem("vgl_plantilla_examen_fisico"), null, "no se escribió ninguna plantilla");
     });
 
-    t.caso("createExamenFisicoInjectorUI: rellena solo las vacías, respeta las que tienen texto", () => {
-      // setNgValue construye `new Event(...)` para disparar input/change: el DOM falso del
-      // harness no trae Event global (igual que en suite_08), hay que dárselo al contexto.
-      if (!cv.ctx.Event) {
-        cv.ctx.Event = class Event {
-          constructor(type, init) { this.type = type; this.bubbles = (init && init.bubbles) || false; }
-        };
-      }
-      const btn = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-injector");
-      const conTexto = campoFalso("Ictericia leve");
-      const vacio1 = campoFalso("");
-      const vacio2 = campoFalso("   "); // solo espacios: cuenta como vacía
-      // v12.9.0 — el selector de atributo (id+type="text") ya excluye los "alert_message"
-      // numéricos por construcción del propio selector CSS: el mock los omite del array
-      // devuelto por esa razón. Lo que SÍ hace el código de la pestaña, en JS, es el
-      // filtro por offsetParent — por eso ESTA casilla oculta sí va dentro del array que
-      // devuelve querySelectorAll, para ejercitar ese filtro de verdad.
-      const oculto = campoFalso("", { oculto: true });
-      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [conTexto, vacio1, vacio2, oculto] : []);
+    t.caso("Guardar plantilla: captura cada frase EN SU POSICIÓN, tal cual como está escrita hoy", () => {
+      const btnG = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-guardar");
+      // v12.9.0 — caso real reportado: cada sistema tiene su PROPIA frase, no un texto único.
+      const piel = campoFalso("NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.");
+      const oido = campoFalso("NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.");
+      const vacia = campoFalso(""); // una casilla sin escribir todavía, se guarda como ""
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [piel, oido, vacia] : []);
       const alertas = [];
       cv.ctx.alert = (m) => alertas.push(String(m));
-      btn.onclick();
-      t.igual(vacio1.value, "NO VALORADO", "casilla vacía rellenada");
-      t.igual(vacio2.value, "NO VALORADO", "casilla con solo espacios tratada como vacía");
-      t.igual(conTexto.value, "Ictericia leve", "casilla con contenido real NUNCA se sobrescribe");
-      t.cierto(vacio1._eventos.includes("input") && vacio1._eventos.includes("change"), "setNgValue disparó input y change");
-      t.igual(conTexto._eventos.length, 0, "la casilla respetada no dispara ningún evento");
-      t.igual(oculto.value, "", "una casilla oculta (offsetParent null) no se toca aunque esté vacía");
-      t.igual(oculto._eventos.length, 0, "la casilla oculta no dispara ningún evento");
-      t.cierto(alertas[0].includes("Se rellenaron 2 casilla(s) vacías"), "cuenta exacta de rellenadas (la oculta no cuenta)");
-      t.cierto(alertas[0].includes("1 ya tenían texto y se respetaron"), "cuenta exacta de respetadas (solo la visible con texto)");
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnG.onclick();
+      const guardado = JSON.parse(cv.env.storage.getItem("vgl_plantilla_examen_fisico"));
+      t.igual(guardado.total, 3, "guarda el total de casillas vistas, no solo las llenas");
+      t.igual(guardado.textos[0], "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "posición 0 = la frase exacta de Piel");
+      t.igual(guardado.textos[1], "NEGATIVO PARA OTALGIA, TINNITUS O HIPOACUSIA.", "posición 1 = la frase exacta de Oído, DISTINTA de la 0");
+      t.igual(guardado.textos[2], "", "la casilla vacía se guarda como cadena vacía, no se inventa nada");
+      t.cierto(alertas[alertas.length - 1].includes("2 frase(s) de 3 casilla(s)"), "el resumen cuenta frases reales vs. total de casillas");
+    });
+
+    t.caso("Aplicar plantilla: sin plantilla guardada, avisa a guardar una primero", () => {
+      cv.env.storage.removeItem("vgl_plantilla_examen_fisico");
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      btnA.onclick();
+      t.cierto(alertas[0].includes("Todavía no hay ninguna plantilla guardada"));
+    });
+
+    t.caso("Aplicar plantilla: rellena SOLO las vacías con la frase de SU posición, respeta las que ya tienen texto", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({
+        total: 3,
+        textos: ["Frase de Piel", "Frase de Oído", "Frase de Boca"],
+        guardadoEn: 1,
+      }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const yaEscrita = campoFalso("El médico ya escribió esto y NUNCA se toca");
+      const vacia1 = campoFalso("");
+      const vacia2 = campoFalso("   "); // solo espacios: cuenta como vacía
+      const oculta = campoFalso("", { oculto: true }); // offsetParent null: el filtro real la excluye de "candidatos"
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [yaEscrita, vacia1, vacia2, oculta] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnA.onclick();
+      t.igual(yaEscrita.value, "El médico ya escribió esto y NUNCA se toca", "posición 0 ya tenía texto: se respeta, NO se pisa con \"Frase de Piel\"");
+      t.igual(vacia1.value, "Frase de Oído", "posición 1 vacía recibe la frase guardada de SU posición (no la 0)");
+      t.igual(vacia2.value, "Frase de Boca", "posición 2 (solo espacios) también cuenta como vacía y recibe su frase");
+      t.cierto(vacia1._eventos.includes("input") && vacia1._eventos.includes("change"), "setNgValue disparó input y change");
+      t.igual(yaEscrita._eventos.length, 0, "la casilla respetada no dispara ningún evento");
+      t.igual(oculta.value, "", "una casilla oculta no se toca aunque su posición estuviera vacía en la plantilla");
+      t.cierto(alertas.some((a) => a.includes("[confirm]") && a.includes("2 casilla(s)")), "confirma antes de escribir, con la cuenta exacta");
+      t.falso(alertas[alertas.length - 1].includes("⚠️"), "sin aviso de desajuste: 3 candidatos vistos, candidatos.length===3===plantilla.total (oculta no cuenta)");
+    });
+
+    t.caso("Aplicar plantilla: si el número de casillas no coincide con el guardado, avisa el desajuste sin dejar de aplicar", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({ total: 5, textos: ["A", "B", "C", "D", "E"], guardadoEn: 1 }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const vacia = campoFalso("");
+      // solo 1 casilla hoy, la plantilla trae 5
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
+      const alertas = [];
+      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.ctx.confirm = (m) => { alertas.push("[confirm]" + m); return true; };
+      btnA.onclick();
+      t.igual(vacia.value, "A", "aun con desajuste, sí aplica lo que puede (posición 0)");
+      t.cierto(alertas.some((a) => a.includes("⚠️") && a.includes("1 casilla(s)") && a.includes("5")), "avisa el desajuste con ambas cifras, en el confirm o en el resumen final");
+    });
+
+    t.caso("Aplicar plantilla: si el médico cancela la confirmación, no escribe nada", () => {
+      cv.env.storage.setItem("vgl_plantilla_examen_fisico", JSON.stringify({ total: 1, textos: ["Frase guardada"], guardadoEn: 1 }));
+      const btnA = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-aplicar");
+      const vacia = campoFalso("");
+      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
+      cv.ctx.confirm = () => false;
+      btnA.onclick();
+      t.igual(vacia.value, "", "cancelar la confirmación deja la casilla vacía intacta");
+      t.igual(vacia._eventos.length, 0, "no se disparó ningún evento al cancelar");
+      cv.ctx.confirm = () => true; // se restaura para no afectar pruebas posteriores
     });
 
     // ================= openLaboratoriosModal =================
