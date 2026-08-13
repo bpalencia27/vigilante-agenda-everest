@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.3
+// @version      12.10.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2760,13 +2760,7 @@
   // v12.9.0 — Pestaña "Revisión por sistema y Examen físico": el médico escribe a mano, en
   // cada consulta, la MISMA frase específica por cada sistema (p. ej. "Piel y faneras:
   // NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "Corazón: NEGATIVO PARA
-  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido. Corrección tras
-  // la primera entrega (que asumía casillas vacías con un solo texto a repetir): el médico
-  // mostró una captura real donde las ~37 casillas de esa pestaña YA tenían, cada una, su
-  // propia frase — nada estaba vacío salvo dos exámenes puntuales no realizados. Lo que hace
-  // falta es una PLANTILLA guardada por posición: capturar hoy, en orden, la frase de cada
-  // casilla, y poder volver a pegarlas — cada una en SU posición — en un paciente nuevo con
-  // esa pestaña en blanco.
+  // PRECORDIALGIA..."): un texto DISTINTO por casilla, no uno único repetido.
   //
   // Diagnóstico real en consultorio (13-08-2026, DIAGNOSTICO_EXAMEN_FISICO.js): 45 de 56
   // campos de esa pestaña comparten LITERALMENTE el mismo id="alert_message" (defecto de
@@ -2777,13 +2771,16 @@
   // un supuesto, no una certeza: si Everest cambiara el orden o el número de casillas entre
   // pacientes (el propio médico mostró que un paciente pediátrico trae secciones adicionales
   // de curvas de crecimiento que uno adulto no tiene), la posición N ya no sería el mismo
-  // sistema. Por eso "Aplicar plantilla" avisa explícitamente si el número de casillas no
-  // coincide con el de cuando se guardó, en vez de aplicar en silencio.
-  const EXAMEN_FISICO_PLANTILLA_KEY = "vgl_plantilla_examen_fisico";
+  // sistema. Por eso el botón avisa explícitamente si el número de casillas de hoy no
+  // coincide con lo esperado, en vez de aplicar en silencio.
+  //
+  // v12.10.4 — Se retiraron "💾 Guardar plantilla" / "📋 Aplicar plantilla" (v12.9.0, la
+  // plantilla que se "recordaba" del último paciente vía localStorage) a pedido directo del
+  // médico: solo quiere la plantilla FIJA de normalidad semiológica de abajo, con un único
+  // botón y sin cuadro de confirmación de por medio (sigue sin sobrescribir NUNCA una casilla
+  // con texto — esa regla no se negocia).
 
-  // v12.10.3 — Plantilla de normalidad semiológica FIJA (a pedido directo del médico, no
-  // "recordada" del último paciente como la de arriba: esta va incluida en el propio script).
-  // Mismo supuesto posicional que EXAMEN_FISICO_PLANTILLA_KEY (ver comentario arriba): 19
+  // v12.10.3 — Plantilla de normalidad semiológica FIJA, incluida en el propio script. 19
   // frases de "Revisión por sistema" seguidas de 17 de "Examen físico" — el médico pidió
   // omitir MAMAS y GENITO/URINARIO de esa segunda sección porque no las examina de rutina.
   // Cada texto es SOLO la descripción (Everest ya muestra el nombre del sistema como
@@ -2835,83 +2832,13 @@
   }
 
   function createExamenFisicoInjectorUI() {
-      if (document.getElementById("vgl-examen-guardar")) return;
-
-      const btnGuardar = document.createElement("button");
-      btnGuardar.id = "vgl-examen-guardar";
-      btnGuardar.innerHTML = "💾 Guardar plantilla";
-      btnGuardar.title = "Guarda, en el orden en que aparecen, las frases que ya escribiste en Revisión por sistema / Examen físico de ESTE paciente. Se recuerdan en este navegador para aplicarlas en el próximo paciente.";
-      btnGuardar.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#0ea5e9;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
-
-      btnGuardar.onclick = () => {
-          uxTrack("examenFisico.plantilla.guardar.click");
-          const candidatos = _casillasExamenFisico();
-          if (!candidatos.length) {
-              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
-              return;
-          }
-          const textos = candidatos.map((el) => String(el.value == null ? "" : el.value).trim());
-          const conTexto = textos.filter((t) => t !== "").length;
-          if (!conTexto) {
-              alert("Ninguna de las " + candidatos.length + " casilla(s) tiene texto todavía — escribe primero y luego guarda la plantilla.");
-              return;
-          }
-          if (!confirm("¿Guardar como plantilla las " + conTexto + " frase(s) que ya escribiste en esta pantalla (de " + candidatos.length + " casillas en total)?\n\nLa próxima vez que uses \"Aplicar plantilla\" en un paciente nuevo, se pegarán en el mismo orden.")) return;
-          writeJSON(EXAMEN_FISICO_PLANTILLA_KEY, { total: candidatos.length, textos, guardadoEn: Date.now() });
-          uxTrack("examenFisico.plantilla.guardada", { n: conTexto, total: candidatos.length });
-          alert("✅ Plantilla guardada: " + conTexto + " frase(s) de " + candidatos.length + " casilla(s).");
-      };
-
-      const btnAplicar = document.createElement("button");
-      btnAplicar.id = "vgl-examen-aplicar";
-      btnAplicar.innerHTML = "📋 Aplicar plantilla";
-      btnAplicar.title = "Pega, casilla por casilla y en el mismo orden, la última plantilla guardada — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
-      btnAplicar.style.cssText = "position:fixed;bottom:175px;left:15px;z-index:9999999;background:#0ea5e9;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
-
-      btnAplicar.onclick = () => {
-          uxTrack("examenFisico.plantilla.aplicar.click");
-          const plantilla = readJSON(EXAMEN_FISICO_PLANTILLA_KEY, null);
-          if (!plantilla || !Array.isArray(plantilla.textos) || !plantilla.textos.length) {
-              alert("Todavía no hay ninguna plantilla guardada. Usa primero \"💾 Guardar plantilla\" en un paciente con las casillas ya escritas.");
-              return;
-          }
-          const candidatos = _casillasExamenFisico();
-          if (!candidatos.length) {
-              alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
-              return;
-          }
-          // v12.9.0 — Nunca se sobrescribe una casilla con contenido (misma regla de Auto-Labs:
-          // LA CASILLA DEL MÉDICO ES SAGRADA), y solo se recorre hasta el menor de los dos
-          // tamaños — si esta pantalla trae MÁS casillas que la plantilla, las de más allá del
-          // final guardado se dejan intactas en vez de adivinar con qué rellenarlas.
-          const porAplicar = [];
-          const n = Math.min(candidatos.length, plantilla.textos.length);
-          for (let i = 0; i < n; i++) {
-              const actual = String(candidatos[i].value == null ? "" : candidatos[i].value).trim();
-              const guardado = String(plantilla.textos[i] || "").trim();
-              if (actual === "" && guardado !== "") porAplicar.push({ el: candidatos[i], texto: guardado });
-          }
-          if (!porAplicar.length) {
-              alert("No hay ninguna casilla vacía que la plantilla pueda completar en esta pantalla.");
-              return;
-          }
-          const desajuste = candidatos.length !== plantilla.total;
-          const aviso = desajuste
-            ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla se guardó con " + plantilla.total + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
-            : "";
-          if (!confirm("¿Rellenar " + porAplicar.length + " casilla(s) vacía(s) con la plantilla guardada?" + aviso)) return;
-          porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
-          uxTrack("examenFisico.plantilla.aplicada", { n: porAplicar.length, desajuste });
-          alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla guardada."
-            + (candidatos.length - porAplicar.length > 0 ? "\n\n✋ Las demás ya tenían texto o quedan fuera de la plantilla, y se respetaron." : "")
-            + aviso);
-      };
+      if (document.getElementById("vgl-examen-normalidad")) return;
 
       const btnNormalidad = document.createElement("button");
       btnNormalidad.id = "vgl-examen-normalidad";
       btnNormalidad.innerHTML = "🩺 Normalidad fija";
-      btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto. Distinta de \"Aplicar plantilla\": esta no depende de haber guardado nada antes.";
-      btnNormalidad.style.cssText = "position:fixed;bottom:220px;left:15px;z-index:9999999;background:#16a34a;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+      btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
+      btnNormalidad.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#16a34a;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
 
       btnNormalidad.onclick = () => {
           uxTrack("examenFisico.normalidadFija.click");
@@ -2920,8 +2847,10 @@
               alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
               return;
           }
-          // Misma regla sagrada que "Aplicar plantilla": nunca se sobrescribe una casilla con
-          // contenido, y solo se recorre hasta el menor de los dos tamaños.
+          // LA CASILLA DEL MÉDICO ES SAGRADA: nunca se sobrescribe una casilla con contenido,
+          // y solo se recorre hasta el menor de los dos tamaños. A pedido del médico, este
+          // botón no pide confirmación — un solo clic — pero la regla de no-sobrescribir no
+          // se negocia.
           const porAplicar = [];
           const n = Math.min(candidatos.length, EXAMEN_FISICO_NORMALIDAD_FIJA.length);
           for (let i = 0; i < n; i++) {
@@ -2936,7 +2865,6 @@
           const aviso = desajuste
             ? "\n\n⚠️ Esta pantalla tiene " + candidatos.length + " casilla(s) y la plantilla fija trae " + EXAMEN_FISICO_NORMALIDAD_FIJA.length + ". El orden podría no coincidir exactamente — revisa el resultado antes de guardar la historia."
             : "";
-          if (!confirm("¿Rellenar " + porAplicar.length + " casilla(s) vacía(s) con la plantilla FIJA de normalidad semiológica?" + aviso)) return;
           porAplicar.forEach(({ el, texto }) => setNgValue(el, texto));
           uxTrack("examenFisico.normalidadFija.aplicada", { n: porAplicar.length, desajuste });
           alert("✅ Se rellenaron " + porAplicar.length + " casilla(s) vacías con la plantilla fija de normalidad."
@@ -2944,8 +2872,6 @@
             + aviso);
       };
 
-      document.body.appendChild(btnGuardar);
-      document.body.appendChild(btnAplicar);
       document.body.appendChild(btnNormalidad);
   }
 
