@@ -2617,6 +2617,7 @@
   // que el médico borraba o corregía — sin ningún clic suyo. Ahora el robot solo CONSULTA
   // Athenea y guarda el resultado aquí; escribir en la historia clínica es EXCLUSIVO del
   // botón «🧬 Auto-Labs», que gracias a esta pre-carga responde al instante.
+  let _pacienteDetalladoCache = { pid: "", edadAnos: null, sexo: "" };
   let _labsPrefetch = { docId: "", labs: null, ts: 0 };
   let _labsAvisoDoc = "";
   const LABS_PREFETCH_TTL_MS = 10 * 60000;
@@ -5034,6 +5035,70 @@
   }
 
   // =====================================================================
+
+  // =====================================================================
+  //  CÁLCULO DE FUNCIÓN RENAL Y ESTADIFICACIÓN KDIGO (PORTADO DE RCV_COPILOTO)
+  // =====================================================================
+  function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
+    const edad = Number(edadAnios);
+    const peso = Number(pesoKg);
+    const cr = Number(creatininaSerica);
+    if (!Number.isFinite(edad) || edad <= 0 || edad >= 140 || !Number.isFinite(peso) || peso <= 0 || !Number.isFinite(cr) || cr <= 0) return 0;
+
+    let v = ((140 - edad) * peso) / (72 * cr);
+    if (String(sexo).trim().toUpperCase().charAt(0) === 'F') {
+      v *= 0.85;
+    }
+    return Math.round(v * 10) / 10;
+  }
+
+  function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
+    const edad = Number(edadAnios);
+    const cr = Number(creatininaSerica);
+    if (!Number.isFinite(edad) || edad <= 0 || !Number.isFinite(cr) || cr <= 0) return 0;
+
+    const esFem = String(sexo).trim().toUpperCase().charAt(0) === 'F';
+    const k = esFem ? 0.7 : 0.9;
+    const a = esFem ? -0.241 : -0.302;
+    const R = cr / k;
+
+    const F = R <= 1 ? Math.pow(R, a) : Math.pow(R, -1.200);
+    let e = 142 * F * Math.pow(0.9938, edad);
+    if (esFem) e *= 1.012;
+
+    return Math.round(e * 10) / 10;
+  }
+
+  function estadioKDIGO(tfg) {
+    if (tfg >= 90) return "G1";
+    if (tfg >= 60) return "G2";
+    if (tfg >= 45) return "G3a";
+    if (tfg >= 30) return "G3b";
+    if (tfg >= 15) return "G4";
+    return "G5";
+  }
+
+  function evaluarDiscordanciaTFG(tfgCG, tfgCKD) {
+    if (!tfgCG || !tfgCKD) return null;
+
+    const estadioCG = estadioKDIGO(tfgCG);
+    const estadioCKD = estadioKDIGO(tfgCKD);
+
+    const mapa = { "G1": 1, "G2": 2, "G3a": 3, "G3b": 4, "G4": 5, "G5": 6 };
+    const diff = Math.abs(mapa[estadioCG] - mapa[estadioCKD]);
+
+    if (diff > 2) {
+      return {
+        alerta: true,
+        estadioCG,
+        estadioCKD,
+        diferenciaEstadios: diff,
+        mensaje: `Discordancia clínica detectada: el estadio administrativo (Cockcroft-Gault: ${estadioCG}) difiere en ${diff} posiciones del estadio clínico real (CKD-EPI: ${estadioCKD}).`
+      };
+    }
+    return null;
+  }
+
   //  RECORDATORIO DE PyM AL ABRIR LA HISTORIA CLÍNICA (v7.6)
   //  Confirmado con diagnóstico real en Everest: la pestaña #anamesis SOLO existe
   //  en la vista de historia clínica (ancla barata y confiable), y la cédula vive
@@ -5408,6 +5473,86 @@
   // (_labsPrefetch) — nunca dispara una consulta propia ni bloquea el tick esperando una;
   // si la pre-carga de este paciente aún no llegó, simplemente no hay nada que revisar
   // todavía y el siguiente tick lo reintenta solo.
+
+
+  // =====================================================================
+  //  VIGILANTE RCV: CÁLCULO DE FUNCIÓN RENAL
+  // =====================================================================
+  async function checkFuncionRenal() {
+    try {
+      const doc = extractPacienteAbierto(); if (!doc) return;
+      const key = normalizeKey(doc); if (!key) return;
+      const uid = "tfg|" + key;
+
+      if (avisoYaVisto(uid)) return;
+      if (otroAvisoDePacienteAbierto()) return;
+
+      const pCache = _pacienteDetalladoCache;
+      if (!pCache || !pCache.pid) return; // Esperamos a que alguna de las otras funciones cargue BuscarPacienteDetallado
+
+      // Obtener creatinina de los labs precargados
+      if (!_labsPrefetch.labs || _labsPrefetch.docId !== doc) return; // Aún no hay prefetch o es de otro doc
+      const cands = _ultimaFechaPorAnalito(Array.isArray(_labsPrefetch.labs) ? _labsPrefetch.labs : [], { uroanalisisPorComponentes: true }).candidatos;
+      const crCand = cands.get("CREATININA");
+
+      const crVal = crCand ? Number(String(crCand.resultVal).replace(",", ".")) : null;
+
+      let peso = null;
+      let hayDatosPeso = false;
+      try {
+        const hRes = await pageFetchJson(`/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=${pCache.pid}`);
+        if (Array.isArray(hRes) && hRes.length > 0) {
+           peso = Number(hRes[0].peso);
+           hayDatosPeso = true;
+        }
+      } catch(e) {}
+
+      const e = pCache.edadAnos;
+      const s = pCache.sexo;
+
+      let resMsg = [];
+      let cgTfg = 0;
+      let ckdTfg = 0;
+
+      if (e != null && s && hayDatosPeso && Number.isFinite(peso) && crVal) {
+        cgTfg = cockcroftGault(e, peso, crVal, s);
+        if (cgTfg > 0) {
+           resMsg.push(`Cockcroft-Gault: ${cgTfg} mL/min (${estadioKDIGO(cgTfg)}, administrativo)`);
+        } else {
+           console.log(`[Vigilante RCV] TFG — Cockcroft-Gault: No evaluable (resultado ${cgTfg})`);
+        }
+      } else {
+        console.log(`[Vigilante RCV] TFG — Falta dato para Cockcroft-Gault: edad=${e != null}, peso=${hayDatosPeso}, cr=${!!crVal}, sexo=${!!s}`);
+      }
+
+      if (e != null && s && crVal) {
+        ckdTfg = ckdEpi2021(e, crVal, s);
+        if (ckdTfg > 0) {
+           resMsg.push(`CKD-EPI 2021: ${ckdTfg} mL/min/1.73m² (${estadioKDIGO(ckdTfg)}, clínico)`);
+        } else {
+           console.log(`[Vigilante RCV] TFG — CKD-EPI 2021: No evaluable (resultado ${ckdTfg})`);
+        }
+      } else {
+        console.log(`[Vigilante RCV] TFG — Falta dato para CKD-EPI 2021: edad=${e != null}, cr=${!!crVal}, sexo=${!!s}`);
+      }
+
+      if (resMsg.length > 0) {
+        console.log(`[Vigilante RCV] TFG — ${resMsg.join(" · ")}`);
+      }
+
+      if (cgTfg > 0 && ckdTfg > 0) {
+        const diff = evaluarDiscordanciaTFG(cgTfg, ckdTfg);
+        if (diff && diff.alerta) {
+          console.warn(`[Vigilante RCV] TFG — ${diff.mensaje}`);
+        }
+      }
+
+      avisoMarcarVisto(uid);
+    } catch(err) {
+      console.warn("[Vigilante RCV] Error calculando TFG:", err);
+    }
+  }
+
   function checkLabsVencidos() {
     try {
       if (!S.labsVencidos) return;
@@ -9293,6 +9438,13 @@
         progCargados = true;
         try {
           const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
+          if (det && det.data) {
+            _pacienteDetalladoCache = {
+              pid: String(pacienteIdAcceso),
+              edadAnos: det.data.edad !== undefined && det.data.edad !== null && det.data.edad !== 0 ? det.data.edad : (det.data.edadAnos !== undefined && det.data.edadAnos !== null && det.data.edadAnos !== 0 ? det.data.edadAnos : null),
+              sexo: String(det.data.sexo || "").trim().toUpperCase().charAt(0)
+            };
+          }
           if (!vivo()) return;
           pacienteEpsNombre = (det && det.data && det.data.eps && det.data.eps.nombre) || "";
           pacienteNombreCompleto = (det && det.data && det.data.nombreCompleto) || "";
@@ -10400,6 +10552,13 @@
       const pid = await apiAccesoBuscarPaciente(apt.doc_id);
       if (pid) {
         const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pid}`);
+        if (det && det.data) {
+          _pacienteDetalladoCache = {
+            pid: String(pid),
+            edadAnos: det.data.edad !== undefined && det.data.edad !== null && det.data.edad !== 0 ? det.data.edad : (det.data.edadAnos !== undefined && det.data.edadAnos !== null && det.data.edadAnos !== 0 ? det.data.edadAnos : null),
+            sexo: String(det.data.sexo || "").trim().toUpperCase().charAt(0)
+          };
+        }
         sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
       }
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
@@ -11506,6 +11665,7 @@
           checkRecordatorioPym();
           checkAbandonoPES();
           checkLabsVencidos();
+          checkFuncionRenal();
         }
       }
     } catch (e) { console.error("[Vigilante] tick:", e); }

@@ -50,3 +50,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 11128 | `? (esAtendido || yaAbiertoHoy` &rarr; `? (false || yaAbiertoHoy` | No | - |
 | 8822 | `<div class="vgl-labs-uro">…<span class="vgl-labs-uro-i">…</span>…</div>` &rarr; `…join("&lt;br&gt;")` (volver al chorizo previo) | No | - |
 | 2844 | `if (actual === "" && guardado !== "") porAplicar.push(...)` &rarr; `if (guardado !== "") porAplicar.push(...)` (rediseño v12.9.0 a plantilla por posición; reemplaza la fila anterior de esta misma pareja de botones) | No | - |
+| 2026-08-12 | `vigilante_agenda.user.js` | Se alteró la frontera KDIGO G1 de `>= 90` a `> 90` | `estadioKDIGO: fronteras exactas` | Falla reportando que 90 devuelve G2 en lugar de G1. | Restaurado |
