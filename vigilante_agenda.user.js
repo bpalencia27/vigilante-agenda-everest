@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.9
+// @version      12.10.10
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.9";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.10";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8609,6 +8609,22 @@
     };
   }
 
+  function clasificaCupoAgenda(valorCampoAgenda) {
+    if (!valorCampoAgenda) return "desconocido";
+    const norm = String(valorCampoAgenda)
+      .toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, "");
+
+    if (norm === "adicional" || norm === "adicional-staff") {
+      return "adicional";
+    }
+    if (norm === "normal") {
+      return "normal";
+    }
+    return "desconocido";
+  }
+
   function format12hTime(timeStr) {
     if (!timeStr) return "";
     const parts = String(timeStr).split(":");
@@ -9476,10 +9492,11 @@
     // probadas con mutación en suite_24_motor_perfil.js) calculado UNA vez junto con los
     // programas — mismo patrón que pacienteEpsNombre/pacienteNombreCompleto de arriba.
     // Solo se usa el Eje A (franja horaria: "SUGERIDO" en la hora que recomienda para
-    // diabetes/HTA+DM). El Eje B (cupos adicionales) queda sin conectar a propósito: no
-    // hay evidencia real de qué campo de la respuesta de Everest marca una agenda como
-    // "Adicional" (ver BACKLOG_MEJORAS.md #3) — conectarlo a ciegas violaría "casilla
-    // vacía antes que dato inventado".
+    // diabetes/HTA+DM). El Eje B (cupos adicionales) queda sin conectar a propósito:
+    // la evidencia está en captura_agendamiento_oficial_20260810.json donde el campo
+    // `agenda` puede ser "Normal", "Adicional", o "Adicional-Staff" (SUPERPROMPT_AGENDA_V13.md
+    // líneas 395-397). Todavía falta la estadística de ocupación de esos cupos (ver
+    // BACKLOG_MEJORAS.md #3).
     let perfilDelPaciente = null;
     let progCargados = false;   // v12.1.0: los programas del paciente se cargan una vez
     let selectedTurnoObj = null;

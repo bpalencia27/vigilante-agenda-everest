@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Motor de perfil (D3-bis)",
-  cubre: ["perfilPaciente", "recomendacionHorario"],
+  cubre: ["perfilPaciente", "recomendacionHorario", "clasificaCupoAgenda"],
   pruebas(t, api) {
     t.caso("Eje A (franja) - diabéticos obtienen primera mitad", () => {
       t.igual(api.perfilPaciente(["Diabetes"]).franja, "primera_mitad");
@@ -110,6 +110,25 @@ module.exports = {
       ];
       const rec = api.recomendacionHorario({ franja: "primera_mitad" }, turnos);
       t.igual(rec.sugerida, "06:20");
+    });
+
+    t.caso("Clasifica cupo agenda - valores normales", () => {
+      t.igual(api.clasificaCupoAgenda("Normal"), "normal");
+      t.igual(api.clasificaCupoAgenda("normal"), "normal");
+    });
+
+    t.caso("Clasifica cupo agenda - valores adicionales (con y sin staff)", () => {
+      t.igual(api.clasificaCupoAgenda("Adicional"), "adicional");
+      t.igual(api.clasificaCupoAgenda("adicional"), "adicional");
+      t.igual(api.clasificaCupoAgenda("Adicional-Staff"), "adicional");
+      t.igual(api.clasificaCupoAgenda("adicional-staff"), "adicional");
+    });
+
+    t.caso("Clasifica cupo agenda - vacíos, nulos y desconocidos no asumen normalidad", () => {
+      t.igual(api.clasificaCupoAgenda(""), "desconocido");
+      t.igual(api.clasificaCupoAgenda(null), "desconocido");
+      t.igual(api.clasificaCupoAgenda(undefined), "desconocido");
+      t.igual(api.clasificaCupoAgenda("cualquierotra"), "desconocido");
     });
   }
 };
