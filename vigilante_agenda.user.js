@@ -6628,15 +6628,15 @@
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
-      .vgl-card-top-t1 { gap:10px; }
-      .vgl-card-time-wrap-t1 { gap:10px; }
-      .vgl-cdot-t1 { width:11px; height:11px; }
-      .vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
-      .vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
-      .vgl-card-mid-t1 { margin-top:9px; gap:10px; }
-      .vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
+      .vgl-card-top.vgl-card-top-t1 { gap:10px; }
+      .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
+      .vgl-cdot.vgl-cdot-t1 { width:11px; height:11px; }
+      .vgl-time.vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
+      .vgl-badge.vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
+      .vgl-card-mid.vgl-card-mid-t1 { margin-top:9px; gap:10px; }
+      .vgl-name.vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
       .vgl-doc-t1 { background:var(--bg2); padding:3px 10px; border-radius:var(--r-pill); box-shadow:var(--glow-edge); font-variant-numeric:tabular-nums; }
-      .vgl-card-btm-t1 { margin-top:7px; gap:10px; }
+      .vgl-card-btm.vgl-card-btm-t1 { margin-top:7px; gap:10px; }
 
       .vgl-card-actions{
         display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;
@@ -7468,7 +7468,7 @@
       #vgl-agendar-modal .vgl-agm-cell:hover{border-color:var(--edge);box-shadow:var(--shadow-card)}
       #vgl-agendar-modal.light .vgl-agm-cell{background:var(--bg2)}
       #vgl-agendar-modal .vgl-agm-cell .vgl-agm-presets:last-child{margin-bottom:0}
-      #vgl-agendar-modal .vgl-agm-cell-flat{padding:13px 16px}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-flat {padding:13px 16px}
 
       /* ---- Cabecera: jerarquía masiva — el paciente ES el título ---- */
       #vgl-agendar-modal .vgl-agm-head{align-items:center;gap:14px;border-bottom:0;padding-bottom:0;margin-bottom:16px}
@@ -7511,20 +7511,20 @@
       #vgl-agendar-modal .vgl-agm-sbtn.active{transform:scale(1.02)}
 
       /* ---- Celdas bento SMS (azul) y Laboratorio (verde) ---- */
-      #vgl-agendar-modal .vgl-agm-cell-sms{
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms {
         background:linear-gradient(165deg,rgba(var(--rgb-azul),.16),rgba(var(--rgb-azul),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-azul),.36);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-azul),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell-sms:hover{border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
-      #vgl-agendar-modal .vgl-agm-cell-lab{
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-sms:hover {border-color:rgba(var(--rgb-azul),.55);transform:translateY(-1px)}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab {
         background:linear-gradient(165deg,rgba(var(--rgb-verde),.15),rgba(var(--rgb-verde),.03) 72%),var(--bg2);
         border-color:rgba(var(--rgb-verde),.34);
         box-shadow:var(--glow-edge),0 0 26px rgba(var(--rgb-verde),.08)
       }
-      #vgl-agendar-modal .vgl-agm-cell-lab:hover{border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
-      #vgl-agendar-modal.light .vgl-agm-cell-sms{background:rgba(var(--rgb-azul),.07)}
-      #vgl-agendar-modal.light .vgl-agm-cell-lab{background:rgba(var(--rgb-verde),.07)}
+      #vgl-agendar-modal .vgl-agm-cell.vgl-agm-cell-lab:hover {border-color:rgba(var(--rgb-verde),.52);transform:translateY(-1px)}
+      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-sms {background:rgba(var(--rgb-azul),.07)}
+      #vgl-agendar-modal.light .vgl-agm-cell.vgl-agm-cell-lab {background:rgba(var(--rgb-verde),.07)}
       /* v12.3.x — Se extiende a #vgl-ordenar-modal (antes solo agendar) para la sección de
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
