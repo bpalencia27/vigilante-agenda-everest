@@ -389,6 +389,26 @@ module.exports = {
       t.falso(bAt.disabled, "al fallar, el botón se reactiva — no queda bloqueado para siempre por un error de red");
     });
 
+
+
+    t.caso("T1 — Las tarjetas de render() se construyen usando clases y sin style inline (salvo --tc/--trgb)", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = { doc_id: "777", nombre: "Prueba Clases", hora: "08:00", hora_texto: "08:00", color: "VERDE", estado: "Sala", pym: ["MAMOGRAFÍA"] };
+      cv.api.render([pac], "suite", new Date("2023-01-01T12:00:00"));
+      const tarjeta = lista.children[0];
+      const cardHTML = tarjeta.innerHTML;
+
+      const styles = cardHTML.match(/style="([^"]+)"/g) || [];
+      const stylesProhibidos = styles.filter(s =>
+        !s.includes("--tc") &&
+        !s.includes("background:rgba(var(--rgb-") // badgeRgba
+      );
+      t.cierto(stylesProhibidos.length === 0, "No debe haber styles inline salvo variables o badgeRgba, hallados: " + stylesProhibidos.join(", "));
+      t.falso(cardHTML.includes('gap:10px'), "no debe haber gap:10px inline");
+    });
+
+
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
