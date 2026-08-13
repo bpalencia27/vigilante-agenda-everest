@@ -66,3 +66,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 7031 | v12.10.7: `color:var(--c-rojo)` &rarr; `color:var(--c-alerta)` (token inventado por Jules que nunca se definió en ningún lado; causaba herencia del azul de Everest) | No | "no debe reaparecer --c-alerta/--rgb-alerta..." — restaurado |
 | 1973 | `_canonNombreLab` (quitar reemplazo de separadores por espacios, `replace(/[\/\-_,.;:()]+/g, " ")`) | No | Falla `_canonNombreLab: convierte separadores especiales a espacios simples` y `_matchLabInWhitelist v12.6.8` |
 | 2034 | `_findHbA1cFields` (cambiar el atributo para validación max de 30 a 20 `el.getAttribute("max") === "20"`) | No | Falla `_findHbA1cFields: encuentra el input correcto por type=number y max=30 y asocia la fecha hermana` |
+| 11912 | `if (false) return;` | No | `boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)` |

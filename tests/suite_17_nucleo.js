@@ -1,12 +1,40 @@
+
+
+function enriquecerDom(c) {
+  const doc = c.env.doc;
+  const crearBase = doc.createElement;
+  doc._nodos = [];
+  doc.createElement = function (tag) {
+    const e = crearBase.call(doc, tag);
+    const memo = new Map();
+    e.querySelector = (sel) => {
+      if (!memo.has(sel)) memo.set(sel, doc.createElement("div"));
+      return memo.get(sel);
+    };
+    e.querySelectorAll = () => [];
+    doc._nodos.push(e);
+    return e;
+  };
+  doc.createDocumentFragment = () => {
+    const f = doc.createElement("div");
+    f._esFragmento = true;
+    return f;
+  };
+  const getByIdBase = doc.getElementById;
+  doc.getElementById = (id) => {
+    return doc._nodos.find(n => n.id === id) || (getByIdBase ? getByIdBase(id) : null);
+  };
+}
+
 // =====================================================================
 //  SUITE 17 — Núcleo: bucles, latidos y utilidades GM
 //  Cubre el corazón del Vigilante: el bucle tick(), el latido de liderazgo,
 //  la cesión del hilo (yieldNow/makeYielder/idleRun), los POST vía
 //  GM_xmlhttpRequest, los avisos de versión/PyM y el robot Athenea.
 //
-//  boot() NO se cubre: construye el panel entero con buildOverlay(), que
-//  exige un DOM real (root.querySelector("#vgl-load").addEventListener
-//  revienta con el DOM falso del arnés, cuyo querySelector devuelve null).
+//  boot() ahora se cubre inyectando un DOM simulado enriquecido.
+//  (Usando el mismo patrón de enriquecerDom() de la suite 15).
+//
 // =====================================================================
 module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
@@ -16,6 +44,7 @@ module.exports = {
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
+    "boot",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -602,5 +631,42 @@ module.exports = {
       t.cierto(logs.some((e) => e.act === "LabsAutoPrefetched"), "la pre-carga queda registrada en la bitácora");
       t.falso(logs.some((e) => e.act === "LabsAutoInjected"), "y ninguna inyección automática vuelve a ocurrir");
     });
+
+    // ---------- boot ----------
+    await t.casoAsync("boot: inicializa sistema, levanta timers y construye overlay (v12)", async () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+
+      const _si = c.env.win.setInterval;
+      const _st = c.env.win.setTimeout;
+      const registeredIntervals = [];
+      const registeredTimeouts = [];
+
+      c.env.win.setInterval = (fn, ms) => {
+        registeredIntervals.push({ fn, ms });
+        return _si(fn, ms);
+      };
+      c.env.win.setTimeout = (fn, ms) => {
+        registeredTimeouts.push({ fn, ms });
+        return _st(fn, ms);
+      };
+
+      c.api.boot();
+
+      t.cierto(registeredIntervals.some(i => i.ms === 300000 && i.fn === c.api.checkVersionMinimum), "boot configuró el intervalo para checkVersionMinimum");
+      t.cierto(registeredIntervals.some(i => i.ms === 15000 && i.fn === c.api.paintMute), "boot configuró el intervalo para paintMute");
+      t.cierto(registeredTimeouts.some(i => i.ms === 6000 && i.fn === c.api.chequearAutoUpdateLento), "boot configuró el timeout para chequearAutoUpdateLento");
+
+      const prevIntervals = registeredIntervals.length;
+
+      // Simular que el root ya existe en el DOM
+      const rootMock = c.env.doc.createElement("div");
+      rootMock.id = "vgl-root";
+
+      c.api.boot();
+
+      t.igual(registeredIntervals.length, prevIntervals, "boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)");
+    });
+
   },
 };
