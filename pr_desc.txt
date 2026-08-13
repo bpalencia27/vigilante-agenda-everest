@@ -1,0 +1,100 @@
+## 1. Qué cambié
+- `cockcroftGault` (:5299) — nueva
+- `ckdEpi2021` (:5306) — nueva
+- `estadioKDIGO` (:5318) — nueva
+- `evaluarDiscordanciaTFG` (:5327) — nueva
+- `checkTFGRCV` (:5345) — nueva, encargada de la lógica de evaluación diaria y extracción de datos del paciente, validando ausencias de peso, edad, y sexo, reaprovechando la API de signos vitales y datos de pacientes.
+- `setInterval` main loop (:11513) — tocada para insertar `checkTFGRCV()`.
+- `apiAccesoBuscarPacienteDetallado` (:8229) — nueva función memoizada para evitar peticiones redundantes a `BuscarPacienteDetallado` (regla 5). Utilizada tanto en `checkTFGRCV`, como refactorizada en `openAgendamientoModal` y `openOrdenamientoModal` para reutilizar el valor.
+
+## 2. Salida COMPLETA del runner
+════════════════════════════════════════════════════════════════
+  PRUEBAS DEL VIGILANTE DE AGENDA
+════════════════════════════════════════════════════════════════
+  funciones alcanzables: 328 de 353
+
+✓ Texto y datos del paciente                41 ok
+✓ Tiempo y fechas                           22 ok
+✓ Excel, caché y SharePoint                 16 ok
+✓ Colores y notificaciones de la agenda     23 ok
+[Vigilante] AsignarTurno → {
+  Marcacion: 'NA',
+  Consulta: false,
+  swIsPyM: true,
+  SwProgramaEspecial: true
+}
+✓ Llamadas a Everest y clínicas             1 ok
+✓ Panel, ajustes, modales                   6 ok
+✓ Lector de Excel (ZIP/XLSX)                10 ok
+[Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado, resultDate = 2023-01-02
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Solicitud 4321 · 05/03/2026 · LAB</div>"
+[Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Del 01/02/2026 al 05/03/2026</div>"
+[Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"PARCIAL DE ORINA","resultado":"+++"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"POSITIVO"},{"nombre":"PROTEINAS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"HEMOGLOBINA","padre":"UROANALISIS","resultado":"+++ (solicitud vieja)"}]
+[Vigilante] uroanálisis: 1 casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).
+[Vigilante] diagnóstico fecha — COLESTEROL_TOTAL: dateInput NO encontrado, resultDate = null
+[Vigilante] uroanálisis: casilla de resultado completada tras reintento (Angular tardó en mostrarla después de marcar SI).
+[Vigilante] diagnóstico fecha — UROANALISIS: dateInput SÍ encontrado, resultDate = 2026-08-10
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","resultado":"412.5"}]
+[Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
+✓ Laboratorios Crónicos (Suite 08)          84 ok
+✓ Ajustes y almacén local (Suite 09)        30 ok
+✓ Estadísticas, eventos y auditoría         24 ok
+✓ Cola de reportes al remoto (Suite 11)     21 ok
+✓ SharePoint y caché del piloto (Suite 12)  40 ok
+✓ Lectura directa del API de agenda         56 ok
+✓ Extracción del DOM de Everest (Suite 14)  26 ok
+✓ Interfaz: ventana, hojas y modales        79 ok
+✓ Lectura en flujo del Excel PyM            24 ok
+✓ Núcleo: bucles, latidos y utilidades GM   26 ok
+✓ Puente Athenea y credenciales (Suite 18)  80 ok
+✓ Identidad de API por médico y blindaje de cuota21 ok
+✓ Correo de órdenes al paciente (Suite 20)  7 ok
+✓ Comparador de fuentes                     1 ok
+✓ RCV: Fórmulas de TFG y estadificación KDIGO5 ok
+✓ v12.4: horas, panel PyM y tabla CUPS      29 ok
+✓ Utilidades Puras                          3 ok
+✓ Telemetría de uso del panel (v12.5)       20 ok
+
+────────────────────────────────────────────────────────────────
+  comprobaciones : 695 pasan
+  funciones cubiertas: 322 / 353  (91.2%)
+
+  sin cubrir (6):
+    _findHbA1cFields, _instalarCazaErrores, apiAccesoBuscarPacienteDetallado, openLabSoloModal, boot, _canonNombreLab
+────────────────────────────────────────────────────────────────
+
+## 3. Pruebas nuevas
+- `cockcroftGault: paciente obesa (caso real referenciado 186.8 mL/min) y datos básicos` (verifica cálculo matemático exacto)
+- `ckdEpi2021: calcula correctamente para hombre y mujer y aplica factor edad` (verifica sensibilidad de formula según sexo y edad)
+- `estadioKDIGO: fronteras exactas probadas` (verifica límites >= KDIGO)
+- `evaluarDiscordanciaTFG: detecta saltos > 2 estadios` (verifica saltos de G1->G3a (2) y G1->G3b (3))
+- `Falta de datos en formulas: devuelve 0` (verifica aborto matemático para evitar NaNs)
+- `checkTFGRCV: omite cálculo si falta algún dato o es 0001-01-01 (fecha centinela) / signos vacío` (verifica que el request aborta correctamente usando la fecha_Nacimiento centinela)
+- `checkTFGRCV: omite cálculo si ObtenerHistoricoSignosVitales trae array vacío` (verifica que se aborta al no tener talla/peso en historial de signos vitales)
+
+## 4. Mutación aplicada
+- **Línea rota:** 5319 en `estadioKDIGO`, donde se evaluó `if (tfg >= 60) return "G2";` se cambió por `if (tfg > 60) return "G2";`.
+- **Prueba que cayó:** `estadioKDIGO: fronteras exactas probadas` (esperaba "G2" y obtuvo "G3a").
+- **Restaurado:** Se restauró y se comprobó la vuelta al verde total (695 pasan).
+
+## 5. Verificación de alcance
+`git diff --stat origin/claude/pym-agenda-blindaje-v12-4`
+ tests/INFORME_MUTACIONES.md         |   1 +
+ tests/runner.js                     |   2 +-
+ tests/suite_21_rcv_tfg.js           | 156 ++++++++++++++++++++++++++++++++++++
+ vigilante_agenda.user.js            | 125 +++++++++++++++++++++++++++++++++++++-
+ 4 files changed, 281 insertions(+), 3 deletions(-)
+
+Se confirma explícitamente:
+- No se crearon elementos visuales.
+- La TFG solo se muestra por `console.log`.
+- No se tocó RCV_VIGENCIA_DIAS.
+- No se duplicó `BuscarPacienteDetallado`. Se reutilizó creando la función memoizada `apiAccesoBuscarPacienteDetallado(pid)`.
+
+## 6. Hallazgos NO tocados
+Ninguno. Las respuestas en el código base para `BuscarPacienteDetallado` sí proveían `edad` o `edadAnos` adecuadamente. El script las procesa según lo encomendado.

@@ -326,7 +326,7 @@ module.exports = {
       const cf = lista.children[2].className;
 
       t.falso(cs.includes("atendido"), "En sala NO lleva clase atendido");
-      t.cierto(ca.includes("atendido"), "Atendido usa clase atendido para peso/forma CSS");
+      t.cierto(ca.includes("atendido"), "Atendido SÍ lleva clase atendido");
       t.cierto(ca.includes("vgl-card"), "Sigue siendo tarjeta");
       t.cierto(cf.includes("atendido") && cf.includes("rojo"), "El fraude mantiene ambas clases, para que CSS priorice el rojo");
     });
