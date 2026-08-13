@@ -202,7 +202,7 @@ module.exports = {
       t.igual(cv.api.__state.sheet, "ajustes");
       t.cierto(hoja.innerHTML.includes("Ajustes"));
       t.cierto(hoja.innerHTML.includes("Modo rendimiento"));
-      t.cierto(hoja.innerHTML.includes('style="display:none;"'), "sin opcionesTecnicas la sección técnica va oculta");
+      t.cierto(hoja.innerHTML.includes('class="vgl-d-none"'), "sin opcionesTecnicas la sección técnica va oculta");
       t.igual(hoja.querySelector("#c-tema").value, "oscuro", "el selector de tema refleja S.tema");
     });
 
@@ -220,7 +220,7 @@ module.exports = {
       tec.checked = true;
       disparar(tec, "change");
       t.igual(cv.api.__S.opcionesTecnicas, true);
-      t.falso(hoja.innerHTML.includes('style="display:none;"'), "la sección técnica ya no va oculta");
+      t.falso(hoja.innerHTML.includes('class="vgl-d-none"'), "la sección técnica ya no va oculta");
       t.cierto(hoja.innerHTML.includes("Probar avisos"), "los controles técnicos están pintados");
       cv.api.closeSheet();
       t.igual(cv.api.__state.sheet, null);
@@ -1093,7 +1093,7 @@ module.exports = {
       const sel = modal.querySelector("#vgl-agm-prog-sel");
       t.cierto(sel.innerHTML.includes("Nefroprotección"));
       t.falso(sel.innerHTML.includes("Salud Mental"), "un programa no-especial no se ofrece");
-      t.igual(modal.querySelector("#vgl-agm-prog-box").style.display, "block");
+      t.igual(modal.querySelector("#vgl-agm-prog-box").className.includes("vgl-d-none"), false);
       // El celular del SMS se muestra saneado para que el médico lo verifique
       t.igual(modal.querySelector("#vgl-agm-sms-tel").value, "3001112233");
       t.cierto(modal.querySelector("#vgl-agm-sms-nota").textContent.includes("verifíquelo antes de confirmar"));
