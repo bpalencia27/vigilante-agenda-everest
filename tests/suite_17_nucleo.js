@@ -394,7 +394,10 @@ module.exports = {
 
       t.cierto(texto.includes("123…(10 díg.)"), "el ID 1 debe estar enmascarado");
       t.cierto(texto.includes("987…(10 díg.)"), "el ID 2 debe estar enmascarado");
-      t.cierto(texto.includes("COINCIDEN:"), "debe contener la línea de 'COINCIDEN:'");
+      // No basta con que exista la etiqueta: el conteo real de coincidencias también es
+      // lógica de negocio, y sin esta aserción una mutación que rompa el conteo (ej. "hit"
+      // fijo) sobrevive al banco. Solo 1234567890 está en la base pym; 9876543210 no.
+      t.cierto(texto.includes("COINCIDEN: 1/2"), "el conteo real de coincidencias debe ser correcto, no solo la etiqueta");
 
       // Esta aserción pasa vacuamente porque downloadDiagnostic no vuelca el campo nombre,
       // no cuenta como cobertura y la mutación no se comprueba contra ella.
