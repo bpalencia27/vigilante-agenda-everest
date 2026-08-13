@@ -6,7 +6,8 @@ module.exports = {
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
-    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields"
+    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1131,6 +1132,68 @@ module.exports = {
       // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
       // candidato que buscar casilla para él.
       t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    t.caso("RAC Guardia: restaura la casilla cuando Everest la vacía y se apaga en edición real", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      const prevQSA = c.env.doc.querySelectorAll;
+      const prevQS = c.env.doc.querySelector;
+      const prevGetById = c.env.doc.getElementById;
+
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 123456", closest: () => null }] : []);
+
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return { id: "anamesis", tagName: "DIV" };
+        if (id === "resultadoRelacionAlbuminaCreatinina") return mockDOM.resultadoRelacionAlbuminaCreatinina;
+        return prevGetById(id);
+      };
+
+      c.ctx.uxTrack = () => {};
+
+      mockDOM = {
+        resultadoRelacionAlbuminaCreatinina: {
+          id: "resultadoRelacionAlbuminaCreatinina", tagName: "INPUT",
+          dispatchEvent: () => {}, _val: "",
+          set value(v) { this._val = v; }, get value() { return this._val; }
+        }
+      };
+
+      const labRac = { codigo: "8779", nombre: "RELACION MICROALBUMINURIA CREATININA", Resultado: "35.5" };
+      testApi.injectLabsIntoCronicos([labRac], "123456");
+
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "35.5", "el robot escribió la RAC");
+      let guardia = testApi._getRacGuardiaParaTest();
+      t.cierto(guardia.activa, "la guardia se activó");
+      t.igual(guardia.docId, "123456", "guardó el paciente");
+      t.igual(guardia.valor, "35.5", "guardó el valor");
+
+      // Simular borrado de Everest
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "35.5", "el tick restauró el valor tras ser vaciado");
+      t.cierto(testApi._getRacGuardiaParaTest().activa, "la guardia sigue activa tras restaurar");
+
+      // Simular edición real del médico a un valor distinto
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "40.0";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "40.0", "el tick respeta el valor editado a mano");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apagó para siempre por edición real");
+
+      // Simular nuevo borrado (ahora que está apagada)
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "", "ya no restaura, la guardia murió");
+
+      // Simular cambio de paciente
+      testApi._setRacGuardiaParaTest({ activa: true, docId: "PAC_999", valor: "50" });
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "50";
+      testApi.checkRacGuardia(); // el docId devuelto será 123456 (extractPacienteAbierto mock via DOM)
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apaga si cambia el paciente");
+
+      delete c.ctx.uxTrack;
+      c.env.doc.querySelectorAll = prevQSA;
+      c.env.doc.querySelector = prevQS;
+      c.env.doc.getElementById = prevGetById;
+    });
     });
 
     // =====================================================================
