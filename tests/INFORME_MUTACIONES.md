@@ -51,3 +51,5 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 8822 | `<div class="vgl-labs-uro">…<span class="vgl-labs-uro-i">…</span>…</div>` &rarr; `…join("&lt;br&gt;")` (volver al chorizo previo) | No | - |
 | 2844 | `if (actual === "" && guardado !== "") porAplicar.push(...)` &rarr; `if (guardado !== "") porAplicar.push(...)` (rediseño v12.9.0 a plantilla por posición; reemplaza la fila anterior de esta misma pareja de botones) | No | - |
 | 8382 | `const franja = tieneDM ? "primera_mitad" : "sin_preferencia";` &rarr; `const franja = tieneDM && !tieneNefro ? "primera_mitad" : "sin_preferencia";` | No | - |
+| 6655 | `.vgl-btn-action.vgl-btn-ambar` &rarr; `.vgl-btn-ambar` y declarada antes de la base. | Sí | Suite 25 (Cascada CSS) detecta dependencia del orden de declaración. |
+| 6240 | Añadir `.vgl-d-none{display:none !important}` y usar `el.root.classList.add('vgl-d-none')` antes de `style.display="flex"`. | Sí | Suite 25 (Cascada CSS) detecta conflicto !important vs inline style en `display`. |
