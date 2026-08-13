@@ -4,7 +4,7 @@
 module.exports = {
   nombre: "Telemetría de uso del panel (v12.5)",
   cubre: ["uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
-    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario"],
+    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario", "_instalarCazaErrores"],
   pruebas(t, api, env, cargar) {
 
     // gmxhr que siempre falla: reportar() encola pero repFlush no puede entregar, así
@@ -265,6 +265,46 @@ module.exports = {
       c.api.uxBootCheck();
       t.igual(cola(c).length, 1, "la ventana de HOY no se manda antes de su media hora");
       t.igual(ventana(c).acciones["panel.busqueda"], 1);
+    });
+
+    t.caso("_instalarCazaErrores: intercepta errores y rechazos solo del script propio", () => {
+      const c = cargar(cfgRed);
+      const listeners = {};
+      c.env.win.addEventListener = (evt, fn) => { listeners[evt] = fn; };
+
+      c.api._instalarCazaErrores();
+      t.cierto(!!listeners.error, "instala window.onerror");
+      t.cierto(!!listeners.unhandledrejection, "instala window.unhandledrejection");
+
+      // Simula error ajeno
+      listeners.error({ filename: "https://everest.com/app.js", message: "fallo ajeno", lineno: 10 });
+      t.igual(cola(c).filter((f) => f.evento === "error").length, 0, "ignora errores de otros scripts");
+
+      // Simula error propio
+      listeners.error({ filename: "https://x.com/vigilante_agenda.user.js", message: "fallo nuestro", lineno: 42 });
+      let q = cola(c).filter((f) => f.evento === "error");
+      t.igual(q.length, 1, "atrapa errores con vigilante en el filename");
+      t.igual(q[0].origen, "js");
+      t.cierto(q[0].msg.includes("fallo nuestro"));
+
+      // Simula rechazo ajeno
+      listeners.unhandledrejection({ reason: { stack: "Error at https://everest.com/app.js:10", message: "rechazo ajeno" } });
+      q = cola(c).filter((f) => f.evento === "error");
+      t.igual(q.length, 1, "ignora rechazos de promesas de otros scripts");
+
+      // Simula rechazo propio
+      listeners.unhandledrejection({ reason: { stack: "Error at https://x.com/userscript.js:10", message: "rechazo nuestro" } });
+      q = cola(c).filter((f) => f.evento === "error");
+      t.igual(q.length, 2, "atrapa rechazos con userscript en el stack");
+      t.igual(q[1].origen, "promesa");
+      t.cierto(q[1].msg.includes("rechazo nuestro"));
+
+      // Simula rechazo propio sin mensaje (cae en fallback al string de reason)
+      // Si la pila está vacía, pasa porque la validación es `if (pila && !/userscript|vigilante/i.test(pila)) return;`
+      listeners.unhandledrejection({ reason: "rechazo string" });
+      q = cola(c).filter((f) => f.evento === "error");
+      t.igual(q.length, 3, "atrapa rechazos sin stack");
+      t.cierto(q[2].msg.includes("rechazo string"));
     });
   }
 };
