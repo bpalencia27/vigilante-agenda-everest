@@ -11836,7 +11836,7 @@
       if (!_racGuardia.activa) return;
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
       if (docId !== _racGuardia.docId) { _racGuardia.activa = false; return; }
-      const el = document.getElementById("resultadoRelacionAlbuminaCreatinina");
+      const el = _findLabField("resultadoRelacionAlbuminaCreatinina", ["resultadoRAC"]);
       if (!el) return;
       const val = String(el.value == null ? "" : el.value).trim();
       if (val === "") {
