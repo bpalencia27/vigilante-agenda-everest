@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Tiempo y fechas",
-  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList", "esFestivo"],
+  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "calcRangoSondeoIso", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList", "esFestivo"],
   pruebas(t, api, env, cargar) {
     // Helper to setup mock date using a fresh harness to avoid global pollution
     function runWithMockDate(mockIsoStr, fn) {
@@ -73,6 +73,38 @@ module.exports = {
         const isos = range.map(r => r.iso);
         t.igual(isos, ["2023-10-18", "2023-10-19", "2023-10-20", "2023-10-23", "2023-10-24", "2023-10-25", "2023-10-26"]);
       });
+    });
+
+    // ---------- calcRangoSondeoIso ----------
+    t.caso("calcRangoSondeoIso: ±7 días hábiles + sábados candidatos, arreglo ISO exacto", () => {
+      const range = api.calcRangoSondeoIso("2026-08-13"); // Jue 13/08/2026; festivos 07/08 (Vie) y 17/08 (Lun)
+      const isos = range.map(r => r.iso);
+      t.igual(isos, [
+        "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-08", "2026-08-10", "2026-08-11",
+        "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-18", "2026-08-19", "2026-08-20",
+        "2026-08-21", "2026-08-22", "2026-08-24", "2026-08-25",
+      ]);
+    });
+
+    t.caso("calcRangoSondeoIso: metadatos — confirmado, esSabado, centro único y sin domingos/festivos", () => {
+      const range = api.calcRangoSondeoIso("2026-08-13");
+      t.igual(range.length, 18);
+
+      const centro = range.filter(r => r.isCenter);
+      t.igual(centro.length, 1);
+      t.igual(centro[0].iso, "2026-08-13");
+
+      const confirmadosAntes = range.filter(r => r.iso < "2026-08-13" && r.confirmado === true);
+      const confirmadosDespues = range.filter(r => r.iso > "2026-08-13" && r.confirmado === true);
+      t.igual(confirmadosAntes.length, 7);
+      t.igual(confirmadosDespues.length, 7);
+
+      const sabados = range.filter(r => r.esSabado === true);
+      t.igual(sabados.map(r => r.iso), ["2026-08-08", "2026-08-15", "2026-08-22"]);
+      t.cierto(sabados.every(r => r.confirmado === false));
+
+      t.cierto(range.every(r => r.dateObj.getDay() !== 0)); // ningún domingo
+      t.cierto(range.every(r => !api.esFestivo(r.dateObj))); // ningún festivo (07/08, 17/08)
     });
 
     // ---------- todayStamp ----------

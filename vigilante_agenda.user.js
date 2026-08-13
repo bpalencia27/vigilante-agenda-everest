@@ -9108,6 +9108,68 @@
     return [...prevDays, getInfo(baseDate, true), ...nextDays];
   }
 
+  // v12.10.10 (C2) — Días a SONDEAR (no a mostrar como confirmados) alrededor de una
+  // fecha ISO ya calculada: ±7 días hábiles más los sábados que caen entre ellos, porque
+  // el consultorio sí abre algunos sábados y esos días requieren sondeo por red aparte
+  // (esta función solo entrega el QUÉ sondear; el sondeo por red en sí es de otra tarea).
+  function calcRangoSondeoIso(isoDateStr) {
+    const parts = isoDateStr.split("-");
+    const baseDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    const pad = (n) => String(n).padStart(2, "0");
+
+    const getInfo = (dt, isCenter, esSabado) => {
+      const yyyy = dt.getFullYear();
+      const mm = pad(dt.getMonth() + 1);
+      const dd = pad(dt.getDate());
+      const dayShort = dt.toLocaleDateString("es-CO", { weekday: "short" }).replace(".", "");
+      const dayCap = dayShort.charAt(0).toUpperCase() + dayShort.slice(1);
+      return {
+        iso: `${yyyy}-${mm}-${dd}`,
+        fmt: `${dd}/${mm}/${yyyy}`,
+        shortLbl: `${dayCap} ${dd}/${mm}`,
+        lbl: dt.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+        isCenter: !!isCenter,
+        dateObj: new Date(dt),
+        esSabado: !!esSabado,
+        confirmado: !esSabado,
+      };
+    };
+
+    const prevDays = [];
+    let curPrev = new Date(baseDate);
+    while (prevDays.length < 7) {
+      curPrev.setDate(curPrev.getDate() - 1);
+      if (curPrev.getDay() !== 0 && curPrev.getDay() !== 6 && !esFestivo(curPrev)) {
+        prevDays.unshift(getInfo(curPrev, false, false));
+      }
+    }
+
+    const nextDays = [];
+    let curNext = new Date(baseDate);
+    while (nextDays.length < 7) {
+      curNext.setDate(curNext.getDate() + 1);
+      if (curNext.getDay() !== 0 && curNext.getDay() !== 6 && !esFestivo(curNext)) {
+        nextDays.push(getInfo(curNext, false, false));
+      }
+    }
+
+    // Sábados candidatos: los que caen estrictamente entre el primer y el último día
+    // hábil del rango (los domingos y festivos ya quedan fuera por construcción arriba).
+    const sabados = [];
+    const curSab = new Date(prevDays[0].dateObj);
+    curSab.setDate(curSab.getDate() + 1);
+    const ultimoHabil = nextDays[nextDays.length - 1].dateObj;
+    while (curSab < ultimoHabil) {
+      if (curSab.getDay() === 6 && !esFestivo(curSab)) {
+        sabados.push(getInfo(curSab, false, true));
+      }
+      curSab.setDate(curSab.getDate() + 1);
+    }
+
+    return [...prevDays, getInfo(baseDate, true, false), ...nextDays, ...sabados]
+      .sort((a, b) => (a.iso < b.iso ? -1 : a.iso > b.iso ? 1 : 0));
+  }
+
   // v12.3.20 — Igual que calcTargetDateRange pero centrado en una fecha ISO ya calculada
   // (no en "hoy + meses/días"). Se usa para los chips de fecha alterna de toma de
   // muestras, centrados en la fecha sugerida (5 días hábiles antes de la cita principal).
