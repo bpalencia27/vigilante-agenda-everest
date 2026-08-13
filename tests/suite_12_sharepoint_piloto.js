@@ -498,7 +498,7 @@ module.exports = {
       const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
-      t.igual(nodo.style.opacity, "1");
+      t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
       t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
@@ -506,8 +506,7 @@ module.exports = {
       t.igual(c.env.doc._nodos.filter((n) => n.id === "vgl-sp").length, 1, "reutiliza el nodo, no apila toasts");
       t.cierto(String(nodo.children[0].textContent).indexOf("segundo aviso") >= 0, "el texto se actualiza en el mismo aviso");
       c.api.dismissSpToast();
-      t.igual(nodo.style.opacity, "0");
-      t.igual(nodo.style.transform, "translateY(10px)");
+      t.falso(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe estar oculto");
     });
 
     await t.casoAsync("spToast: con duración se autodescarta solo; dismissSpToast sin toast no lanza", async () => {
@@ -515,7 +514,7 @@ module.exports = {
       c.api.spToast("fugaz", 6000);                       // el sandbox recorta el timer a ~1 ms
       const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
-      await esperar(() => nodo.style.opacity === "0", 2000, "el autodescarte del toast");
+      await esperar(() => !nodo.classList || !nodo.classList.contains("vgl-sp-visible"), 2000, "el autodescarte del toast");
       const c2 = cargar({ silencioso: true });
       t.noLanza(() => c2.api.dismissSpToast(), "sin toast en pantalla debe ser inofensivo");
     });

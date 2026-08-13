@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.6
+// @version      12.10.7
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.6";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.7";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2675,7 +2675,7 @@
       const btn = document.createElement("button");
       btn.id = "vgl-lab-injector";
       btn.innerHTML = "🧬 Auto-Labs (Athenea)";
-      btn.style.cssText = "position:fixed;bottom:80px;left:15px;z-index:9999999;background:#8b5cf6;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;";
+      btn.className = "vgl-lab-inj";
 
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
@@ -2838,7 +2838,7 @@
       btnNormalidad.id = "vgl-examen-normalidad";
       btnNormalidad.innerHTML = "🩺 Normalidad fija";
       btnNormalidad.title = "Pega, casilla por casilla y en el mismo orden, la plantilla FIJA de normalidad semiológica que trae el script — SOLO en las casillas que estén vacías. Nunca sobrescribe una que ya tenga texto.";
-      btnNormalidad.style.cssText = "position:fixed;bottom:130px;left:15px;z-index:9999999;background:#16a34a;color:white;border:none;padding:10px 14px;border-radius:6px;font-family:sans-serif;font-size:12px;font-weight:bold;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.5);";
+      btnNormalidad.className = "vgl-exf-btn vgl-exf-btn-normalidad";
 
       btnNormalidad.onclick = () => {
           uxTrack("examenFisico.normalidadFija.click");
@@ -4912,8 +4912,7 @@
       if (spToastTimer) { clearTimeout(spToastTimer); spToastTimer = null; }
       const t = document.getElementById("vgl-sp");
       if (t) {
-        t.style.opacity = "0";
-        t.style.transform = "translateY(10px)";
+        t.classList.remove("vgl-sp-visible");
         setTimeout(() => { try { t.remove(); } catch (e2) {} }, 260);
       }
     } catch (e) {}
@@ -4927,10 +4926,10 @@
         t.id = "vgl-sp";
         /* HUD OLED autónomo: #vgl-sp vive fuera de #vgl-root (sin tokens ni .perf a mano), así que
            valores literales y CERO efectos pesados: sin backdrop-filter ni animaciones en bucle. */
-        t.style.cssText = "position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px);";
+        t.className = "vgl-sp-toast";
 
         const closeBtn = document.createElement("span");
-        closeBtn.style.cssText = "position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px;";
+        closeBtn.className = "vgl-sp-x";
         closeBtn.textContent = "×";
         closeBtn.onclick = (e) => { e.stopPropagation(); dismissSpToast(); };
         t.appendChild(closeBtn);
@@ -4953,8 +4952,7 @@
       }
       textNode.textContent = "🛡️ Vigilante PyM · " + msg;
 
-      t.style.opacity = "1";
-      t.style.transform = "translateY(0)";
+      t.classList.add("vgl-sp-visible");
 
       if (spToastTimer) clearTimeout(spToastTimer);
       if (durationMs > 0) {
@@ -5255,12 +5253,20 @@
       const c = COLORS[color] || COLORS.AZUL;
       w.document.open();
       w.document.write(`<!doctype html><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-        <body style="margin:0;font-family:-apple-system,'Segoe UI',sans-serif;background:#0B1220;color:#f5f5f7;display:flex;align-items:center;justify-content:center;height:100vh">
-        <div style="padding:24px;text-align:center;max-width:420px">
-          <div style="width:16px;height:16px;border-radius:50%;background:${c};margin:0 auto 14px;box-shadow:0 0 16px ${c}"></div>
-          <div style="font-size:17px;font-weight:700;margin-bottom:8px">${escapeHtml(title)}</div>
-          <div style="font-size:14px;opacity:.85;white-space:pre-line;line-height:1.45">${escapeHtml(body)}</div>
-          <button onclick="window.close()" style="margin-top:18px;background:${c};color:#001;border:0;border-radius:9px;padding:9px 20px;font-size:14px;font-weight:700;cursor:pointer">Entendido</button>
+        <style>
+          body{margin:0;font-family:-apple-system,'Segoe UI',sans-serif;background:#0B1220;color:#f5f5f7;display:flex;align-items:center;justify-content:center;height:100vh}
+          .vgl-pop-card{padding:24px;text-align:center;max-width:420px}
+          .vgl-pop-dot{width:16px;height:16px;border-radius:50%;margin:0 auto 14px}
+          .vgl-pop-t{font-size:17px;font-weight:700;margin-bottom:8px}
+          .vgl-pop-b{font-size:14px;opacity:.85;white-space:pre-line;line-height:1.45}
+          .vgl-pop-ok{margin-top:18px;color:#001;border:0;border-radius:9px;padding:9px 20px;font-size:14px;font-weight:700;cursor:pointer}
+        </style>
+        <body>
+        <div class="vgl-pop-card">
+          <div class="vgl-pop-dot" style="background:${c};box-shadow:0 0 16px ${c}"></div>
+          <div class="vgl-pop-t">${escapeHtml(title)}</div>
+          <div class="vgl-pop-b">${escapeHtml(body)}</div>
+          <button class="vgl-pop-ok" onclick="window.close()" style="background:${c}">Entendido</button>
         </div></body>`);
       w.document.close();
       try { w.focus(); } catch (e) {}
@@ -5282,10 +5288,10 @@
       // (se inyecta UNA vez, no en cada alerta). El único valor dinámico —el color del estado— entra
       // aquí como custom property inline (--ac / --ac-rgb) sobre la tarjeta; las reglas de la hoja
       // maestra lo consumen con var(), de modo que el estilo computado es idéntico al de antes.
-      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);border-color:rgba(var(--ac-rgb),.60)">
-          <div class="vgl-modal-dot" style="background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85)"></div>
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
+          <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
-          <button class="vgl-modal-ok" style="background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid);box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35)">Entendido</button>
+          <button class="vgl-modal-ok">Entendido</button>
         </div>`;
       ov.querySelector(".vgl-modal-t").textContent = title;
       ov.querySelector(".vgl-modal-b").textContent = body;
@@ -5319,9 +5325,9 @@
       // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
       // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pym-card">
-          <div class="vgl-pym-ic" style="text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45)">🩺</div>
-          <div class="vgl-pym-t" style="font-size:12.5px;font-weight:800;color:var(--c-recordatorio);letter-spacing:1.1px;text-transform:uppercase">Actividades preventivas pendientes</div>
-          <div class="vgl-pym-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30)"></div>
+          <div class="vgl-pym-ic">🩺</div>
+          <div class="vgl-pym-t">Actividades preventivas pendientes</div>
+          <div class="vgl-pym-n"></div>
           <div class="vgl-pym-lead">Se sugiere revisar y solicitar las siguientes actividades de prevención:</div>
           <div class="vgl-pym-list">${chips}</div>
           <div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
@@ -5348,9 +5354,9 @@
       // [v12.3.13] El CSS de esta alerta vive al final de la hoja maestra de buildOverlay():
       // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pes-card">
-          <div class="vgl-pes-ic" style="text-shadow:0 0 14px rgba(var(--rgb-pes),.45)">🫀</div>
-          <div class="vgl-pes-t" style="font-size:12.5px;font-weight:800;color:var(--c-pes);letter-spacing:1.1px;text-transform:uppercase">Prioridad de Atención: Riesgo Cardiovascular</div>
-          <div class="vgl-pes-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30)"></div>
+          <div class="vgl-pes-ic">🫀</div>
+          <div class="vgl-pes-t">Prioridad de Atención: Riesgo Cardiovascular</div>
+          <div class="vgl-pes-n"></div>
           <div class="vgl-pes-lead">Este paciente tiene un <b>seguimiento pendiente</b> en el programa de protección cardiovascular. Se recomienda priorizar la valoración cardiovascular durante la consulta de hoy.</div>
           <div class="vgl-pes-foot">Este recordatorio no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pes-ok">Entendido</button>
@@ -5395,9 +5401,9 @@
       // patrón que el resto de modales): se inyecta UNA vez, aquí solo queda HTML puro.
       const chips = (faltantes || []).map((f) => `<span class="vgl-labsv-chip">${escapeHtml(f.nombre)}</span>`).join("");
       ov.innerHTML = `<div class="vgl-labsv-card">
-          <div class="vgl-labsv-ic" style="text-shadow:0 0 14px rgba(var(--rgb-rojo),.45)">🧪</div>
-          <div class="vgl-labsv-t" style="font-size:12.5px;font-weight:800;color:var(--c-rojo);letter-spacing:1.1px;text-transform:uppercase">Laboratorios RCV sin resultado vigente</div>
-          <div class="vgl-labsv-n" style="font-size:21px;font-weight:800;color:var(--fg);line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30)"></div>
+          <div class="vgl-labsv-ic">🧪</div>
+          <div class="vgl-labsv-t">Laboratorios RCV sin resultado vigente</div>
+          <div class="vgl-labsv-n"></div>
           <div class="vgl-labsv-lead">Este paciente no tiene resultado en los <b>últimos 180 días</b> para:</div>
           <div class="vgl-labsv-list">${chips}</div>
           <div class="vgl-labsv-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
@@ -5507,7 +5513,7 @@
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);flex:0 0 5px;align-self:stretch;border-radius:var(--r-pill);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:0 0 12px rgba(var(--tk),.70),0 0 3px rgba(var(--tk),.90)"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25)"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col});font-size:14.5px;letter-spacing:.2px;text-shadow:0 0 16px rgba(var(--tk),.35)"></div><div class="vgl-toast-b" style="font-size:12.5px"></div></div><span class="vgl-toast-x">×</span>`;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
@@ -6107,7 +6113,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -6175,7 +6181,7 @@
       }
 
       /* ---- Modo Claro — cerámica ---- */
-      #vgl-root.light,#vgl-dock.light,#vgl-toasts.light,
+      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-toasts.light,
       #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
@@ -6282,7 +6288,7 @@
       #vgl-dock.perf *{animation:none !important;transition:none !important;filter:none !important}
       @media (prefers-reduced-motion:reduce){
         #vgl-root,#vgl-root *,#vgl-root *::before,#vgl-root *::after,
-        #vgl-dock,#vgl-dock *,#vgl-toasts *,
+        #vgl-dock,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
@@ -6291,7 +6297,34 @@
         }
       }
       /* Reset defensivo contra herencias del host */
-      #vgl-root *,#vgl-dock *,#vgl-toasts *,
+
+
+
+      /* Estilos layout y utilidades JS */
+      .vgl-d-none{display:none}
+      .vgl-mb-10{margin-bottom:10px}
+      .vgl-op-half{opacity:0.5}
+      .vgl-line-through{text-decoration:line-through}
+      .vgl-border-err{border:1px solid var(--c-rojo, #e54d42)}
+      .vgl-bg-success{background:var(--c-verde, #10b981) !important}
+      .vgl-btn-wait{opacity:0.5;cursor:wait}
+
+      .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
+      .vgl-sp-toast.vgl-sp-visible{opacity:1;transform:translateY(0)}
+      .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
+
+      /* Botones inyectados globales */
+      .vgl-lab-inj,.vgl-exf-btn{
+        position:fixed;left:15px;z-index:9999999;
+        color:var(--bg-solid, #fff);border:none;padding:10px 14px;border-radius:6px;
+        font-family:var(--font-stack, sans-serif);font-size:12px;font-weight:bold;cursor:pointer;
+        box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
+      }
+      .vgl-lab-inj{bottom:80px;background:var(--c-morado, #8b5cf6)}
+      .vgl-exf-btn{background:var(--c-verde, #16a34a)}
+      .vgl-exf-btn-normalidad{bottom:130px}
+
+      #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
       #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
       #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *,
       #vgl-labsv-modal *,#vgl-postcita-panel *{box-sizing:border-box}
@@ -6848,6 +6881,7 @@
         to{opacity:1;transform:none}
       }
       .vgl-toast-ic{
+        background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25);
         width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:18px;
         box-shadow:var(--glow-edge)
@@ -6855,6 +6889,7 @@
       .vgl-toast-main{flex:1;min-width:0}
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
+        font-size:12.5px;
         margin-top:3px;font-size:12px;color:var(--fg2);
         white-space:pre-line;line-height:1.45
       }
@@ -6877,20 +6912,22 @@
         animation:vglToastIn .25s ease
       }
       .vgl-modal-card{
-        background:linear-gradient(165deg,rgba(var(--rgb-rojo),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
-        border:1px solid rgba(var(--rgb-rojo),.55);
+        border-color:rgba(var(--ac-rgb),.60);
+        background:linear-gradient(165deg,rgba(var(--ac-rgb),.10),rgba(0,0,0,0) 55%),var(--bg-solid);
+        border:1px solid rgba(var(--ac-rgb),.55);
         border-radius:var(--r-surface);padding:30px 34px;
         max-width:460px;text-align:center;
-        box-shadow:var(--shadow-float),0 0 60px rgba(var(--rgb-rojo),.14),inset 0 1px 0 rgba(255,255,255,.10);
+        box-shadow:var(--shadow-float),0 0 60px rgba(var(--ac-rgb),.14),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-modal-dot{width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
-      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg);margin-bottom:8px;letter-spacing:.2px}
-      .vgl-modal-b{font-size:14px;color:var(--fg2);white-space:pre-line;line-height:1.55}
+      .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
+      .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg) !important;margin-bottom:8px;letter-spacing:.2px}
+      .vgl-modal-b{font-size:14px;color:var(--fg2) !important;white-space:pre-line;line-height:1.55}
       .vgl-modal-ok{
+        background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid) !important;box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35);
         margin-top:22px;border:0;border-radius:var(--r-chip);
         padding:11px 28px;font-size:14px;font-weight:800;
-        color:#001;cursor:pointer;font-family:inherit;
+        cursor:pointer;font-family:inherit;
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
       .vgl-modal-ok:hover{transform:scale(1.04);filter:brightness(1.08)}
@@ -6907,14 +6944,14 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-recordatorio),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pym-ic{
+      .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
-      .vgl-pym-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
-      .vgl-pym-n{font-size:13.5px;font-weight:700;color:var(--c-recordatorio);margin-bottom:14px}
+      .vgl-pym-t{font-size:12.5px;font-weight:800;color:var(--c-recordatorio) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pym-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-recordatorio),.30);margin-bottom:14px}
       .vgl-pym-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-pym-list{
         display:flex;flex-wrap:wrap;gap:7px;
@@ -6948,14 +6985,14 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-pes),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-pes-ic{
+      .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
         box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
-      .vgl-pes-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
-      .vgl-pes-n{font-size:13.5px;font-weight:700;color:var(--c-pes);margin-bottom:14px}
+      .vgl-pes-t{font-size:12.5px;font-weight:800;color:var(--c-pes) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-pes-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-pes),.30);margin-bottom:14px}
       .vgl-pes-lead{
         font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
       }
@@ -6985,14 +7022,14 @@
         box-shadow:var(--shadow-float),0 0 54px rgba(var(--rgb-rojo),.13),inset 0 1px 0 rgba(255,255,255,.10);
         font-family:var(--font-stack);color:var(--fg)
       }
-      .vgl-labsv-ic{
+      .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
         display:flex;align-items:center;justify-content:center;font-size:22px;
         background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
         box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
       }
-      .vgl-labsv-t{font-size:16.5px;font-weight:800;color:var(--fg);margin-bottom:2px}
-      .vgl-labsv-n{font-size:13.5px;font-weight:700;color:var(--c-rojo);margin-bottom:14px}
+      .vgl-labsv-t{font-size:12.5px;font-weight:800;color:var(--c-rojo) !important;margin-bottom:2px;letter-spacing:1.1px;text-transform:uppercase}
+      .vgl-labsv-n{font-size:21px;font-weight:800;color:var(--fg) !important;line-height:1.2;letter-spacing:.2px;text-shadow:0 0 20px rgba(var(--rgb-rojo),.30);margin-bottom:14px}
       .vgl-labsv-lead{font-size:12.5px;color:var(--fg2) !important;margin-bottom:10px}
       .vgl-labsv-list{
         display:flex;flex-wrap:wrap;gap:7px;
@@ -7774,7 +7811,7 @@
         48%{transform:scale(1)}
       }
       #vgl-pes-modal .vgl-pes-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-pes-modal .vgl-pes-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-pes-modal .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-pes-modal .vgl-pes-ok:focus-visible{outline:2px solid var(--c-pes);outline-offset:3px}
       #vgl-root.perf~#vgl-pes-modal,#vgl-root.perf~#vgl-pes-modal *{
         animation:none !important;transition:none !important;
@@ -7790,7 +7827,7 @@
       /* v12.5.7 — Mismas animaciones ya definidas arriba (vglPesPop/vglPesBeat son
          genéricas, no específicas de PES): se reutilizan aquí, sin duplicar keyframes. */
       #vgl-labsv-modal .vgl-labsv-card{animation:vglPesPop .42s var(--spring) both}
-      #vgl-labsv-modal .vgl-labsv-ic{animation:vglPesBeat 1.8s ease-in-out .5s infinite}
+      #vgl-labsv-modal .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);animation:vglPesBeat 1.8s ease-in-out .5s infinite}
       #vgl-labsv-modal .vgl-labsv-ok:focus-visible{outline:2px solid var(--c-rojo);outline-offset:3px}
       #vgl-root.perf~#vgl-labsv-modal,#vgl-root.perf~#vgl-labsv-modal *{
         animation:none !important;transition:none !important;
@@ -7945,7 +7982,7 @@
           <div id="vgl-sheet"></div>
         </div>
       </div>
-      <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" style="display:none">
+      <input type="file" id="vgl-file" accept=".xlsx,.xlsm,.csv" class="vgl-d-none">
     `;
     document.body.appendChild(root);
     el = { root, sum: root.querySelector("#vgl-sum"), stats: root.querySelector("#vgl-stats"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot"), sheet: root.querySelector("#vgl-sheet"), q: root.querySelector("#vgl-q") };
@@ -7975,7 +8012,7 @@
     root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     // [COPY-UX] Dock flotante del asistente clínico
     const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Asistente Clínico (Alt+V)";
-    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" style="display:none">0</b>`;
+    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
     dock.addEventListener("click", () => setWinState("full"));
     document.body.appendChild(dock); el.dock = dock; el.dockB = dock.querySelector("#vgl-dock-b");
     const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
@@ -9322,7 +9359,7 @@
                  paciente y el médico ELIGE uno; ese identificador viaja como ProgramaId en
                  AsignarTurno. No se puede deducir: en la captura, para una agenda de HTA el
                  médico eligió "Nefroprotección". Por eso se pregunta, igual que Everest. -->
-            <div id="vgl-agm-prog-box" style="display:none;margin-bottom:10px">
+            <div id="vgl-agm-prog-box" class="vgl-d-none vgl-mb-10">
               <label class="vgl-agm-lbl" for="vgl-agm-prog-sel">Programa al que se carga la cita:</label>
               <select id="vgl-agm-prog-sel" class="vgl-agm-input"></select>
             </div>
@@ -9909,7 +9946,7 @@
         // v12.3.14 — La cita YA quedó creada en el servidor: el registro y el estado de
         // abajo corren siempre; lo único que se salta si el modal fue cerrado es pintarlo.
         if (vivo()) {
-          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.classList.add("vgl-bg-success"); // [UI-CSS]
           confirmBtn.textContent = "✅ ¡Cita Creada Exitosamente!";
 
           const successMsg = document.createElement("div");
@@ -10159,7 +10196,7 @@
         uxTrack("lab.agendado.solo");
         markLabAgendadaHoy(apt.doc_id);
         if (vivo()) {
-          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.classList.add("vgl-bg-success"); // [UI-CSS]
           confirmBtn.textContent = "✅ ¡Toma de Muestras Agendada!";
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
@@ -10753,12 +10790,11 @@
           if (vivo()) {
             c.checked = false; // Desmarcar exitoso
             c.disabled = true; // Deshabilitar
-            c.closest("label").style.opacity = "0.5";
-            c.closest("label").style.textDecoration = "line-through";
+            const lbl = c.closest("label"); if(lbl && lbl.classList) lbl.classList.add("vgl-op-half", "vgl-line-through");
           }
         } else {
           fallidasCount++;
-          if (vivo()) c.closest("label").style.border = "1px solid #e54d42"; // Marcar fallido en ROJO // [UI-CSS]
+          if (vivo()) { const lbl2 = c.closest("label"); if (lbl2 && lbl2.classList) lbl2.classList.add("vgl-border-err"); } // Marcar fallido en ROJO // [UI-CSS]
         }
       }
 
@@ -10767,7 +10803,7 @@
         // estado de abajo corren siempre; solo el pintado se salta si el modal fue cerrado.
         const agrupadoresUnicos = [...new Set(agrupadores)];
         if (vivo()) {
-          confirmBtn.style.background = "#10b981"; // [UI-CSS]
+          confirmBtn.classList.add("vgl-bg-success"); // [UI-CSS]
           confirmBtn.textContent = `✅ ¡${creadasCount} Orden(es) Creada(s)!`;
 
           const successMsg = document.createElement("div");
@@ -11024,7 +11060,7 @@
     // prevención» o «Sincronizar almacenamiento». Ahora se abre con un interruptor normal,
     // y los dos controles operativos se sacaron a la parte siempre visible.
     const isDevMode = !!S.opcionesTecnicas;
-    const devStyle = isDevMode ? "" : 'style="display:none;"';
+    const devStyle = isDevMode ? "" : 'class="vgl-d-none"';
     const sw = (id, on) => `<label class="vgl-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
     // v12.5.2 — Estado de la credencial COMPARTIDA de Athenea en este equipo (sin exponer valores).
     const athEstado = atheneaCredsGet()
@@ -11076,7 +11112,7 @@
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
-      <div class="vgl-grp vgl-grp-tec" ${devStyle}>
+      <div class="vgl-grp vgl-grp-tec ${S.opcionesTecnicas ? '' : 'vgl-d-none'}">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Opciones técnicas</div>
         <div class="vgl-fld"><label>Tolerancia (Fijo)<span class="vgl-hint">Minutos de gracia rígidos (6.0 min predeterminado).</span></label><input type="number" id="c-tol" value="6" disabled></div>
         <div class="vgl-fld"><label>Refresco<span class="vgl-hint">Frecuencia de actualización en segundos de la agenda.</span></label><input type="number" id="c-ref" step="1" min="2" max="120" value="${S.refresco}"></div>
@@ -11508,11 +11544,11 @@
         e.stopPropagation();
         if (bAt.disabled) return;
         uxTrack("panel.atender.click");
-        bAt.disabled = true; bAt.style.opacity = ".5"; bAt.style.cursor = "wait";
+        bAt.disabled = true; bAt.classList.add("vgl-btn-wait");
         const ok = await apiMedicoAbrirHistoria(a.citaId);
         if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`📝 Inicio de atención registrado en Everest para ${a.nombre}. Abra su historia con "Historias Clínicas".`); }
         else {
-          bAt.disabled = false; bAt.style.opacity = ""; bAt.style.cursor = "";
+          bAt.disabled = false; bAt.classList.remove("vgl-btn-wait");
           spToast(`⚠️ No se pudo registrar en Everest el inicio de atención de ${a.nombre}. Abra su historia con "Historias Clínicas".`);
         }
       });
