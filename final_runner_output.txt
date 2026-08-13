@@ -5,6 +5,7 @@
   funciones alcanzables: 326 de 351
 
 [32m✓[0m Texto y datos del paciente                [90m41 ok[0m
+[Vigilante] hora no interpretable: invalido
 [32m✓[0m Tiempo y fechas                           [90m22 ok[0m
 [32m✓[0m Excel, caché y SharePoint                 [90m16 ok[0m
 [32m✓[0m Colores y notificaciones de la agenda     [90m23 ok[0m
@@ -18,6 +19,7 @@
 [32m✓[0m Panel, ajustes, modales                   [90m6 ok[0m
 [32m✓[0m Lector de Excel (ZIP/XLSX)                [90m10 ok[0m
 [Vigilante] diagnóstico fecha — GLUCOSA: dateInput SÍ encontrado, resultDate = 2023-01-02
+[Vigilante] diagnóstico: no se reconoció ninguna fecha (ni por nombre ni por forma) en el resultado de Athenea. Claves disponibles: [ 'codigo', 'nombre', 'Resultado' ] { codigo: '903841', nombre: 'GLUCOSA', Resultado: '7.1' }
 [Vigilante Athenea] diagnóstico tarjeta de solicitud #1 — fechas reconocibles (numérico): [ '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: 2026-03-05 · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Solicitud 4321 · 05/03/2026 · LAB</div>"
 [Vigilante Athenea] diagnóstico tarjeta de solicitud #2 — fechas reconocibles (numérico): [ '2026-02-01', '2026-03-05' ] · español: [] · Numero: NINGUNO · aceptada: NINGUNA · hora: NINGUNA · tras el formulario: "</form>" · ANTES del formulario (crudo, últimos 1500 caracteres): "<div>Del 01/02/2026 al 05/03/2026</div>"
 [Vigilante] fecha de Athenea detectada por forma del valor, clave real: fechaTomaMuestra → 2026-03-15
@@ -31,6 +33,8 @@
 [Vigilante] diagnóstico: analitos de Athenea que NO casaron con ningún examen conocido: [{"nombre":"GLUCOSA EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"1250"},{"nombre":"PROTEINAS EN ORINA DE 24 HORAS","padre":"","codigo":"","resultado":"412.5"}]
 [Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"PENDIENTE","idEstado":1},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":""},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO (SOLICITUD VIEJA)"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"+++ (SOLICITUD VIEJA)"}]
 [Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"LEUCOCITOS (PARCIAL DE ORINA)","padre":"","resultado":"15 X CAMPO"}]
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: GLUCOSA
+[Vigilante] repetición del mismo analito, se conserva la fecha más reciente: UROANALISIS
 [Vigilante] diagnóstico uroanálisis — analitos de orina recibidos de Athenea: [{"nombre":"COLOR","padre":"UROANALISIS","resultado":"AMARILLO"},{"nombre":"GLUCOSA","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"NITRITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"SANGRE","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"LEUCOCITOS","padre":"UROANALISIS","resultado":"NEGATIVO"},{"nombre":"HEMATIES","padre":"UROANALISIS","resultado":"30.70"},{"nombre":"CILINDROS","padre":"UROANALISIS","resultado":"0"}]
 [32m✓[0m Laboratorios Crónicos (Suite 08)          [90m84 ok[0m
 [32m✓[0m Ajustes y almacén local (Suite 09)        [90m30 ok[0m
@@ -39,7 +43,7 @@
 [32m✓[0m SharePoint y caché del piloto (Suite 12)  [90m40 ok[0m
 [32m✓[0m Lectura directa del API de agenda         [90m56 ok[0m
 [32m✓[0m Extracción del DOM de Everest (Suite 14)  [90m26 ok[0m
-[32m✓[0m Interfaz: ventana, hojas y modales        [90m87 ok[0m
+[32m✓[0m Interfaz: ventana, hojas y modales        [90m88 ok[0m
 [32m✓[0m Lectura en flujo del Excel PyM            [90m24 ok[0m
 [32m✓[0m Núcleo: bucles, latidos y utilidades GM   [90m26 ok[0m
 [32m✓[0m Puente Athenea y credenciales (Suite 18)  [90m80 ok[0m
@@ -52,9 +56,10 @@
 [32m✓[0m Motor de perfil (D3-bis)                  [90m12 ok[0m
 
 [36m────────────────────────────────────────────────────────────────[0m
-  comprobaciones : [32m710 pasan[0m
+  comprobaciones : [32m711 pasan[0m
   funciones cubiertas: 321 / 351  (91.5%)
 
 [33m  sin cubrir (5):[0m
     [90m_findHbA1cFields, _instalarCazaErrores, openLabSoloModal, boot, _canonNombreLab[0m
 [36m────────────────────────────────────────────────────────────────[0m
+
