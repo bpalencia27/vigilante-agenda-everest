@@ -32,6 +32,8 @@ module.exports = {
       t.igual(api.perfilPaciente(["Nefroprotección"]).adicionales, false);
       t.igual(api.perfilPaciente(["Nefroprotección","Hipertensión"]).adicionales, false);
       t.igual(api.perfilPaciente(["Hipertensión","Nefroprotección"]).adicionales, false);
+      t.igual(api.perfilPaciente(["Nefroprotección","Diabetes"]).adicionales, false);
+      t.igual(api.perfilPaciente(["Nefroprotección","HTA+DM"]).adicionales, false);
     });
 
     t.caso("Eje B (cupos adicionales) - vacíos/desconocidos quedan visibles pero no recomendados", () => {
