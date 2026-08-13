@@ -4,6 +4,7 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 
 | Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
 |---|---|---|---|
+| 4335 | Vaciar la función `_instalarCazaErrores` | No | `Telemetría de uso del panel (v12.5) -> _instalarCazaErrores: intercepta errores y rechazos solo del script propio` |
 | 932 | `if (!resultDate && !_diagLabFechaLogged) {` &rarr; `if (resultDate && !_diagLabFechaLogged) {` | Sí | Falta asertar que el flag de una-sola-vez `_diagLabFechaLogged` evita desbordar la consola de logs repetidamente. |
 | 2478 | `} catch (e) { return false; }` &rarr; `} catch (e) { return true; }` | Sí | Falta aserción que verifique el estado alterado o la acción por defecto tras atrapar un error específico en la API externa/localStorage. |
 | 2485 | `} catch (e) {}` &rarr; `} catch (e) { return; }` | Sí | Falta una prueba que cubra la ruta de error/excepción simulando un fallo que obligue a pasar por este `catch` específico y aserte que la función continúa su ejecución sin abortar. |
