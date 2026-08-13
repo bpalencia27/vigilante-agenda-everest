@@ -49,3 +49,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 11005 | `const atendidoLeyenda = esAtendido && a.color !== "ROJO";` &rarr; `const atendidoLeyenda = false;` | No | - |
 | 11128 | `? (esAtendido || yaAbiertoHoy` &rarr; `? (false || yaAbiertoHoy` | No | - |
 | 8822 | `<div class="vgl-labs-uro">…<span class="vgl-labs-uro-i">…</span>…</div>` &rarr; `…join("&lt;br&gt;")` (volver al chorizo previo) | No | - |
+| 11091 | `const esAtendido = !!(a.estado && a.estado.toLowerCase().includes("atendido"));` &rarr; `const esAtendido = !!(a.estado && a.estado.toLowerCase().includes("en sala"));` | Sí | `atenuar Atendido pero no En sala, a menos que sea fraude (rojo)` |

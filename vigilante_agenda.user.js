@@ -6444,7 +6444,9 @@
       /* v13.0.0 — Además de atenuar (opacidad+grises), el borde izquierdo pasa al tono
          EXCLUSIVO --c-atendido: así la tarjeta se distingue de "En sala" (mismo verde en
          el badge) incluso antes de leer el texto. El fraude (.rojo) nunca entra aquí. */
-      .vgl-card.atendido:not(.rojo){opacity:0.6;filter:grayscale(60%);border-left-color:var(--c-atendido)}
+      .vgl-card.atendido:not(.rojo){border-left-color:var(--c-atendido)}
+      .vgl-card.atendido:not(.rojo) .vgl-name { font-weight: 500 !important; color: var(--fg3); }
+      .vgl-card.atendido:not(.rojo) .vgl-time { color: var(--fg3); font-weight: 500 !important; text-decoration: line-through; }
 
       .vgl-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       /* v12.0.0 — La tarjeta de paciente se rediseñó en tres franjas (hora/estado, nombre,
