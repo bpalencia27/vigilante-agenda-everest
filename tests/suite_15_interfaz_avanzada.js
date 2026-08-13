@@ -59,7 +59,7 @@ module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
     "createLabInjectorUI", "createExamenFisicoInjectorUI", "_casillasExamenFisico", "setWinState", "buildOverlay",
-    "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openOrdenamientoModal",
+    "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openLabSoloModal", "openOrdenamientoModal",
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
@@ -1340,6 +1340,55 @@ module.exports = {
       const slots = modal.querySelector("#vgl-agm-slots");
       const btn = [...slots.children].find((n) => (n.innerHTML || "").includes("07:00 AM"));
       t.falso(btn.innerHTML.includes("SUGERIDO"), "sin diabetes/HTA+DM no hay franja que imponer, sin insignia");
+    });
+
+    // ================= openLabSoloModal =================
+    t.caso("openLabSoloModal: una cita sin documento solo deja un aviso warn", () => {
+      cv.api.openLabSoloModal(null);
+      t.igual(suma.className, "warn");
+      t.cierto(suma.textContent.includes("no tiene documento legible"));
+    });
+
+    await t.casoAsync("openLabSoloModal: paciente sin fecha guardada lanza notify y aborta", async () => {
+      const cLab = cargar({ silencioso: true });
+      enriquecerDom(cLab);
+      const avisos = [];
+      cLab.ctx.Notification = class {
+        constructor(title, opts) {
+          avisos.push({ title, body: (opts||{}).body || "", tag: (opts||{}).tag || "", icon: (opts||{}).icon || "" });
+        }
+        close() {}
+        static get permission() { return "granted"; }
+      };
+
+      await cLab.api.openLabSoloModal({ doc_id: "424242", nombre: "PRUEBA SINTETICA" });
+      await esperar(40);
+
+      t.igual(avisos.length, 1, "se emitió exactamente un aviso");
+      t.igual(avisos[0].tag, "vgl-labsolo-sinfecha|424242", "la clave de dedupe viaja en el tag");
+      t.igual(avisos[0].icon, cLab.api.colorDot("AMBAR"), "el aviso es AMBAR");
+      t.cierto(avisos[0].body.includes("agende la toma de muestras manualmente"));
+      t.falso(cLab.env.doc.body.children.some(n => n.id === "vgl-agendar-modal"), "y aborta sin pintar modal");
+    });
+
+    await t.casoAsync("openLabSoloModal: flujo completo — muestra el modal con los datos correctos", async () => {
+      const cLab = cargar({ silencioso: true });
+      enriquecerDom(cLab);
+      cLab.api.markCitaAgendadaHoy("424242", "2026-08-20");
+      await cLab.api.openLabSoloModal({ doc_id: "424242", nombre: "CON FECHA" });
+      const modal = cLab.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(!!modal, "el modal de toma de muestras quedó en el body");
+      t.cierto(modal.innerHTML.includes("Toma de Muestras Pendiente"));
+      t.cierto(modal.innerHTML.includes("CON FECHA"));
+      t.cierto(modal.innerHTML.includes("424242"));
+      t.cierto(modal.innerHTML.includes("20/08/2026"), "la fecha de la cita se formatea correctamente");
+      // El día SUGERIDO de toma sale de calcBusinessDaysBefore(fechaCita, 5) — la regla
+      // clínica real de esta pantalla. Se compara contra lo que devuelve la propia función,
+      // no contra una fecha calculada a mano aparte: si las dos aritméticas de días hábiles
+      // llegaran a divergir (festivos, domingos), una fecha fija en el test no lo notaría.
+      const sug = cLab.api.calcBusinessDaysBefore("2026-08-20", 5);
+      t.cierto(modal.innerHTML.includes(sug.fmt), "el día sugerido de toma es el que calcula calcBusinessDaysBefore, 5 días hábiles antes");
+      t.cierto(modal.innerHTML.includes(sug.dayLbl), "y se muestra con su nombre de día");
     });
 
     // ================= openOrdenamientoModal =================
