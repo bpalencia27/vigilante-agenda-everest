@@ -53,4 +53,4 @@ Este documento reporta los resultados de la auditoría de mutaciones manual sobr
 | 8382 | `const franja = tieneDM ? "primera_mitad" : "sin_preferencia";` &rarr; `const franja = tieneDM && !tieneNefro ? "primera_mitad" : "sin_preferencia";` | No | - |
 | 6660 | `.vgl-btn-action.vgl-btn-ambar,\n.vgl-btn-action.vgl-btn-ambar:hover{` &rarr; `.vgl-btn-ambar{` (clase suelta, misma especificidad que la regla base — el bug real de T1) | Sí, hasta corregirse | "el ámbar de «falta la toma de muestras» gana a la regla base pase lo que pase (cascada)" — restaurado |
 | 11400/11443 | textos "abre la Historia Clínica de.../Historia clínica abierta..." &rarr; versión honesta "Registrar inicio de atención..." (incidente real en consultorio: apiMedicoAbrirHistoria() nunca navega, solo registra un timestamp; el médico creyó haber revisado al paciente sin haberlo hecho) | No | "botón Atender: ningún texto visible promete abrir/mostrar la historia clínica" |
-| `8136` | `return FESTIVOS.has(...)` > `return false;` | `esFestivo: Un festivo entre semana no es día hábil` | `v12.4.3` |
+| 8125 | `return FESTIVOS.has(...)` &rarr; `return false;` | No | - |
