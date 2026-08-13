@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.0
+// @version      12.10.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6289,10 +6289,19 @@
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
-      /* v12.6.6 — mismo blindaje para los dos avisos que viven en document.body: sin esto,
-         Everest pinta de azul cualquier <b>/<span>/<div> suyo que caiga dentro. */
-      #vgl-labsv-modal b,#vgl-labsv-modal span,#vgl-labsv-modal div,
-      #vgl-postcita-panel b,#vgl-postcita-panel span,#vgl-postcita-panel div{color:inherit}
+      /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
+         v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
+         especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
+         propia dentro del mismo panel, aunque esa clase fuera más específica en intención.
+         Reportado real en consultorio: ".vgl-postcita-title" (color:var(--c-verde)) y
+         ".vgl-postcita-sub" (color:var(--fg2)) son <div> con clase — la regla vieja los
+         forzaba a color:inherit de todos modos, y como #vgl-postcita-panel cuelga de
+         document.body (no de #vgl-root), ese "inherit" terminaba en el azul de Everest.
+         Verificado en Chromium con el CSS real generado por buildOverlay(). La regla
+         correcta (armadura de v12.3.15, más abajo, con :where()+:not([class]) para no
+         pisar reglas de acento con clase propia) ya existe para esto — solo faltaba
+         incluir ahí estos dos paneles. Se quitó la regla vieja de aquí y se sumaron
+         #vgl-labsv-modal y #vgl-postcita-panel a esa lista. */
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
@@ -7189,7 +7198,15 @@
       .vgl-postcita-card{
         position:relative;min-width:260px;max-width:340px;
         padding:16px 18px;border-radius:var(--r-card);
-        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
+        /* v12.10.2 — El médico reportó el panel "horrible" en consultorio: se veía mezclado
+           con la fila de la cita en la agenda de Everest, justo debajo. Causa real: --toast
+           es rgba(...,.94) — 94% opaco A PROPÓSITO para los toasts normales (dejan ver un poco
+           la página, efecto vidrio), pero ese 6% de transparencia deja asomar la fila de
+           Everest detrás en esta esquina concreta, donde Everest coloca sus propios botones
+           "Historias Clínicas"/"Consentimientos" por cita. Esta tarjeta necesita leerse sola,
+           sin nada compitiendo detrás: --bg-solid es el mismo token, ya existente en el
+           proyecto, pero SIN alfa — 100% opaco. */
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
         color:var(--fg)
@@ -7870,7 +7887,10 @@
       #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
-      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-labsv-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-postcita-panel :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]))
+      {color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";
@@ -11389,15 +11409,22 @@
       const labsBtn = a.doc_id
         ? `<button class="vgl-btn-labs vgl-btn-action" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
         : "";
-      // v13.0.0 — "Atender": abre la Historia Clínica real (ver apiMedicoAbrirHistoria).
+      // v13.0.0 — "Atender": SOLO registra en el servidor de Everest la hora de apertura
+      // (guardarHoraApertura), el mismo efecto de red que deja el botón nativo "Historias
+      // Clínicas" — pero, a diferencia del nativo, este botón NUNCA navega ni pinta la
+      // historia clínica en pantalla (decisión original: de la cascada de ~50 peticiones
+      // que dispara el nativo, solo esas dos tienen efecto/lectura real; el resto no pinta
+      // nada sin la vista real montada). El texto de v13.0.0 decía "abre la Historia
+      // Clínica", lo cual era falso desde el primer commit: un médico podía creer que ya
+      // revisó al paciente sin haberlo hecho. v12.10.1 — corregido para decir la verdad.
       // SOLO se ofrece cuando el citaId vino del API directo de Everest (apiParse): el
       // camino de respaldo por scraping de DOM nunca lo tuvo, y sin él no hay a qué
       // CitaId apuntar — casilla vacía en vez de un botón que apunte a un id inventado.
       const yaAbiertoHoy = a.citaId ? isAtencionAbiertaHoy(a.citaId) : false;
       const atenderBtn = a.citaId
         ? (esAtendido || yaAbiertoHoy
-            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Historia ya abierta para ${escapeHtml(a.nombre)}" title="✅ Historia clínica ya abierta${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}.">🩺</button>`
-            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Atender: abrir Historia Clínica de ${escapeHtml(a.nombre)}" title="🩺 Atender — abre la Historia Clínica de ${escapeHtml(a.nombre)} en Everest (mismo efecto que su botón nativo 'Historias Clínicas')">🩺</button>`)
+            ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Inicio de atención ya registrado para ${escapeHtml(a.nombre)}" title="✅ Ya se registró en Everest el inicio de atención${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}. Esto NO abrió la historia clínica: úsela con \"Historias Clínicas\".">🩺</button>`
+            : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Registrar inicio de atención de ${escapeHtml(a.nombre)} en Everest" title="🩺 Registra en Everest que empezó a atender a ${escapeHtml(a.nombre)}. NO abre la historia clínica — ábrala con el botón nativo \"Historias Clínicas\".">🩺</button>`)
         : "";
       const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
         ? `<span class="vgl-card-actions">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
@@ -11431,19 +11458,20 @@
       if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
       const bAt = card.querySelector(".vgl-btn-atender");
       // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
-      // la llamada de red directamente: es lo mismo que hace el botón nativo de Everest
-      // al pulsarlo (no pide confirmación tampoco). Se deshabilita YA al pulsar para que
-      // un doble clic no dispare guardarHoraApertura dos veces mientras responde la red.
+      // la llamada de red directamente: es lo mismo EFECTO DE RED que deja el botón nativo
+      // de Everest al pulsarlo — pero NO navega ni pinta nada (ver comentario arriba, en la
+      // construcción de atenderBtn). Se deshabilita YA al pulsar para que un doble clic no
+      // dispare guardarHoraApertura dos veces mientras responde la red.
       if (bAt) bAt.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (bAt.disabled) return;
         uxTrack("panel.atender.click");
         bAt.disabled = true; bAt.style.opacity = ".5"; bAt.style.cursor = "wait";
         const ok = await apiMedicoAbrirHistoria(a.citaId);
-        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`🩺 Historia clínica abierta para ${a.nombre}.`); }
+        if (ok) { markAtencionAbiertaHoy(a.citaId); spToast(`📝 Inicio de atención registrado en Everest para ${a.nombre}. Abra su historia con "Historias Clínicas".`); }
         else {
           bAt.disabled = false; bAt.style.opacity = ""; bAt.style.cursor = "";
-          spToast(`⚠️ No se pudo abrir la historia de ${a.nombre} desde el panel. Ábrala manualmente con "Historias Clínicas".`);
+          spToast(`⚠️ No se pudo registrar en Everest el inicio de atención de ${a.nombre}. Abra su historia con "Historias Clínicas".`);
         }
       });
       fragment.appendChild(card);
