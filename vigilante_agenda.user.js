@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.8
+// @version      12.10.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7193,10 +7193,25 @@
          lenguaje visual ya decidido en disenos/COMPARACION.md para "el día recomendado").
          Sin !important a propósito: si el médico la elige, .active (arriba) debe ganar y
          mostrarse como ELEGIDA, no como sugerida — la sugerencia deja de importar una vez
-         que el médico decide. */
+         que el médico decide. .active gana igual sin depender de esto: usa !important, y
+         !important le gana a cualquier regla sin !important sin importar la especificidad. */
       .vgl-agm-sbtn-sugerido{
         background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55);
         transform:scale(1.03);box-shadow:0 0 12px rgba(var(--rgb-ambar),.20)
+      }
+      /* v12.10.9 — bug real: en tema claro la insignia SUGERIDO se veía sin ningún color
+         propio (texto oscuro sobre fondo casi blanco, indistinguible del resto de turnos).
+         Causa: #vgl-agendar-modal.light .vgl-agm-sbtn (id+2 clases, arriba) le gana en
+         especificidad a .vgl-agm-sbtn-sugerido (1 clase) y sobrescribe background/color/
+         border-color de vuelta a los del botón sin elegir. Mismo patrón de colisión INTERNA
+         de especificidad que T1 (ver CLAUDE.md) — no es CSS de Everest esta vez, es nuestro
+         propio selector de tema claro. Se iguala la especificidad citando los mismos tres
+         ids del selector que compite (id+2 clases) para ganarle por orden de declaración
+         sin recurrir a !important, que rompería que .active gane al elegir con un clic. */
+      #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
+      #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
+      #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido{
+        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
       }
       .vgl-agm-loading{
         font-size:12.5px;color:var(--fg2);padding:6px;font-style:italic
