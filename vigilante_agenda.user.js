@@ -6310,7 +6310,7 @@
       .vgl-toast-b{font-size:12.5px}
 
       /* Estilos layout y utilidades JS */
-      .vgl-d-none{display:none !important}
+      .vgl-d-none{display:none}
       .vgl-mb-10{margin-bottom:10px}
       .vgl-op-half{opacity:0.5}
       .vgl-line-through{text-decoration:line-through}
