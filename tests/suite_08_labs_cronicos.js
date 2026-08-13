@@ -909,6 +909,32 @@ module.exports = {
       t.igual(r2.candidatos.size, 0, "'pendiente' en minúscula se descarta igual");
     });
 
+    t.caso("injectLabsIntoCronicos: componente de orina con idEstado 1 pero valor aparentemente real no llega a la historia clinica", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputNitritos] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NEGATIVO", idEstado: 1 }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(res.pendientes, 1);
+      t.igual(res.count, 0);
+      t.igual(inputNitritos.value, "");
+    });
+
+    t.caso("injectLabsIntoCronicos: entrada que no es arreglo devuelve objeto de estado vacio", () => {
+      const casos = [null, undefined, "no es un arreglo", {}];
+      for (const val of casos) {
+        const r = testApi.injectLabsIntoCronicos(val);
+        t.igual(r.count, 0);
+        t.igual(r.pendientes, 0);
+        t.cierto(Array.isArray(r.sinCasilla) && r.sinCasilla.length === 0);
+        t.igual(r.respetadas, 0);
+        t.falso(r.uroanalisisMarcado);
+      }
+    });
+
     t.caso("_ultimaFechaPorAnalito: entre dos repeticiones del mismo analito, gana la de fecha MÁS RECIENTE (no la primera de la lista)", () => {
       const r = testApi._ultimaFechaPorAnalito([
         { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2024-01-01" },
