@@ -51,7 +51,15 @@ está hecho y comprobado. No re-litigues esas decisiones.**
 
 ## T1 — Migrar a clases el estilo inline de `render()`
 
-**Alcance:** SOLO la función `render()` (**11046**–~11230). Ahí hay **20 bloques `style="…"`**.
+**Alcance:** SOLO la función `render()`. **Aviso de anclas movidas (13-08-2026):** el superprompt
+cita `render()` en 11046–~11230, pero el archivo ha recibido commits directos desde que se escribió
+esa cita (botón Atender, plantilla de Examen Físico, entre otros) y `render()` verificada HOY
+empieza en la **línea 11153**. **No confíes en ningún número de línea de `SUPERPROMPT_DISENO_V14.md`
+sin volver a localizarlo tú mismo** (`grep -n "^  function render("` o el patrón que corresponda) —
+son la mejor evidencia disponible al momento de escribirse, no una garantía a día de hoy. Si algo no
+cuadra, dilo en el PR con lo que sí encontraste; no seas el segundo diff que asume una línea vieja.
+Sigue habiendo **20 bloques `style="…"`** dentro de `render()` — cuéntalos tú mismo antes de empezar,
+no asumas que siguen siendo exactamente esos 20 si el recuento real difiere, repórtalo.
 
 Qué hacer:
 1. Por cada `style="…"` inline en el HTML de la tarjeta, crea una clase equivalente en el bloque
