@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.1
+// @version      12.10.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6289,10 +6289,19 @@
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
-      /* v12.6.6 — mismo blindaje para los dos avisos que viven en document.body: sin esto,
-         Everest pinta de azul cualquier <b>/<span>/<div> suyo que caiga dentro. */
-      #vgl-labsv-modal b,#vgl-labsv-modal span,#vgl-labsv-modal div,
-      #vgl-postcita-panel b,#vgl-postcita-panel span,#vgl-postcita-panel div{color:inherit}
+      /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
+         v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
+         especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
+         propia dentro del mismo panel, aunque esa clase fuera más específica en intención.
+         Reportado real en consultorio: ".vgl-postcita-title" (color:var(--c-verde)) y
+         ".vgl-postcita-sub" (color:var(--fg2)) son <div> con clase — la regla vieja los
+         forzaba a color:inherit de todos modos, y como #vgl-postcita-panel cuelga de
+         document.body (no de #vgl-root), ese "inherit" terminaba en el azul de Everest.
+         Verificado en Chromium con el CSS real generado por buildOverlay(). La regla
+         correcta (armadura de v12.3.15, más abajo, con :where()+:not([class]) para no
+         pisar reglas de acento con clase propia) ya existe para esto — solo faltaba
+         incluir ahí estos dos paneles. Se quitó la regla vieja de aquí y se sumaron
+         #vgl-labsv-modal y #vgl-postcita-panel a esa lista. */
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
@@ -7189,7 +7198,15 @@
       .vgl-postcita-card{
         position:relative;min-width:260px;max-width:340px;
         padding:16px 18px;border-radius:var(--r-card);
-        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--toast);
+        /* v12.10.2 — El médico reportó el panel "horrible" en consultorio: se veía mezclado
+           con la fila de la cita en la agenda de Everest, justo debajo. Causa real: --toast
+           es rgba(...,.94) — 94% opaco A PROPÓSITO para los toasts normales (dejan ver un poco
+           la página, efecto vidrio), pero ese 6% de transparencia deja asomar la fila de
+           Everest detrás en esta esquina concreta, donde Everest coloca sus propios botones
+           "Historias Clínicas"/"Consentimientos" por cita. Esta tarjeta necesita leerse sola,
+           sin nada compitiendo detrás: --bg-solid es el mismo token, ya existente en el
+           proyecto, pero SIN alfa — 100% opaco. */
+        background:linear-gradient(165deg,rgba(255,255,255,.05),rgba(255,255,255,0) 55%),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.10);
         color:var(--fg)
@@ -7870,7 +7887,10 @@
       #vgl-pes-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-agendar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-ordenar-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
-      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])){color:inherit}
+      #vgl-labs-modal :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
+      #vgl-labsv-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-postcita-panel :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]))
+      {color:inherit}
     `;
     document.head.appendChild(style);
     const root = document.createElement("div"); root.id = "vgl-root";

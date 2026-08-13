@@ -1611,5 +1611,38 @@ module.exports = {
       t.igual(panel.innerHTML, "", "al cerrar, el panel queda vacío");
     });
 
+    // v12.10.2 — Incidente real en consultorio: ".vgl-postcita-title" (color:var(--c-verde))
+    // y ".vgl-postcita-sub" (color:var(--fg2)) se veían del azul corporativo de Everest.
+    // Causa: #vgl-postcita-panel div{color:inherit} (especificidad id+tipo) le ganaba a esas
+    // clases de acento (especificidad solo-clase), y como el panel cuelga de document.body
+    // (no de #vgl-root), ese "inherit" terminaba tomando el color del host. Verificado con
+    // Chromium real sobre el CSS que de verdad genera buildOverlay(). El blindaje correcto
+    // (v12.3.15, más abajo en la hoja) usa :where(...:not([class])...) — cero especificidad
+    // extra, así que nunca le puede ganar a una clase de acento propia — pero
+    // #vgl-postcita-panel y #vgl-labsv-modal se habían quedado fuera de esa lista, con la
+    // regla vieja rota todavía activa para ellos dos.
+    t.caso("blindaje tipográfico: postcita-panel y labsv-modal usan :not([class]), no div/span/b a pelo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      // La forma vieja y rota NO debe reaparecer para ninguno de los dos paneles.
+      const formaRota = /#vgl-(postcita-panel|labsv-modal)\s+(b|span|div)\s*,\s*#vgl-(postcita-panel|labsv-modal)\s+(b|span|div)/;
+      t.falso(formaRota.test(src), "no debe volver la regla div/span/b a pelo sobre estos paneles");
+
+      // La forma correcta SÍ debe estar: cada panel, con :where(...:not([class])...).
+      t.cierto(/#vgl-postcita-panel\s+:where\([^)]*:not\(\[class\]\)/.test(src), "#vgl-postcita-panel debe usar el blindaje :where()+:not([class])");
+      t.cierto(/#vgl-labsv-modal\s+:where\([^)]*:not\(\[class\]\)/.test(src), "#vgl-labsv-modal debe usar el blindaje :where()+:not([class])");
+    });
+
+    t.caso("blindaje tipográfico: el título y el subtítulo de postcita-panel conservan su clase de acento (no color:inherit directo)", () => {
+      const c = cargar();
+      enriquecerDom(c);
+      c.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE", "fallback");
+      const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
+      t.cierto(panel.innerHTML.includes('class="vgl-postcita-title"'), "el título conserva su clase de acento (verde)");
+      t.cierto(panel.innerHTML.includes('class="vgl-postcita-sub"'), "el subtítulo conserva su clase de acento (gris)");
+    });
+
   },
 };
