@@ -11022,8 +11022,18 @@
         let hayAgenda = true; // por defecto NO se oculta: un fallo de red no debe borrar un día real
         try {
           const res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId, true);
-          const agendas = extractAgendasList(res);
-          hayAgenda = !!(agendas && agendas.length);
+          const agendasDelDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === item.fmt);
+          // v14.0.2 — Gap documentado desde v14.0.1: el sondeo en segundo plano decidía
+          // "hay agenda" con CUALQUIER agenda de la respuesta (propia o ajena), así que un
+          // sábado con agenda de OTRO profesional se ofrecía como chip normal — y al
+          // pulsarlo, cargarHoras() lo bloqueaba igual que el día central y saltaba de
+          // nuevo. Ahora el sondeo usa la MISMA regla de "propia" que cargarHoras() y
+          // _buscarDiaConAgendaPropia (solo aplica a Medicina General, único caso donde el
+          // concepto de agenda ajena existe: las demás especialidades no se filtran por
+          // médico en ningún otro punto del modal).
+          hayAgenda = selectedEspId === 12
+            ? _agendasPropias(agendasDelDia, doctorName).length > 0
+            : agendasDelDia.length > 0;
         } catch (e) { hayAgenda = true; }
         if (!vivo() || miToken !== _sweepAgendaToken) return;
         if (!hayAgenda) {

@@ -1941,6 +1941,43 @@ module.exports = {
       t.cierto(chipsEl.children.length < 18, "los días NO activos que sí estaban confirmados vacíos sí se retiraron");
     });
 
+    // v14.0.2 — Gap documentado en v14.0.1: el sondeo en segundo plano decidía "hay agenda"
+    // con CUALQUIER agenda de la respuesta (propia o ajena), así que un sábado con agenda de
+    // OTRO profesional se seguía ofreciendo como chip normal — y al pulsarlo, cargarHoras()
+    // lo bloqueaba de todos modos y saltaba a otro día, una experiencia peor que no haberlo
+    // mostrado nunca. Ahora el sondeo usa la MISMA regla de "propia" que cargarHoras().
+    await t.casoAsync("openAgendamientoModal v14.0.2: el sondeo retira el chip de un sábado con agenda solo AJENA, igual que si estuviera vacío", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cSweep = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const dow = new Date(iso + "T12:00:00").getDay();
+            // El día CENTRO siempre cae en día hábil (nunca sábado): solo los sábados
+            // traen agenda AJENA, así que el chip activo nunca depende de esta regla.
+            const medico = dow === 6 ? "OTRO PROFESIONAL" : "ANA MARIA PEREZ";
+            return respuestaJson({ agendas: [{ agendaId: 61, medico, fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cSweep);
+      cSweep.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cSweep.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      const modal = cSweep.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const chipsEl = modal.querySelector("#vgl-day-chips");
+      await esperar(1200);
+      const quedaSabado = [...chipsEl.children].some((b) => b.className.includes("vgl-agm-pbtn-sabado"));
+      t.falso(quedaSabado, "el chip del sábado con agenda solo ajena se retiró — la misma regla de 'propia' que bloquea el día central también aplica al sondeo en segundo plano");
+    });
+
     // ================= openLabSoloModal =================
     t.caso("openLabSoloModal: una cita sin documento solo deja un aviso warn", () => {
       cv.api.openLabSoloModal(null);
