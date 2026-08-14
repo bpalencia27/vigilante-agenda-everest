@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.17
+// @version      12.10.18
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.17";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.18";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3381,6 +3381,7 @@
     try {
       const r = document.getElementById("vgl-root"); if (r) { r.classList.toggle("light", isLight()); r.classList.toggle("perf", !!S.modoRendimiento); }
       const d = document.getElementById("vgl-dock"); if (d) { d.classList.toggle("light", isLight()); d.classList.toggle("perf", !!S.modoRendimiento); }
+      const pb = document.getElementById("vgl-pym-banner"); if (pb) { pb.classList.toggle("light", isLight()); pb.classList.toggle("perf", !!S.modoRendimiento); }
       const t = document.getElementById("vgl-toasts"); if (t) t.classList.toggle("light", isLight());
     } catch (e) {}
   }
@@ -6344,7 +6345,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -6430,7 +6431,7 @@
       }
 
       /* ---- Modo Claro — cerámica ---- */
-      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-toasts.light,
+      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
       #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
@@ -6542,7 +6543,7 @@
       #vgl-dock.perf *{animation:none !important;transition:none !important;filter:none !important}
       @media (prefers-reduced-motion:reduce){
         #vgl-root,#vgl-root *,#vgl-root *::before,#vgl-root *::after,
-        #vgl-dock,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
+        #vgl-dock,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-pym-banner,#vgl-pym-banner *,#vgl-toasts *,
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
@@ -6578,7 +6579,7 @@
       .vgl-exf-btn{background:var(--c-verde, #16a34a)}
       .vgl-exf-btn-normalidad{bottom:130px}
 
-      #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
+      #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-pym-banner *,#vgl-toasts *,
       #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
       #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *,
       #vgl-labsv-modal *,#vgl-postcita-panel *{box-sizing:border-box}
@@ -6586,6 +6587,7 @@
       /* Blindaje contra estilos globales de Everest */
       #vgl-root b,#vgl-root i,#vgl-root small,#vgl-root mark,
       #vgl-root span,#vgl-root label{color:inherit}
+      #vgl-pym-banner span,#vgl-pym-banner b{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
@@ -7086,6 +7088,52 @@
       .vgl-kpi .vgl-l{font-size:var(--t-micro);color:var(--fg3);margin-top:4px;font-weight:700;letter-spacing:.4px} /* Mínimo 12px */
 
       /* ---- Pastilla Flotante (Dock) — cápsula HUD ---- */
+      /* ---- T7: banner PyM superior — nivel 2 · persistente (D5) ----
+         D5: empuja el contenido de Everest (posición NORMAL/sticky, nunca fixed/absolute
+         flotando por encima) — se inserta como primer hijo de document.body. D7: sin
+         backdrop-filter nuevo (superficie sólida --surface-2), máximo 2 capas de sombra,
+         sin animación permanente (el minimizado es un display:none instantáneo, no una
+         transición de alto/max-height — D7 prohíbe animar height/width/top/left), con
+         interruptor .perf propio. */
+      #vgl-pym-banner{
+        position:sticky;top:0;left:0;right:0;z-index:var(--z-banner);
+        display:flex;flex-direction:column;
+        background:var(--surface-2);
+        border-bottom:1px solid var(--edge);
+        box-shadow:var(--shadow-card);
+        color:var(--fg);font-family:var(--font-stack);font-size:var(--t-body);
+      }
+      .vgl-pymb-barra{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4)}
+      .vgl-pymb-titulo{font-weight:700;font-size:var(--t-strong)}
+      .vgl-pymb-contador{
+        background:var(--c-ambar);color:var(--bg-solid);font-weight:800;
+        border-radius:var(--r-pill);padding:1px 8px;font-size:var(--t-micro);
+      }
+      .vgl-pymb-toggle{
+        margin-left:auto;background:transparent;border:none;color:var(--fg3);cursor:pointer;
+        font-size:var(--t-body);padding:var(--s1) var(--s2);border-radius:var(--r-chip);
+      }
+      .vgl-pymb-toggle:hover{color:var(--fg);background:var(--surface-1)}
+      .vgl-pymb-aviso{
+        padding:0 var(--s4) var(--s2);color:var(--c-ambar);font-size:var(--t-micro);font-weight:600;
+      }
+      .vgl-pymb-lista{display:flex;flex-wrap:wrap;gap:var(--s2);padding:0 var(--s4) var(--s3)}
+      .vgl-pymb-item{
+        display:flex;align-items:center;gap:var(--s2);
+        background:var(--surface-1);border-radius:var(--r-chip);
+        padding:var(--s1) var(--s2) var(--s1) var(--s3);
+        box-shadow:inset 0 0 0 1px var(--edge);
+      }
+      .vgl-pymb-item.vgl-pymb-item-libre{box-shadow:inset 0 0 0 1px var(--c-ambar)}
+      .vgl-pymb-item-nombre{font-size:var(--t-micro)}
+      .vgl-pymb-item-btn{
+        background:var(--c-azul);color:var(--bg-solid);border:none;font-weight:700;
+        border-radius:var(--r-chip);padding:2px 10px;font-size:var(--t-micro);cursor:pointer;
+      }
+      #vgl-pym-banner.minimizado .vgl-pymb-aviso,
+      #vgl-pym-banner.minimizado .vgl-pymb-lista{display:none}
+      #vgl-pym-banner.perf{box-shadow:none;background:var(--bg-solid)}
+
       #vgl-dock{
         position:fixed;bottom:22px;right:22px;z-index:var(--z-panel);
         display:none;align-items:center;gap:10px;cursor:pointer;
@@ -8208,6 +8256,7 @@
          verdes, etiquetas azules, notas) le siguen ganando sin tocarlas. */
       #vgl-root :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-dock :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-pym-banner :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-toasts :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-pym-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
@@ -10898,6 +10947,34 @@
     }
   ];
 
+  // v14.0.0 (T7) — Extraído de dentro de openOrdenamientoModal (donde vivía desde v12.3.x,
+  // inline): la MISMA lógica de emparejamiento por palabra clave que decide qué paquetes de
+  // PYM_CATALOG le corresponden a las etiquetas del Excel de PyM de un paciente. Ahora la
+  // reutiliza también el banner (T7) — una sola verdad de "qué paquete es cuál etiqueta", no
+  // dos copias que puedan desincronizarse.
+  function pymPaquetesDelPaciente(etiquetas) {
+    const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const lista = Array.isArray(etiquetas) ? etiquetas : [];
+    const pymPorPaquete = new Map();
+    const emparejadas = new Set();
+    for (const pkg of PYM_CATALOG) {
+      const coincidencias = lista.filter((etiqueta) => {
+        const et = stripToAlphanum(etiqueta);
+        return pkg.keywords.some((kw) => et.includes(stripToAlphanum(kw)));
+      });
+      if (coincidencias.length) {
+        pymPorPaquete.set(pkg, coincidencias);
+        coincidencias.forEach((e) => emparejadas.add(e));
+      }
+    }
+    const matchedPackages = PYM_CATALOG.filter((pkg) => pymPorPaquete.has(pkg));
+    // Etiquetas del Excel que NO casaron con ningún paquete del catálogo (p. ej. Optometría/
+    // Odontología, que son remisiones, no exámenes con CUPS propio): T7 las trata como
+    // SIEMPRE pendientes — no hay forma de cruzarlas contra una orden vigente sin CUPS.
+    const sinEmparejar = lista.filter((e) => !emparejadas.has(e));
+    return { pymPorPaquete, matchedPackages, sinEmparejar };
+  }
+
   // Buscar Paciente en APIOrdenamientoHealth
   async function apiOrdenamientoBuscarPaciente(docId) {
     const cleanDoc = String(docId || "").replace(/\D/g, "");
@@ -11216,7 +11293,6 @@
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
     if (!vivo()) return; // el médico ya cerró el modal mientras se verificaba el sexo
 
-    const stripToAlphanum = (s) => stripAccents(s).toLowerCase().replace(/[^a-z0-9]/g, "");
     // v12.3.x — Antes solo se sabía SI había coincidencia con la base de PyM (booleano);
     // ahora se guarda también CUÁL actividad concreta del Excel del SharePoint la
     // disparó — "el nombre de la prueba que toca enviarle al paciente según los xlsx",
@@ -11225,15 +11301,9 @@
     // nunca se le mostraba al médico en el modal de Órdenes. Coincidencia por etiqueta
     // INDIVIDUAL (no por el texto de todas juntas): más preciso, y permite saber cuál
     // etiqueta específica corresponde a cuál paquete cuando el paciente tiene varias.
-    const pymPorPaquete = new Map();
-    for (const pkg of PYM_CATALOG) {
-      const coincidencias = (apt.pym || []).filter((etiqueta) => {
-        const et = stripToAlphanum(etiqueta);
-        return pkg.keywords.some((kw) => et.includes(stripToAlphanum(kw)));
-      });
-      if (coincidencias.length) pymPorPaquete.set(pkg, coincidencias);
-    }
-    const matchedPackages = PYM_CATALOG.filter((pkg) => pymPorPaquete.has(pkg));
+    // v14.0.0 (T7) — emparejamiento extraído a pymPaquetesDelPaciente(), reutilizado ahora
+    // también por el banner.
+    const { pymPorPaquete, matchedPackages } = pymPaquetesDelPaciente(apt.pym || []);
 
     // v11.0.1 — Cuando NO hay coincidencia con el PyM del paciente se siguen mostrando
     // todas las actividades, pero DESMARCADAS. Antes salían las 10 premarcadas y un solo
@@ -11498,6 +11568,157 @@
         alert("No se pudieron generar las órdenes en el sistema de órdenes."); // [COPY-UX]
       }
     });
+  }
+
+  // =====================================================================
+  //  T7 — BANNER PyM SUPERIOR (nivel 2 · persistente, D5)
+  // =====================================================================
+  // v14.0.0 (T7) — Reemplaza el aviso MODAL de checkRecordatorioPym/pymAlert (interruptivo,
+  // nivel 3 por accidente: bloqueaba hasta que el médico lo reconocía, para algo que D5
+  // clasifica como nivel 2 · persistente). El banner ocupa su franja arriba, empuja el
+  // contenido de Everest (no lo tapa) y NO se puede cerrar mientras algo siga pendiente —
+  // solo minimizar a una barra fina con el contador. El abandono del Programa RCV NO pasa
+  // por aquí: sigue siendo abandonoPESAlert/checkAbandonoPES, nivel 3, sin degradar (D5).
+  //
+  // D4 ("ante la duda, se muestra"): si apiHcObtenerOrdenamientosVigentes no pudo verificar
+  // (fallo de red, respuesta malformada), el banner se muestra con TODAS las actividades
+  // emparejadas como pendientes y un texto honesto de que no se pudo comprobar — nunca se
+  // apaga por una duda.
+  //
+  // D7 (una consulta por paciente, cacheada): igual que _labsPrefetch, el refresco corre
+  // en segundo plano y el render siempre lee de la caché — nunca bloquea el tick esperando
+  // la red.
+  let _bannerPymCache = { docId: "", pendientes: null, sinEmparejar: null, verificado: false, ts: 0 };
+  let _bannerPymEnVuelo = null;
+  const BANNER_PYM_TTL_MS = 10 * 60000;
+  function _bannerPymInvalidar() { _bannerPymCache = { docId: "", pendientes: null, sinEmparejar: null, verificado: false, ts: 0 }; }
+
+  async function _refrescarBannerPym(docId) {
+    const etiquetas = getActivities(docId);
+    if (!etiquetas.length) {
+      _bannerPymCache = { docId, pendientes: [], sinEmparejar: [], verificado: true, ts: Date.now() };
+      return;
+    }
+    const { matchedPackages, sinEmparejar } = pymPaquetesDelPaciente(etiquetas);
+    if (!matchedPackages.length) {
+      // Nada que cruzar contra T6 (ningún paquete conocido), pero las etiquetas sin
+      // emparejar (p. ej. Optometría/Odontología) siguen contando como pendientes.
+      _bannerPymCache = { docId, pendientes: [], sinEmparejar, verificado: true, ts: Date.now() };
+      return;
+    }
+    let ordenes = null;
+    try {
+      const pacienteId = await apiAccesoBuscarPaciente(docId);
+      if (pacienteId) ordenes = await apiHcObtenerOrdenamientosVigentes(pacienteId);
+    } catch (e) { console.warn("[Vigilante] banner PyM: no se pudo verificar contra Everest:", e); }
+    const verificado = Array.isArray(ordenes); // null = fallo/malformado; [] o [...] = éxito real
+    const pendientes = pymCubiertoPorOrdenVigente(matchedPackages, ordenes, todayStamp());
+    _bannerPymCache = { docId, pendientes, sinEmparejar, verificado, ts: Date.now() };
+  }
+
+  function createPymBannerUI() {
+    if (!_enModuloHCHealth()) { const fuera = document.getElementById("vgl-pym-banner"); if (fuera) fuera.remove(); return; }
+    const docId = extractPacienteAbierto();
+    if (!docId) { const sinPac = document.getElementById("vgl-pym-banner"); if (sinPac) sinPac.remove(); return; }
+
+    const cacheDelPaciente = _bannerPymCache.docId === docId;
+    const cacheVigente = cacheDelPaciente && (Date.now() - _bannerPymCache.ts) < BANNER_PYM_TTL_MS;
+    if (!cacheVigente) {
+      if (!cacheDelPaciente) {
+        // Paciente distinto al de la caché: sin datos frescos todavía NO se muestra el
+        // banner del paciente ANTERIOR — D8: mejor ausente un instante que equivocado.
+        const viejo = document.getElementById("vgl-pym-banner"); if (viejo) viejo.remove();
+      }
+      if (!_bannerPymEnVuelo) {
+        _bannerPymEnVuelo = _refrescarBannerPym(docId).catch(() => {}).finally(() => { _bannerPymEnVuelo = null; });
+      }
+      if (!cacheDelPaciente) return; // se pinta en el próximo tick, cuando el refresco resuelva
+    }
+
+    const { pendientes, sinEmparejar, verificado } = _bannerPymCache;
+    const totalPendientes = (pendientes || []).length + (sinEmparejar || []).length;
+    let banner = document.getElementById("vgl-pym-banner");
+    if (!totalPendientes) { if (banner) banner.remove(); return; }
+
+    const esNuevo = !banner;
+    if (esNuevo) {
+      banner = document.createElement("div");
+      banner.id = "vgl-pym-banner";
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+    const minimizado = esNuevo
+      ? (typeof GM_getValue !== "undefined" ? GM_getValue("vgl_banner_pym_minimizado", "") === "1" : false)
+      : banner.classList.contains("minimizado");
+    banner.className = "vgl-pym-banner" + (isLight() ? " light" : "") + (minimizado ? " minimizado" : "");
+
+    while (banner.children.length) banner.removeChild(banner.children[0]);
+
+    const barra = document.createElement("div");
+    barra.className = "vgl-pymb-barra";
+    const titulo = document.createElement("span");
+    titulo.className = "vgl-pymb-titulo";
+    titulo.textContent = "📋 Prevención (PyM) pendiente";
+    const contador = document.createElement("span");
+    contador.className = "vgl-pymb-contador";
+    contador.textContent = String(totalPendientes);
+    const toggle = document.createElement("button");
+    toggle.className = "vgl-pymb-toggle";
+    toggle.setAttribute("aria-label", minimizado ? "Expandir" : "Minimizar");
+    toggle.title = minimizado ? "Expandir" : "Minimizar";
+    toggle.textContent = minimizado ? "▼" : "▲";
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nuevoMinimizado = !banner.classList.contains("minimizado");
+      banner.classList.toggle("minimizado", nuevoMinimizado);
+      toggle.textContent = nuevoMinimizado ? "▼" : "▲";
+      toggle.title = nuevoMinimizado ? "Expandir" : "Minimizar";
+      toggle.setAttribute("aria-label", nuevoMinimizado ? "Expandir" : "Minimizar");
+      try { if (typeof GM_setValue !== "undefined") GM_setValue("vgl_banner_pym_minimizado", nuevoMinimizado ? "1" : ""); } catch (e2) {}
+      uxTrack(nuevoMinimizado ? "banner.pym.minimizar" : "banner.pym.expandir");
+    });
+    barra.appendChild(titulo);
+    barra.appendChild(contador);
+    barra.appendChild(toggle);
+    banner.appendChild(barra);
+
+    if (!verificado) {
+      const aviso = document.createElement("div");
+      aviso.className = "vgl-pymb-aviso";
+      aviso.textContent = "⚠ No se pudo verificar contra Everest si alguna ya se ordenó — se muestran todas por seguridad.";
+      banner.appendChild(aviso);
+    }
+
+    const citaReal = (state.lastSnapshot && state.lastSnapshot.list)
+      ? state.lastSnapshot.list.find((a) => a.doc_id && normalizeKey(a.doc_id) === normalizeKey(docId))
+      : null;
+    const apt = citaReal || { doc_id: docId };
+
+    const lista = document.createElement("div");
+    lista.className = "vgl-pymb-lista";
+    for (const pkg of (pendientes || [])) {
+      const item = document.createElement("div");
+      item.className = "vgl-pymb-item";
+      const nombre = document.createElement("span");
+      nombre.className = "vgl-pymb-item-nombre";
+      nombre.textContent = pkg.titulo;
+      const btnOrd = document.createElement("button");
+      btnOrd.className = "vgl-pymb-item-btn";
+      btnOrd.textContent = "Ordenar";
+      btnOrd.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("banner.pym.ordenar.abrir"); openOrdenamientoModal(apt); });
+      item.appendChild(nombre);
+      item.appendChild(btnOrd);
+      lista.appendChild(item);
+    }
+    for (const etiqueta of (sinEmparejar || [])) {
+      const item = document.createElement("div");
+      item.className = "vgl-pymb-item vgl-pymb-item-libre";
+      const nombre = document.createElement("span");
+      nombre.className = "vgl-pymb-item-nombre";
+      nombre.textContent = etiqueta;
+      item.appendChild(nombre);
+      lista.appendChild(item);
+    }
+    banner.appendChild(lista);
   }
 
   // =====================================================================
@@ -12230,6 +12451,10 @@
       // createLabInjectorUI es idempotente con su botón y el robot automático conserva
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
       if (secc === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); checkRacGuardia(); }
+      // v14.0.0 (T7) — el banner PyM usa _enModuloHCHealth() (por ruta), el mismo alcance
+      // amplio que T5 le dio al dock de widgets: vive sobre TODA la Historia Clínica, no
+      // solo la pestaña con el marcador #anamesis. Idempotente y se autolimpia sola.
+      createPymBannerUI();
 
       // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
       // dispara los avisos que quedaron en cola mientras ninguna pestaña estaba ahí (ver
@@ -12321,7 +12546,11 @@
             identidadDesdeCliente();
             if (loginVisto) resolverMedicoPorPerfil(loginVisto);
           }
-          checkRecordatorioPym();
+          // v14.0.0 (T7) — checkRecordatorioPym()/pymAlert() APAGADO: el aviso MODAL
+          // interruptivo que hacían quedó reemplazado por createPymBannerUI() (arriba),
+          // nivel 2 · persistente (D5) en vez de bloquear la pantalla hasta que el médico
+          // lo reconociera. Las funciones NO se borran (checkAbandonoPES/abandonoPESAlert,
+          // nivel 3, siguen intocadas y son independientes) — solo se deja de invocar esta.
           checkAbandonoPES();
           checkLabsVencidos();
         }

@@ -489,8 +489,12 @@ module.exports = {
       const bodyUsos = css.match(/var\(--t-body\)/g) || [];
       const leadUsos = css.match(/var\(--t-lead\)/g) || [];
 
-      t.cierto(microUsos.length === 25, `var(--t-micro) debe aparecer 25 veces (incluida la reserva). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 6, `var(--t-body) debe aparecer 6 veces. Salieron ${bodyUsos.length}.`);
+      // v14.0.0 (T7) — el banner PyM suma 4 usos nuevos de var(--t-micro) (contador, aviso
+      // de "no se pudo verificar", nombre de cada actividad, y el botón "Ordenar" del
+      // banner) y 2 de var(--t-body) (el contenedor #vgl-pym-banner y el botón de
+      // minimizar). var(--t-lead) no lo usa el banner: sin cambio.
+      t.cierto(microUsos.length === 29, `var(--t-micro) debe aparecer 29 veces (incluida la reserva y los 4 usos nuevos del banner de T7). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 8, `var(--t-body) debe aparecer 8 veces (incluidos los 2 usos nuevos del banner de T7). Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length === 5, `var(--t-lead) debe aparecer 5 veces. Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
@@ -522,7 +526,8 @@ module.exports = {
       const strongUsos = css.match(/var\(--t-strong\)/g) || [];
       const titleUsos = css.match(/var\(--t-title\)/g) || [];
       const heroUsos = css.match(/var\(--t-hero\)/g) || [];
-      t.cierto(strongUsos.length === 3, `var(--t-strong) debe aparecer 3 veces. Salieron ${strongUsos.length}.`);
+      // v14.0.0 (T7) — el título del banner PyM (.vgl-pymb-titulo) suma 1 uso nuevo.
+      t.cierto(strongUsos.length === 4, `var(--t-strong) debe aparecer 4 veces (incluido .vgl-pymb-titulo de T7). Salieron ${strongUsos.length}.`);
       t.cierto(titleUsos.length === 4, `var(--t-title) debe aparecer 4 veces. Salieron ${titleUsos.length}.`);
       t.cierto(heroUsos.length === 6, `var(--t-hero) debe aparecer 6 veces. Salieron ${heroUsos.length}.`);
 
@@ -556,10 +561,13 @@ module.exports = {
       const zWidget = css.match(/z-index:var\(--z-widget\)/g) || [];
       const zModal = css.match(/z-index:var\(--z-modal\)/g) || [];
       const zAlerta = css.match(/z-index:var\(--z-alerta\)/g) || [];
+      const zBanner = css.match(/z-index:var\(--z-banner\)/g) || [];
       t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
       t.cierto(zWidget.length === 1, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn (1 sitio). Salieron ${zWidget.length}.`);
       t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
       t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
+      // v14.0.0 (T7) — el banner PyM superior ya tiene consumidor real.
+      t.cierto(zBanner.length === 1, `var(--z-banner) debe usarse en #vgl-pym-banner (1 sitio, T7). Salieron ${zBanner.length}.`);
 
       // Orden relativo exigido por D6, verificado sobre los valores reales de los tokens (no solo
       // que existan): las alertas SIEMPRE deben poder ganarle a los modales de flujo.

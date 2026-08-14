@@ -65,6 +65,7 @@ module.exports = {
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita",
+    "createPymBannerUI", "_refrescarBannerPym", "pymPaquetesDelPaciente",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1831,6 +1832,215 @@ module.exports = {
       for (const linea of ocurrencias) {
         t.cierto(/if\s*\(\w+\s*&&\s*\w+\.classList\)/.test(linea), "cada guard debe cortocircuitar con '&&' antes de leer .classList: " + linea);
       }
+    });
+
+    // ================= pymPaquetesDelPaciente (T7, extraída de openOrdenamientoModal) =================
+    t.caso("pymPaquetesDelPaciente: empareja etiquetas por palabra clave, y separa las que no casan con ningún paquete", () => {
+      const r = api.pymPaquetesDelPaciente(["Tamización cardiometabólica", "Remisión a Optometría", "VIH"]);
+      const cies = r.matchedPackages.map((p) => p.cie10).sort();
+      t.igual(cies, ["Z108", "Z113"]);
+      t.igual(r.sinEmparejar, ["Remisión a Optometría"]);
+      t.igual(r.pymPorPaquete.get(r.matchedPackages.find((p) => p.cie10 === "Z108")), ["Tamización cardiometabólica"]);
+    });
+
+    t.caso("pymPaquetesDelPaciente: sin etiquetas, o etiquetas vacías/no-arreglo, no lanza y devuelve todo vacío", () => {
+      t.noLanza(() => api.pymPaquetesDelPaciente(null));
+      const r = api.pymPaquetesDelPaciente([]);
+      t.igual(r.matchedPackages, []);
+      t.igual(r.sinEmparejar, []);
+    });
+
+    // ================= createPymBannerUI / _refrescarBannerPym (T7) =================
+    // v14.0.0 — Banner PyM superior, nivel 2 · persistente (D5). Reemplaza el aviso modal
+    // de checkRecordatorioPym/pymAlert. D4: si la verificación contra Everest (T6) falla,
+    // se muestra TODO como pendiente con un aviso honesto — nunca se apaga por una duda.
+    function mockPacienteBanner(c, doc) {
+      c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC " + doc, closest: () => null }] : []);
+    }
+    // Responde BuscarPaciente (resuelve pacienteId=777) y, según `ordenesResp`, el endpoint
+    // de T6: una función (para simular fallo/malformado) o un valor JSON directo (éxito).
+    function planBanner(ordenesResp) {
+      return (url) => {
+        if (String(url).includes("BuscarPaciente")) return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ id: 777 }), text: async () => '{"id":777}' });
+        if (String(url).includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
+          if (typeof ordenesResp === "function") return ordenesResp();
+          return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ordenesResp, text: async () => JSON.stringify(ordenesResp) });
+        }
+        return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}" });
+      };
+    }
+    const FALLO_RED = () => Promise.resolve({ ok: false, status: 500, headers: { get: () => null }, json: async () => null, text: async () => "" });
+
+    t.caso("createPymBannerUI: fuera del módulo HCHealth no crea el banner", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.createPymBannerUI();
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+    });
+
+    t.caso("createPymBannerUI: en HCHealth pero sin paciente abierto no crea el banner", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/CitasDelDia";
+      c.env.doc.getElementById = () => null;
+      c.api.createPymBannerUI();
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+    });
+
+    t.caso("createPymBannerUI: paciente sin ninguna actividad PyM indexada no crea el banner (nada que reportar)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteBanner(c, "100000001");
+      c.api.__state.pym = new Map();
+      c.api.createPymBannerUI();
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+    });
+
+    await t.casoAsync("createPymBannerUI: todas las actividades ya cubiertas por una orden vigente reciente -> NO aparece el banner", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2026-08-01" }]) });
+      mockPacienteBanner(c, "100000002");
+      c.api.__state.pym = new Map([["100000002", ["Mamografía"]]]);
+      // Z123 (mamografía) no tiene vigenciaDias confirmado -> SIEMPRE pendiente (D4), así
+      // que para esta prueba se le fija una vigencia de prueba y se restaura después,
+      // exactamente igual que la prueba de pymCubiertoPorOrdenVigente en suite_21.
+      const z123 = c.api.__PYM_CATALOG.find((p) => p.cie10 === "Z123");
+      z123.vigenciaDias = 365;
+      try {
+        await c.api._refrescarBannerPym("100000002");
+        c.api.createPymBannerUI();
+        t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "mamografía cubierta por una orden reciente: nada pendiente, sin banner");
+      } finally { delete z123.vigenciaDias; }
+    });
+
+    await t.casoAsync("createPymBannerUI: con actividades pendientes, el banner aparece con el contador y el botón Ordenar", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      mockPacienteBanner(c, "100000003");
+      c.api.__state.pym = new Map([["100000003", ["VIH"]]]);
+      // Simula que Everest (app-root de Angular) ya tiene contenido propio en el body ANTES
+      // de que el banner se cree — D5: el banner debe EMPUJAR ese contenido (insertarse
+      // ANTES, en flujo normal), nunca aparecer flotando encima ni después.
+      const appRootEverest = c.env.doc.createElement("div");
+      appRootEverest.id = "app-root-simulado-de-everest";
+      c.env.doc.body.appendChild(appRootEverest);
+      await c.api._refrescarBannerPym("100000003");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!banner, "el banner quedó en el body");
+      t.igual(banner, c.env.doc.body.children[0], "se inserta como PRIMER hijo del body, ANTES del contenido de Everest: lo empuja, no lo tapa (D5)");
+      t.igual(c.env.doc.body.children[1], appRootEverest, "el contenido de Everest queda DESPUÉS del banner, no reemplazado ni cubierto");
+      const contador = banner.children.find((n) => n.className === "vgl-pymb-barra").children.find((n) => n.className === "vgl-pymb-contador");
+      t.igual(contador.textContent, "1");
+      const item = banner.children.find((n) => n.className === "vgl-pymb-lista").children[0];
+      t.cierto(item.children.some((n) => n.className === "vgl-pymb-item-btn" && n.textContent === "Ordenar"));
+    });
+
+    await t.casoAsync("createPymBannerUI (D4, LA MUTACIÓN OBLIGATORIA — condición de apagado): con la verificación CAÍDA, el banner se muestra con TODO pendiente y el aviso honesto", async () => {
+      // fetch caído SÍ dispara el respaldo por GM_xmlhttpRequest dentro de pageFetchJson: se
+      // mockea también para que falle rápido (si no, el arnés usa un no-op silencioso que
+      // nunca resuelve la promesa — cuelga la prueba, no la hace fallar).
+      const c = cargar({ silencioso: true, fetch: planBanner(FALLO_RED), gmxhr: (o) => o.onerror(new Error("fallo simulado (T7, prueba de la mutación obligatoria)")) });
+      mockPacienteBanner(c, "100000004");
+      c.api.__state.pym = new Map([["100000004", ["VIH"]]]);
+      await c.api._refrescarBannerPym("100000004");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!banner, "D4: ante la duda (verificación caída), el banner SE MUESTRA, nunca se apaga en silencio");
+      const aviso = banner.children.find((n) => n.className === "vgl-pymb-aviso");
+      t.cierto(!!aviso, "debe aparecer el texto honesto de que no se pudo verificar");
+      t.cierto(aviso.textContent.includes("No se pudo verificar"));
+    });
+
+    await t.casoAsync("createPymBannerUI: etiquetas SIN paquete conocido en PYM_CATALOG (Optometría/Odontología) también cuentan como pendientes", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      mockPacienteBanner(c, "100000005");
+      c.api.__state.pym = new Map([["100000005", ["Remisión a Optometría"]]]);
+      await c.api._refrescarBannerPym("100000005");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!banner);
+      const item = banner.children.find((n) => n.className === "vgl-pymb-lista").children[0];
+      t.cierto(item.className.includes("vgl-pymb-item-libre"));
+      t.falso(item.children.some((n) => n.className === "vgl-pymb-item-btn"), "sin paquete conocido no hay CUPS que ordenar: sin botón");
+    });
+
+    t.caso("createPymBannerUI: primer tick de un paciente sin caché todavía — no pinta nada hasta que el refresco resuelva", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteBanner(c, "100000006");
+      c.api.__state.pym = new Map([["100000006", ["VIH"]]]);
+      // Sin refrescar la caché real (sin red mockeada): se inyecta directamente para
+      // aislar esta prueba del ciclo async y probar solo la idempotencia del render.
+      c.api.createPymBannerUI(); // dispara el refresco en vuelo, sin pintar todavía (paciente nuevo en caché)
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "primer tick: la caché aún no tiene datos de este paciente, no pinta con datos viejos/ajenos");
+    });
+
+    await t.casoAsync("createPymBannerUI: al abrir un paciente DISTINTO, no reutiliza por error los pendientes del paciente ANTERIOR mientras se refresca el nuevo", async () => {
+      // Paciente B necesita una etiqueta que SÍ empareje con PYM_CATALOG (dispara la rama
+      // de _refrescarBannerPym que de verdad consulta la red vía apiAccesoBuscarPaciente):
+      // solo esa rama tiene un await real que deja una ventana de "caché todavía vieja"
+      // para observar — las otras dos ramas (sin etiquetas / sin paquete conocido)
+      // resuelven de forma síncrona y no reproducen el bug real.
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      // Paciente A: etiqueta SIN paquete conocido -> _refrescarBannerPym resuelve sin red
+      // (rama "nada que cruzar con T6"), así que puede quedar realmente en caché sin mocks.
+      mockPacienteBanner(c, "100000009");
+      c.api.__state.pym = new Map([
+        ["100000009", ["Actividad exclusiva del paciente A, nunca debe verse para B"]],
+        ["100000010", ["VIH"]],
+      ]);
+      await c.api._refrescarBannerPym("100000009");
+      c.api.createPymBannerUI();
+      const bannerA = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!bannerA, "el banner de A se pintó primero, con su propio pendiente");
+      // Espía la reconstrucción de contenido (el bucle "while(...) removeChild(...)" que
+      // createPymBannerUI usa para repintar): el DOM falso del arnés no borra de verdad con
+      // remove()/removeChild() (ya documentado en otras pruebas de esta suite), así que
+      // comprobar body.children después no distingue "se devolvió temprano, sin tocar nada"
+      // de "se repintó con datos ajenos" — ambos casos dejan el mismo nodo en el mismo
+      // lugar. Lo que SÍ distingue una rama de la otra es si el código LLEGÓ a reconstruir.
+      let seReconstruyo = false;
+      const removeChildOriginal = bannerA.removeChild.bind(bannerA);
+      bannerA.removeChild = (n) => { seReconstruyo = true; return removeChildOriginal(n); };
+
+      // Cambia de paciente (misma pestaña, el médico pasó al siguiente): la caché sigue
+      // teniendo los datos de A todavía, porque el refresco de B aún no corrió.
+      mockPacienteBanner(c, "100000010");
+      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? bannerA : (id === "anamesis" ? { id: "anamesis" } : null));
+      c.api.createPymBannerUI(); // SIN await: exactamente lo que pasa en un tick real
+      t.falso(seReconstruyo, "bug real que esto previene: con B recién abierto y su refresco aún en vuelo, NO debe repintar el banner reutilizando los datos EN CACHÉ de A");
+    });
+
+    await t.casoAsync("createPymBannerUI: clic en minimizar colapsa el banner y persiste la preferencia (GM_setValue)", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      mockPacienteBanner(c, "100000007");
+      c.api.__state.pym = new Map([["100000007", ["VIH"]]]);
+      await c.api._refrescarBannerPym("100000007");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      const toggle = banner.children.find((n) => n.className === "vgl-pymb-barra").children.find((n) => n.className === "vgl-pymb-toggle");
+      t.falso(banner.className.includes("minimizado"));
+      toggle._listeners.click[0]({ stopPropagation() {} });
+      t.cierto(banner.classList.contains("minimizado"));
+      t.igual(c.env.gm["vgl_banner_pym_minimizado"], "1");
+      toggle._listeners.click[0]({ stopPropagation() {} });
+      t.falso(banner.classList.contains("minimizado"));
+      t.igual(c.env.gm["vgl_banner_pym_minimizado"], "");
+    });
+
+    await t.casoAsync("createPymBannerUI: se autolimpia al salir del módulo HCHealth", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      mockPacienteBanner(c, "100000008");
+      c.api.__state.pym = new Map([["100000008", ["VIH"]]]);
+      await c.api._refrescarBannerPym("100000008");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!banner);
+      let removido = false;
+      banner.remove = () => { removido = true; };
+      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : null);
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.createPymBannerUI();
+      t.cierto(removido, "el banner se quita del body al salir de HCHealth");
     });
 
   },
