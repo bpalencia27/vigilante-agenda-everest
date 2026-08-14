@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.18
+// @version      12.10.19
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.18";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.19";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7650,12 +7650,12 @@
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:12.5px;color:var(--fg2);line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2);line-height:1.5;min-width:0}
       #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
         background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul);font-size:12.5px;font-weight:800;
+        color:var(--c-azul);font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -7720,7 +7720,7 @@
          titular: el 15.5px/900 de .vgl-labs-val es para un valor suelto, no para 30. */
       #vgl-labs-modal .vgl-labs-uro{
         display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));
-        gap:0 20px;font-size:12.5px;font-weight:600;letter-spacing:0
+        gap:0 20px;font-size:var(--t-micro);font-weight:600;letter-spacing:0
       }
       #vgl-labs-modal .vgl-labs-uro-i{
         min-width:0;overflow-wrap:break-word;line-height:1.5;
@@ -9664,6 +9664,15 @@
     // del primer resultado de Athenea sin fecha reconocida.
     let diagFechaModalLogged = false;
     let diagHoraModalLogged = false; // v12.4.0
+    // v14.0.0 (TL2) — mismo diagnóstico que fecha/hora arriba, para el mismo hueco de
+    // evidencia: la columna "Ref. / Rango" sale vacía a menudo porque el nombre real del
+    // campo en el payload de Athenea no está confirmado (aquí se prueban `referencia`,
+    // `ValoresReferencia`, `Estado`; los 4 nombres de fecha ya probados tampoco existían
+    // en el objeto real — no se adivina un quinto nombre sin evidencia, se captura la de
+    // verdad). Al detenerse en el primer analito sin ninguno de los tres campos, la
+    // consola del navegador (F12) muestra las claves reales de ESE analito para copiarlas
+    // y confirmar en consultorio cuál es el nombre correcto.
+    let diagReferenciaModalLogged = false;
     let rowsHtml = _agruparUroanalisisParaTabla(todosLabs).map(lab => {
       // v12.5.16 — El bloque agrupado del uroanálisis (ver _agruparUroanalisisParaTabla)
       // trae sus componentes en __vglGrupoUroComponentes: el "Resultado" de la fila es la
@@ -9698,6 +9707,10 @@
       // v12.0.0 — Fuera `lab.unidades` de esta cadena: unas unidades ("mg/dL") no son un
       // rango de referencia, y colarlas aquí ensucia la única señal que usa el resaltado.
       const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || "";
+      if (!esGrupoUro && !referencia && !diagReferenciaModalLogged && String(lab.origen || "").includes("Athenea")) {
+        diagReferenciaModalLogged = true;
+        console.warn("[Vigilante Labs] diagnóstico Ref./Rango: ninguno de los campos probados (referencia/ValoresReferencia/Estado) trajo valor. Claves disponibles:", Object.keys(lab), lab);
+      }
       // v12.0.0 — El color por defecto ya NO es verde. Pintar de verde todo lo que no
       // reconoce equivale a declarar "normal" un resultado que el script no ha
       // interpretado: es una afirmación clínica que no le corresponde hacer. Ahora solo

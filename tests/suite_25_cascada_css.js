@@ -502,7 +502,14 @@ module.exports = {
       // .vgl-agm-sub/-check-lbl/-btn y las DOS declaraciones de .vgl-ord-title — la base
       // compartida y el override más específico de #vgl-ordenar-modal, que antes le ganaba
       // en especificidad y dejaba el cableado de la base sin efecto real): 25->33, 6->11.
-      t.cierto(microUsos.length === 33, `var(--t-micro) debe aparecer 33 veces (incluida la reserva y los 8 usos nuevos de TL1). Salieron ${microUsos.length}.`);
+      // v14.0.0 (TL2) — 3 usos nuevos de var(--t-micro) en #vgl-labs-modal
+      // (.vgl-labs-srclbl, .vgl-labs-portal, .vgl-labs-uro): 33->36. Solo estos 3: el
+      // resto de tamaños del modal de labs (10.5/11/11.5/13/15.5px) se dejan a propósito
+      // — migrarlos a --t-body (14px, el valor VIGENTE, no el "oficial" de 13px) subiría
+      // el tamaño de letra de una tabla clínica densa, justo lo contrario de "densidad
+      // antes que aire" (§4.3.4); queda documentado como pregunta abierta para el médico,
+      // no una migración mecánica segura.
+      t.cierto(microUsos.length === 36, `var(--t-micro) debe aparecer 36 veces (incluidos los 3 usos nuevos de TL2). Salieron ${microUsos.length}.`);
       t.cierto(bodyUsos.length === 11, `var(--t-body) debe aparecer 11 veces (incluidos los 5 usos nuevos de TL1). Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length === 5, `var(--t-lead) debe aparecer 5 veces. Salieron ${leadUsos.length}.`);
 
