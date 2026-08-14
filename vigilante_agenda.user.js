@@ -8599,9 +8599,9 @@
     root.innerHTML = `
       <div id="vgl-head">
         <div id="vgl-tls">
-          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 1L5 5M5 1L1 5"/></svg></button>
-          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5"/></svg></button>
-          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
+          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)" aria-label="Ocultar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 1L5 5M5 1L1 5"/></svg></button>
+          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)" aria-label="Minimizar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5"/></svg></button>
+          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo" aria-label="Restaurar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
         </div>
         <div id="vgl-title">Asistente Clínico<small>v${VERSION}</small></div>
         <span id="vgl-dot" title="origen de datos"></span>
@@ -9707,7 +9707,7 @@
       panel.className = isLight() ? "light" : "";
       panel.innerHTML = `
         <div class="vgl-postcita-card">
-          <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar">✕</button>
+          <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
           <div class="vgl-postcita-title">✅ Cita creada</div>
           <div class="vgl-postcita-sub">${escapeHtml(nombreCompleto || patientNameFallback || "")}</div>
           <button class="vgl-agm-btn sec" id="vgl-postcita-print">🖨️ Imprimir recordatorio de cita</button>
@@ -9971,7 +9971,7 @@
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-labs-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
@@ -10284,7 +10284,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-grid">
@@ -11177,7 +11177,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Cita de control ya agendada para el <b>${escapeHtml(citaFechaFmt)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec">
@@ -11767,7 +11767,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">Verificando datos del paciente antes de sugerir actividades...</label>
@@ -11836,7 +11836,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec">
@@ -12630,38 +12630,52 @@
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
+    let prevRow = [];
+    let currRow = [];
+    let prevPrevRow = [];
+
     for (const qToken of queryTokens) {
       let tokenMatched = false;
+      const m = qToken.length;
+      const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
+
       for (const tToken of textTokens) {
         if (tToken.includes(qToken)) {
           tokenMatched = true;
           break;
         }
-        const m = qToken.length;
-        const n = tToken.length;
-        const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
         if (maxErrors === 0) continue;
 
-        let matrix = [];
-        for (let i = 0; i <= m; i++) matrix[i] = [i];
-        for (let j = 0; j <= n; j++) matrix[0][j] = j;
+        const n = tToken.length;
+
+        // initialize 1st row
+        for (let j = 0; j <= n; j++) {
+          prevRow[j] = j;
+        }
 
         for (let i = 1; i <= m; i++) {
+          currRow[0] = i;
           for (let j = 1; j <= n; j++) {
             const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
-            matrix[i][j] = Math.min(
-              matrix[i - 1][j] + 1,
-              matrix[i][j - 1] + 1,
-              matrix[i - 1][j - 1] + cost
+            currRow[j] = Math.min(
+              prevRow[j] + 1,
+              currRow[j - 1] + 1,
+              prevRow[j - 1] + cost
             );
             if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
-              matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
+              currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
+          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
+          for (let j = 0; j <= n; j++) {
+            prevPrevRow[j] = prevRow[j];
+            prevRow[j] = currRow[j];
+          }
         }
+
         let minCost = Infinity;
         for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
-          if (matrix[m][j] < minCost) minCost = matrix[m][j];
+          if (prevRow[j] < minCost) minCost = prevRow[j];
         }
         if (minCost <= maxErrors) {
           tokenMatched = true;
