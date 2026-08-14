@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.16
+// @version      12.10.17
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.16";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.17";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3212,10 +3212,6 @@
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
-    // v14.0.0 (T6) — años calendario ADICIONALES al año en curso que cuentan como "orden
-    // vigente" al cruzar contra PYM_CATALOG. 0 = solo el año en curso (D4: por defecto
-    // conservador). Todavía sin control propio en la hoja de Ajustes (T6 es solo el motor).
-    pymOrdenesVentanaAnios: 0,
   };
   function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
   // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
@@ -9129,16 +9125,25 @@
     }
   }
 
-  // Cuánto hacia atrás, en años calendario completos, se acepta una orden como vigente
-  // además del año en curso (D4: por defecto conservador, 0 = SOLO el año calendario en
-  // curso, tal como especifica la tarea). Ajustable por el médico vía S.pymOrdenesVentanaAnios
-  // (ver DEFAULTS) — sin fila propia todavía en la hoja de Ajustes: T6 es solo el motor, sin
-  // interfaz visual; darle un control visible es un seguimiento natural, probablemente junto
-  // con el banner de T7 que es quien de verdad expone esta ventana al médico.
+  // v14.0.0 (T6, CORREGIDO tras releer D4 completo en el superprompt — la ventana por
+  // año-calendario de la primera versión de esta función usaba una regla ya cerrada por el
+  // médico el 12-ago-2026, distinta de la que quedó escrita aquí; JULES_TAREAS_DISENO_V14.md
+  // traía el texto de tarea SIN esa actualización). La ventana correcta NO es "el año
+  // calendario en curso" (eso es solo la vigencia ADMINISTRATIVA de fechaVencimiento, que
+  // D4 dice explícitamente que no aplica) — es la VIGENCIA CLÍNICA del analito/actividad:
+  //   · Riesgo cardiovascular: máximo RCV_VIGENCIA_DIAS (180) días desde la orden.
+  //   · PyM que no es RCV: el campo `vigenciaDias` de PYM_CATALOG (Resolución 3280/2018).
+  // "Reutiliza eso; no escribas una segunda tabla de vigencias" (D4) — por eso el I10X
+  // (RCV exprés) toma vigenciaDias = RCV_VIGENCIA_DIAS en vez de un número repetido a mano.
+  //
+  // Las actividades SIN `vigenciaDias` confirmado (el médico aún no ha dado la periodicidad
+  // de la Resolución 3280 para ellas) SIEMPRE cuentan como pendientes — D4: "ante la duda,
+  // el banner se muestra". No se inventa un plazo. Ver PYM_CATALOG para el detalle de cuáles
+  // quedan así (anotado ahí mismo para que el médico las complete).
   //
   // `estado` ("PEN"/"PRO" vistos en la captura real, ver §1.6 del superprompt) NO SE
   // INTERPRETA a propósito: su significado no está confirmado todavía. Ninguna orden se
-  // acepta ni se descarta por su valor de `estado` — solo por CUPS + ventana de fecha. Si el
+  // acepta ni se descarta por su valor de `estado` — solo por CUPS + vigencia clínica. Si el
   // médico confirma después qué significan, se afina aquí.
   //
   // D4 ("fallo = no cubierto"): cualquier cosa que no sea un arreglo de órdenes utilizable
@@ -9149,21 +9154,36 @@
     if (!lista.length) return lista;
     if (!Array.isArray(ordenes) || !ordenes.length) return lista;
     const hoyInfo = _parseFechaHoraLike(hoy);
-    if (!hoyInfo) return lista; // sin "hoy" fiable no hay ventana de tiempo que calcular
-    const anioActual = Number(hoyInfo.iso.slice(0, 4));
-    const ventanaAnios = Number.isFinite(S.pymOrdenesVentanaAnios) && S.pymOrdenesVentanaAnios >= 0
-      ? S.pymOrdenesVentanaAnios : 0;
-    const anioMinimo = anioActual - ventanaAnios;
-    const cupsVigentes = new Set();
+    if (!hoyInfo) return lista; // sin "hoy" fiable no hay vigencia que calcular
+    const hoyMs = new Date(hoyInfo.iso + "T00:00:00").getTime();
+    // Por cada CUPS, se guarda la fecha de creación MÁS RECIENTE entre las órdenes vigentes
+    // (si el mismo examen se ordenó varias veces, la repetición más nueva es la que importa).
+    // Cada actividad se compara luego contra SU PROPIA vigencia clínica — no hay un único
+    // límite global, porque RCV (180 días) y el resto de PyM (Resolución 3280) no comparten
+    // periodicidad.
+    const masRecientePorCup = new Map();
     for (const o of ordenes) {
       if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
       const fc = _parseFechaHoraLike(o.fechaCreacion);
       if (!fc) continue; // fecha ilegible: por prudencia, esta orden NO cuenta como cobertura
-      const anioOrden = Number(fc.iso.slice(0, 4));
-      if (anioOrden < anioMinimo || anioOrden > anioActual) continue; // fuera de la ventana
-      cupsVigentes.add(String(o.cup.codigo));
+      const fcMs = new Date(fc.iso + "T00:00:00").getTime();
+      if (fcMs > hoyMs) continue; // fecha futura: dato absurdo, se descarta por prudencia
+      const cup = String(o.cup.codigo);
+      const prev = masRecientePorCup.get(cup);
+      if (prev === undefined || fcMs > prev) masRecientePorCup.set(cup, fcMs);
     }
-    return lista.filter((act) => !(act.cups || []).some((c) => c && cupsVigentes.has(String(c.codigo))));
+    return lista.filter((act) => {
+      if (!Number.isFinite(act.vigenciaDias) || act.vigenciaDias <= 0) return true; // sin vigencia confirmada: siempre pendiente (D4)
+      const cups = Array.isArray(act.cups) ? act.cups : [];
+      const cubierta = cups.some((c) => {
+        if (!c || c.codigo === undefined || c.codigo === null) return false;
+        const fcMs = masRecientePorCup.get(String(c.codigo));
+        if (fcMs === undefined) return false;
+        const dias = Math.round((hoyMs - fcMs) / 86400000);
+        return dias <= act.vigenciaDias;
+      });
+      return !cubierta;
+    });
   }
 
   // Interfaz con APIAcceso: Validar Agenda
@@ -10771,11 +10791,19 @@
   //  v8.0.0: GENERADOR AUTOMÁTICO DE ÓRDENES PYM EN 1-CLIC (APIOrdenamientoHealth)
   // =====================================================================
   // [COPY-UX] Catálogo de actividades de prevención y mantenimiento
+  // v14.0.0 (T6, D4) — `vigenciaDias`: cada cuántos días una orden vigente (§1.6,
+  // pymCubiertoPorOrdenVigente) deja de "tapar" la necesidad de esta actividad. I10X (RCV
+  // exprés) reutiliza RCV_VIGENCIA_DIAS — "no escribas una segunda tabla de vigencias" — en
+  // vez de repetir 180 a mano. Las demás actividades (Resolución 3280 de 2018) TODAVÍA NO
+  // tienen su periodicidad confirmada por el médico: quedan A PROPÓSITO sin `vigenciaDias`,
+  // así que pymCubiertoPorOrdenVigente las trata SIEMPRE como pendientes (D4: ante la duda,
+  // el banner se muestra) — anotado en cada una para que el médico las complete.
   const PYM_CATALOG = [
     {
       cie10: "I10X",
       titulo: "⚡ PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS (Perfil Lipídico + Renal + Glicemia)",
       keywords: ["rcv", "super", "expres", "paquete rcv"],
+      vigenciaDias: RCV_VIGENCIA_DIAS,
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad [HDL]" },
         { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL]" },
@@ -10799,6 +10827,7 @@
       cie10: "Z124",
       titulo: "Cáncer de cuello uterino (Citología / ADN VPH)",
       keywords: ["cuello uterino", "cervix", "citologia", "ccu", "vph", "tamizar con ccu"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "908890", desc: "Deteccion Virus Del Papiloma Humano Por Pruebas Moleculares (Especifico)" },
         { codigo: "898001", desc: "Estudio de coloracion basica en citologia vaginal tumoral o funcional" },
@@ -10809,6 +10838,7 @@
       cie10: "Z113",
       titulo: "VIH (Anticuerpos VIH 1 y 2)",
       keywords: ["vih", "inmunodeficiencia", "hiv"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "906249", desc: "Virus De Inmunodeficiencia Humana 1 Y 2 Anticuerpos" }
       ]
@@ -10817,6 +10847,8 @@
       cie10: "Z108",
       titulo: "Tamización cardiometabólica (Perfil lipídico, Creatinina, Parcial de orina, Glicemia)",
       keywords: ["cardiometabolic", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018, tamización de pacientes SANOS —
+      // periodicidad distinta a la de RCV en crónicos) — pregunta abierta para el médico.
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
         { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" }, // tabla oficial: CMB de pacientes sanos (903817 es de crónicos, ver RCV exprés)
@@ -10831,6 +10863,7 @@
       cie10: "Z123",
       titulo: "Mamografía (Mamografía Bilateral)",
       keywords: ["mamografia", "mama", "seno"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "876802", desc: "Mamografia Bilateral" }
       ]
@@ -10839,6 +10872,7 @@
       cie10: "Z125",
       titulo: "PSA (antígeno de próstata)",
       keywords: ["psa", "prostata"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
       ]
@@ -10847,6 +10881,7 @@
       cie10: "Z121",
       titulo: "SOMF (sangre oculta en materia fecal)",
       keywords: ["somf", "omf", "sangre oculta", "materia fecal", "colon"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "907009", desc: "Sangre Oculta En Materia Fecal (Determinacion De Hemoglobina Humana Especifica)" }
       ]
@@ -10855,6 +10890,7 @@
       cie10: "Z103",
       titulo: "Hemoglobina y Hematocrito",
       keywords: ["hemoglobina", "hematocrito"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "902213", desc: "Hemoglobina" },
         { codigo: "902211", desc: "Hematocrito" }
