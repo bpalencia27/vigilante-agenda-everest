@@ -520,8 +520,12 @@ module.exports = {
       // Total: micro 36+1+4=41, body 11+2=13, lead 5+1=6. Los tres números se
       // recalcularon ejecutando este mismo regex contra el CSS ya fusionado, no sumando a
       // mano las cifras de cada rama por separado.
-      t.cierto(microUsos.length === 41, `var(--t-micro) debe aparecer 41 veces (36 de TL1/TL2 + 1 del dock de T5 + 4 del banner de T7). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 13, `var(--t-body) debe aparecer 13 veces (11 de TL1 + los 2 del banner de T7; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
+      // v14.1.1 (R1b) — +3 micro y +1 body: el recuadro de función renal del modal de
+      // laboratorios (.vgl-labs-renal-det/-aviso/-vacio en micro, .vgl-labs-renal-top en
+      // body). Se suben los anclas en vez de relajar la regla: el valor de esta prueba es
+      // justamente que un font-size literal nuevo NO pueda entrar sin que alguien lo note.
+      t.cierto(microUsos.length === 44, `var(--t-micro) debe aparecer 44 veces (36 de TL1/TL2 + 1 del dock de T5 + 4 del banner de T7 + 3 del recuadro renal de R1b). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 14, `var(--t-body) debe aparecer 14 veces (11 de TL1 + 2 del banner de T7 + 1 del recuadro renal de R1b; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
@@ -532,8 +536,13 @@ module.exports = {
       // !important;animation:none !important}) suma 2 !important nuevos, mismo patrón que
       // el ya existente #vgl-dock.perf *{...}. No los añadió el cableado de esta regla
       // (Regla G): 150 -> 152.
+      // v14.1.1 (R1b): 152 -> 158. Las 6 declaraciones de 'color' del recuadro de función
+      // renal del modal de laboratorios viven FUERA de #vgl-root (el modal cuelga de
+      // document.body), así que la Regla E exige !important en cada una: el CSS de Everest
+      // es una caja negra que puede ganarle a una regla sin él. No son 6 !important
+      // decorativos: son exactamente los que esa regla obliga a poner.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 152, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 (esperado 152, salió ${importantTotal})`);
+      t.cierto(importantTotal === 158, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 y los 6 del recuadro renal de R1b (esperado 158, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {

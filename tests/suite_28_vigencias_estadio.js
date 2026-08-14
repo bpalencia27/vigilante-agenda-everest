@@ -60,9 +60,15 @@ module.exports = {
       t.igual(api.vigenciaPorEstadio("ERC", "G3a", "hba1c", { esDM2: false }), null);
       t.igual(api.vigenciaPorEstadio("ERC", "G3a", "hba1c", { esDM2: "si" }), null); // no truthy suelto, exige === true
     });
-    t.caso("vigenciaPorEstadio - ERC/hba1c con esDM2:true sigue la tabla: BLOQ en G1/G2, 180 en G3a/G3b, 120 en G4", () => {
-      t.igual(api.vigenciaPorEstadio("ERC", "G1", "hba1c", { esDM2: true }), "BLOQ");
-      t.igual(api.vigenciaPorEstadio("ERC", "G2", "hba1c", { esDM2: true }), "BLOQ");
+    // v14.1.2 — CORREGIDO contra la Tabla 50 oficial (imagen del médico, 14-ago-2026).
+    // La versión anterior de esta prueba anclaba "BLOQ" en G1/G2, que NO está en la fuente:
+    // la tabla da 180 días en los cuatro primeros estadios y 120 en E4. El "(solo para
+    // diabéticos)" de la tabla es una condición de PACIENTE, no de estadio, y ya la aplica
+    // vigenciaPorEstadio con esDM2 (ver la prueba de arriba). Con el BLOQ, un diabético en
+    // estadio renal temprano se quedaba sin HbA1c — justo en quien más se controla.
+    t.caso("vigenciaPorEstadio - ERC/hba1c con esDM2:true sigue la Tabla 50: 180 en G1..G3b, 120 en G4", () => {
+      t.igual(api.vigenciaPorEstadio("ERC", "G1", "hba1c", { esDM2: true }), 180);
+      t.igual(api.vigenciaPorEstadio("ERC", "G2", "hba1c", { esDM2: true }), 180);
       t.igual(api.vigenciaPorEstadio("ERC", "G3a", "hba1c", { esDM2: true }), 180);
       t.igual(api.vigenciaPorEstadio("ERC", "G3b", "hba1c", { esDM2: true }), 180);
       t.igual(api.vigenciaPorEstadio("ERC", "G4", "hba1c", { esDM2: true }), 120);
@@ -88,11 +94,45 @@ module.exports = {
       t.igual(api.vigenciaPorEstadio("ERC", "G3a", "trigliceridos", {}), 180);
       t.igual(api.vigenciaPorEstadio("ERC", "G4", "trigliceridos", {}), 120);
     });
-    t.caso("vigenciaPorEstadio - ERC/ldl, hdl y rac se mantienen 180 en todos los estadios de la tabla", () => {
+    // v14.1.2 — CORREGIDO contra la Tabla 50. Dos cambios respecto a la versión anterior:
+    //  · El LDL NO se mantiene en 180: en Estadio 4 baja a 120, igual que el colesterol
+    //    total y los triglicéridos de su misma fila. El valor viejo hacía que en el estadio
+    //    MÁS avanzado el LDL se pidiera con MENOS frecuencia que sus compañeros de perfil.
+    //  · La fila de la Tabla 50 se llama "Micro albuminuria", no "Relación
+    //    albúmina/creatinina". Son analitos distintos (concentración vs. cociente) y este
+    //    proyecto los separa a propósito. Las tablas de HTA y DM sí piden la RELACIÓN.
+    t.caso("vigenciaPorEstadio - ERC/hdl y microalbuminuria a 180 en todos los estadios; el LDL baja a 120 en G4", () => {
       for (const est of ["G1", "G2", "G3a", "G3b", "G4"]) {
-        t.igual(api.vigenciaPorEstadio("ERC", est, "ldl", {}), 180);
         t.igual(api.vigenciaPorEstadio("ERC", est, "hdl", {}), 180);
-        t.igual(api.vigenciaPorEstadio("ERC", est, "rac", {}), 180);
+        t.igual(api.vigenciaPorEstadio("ERC", est, "microalbuminuria", {}), 180);
+      }
+      for (const est of ["G1", "G2", "G3a", "G3b"]) {
+        t.igual(api.vigenciaPorEstadio("ERC", est, "ldl", {}), 180);
+      }
+      t.igual(api.vigenciaPorEstadio("ERC", "G4", "ldl", {}), 120, "Tabla 50: LDL en Estadio 4 = 120 días");
+    });
+
+    // v14.1.2 — Filas de la Tabla 50 que faltaban ENTERAS en la tabla del script.
+    t.caso("vigenciaPorEstadio - ERC/hematocrito: 365 en G1..G3b y 180 en G4 (Tabla 50)", () => {
+      for (const est of ["G1", "G2", "G3a", "G3b"]) {
+        t.igual(api.vigenciaPorEstadio("ERC", est, "hematocrito", {}), 365);
+      }
+      t.igual(api.vigenciaPorEstadio("ERC", "G4", "hematocrito", {}), 180);
+    });
+    t.caso("vigenciaPorEstadio - ERC/depuracion_creatinina_orina24h: 365 en G1, 180 en G2..G3b, 90 en G4", () => {
+      t.igual(api.vigenciaPorEstadio("ERC", "G1", "depuracion_creatinina_orina24h", {}), 365);
+      t.igual(api.vigenciaPorEstadio("ERC", "G2", "depuracion_creatinina_orina24h", {}), 180);
+      t.igual(api.vigenciaPorEstadio("ERC", "G3a", "depuracion_creatinina_orina24h", {}), 180);
+      t.igual(api.vigenciaPorEstadio("ERC", "G3b", "depuracion_creatinina_orina24h", {}), 180);
+      t.igual(api.vigenciaPorEstadio("ERC", "G4", "depuracion_creatinina_orina24h", {}), 90);
+    });
+
+    // v14.1.2 — La Tabla 50 NO tiene una fila de "relación albúmina/creatinina": pide
+    // microalbuminuria. Que `rac` devuelva null en ERC es el comportamiento correcto según
+    // la fuente, y esta prueba lo fija para que nadie lo "arregle" añadiéndola por parecido.
+    t.caso("vigenciaPorEstadio - ERC/rac NO existe en la Tabla 50: devuelve null (la fuente pide microalbuminuria)", () => {
+      for (const est of ["G1", "G2", "G3a", "G3b", "G4"]) {
+        t.igual(api.vigenciaPorEstadio("ERC", est, "rac", {}), null);
       }
     });
     t.caso("vigenciaPorEstadio - ERC/G5 no está contemplado por la tabla fuente: null", () => {

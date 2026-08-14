@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.1
+// @version      14.1.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2875,11 +2875,30 @@
           fosforo: { G1: "BLOQ", G2: "BLOQ", G3a: "BLOQ", G3b: 365, G4: 365 },
           colesterol_total: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
           trigliceridos: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
-          ldl: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
+          // v14.1.2 — CORREGIDO contra la Tabla 50 oficial (imagen entregada por el médico
+          // el 14-ago-2026): en Estadio 4 el LDL es 120 días, no 180. El valor viejo hacía
+          // que en el estadio MÁS avanzado el LDL se pidiera con MENOS frecuencia que el
+          // colesterol total y los triglicéridos de su misma fila — la incoherencia que
+          // delataba el error.
+          ldl: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
           hdl: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
-          rac: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
-          // Solo aplica si el paciente además es DM2 — lo exige vigenciaPorEstadio, no esta tabla.
-          hba1c: { G1: "BLOQ", G2: "BLOQ", G3a: 180, G3b: 180, G4: 120 },
+          // v14.1.2 — La Tabla 50 (ERC) pide "Micro albuminuria", NO la relación
+          // albúmina/creatinina. Son cosas distintas —concentración frente a cociente— y
+          // este proyecto ya trata esa distinción como crítica (decisión confirmada en
+          // consultorio el 10-08-2026: se usa resultadoRelacionAlbuminaCreatinina y NUNCA
+          // resultadoMicroAlbuminuriaCreatinuria). Las tablas 39 (HTA) y 43 (DM) sí piden la
+          // RELACIÓN; solo la de ERC pide la microalbuminuria. Se respeta cada tabla como
+          // está escrita, en vez de unificarlas por parecido de nombre.
+          microalbuminuria: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
+          // v14.1.2 — CORREGIDO: la Tabla 50 da 180 días en TODOS los estadios (120 en E4).
+          // El "(solo para diabéticos)" de la tabla NO es un bloqueo por estadio: eso ya lo
+          // aplica vigenciaPorEstadio con su parámetro `esDM2`. Tener ADEMÁS "BLOQ" en G1/G2
+          // era una segunda compuerta que la fuente no tiene, y dejaba sin HbA1c a un
+          // diabético en estadio renal temprano — justo el paciente en quien más se controla.
+          hba1c: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
+          // v14.1.2 — Filas de la Tabla 50 que faltaban ENTERAS en esta tabla.
+          hematocrito: { G1: 365, G2: 365, G3a: 365, G3b: 365, G4: 180 },
+          depuracion_creatinina_orina24h: { G1: 365, G2: 180, G3a: 180, G3b: 180, G4: 90 },
       },
       // Programa DM2 (sin ERC activa, o ERC en G1/G2) — la tabla fuente no lo desglosa por
       // estadio, son valores planos. No exige PTH/Albúmina/Fósforo (no están en este bloque).
@@ -2906,8 +2925,19 @@
           hdl: 180,
           trigliceridos: 180,
           ecg: 365,
+          // ⚠ v14.1.2 — ESTAS DOS NO ESTÁN EN LA TABLA 39 que entregó el médico. Esa tabla
+          // tiene exactamente 9 filas: parcial de orina, glicemia basal, creatinina sérica,
+          // colesterol total, LDL, HDL, triglicéridos, relación albuminuria/creatinina (las
+          // 8 a 180 días, 2 veces al año) y electrocardiograma (1 vez, anual). Ni
+          // ecocardiograma ni ácido úrico aparecen.
+          // No se borran todavía porque podrían venir de otra parte del manual que no se ha
+          // visto, y borrar un examen es una decisión clínica. Quedan marcadas para que el
+          // médico confirme: el ácido úrico está en "BLOQ" (nunca se pide), que es
+          // equivalente a no estar en la tabla, así que es inocuo; el ECOCARDIOGRAMA sí
+          // cambia el comportamiento — hoy se pediría una vez al año sin respaldo en la
+          // Tabla 39.
           ecocardiograma: 365,
-          acido_urico: "BLOQ", // siempre — no se pide en este programa.
+          acido_urico: "BLOQ",
       },
   };
   // Consulta PURA de la tabla anterior: sin DOM, sin red, sin estado global, sin deducir nada
@@ -8265,6 +8295,25 @@
         padding:3px 0;border-bottom:1px solid var(--line)
       }
       #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3);font-weight:800;font-size:11.5px}
+      /* v14.1.1 (R1b) — recuadro de función renal. Superficie propia para que se lea como
+         un resumen y no como una fila más de la tabla de resultados. */
+      #vgl-labs-modal .vgl-labs-renal{
+        background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
+        padding:10px 12px;display:flex;flex-direction:column;gap:5px
+      }
+      #vgl-labs-modal .vgl-labs-renal-top{
+        display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+        font-size:var(--t-body);color:var(--fg) !important
+      }
+      #vgl-labs-modal .vgl-labs-renal-tfg{font-weight:800;font-variant-numeric:tabular-nums;color:var(--fg) !important}
+      #vgl-labs-modal .vgl-labs-renal-estadio{
+        font-weight:800;letter-spacing:.4px;padding:2px 9px;border-radius:var(--r-chip);
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.32)
+      }
+      #vgl-labs-modal .vgl-labs-renal-det{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+      #vgl-labs-modal .vgl-labs-renal-aviso{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
+      #vgl-labs-modal .vgl-labs-renal-vacio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
       #vgl-labs-modal .vgl-labs-src{
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:10.5px;font-weight:800;letter-spacing:.4px;
@@ -9743,6 +9792,57 @@
     return { peso, fechaRegistro: r.fechaRegistro || "" };
   }
 
+  // v14.1.1 (R1b) — EDAD y SEXO del paciente. Los dos vienen del MISMO endpoint que el
+  // script ya llamaba desde hace versiones (`BuscarPacienteDetallado`, en el modal de
+  // agendamiento y en el de ordenamiento): el sexo ya se leía, pero la EDAD viajaba en la
+  // respuesta y nadie la tocaba — verificado contra la captura real de consultorio
+  // (`captura_agendamiento_oficial_20260810.json`: `"edad": 82, "edadAnos": 82`). Sin ella
+  // no hay ninguna de las dos fórmulas renales, así que era el hueco más barato de cerrar
+  // de toda la cadena. Se extrae aquí, cacheado por paciente, para no repetir la llamada.
+  let _demograficosCache = { pacienteId: "", data: null, ts: 0 };
+  function _demograficosInvalidar() { _demograficosCache = { pacienteId: "", data: null, ts: 0 }; }
+  async function apiAccesoObtenerDemograficos(pacienteId) {
+    if (!pacienteId) return null;
+    const key = String(pacienteId);
+    const ahora = Date.now();
+    if (_demograficosCache.pacienteId === key && _demograficosCache.data &&
+        (ahora - _demograficosCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _demograficosCache.data;
+    }
+    try {
+      const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(key)}`);
+      const d = det && det.data;
+      if (!d || typeof d !== "object") return null;
+      // `edad` es el campo visto en la captura real; `edadAnos` se acepta como sinónimo por
+      // si otra versión del backend lo nombra así. NO se deriva de fecha_Nacimiento: sería
+      // recalcular a mano algo que el servidor ya entrega hecho.
+      const edadN = Number(d.edad != null ? d.edad : d.edadAnos);
+      const out = {
+        edad: Number.isFinite(edadN) && edadN > 0 ? edadN : null,
+        sexo: String(d.sexo == null ? "" : d.sexo).trim(),
+      };
+      _demograficosCache = { pacienteId: key, data: out, ts: Date.now() };
+      return out;
+    } catch (e) {
+      console.warn("[Vigilante] apiAccesoObtenerDemograficos falló:", e);
+      return null;
+    }
+  }
+
+  // v14.1.1 (R1b) — Saca del arreglo de laboratorios la creatinina SÉRICA más reciente con
+  // su fecha. Reutiliza `_ultimaFechaPorAnalito`, que ya resuelve lo difícil: casar el
+  // nombre contra la whitelist, descartar los PENDIENTE y quedarse con la fecha más nueva
+  // cuando el mismo analito viene repetido. La entrada CREATININA del whitelist ya excluye
+  // ORINA/CREATINURIA/DEPURAC/24 H, así que aquí no puede colarse una creatinina en orina.
+  function _creatininaDeLabs(labsArray) {
+    try {
+      const { candidatos } = _ultimaFechaPorAnalito(labsArray);
+      const c = candidatos && candidatos.get("CREATININA");
+      if (!c) return null;
+      return { crudo: c.resultVal, fechaIso: c.resultDate || "" };
+    } catch (e) { return null; }
+  }
+
   // v14.1.0 (R1b) — EL ORQUESTADOR. Junta las cuatro entradas y devuelve el estadio, o
   // dice EXACTAMENTE qué falta. Aquí vive toda la seguridad clínica de esta función:
   //
@@ -9811,6 +9911,83 @@
       tfgCkdEpi: tfgCKD > 0 ? tfgCKD : null,
       sexoAusente: !sexoTxt,
     };
+  }
+
+  // v14.1.1 (R1b) — EL ENSAMBLADOR: la pieza que faltaba para que el motor renal dejara de
+  // estar en modo sombra. `estadioRenalDelPaciente` es puro a propósito (para poder probarlo
+  // de verdad); esta función es la que va a buscar sus cuatro entradas al mundo real y se la
+  // llama. Es el único sitio del script que paga las llamadas de red del cálculo renal.
+  //
+  // Las dos consultas van EN PARALELO porque son independientes (demográficos y signos
+  // vitales), y las dos están cacheadas por paciente: abrir el modal dos veces seguidas no
+  // vuelve a pedirlas. La creatinina NO se pide: se saca de los laboratorios que el modal ya
+  // trajo, así que este cálculo no añade ni una consulta de laboratorio.
+  //
+  // Devuelve exactamente lo mismo que `estadioRenalDelPaciente` (siempre un objeto), así que
+  // quien la consuma no tiene que distinguir "no se pudo" de "se rompió".
+  async function calcularEstadioRenal(pacienteId, labsArray) {
+    const creat = _creatininaDeLabs(labsArray);
+    let demo = null, sv = null;
+    if (pacienteId) {
+      try {
+        [demo, sv] = await Promise.all([
+          apiAccesoObtenerDemograficos(pacienteId).catch(() => null),
+          apiHcObtenerSignosVitales(pacienteId).catch(() => null),
+        ]);
+      } catch (e) { /* ninguna de las dos lanza; el catch es por si Promise.all se rompe */ }
+    }
+    const p = _pesoDeSignosVitales(sv);
+    return estadioRenalDelPaciente({
+      edad: demo && demo.edad,
+      peso: p && p.peso,
+      creatininaCruda: creat && creat.crudo,
+      sexo: demo && demo.sexo,
+      fechaCreatinina: creat && creat.fechaIso,
+      fechaPeso: p && p.fechaRegistro,
+    });
+  }
+
+  // v14.1.1 (R1b) — Cómo se le cuenta al médico. Dos reglas gobiernan este HTML:
+  //
+  //  1. Si falta una entrada, se dice CUÁL falta y no se muestra ningún número. Nunca un
+  //     estadio a medias, nunca un "aproximadamente". De este estadio cuelga qué exámenes
+  //     se le piden a una persona.
+  //  2. Se muestran SIEMPRE las entradas que se usaron y CUÁNDO se tomaron. Una TFG
+  //     calculada con un peso de hace dos años o una creatinina de hace ocho meses puede ser
+  //     engañosa, y el médico solo puede juzgarlo si ve las fechas. El script no decide por
+  //     él si el dato está demasiado viejo: se lo enseña.
+  function _renderEstadioRenalHtml(r) {
+    if (!r) return "";
+    const ETIQUETA = { edad: "la edad", peso: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    if (!r.estadio) {
+      const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);
+      const lista = faltan.length > 1
+        ? faltan.slice(0, -1).join(", ") + " y " + faltan[faltan.length - 1]
+        : (faltan[0] || "un dato");
+      const pista = (r.faltan || []).indexOf("peso") !== -1
+        ? " El peso se toma de los signos vitales de Everest: si hoy no se le registraron, no aparecerá."
+        : "";
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular — falta ${escapeHtml(lista)}.${pista}</div>`;
+    }
+    const e = r.entradas || {};
+    const fecha = (iso) => {
+      const s = String(iso || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return "";
+      return " (" + s.split("-").reverse().join("/") + ")";
+    };
+    const avisos = [];
+    if (r.discordancia && r.discordancia.alerta) {
+      avisos.push(`⚠ Cockcroft-Gault y CKD-EPI difieren en ${escapeHtml(String(r.discordancia.diferenciaEstadios))} estadios (${escapeHtml(String(r.discordancia.estadioCG))} vs ${escapeHtml(String(r.discordancia.estadioCKD))}) — suele pasar con peso muy alto o muy bajo. Verifique el peso antes de decidir.`);
+    }
+    if (r.sexoAusente) avisos.push("⚠ Sin sexo registrado: en una mujer, esto sobreestima la TFG en un 15 %.");
+    return `<div class="vgl-labs-renal">
+        <div class="vgl-labs-renal-top">🫘 <b>Función renal estimada:</b>
+          <span class="vgl-labs-renal-tfg">${escapeHtml(String(r.tfg))} mL/min</span>
+          <span class="vgl-labs-renal-estadio">${escapeHtml(String(r.estadio))}</span>
+        </div>
+        <div class="vgl-labs-renal-det">Por <b>${escapeHtml(String(r.formula))}</b> · creatinina ${escapeHtml(String(e.creatininaCruda || e.creatinina))}${escapeHtml(fecha(e.fechaCreatinina))} · peso ${escapeHtml(String(e.peso))} kg${escapeHtml(fecha(e.fechaPeso))} · ${escapeHtml(String(e.edad))} años${e.sexo ? " · " + escapeHtml(String(e.sexo)) : ""}${r.tfgCkdEpi ? " · CKD-EPI: " + escapeHtml(String(r.tfgCkdEpi)) : ""}</div>
+        ${avisos.map((a) => `<div class="vgl-labs-renal-aviso">${a}</div>`).join("")}
+      </div>`;
   }
 
   // v14.0.0 (T6, CORREGIDO tras releer D4 completo en el superprompt — la ventana por
@@ -10262,6 +10439,8 @@
           </a>
         </div>
 
+        <div class="vgl-agm-sec" id="vgl-labs-renal-sec"></div>
+
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Resultados de Paraclínicos (Búsqueda Prioritaria en Athenea Soluciones):</label>
           <div id="vgl-labs-content" class="vgl-agm-slots" style="max-height:420px;overflow-y:auto;display:block">
@@ -10317,9 +10496,11 @@
     if (!vivo()) return;
 
     // 2. BÚSQUEDA SECUNDARIA EN COMPLEMENTO (ANNAR / CITI)
+    let pacienteIdLabs = null;
     try {
       let pId = await apiAccesoBuscarPaciente(apt.doc_id);
       if (!vivo()) return;
+      pacienteIdLabs = pId || null;
       if (pId) {
         const [annarRes, citiRes] = await Promise.all([
           apiAccesoObtenerLaboratoriosAnnar(pId).catch(() => null),
@@ -10332,6 +10513,21 @@
       }
     } catch (e) {}
     if (!vivo()) return;
+
+    // v14.1.1 (R1b) — FUNCIÓN RENAL. Aquí es donde el motor renal deja de estar en modo
+    // sombra: este es su primer llamador de producción. Se pone en el modal de laboratorios
+    // porque es justo donde el médico está mirando la creatinina, y se lanza SIN await para
+    // no retrasar ni un milisegundo la tabla de resultados, que es lo que él vino a ver: el
+    // recuadro renal aparece solo cuando sus dos consultas vuelven.
+    // Si algo falla, el recuadro simplemente no aparece — nunca rompe el modal.
+    (async () => {
+      try {
+        const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
+        if (!vivo()) return;
+        const sec = modal.querySelector("#vgl-labs-renal-sec");
+        if (sec) sec.innerHTML = _renderEstadioRenalHtml(r);
+      } catch (e) { console.warn("[Vigilante] recuadro renal no disponible:", e); }
+    })();
 
     // v12.0.0 — RETIRADOS los "datos clínicos de muestra". Cuando la consulta real no
     // devolvía nada, se inventaban SIETE resultados de laboratorio (glicemia 98 mg/dL,
