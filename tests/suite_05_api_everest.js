@@ -369,5 +369,10 @@ module.exports = {
       t.igual(cont.fetch, 4, "1 intento inicial + 3 reintentos, pese a ser POST");
       t.igual(cont.gm, 4, "__idempotent:true habilita el reenvío por GM");
     });
+
+    await t.casoAsync("pageFetchJson no debe lanzar error", async () => {
+      const c = cargar({ silencioso: true, gmxhr: (o) => o.onload({ status: 200, responseText: '{"ok":true}' }) });
+      await t.noLanza(async () => await c.api.pageFetchJson("url"));
+    });
   }
 };

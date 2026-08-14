@@ -2781,5 +2781,10 @@ module.exports = {
       t.falso(c.api.avisoYaVisto(uid), "y no cae al aviso modal: undefined no es un apagado explícito");
     });
 
+    t.caso("_casillasExamenFisico devuelve un array con ids y nombres", () => {
+      const c = cargar({ silencioso: true });
+      const r = c.api._casillasExamenFisico();
+      t.cierto(Array.isArray(r));
+    });
   },
 };

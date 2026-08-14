@@ -94,5 +94,12 @@ module.exports = {
       const sinTokens = [...fijosConEstilo].filter((id) => !listaTokens.includes("#" + id)).sort();
       t.igual(sinTokens, [], "estos overlays viven fuera de #vgl-root y no heredan los tokens: saldrían sin tarjeta");
     });
+
+    t.caso("tests extra para utilidades de stats y strings", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api.renderStats([]));
+      t.noLanza(() => c.api.fraudesHoy());
+      t.igual(c.api.escapeHtml("a < b & c > d"), "a &lt; b &amp; c &gt; d");
+    });
   }
 };

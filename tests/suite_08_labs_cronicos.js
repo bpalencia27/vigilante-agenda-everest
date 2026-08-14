@@ -1556,5 +1556,13 @@ module.exports = {
       t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
       t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
     });
+
+    t.caso("_valorCrudoLab trata null, undefined y vacio como undefined", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._valorCrudoLab(null), undefined);
+      t.igual(c.api._valorCrudoLab(undefined), undefined);
+      t.igual(c.api._valorCrudoLab("   "), undefined);
+      t.igual(c.api._valorCrudoLab(" 5.5 "), " 5.5 ");
+    });
   }
 };

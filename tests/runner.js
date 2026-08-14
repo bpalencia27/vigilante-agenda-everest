@@ -100,35 +100,27 @@ async function main() {
   }
 
   // ------------------------------------------------------------------
-  // Cobertura EFECTIVA (puramente informativo: no toca el % de cobertura
-  // declarada, el total de comprobaciones ni el código de salida).
-  // El array `cubre` de una suite es un AUTOINFORME: el bucle de arriba
-  // solo valida que el NOMBRE exista en el API real, no que alguna
-  // prueba lo EJERCITE de verdad. Aquí se hace una comprobación textual
-  // best-effort: para cada nombre ya validado en `cubiertas`, se busca
-  // como palabra completa (\bNOMBRE\b) en el texto de las suites, tras
-  // quitarle a cada suite su propio bloque `cubre: [...]` (si no, el
-  // nombre "se encontraría a sí mismo" en su propia declaración y la
-  // comprobación no diría nada).
-  // OJO: esto NO es "sin probar" — por eso el bloque se llama "nunca
-  // nombradas" y no "sin cubrir". Hay funciones que sí se ejercitan de
-  // verdad (p.ej. vía `.onclick()`, o porque otra función cubierta las
-  // invoca por dentro) aunque su nombre nunca se escriba literal en
-  // ninguna suite. El número de funciones con prueba EFECTIVA es
-  // (total declaradas en `cubre`) menos (nunca nombradas).
-  const textoSinBloquesCubre = archivos.map(arch => {
-    const texto = fs.readFileSync(path.join(__dirname, arch), "utf8");
-    const bloqueCubre = (texto.match(/cubre:\s*\[[\s\S]*?\]/) || [""])[0];
-    return bloqueCubre ? texto.replace(bloqueCubre, "") : texto;
-  }).join("\n");
-  const nuncaNombradas = [...cubiertas].filter(n => {
-    const escapado = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return !new RegExp("\\b" + escapado + "\\b").test(textoSinBloquesCubre);
-  }).sort();
-  if (nuncaNombradas.length) {
-    console.log("");
-    console.log(COL.ama + "  declaradas pero nunca nombradas (" + nuncaNombradas.length + "):" + COL.fin);
-    for (let i = 0; i < nuncaNombradas.length; i += 6) console.log("    " + COL.dim + nuncaNombradas.slice(i, i + 6).join(", ") + COL.fin);
+  // Cobertura HONESTA (Validación estricta por suite):
+  // El runner ahora falla si una suite declara cubrir una función en
+  // su array `cubre` pero el nombre de esa función no aparece en el texto
+  // de la propia suite (excluyendo el bloque `cubre`).
+  // ------------------------------------------------------------------
+  for (const arch of archivos) {
+    const suite = require(path.join(__dirname, arch));
+    if (suite.cubre && suite.cubre.length > 0) {
+      const texto = fs.readFileSync(path.join(__dirname, arch), "utf8");
+      const bloqueCubre = (texto.match(/cubre:\s*\[[\s\S]*?\]/) || [""])[0];
+      const textoSinBloque = bloqueCubre ? texto.replace(bloqueCubre, "") : texto;
+
+      for (const fn of suite.cubre) {
+        if (!todosSet.has(fn)) continue; // Ya validado arriba
+        const escapado = fn.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (!new RegExp("\\b" + escapado + "\\b").test(textoSinBloque)) {
+          console.error(COL.mal + "Error: la suite '" + (suite.nombre || arch) + "' declara cubrir '" + fn + "', pero no la nombra en su propio código." + COL.fin);
+          tf++;
+        }
+      }
+    }
   }
 
   console.log(COL.tit + "─".repeat(64) + COL.fin);

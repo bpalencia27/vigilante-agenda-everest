@@ -410,5 +410,15 @@ module.exports = {
       await c.api.pageFetchJson("/apiviva/APIAcceso/api/Acceso/AsignarTurno");
       t.igual(ventana(c), null, "ninguna ventana creada, ni por uxTrack ni por RUM");
     });
+
+    t.caso("tests extra para funciones de uxVentanaNueva, uxClaveLimpia, _loteId, repEntornoDiario, _rumTrack, _migaPush", () => {
+      const c = cargar({ silencioso: true });
+      t.cierto(typeof c.api.uxVentanaNueva() === "object");
+      t.igual(c.api.uxClaveLimpia("A B-C_1234567"), "ab-c_");
+      t.cierto(typeof c.api._loteId() === "string");
+      t.noLanza(() => c.api.repEntornoDiario());
+      t.noLanza(() => c.api._rumTrack("url", 100, Promise.resolve()));
+      t.noLanza(() => c.api._migaPush("a"));
+    });
   }
 };

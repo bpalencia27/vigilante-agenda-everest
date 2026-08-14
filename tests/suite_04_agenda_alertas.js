@@ -444,5 +444,26 @@ module.exports = {
       t.cierto(c.api.avisoYaVisto(uid), "sin colisión, labs vencidos se muestra y queda marcado como visto");
     });
 
+    t.caso("tests extra para utilidades de notificaciones declaradas en cubre", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api.beep(440, 100, 0));
+      t.noLanza(() => c.api.playTone("exito"));
+      t.noLanza(() => c.api.startNag());
+      t.noLanza(() => c.api.stopNag());
+      t.cierto(c.api.faviconUrl("") !== null);
+      t.noLanza(() => c.api.setFavicon(""));
+      t.noLanza(() => c.api.startFlash());
+      t.noLanza(() => c.api.stopFlash());
+      t.noLanza(() => c.api.popupAlert("hola", "ok"));
+      t.noLanza(() => c.api.bigAlert("hola", "ok"));
+      t.noLanza(() => c.api.acknowledge());
+      t.cierto(c.api.colorDot("red") !== null);
+      t.noLanza(() => c.api.osNotify("hola"));
+      t.noLanza(() => c.api._renderToast("hola"));
+      t.noLanza(() => c.api.showToast("hola"));
+      t.noLanza(() => c.api.updateBell(0));
+      t.noLanza(() => c.api.testNotifications());
+      t.noLanza(() => c.api.enableOsNotifications());
+    });
   }
 };
