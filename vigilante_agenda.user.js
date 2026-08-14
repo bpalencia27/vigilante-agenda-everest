@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.17
+// @version      12.10.18
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.17";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.18";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7343,7 +7343,7 @@
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
       #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
-      .vgl-agm-sub{font-size:13.5px;margin-top:3px;color:var(--fg2)}
+      .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2)}
       #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2)}
       .vgl-agm-sub b{color:var(--fg);font-weight:800}
       #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg)}
@@ -7359,7 +7359,7 @@
       .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
       .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
-        font-size:12.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+        font-size:var(--t-micro);font-weight:800;letter-spacing:.7px;text-transform:uppercase;
         display:block;margin-bottom:9px;color:var(--c-azul)
       }
       #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul)}
@@ -7368,7 +7368,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 15px;
-        font-size:12.5px;font-weight:600;cursor:pointer;
+        font-size:var(--t-micro);font-weight:600;cursor:pointer;
         transition:background .15s var(--ease-out),color .15s var(--ease-out),border-color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
         box-shadow:var(--glow-edge)
       }
@@ -7382,7 +7382,7 @@
         font-weight:800;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),0 4px 14px rgba(var(--rgb-azul),.18)
       }
       .vgl-agm-dinfo{
-        font-size:12.5px;color:var(--fg);
+        font-size:var(--t-micro);color:var(--fg);
         background:rgba(var(--rgb-verde),.13);border:1px solid rgba(var(--rgb-verde),.45);
         border-radius:var(--r-field);padding:9px 13px;margin-top:7px;font-weight:600
       }
@@ -7414,7 +7414,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 14px;
-        font-size:12.5px;font-weight:700;
+        font-size:var(--t-micro);font-weight:700;
         cursor:pointer;
         transition:background .15s var(--ease-out),border-color .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
         box-shadow:var(--glow-edge)
@@ -7452,16 +7452,16 @@
         background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
       }
       .vgl-agm-loading{
-        font-size:12.5px;color:var(--fg2);padding:6px;font-style:italic
+        font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
       }
       .vgl-agm-err{
-        font-size:12.5px;color:var(--c-rojo); /* [UI-CSS] */
+        font-size:var(--t-micro);color:var(--c-rojo); /* [UI-CSS] */
         background:rgba(var(--rgb-rojo),.13);border:1px solid rgba(var(--rgb-rojo),.35); /* [UI-CSS] */
         padding:9px 11px;border-radius:var(--r-field);font-weight:700
       }
       .vgl-agm-check-lbl{
         display:flex;align-items:center;gap:10px;
-        font-size:13.5px;font-weight:700;margin-bottom:8px;
+        font-size:var(--t-body);font-weight:700;margin-bottom:8px;
         cursor:pointer;color:var(--fg)
       }
       /* v12.3.20 — Sin min-width:0 el span no podía encogerse por debajo de su ancho
@@ -7473,7 +7473,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-field);padding:11px 13px;
-        font-size:12.5px;font-family:inherit;resize:none;
+        font-size:var(--t-micro);font-family:inherit;resize:none;
         box-shadow:var(--glow-edge);
         transition:border-color .16s var(--ease-out),box-shadow .16s var(--ease-out)
       }
@@ -7496,7 +7496,7 @@
       #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde)}
       .vgl-agm-btn{
         border:0;border-radius:var(--r-chip);padding:11px 22px;
-        font-size:13.5px;font-weight:800;cursor:pointer;
+        font-size:var(--t-body);font-weight:800;cursor:pointer;
         transition:background .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out),color .15s var(--ease-out)
       }
       .vgl-agm-btn.sec{background:var(--bg3);color:var(--fg)}
@@ -7545,7 +7545,7 @@
       }
       .vgl-postcita-x:hover{color:var(--fg)}
       .vgl-postcita-title{font-size:var(--t-body);font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
-      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
+      .vgl-postcita-sub{font-size:var(--t-micro);color:var(--fg2) !important;margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
       /* Items de Órdenes PyM — celdas bento */
@@ -7594,7 +7594,7 @@
       }
       .vgl-ord-title {
         color: var(--fg);
-        font-size: 13.5px;
+        font-size:var(--t-body);
         font-weight: 700;
         line-height: 1.45;
         word-break: break-word;
@@ -7953,7 +7953,7 @@
       #vgl-ordenar-modal .vgl-ord-label{gap:11px;border:1px solid transparent;border-radius:var(--r-field);padding:1px}
       #vgl-ordenar-modal .vgl-ord-chk{width:19px;height:19px;accent-color:var(--c-verde)}
       #vgl-ordenar-modal .vgl-ord-chk:focus-visible{outline:2px solid rgba(var(--rgb-verde),.80);outline-offset:2px;border-radius:4px}
-      #vgl-ordenar-modal .vgl-ord-title{font-size:13.5px;line-height:1.4}
+      #vgl-ordenar-modal .vgl-ord-title{font-size:var(--t-body);line-height:1.4}
       #vgl-ordenar-modal .vgl-ord-cie{
         display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.5px;
         color:var(--c-morado);background:rgba(var(--rgb-morado),.13);

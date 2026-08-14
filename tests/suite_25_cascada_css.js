@@ -480,17 +480,30 @@ module.exports = {
       const literal12 = css.match(/font-size: *12px(?![0-9.])/g) || [];
       const literal14 = css.match(/font-size: *14px(?![0-9.])/g) || [];
       const literal16 = css.match(/font-size: *16px(?![0-9.])/g) || [];
-
       t.cierto(literal12.length === 0, `No deben quedar font-size:12px literales en la hoja (quedaron ${literal12.length})`);
       t.cierto(literal14.length === 0, `No deben quedar font-size:14px literales en la hoja (quedaron ${literal14.length})`);
       t.cierto(literal16.length === 0, `No deben quedar font-size:16px literales en la hoja (quedaron ${literal16.length})`);
+
+      // v14.0.0 (TL1) — piel de agendar/ordenar: 12.5px/13.5px eran parte de los "hoy hay
+      // 11px, 11.5px, 12.5px..." que el propio §4.2 pide eliminar. Migrados a
+      // var(--t-micro)/var(--t-body) (0.5px de diferencia, imperceptible) SOLO en las
+      // clases .vgl-agm-*/.vgl-ord-*/.vgl-postcita-* — el resto de la hoja (labs/pym/pes/
+      // labsv-modal, toasts, badges) queda fuera del alcance de TL1 a propósito, no tocado.
+      const clasesTL1 = /\.(vgl-agm-[\w-]+|vgl-ord-[\w-]+|vgl-postcita-sub)\s*\{[^}]*font-size:\s*1[23]\.5px/g;
+      const sinMigrarTL1 = css.match(clasesTL1) || [];
+      t.cierto(sinMigrarTL1.length === 0, `No deben quedar font-size:12.5px/13.5px literales en las clases de TL1 (agendar/ordenar) (quedaron ${sinMigrarTL1.length}: ${sinMigrarTL1.join(" | ")})`);
 
       const microUsos = css.match(/var\(--t-micro(?:,[^)]*)?\)/g) || [];
       const bodyUsos = css.match(/var\(--t-body\)/g) || [];
       const leadUsos = css.match(/var\(--t-lead\)/g) || [];
 
-      t.cierto(microUsos.length === 25, `var(--t-micro) debe aparecer 25 veces (incluida la reserva). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 6, `var(--t-body) debe aparecer 6 veces. Salieron ${bodyUsos.length}.`);
+      // v14.0.0 (TL1) — 8 usos nuevos de var(--t-micro) (12.5px de .vgl-agm-lbl/-pbtn/-dinfo/
+      // -sbtn/-loading/-err/-input y .vgl-postcita-sub) y 5 de var(--t-body) (13.5px de
+      // .vgl-agm-sub/-check-lbl/-btn y las DOS declaraciones de .vgl-ord-title — la base
+      // compartida y el override más específico de #vgl-ordenar-modal, que antes le ganaba
+      // en especificidad y dejaba el cableado de la base sin efecto real): 25->33, 6->11.
+      t.cierto(microUsos.length === 33, `var(--t-micro) debe aparecer 33 veces (incluida la reserva y los 8 usos nuevos de TL1). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 11, `var(--t-body) debe aparecer 11 veces (incluidos los 5 usos nuevos de TL1). Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length === 5, `var(--t-lead) debe aparecer 5 veces. Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
