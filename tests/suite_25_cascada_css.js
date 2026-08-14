@@ -581,5 +581,36 @@ module.exports = {
       t.cierto(valorToken("z-banner") > valorToken("z-widget"), "el banner debe ganarle al dock de widgets (T5, aún no existe)");
     });
 
+    // v14.0.0 (T8) — Regla K (dirigida, no genérica): repite exactamente el bug ya
+    // documentado en v12.6.6/v12.10.2 (#vgl-postcita-panel/#vgl-labsv-modal), esta vez en
+    // #vgl-pym-banner: la entrada "simple" de la lista de escudos
+    // (`#vgl-pym-banner span,#vgl-pym-banner b{color:inherit}`, especificidad id+tag) le
+    // ganaba en cascada a `.vgl-pymb-contador{color:var(--bg-solid)}` (especificidad de 1
+    // clase), dejando el contador con el color heredado del banner en vez del suyo propio
+    // — invisible sobre su fondo ámbar. Detectado por auditoría real de contraste WCAG en
+    // Chromium (ratio 1.5/2.64, ambos bajo el mínimo AA de 4.5), no por esta suite: el
+    // harness de pruebas no aplica cascada CSS real. El fix fue quitar la entrada simple y
+    // apoyarse solo en la armadura segura `:where(span:not([class]),...)`, que por
+    // construcción nunca compite con un elemento que ya tiene su propia clase. Esta regla
+    // ancla que esa entrada insegura no vuelva: cualquier regla dentro de #vgl-pym-banner
+    // que fije 'color' sobre span/b SIN exigir una clase propia, con especificidad >= la de
+    // .vgl-pymb-contador, es exactamente la reincidencia del bug.
+    t.caso("Regla K - el contador del banner PyM no pierde su color propio contra el escudo del banner", () => {
+      const contador = reglasCss.find((r) => r.selector === ".vgl-pymb-contador" && r.props.has("color"));
+      t.cierto(!!contador, "existe una regla .vgl-pymb-contador que fija 'color' (si esto falla, el selector cambió de forma y hay que revisar a mano)");
+
+      const escudosPeligrosos = reglasCss.filter((r) => {
+        if (!r.props.has("color")) return false;
+        if (!r.selector.includes("#vgl-pym-banner")) return false;
+        if (r.selector.includes(":where(")) return false; // la armadura segura, no compite por diseño
+        const tagPelado = /(^|[\s>+~])(span|b|small|label|p)(\[|:|\.|$|[\s>+~])/.test(r.selector) && !r.targetClasses.has("vgl-pymb-contador");
+        return tagPelado;
+      });
+
+      for (const r of escudosPeligrosos) {
+        t.cierto(r.specificity < contador.specificity, `la regla '${r.selector}' (especificidad ${r.specificity}) NO debe igualar/superar a '.vgl-pymb-contador' (especificidad ${contador.specificity}) fijando 'color' — es la reincidencia exacta del bug v12.6.6/v12.10.2/T8 que dejaba el contador ilegible`);
+      }
+    });
+
   }
 };
