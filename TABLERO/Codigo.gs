@@ -129,7 +129,7 @@ function doPost(e) {
     }
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var comunes = [new Date(), _celda(body.ts, 30), _celda(body.dia, 10), _celda(body.equipo, 40), _celda(body.ver, 20), _celda(lote, 60)];
+    var comunes = [new Date(), _celda(body.ts, 30), _celda(body.dia, 10), _celda(body.equipo, 40), _celdaVersion(body.ver), _celda(lote, 60)];
     var COMUNES_HD = ["recibido", "ts", "dia", "equipo", "ver", "lote"];
 
     if (ev === "ux") {
@@ -161,7 +161,7 @@ function doPost(e) {
       hoja.appendRow(comunes.concat([_celda(body.deDia, 10), _celda(body.desde, 30), totalLimpio, _celda(JSON.stringify(limpio), 4000)]));
 
       var filas = [];
-      for (var k in limpio) filas.push([new Date(), _celda(body.deDia, 10), _celda(body.equipo, 40), _celda(body.ver, 20), _celda(k, 60), limpio[k]]);
+      for (var k in limpio) filas.push([new Date(), _celda(body.deDia, 10), _celda(body.equipo, 40), _celdaVersion(body.ver), _celda(k, 60), limpio[k]]);
       if (filas.length) {
         var largo = _hoja(ss, "uso_detalle", ["recibido", "dia", "equipo", "ver", "accion", "conteo"]);
         largo.getRange(largo.getLastRow() + 1, 1, filas.length, 6).setValues(filas); // un solo golpe
@@ -547,6 +547,34 @@ function _forzarTextoColumnaVer(h, encabezados) {
 function _celda(v, max) {
   var t = String(v == null ? "" : v).slice(0, max || 100);
   return /^[=+\-@]/.test(t) ? "'" + t : t;
+}
+
+// v14.1.6 — LA VERSIÓN SE ESCRIBE SIEMPRE CON APÓSTROFO. No es redundante con
+// _forzarTextoColumnaVer(): son dos defensas distintas y la de formato tiene un agujero
+// real, medido sobre la Hoja de producción del 14-ago-2026.
+//
+// Qué se vio: de 20 equipos, 14 reportaban una versión convertida en fecha —
+// "12.10.7" guardado como "12.10.2007", "12.10.0" como "12.10.2000", "12.6.9" como
+// "12.6.2009". Sheets lee "12.10.7" como día.mes.año y lo convierte. Y UNA fila
+// sobrevivió intacta, que es la pista de que el problema no es el dato sino CUÁNDO se
+// aplicó el formato.
+//
+// El agujero: _forzarTextoColumnaVer da formato a un rango FIJO de filas (2..N) en el
+// momento de abrir la hoja. Cada appendRow posterior crece la hoja, y las filas nuevas
+// que caen fuera de ese rango llegan sin formato de texto y Sheets las parsea. Por eso
+// el reparador manual existía y por eso no bastaba: reparaba el pasado mientras la
+// entrada seguía corrompiéndose.
+//
+// El apóstrofo NO depende del formato de la celda ni de cuántas filas tenga la hoja:
+// obliga a texto en la propia escritura. Al leer, Sheets lo devuelve sin él, así que
+// las comparaciones de versión siguen viendo "12.10.7".
+//
+// Por qué importa ahora: con la versión ilegible, la columna "¿Al día?" del tablero
+// dice "❓ versión no reconocida" y NADIE sabe qué equipo está atrasado — justo cuando
+// hay una corrección de avisos tardíos que toda la flota necesita instalar.
+function _celdaVersion(v) {
+  var t = String(v == null ? "" : v).slice(0, 20);
+  return t ? "'" + t : t;
 }
 
 // Barrera de PHI del lado del servidor. El userscript ya sanea el mensaje antes de
