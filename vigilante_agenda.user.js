@@ -2541,12 +2541,37 @@
                       console.warn("[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.");
                       return;
                   }
+                  // v14.0.0 — BUG REAL REPORTADO EN CONSULTA (dos veces): "Auto-Labs no pone
+                  // la fecha del uroanálisis". La causa estaba aquí: este reintento salía con
+                  // `if (valorActual !== "") return;` en cuanto la casilla de RESULTADO ya
+                  // tenía algo — y se llevaba por delante la escritura de la FECHA, aunque su
+                  // casilla estuviera vacía. Basta con que el resultado se haya puesto en una
+                  // corrida anterior (o por el camino de componentes) para que la fecha no se
+                  // escriba NUNCA por más veces que se pulse el botón.
+                  // El camino principal ya resolvió esto en v12.3.35 separando valor y fecha;
+                  // a este reintento no se le aplicó. Se replica aquí la MISMA regla:
+                  //   · valor DISTINTO al de Athenea -> lo escribió el médico: se respeta
+                  //     entero, incluida su fecha. La casilla del médico es sagrada.
+                  //   · valor IGUAL al de Athenea (corrida anterior) -> no se reescribe, pero
+                  //     SÍ se completa la fecha si quedó vacía.
+                  //   · casilla vacía -> se escriben valor y fecha.
                   const valorActual = String(inputEl.value == null ? "" : inputEl.value).trim();
-                  if (valorActual !== "") return; // se llenó por otra vía mientras tanto: se respeta
-                  setNgValue(inputEl, resultVal);
+                  const mismoValor = valorActual !== "" && valorActual === String(resultVal).trim();
+                  if (valorActual !== "" && !mismoValor) return; // valor propio del médico: no se toca nada
+                  if (valorActual === "") setNgValue(inputEl, resultVal);
                   const grupo = inputEl.closest ? inputEl.closest(".input-group") : null;
                   const dateInput = (grupo && grupo.querySelector('input[type="date"]')) || _findLabField(matched.dateId, matched.altDateIds);
-                  if (dateInput && resultDate && String(dateInput.value == null ? "" : dateInput.value).trim() === "") setNgValue(dateInput, resultDate);
+                  const fechaVacia = dateInput && String(dateInput.value == null ? "" : dateInput.value).trim() === "";
+                  if (dateInput && resultDate && fechaVacia) setNgValue(dateInput, resultDate);
+                  // Diagnóstico dirigido: si la fecha SIGUE sin escribirse, esto dice por cuál
+                  // de las tres razones posibles, en vez de dejar al médico adivinando.
+                  if (!resultDate) {
+                      console.warn("[Vigilante] uroanálisis: no se escribió la fecha porque Athenea NO trajo fecha para este uroanálisis (resultDate = null). Los componentes de orina pueden venir sin fecha propia aunque el examen padre sí la tenga.");
+                  } else if (!dateInput) {
+                      console.warn("[Vigilante] uroanálisis: no se escribió la fecha porque NO se encontró su casilla (ni como hermana input[type=date] del .input-group, ni por el id " + matched.dateId + ").");
+                  } else if (!fechaVacia) {
+                      console.log("[Vigilante] uroanálisis: la fecha ya tenía valor, se respeta la del médico.");
+                  }
                   console.log("[Vigilante] uroanálisis: casilla de resultado completada tras reintento (Angular tardó en mostrarla después de marcar SI).");
               } catch (e) {}
           }, 300);

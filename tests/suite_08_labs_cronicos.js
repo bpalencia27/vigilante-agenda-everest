@@ -503,6 +503,56 @@ module.exports = {
       t.igual(busquedas, 3, "una búsqueda síncrona y exactamente DOS reintentos: acotado, nunca un sondeo eterno");
     });
 
+    // v14.0.0 — BUG REPORTADO EN CONSULTA DOS VECES: "Auto-Labs no pone la fecha del
+    // uroanálisis". El reintento del uroanálisis (el que espera al *ngIf de Angular tras
+    // marcar SI) salía con `if (valorActual !== "") return;` en cuanto la casilla de
+    // RESULTADO ya tenía algo, y se llevaba por delante la escritura de la FECHA aunque su
+    // casilla estuviera vacía. Basta con que el resultado se haya puesto en una corrida
+    // anterior para que la fecha no se escriba nunca, por más veces que se pulse el botón.
+    // El camino principal ya separaba valor y fecha desde v12.3.35; a ESTE reintento no.
+    // Usa instancia PROPIA: sustituye getElementById/querySelectorAll y el reintento es
+    // asíncrono, así que con la instancia compartida los mocks se filtrarían a otras pruebas.
+    await t.casoAsync("injectLabsIntoCronicos v14: el reintento del UROANÁLISIS completa la fecha aunque el resultado YA estuviera escrito (bug real de consulta)", async () => {
+      const cu = cargar({ silencioso: true });
+      cu.ctx.Event = class Event { constructor(tipo, init) { this.type = tipo; this.bubbles = !!(init && init.bubbles); } };
+      let siMarcado = false, montada = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const compSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      // La casilla de resultado del uroanálisis YA trae el valor de Athenea (corrida
+      // anterior) y su FECHA está VACÍA — el escenario exacto que reportó el médico.
+      const fechaUro = { value: "", dispatchEvent: () => {} };
+      const resultadoUro = {
+        value: "NORMAL", dispatchEvent: () => {},
+        closest: () => ({ querySelector: (s) => (s === 'input[type="date"]' ? fechaUro : null) }),
+      };
+      cu.env.doc.getElementById = (id) => {
+        if (id === "resultadoUroanalisis") return montada ? resultadoUro : null; // *ngIf tardío
+        if (id === "fechaResultUroanalisis") return montada ? fechaUro : null;
+        return null;
+      };
+      cu.env.doc.querySelector = () => null;
+      cu.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
+        if (sel === "input[placeholder]") return montada ? [compSangre] : [];
+        return [];
+      };
+      // Un COMPONENTE real dispara el marcado del SI (la fila padre sola no lo hace), y la
+      // fila padre es la que crea el candidato UROANALISIS con su fecha.
+      const res = cu.api.injectLabsIntoCronicos([
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-08-10" }
+      ]);
+      t.cierto(siMarcado, "un componente real marca el SI de ¿Uroanálisis?");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"), "en la corrida síncrona la casilla del resultado aún no existía");
+      t.igual(fechaUro.value, "", "y por tanto la fecha tampoco se pudo escribir todavía");
+
+      montada = true;                       // Angular monta el *ngIf
+      await new Promise((r) => setTimeout(r, 80));
+
+      t.igual(resultadoUro.value, "NORMAL", "el resultado NO se reescribe: ya era el de Athenea");
+      t.igual(fechaUro.value, "2026-08-10", "y la FECHA vacía SÍ se completa — esto es lo que fallaba en consulta");
+    });
+
     // =====================================================================
     // v12.6.8 — Reportado en consultorio con el PDF del laboratorio: una paciente con
     // resultado real de RAC (6.93 mg/gr) no se completó en la historia. El emparejamiento
