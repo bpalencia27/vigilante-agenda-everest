@@ -1,10 +1,26 @@
-# Instrucciones para Jules
+# Instrucciones para agentes de código
+
+> Lo lee **Jules** automáticamente desde la raíz. Aplica igual a cualquier otro agente
+> que trabaje este repo: Claude Code, Gemini 3.7 Flash, Codex, Copilot, Cursor.
+> **Un prompt explícito del usuario tiene prioridad sobre cualquier regla de aquí.**
+> Manual operativo de los agentes externos: `jules.md`.
 
 Este repo es un userscript de Tampermonkey (`vigilante_agenda.user.js`, IIFE único,
 sin build) que un médico usa EN VIVO durante consultas reales en un EHR ajeno
 ("Everest"/Athenea Soluciones). Un bug aquí puede mostrar un dato clínico incorrecto
 o desplazar una cita real. Lee también `CLAUDE.md` en la raíz — tiene las reglas
 completas del proyecto y el historial de bugs de CSS ya encontrados hoy.
+
+## Datos duros del repo (verificados 14-ago-2026 — no los cites de memoria)
+
+| Dato | Valor real |
+|---|---|
+| Archivo de producción | `vigilante_agenda.user.js`, **~853 KB**, un solo archivo |
+| Banco de pruebas | `node tests/runner.js` (= `npm test`), **930 comprobaciones en verde** |
+| Suites | `tests/suite_01…suite_28` — ya NO existe `PARA_JULES/`, se migró |
+| Python | **No hay** `pytest` en este repo (eso es el repo hermano del Copiloto) |
+| CI | `.github/workflows/tests.yml` |
+| Rama de trabajo | `claude/pym-agenda-blindaje-v12-4` |
 
 ## Alcance de la tarea
 
@@ -46,11 +62,68 @@ lo pidan aparte.
   archivos" cuando el diff los agrega, o "restauré un valor" cuando el cambio
   fue un no-op).
 
+## Invariantes de dominio — el "por qué" detrás del código que parece raro
+
+Si algo de aquí te parece un bug, **no lo es**. Está así a propósito, casi siempre porque
+ya falló una vez en consulta real. Verificado contra el código el 14-ago-2026.
+
+### Colores y detección de fraude (`colorAndAlert`, ~línea 5680)
+
+| Color | Significado | Regla |
+|---|---|---|
+| 🟢 VERDE | A tiempo | Llegada dentro de tolerancia |
+| 🟣 MORADO | Pre-alerta | Retraso ≥ pre-alerta pero < gracia, o 3+ actividades de PyM |
+| 🟠 ÁMBAR | Sin presentarse | Retraso ≥ gracia → además entra en `fraudWatch` |
+| 🔴 ROJO | Atención extemporánea | Estaba en `fraudWatch` y reaparece. Sonido **una sola vez** |
+| 🔵 AZUL | Normal | — |
+
+- **`Atendido` NO cuenta como confirmación de llegada.** La rama de `Atendido` consulta
+  `fraudWatch`, **no solo** `alertedFraud`: si la agenda salta de `Sin presentarse` directo
+  a `Atendido`, sin eso el caso se pintaba VERDE. *(Regresión real.)*
+- **`apptKey` incluye la hora**, no solo la cédula
+  (`doc_id + "@" + hora_texto`, línea 5655). Un paciente con dos citas el mismo día
+  compartía estado y se le acusaba al llegar puntual a la segunda. *(Regresión real.)*
+- **`diaNuevo()` limpia `fraudWatch`/`alertedFraud` al cambiar de día** (línea 5659). Sin
+  esto, una pestaña abierta toda la noche acusa hoy a quien estuvo en la lista ayer.
+  *(Regresión real.)*
+- El sonido de ROJO es **edge-triggered**: `alertedFraud` garantiza una sola alerta por
+  cita. No lo conviertas en un aviso repetido.
+
+### Reglas de negocio de PyM
+
+- Entre las ETS **solo se conserva VIH**. VDRL/sífilis/hepatitis B y C se ocultan (meta ya
+  cumplida en la IPS). La lista es `S.excluir` (línea 3483) y es configurable, pero
+  **VIH nunca se oculta** — es seguridad clínica, no preferencia.
+- Hepatitis aparece en la base como `HVC`/`VHC`/`HBV`/`VHB`: por eso la lista trae las
+  cuatro grafías.
+- La exclusión **no afecta** cérvix, mama, colon, próstata, citas ni valoración.
+
+### Evidencia clínica: nunca inventes un código
+
+Los CUPS, las vigencias y los festivos **solo se añaden con fuente citada**. La jerarquía
+de confianza, de mayor a menor, es:
+
+1. Una **orden real ya guardada** en Everest (`ObtenerOrdenamientoPorPacienteIdVigente`).
+2. Un **clic capturado** en consultorio (`captura_*.json` + el texto literal del `<li>`).
+3. Un catálogo de otro repo del proyecto.
+
+Ya ocurrió que (3) contradijo a (1) y se coló un código equivocado — **gana siempre el de
+más arriba**. Y ya se coló una vez una tabla de festivos con fechas que no existen.
+
 ## Reglas del proyecto (no negociables — ver CLAUDE.md para el detalle completo)
 
 - Casilla vacía antes que dato inventado.
 - La casilla del médico es sagrada: nunca sobrescribir en silencio algo que el
   médico ya escribió.
+- **El script sugiere, el médico decide.** Nada se ordena, agenda ni confirma solo.
+- **Un solo archivo.** Nunca dividas `vigilante_agenda.user.js` en módulos ES ni
+  introduzcas un bundler: Tampermonkey instala un archivo único y cualquier `import`
+  lo rompe. Sin dependencias externas en runtime (el lector de `.xlsx` está escrito a
+  mano con `DecompressionStream` + regex justo para no depender de librerías; no lo
+  "mejores" metiendo SheetJS).
+- Si añades un dominio de red, decláralo en `@connect` de la cabecera del userscript.
+- No renombres las clases CSS con prefijo `vgl-` a nombres genéricos: se prefijaron a
+  propósito porque el CSS de Everest pisaba `.hint`, `.col`, `.seg`, `.d`.
 - Cero PHI en código, tests, comentarios ni commits.
 - Toda regla CSS nueva que viva fuera de `#vgl-root` (cualquier modal/aviso que
   cuelga directo de `document.body`) necesita `!important` en sus declaraciones
@@ -94,3 +167,16 @@ AMBAS filas, nunca descartando la ajena.
   con el MISMO formato de las filas existentes: `| Línea | Mutación Aplicada |
   ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |`. No cambies el orden de las
   columnas ni pongas el nombre del test donde va la línea.
+- **Restaura CADA mutación antes de pasar a la siguiente**, sin excepción. Ya pasó que
+  una mutación quedó sin restaurar durante una interrupción y luego se depuró durante
+  un buen rato un fallo que era la propia mutación olvidada.
+- **Ninguna rama de una prueba puede saltarse en silencio.** Si envuelves una
+  comprobación en `if (algo_se_pudo_leer)`, esa mitad puede no ejecutarse nunca y dar
+  verde sin haber medido nada — pasó con una guarda de contraste cuyo selector dejó de
+  casar. Asegura primero que el dato se leyó (`t.cierto(!!dato, …)`) y comprueba después.
+- Cuidado con el arnés: `textContent` en `tests/harness.js` es una propiedad estática
+  que NO se deriva de `innerHTML` ni de `appendChild`. Para leer lo que pintó el
+  código, usa `.innerHTML`, como el resto de las suites.
+- `t.casoAsync` **siempre** con `await` delante. Sin él, las pruebas corren en carrera
+  contra el mock compartido de la suite y dan resultados falsos; hay una prueba
+  centinela que lo caza y nombra las líneas exactas.
