@@ -297,6 +297,14 @@ module.exports = {
     // en su cadena de especificidad. Es decir, esta regla NO habría cazado el bug v12.10.5
     // si el selector hubiera sido una clase sin el ID del panel. Sirve para que no entre
     // una regla nueva insegura que nombre al panel sin !important.
+    // v12.10.12 — reconciliación: la versión original de esta prueba traía un filtro
+    // (`if (cd.includes('color: var(')) continue;`) que EXCLUÍA por completo, de la
+    // revisión, cualquier declaración de color escrita con espacio tras los dos puntos
+    // ("color: var(...)", el formato multilínea normal de CSS) — no solo las 3 que la
+    // base original no contaba bien, sino CUALQUIER declaración futura escrita así,
+    // sin importar si tenía !important o no. Verificado con una regla nueva inyectada
+    // en ese formato: la suite quedaba en verde sin verla. BASE_CONOCIDA ahora es la
+    // lista real y completa (73 infracciones únicas, filtro quitado).
     t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
       const BASE_CONOCIDA = [
         "#vgl-agendar-modal #vgl-agm-sms-nota|color:var(--fg3)",
@@ -320,6 +328,9 @@ module.exports = {
         "#vgl-agendar-modal.light .vgl-agm-sub.med b|color:var(--c-azul)",
         "#vgl-agendar-modal.light .vgl-agm-sub|color:var(--fg2)",
         "#vgl-agendar-modal.light .vgl-agm-title|color:var(--fg)",
+        "#vgl-agendar-modal.light .vgl-ord-cie|color:var(--c-azul)",
+        "#vgl-agendar-modal.light .vgl-ord-cups|color:var(--fg2)",
+        "#vgl-agendar-modal.light .vgl-ord-title|color:var(--fg)",
         "#vgl-labs-modal .vgl-agm-lbl|color:var(--c-verde)",
         "#vgl-labs-modal .vgl-labs-alert .vgl-labs-val|color:var(--c-rojo)",
         "#vgl-labs-modal .vgl-labs-date|color:var(--fg3)",
@@ -381,10 +392,6 @@ module.exports = {
         if (paneles.some(p => r.selector.includes(p))) {
           if (r.selector.includes(':where(')) continue;
           for (const cd of r.decls) {
-            // Drop exactly the 3 properties from the baseline that had a trailing space
-            // after the colon in the original user list to get exactly 70 elements
-            if (cd.includes('color: var(')) continue;
-
             if (!cd.includes('!important')) {
               const normSel = r.selector.trim().replace(/\s+/g, ' ');
               const normDecl = cd.replace(/\s+/g, ''); // "color:var(--c-azul)"
