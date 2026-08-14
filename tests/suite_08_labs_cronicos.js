@@ -7,7 +7,7 @@ module.exports = {
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
-    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia",
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_conductaBuscarYAgregarExamen"
   ],
 
@@ -1412,6 +1412,134 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
       c.env.doc.querySelector = prevQS;
       c.env.doc.getElementById = prevGetById;
+    });
+
+    // =====================================================================
+    // v14.1.5 — CRUCE DE PACIENTES. El peor caso clínico del script: entre pedir los
+    // laboratorios y escribirlos pasan 2-4 s de red, y en ese lapso el médico puede
+    // haber abierto OTRA historia. Las casillas se buscan por id global, así que sin
+    // esta guarda los resultados del paciente A caen en la historia del paciente B.
+    // =====================================================================
+    const montarDomDePaciente = (cedulaEnPantalla) => {
+      const prev = {
+        qsa: c.env.doc.querySelectorAll,
+        qs: c.env.doc.querySelector,
+        byId: c.env.doc.getElementById,
+      };
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) =>
+        (sel === ".text-muted" && cedulaEnPantalla ? [{ textContent: "CC " + cedulaEnPantalla, closest: () => null }] : []);
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return { id: "anamesis", tagName: "DIV" };
+        if (mockDOM[id]) return mockDOM[id];
+        return null;
+      };
+      return () => {
+        c.env.doc.querySelectorAll = prev.qsa;
+        c.env.doc.querySelector = prev.qs;
+        c.env.doc.getElementById = prev.byId;
+      };
+    };
+    const casillaFalsa = (id) => ({
+      id, tagName: "INPUT", dispatchEvent: () => {}, _val: "",
+      set value(v) { this._val = v; }, get value() { return this._val; },
+    });
+
+    t.caso("Cruce de pacientes: si la historia abierta cambió durante la espera de red, NO se escribe una sola casilla", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      // Se pidieron los labs con el paciente 111111 abierto; ahora en pantalla hay otro.
+      const restaurar = montarDomDePaciente("222222");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.cierto(r.abortadoPorPaciente, "el resultado avisa que se abortó por cambio de paciente");
+      t.igual(r.count, 0, "no se diligenció ninguna casilla");
+      t.igual(mockDOM.resultadoCreatinina.value, "", "la creatinina de 4.5 del paciente A NO cayó en la historia del paciente B");
+      restaurar();
+    });
+
+    t.caso("Cruce de pacientes: con el MISMO paciente todavía abierto, la inyección procede con normalidad", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      const restaurar = montarDomDePaciente("111111");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.falso(!!r.abortadoPorPaciente, "no se aborta cuando es el mismo paciente");
+      t.igual(mockDOM.resultadoCreatinina.value, "4.5", "la creatinina se escribió en la historia correcta");
+      restaurar();
+    });
+
+    t.caso("Cruce de pacientes: si la cédula NO se puede leer del DOM, se aborta (falla cerrada, no se escribe a ciegas)", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      // Angular re-renderizando la cabecera: no hay .text-muted legible.
+      const restaurar = montarDomDePaciente("");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.cierto(r.abortadoPorPaciente, "sin cédula legible NO se asume que sigue siendo el mismo paciente");
+      t.igual(mockDOM.resultadoCreatinina.value, "", "no se escribió nada");
+      restaurar();
+    });
+
+    t.caso("_pacienteSigueAbierto: sin docId esperado deja pasar (los tests montan DOM sin cabecera); con uno, exige coincidencia exacta", () => {
+      const restaurar = montarDomDePaciente("111111");
+      t.cierto(testApi._pacienteSigueAbierto(""), "cadena vacía = nadie preguntó, deja pasar");
+      t.cierto(testApi._pacienteSigueAbierto(undefined), "sin argumento deja pasar");
+      t.cierto(testApi._pacienteSigueAbierto("111111"), "coincide");
+      t.falso(testApi._pacienteSigueAbierto("111112"), "una cédula parecida NO coincide");
+      restaurar();
+    });
+
+    // =====================================================================
+    // v14.1.5 — LA GUARDA DE LA RAC SE RINDE. Antes reescribía indefinidamente lo que
+    // el médico borraba a propósito. Ahora tiene ventana de 20 s y cupo de 2.
+    // =====================================================================
+    t.caso("RAC Guardia: al TERCER vaciado cede y deja la casilla como el médico la dejó", () => {
+      mockDOM = { resultadoRelacionAlbuminaCreatinina: casillaFalsa("resultadoRelacionAlbuminaCreatinina") };
+      const restaurar = montarDomDePaciente("123456");
+      c.ctx.uxTrack = () => {};
+      const casilla = mockDOM.resultadoRelacionAlbuminaCreatinina;
+
+      testApi.injectLabsIntoCronicos([{ codigo: "8779", nombre: "RELACION MICROALBUMINURIA CREATININA", Resultado: "35.5" }], "123456");
+      t.igual(casilla.value, "35.5", "el robot escribió la RAC");
+
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "35.5", "1er vaciado: restaura (esto sí parece el re-render de Everest)");
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "35.5", "2do vaciado: restaura, último del cupo");
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "", "3er vaciado: CEDE — quien borra tres veces es una persona, no un re-render");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apaga para siempre en este paciente");
+
+      // Y una vez apagada, no revive.
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "", "sigue sin tocarla");
+      delete c.ctx.uxTrack;
+      restaurar();
+    });
+
+    t.caso("RAC Guardia: pasada la ventana de 20 s ya no restaura, aunque le quede cupo", () => {
+      mockDOM = { resultadoRelacionAlbuminaCreatinina: casillaFalsa("resultadoRelacionAlbuminaCreatinina") };
+      const restaurar = montarDomDePaciente("123456");
+      c.ctx.uxTrack = () => {};
+      const casilla = mockDOM.resultadoRelacionAlbuminaCreatinina;
+      casilla.value = "35.5";
+      // Guardia armada hace 21 s, con el cupo intacto: solo el reloj la desactiva.
+      testApi._setRacGuardiaParaTest({ activa: true, docId: "123456", valor: "35.5", ts: Date.now() - 21000, restauraciones: 0 });
+
+      casilla.value = "";
+      testApi.checkRacGuardia();
+
+      t.igual(casilla.value, "", "el borrado del médico un minuto después se respeta");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia caducó");
+      delete c.ctx.uxTrack;
+      restaurar();
     });
 
     // =====================================================================

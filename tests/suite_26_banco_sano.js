@@ -29,6 +29,32 @@ module.exports = {
       t.cierto(suites.length > 10, "se esperaban más de 10 suites, se hallaron " + suites.length);
     });
 
+    // v14.1.5 — La guarda de cruce de pacientes es OPCIONAL por firma: sin el segundo
+    // argumento, `injectLabsIntoCronicos` escribe sin comprobar nada. Eso es a propósito
+    // (las suites montan un DOM sin cabecera de paciente), pero deja la puerta abierta a
+    // que una edición futura añada un llamador de PRODUCCIÓN que se lo olvide y reabra en
+    // silencio el peor bug que ha tenido este script. Esta prueba lee el userscript y
+    // exige que toda llamada real lleve los dos argumentos.
+    t.caso("toda llamada de producción a injectLabsIntoCronicos pasa el docId esperado (guarda de cruce de pacientes, v14.1.5)", () => {
+      const src = fs.readFileSync(path.join(dir, "..", "vigilante_agenda.user.js"), "utf8");
+      const MARCA = "injectLabsIntoCronicos(";
+      const sinGuarda = [];
+      let vistas = 0;
+      src.split("\n").forEach((linea, i) => {
+        const limpia = linea.replace(/\/\/.*$/, "");
+        const pos = limpia.indexOf(MARCA);
+        if (pos === -1) return;
+        if (/function\s+injectLabsIntoCronicos/.test(limpia)) return;   // la declaración
+        vistas++;
+        const tras = limpia.slice(pos + MARCA.length);
+        const cierre = tras.indexOf(")");
+        const args = cierre === -1 ? tras : tras.slice(0, cierre);
+        if (args.indexOf(",") === -1) sinGuarda.push((i + 1) + ": " + limpia.trim());
+      });
+      t.cierto(vistas > 0, "se esperaban llamadas a injectLabsIntoCronicos en el userscript; si son 0, esta prueba quedó ciega");
+      t.igual(sinGuarda, [], "llamadas sin docId esperado: escribirían en la historia que esté abierta AHORA, no en la del paciente consultado");
+    });
+
     t.caso("todo t.casoAsync se invoca con await — si no, sus aserciones caen fuera de la cuenta", () => {
       const huerfanos = [];
       for (const f of suites) {

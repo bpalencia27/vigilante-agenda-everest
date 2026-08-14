@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.4
+// @version      14.1.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2402,13 +2402,39 @@
       return { candidatos, pendientesWhitelist };
   }
 
-  function injectLabsIntoCronicos(labsArray) {
+  // v14.1.5 — GUARDA DE IDENTIDAD DEL PACIENTE. Devuelve `true` solo si el paciente
+  // abierto en el DOM AHORA MISMO sigue siendo aquel para el que se pidieron los datos.
+  // Sin `docIdEsperado` no puede opinar y deja pasar: eso es para los tests, que montan
+  // un DOM sin cabecera de paciente. TODA llamada de producción tiene que pasarlo — hay
+  // una prueba que lee este archivo y falla si algún llamador se lo olvida.
+  function _pacienteSigueAbierto(docIdEsperado) {
+      if (!docIdEsperado) return true;
+      const actual = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
+      // Si el DOM no deja leer la cédula (Angular re-renderizando la cabecera) NO se
+      // asume que sigue siendo el mismo: escribir a ciegas es justo lo que se evita.
+      return !!actual && String(actual) === String(docIdEsperado);
+  }
+
+  // v14.1.5 — CRUCE DE PACIENTES (hallazgo de auditoría; el riesgo clínico más alto que
+  // ha tenido este script). `docIdEsperado` es la cédula que estaba abierta cuando se
+  // PIDIERON estos resultados. Entre esa petición y esta escritura pasan 2-4 s de red
+  // contra Athenea, y en ese lapso el médico puede haber abierto otra historia: Angular
+  // monta las casillas del paciente NUEVO y esta función, que busca por id global en el
+  // documento, las encontraría y les escribiría los laboratorios del paciente ANTERIOR.
+  // En un caso real eso es asentar la falla renal de uno en la historia del otro, y al
+  // guardar queda en firme. Los reintentos diferidos (300/900 ms) vuelven a comprobarlo
+  // por su cuenta: disparan MÁS TARDE todavía, así que están aún más expuestos.
+  function injectLabsIntoCronicos(labsArray, docIdEsperado) {
       let count = 0;
       let pendientes = 0;
       let respetadas = 0;
       const sinCasilla = [];
       const yaEscritas = new Set();
       if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false };
+      if (!_pacienteSigueAbierto(docIdEsperado)) {
+          console.warn("[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.");
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, abortadoPorPaciente: true };
+      }
       // v12.5.11 — se enciende en cuanto Athenea confirma AL MENOS un componente real
       // (no vacío, no PENDIENTE) del parcial de orina — la misma condición que ya decide
       // si ese componente se escribe en su casilla. Es la evidencia de que el uroanálisis
@@ -2598,7 +2624,8 @@
                   setNgValue(inputEl, resultVal);
                   count++;
                   if (matched.key === "RAC") {
-                      _racGuardia = { activa: true, docId: (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "", valor: resultVal };
+                      // v14.1.5 — la guarda nace con reloj y con cupo (ver checkRacGuardia).
+                      _racGuardia = { activa: true, docId: (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "", valor: resultVal, ts: Date.now(), restauraciones: 0 };
                   }
               } else {
                   respetadas++;
@@ -2658,6 +2685,13 @@
       // vacía, y nunca un valor más viejo (se guardó el primero, que es el más reciente).
       if (uroanalisisMarcado && reintentosOrina.size) {
           const intentarOrina = (intento) => {
+              // v14.1.5 — este temporizador dispara 300-900 ms DESPUÉS del clic: para
+              // entonces el médico ya pudo haber abierto otra historia. Se recomprueba.
+              if (!_pacienteSigueAbierto(docIdEsperado)) {
+                  console.warn("[Vigilante] uroanálisis: reintento cancelado, el paciente abierto cambió.");
+                  reintentosOrina.clear();
+                  return;
+              }
               let escritas = 0;
               for (const [marca, r] of [...reintentosOrina]) {
                   const el = _findUroInput(r.comp.placeholder);
@@ -2679,6 +2713,12 @@
           const { matched, resultVal, resultDate } = uroCandidato;
           setTimeout(() => {
               try {
+                  // v14.1.5 — misma guarda que el reintento de componentes: 300 ms después
+                  // del clic el paciente abierto puede ser otro.
+                  if (!_pacienteSigueAbierto(docIdEsperado)) {
+                      console.warn("[Vigilante] uroanálisis: reintento cancelado, el paciente abierto cambió.");
+                      return;
+                  }
                   const inputEl = _findLabField(matched.resultId, matched.altIds);
                   if (!inputEl) {
                       console.warn("[Vigilante] uroanálisis: la casilla de resultado sigue sin aparecer tras marcar SI — revise a mano o vuelva a pulsar Auto-Labs.");
@@ -3046,7 +3086,7 @@
   const LABS_PREFETCH_TTL_MS = 10 * 60000;
 
   // v12.6.9 - Guarda para evitar borrado espontáneo de la RAC al editar Creatinina.
-  let _racGuardia = { activa: false, docId: "", valor: "" };
+  let _racGuardia = { activa: false, docId: "", valor: "", ts: 0, restauraciones: 0 };
   function _getRacGuardiaParaTest() { return _racGuardia; }
   function _setRacGuardiaParaTest(v) { _racGuardia = v; }
 
@@ -3140,7 +3180,18 @@
               // el robot no repita esta misma consulta 30 s después.
               if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
-                  const r = injectLabsIntoCronicos(labs);
+                  const r = injectLabsIntoCronicos(labs, docId);
+                  // v14.1.5 — si el médico cambió de historia mientras Athenea respondía,
+                  // no se escribió nada y hay que DECIRLO: callarlo dejaría creer que la
+                  // historia quedó diligenciada.
+                  if (r.abortadoPorPaciente) {
+                      uxTrack("labs.autollenado.abortado_cambio_paciente");
+                      alert("🛑 No se diligenció nada: la historia clínica abierta cambió mientras Athenea respondía."
+                        + "\n\nLos resultados que llegaron son del paciente con cédula " + docId + ", y en pantalla hay otro paciente."
+                        + "\n\nVuelva a abrir la historia de ese paciente y pulse Auto-Labs de nuevo.");
+                      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                      return;
+                  }
                   uxTrack("labs.autollenado.casillas", { n: r.count });
                   alert("✅ Se encontraron " + labs.length + " analitos y se diligenciaron " + r.count + " casillas en la Ruta Crónicos."
                     + (r.uroanalisisMarcado ? "\n\n🧪 Se marcó \"SI\" en ¿Uroanálisis? porque Athenea trajo resultados reales del parcial de orina." : "")
@@ -3165,7 +3216,14 @@
                           btn.innerHTML = "⏳ Reintentando…";
                           const labs2 = await getAtheneaLabsAuto(docId);
                           if (labs2 && labs2.length > 0) {
-                              const r2 = injectLabsIntoCronicos(labs2);
+                              const r2 = injectLabsIntoCronicos(labs2, docId);
+                              if (r2.abortadoPorPaciente) {
+                                  uxTrack("labs.autollenado.abortado_cambio_paciente");
+                                  alert("🛑 No se diligenció nada: la historia clínica abierta cambió mientras se iniciaba sesión en Athenea."
+                                    + "\n\nVuelva a abrir la historia del paciente con cédula " + docId + " y pulse Auto-Labs de nuevo.");
+                                  btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+                                  return;
+                              }
                               alert("✅ Sesión iniciada y " + labs2.length + " analitos encontrados: " + r2.count + " casillas diligenciadas en la Ruta Crónicos."
                                 + (r2.uroanalisisMarcado ? "\n\n🧪 Se marcó \"SI\" en ¿Uroanálisis? porque Athenea trajo resultados reales del parcial de orina." : "")
                                 + (r2.respetadas ? "\n\n✋ " + r2.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
@@ -13742,16 +13800,45 @@
     setSummary("Diagnóstico descargado (solo local, sin datos de pacientes). Revisa Descargas.");
   }
 
+  // v14.1.5 — LA GUARDA DE LA RAC AHORA SE RINDE, Y ESO ES EL ARREGLO.
+  // Existe porque Everest borra esa casilla solo, al re-renderizar, segundos después de
+  // escribirla. Pero tal como estaba no distinguía ese borrado del OTRO: el del médico
+  // que borra la casilla a propósito. Corría en cada tick, sin límite de tiempo ni de
+  // veces, así que rellenaba la casilla una y otra vez a espaldas del profesional —
+  // exactamente lo contrario de la regla sagrada del proyecto.
+  //
+  // La diferencia entre los dos borrados es CUÁNDO y CUÁNTAS VECES: el de Everest ocurre
+  // en el re-render inmediato y no se repite; el del médico llega más tarde y, si se le
+  // pisa, insiste. Por eso la guarda ahora vive 20 s y tiene cupo de 2 restauraciones.
+  // Pasado cualquiera de los dos límites se apaga PARA SIEMPRE en este paciente: el
+  // médico gana el desempate, que es como tiene que ser.
+  const RAC_GUARDIA_VENTANA_MS = 20000;
+  const RAC_GUARDIA_MAX_RESTAURACIONES = 2;
   function checkRacGuardia() {
       if (!_racGuardia.activa) return;
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
       if (docId !== _racGuardia.docId) { _racGuardia.activa = false; return; }
+      // El reloj se mira ANTES de tocar el DOM: pasada la ventana, la guarda no tiene
+      // nada que hacer aquí aunque la casilla esté vacía.
+      if ((Date.now() - (_racGuardia.ts || 0)) > RAC_GUARDIA_VENTANA_MS) {
+          _racGuardia.activa = false;
+          return;
+      }
       const el = _findLabField("resultadoRelacionAlbuminaCreatinina", ["resultadoRAC"]);
       if (!el) return;
       const val = String(el.value == null ? "" : el.value).trim();
       if (val === "") {
+          if ((_racGuardia.restauraciones || 0) >= RAC_GUARDIA_MAX_RESTAURACIONES) {
+              // Ya se restauró el cupo entero y la casilla volvió a quedar vacía: eso ya
+              // no parece un re-render, parece una persona borrando. Se cede.
+              _racGuardia.activa = false;
+              console.warn("[Vigilante] RAC: la casilla se vació de nuevo tras " + RAC_GUARDIA_MAX_RESTAURACIONES + " restauraciones. Se deja como el médico la dejó y no se vuelve a tocar.");
+              uxTrack("rac.guardia.cede");
+              return;
+          }
+          _racGuardia.restauraciones = (_racGuardia.restauraciones || 0) + 1;
           setNgValue(el, _racGuardia.valor);
-          console.warn("[Vigilante] RAC borrada por Everest, restaurando valor del robot");
+          console.warn("[Vigilante] RAC vacía, restaurando valor del robot (" + _racGuardia.restauraciones + "/" + RAC_GUARDIA_MAX_RESTAURACIONES + "). Si la borra otra vez, se respeta.");
           uxTrack("rac.restaurada");
       } else if (val !== String(_racGuardia.valor).trim()) {
           _racGuardia.activa = false;
