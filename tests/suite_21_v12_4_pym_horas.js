@@ -4,7 +4,7 @@
 // REALES vistos en campo (tarjetas de Athenea, valores ASP.NET /Date(ms)/).
 module.exports = {
   nombre: "v12.4: horas, panel PyM y tabla CUPS",
-  cubre: ["_parseFechaHoraLike", "isPanelHiddenActivity", "panelActivities", "pymPendientesRestantes", "debeBuscarPymDiario"],
+  cubre: ["_parseFechaHoraLike", "isPanelHiddenActivity", "panelActivities", "pymPendientesRestantes", "debeBuscarPymDiario", "pymCubiertoPorOrdenVigente"],
   pruebas(t, api, env, cargar) {
 
     // ---------- _parseFechaHoraLike ----------
@@ -235,5 +235,87 @@ module.exports = {
       t.cierto(casa("SOMF (sangre oculta en materia fecal)", porCie("Z121")), "el nombre de la tabla y el 'Última SOMF' de la piloto casan con Z121");
       t.cierto(casa("Hemoglobina", porCie("Z103")));
     });
+
+    // ================= pymCubiertoPorOrdenVigente (T6) =================
+    // v14.0.0 — Cruza actividades PyM (paquetes con forma de PYM_CATALOG) contra las
+    // órdenes VIGENTES ya existentes en Everest. Devuelve las que SIGUEN pendientes.
+    (() => {
+      const z108 = () => api.__PYM_CATALOG.find((p) => p.cie10 === "Z108"); // 903815/903816/903818/903841/903868/903895/907106
+      const z123 = () => api.__PYM_CATALOG.find((p) => p.cie10 === "Z123"); // 876802 (mamografía)
+      const HOY = "2026-08-14";
+
+      t.caso("pymCubiertoPorOrdenVigente: una orden vigente con CUPS coincidente cubre la actividad (sale del pendiente)", () => {
+        const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2026-03-10" }];
+        const r = api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY);
+        t.igual(r, [], "mamografía ya tiene una orden vigente este año: no queda pendiente");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin ningún CUPS coincidente, la actividad sigue pendiente", () => {
+        const ordenes = [{ cup: { codigo: "999999" }, estado: "PEN", fechaCreacion: "2026-03-10" }];
+        const r = api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY);
+        t.igual(r, [z123()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: coincide con SOLO UNO de los 7 CUPS del paquete -> el paquete completo cuenta como cubierto (cruce por paquete, no por examen suelto)", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: "2026-03-10" }];
+        const r = api.pymCubiertoPorOrdenVigente([z108()], ordenes, HOY);
+        t.igual(r, []);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente (D4, ventana temporal): una orden del AÑO PASADO, con la ventana por defecto (0 años extra), NO cubre — sigue pendiente", () => {
+        const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2025-11-01" }];
+        const r = api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY);
+        t.igual(r, [z123()], "fuera del año calendario en curso: no tapa la actividad");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente (D4, ventana temporal ajustada): con S.pymOrdenesVentanaAnios=1, una orden del año pasado SÍ cubre", () => {
+        api.__S.pymOrdenesVentanaAnios = 1;
+        try {
+          const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2025-11-01" }];
+          const r = api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY);
+          t.igual(r, [], "con la ventana ampliada a 1 año atrás, la orden de 2025 sí tapa la actividad");
+        } finally { api.__S.pymOrdenesVentanaAnios = 0; }
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: NO interpreta `estado` — 'PEN' y 'PRO' cubren igual, por CUPS+fecha únicamente", () => {
+        const cubrePen = api.pymCubiertoPorOrdenVigente([z123()], [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2026-03-10" }], HOY);
+        const cubrePro = api.pymCubiertoPorOrdenVigente([z123()], [{ cup: { codigo: "876802" }, estado: "PRO", fechaCreacion: "2026-03-10" }], HOY);
+        const cubreRaro = api.pymCubiertoPorOrdenVigente([z123()], [{ cup: { codigo: "876802" }, estado: "ALGO-NUNCA-VISTO", fechaCreacion: "2026-03-10" }], HOY);
+        t.igual(cubrePen, []); t.igual(cubrePro, []); t.igual(cubreRaro, [], "un estado desconocido no descarta la orden: no se interpreta");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: fecha de la orden ilegible -> por prudencia, NO cuenta como cobertura", () => {
+        const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "esto-no-es-una-fecha" }];
+        const r = api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY);
+        t.igual(r, [z123()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: respuesta vacía de órdenes -> TODO sigue pendiente", () => {
+        const r = api.pymCubiertoPorOrdenVigente([z123(), z108()], [], HOY);
+        t.igual(r, [z123(), z108()]);
+      });
+
+      // v14.0.0 — LA MUTACIÓN MÁS IMPORTANTE DEL ENCARGO (según el propio criterio de
+      // aceptación de T6): "fallo = no cubierto". Si `ordenes` no es un arreglo utilizable
+      // (null por fallo de red, undefined, un objeto malformado), TODAS las actividades
+      // deben seguir pendientes — nunca se pierde en silencio un recordatorio real.
+      t.caso("pymCubiertoPorOrdenVigente (D4, LA MUTACIÓN OBLIGATORIA): fallo de red (ordenes=null) -> TODO sigue pendiente, nunca se descarta nada", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([z123(), z108()], null, HOY), [z123(), z108()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: respuesta malformada (ni null ni arreglo) -> también todo pendiente", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([z123()], { inesperado: true }, HOY), [z123()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin actividades que revisar, devuelve la lista vacía sin lanzar", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([], [{ cup: { codigo: "876802" }, fechaCreacion: "2026-03-10" }], HOY), []);
+        t.noLanza(() => api.pymCubiertoPorOrdenVigente(null, null, HOY));
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin un 'hoy' fiable (fecha ilegible), no se puede acotar la ventana -> por prudencia, todo pendiente", () => {
+        const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2026-03-10" }];
+        t.igual(api.pymCubiertoPorOrdenVigente([z123()], ordenes, "fecha-invalida"), [z123()]);
+      });
+    })();
   }
 };

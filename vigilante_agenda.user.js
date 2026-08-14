@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.15
+// @version      12.10.16
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.15";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.16";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3212,6 +3212,10 @@
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
+    // v14.0.0 (T6) — años calendario ADICIONALES al año en curso que cuentan como "orden
+    // vigente" al cruzar contra PYM_CATALOG. 0 = solo el año en curso (D4: por defecto
+    // conservador). Todavía sin control propio en la hoja de Ajustes (T6 es solo el motor).
+    pymOrdenesVentanaAnios: 0,
   };
   function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
   // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
@@ -9089,6 +9093,77 @@
   async function apiAccesoObtenerLaboratoriosCiti(pacienteId) {
     const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerResultadosLaboratorioCiti?pacienteId=${pacienteId}`;
     try { return await pageFetchJson(path); } catch (e) { return null; }
+  }
+
+  // v14.0.0 (T6) — Órdenes VIGENTES ya existentes en Everest para el paciente, para no
+  // pedirle al médico (banner de T7) algo que ya se ordenó. La respuesta real capturada en
+  // consultorio superó los 20.000 caracteres (truncada por el grabador de red): es pesada,
+  // así que se cachea por paciente además de la deduplicación que pageFetchJson ya trae vía
+  // GHOST.promises (esa solo evita llamadas CONCURRENTES idénticas, no repetir la consulta
+  // en cada tick mientras el médico sigue con el mismo paciente abierto).
+  let _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 };
+  const ORDENES_VIGENTES_TTL_MS = 10 * 60000;
+  function _ordenesVigentesInvalidar() { _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 }; }
+  async function apiHcObtenerOrdenamientosVigentes(pacienteId) {
+    if (!pacienteId) return null;
+    const key = String(pacienteId);
+    const ahora = Date.now();
+    if (_ordenesVigentesCache.pacienteId === key && _ordenesVigentesCache.data &&
+        (ahora - _ordenesVigentesCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _ordenesVigentesCache.data;
+    }
+    const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=${encodeURIComponent(key)}`;
+    try {
+      const data = await pageFetchJson(path);
+      // Solo se cachea una respuesta EXITOSA y utilizable (un arreglo — vacío incluido: un
+      // paciente sin órdenes vigentes es un resultado real, no un fallo). Cualquier otra
+      // forma (null, objeto, string) es una respuesta inesperada: ni se cachea ni se
+      // devuelve como si fuera válida — sube como null, igual que un fallo de red, para que
+      // pymCubiertoPorOrdenVigente la trate con la misma prudencia ("fallo = no cubierto").
+      if (!Array.isArray(data)) return null;
+      _ordenesVigentesCache = { pacienteId: key, data, ts: Date.now() };
+      return data;
+    } catch (e) {
+      console.warn("[Vigilante] apiHcObtenerOrdenamientosVigentes falló:", e);
+      return null;
+    }
+  }
+
+  // Cuánto hacia atrás, en años calendario completos, se acepta una orden como vigente
+  // además del año en curso (D4: por defecto conservador, 0 = SOLO el año calendario en
+  // curso, tal como especifica la tarea). Ajustable por el médico vía S.pymOrdenesVentanaAnios
+  // (ver DEFAULTS) — sin fila propia todavía en la hoja de Ajustes: T6 es solo el motor, sin
+  // interfaz visual; darle un control visible es un seguimiento natural, probablemente junto
+  // con el banner de T7 que es quien de verdad expone esta ventana al médico.
+  //
+  // `estado` ("PEN"/"PRO" vistos en la captura real, ver §1.6 del superprompt) NO SE
+  // INTERPRETA a propósito: su significado no está confirmado todavía. Ninguna orden se
+  // acepta ni se descarta por su valor de `estado` — solo por CUPS + ventana de fecha. Si el
+  // médico confirma después qué significan, se afina aquí.
+  //
+  // D4 ("fallo = no cubierto"): cualquier cosa que no sea un arreglo de órdenes utilizable
+  // (fallo de red, respuesta malformada, lista vacía) deja TODAS las actividades como
+  // pendientes — nunca se oculta en silencio un recordatorio de prevención real.
+  function pymCubiertoPorOrdenVigente(actividades, ordenes, hoy) {
+    const lista = Array.isArray(actividades) ? actividades : [];
+    if (!lista.length) return lista;
+    if (!Array.isArray(ordenes) || !ordenes.length) return lista;
+    const hoyInfo = _parseFechaHoraLike(hoy);
+    if (!hoyInfo) return lista; // sin "hoy" fiable no hay ventana de tiempo que calcular
+    const anioActual = Number(hoyInfo.iso.slice(0, 4));
+    const ventanaAnios = Number.isFinite(S.pymOrdenesVentanaAnios) && S.pymOrdenesVentanaAnios >= 0
+      ? S.pymOrdenesVentanaAnios : 0;
+    const anioMinimo = anioActual - ventanaAnios;
+    const cupsVigentes = new Set();
+    for (const o of ordenes) {
+      if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
+      const fc = _parseFechaHoraLike(o.fechaCreacion);
+      if (!fc) continue; // fecha ilegible: por prudencia, esta orden NO cuenta como cobertura
+      const anioOrden = Number(fc.iso.slice(0, 4));
+      if (anioOrden < anioMinimo || anioOrden > anioActual) continue; // fuera de la ventana
+      cupsVigentes.add(String(o.cup.codigo));
+    }
+    return lista.filter((act) => !(act.cups || []).some((c) => c && cupsVigentes.has(String(c.codigo))));
   }
 
   // Interfaz con APIAcceso: Validar Agenda
