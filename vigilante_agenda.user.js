@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.15
+// @version      12.10.16
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.15";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.16";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2944,6 +2944,139 @@
       document.body.appendChild(btn);
   }
 
+  // v14.0.0 (T5) — DOCK DE WIDGETS SOBRE LA HISTORIA CLÍNICA. Fase 4 de
+  // SUPERPROMPT_DISENO_V14.md: los tres botones que T4 sacó de la tarjeta del panel
+  // (🗓️ agendar · 📋 ordenar PyM · 🧪 labs) renacen aquí como widgets flotantes sobre la
+  // Historia Clínica de Everest — misma mecánica de anclaje que createLabInjectorUI()
+  // arriba (D8: idempotente por id, se re-crea sola si Angular la borra), mismas
+  // funciones de siempre (openAgendamientoModal/openOrdenamientoModal/
+  // openLaboratoriosModal/openLabSoloModal — NINGUNA se tocó, siguen siendo las mismas
+  // que usaba render()) y los MISMOS bloqueos antiduplicado (isCitaAgendadaHoy/
+  // isLabAgendadaHoy/isOrdenesCreadasHoy).
+  //
+  // De dónde sale el paciente: extractPacienteAbierto() solo da la CÉDULA (no hay nombre
+  // ni estado ahí) — las cuatro funciones open*Modal() solo EXIGEN `apt.doc_id` (su
+  // primera línea es siempre `if (!apt || !apt.doc_id) {...return;}`) y `apt.nombre` es
+  // puramente cosmético (`apt.nombre || apt.name || "Paciente Everest"`, ya así antes de
+  // esta tarea). Por eso: si la cédula abierta coincide con una cita de
+  // state.lastSnapshot.list (la ÚLTIMA agenda real leída, que sigue en memoria aunque el
+  // médico haya navegado a la historia — la SPA no recarga la página), se usa esa cita
+  // REAL completa; si no hay coincidencia (paciente fuera de la agenda visible de hoy),
+  // se arma el objeto mínimo `{doc_id}` — nunca se inventa un nombre.
+  //
+  // Por qué se reconstruye el HTML entero en cada llamada (a diferencia de
+  // createLabInjectorUI, que crea su botón UNA vez y no lo vuelve a tocar): los tres
+  // estados de cada botón (ya agendado/falta el laboratorio/ya ordenado) pueden cambiar
+  // mientras el médico sigue en la MISMA historia clínica (p. ej. si él mismo agenda
+  // desde este widget) — sin refrescar el contenido, el botón quedaría mintiendo que algo
+  // sigue pendiente cuando ya se hizo. El contenedor #vgl-acciones-dock en sí NUNCA se
+  // quita y se vuelve a poner (evita el parpadeo que prohíbe D8): solo su innerHTML se
+  // renueva, igual de barato que createLabInjectorUI (un getElementById por tick).
+  function createAccionesDockUI() {
+    if (!_enModuloHCHealth()) { const fuera = document.getElementById("vgl-acciones-dock"); if (fuera) fuera.remove(); return; }
+    const docId = extractPacienteAbierto();
+    if (!docId) { const sinPac = document.getElementById("vgl-acciones-dock"); if (sinPac) sinPac.remove(); return; }
+
+    let dock = document.getElementById("vgl-acciones-dock");
+    const esNuevo = !dock;
+    if (esNuevo) {
+      dock = document.createElement("div");
+      dock.id = "vgl-acciones-dock";
+      document.body.appendChild(dock);
+    }
+    // El colapso es una preferencia del médico, no del paciente: se lee del propio nodo
+    // (si ya existía) o de GM_getValue en la primera creación de la sesión.
+    const colapsado = esNuevo
+      ? (typeof GM_getValue !== "undefined" ? GM_getValue("vgl_dock_acciones_colapsado", "") === "1" : false)
+      : dock.classList.contains("colapsado");
+    dock.className = "vgl-acciones-dock" + (isLight() ? " light" : "") + (colapsado ? " colapsado" : "");
+
+    const citaReal = (state.lastSnapshot && state.lastSnapshot.list)
+      ? state.lastSnapshot.list.find((a) => a.doc_id && normalizeKey(a.doc_id) === normalizeKey(docId))
+      : null;
+    const apt = citaReal || { doc_id: docId };
+
+    const citaHechaHoy = isCitaAgendadaHoy(docId);
+    const labHechoHoy = isLabAgendadaHoy(docId);
+    const soloFaltaLab = citaHechaHoy && !labHechoHoy;
+    const yaOrdenadoHoy = isOrdenesCreadasHoy(docId);
+
+    // Se reconstruye por ELEMENTOS reales (createElement + addEventListener directo),
+    // no por plantilla de innerHTML + querySelector — mismo estilo que createLabInjectorUI
+    // y createExamenFisicoInjectorUI: cada botón guarda su propia referencia, así que
+    // agregar/quitar el listener no depende de que un selector encuentre el nodo correcto
+    // después de parsear HTML.
+    while (dock.children.length) dock.removeChild(dock.children[0]);
+
+    const btnToggle = document.createElement("button");
+    btnToggle.className = "vgl-dock-toggle";
+    btnToggle.setAttribute("data-accion", "toggle");
+    btnToggle.setAttribute("aria-label", colapsado ? "Expandir acciones" : "Colapsar acciones");
+    btnToggle.title = colapsado ? "Expandir" : "Colapsar";
+    btnToggle.textContent = colapsado ? "\u25C0" : "\u25B6";
+    btnToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nuevoColapsado = !dock.classList.contains("colapsado");
+      dock.classList.toggle("colapsado", nuevoColapsado);
+      try { if (typeof GM_setValue !== "undefined") GM_setValue("vgl_dock_acciones_colapsado", nuevoColapsado ? "1" : ""); } catch (e2) {}
+      uxTrack(nuevoColapsado ? "widget.colapsar" : "widget.expandir");
+    });
+    dock.appendChild(btnToggle);
+
+    const btns = document.createElement("div");
+    btns.className = "vgl-dock-btns";
+    dock.appendChild(btns);
+
+    // Mismos tres estados que ya tenía el botón de agendar en render() (T4 los quitó de
+    // la tarjeta, no de existencia: isCitaAgendadaHoy/isLabAgendadaHoy siguen siendo las
+    // mismas funciones, con las mismas pruebas).
+    if (S.agendamientoRapido !== false) {
+      const bAg = document.createElement("button");
+      bAg.className = "vgl-dock-btn" + (soloFaltaLab ? " vgl-dock-btn-ambar" : "");
+      bAg.setAttribute("data-accion", "agendar");
+      if (citaHechaHoy && labHechoHoy) {
+        bAg.disabled = true;
+        bAg.setAttribute("aria-label", "Cita y toma de muestras ya agendadas hoy");
+        bAg.title = "\u2705 Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.";
+        bAg.textContent = "\uD83D\uDDD3\uFE0F";
+      } else if (soloFaltaLab) {
+        bAg.setAttribute("aria-label", "Falta agendar toma de muestras");
+        bAg.title = "\uD83E\uDDEA Cita de control ya agendada hoy \u2014 falta la toma de muestras. Clic para agendarla.";
+        bAg.textContent = "\uD83E\uDDEA";
+      } else {
+        bAg.setAttribute("aria-label", "Agendar cita de control");
+        bAg.title = "\uD83D\uDDD3\uFE0F Agendar cita de control";
+        bAg.textContent = "\uD83D\uDDD3\uFE0F";
+      }
+      bAg.addEventListener("click", (e) => { e.stopPropagation(); if (bAg.disabled) return; uxTrack(soloFaltaLab ? "widget.agendar.sololab" : "widget.agendar.abrir"); soloFaltaLab ? openLabSoloModal(apt) : openAgendamientoModal(apt); });
+      btns.appendChild(bAg);
+
+      const bOrd = document.createElement("button");
+      bOrd.className = "vgl-dock-btn";
+      bOrd.setAttribute("data-accion", "ordenar");
+      if (yaOrdenadoHoy) {
+        bOrd.disabled = true;
+        bOrd.setAttribute("aria-label", "\u00d3rdenes PyM ya generadas hoy");
+        bOrd.title = "\u2705 \u00d3rdenes PyM ya generadas hoy. Bloqueado para evitar duplicados.";
+      } else {
+        bOrd.setAttribute("aria-label", "Generar \u00f3rdenes PyM");
+        bOrd.title = "\uD83D\uDCCB Generar \u00f3rdenes PyM";
+      }
+      bOrd.textContent = "\uD83D\uDCCB";
+      bOrd.addEventListener("click", (e) => { e.stopPropagation(); if (bOrd.disabled) return; uxTrack("widget.ordenar.abrir"); openOrdenamientoModal(apt); });
+      btns.appendChild(bOrd);
+    }
+
+    const bLabs = document.createElement("button");
+    bLabs.className = "vgl-dock-btn";
+    bLabs.setAttribute("data-accion", "labs");
+    bLabs.setAttribute("aria-label", "Ver paracl\u00ednicos / laboratorios");
+    bLabs.title = "\uD83E\uDDEA Ver paracl\u00ednicos / laboratorios";
+    bLabs.textContent = "\uD83E\uDDEA";
+    bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("widget.labs.abrir"); openLaboratoriosModal(apt); });
+    btns.appendChild(bLabs);
+  }
+
   // v12.9.0 — Pestaña "Revisión por sistema y Examen físico": el médico escribe a mano, en
   // cada consulta, la MISMA frase específica por cada sistema (p. ej. "Piel y faneras:
   // NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "Corazón: NEGATIVO PARA
@@ -3360,6 +3493,7 @@
     try {
       const r = document.getElementById("vgl-root"); if (r) { r.classList.toggle("light", isLight()); r.classList.toggle("perf", !!S.modoRendimiento); }
       const d = document.getElementById("vgl-dock"); if (d) { d.classList.toggle("light", isLight()); d.classList.toggle("perf", !!S.modoRendimiento); }
+      const ad = document.getElementById("vgl-acciones-dock"); if (ad) { ad.classList.toggle("light", isLight()); ad.classList.toggle("perf", !!S.modoRendimiento); }
       const t = document.getElementById("vgl-toasts"); if (t) t.classList.toggle("light", isLight());
     } catch (e) {}
   }
@@ -6323,7 +6457,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -6409,7 +6543,7 @@
       }
 
       /* ---- Modo Claro — cerámica ---- */
-      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-toasts.light,
+      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-toasts.light,
       #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
@@ -6521,7 +6655,7 @@
       #vgl-dock.perf *{animation:none !important;transition:none !important;filter:none !important}
       @media (prefers-reduced-motion:reduce){
         #vgl-root,#vgl-root *,#vgl-root *::before,#vgl-root *::after,
-        #vgl-dock,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
+        #vgl-dock,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-acciones-dock,#vgl-acciones-dock *,#vgl-toasts *,
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
@@ -6557,7 +6691,46 @@
       .vgl-exf-btn{background:var(--c-verde, #16a34a)}
       .vgl-exf-btn-normalidad{bottom:130px}
 
-      #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-toasts *,
+      /* ---- T5: dock de acciones — widget flotante sobre la Historia Clínica ----
+         D7 (presupuesto de rendimiento): sin backdrop-filter nuevo (superficie sólida de
+         --surface-*), máximo 2 capas de sombra (--shadow-card, ya reutilizado en el resto
+         del panel), sin animación permanente (solo transición de hover, neutralizada por
+         la lista de prefers-reduced-motion y por .perf más abajo). Posición en el borde
+         derecho, centrado verticalmente: no choca con #vgl-dock (abajo-derecha) ni con
+         .vgl-lab-inj/.vgl-exf-btn (abajo-izquierda). */
+      #vgl-acciones-dock{
+        position:fixed;top:50%;right:14px;transform:translateY(-50%);
+        z-index:var(--z-widget);
+        display:flex;flex-direction:column;align-items:center;gap:6px;
+        padding:8px 6px;border-radius:var(--r-pill);
+        background:var(--surface-2);
+        border:1px solid var(--edge);
+        box-shadow:var(--shadow-card);
+        color:var(--fg);font-family:var(--font-stack);
+      }
+      #vgl-acciones-dock.colapsado .vgl-dock-btns{display:none}
+      .vgl-dock-toggle{
+        width:26px;height:22px;border:none;border-radius:var(--r-chip);
+        background:transparent;color:var(--fg3);cursor:pointer;padding:0;
+        display:flex;align-items:center;justify-content:center;font-size:var(--t-micro);
+        transition:background .15s var(--ease-out),color .15s var(--ease-out);
+      }
+      .vgl-dock-toggle:hover{color:var(--fg);background:var(--surface-1)}
+      .vgl-dock-btns{display:flex;flex-direction:column;gap:6px}
+      .vgl-dock-btn{
+        width:38px;height:38px;border:none;border-radius:var(--r-chip);
+        background:var(--surface-1);color:var(--fg);
+        font-size:var(--t-lead);line-height:1;cursor:pointer;padding:0;
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:inset 0 0 0 1px var(--edge);
+        transition:background .15s var(--ease-out);
+      }
+      .vgl-dock-btn:hover{background:var(--surface-2)}
+      .vgl-dock-btn:disabled{opacity:.35;cursor:not-allowed}
+      .vgl-dock-btn-ambar{box-shadow:inset 0 0 0 1px var(--c-ambar);color:var(--c-ambar)}
+      #vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none !important;animation:none !important}
+
+      #vgl-root *,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock *,#vgl-acciones-dock *,#vgl-toasts *,
       #vgl-modal *,#vgl-pym-modal *,#vgl-pes-modal *,
       #vgl-agendar-modal *,#vgl-ordenar-modal *,#vgl-labs-modal *,
       #vgl-labsv-modal *,#vgl-postcita-panel *{box-sizing:border-box}
@@ -6567,6 +6740,7 @@
       #vgl-root span,#vgl-root label{color:inherit}
       #vgl-toasts b,#vgl-toasts span{color:inherit}
       #vgl-dock span{color:inherit}
+      #vgl-acciones-dock span{color:inherit}
       /* v12.6.6/v12.10.2 — mismo blindaje para los dos avisos que viven en document.body.
          v12.10.2: la versión de v12.6.6 usaba div/span/b A PELO (sin :not([class])) — con
          especificidad id+tipo (1,0,1), le ganaba a CUALQUIER regla de acento con clase
@@ -8187,6 +8361,7 @@
          verdes, etiquetas azules, notas) le siguen ganando sin tocarlas. */
       #vgl-root :where(span:not([class]),b:not([class]),i:not([class]),em:not([class]),strong:not([class]),small:not([class]),label:not([class]),p:not([class]),li:not([class]),td:not([class]),th:not([class])),
       #vgl-dock :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      #vgl-acciones-dock :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-toasts :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-pym-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
@@ -12044,6 +12219,12 @@
       // createLabInjectorUI es idempotente con su botón y el robot automático conserva
       // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
       if (secc === "historia") { createLabInjectorUI(); createExamenFisicoInjectorUI(); checkRacGuardia(); }
+      // v14.0.0 (T5) — el dock de acciones usa _enModuloHCHealth() (por ruta, viva/HCHealth)
+      // en vez de secc==="historia" (por el marcador #anamesis): es el alcance MÁS AMPLIO
+      // que pide el encargo original ("widgets sobre la Historia Clínica"), no solo la
+      // pestaña concreta. La función es idempotente y se autolimpia sola si el médico sale
+      // del módulo o cierra al paciente — igual de barata que createLabInjectorUI().
+      createAccionesDockUI();
 
       // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
       // dispara los avisos que quedaron en cola mientras ninguna pestaña estaba ahí (ver

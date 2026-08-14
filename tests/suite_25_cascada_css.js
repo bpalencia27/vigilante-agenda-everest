@@ -489,15 +489,24 @@ module.exports = {
       const bodyUsos = css.match(/var\(--t-body\)/g) || [];
       const leadUsos = css.match(/var\(--t-lead\)/g) || [];
 
-      t.cierto(microUsos.length === 25, `var(--t-micro) debe aparecer 25 veces (incluida la reserva). Salieron ${microUsos.length}.`);
+      // v14.0.0 (T5) — el dock de widgets suma 1 uso más de var(--t-micro) en
+      // .vgl-dock-toggle (25 -> 26).
+      t.cierto(microUsos.length === 26, `var(--t-micro) debe aparecer 26 veces (incluida la reserva y el toggle del dock de T5). Salieron ${microUsos.length}.`);
       t.cierto(bodyUsos.length === 6, `var(--t-body) debe aparecer 6 veces. Salieron ${bodyUsos.length}.`);
-      t.cierto(leadUsos.length === 5, `var(--t-lead) debe aparecer 5 veces. Salieron ${leadUsos.length}.`);
+      // v14.0.0 (T5) — .vgl-dock-btn (los íconos del dock) también usa var(--t-lead):
+      // 5 sitios -> 6.
+      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (incluido .vgl-dock-btn de T5). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
       t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
 
+      // v14.0.0 (T5) — el interruptor de modo rendimiento del dock de widgets
+      // (#vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none
+      // !important;animation:none !important}) suma 2 !important nuevos, mismo patrón que
+      // el ya existente #vgl-dock.perf *{...}. No los añadió el cableado de esta regla
+      // (Regla G): 150 -> 152.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 150, `El total de !important en la hoja no debe cambiar por este cableado (esperado 150, salió ${importantTotal})`);
+      t.cierto(importantTotal === 152, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 (esperado 152, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
@@ -557,7 +566,9 @@ module.exports = {
       const zModal = css.match(/z-index:var\(--z-modal\)/g) || [];
       const zAlerta = css.match(/z-index:var\(--z-alerta\)/g) || [];
       t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
-      t.cierto(zWidget.length === 1, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn (1 sitio). Salieron ${zWidget.length}.`);
+      // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
+      // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios.
+      t.cierto(zWidget.length === 2, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn y #vgl-acciones-dock (2 sitios). Salieron ${zWidget.length}.`);
       t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
       t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
 

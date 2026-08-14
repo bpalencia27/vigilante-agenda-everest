@@ -640,6 +640,218 @@ module.exports = {
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
 
+    // ================= createAccionesDockUI (T5 — dock de widgets sobre la HC) =================
+    // v14.0.0 (T5): el dock flotante con las 3 acciones rápidas (agendar/ordenar/labs) que
+    // T4 sacó de la tarjeta. Usa _enModuloHCHealth() (alcance amplio, por ruta) en vez de
+    // seccionActiva()==="historia" (alcance angosto, por #anamesis): el encargo pide que el
+    // widget viva sobre TODA la Historia Clínica, no solo la pestaña con ese marcador.
+    function mockPacienteDock(c, doc) {
+      c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC " + doc, closest: () => null }] : []);
+    }
+
+    t.caso("createAccionesDockUI: fuera del módulo HCHealth no crea el widget", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.createAccionesDockUI();
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock"));
+    });
+
+    t.caso("createAccionesDockUI: en HCHealth pero sin paciente abierto no crea el widget", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/CitasDelDia";
+      c.env.doc.getElementById = () => null; // sin #anamesis ni nada: sin paciente resoluble
+      c.api.createAccionesDockUI();
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock"));
+    });
+
+    t.caso("createAccionesDockUI: crea el widget con los 3 botones + el de colapsar, una sola vez (idempotente)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "555666777");
+      const antes = c.env.doc.body.children.length;
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock quedó en el body");
+      t.cierto(dock.className.includes("vgl-acciones-dock"));
+      const btns = dock.children.find((n) => n.className === "vgl-dock-btns");
+      t.cierto(!!btns, "existe el contenedor de botones");
+      const accs = btns.children.map((b) => b.getAttribute("data-accion"));
+      t.igual(accs, ["agendar", "ordenar", "labs"]);
+      t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
+
+      // Segunda llamada: no duplica el contenedor del dock.
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "anamesis" ? { id: "anamesis" } : null));
+      c.api.createAccionesDockUI();
+      t.igual(c.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro dock");
+    });
+
+    t.caso("createAccionesDockUI: se autolimpia al salir del módulo HCHealth", () => {
+      // El DOM falso del arnés define remove() como no-op puro (no lo saca de
+      // body.children, a diferencia del navegador real) — mismo hallazgo documentado ya
+      // para otros modales de esta suite. Se espía la llamada en vez de inspeccionar
+      // body.children después.
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "555666777");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock);
+      let removido = false;
+      dock.remove = () => { removido = true; };
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : null);
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.createAccionesDockUI();
+      t.cierto(removido, "el dock se quita del body al salir de HCHealth");
+    });
+
+    t.caso("createAccionesDockUI: se autolimpia si el paciente se cierra (docId ya no resuelve)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "555666777");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock);
+      let removido = false;
+      dock.remove = () => { removido = true; };
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : null); // sin "anamesis": sin paciente
+      c.api.createAccionesDockUI();
+      t.cierto(removido, "el dock se quita del body sin paciente abierto");
+    });
+
+    t.caso("createAccionesDockUI: botón de agendar refleja los 3 estados (nada hecho / falta lab / ambas bloqueadas)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "111111111");
+      c.api.createAccionesDockUI();
+      let dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      let bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      t.falso(bAg.disabled, "nada hecho: botón habilitado");
+      t.falso(bAg.className.includes("vgl-dock-btn-ambar"));
+
+      c.api.markCitaAgendadaHoy("111111111", "2026-08-20");
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "anamesis" ? { id: "anamesis" } : null));
+      c.api.createAccionesDockUI();
+      dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      t.cierto(bAg.className.includes("vgl-dock-btn-ambar"), "solo falta el laboratorio: variante ámbar");
+      t.falso(bAg.disabled);
+
+      c.api.markLabAgendadaHoy("111111111");
+      c.api.createAccionesDockUI();
+      dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      t.cierto(bAg.disabled, "las dos hechas: bloqueado para evitar duplicados");
+    });
+
+    t.caso("createAccionesDockUI: botón de ordenar se bloquea cuando las órdenes ya se generaron hoy", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "222222222");
+      c.api.createAccionesDockUI();
+      let dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      let bOrd = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "ordenar");
+      t.falso(bOrd.disabled);
+
+      c.api.markOrdenesCreadasHoy("222222222", [], []);
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "anamesis" ? { id: "anamesis" } : null));
+      c.api.createAccionesDockUI();
+      dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      bOrd = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "ordenar");
+      t.cierto(bOrd.disabled, "órdenes ya generadas hoy: bloqueado para evitar duplicados");
+    });
+
+    t.caso("createAccionesDockUI: Ajustes con agendamientoRapido=false oculta agendar/ordenar, pero labs se conserva", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "333333333");
+      c.api.__S.agendamientoRapido = false;
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
+      t.igual(accs, ["labs"]);
+    });
+
+    t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "444444444");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const toggle = dock.children.find((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle");
+      t.falso(dock.className.includes("colapsado"));
+      toggle._listeners.click[0]({ stopPropagation() {} });
+      t.cierto(dock.classList.contains("colapsado"), "el primer clic colapsa");
+      t.igual(c.env.gm["vgl_dock_acciones_colapsado"], "1", "la preferencia queda persistida");
+      toggle._listeners.click[0]({ stopPropagation() {} });
+      t.falso(dock.classList.contains("colapsado"), "el segundo clic expande");
+      t.igual(c.env.gm["vgl_dock_acciones_colapsado"], "", "y la preferencia se actualiza");
+    });
+
+    t.caso("createAccionesDockUI: clic en agendar (nada pendiente) abre openAgendamientoModal, no openLabSoloModal", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c); // los open*Modal cablean sus propios botones con querySelector
+      mockPacienteDock(c, "555555555");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      bAg._listeners.click[0]({ stopPropagation() {} });
+      t.cierto(!!c.env.doc.getElementById("vgl-agendar-modal") || !!c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal"), "el modal de agendamiento completo quedó montado");
+      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-labsolo-modal"), "NO el modal ligero de solo-laboratorio");
+      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(w && w.acciones && w.acciones["widget.agendar.abrir"] === 1, "queda telemetría de la acción");
+    });
+
+    t.caso("createAccionesDockUI: clic en agendar (solo falta el laboratorio) abre openLabSoloModal", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      mockPacienteDock(c, "666666666");
+      c.api.markCitaAgendadaHoy("666666666", "2026-08-20");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      bAg._listeners.click[0]({ stopPropagation() {} });
+      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(w && w.acciones && w.acciones["widget.agendar.sololab"] === 1, "la rama 'solo falta el laboratorio' queda registrada, no la de agendamiento completo");
+      t.falso(!!(w.acciones["widget.agendar.abrir"]));
+    });
+
+    t.caso("createAccionesDockUI: clic en un botón bloqueado (disabled) no hace nada", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "777777777");
+      c.api.markCitaAgendadaHoy("777777777", "2026-08-20");
+      c.api.markLabAgendadaHoy("777777777");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
+      t.cierto(bAg.disabled);
+      bAg._listeners.click[0]({ stopPropagation() {} });
+      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.falso(w && w.acciones && (w.acciones["widget.agendar.abrir"] || w.acciones["widget.agendar.sololab"]), "un botón disabled no dispara ninguna acción ni telemetría, aunque el listener siga cableado");
+    });
+
+    t.caso("createAccionesDockUI: usa la cita REAL de state.lastSnapshot.list cuando existe (no inventa el nombre)", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      mockPacienteDock(c, "888888888");
+      c.api.__state.lastSnapshot = { list: [{ doc_id: "888888888", nombre: "PACIENTE DE PRUEBA REAL", citaId: 4321 }] };
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      const bLabs = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "labs");
+      // openLaboratoriosModal es async (consulta Athenea) y GM_xmlhttpRequest no está
+      // mockeada aquí — la promesa queda pendiente para siempre, sin bloquear el proceso
+      // (no registra ningún timer). Lo que SÍ es observable de forma síncrona es que el
+      // clic no lanzó (apt.doc_id llegó bien formado desde lastSnapshot.list) y que la
+      // telemetría de apertura quedó registrada.
+      t.noLanza(() => bLabs._listeners.click[0]({ stopPropagation() {} }));
+      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
+      t.cierto(w && w.acciones && w.acciones["widget.labs.abrir"] === 1);
+    });
+
+    t.caso("createAccionesDockUI: sin coincidencia en state.lastSnapshot.list arma solo {doc_id}, nunca inventa un nombre", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "999999999");
+      c.api.__state.lastSnapshot = { list: [{ doc_id: "000000000", nombre: "OTRO PACIENTE" }] };
+      t.noLanza(() => c.api.createAccionesDockUI());
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el widget igual se crea: apt.doc_id es lo único que exigen los open*Modal");
+    });
+
     // ================= createExamenFisicoInjectorUI (plantilla por posición) =================
     // v12.9.0 — Diagnóstico real en consultorio (13-08-2026): 45 de 56 campos de la pestaña
     // "Revisión por sistema y Examen físico" comparten LITERALMENTE el mismo id="alert_message"
