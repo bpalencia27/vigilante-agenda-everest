@@ -6729,7 +6729,13 @@
         z-index:var(--z-widget);
         display:flex;flex-direction:column;align-items:center;gap:6px;
         padding:8px 6px;border-radius:var(--r-pill);
-        background:var(--surface-2);
+        /* v14.0.0 — BASE OPACA OBLIGATORIA. --surface-2 es un velo (~92% transparente)
+           pensado para ir SOBRE el --bg de #vgl-root. Este dock cuelga de document.body,
+           así que no tiene ese --bg debajo: con --surface-2 a secas su fondo real es el
+           que pinte Everest, y en tema oscuro sobre una pantalla clara el texto casi
+           blanco quedaba con contraste 1.05 — invisible. Se apila el mismo velo SOBRE
+           --bg-solid: idéntico aspecto, pero el fondo ya no depende del host. */
+        background:linear-gradient(0deg,var(--surface-2),var(--surface-2)),var(--bg-solid);
         border:1px solid var(--edge);
         box-shadow:var(--shadow-card);
         color:var(--fg);font-family:var(--font-stack);
@@ -7275,7 +7281,15 @@
       #vgl-pym-banner{
         position:sticky;top:0;left:0;right:0;z-index:var(--z-banner);
         display:flex;flex-direction:column;
-        background:var(--surface-2);
+        /* v14.0.0 — BASE OPACA OBLIGATORIA, y aquí es doblemente crítico. Igual que el
+           dock, el banner cuelga de document.body y no tiene el --bg de #vgl-root debajo,
+           así que --surface-2 a secas (velo ~92% transparente) dejaba su fondo a merced
+           de Everest: en tema oscuro sobre pantalla clara el título y los nombres de
+           actividad caían a contraste 1.05. Y por ser position:sticky, al hacer scroll
+           las filas clínicas de Everest se leían A TRAVÉS del banner, sobreimpresas en su
+           texto — leer mal un dato clínico por transparencia es peor que un defecto
+           estético. El velo va apilado SOBRE --bg-solid: mismo aspecto, fondo propio. */
+        background:linear-gradient(0deg,var(--surface-2),var(--surface-2)),var(--bg-solid);
         border-bottom:1px solid var(--edge);
         box-shadow:var(--shadow-card);
         color:var(--fg);font-family:var(--font-stack);font-size:var(--t-body);

@@ -645,5 +645,37 @@ module.exports = {
       }
     });
 
+    // v14.0.0 — Regla L: todo contenedor que cuelgue de document.body debe traer su
+    // PROPIO fondo opaco. Bug real encontrado en la verificación en Chromium del release
+    // unificado, y que la auditoría T8 NO cazó porque su página de prueba tenía el lienzo
+    // oscuro — es decir, midió justo la combinación que no ocurre en producción.
+    //
+    // El mecanismo: --surface-1/2/3 son VELOS (~92% transparentes, ver §4.3 del
+    // superprompt: "tarjeta"), pensados para ir SOBRE el --bg opaco que paga #vgl-root.
+    // Un contenedor pegado a document.body no tiene ese --bg debajo, así que con
+    // `background:var(--surface-2)` a secas su fondo real es EL QUE PINTE EVEREST. En tema
+    // oscuro sobre una pantalla clara del EHR, el texto --fg casi blanco caía a contraste
+    // 1.05 (invisible); y en el banner, por ser position:sticky, al hacer scroll las filas
+    // clínicas de Everest se leían A TRAVÉS de él, sobreimpresas sobre el aviso de PyM.
+    //
+    // Esta regla es DIRIGIDA (no genérica): fija los contenedores de nivel body conocidos
+    // y exige que su declaración de background mencione un token opaco (--bg-solid o --bg),
+    // no solo un velo --surface-*. No intenta adivinar la opacidad real de un color: se
+    // ancla al patrón concreto que causó el fallo.
+    t.caso("Regla L - los contenedores pegados a document.body traen fondo opaco propio, no solo un velo --surface-*", () => {
+      const CONTENEDORES_BODY = ["#vgl-acciones-dock", "#vgl-pym-banner"];
+      for (const id of CONTENEDORES_BODY) {
+        // Bloque base del contenedor: el selector EXACTO, sin sufijos (.perf/.light/.minimizado).
+        // Se lee del CSS crudo porque el parser de esta suite solo guarda el texto de las
+        // declaraciones de 'color', no el de 'background'.
+        const bloque = new RegExp(`(^|\\n)\\s*\\${id}\\s*\\{([^}]*)\\}`).exec(cssClean);
+        t.cierto(!!bloque, `existe el bloque base de ${id} (si falla, el selector cambió de forma y hay que revisar a mano)`);
+        const decl = (bloque[2].split(";").find((d) => /^\s*background\s*:/.test(d)) || "").trim();
+        t.cierto(!!decl, `el bloque base de ${id} debe declarar 'background' explícitamente`);
+        t.cierto(/var\(--bg-solid\)|var\(--bg\)/.test(decl),
+          `${id} cuelga de document.body: su 'background' DEBE apoyarse en un token opaco (--bg-solid o --bg), no solo en un velo --surface-*, o su fondo real pasa a ser el que pinte Everest y el texto se vuelve ilegible según la pantalla del host. Declaración actual: "${decl}"`);
+      }
+    });
+
   }
 };
