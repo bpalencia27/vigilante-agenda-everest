@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Motor de perfil (D3-bis)",
-  cubre: ["perfilPaciente", "recomendacionHorario", "clasificaCupoAgenda"],
+  cubre: ["perfilPaciente", "recomendacionHorario", "clasificaCupoAgenda", "esCupoAdicional"],
   pruebas(t, api) {
     t.caso("Eje A (franja) - diabéticos obtienen primera mitad", () => {
       t.igual(api.perfilPaciente(["Diabetes"]).franja, "primera_mitad");
@@ -164,6 +164,47 @@ module.exports = {
       const rec = api.recomendacionHorario(perfil, [{ hora: "06:30" }, { hora: "14:00" }]);
       t.igual(rec.sugerida, null, "sin franja impuesta no hay hora sugerida");
       t.igual(rec.horasEnFranja.length, 0, "ni ninguna hora que repintar");
+    });
+    // v14.0.0 — CITAS ADICIONALES (encargo del 12-ago). El médico las identifica por hora
+    // (7:30/9:30/11:30/1:30/3:30/5:30, fuera de la malla de 20 min) y pidió resaltarlas
+    // con color y elemento visual propios. clasificaCupoAgenda ya sabía leer el CAMPO de
+    // Everest pero llevaba desde su commit sin un solo llamador; esCupoAdicional lo conecta
+    // y añade la lista de horas como respaldo cuando el campo no viene.
+    t.caso("v14 (cupos adicionales) - el CAMPO de Everest manda sobre la hora", () => {
+      // Campo explícito: se respeta aunque la hora no esté en la lista.
+      t.cierto(api.esCupoAdicional({ tipoCupo: "ADICIONAL" }, "08:00").adicional, "campo ADICIONAL en hora normal");
+      t.igual(api.esCupoAdicional({ tipoCupo: "ADICIONAL" }, "08:00").fuente, "campo");
+      // Campo dice NORMAL en una hora de la lista: gana el campo, no el reloj.
+      t.falso(api.esCupoAdicional({ tipoCupo: "NORMAL" }, "07:30").adicional,
+        "si Everest dice que el cupo es normal, la heurística de la hora NO puede contradecirlo");
+      t.igual(api.esCupoAdicional({ tipoCupo: "NORMAL" }, "07:30").fuente, "campo");
+    });
+
+    t.caso("v14 (cupos adicionales) - sin campo, se deducen por la hora que dio el médico", () => {
+      for (const h of ["07:30", "09:30", "11:30", "13:30", "15:30", "17:30"]) {
+        const r = api.esCupoAdicional({}, h);
+        t.cierto(r.adicional, h + " es una hora de cupo adicional");
+        t.igual(r.fuente, "hora", "y queda marcado como DEDUCIDO, no como dato de Everest");
+      }
+      for (const h of ["07:00", "08:20", "10:00", "14:40", "16:00"]) {
+        t.falso(api.esCupoAdicional({}, h).adicional, h + " es un cupo normal de la malla de 20 min");
+      }
+    });
+
+    // La regla clínica del Eje B, que se calculaba y nadie leía: las adicionales se
+    // sugieren a hipertensos SIN diabetes ni enfermedad renal.
+    t.caso("v14 (Eje B) - solo el hipertenso puro tiene las adicionales recomendadas", () => {
+      t.igual(api.perfilPaciente(["Hipertensión"]).adicionales, true, "HTA puro: se le pueden ofrecer");
+      t.igual(api.perfilPaciente(["Diabetes"]).adicionales, false, "diabético: se reservan");
+      t.igual(api.perfilPaciente(["HTA+DM"]).adicionales, false, "HTA+DM: se reservan");
+      t.igual(api.perfilPaciente(["Nefroprotección"]).adicionales, false, "renal: se reservan");
+      t.igual(api.perfilPaciente([]).adicionales, "visibles", "sin etiqueta reconocida: se muestran sin opinar");
+      // Ninguno de los tres estados oculta el cupo: el médico debe poder usarlo cuando no
+      // queda otra cita — el caso puntual que él mismo describió.
+      for (const et of [["Hipertensión"], ["Diabetes"], []]) {
+        t.falso(api.perfilPaciente(et).adicionales === "oculto",
+          "las adicionales nunca se ocultan ni se bloquean, solo se recomiendan o se desaconsejan");
+      }
     });
   }
 };

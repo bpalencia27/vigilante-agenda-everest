@@ -7737,9 +7737,14 @@
          mostrarse como ELEGIDA, no como sugerida — la sugerencia deja de importar una vez
          que el médico decide. .active gana igual sin depender de esto: usa !important, y
          !important le gana a cualquier regla sin !important sin importar la especificidad. */
+      /* v14.0.0 — El médico: «la cita sugerida debe resaltar mucho más ya que a duras penas
+         se nota». Se sube el peso visual sin salirse del sistema: borde izquierdo grueso
+         (el mismo recurso que ya usan las tarjetas del panel para el color de puntualidad),
+         fondo más presente y contorno completo. Sigue sin preseleccionar nada. */
       .vgl-agm-sbtn-sugerido{
-        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55);
-        transform:scale(1.03);box-shadow:0 0 12px rgba(var(--rgb-ambar),.20)
+        background:rgba(var(--rgb-ambar),.22);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.85);
+        border-left:5px solid var(--c-ambar);font-weight:800;
+        transform:scale(1.04);box-shadow:0 0 0 1px rgba(var(--rgb-ambar),.45),0 0 18px rgba(var(--rgb-ambar),.28)
       }
       /* v12.10.9 — bug real: en tema claro la insignia SUGERIDO se veía sin ningún color
          propio (texto oscuro sobre fondo casi blanco, indistinguible del resto de turnos).
@@ -7771,6 +7776,33 @@
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-franja,
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-franja{
         background:rgba(var(--rgb-ambar),.10);border-color:rgba(var(--rgb-ambar),.34)
+      }
+      /* v14.0.0 — CUPOS ADICIONALES (7:30/9:30/11:30/13:30/15:30/17:30 y los que Everest
+         marque como tal). Color PROPIO —morado, no el ámbar de la recomendación— porque son
+         un eje distinto: el ámbar dice "le conviene a este paciente", el morado dice "este
+         cupo no es de la malla normal". Un turno puede ser las dos cosas a la vez, y por eso
+         no pueden compartir color. El elemento visual extra que pidió el médico es la
+         etiqueta "+ ADICIONAL" dentro del propio botón, no solo un tono de fondo. */
+      .vgl-agm-sbtn-adicional{
+        border-style:dashed;border-color:rgba(var(--rgb-morado),.60)
+      }
+      .vgl-agm-cupo-adic{
+        display:inline-block;font-size:10px;font-weight:800;letter-spacing:.6px;
+        color:var(--c-morado);background:rgba(var(--rgb-morado),.16);
+        border:1px solid rgba(var(--rgb-morado),.40);border-radius:var(--r-pill);
+        padding:1px 7px;margin-right:6px;vertical-align:1px
+      }
+      /* Desaconsejada por perfil (diabético o renal): se atenúa, NUNCA se oculta ni se
+         bloquea — el médico debe poder usarla cuando no queda otra cita, que es justo el
+         caso puntual que él describió. */
+      .vgl-agm-sbtn-adic-no{opacity:.62}
+      .vgl-agm-sbtn-adic-no .vgl-agm-cupo-adic{
+        color:var(--fg3);background:rgba(var(--rgb-atendido),.16);border-color:rgba(var(--rgb-atendido),.40)
+      }
+      #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
+      #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
+      #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional{
+        border-style:dashed;border-color:rgba(var(--rgb-morado),.55)
       }
       .vgl-agm-loading{
         font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
@@ -9218,6 +9250,26 @@
     };
   }
 
+  // v14.0.0 — CITAS ADICIONALES (encargo del médico, 12-ago): «Las horas de la agenda
+  // 7:30, 9:30, 11:30, 1:30, 3:30 y 5:30 (según la jornada que aplique) se deben resaltar
+  // con otros colores y otros elementos visuales, ya que esas citas se consideran
+  // adicionales a las de cada 20 minutos normales de las agendas».
+  // Dos fuentes, en este orden:
+  //  1. El CAMPO del turno, si Everest lo trae (clasificaCupoAgenda ya sabía leerlo, pero
+  //     llevaba desde su commit sin un solo llamador). Es la fuente autoritativa.
+  //  2. Si el campo no viene o no se reconoce, la LISTA DE HORAS que dio el médico. Es una
+  //     heurística, no un dato de Everest — por eso se marca aparte en el retorno, para no
+  //     presentar como confirmado algo que se dedujo del reloj.
+  const HORAS_ADICIONALES = ["07:30", "09:30", "11:30", "13:30", "15:30", "17:30"];
+  function esCupoAdicional(turno, horaNorm) {
+    const campo = turno && (turno.tipoCupo || turno.TipoCupo || turno.tipo || turno.Tipo ||
+                            turno.clasificacion || turno.Clasificacion || turno.cupo || turno.Cupo);
+    const porCampo = clasificaCupoAgenda(campo);
+    if (porCampo === "adicional") return { adicional: true, fuente: "campo" };
+    if (porCampo === "normal") return { adicional: false, fuente: "campo" };
+    return { adicional: HORAS_ADICIONALES.indexOf(String(horaNorm || "")) !== -1, fuente: "hora" };
+  }
+
   function clasificaCupoAgenda(valorCampoAgenda) {
     if (!valorCampoAgenda) return "desconocido";
     const norm = String(valorCampoAgenda)
@@ -10649,14 +10701,41 @@
         // pudiendo escoger cualquier otra hora (nada se bloquea ni se oculta).
         const enFranja = !esSugerida && Array.isArray(recHorario.horasEnFranja) &&
           recHorario.horasEnFranja.indexOf(normalizeHora(horaTxt)) !== -1;
+        // v14.0.0 — CITAS ADICIONALES (encargo del 12-ago). Son los cupos extra que se
+        // abren fuera de la malla normal de 20 minutos; el médico pidió resaltarlas «con
+        // otros colores y otros elementos visuales» porque no son intercambiables con una
+        // cita normal. Y pidió también la regla clínica de a quién ofrecérselas:
+        //   «solamente se deben sugerir a aquellos pacientes hipertensos que no tengan
+        //    diabetes ni enfermedad renal crónica… en casos puntuales que no haya más
+        //    citas ni agendas en otros días se habilitarían para cualquier paciente».
+        // Eso es exactamente el Eje B de D3-bis (perfil.adicionales), que hasta ahora se
+        // calculaba y NADIE leía: true = HTA puro, este paciente es el destinatario;
+        // false = DM o nefro, se marca pero se desaconseja; "visibles" = sin etiqueta
+        // reconocida, se marca sin opinar. NUNCA se ocultan ni se bloquean: el médico
+        // debe poder usarlas cuando no queda otra, que es el caso puntual que él describió.
+        const infoCupo = esCupoAdicional(t, normalizeHora(horaTxt));
+        const esAdicional = infoCupo.adicional;
+        const adicionalRecomendada = esAdicional && perfilDelPaciente && perfilDelPaciente.adicionales === true;
+        const adicionalDesaconsejada = esAdicional && perfilDelPaciente && perfilDelPaciente.adicionales === false;
         // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
         // Medicina General, que es justo donde el fallback podía colar otra agenda).
-        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : (enFranja ? "● " : "✓ ")) + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
+        const marcaAdicional = esAdicional ? `<span class="vgl-agm-cupo-adic">+ ADICIONAL</span> ` : "";
+        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : (enFranja ? "● " : "✓ ")) + marcaAdicional + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
         btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") +
-          (esSugerida ? " vgl-agm-sbtn-sugerido" : "") + (enFranja ? " vgl-agm-sbtn-franja" : "");
-        if (esSugerida) btn.title = `Horario sugerido para este paciente (franja ${recHorario.rangoTexto || "recomendada"})`;
-        else if (enFranja) btn.title = `Dentro de la franja recomendada para este paciente (${recHorario.rangoTexto || "recomendada"}) — puede elegir esta o cualquier otra`;
+          (esSugerida ? " vgl-agm-sbtn-sugerido" : "") + (enFranja ? " vgl-agm-sbtn-franja" : "") +
+          (esAdicional ? " vgl-agm-sbtn-adicional" : "") +
+          (adicionalDesaconsejada ? " vgl-agm-sbtn-adic-no" : "");
+        const notaCupo = !esAdicional ? "" :
+          (adicionalRecomendada
+            ? " · Cupo ADICIONAL: apropiado para este paciente (hipertenso sin diabetes ni enfermedad renal)."
+            : adicionalDesaconsejada
+              ? " · Cupo ADICIONAL: este paciente tiene diabetes o enfermedad renal — se reserva para hipertensos, úselo solo si no queda otra cita."
+              : " · Cupo ADICIONAL (fuera de la malla de 20 minutos).") +
+          (infoCupo.fuente === "hora" ? " [deducido por la hora, Everest no marcó el tipo de cupo]" : "");
+        if (esSugerida) btn.title = `Horario sugerido para este paciente (franja ${recHorario.rangoTexto || "recomendada"})` + notaCupo;
+        else if (enFranja) btn.title = `Dentro de la franja recomendada para este paciente (${recHorario.rangoTexto || "recomendada"}) — puede elegir esta o cualquier otra` + notaCupo;
+        else if (notaCupo) btn.title = notaCupo.replace(/^ · /, "");
         btn.innerHTML = labelCompleto;
         btn.addEventListener("click", () => {
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
