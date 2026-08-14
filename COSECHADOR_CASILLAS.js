@@ -32,15 +32,25 @@
    Aun así: revise el archivo antes de mandarlo.
 
    ---------------------------------------------------------------------------
-   MODO DE USO (30 segundos por pestaña)
+   MODO DE USO
 
-   1. Abra la historia clínica del paciente y párese en la pestaña que le
-      interese (Antecedentes, Hábitos y Gestión de Riesgo, Examen físico…).
+   1. Abra la historia clínica de un paciente. Mejor uno SIN cambios sin guardar:
+      el recorrido cambia de pestaña, y qué hace Everest con un formulario a medio
+      llenar es cosa suya, no de este script.
    2. F12 -> pestaña "Console". Pegue este archivo entero y pulse Enter.
-   3. Se descarga un .json y además queda copiado al portapapeles.
-   4. Cambie de pestaña y escriba   VGL_COSECHA()   otra vez. Una por pestaña.
+   3. Escriba:
 
-   NO MODIFICA NADA. No escribe, no guarda, no envía. Solo mira y anota.
+          VGL_COSECHA_TODO()
+
+      Recorre TODAS las pestañas solo —pulsa cada una, espera a que Angular la
+      monte, anota— y al final descarga UN archivo con todo. Unos 20 segundos.
+      En la consola queda además una tabla con las casillas que parecen factores
+      de riesgo: tabaquismo, antecedentes, ECV. Eso es lo que hace falta.
+
+   4. Si prefiere ir a mano, VGL_COSECHA() cosecha solo la pantalla actual.
+
+   NO MODIFICA NADA. Pulsa pestañas, que es lo mismo que haría usted con el ratón.
+   No escribe en ninguna casilla, no guarda, no envía nada a ningún sitio.
    =========================================================================== */
 
 (function () {
@@ -85,7 +95,7 @@
     return "";
   }
 
-  window.VGL_COSECHA = function (conEstado) {
+  window.VGL_COSECHA = function (conEstado, sinArchivo) {
     const capturarEstado = conEstado !== false; // por defecto sí
     const campos = [];
     const vistos = new Set();
@@ -156,6 +166,8 @@
       campos: campos,
     };
 
+    if (sinArchivo) return salida;   // el recorrido completo junta todo y descarga UNA vez
+
     const texto = JSON.stringify(salida, null, 1);
     try {
       const a = document.createElement("a");
@@ -185,5 +197,119 @@
     return salida;
   };
 
-  VGL_COSECHA();
+  // ===========================================================================
+  //  VGL_COSECHA_TODO() — RECORRE TODAS LAS PESTAÑAS SOLO
+  //
+  //  Pedido del médico: "captura y graba todas las pestañas de la historia clínica
+  //  para que tengas un panorama completo". Esto hace justo eso: pulsa cada pestaña,
+  //  espera a que Angular la monte, cosecha, y pasa a la siguiente. Al final descarga
+  //  UN archivo con todo junto.
+  //
+  //  QUÉ HACE Y QUÉ NO: solo NAVEGA y MIRA. Pulsa pestañas, que es lo mismo que haría
+  //  usted con el ratón. No escribe en ninguna casilla, no pulsa Guardar, no envía nada
+  //  a ningún sitio. Rigen las mismas reglas de privacidad de arriba: de las casillas de
+  //  texto, número y fecha no se copia ni una letra.
+  //
+  //  AUN ASÍ, ÚSELO CON UN PACIENTE SIN CAMBIOS SIN GUARDAR. Cambiar de pestaña en un
+  //  formulario a medio llenar es cosa de Everest, no de este script, y no sé qué hace
+  //  Everest con eso. Lo prudente: abra un paciente, no escriba nada, y ejecútelo.
+  // ===========================================================================
+  const _dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  window.VGL_COSECHA_TODO = async function (conEstado) {
+    // Se resuelven las pestañas ANTES de empezar: al pulsar la primera, Angular
+    // reconstruye el DOM y una lista de nodos guardada se queda con referencias muertas.
+    const candidatas = [];
+    const vistas = new Set();
+    document.querySelectorAll('[role="tab"], .nav-link, .mat-tab-label, ul.nav a, .nav-tabs a').forEach(function (el) {
+      const txt = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (!txt || txt.length > 60 || vistas.has(txt)) return;
+      if (el.closest && el.closest("#vgl-root")) return;      // nunca el panel del propio Vigilante
+      vistas.add(txt);
+      candidatas.push(txt);
+    });
+
+    if (!candidatas.length) {
+      console.warn("%c[Cosechador] No encontré pestañas en esta pantalla. Use VGL_COSECHA() a mano en cada una.", "color:#e54d42;font-weight:bold");
+      return null;
+    }
+
+    console.log("%c[Cosechador] " + candidatas.length + " pestañas por recorrer: " + candidatas.join(" · "), "color:#06c;font-weight:bold");
+    const porPestana = [];
+
+    for (let i = 0; i < candidatas.length; i++) {
+      const nombre = candidatas[i];
+      // Se vuelve a buscar por TEXTO en cada vuelta, contra el DOM de AHORA.
+      let destino = null;
+      const todos = document.querySelectorAll('[role="tab"], .nav-link, .mat-tab-label, ul.nav a, .nav-tabs a');
+      for (const el of todos) {
+        if ((el.textContent || "").replace(/\s+/g, " ").trim() !== nombre) continue;
+        if (el.closest && el.closest("#vgl-root")) continue;
+        destino = el; break;
+      }
+      if (!destino) { porPestana.push({ pestana: nombre, error: "no se volvió a encontrar tras cambiar de vista" }); continue; }
+
+      try { destino.click(); } catch (e) { porPestana.push({ pestana: nombre, error: "no se pudo pulsar: " + e }); continue; }
+      // 900 ms es lo que ya usa DIAGNOSTICO_FACTORES_RCV.js para esperar a Angular en
+      // esta misma aplicación; se respeta ese número en vez de inventar otro.
+      await _dormir(900);
+
+      const inv = window.VGL_COSECHA_SILENCIOSA(conEstado);
+      porPestana.push({ pestana: nombre, totalCampos: inv.totalCampos, campos: inv.campos });
+      console.log("[Cosechador] " + (i + 1) + "/" + candidatas.length + " — \"" + nombre + "\": " + inv.totalCampos + " casillas");
+    }
+
+    const salida = {
+      _nota: "Recorrido completo de las pestañas de la historia clínica de Everest. Sin valores de texto: solo estructura del formulario.",
+      capturadoEn: new Date().toISOString(),
+      url: location.href,
+      estadoCapturado: conEstado !== false,
+      pestanasRecorridas: porPestana.length,
+      totalCamposTodos: porPestana.reduce((n, p) => n + (p.totalCampos || 0), 0),
+      pestanas: porPestana,
+    };
+
+    const texto = JSON.stringify(salida, null, 1);
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
+      const d = new Date(), p = (x) => String(x).padStart(2, "0");
+      a.download = "casillas_TODAS_" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "_" + p(d.getHours()) + p(d.getMinutes()) + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { console.warn("[Cosechador] no se pudo descargar:", e); }
+    try { if (window.copy) window.copy(texto); } catch (e) {}
+
+    console.log("%c[Cosechador] LISTO — " + salida.pestanasRecorridas + " pestañas, " + salida.totalCamposTodos + " casillas en total. Archivo descargado y copiado al portapapeles.", "color:#0a0;font-weight:bold;font-size:14px");
+
+    // El resumen que de verdad se buscaba: dónde vive cada factor de riesgo.
+    try {
+      const filas = [];
+      porPestana.forEach((p) => (p.campos || []).forEach((c) => {
+        if (/fum|tabac|cigarr|sedentar|activid.*f[ií]s|alcohol|infarto|iam|acv|ecv|stent|revascular|angina|antecedent|familiar/i
+          .test(c.id + " " + c.name + " " + c.etiqueta + " " + c.seccion)) {
+          filas.push({ pestana: p.pestana, id: c.id, name: c.name, tipo: c.tipo, etiqueta: c.etiqueta, seccion: c.seccion, estado: c.estado });
+        }
+      }));
+      if (filas.length) {
+        console.log("%c[Cosechador] FACTORES DE RIESGO ENCONTRADOS — esto es lo que hacía falta:", "color:#e54d42;font-weight:bold;font-size:13px");
+        console.table(filas);
+      } else {
+        console.log("%c[Cosechador] Ninguna casilla de tabaquismo/antecedentes/ECV en las pestañas recorridas. Puede que vivan en otra pantalla (Antecedentes fuera de la consulta, o en el módulo de Riesgo Cardiovascular).", "color:#c80");
+      }
+    } catch (e) {}
+
+    return salida;
+  };
+
+  // Misma cosecha, sin descargar ni imprimir: la usa el recorrido de arriba.
+  window.VGL_COSECHA_SILENCIOSA = function (conEstado) {
+    const log = console.log, warn = console.warn, tabla = console.table;
+    console.log = console.warn = console.table = function () {};
+    try { return window.VGL_COSECHA(conEstado, true); }
+    finally { console.log = log; console.warn = warn; console.table = tabla; }
+  };
+
+  console.log("%c[Cosechador] Listo. Dos formas de usarlo:", "color:#06c;font-weight:bold;font-size:14px");
+  console.log("%c  VGL_COSECHA_TODO()  ← recorre TODAS las pestañas solo (lo que quiere el médico)", "color:#0a0;font-weight:bold");
+  console.log("%c  VGL_COSECHA()       ← solo la pantalla en la que está ahora", "color:#06c");
 })();
