@@ -300,5 +300,74 @@ module.exports = {
       const validWarns = warns.filter(w => w.startsWith("[Vigilante] falló el envío del SMS:"));
       t.igual(validWarns.length, 1, "hay exactamente 1 warn indicando el fallo de envío");
     });
+
+    // ---------------------------------------------------------------
+    // v11.0.1 — _pageFetchJsonCore NUNCA reintenta una ESCRITURA. Antes de esta
+    // guardia el núcleo reintentaba hasta 4 veces y, en cada vuelta, repetía la
+    // petición por una segunda vía (GM_xmlhttpRequest): hasta OCHO envíos del
+    // mismo POST (ocho citas o ocho órdenes clínicas repetidas). Montaje común
+    // con contador doble (fetch/gm) y un gmxhr que LIQUIDA la promesa (si no,
+    // el runner queda colgado esperando para siempre).
+    // ---------------------------------------------------------------
+
+    await t.casoAsync("_pageFetchJsonCore: escritura (POST) con 500 NO reintenta y NO se reenvía por GM", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: false, status: 500, json: async () => ({}) }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+
+      const r = await c.api._pageFetchJsonCore("/x", { method: "POST", body: "{}" });
+
+      t.igual(r, null, "devuelve null");
+      t.igual(cont.fetch, 1, "una sola llamada por fetch, no reintenta");
+      t.igual(cont.gm, 0, "no se reenvía por la segunda vía (GM)");
+    });
+
+    await t.casoAsync("_pageFetchJsonCore: lectura (GET) con 500 sí reintenta 3 veces y se reenvía por GM", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: false, status: 500, json: async () => ({}) }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+
+      const r = await c.api._pageFetchJsonCore("/x", { method: "GET" });
+
+      t.igual(r, null, "devuelve null tras agotar reintentos");
+      t.igual(cont.fetch, 4, "1 intento inicial + 3 reintentos");
+      t.igual(cont.gm, 4, "se reenvía por GM en cada intento fallido");
+    });
+
+    await t.casoAsync("_pageFetchJsonCore: lectura (GET) con 404 NO reintenta (error 4xx)", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: false, status: 404, json: async () => ({}) }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+
+      const r = await c.api._pageFetchJsonCore("/x", { method: "GET" });
+
+      t.igual(r, null, "devuelve null");
+      t.igual(cont.fetch, 1, "un 4xx no reintenta");
+      t.igual(cont.gm, 0, "un 4xx tampoco se reenvía por GM");
+    });
+
+    await t.casoAsync("_pageFetchJsonCore: POST con __idempotent:true SÍ reintenta (excepción explícita)", async () => {
+      const cont = { fetch: 0, gm: 0 };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { cont.fetch++; return { ok: false, status: 500, json: async () => ({}) }; },
+        gmxhr: (o) => { cont.gm++; o.onerror(new Error("red")); },
+      });
+
+      const r = await c.api._pageFetchJsonCore("/x", { method: "POST", body: "{}", __idempotent: true });
+
+      t.igual(r, null, "devuelve null tras agotar reintentos");
+      t.igual(cont.fetch, 4, "1 intento inicial + 3 reintentos, pese a ser POST");
+      t.igual(cont.gm, 4, "__idempotent:true habilita el reenvío por GM");
+    });
   }
 };
