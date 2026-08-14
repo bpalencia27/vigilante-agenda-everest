@@ -44,6 +44,8 @@ module.exports = {
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
+    "_pestanaOculta", "_getUltimoRelevoParaTest", "_setUltimoRelevoParaTest",
+    "_dispararAvisoAudible", "_dispararAvisoCartel",
     "boot",
   ],
 
@@ -108,6 +110,43 @@ module.exports = {
       // Y entre dos ocultas manda la regla de siempre: el latido fresco gana.
       ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: true }));
       t.igual(c.api.heartbeat(), false, "entre dos ocultas no se introduce forcejeo nuevo: gana el latido fresco");
+    });
+
+    // v14.1.5 — Una auditoría adversarial del propio arreglo planteó dos temores. Uno era
+    // infundado y el otro real; los dos quedan fijados aquí para que nadie los reintroduzca.
+    t.caso("heartbeat v14.1.5: si TODAS las pestañas están ocultas NO hay acefalía — el líder oculto conserva el mando", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      // El médico minimizó el navegador entero para mirar otra aplicación. Nadie está a la
+      // vista. Si la visibilidad fuera REQUISITO para mandar, el vigilante se quedaría sin
+      // líder y dejaría de avisar justo cuando el aviso más falta.
+      c.env.doc.visibilityState = "hidden";
+      t.igual(c.api.heartbeat(), true, "sin latido ajeno, una pestaña oculta toma el mando igual");
+      t.igual(c.api.heartbeat(), true, "y lo conserva latido tras latido");
+      t.igual(c.api.__state.leader, true, "la visibilidad es preferencia para RELEVAR, nunca requisito para MANDAR");
+      const beat = JSON.parse(ls.getItem("vgl_leader_beat"));
+      t.igual(beat.oculta, true, "deja constancia de que manda una oculta, para que una visible pueda relevarla luego");
+    });
+
+    t.caso("heartbeat v14.1.5: el relevo por visibilidad tiene enfriamiento — con Alt+Tab rápido no se dispara una ráfaga de consultas al servidor", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      c.env.doc.visibilityState = "visible";
+      c.api._setUltimoRelevoParaTest(0);
+
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), true, "el primer relevo por visibilidad sí ocurre");
+
+      // Alt+Tab inmediato: otra pestaña se lo queda y esta vuelve a intentarlo enseguida.
+      // Cada toma de mando hace API.ultimo = 0, o sea una consulta inmediata de agenda;
+      // sin enfriamiento, alternar pestañas bombardearía el servidor de Everest.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), false, "un segundo relevo dentro de los 10 s NO se concede");
+
+      // Pasado el enfriamiento, quien de verdad se quedó mirando sí se lleva el mando.
+      c.api._setUltimoRelevoParaTest(Date.now() - 11000);
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), true, "pasados los 10 s el relevo vuelve a estar disponible");
     });
 
     t.caso("heartbeat v14.1.5: un latido antiguo SIN el campo `oculta` no dispara relevos (compatibilidad con pestañas de la versión anterior)", () => {
@@ -376,19 +415,38 @@ module.exports = {
     // v12.5.14 — tick() dispara la cola de avisos pendientes (_flushAvisosPendientes) en
     // TODA pestaña que esté en HCHealth, aunque no tenga marcadores de agenda/historia en
     // el DOM (p. ej. una pantalla de Órdenes/RCV dentro del mismo módulo clínico).
-    t.caso("tick: en HCHealth (aunque la sección sea 'otra') dispara los avisos que quedaron en cola", () => {
+    // v14.1.5 — La cola ya solo guarda CARTELES: el tono y la notificación del sistema
+    // salieron cuando el hecho ocurrió, sin esperar a nada. Lo que sigue vigente de esta
+    // prueba es que el cartel pendiente SÍ se pinta en cuanto la pestaña está en HCHealth,
+    // aunque la sección no sea agenda ni historia.
+    t.caso("tick: en HCHealth (aunque la sección sea 'otra') pinta los carteles que quedaron en cola, sin volver a notificar", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";
+      c.api.__S.cartel = true;   // el cartel de pantalla (bigAlert) monta #vgl-modal
+      // Sin `ts`: es un aviso encolado por una versión anterior. No debe caducar por eso.
       c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "queued|ROJO", flashText: "t" });
 
       c.api.tick();
       t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
-      t.igual(notifCount, 1, "el aviso en cola se dispara igual, porque la pestaña SÍ está en HCHealth");
+      t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "el cartel pendiente se pinta, porque la pestaña SÍ está en HCHealth");
+      t.igual(notifCount, 0, "y NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(cola.length, 0, "la cola quedó vacía");
+    });
+
+    t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      c.api.__S.cartel = true;
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 660000 });
+
+      c.api._flushAvisosPendientes();
+
+      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 11 minutos NO se pinta: haría atender una llegada que ya pasó");
+      t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "la cola queda vacía en cualquier caso");
     });
 
     // ---------- downloadDiagnostic ----------

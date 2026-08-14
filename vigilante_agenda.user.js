@@ -3997,6 +3997,10 @@
   function _pestanaOculta() {
     try { return document.visibilityState === "hidden"; } catch (e) { return false; }
   }
+  const RELEVO_VISIBILIDAD_MIN_MS = 10000;
+  let _ultimoRelevoVisibilidad = 0;
+  function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
+  function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
   function heartbeat() {
     try {
       const ahora = Date.now();
@@ -4006,11 +4010,19 @@
       if (beat && beat.id && beat.id !== TABID && (ahora - beat.t) < LEADER_TTL_MS) {
         // Latido ajeno y fresco. Solo se le desafía si él está oculto —y por tanto
         // estrangulado por el navegador— y yo estoy a la vista.
-        const relevoPorVisibilidad = beat.oculta === true && !yoOculta;
+        // v14.1.5 — El enfriamiento NO es decorativo, y lo señaló una auditoría adversarial
+        // del propio arreglo: cada toma de mando hace `API.ultimo = 0`, o sea una lectura
+        // inmediata de la agenda. Con Alt+Tab rápido entre dos pestañas de Everest, cada
+        // conmutación robaba el mando y disparaba su consulta, así que el servidor recibía
+        // ráfagas de peticiones. Un relevo por visibilidad cada 10 s como mucho: quien de
+        // verdad se quedó mirando la pestaña se lleva el mando igual, solo que sin ráfaga.
+        const relevoPorVisibilidad = beat.oculta === true && !yoOculta &&
+          (ahora - _ultimoRelevoVisibilidad) > RELEVO_VISIBILIDAD_MIN_MS;
         if (!relevoPorVisibilidad) {
           state.leader = false;             // hay un líder ajeno y su latido está fresco
           return false;
         }
+        _ultimoRelevoVisibilidad = ahora;
         console.log("[Vigilante] Relevo de liderazgo: la pestaña líder está oculta y el navegador le estrangula el temporizador. Toma el mando esta, que está a la vista.");
       }
       // Latido propio, vencido, inexistente, o de un líder oculto al que se releva.
@@ -6281,21 +6293,60 @@
       writeJSON(AVISOS_PENDIENTES_KEY, cola.slice(-50));      // tope defensivo
     } catch (e) {}
   }
+  // v14.1.5 — La cola ya solo guarda CARTELES: el tono y la notificación del sistema
+  // salieron en su momento, cuando el hecho ocurrió. Aquí queda una segunda cautela:
+  // un cartel de hace media hora NO puede salir como si el paciente acabara de llegar.
+  // Pasados 10 minutos se descarta — el aviso ya se dio, y repetirlo tarde solo consigue
+  // que el médico atienda una llegada que ya pasó.
+  const AVISO_CARTEL_CADUCA_MS = 600000;
   function _flushAvisosPendientes() {
     if (!_enModuloHCHealth()) return;
     let cola;
     try { cola = readJSON(AVISOS_PENDIENTES_KEY, []) || []; } catch (e) { return; }
     if (!cola.length) return;
     try { writeJSON(AVISOS_PENDIENTES_KEY, []); } catch (e) {}
-    cola.forEach(_dispararAvisoReal);
+    const ahora = Date.now();
+    let caducados = 0;
+    cola.forEach((p) => {
+      if (!p) return;
+      if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
+      _dispararAvisoCartel(p);
+    });
+    if (caducados) console.log("[Vigilante] " + caducados + " cartel(es) en cola ya no se muestran: el aviso sonó en su momento y han pasado más de 10 minutos.");
   }
-  function _dispararAvisoReal(p) {
-    if (crossTabDup("full|" + p.uid)) return;   // dos pestañas en HCHealth a la vez: solo dispara la primera
+  // v14.1.5 — TERCERA CAUSA DE LOS AVISOS TARDÍOS, y la más torcida de las tres.
+  //
+  // Hasta aquí, un aviso generado con el médico FUERA de /viva/HCHealth no sonaba: se
+  // guardaba en una cola y esperaba a que entrara a una historia clínica. Entonces salían
+  // todos de golpe, minutos u horas después del hecho. Eso es literalmente lo que
+  // reportaron: "es como si estuvieran asincrónicas".
+  //
+  // Pero mírese lo que se estaba conteniendo: el TONO y la NOTIFICACIÓN DEL SISTEMA
+  // OPERATIVO, que existen precisamente para avisar cuando el médico NO está mirando esta
+  // pantalla. Condicionarlos a "que esté mirando esta pantalla" es justo al revés.
+  //
+  // Así que el aviso se parte en dos, según de qué dependa de verdad:
+  //   · LO QUE ALCANZA AL MÉDICO ESTÉ DONDE ESTÉ (tono, notificación del sistema, parpadeo
+  //     del título y del favicon): sale SIEMPRE, en el acto, sin mirar el módulo.
+  //   · EL CARTEL DENTRO DE LA PÁGINA (bigAlert/popupAlert): ese sí es de la vista, y es lo
+  //     único que tiene sentido encolar hasta que haya una pestaña donde pintarlo.
+  // Lo que alcanza al médico esté donde esté. No mira el módulo: no depende de la vista.
+  function _dispararAvisoAudible(p) {
+    if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     notify(p.color, p.title, p.body, p.persist, p.uid);
-    if (p.color === "ROJO") { startNag("ROJO"); bigAlert("ROJO", p.title, p.body); }
+    if (p.color === "ROJO") startNag("ROJO");
     else playTone(p.color);
     startFlash(p.flashText, p.color);
+    return true;
+  }
+  // El cartel dentro de la página. Este sí es de la vista, y es lo único que se encola.
+  function _dispararAvisoCartel(p) {
+    if (p.color === "ROJO") bigAlert("ROJO", p.title, p.body);
     popupAlert(p.color, p.title, p.body);
+  }
+  function _dispararAvisoReal(p) {
+    if (!_dispararAvisoAudible(p)) return;   // otra pestaña se adelantó: tampoco el cartel
+    _dispararAvisoCartel(p);
   }
   // v14.1.5 — SIEMBRA COMPARTIDA ENTRE PESTAÑAS. Guarda "qué se dio ya por visto hoy"
   // fuera de la memoria de una sola pestaña, para que un relevo de liderazgo no vuelva
@@ -6363,9 +6414,12 @@
     if (a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     const body = `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`;
-    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}` };
+    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}`, ts: Date.now() };
+    // v14.1.5 — El aviso SIEMPRE suena y sale al sistema operativo, aquí y ahora, esté el
+    // médico en el módulo que esté. Lo único que puede quedar esperando es el cartel de
+    // dentro de la página, porque ese necesita una pestaña donde pintarse.
     if (_enModuloHCHealth()) _dispararAvisoReal(payload);
-    else _encolarAvisoPendiente(payload);
+    else if (_dispararAvisoAudible(payload)) _encolarAvisoPendiente(payload);
   }
   function updateBell() {
     const b = document.getElementById("vgl-bell"); if (!b) return;

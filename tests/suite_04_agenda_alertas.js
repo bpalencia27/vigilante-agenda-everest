@@ -228,7 +228,15 @@ module.exports = {
     // del módulo clínico HCHealth: si ninguna pestaña está ahí en el instante
     // de la transición, queda en cola y se dispara en cuanto una lo esté.
     // =====================================================================
-    t.caso("maybeNotify: fuera de HCHealth (Acceso) NO muestra el aviso, pero SIEMPRE lo audita y lo deja en cola", () => {
+    // v14.1.5 — REGLA NUEVA, y es la corrección de un fallo reportado en consultorio.
+    // Antes, un aviso generado con el médico FUERA de /viva/HCHealth no sonaba: se guardaba
+    // y esperaba a que entrara a una historia clínica, y entonces salían todos de golpe
+    // ("es como si estuvieran asincrónicas", dijeron sus compañeros). Pero lo que se estaba
+    // conteniendo era el TONO y la NOTIFICACIÓN DEL SISTEMA, que existen justamente para
+    // avisar cuando el médico NO está mirando esta pantalla: la condición estaba al revés.
+    // Ahora eso sale siempre y en el acto; lo único que se encola es el cartel de la página,
+    // que sí necesita una vista donde pintarse.
+    t.caso("maybeNotify v14.1.5: fuera de HCHealth el aviso SÍ suena y sale al sistema operativo en el acto; solo el cartel queda en cola", () => {
       const c = cargar();
       c.env.win.location.pathname = "/viva/Acceso/";
       let notifCount = 0;
@@ -236,12 +244,13 @@ module.exports = {
       c.env.win.Notification.permission = "granted";
       const base = { hora_texto: "08:00 AM", doc_id: "789", key: "789@08:00 AM", nombre: "LUIS", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });      // siembra
-      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, pero fuera de HCHealth
+      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, fuera de HCHealth
       t.igual(atiempoHoy(c), 1, "la auditoría (bumpStat) SIEMPRE se registra, con la hora real de la transición");
-      t.igual(notifCount, 0, "el aviso visible/audible NO se muestra mientras la pestaña líder está en Acceso");
+      t.igual(notifCount, 1, "el médico se entera AHORA, esté en el módulo que esté: ese es el arreglo");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola.length, 1, "el aviso queda en cola, no se pierde");
+      t.igual(cola.length, 1, "el cartel de la página sí queda en cola, para cuando haya vista donde pintarlo");
       t.igual(cola[0].uid, "789@08:00 AM|VERDE");
+      t.cierto(cola[0].ts > 0, "y lleva la hora del hecho, para poder caducarlo si se vacía mucho después");
     });
 
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
@@ -252,12 +261,12 @@ module.exports = {
       c.env.win.Notification.permission = "granted";
       const a = { hora_texto: "09:00 AM", doc_id: "321", key: "321@09:00 AM", nombre: "ANA", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...a, estado: "Sin presentarse", color: "AZUL", arrival: false });
-      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // encolado: la pestaña líder está en Acceso
-      t.igual(notifCount, 0, "todavía no se muestra");
+      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // fuera de HCHealth
+      t.igual(notifCount, 1, "v14.1.5: el aviso al sistema operativo salió YA, no esperó a nada");
 
       c.env.win.location.pathname = "/viva/HCHealth/";
       c.api._flushAvisosPendientes();
-      t.igual(notifCount, 1, "en cuanto una pestaña está en HCHealth, el aviso pendiente se dispara");
+      t.igual(notifCount, 1, "al volver a HCHealth sale el cartel, pero NO se vuelve a notificar: ya se avisó una vez");
       const colaTrasFlush = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(colaTrasFlush.length, 0, "la cola queda vacía tras el flush");
 
