@@ -506,5 +506,72 @@ module.exports = {
       t.cierto(usos.length === 2, `--t-micro/--t-body/--t-lead deben seguir declarados con 12px/14px/16px en las dos listas de tokens (oscura y clara). Salieron ${usos.length}.`);
     });
 
+    // v14.0.0 (T3) — §4.2 del superprompt: --t-strong/--t-title/--t-hero completan la escala
+    // tipográfica (junto con --t-micro/--t-body/--t-lead, ya cableados en D1). --t-body queda
+    // en 14px (no baja a los 13px "oficiales" del superprompt): esta tarea es cero-cambio-visual,
+    // bajarlo movería 6 elementos reales — pregunta abierta para el médico, documentada en el
+    // comentario junto a la declaración.
+    t.caso("Regla I - escala tipográfica ampliada: 15/18/22px literales quedan cableados a var(--t-strong/title/hero)", () => {
+      const literal15 = css.match(/font-size: *15px(?![0-9.])/g) || [];
+      const literal18 = css.match(/font-size: *18px(?![0-9.])/g) || [];
+      const literal22 = css.match(/font-size: *22px(?![0-9.])/g) || [];
+      t.cierto(literal15.length === 0, `No deben quedar font-size:15px literales en la hoja (quedaron ${literal15.length})`);
+      t.cierto(literal18.length === 0, `No deben quedar font-size:18px literales en la hoja (quedaron ${literal18.length})`);
+      t.cierto(literal22.length === 0, `No deben quedar font-size:22px literales en la hoja (quedaron ${literal22.length})`);
+
+      const strongUsos = css.match(/var\(--t-strong\)/g) || [];
+      const titleUsos = css.match(/var\(--t-title\)/g) || [];
+      const heroUsos = css.match(/var\(--t-hero\)/g) || [];
+      t.cierto(strongUsos.length === 3, `var(--t-strong) debe aparecer 3 veces. Salieron ${strongUsos.length}.`);
+      t.cierto(titleUsos.length === 4, `var(--t-title) debe aparecer 4 veces. Salieron ${titleUsos.length}.`);
+      t.cierto(heroUsos.length === 6, `var(--t-hero) debe aparecer 6 veces. Salieron ${heroUsos.length}.`);
+
+      const declaracion = /--t-strong:15px;--t-title:18px;--t-hero:22px;/g;
+      const usosDeclaracion = css.match(declaracion) || [];
+      t.cierto(usosDeclaracion.length === 2, `--t-strong/--t-title/--t-hero deben estar declarados en las dos listas de tokens (oscura y clara). Salieron ${usosDeclaracion.length}.`);
+    });
+
+    // v14.0.0 (T3) — D6: política de capas. Los 7 "vgl-modal"-como (fraude/PyM/PES/labs vencidos)
+    // ya se agrupaban en el propio CSS bajo el comentario "losas de alerta" — se clasifican como
+    // --z-alerta (2147483600). Los modales de FLUJO (agendar/ordenar/labs, "placas bento") son
+    // --z-modal (2147483000, más bajo que las alertas a propósito: una alerta nunca debe quedar
+    // tapada detrás de un modal de flujo). El panel/dock del Vigilante es --z-panel (2147482000)
+    // y los widgets ya existentes (inyector de labs) son --z-widget (2147480000, la migración que
+    // D6 pide explícitamente para #vgl-lab-injector, hoy en 9999999). --z-toast y los elementos que
+    // lo usan (.vgl-sp-toast, #vgl-toasts, #vgl-postcita-panel) NO están en la tabla de D6: se
+    // dejan con su literal de siempre, no se inventa una clasificación que el diseño no pide.
+    t.caso("Regla J - z-index migrado a los 5 tokens de capas de D6, con el valor exacto de la tabla", () => {
+      const declaracionCapas = /--z-toast:2147483647;--z-modal:2147483000;\s*--z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;/g;
+      const usosDeclaracion = css.match(declaracionCapas) || [];
+      t.cierto(usosDeclaracion.length === 2, `Los 5 tokens --z-* de D6 deben estar declarados con sus valores exactos en las dos listas (oscura y clara). Salieron ${usosDeclaracion.length}.`);
+
+      // Ningún z-index NUEVO de los 8 migrados debe quedar como literal — pero el conteo total
+      // de "z-index:2147483647" en la hoja debe seguir siendo 1 (.vgl-sp-toast, intocado a propósito).
+      const literalMax = css.match(/z-index:2147483647/g) || [];
+      t.cierto(literalMax.length === 1, `Solo debe quedar 1 literal z-index:2147483647 (.vgl-sp-toast, fuera del alcance de D6). Salieron ${literalMax.length}.`);
+      const literalWidgetViejo = css.match(/z-index:9999999/g) || [];
+      t.cierto(literalWidgetViejo.length === 0, `El z-index improvisado de .vgl-lab-inj/.vgl-exf-btn (9999999) debe haber migrado a var(--z-widget). Quedaron ${literalWidgetViejo.length}.`);
+
+      const zPanel = css.match(/z-index:var\(--z-panel\)/g) || [];
+      const zWidget = css.match(/z-index:var\(--z-widget\)/g) || [];
+      const zModal = css.match(/z-index:var\(--z-modal\)/g) || [];
+      const zAlerta = css.match(/z-index:var\(--z-alerta\)/g) || [];
+      t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
+      t.cierto(zWidget.length === 1, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn (1 sitio). Salieron ${zWidget.length}.`);
+      t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
+      t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
+
+      // Orden relativo exigido por D6, verificado sobre los valores reales de los tokens (no solo
+      // que existan): las alertas SIEMPRE deben poder ganarle a los modales de flujo.
+      const valorToken = (nombre) => {
+        const m = new RegExp(`--${nombre}:(\\d+)`).exec(css);
+        return m ? Number(m[1]) : null;
+      };
+      t.cierto(valorToken("z-alerta") > valorToken("z-modal"), "una alerta (PES/fraude/PyM/labs vencidos) debe ganarle SIEMPRE a un modal de flujo (agendar/ordenar/labs) si algún día llegan a coexistir en pantalla");
+      t.cierto(valorToken("z-modal") > valorToken("z-panel"), "un modal debe ganarle al panel/dock");
+      t.cierto(valorToken("z-panel") > valorToken("z-banner"), "el panel debe ganarle al banner de PyM (T7, aún no existe)");
+      t.cierto(valorToken("z-banner") > valorToken("z-widget"), "el banner debe ganarle al dock de widgets (T5, aún no existe)");
+    });
+
   }
 };

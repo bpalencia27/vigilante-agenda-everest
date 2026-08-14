@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.13
+// @version      12.10.14
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.13";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.14";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6359,10 +6359,24 @@
         --r-chip:16px;--r-card:20px;--r-surface:24px;--r-field:16px;--r-pill:999px;
         /* Tinta */
         --fg:#f7fafc;--fg2:rgba(226,232,240,.90);--fg3:#9aa7ba;
-        --t-micro:12px;--t-body:14px;--t-lead:16px;
+        /* v14.0.0 (T3) — --t-body/--t-lead se quedan en 14/16px con sus consumidores ya
+           cableados (D1): el valor "oficial" del superprompt para --t-body es 13px, pero
+           cambiarlo AHORA movería 6 elementos reales 1px — eso es un cambio visual, y esta
+           tarea es "cero cambio visual". Queda como pregunta abierta para el médico, igual
+           que ya se anotó en el commit de D1: ¿se baja --t-body a 13px en una fase de
+           rediseño real (T4/TL1/TL2), o se acepta 14px como el valor vigente del sistema? */
+        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;
         --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
-        --z-toast:2147483647;--z-modal:2147483647;
+        /* v14.0.0 (T3) — D6: política de capas, por fin escrita. --z-toast queda intocado
+           (2147483647, sin consumidor real todavía). --z-modal SÍ estaba declarado desde
+           antes pero SIN NINGÚN consumidor real (todo el CSS usaba el literal 2147483647
+           directo) — redefinir su valor aquí no cambia nada visible hoy; el cambio real
+           ocurre más abajo, al conectar los tres modales de flujo (agendar/ordenar/labs) a
+           este token en vez de al literal. Los otros 4 tokens nuevos son igual de nuevos y
+           también tienen consumidor real desde este mismo commit. */
+        --z-toast:2147483647;--z-modal:2147483000;
+        --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
         --line:rgba(255,255,255,.08);--edge:rgba(255,255,255,.15);
         --edge-side:rgba(255,255,255,.09);
         --toast:rgba(13,16,24,.94);
@@ -6409,10 +6423,11 @@
         --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
         --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#5b6b80;
-        --t-micro:12px;--t-body:14px;--t-lead:16px;
+        --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;
         --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);
-        --z-toast:2147483647;--z-modal:2147483647;
+        --z-toast:2147483647;--z-modal:2147483000;
+        --z-widget:2147480000;--z-banner:2147481000;--z-panel:2147482000;--z-alerta:2147483600;
         --line:rgba(15,23,42,.08);--edge:rgba(15,23,42,.13);--edge-side:rgba(15,23,42,.10);
         --toast:rgba(255,255,255,.94);
         --glow-edge:inset 0 1px 0 rgba(255,255,255,.90),inset 0 0 0 1px rgba(255,255,255,.35);
@@ -6440,7 +6455,7 @@
         position:fixed;bottom:22px;right:22px;
         width:690px;max-width:calc(100vw - 28px);
         max-height:84vh;
-        z-index:2147483647;
+        z-index:var(--z-panel);
         display:flex;flex-direction:column;
         overflow:hidden;
         border-radius:var(--r-surface);
@@ -6529,11 +6544,11 @@
 
       .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
       .vgl-sp-toast.vgl-sp-visible{opacity:1;transform:translateY(0)}
-      .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:15px;font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
+      .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:var(--t-strong);font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
 
       /* Botones inyectados globales */
       .vgl-lab-inj,.vgl-exf-btn{
-        position:fixed;left:15px;z-index:9999999;
+        position:fixed;left:15px;z-index:var(--z-widget);
         color:var(--bg-solid, #fff);border:none;padding:10px 14px;border-radius:6px;
         font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
@@ -6894,10 +6909,10 @@
       .vgl-card-top.vgl-card-top-t1 { gap:10px; }
       .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
       .vgl-cdot.vgl-cdot-t1 { width:11px; height:11px; }
-      .vgl-time.vgl-time-t1 { font-size:22px; font-weight:900; letter-spacing:.4px; }
+      .vgl-time.vgl-time-t1 { font-size:var(--t-hero); font-weight:900; letter-spacing:.4px; }
       .vgl-badge.vgl-badge-t1 { font-size:12.5px; padding:5px 12px; }
       .vgl-card-mid.vgl-card-mid-t1 { margin-top:9px; gap:10px; }
-      .vgl-name.vgl-name-t1 { font-size:18px; font-weight:800; line-height:1.25; }
+      .vgl-name.vgl-name-t1 { font-size:var(--t-title); font-weight:800; line-height:1.25; }
       .vgl-doc-t1 { background:var(--bg2); padding:3px 10px; border-radius:var(--r-pill); box-shadow:var(--glow-edge); font-variant-numeric:tabular-nums; }
       .vgl-card-btm.vgl-card-btm-t1 { margin-top:7px; gap:10px; }
 
@@ -6909,7 +6924,7 @@
         width:40px;height:40px;border-radius:var(--r-chip);
         border:1px solid var(--edge);
         background:var(--bg3);
-        font-size:18px;
+        font-size:var(--t-title);
         display:inline-flex;align-items:center;justify-content:center;
         cursor:pointer;
         transition:transform .2s var(--spring),background .14s var(--ease-out),box-shadow .2s var(--ease-out);
@@ -7051,7 +7066,7 @@
 
       /* ---- Pastilla Flotante (Dock) — cápsula HUD ---- */
       #vgl-dock{
-        position:fixed;bottom:22px;right:22px;z-index:2147483647;
+        position:fixed;bottom:22px;right:22px;z-index:var(--z-panel);
         display:none;align-items:center;gap:10px;cursor:pointer;
         padding:11px 18px;border-radius:var(--r-pill);
         background:linear-gradient(160deg,rgba(var(--rgb-azul),.08),rgba(0,0,0,0) 60%),var(--bg);
@@ -7101,7 +7116,7 @@
       .vgl-toast-ic{
         background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25);
         width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
-        display:flex;align-items:center;justify-content:center;font-size:18px;
+        display:flex;align-items:center;justify-content:center;font-size:var(--t-title);
         box-shadow:var(--glow-edge)
       }
       .vgl-toast-main{flex:1;min-width:0}
@@ -7124,7 +7139,7 @@
 
       /* ---- Modales (fraude, PyM, PES) — losas de alerta ---- */
       #vgl-modal{
-        position:fixed;inset:0;z-index:2147483647;
+        position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
         background:rgba(2,4,9,.72);
         animation:vglToastIn .25s ease
@@ -7150,7 +7165,7 @@
       }
       .vgl-modal-ok:hover{transform:scale(1.04);filter:brightness(1.08)}
       #vgl-pym-modal{
-        position:fixed;inset:0;z-index:2147483647;
+        position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
@@ -7164,7 +7179,7 @@
       }
       .vgl-pym-ic{text-shadow:0 0 14px rgba(var(--rgb-recordatorio),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
-        display:flex;align-items:center;justify-content:center;font-size:22px;
+        display:flex;align-items:center;justify-content:center;font-size:var(--t-hero);
         background:rgba(var(--rgb-recordatorio),.14);border:1px solid rgba(var(--rgb-recordatorio),.40);
         box-shadow:0 0 18px rgba(var(--rgb-recordatorio),.20)
       }
@@ -7191,7 +7206,7 @@
       }
       .vgl-pym-ok:hover{transform:scale(1.04);filter:brightness(1.06)}
       #vgl-pes-modal{
-        position:fixed;inset:0;z-index:2147483647;
+        position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
@@ -7205,7 +7220,7 @@
       }
       .vgl-pes-ic{text-shadow:0 0 14px rgba(var(--rgb-pes),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
-        display:flex;align-items:center;justify-content:center;font-size:22px;
+        display:flex;align-items:center;justify-content:center;font-size:var(--t-hero);
         background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.40);
         box-shadow:0 0 18px rgba(var(--rgb-pes),.20)
       }
@@ -7228,7 +7243,7 @@
          recordatorio de PyM (.vgl-pym-*) para enumerar los analitos faltantes, y el rojo
          de alerta (--c-rojo/--rgb-rojo) en vez del rosa cardiovascular. */
       #vgl-labsv-modal{
-        position:fixed;inset:0;z-index:2147483647;
+        position:fixed;inset:0;z-index:var(--z-alerta);
         display:flex;align-items:center;justify-content:center;
         background:rgba(2,4,9,.58);animation:vglToastIn .25s ease
       }
@@ -7242,7 +7257,7 @@
       }
       .vgl-labsv-ic{text-shadow:0 0 14px rgba(var(--rgb-rojo),.45);
         width:46px;height:46px;border-radius:var(--r-chip);margin:0 auto 12px;
-        display:flex;align-items:center;justify-content:center;font-size:22px;
+        display:flex;align-items:center;justify-content:center;font-size:var(--t-hero);
         background:rgba(var(--rgb-rojo),.14);border:1px solid rgba(var(--rgb-rojo),.40);
         box-shadow:0 0 18px rgba(var(--rgb-rojo),.20)
       }
@@ -7272,7 +7287,7 @@
       /* ---- Modales de Agendamiento / Ordenamiento — placas bento ---- */
       #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal{
         position:fixed;top:0;left:0;width:100vw;height:100vh;
-        background:rgba(2,4,9,.74);z-index:2147483647;
+        background:rgba(2,4,9,.74);z-index:var(--z-modal);
         display:flex;align-items:center;justify-content:center;
         font-family:var(--font-stack);
         backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
@@ -7303,7 +7318,7 @@
       }
       #vgl-agendar-modal.light .vgl-agm-head,#vgl-ordenar-modal.light .vgl-agm-head,#vgl-labs-modal.light .vgl-agm-head{border-bottom-color:var(--line)}
       .vgl-agm-title{
-        font-size:18px;font-weight:800;color:var(--fg);
+        font-size:var(--t-title);font-weight:800;color:var(--fg);
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
       #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
@@ -7315,7 +7330,7 @@
       #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul)}
       .vgl-agm-close{
         background:transparent;border:0;color:var(--fg);
-        font-size:22px;font-weight:700;cursor:pointer;
+        font-size:var(--t-hero);font-weight:700;cursor:pointer;
         opacity:.7;padding:0 6px;border-radius:var(--r-chip);
         transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
@@ -8000,8 +8015,8 @@
         box-shadow:var(--shadow-float),0 0 90px rgba(var(--ac-rgb),.22),var(--glow-edge);
       }
       #vgl-modal .vgl-modal-dot{animation:vglModalBeacon 1.6s ease-in-out infinite}
-      #vgl-modal .vgl-modal-t{font-size:22px;letter-spacing:.3px}
-      #vgl-modal .vgl-modal-b{font-size:15px}
+      #vgl-modal .vgl-modal-t{font-size:var(--t-hero);letter-spacing:.3px}
+      #vgl-modal .vgl-modal-b{font-size:var(--t-strong)}
       #vgl-modal .vgl-modal-ok:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
       #vgl-root.perf~#vgl-modal,#vgl-root.perf~#vgl-modal *{
         animation:none !important;transition:none !important;
@@ -8122,7 +8137,7 @@
       #vgl-root #vgl-sheet .vgl-col{display:flex;flex-direction:column-reverse;width:20px;gap:2px}
       #vgl-root #vgl-sheet .vgl-col:empty::after{content:"";display:block;height:3px;border-radius:2px;background:var(--bg3)}
       #vgl-root #vgl-sheet .vgl-seg{width:100%;border-radius:5px;min-height:2px}
-      #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:15px;font-weight:800;color:var(--fg);background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
+      #vgl-root #vgl-sheet .vgl-count{font-variant-numeric:tabular-nums;font-size:var(--t-strong);font-weight:800;color:var(--fg);background:var(--bg3);padding:4px 12px;border-radius:var(--r-pill);box-shadow:var(--glow-edge);white-space:nowrap}
       /* [v12.3.13] .vgl-fld tiene métricas DISTINTAS en Resumen (11px, gap heredado 12px) y en Ajustes (12px, gap 14px).
          Antes nunca convivían (cada hoja traía su bloque de estilos y solo existía uno en el DOM); ya consolidadas en esta
          hoja única, la regla posterior pisaría a la anterior. El :has() reproduce esa exclusividad: solo aplica la regla
