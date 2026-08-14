@@ -207,6 +207,35 @@ module.exports = {
       t.igual(hoja.querySelector("#c-tema").value, "oscuro", "el selector de tema refleja S.tema");
     });
 
+    // v14.0.4 — AUDITORIA_MOTOR_RCV_v68.md §7.4: la tabla FESTIVOS está codificada a mano
+    // por años — sin un aviso VISIBLE (no solo por consola), un festivo real que falta
+    // porque la tabla caducó puede ofrecer un día de agenda que en realidad está cerrado.
+    t.caso("renderSettings: la tabla de festivos muestra hasta qué año está vigente, sin aviso mientras falten años", () => {
+      cv.api.closeSheet();
+      cv.api.toggleSheet("ajustes");
+      t.cierto(hoja.innerHTML.includes("Tabla de festivos colombianos"));
+      t.cierto(hoja.innerHTML.includes("Vigente hasta el 31/12/2027"), "hoy (2026) todavía queda margen, sin aviso de vencida");
+      t.falso(hoja.innerHTML.includes("actualícela pronto"), "sin aviso mientras el año actual sea anterior al último cubierto");
+      cv.api.closeSheet();
+    });
+
+    t.caso("renderSettings: al llegar (o pasar) el último año cubierto, el aviso se vuelve visible", () => {
+      const cVencida = cargar({ silencioso: true });
+      const OriginalDate = cVencida.ctx.Date || Date;
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super("2027-06-01T12:00:00"); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate("2027-06-01T12:00:00").getTime();
+      cVencida.ctx.Date = FakeDate;
+      enriquecerDom(cVencida);
+      cVencida.api.buildOverlay();
+      const raizVencida = cVencida.env.doc.body.children.find((n) => n.id === "vgl-root");
+      cVencida.api.toggleSheet("ajustes");
+      const hojaVencida = raizVencida.querySelector("#vgl-sheet");
+      t.cierto(hojaVencida.innerHTML.includes("Vigente solo hasta el 31/12/2027"));
+      t.cierto(hojaVencida.innerHTML.includes("actualícela pronto"), "con el año actual ya dentro del último cubierto, el aviso aparece");
+    });
+
     t.caso("renderSettings: cambiar un interruptor guarda el ajuste en S y en localStorage", () => {
       const chk = hoja.querySelector("#c-snd");
       chk.checked = false;

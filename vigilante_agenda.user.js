@@ -12654,6 +12654,19 @@
         <div class="vgl-fld"><label>Sincronizar almacenamiento<span class="vgl-hint">Abre el almacenamiento para renovar la sesión si la descarga automática falla.</span></label><button class="vgl-btn" id="c-spabrir">Abrir</button></div>
         <div class="vgl-fld"><label>Su identificador de médico<span class="vgl-hint">Solo si el panel no lo detecta solo. Sin él no se pueden crear citas ni órdenes: aparece detectado como <b>${escapeHtml(String(state.activeDoctor.id || S.medicoId || "— sin detectar —"))}</b>.</span></label><input type="number" id="c-medid" min="0" value="${escapeHtml(String(S.medicoId || ""))}" placeholder="(automático)"></div>
         <div class="vgl-fld"><label>Su nombre como aparece en la agenda<span class="vgl-hint">Solo si el panel no identifica su agenda propia. Detectado: <b>${escapeHtml(String(state.activeDoctor.name || S.medicoNombre || "— sin detectar —"))}</b>.</span></label><input type="text" id="c-mednom" value="${escapeHtml(String(S.medicoNombre || ""))}" placeholder="(automático)"></div>
+        ${(() => {
+          // v14.0.4 — AUDITORIA_MOTOR_RCV_v68.md §7.4: la tabla FESTIVOS está codificada a
+          // mano para 2026-2027 (esFestivo ya avisa por consola cuando se pasa de año, pero
+          // eso solo lo ve alguien con DevTools abierto). Aviso VISIBLE aquí, en Ajustes,
+          // para que no dependa de que alguien mire la consola — se calcula del propio
+          // contenido de FESTIVOS, nunca de un año fijo aparte que pueda desincronizarse.
+          const anioMax = Math.max(...[...FESTIVOS].map((f) => parseInt(f.slice(0, 4), 10)));
+          const vencida = new Date().getFullYear() >= anioMax;
+          const hint = vencida
+            ? `⚠ Vigente solo hasta el 31/12/${anioMax} — actualícela pronto: un festivo real que falte en la tabla puede ofrecer un día de agenda que en realidad está cerrado.`
+            : `Vigente hasta el 31/12/${anioMax}.`;
+          return `<div class="vgl-fld"><label>Tabla de festivos colombianos<span class="vgl-hint">${hint}</span></label></div>`;
+        })()}
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
