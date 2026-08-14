@@ -469,5 +469,42 @@ module.exports = {
        */
     });
 
+    // TAREA D1 — cablea la escala tipográfica muerta (--t-micro/--t-body/--t-lead) a los
+    // 36 font-size literales de la hoja (12px/14px/16px). El valor computado NO cambia
+    // (los tokens valen exactamente 12/14/16px en ambos temas): cero cambio visual, solo
+    // deja de haber `font-size:12px|14px|16px` literales sueltos en la cascada. El caso
+    // especial de `.vgl-lab-inj,.vgl-exf-btn` lleva reserva (`var(--t-micro,12px)`) porque
+    // ese botón se pega directo a document.body y no está en ninguna de las dos listas de
+    // ids con tokens — sin reserva, la declaración quedaría inválida (incidente v12.6.6).
+    t.caso("Regla G - escala tipográfica: font-size literales quedan cableados a var(--t-*)", () => {
+      const literal12 = css.match(/font-size: *12px(?![0-9.])/g) || [];
+      const literal14 = css.match(/font-size: *14px(?![0-9.])/g) || [];
+      const literal16 = css.match(/font-size: *16px(?![0-9.])/g) || [];
+
+      t.cierto(literal12.length === 0, `No deben quedar font-size:12px literales en la hoja (quedaron ${literal12.length})`);
+      t.cierto(literal14.length === 0, `No deben quedar font-size:14px literales en la hoja (quedaron ${literal14.length})`);
+      t.cierto(literal16.length === 0, `No deben quedar font-size:16px literales en la hoja (quedaron ${literal16.length})`);
+
+      const microUsos = css.match(/var\(--t-micro(?:,[^)]*)?\)/g) || [];
+      const bodyUsos = css.match(/var\(--t-body\)/g) || [];
+      const leadUsos = css.match(/var\(--t-lead\)/g) || [];
+
+      t.cierto(microUsos.length === 25, `var(--t-micro) debe aparecer 25 veces (incluida la reserva). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 6, `var(--t-body) debe aparecer 6 veces. Salieron ${bodyUsos.length}.`);
+      t.cierto(leadUsos.length === 5, `var(--t-lead) debe aparecer 5 veces. Salieron ${leadUsos.length}.`);
+
+      const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
+      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
+
+      const importantTotal = (css.match(/!important/g) || []).length;
+      t.cierto(importantTotal === 150, `El total de !important en la hoja no debe cambiar por este cableado (esperado 150, salió ${importantTotal})`);
+    });
+
+    t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
+      const declaracion = /--t-micro:12px;--t-body:14px;--t-lead:16px;/g;
+      const usos = css.match(declaracion) || [];
+      t.cierto(usos.length === 2, `--t-micro/--t-body/--t-lead deben seguir declarados con 12px/14px/16px en las dos listas de tokens (oscura y clara). Salieron ${usos.length}.`);
+    });
+
   }
 };

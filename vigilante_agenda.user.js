@@ -6454,7 +6454,7 @@
         color:var(--fg);
         font-family:var(--font-stack);
         -webkit-font-smoothing:antialiased;
-        font-size:14px; /* Base 14px */
+        font-size:var(--t-body); /* Base 14px */
         line-height:1.45;
       }
       /* Aurora ambiental decorativa (se apaga en .perf y al arrastrar) */
@@ -6535,7 +6535,7 @@
       .vgl-lab-inj,.vgl-exf-btn{
         position:fixed;left:15px;z-index:9999999;
         color:var(--bg-solid, #fff);border:none;padding:10px 14px;border-radius:6px;
-        font-family:var(--font-stack, sans-serif);font-size:12px;font-weight:bold;cursor:pointer;
+        font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;
       }
       .vgl-lab-inj{bottom:80px;background:var(--c-morado, #8b5cf6)}
@@ -6600,12 +6600,12 @@
       .vgl-tl.min{background:var(--c-ambar) !important;box-shadow:0 0 8px rgba(var(--rgb-ambar),.55) !important}
       .vgl-tl.zoom{background:var(--c-verde) !important;box-shadow:0 0 8px rgba(var(--rgb-verde),.55) !important}
       #vgl-title{
-        flex:1;text-align:center;font-weight:700;font-size:16px; /* Título 16px */
+        flex:1;text-align:center;font-weight:700;font-size:var(--t-lead); /* Título 16px */
         letter-spacing:.3px;color:var(--fg);opacity:.96;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
       }
       #vgl-title small{
-        opacity:.60;font-weight:500;margin-left:6px;font-size:12px /* Mínimo 12px */
+        opacity:.60;font-weight:500;margin-left:6px;font-size:var(--t-micro) /* Mínimo 12px */
       }
       #vgl-dot{
         width:9px;height:9px;border-radius:50%;background:var(--fg3);
@@ -6657,7 +6657,7 @@
 
       /* Etiqueta de sección */
       .vgl-sb-lbl{
-        font-size:12px;font-weight:700;letter-spacing:.9px; /* Mínimo 12px */
+        font-size:var(--t-micro);font-weight:700;letter-spacing:.9px; /* Mínimo 12px */
         color:var(--fg3);text-transform:uppercase;
         padding:0 4px;margin-bottom:6px;margin-top:8px;
       }
@@ -6691,7 +6691,7 @@
       #vgl-stats:empty{display:none;border-top:none;padding-top:0}
       .vgl-stat{
         display:flex;align-items:center;gap:8px;
-        font-size:12px;font-weight:600;color:var(--fg2); /* Mínimo 12px */
+        font-size:var(--t-micro);font-weight:600;color:var(--fg2); /* Mínimo 12px */
         padding:5px 6px;border-radius:var(--r-chip);
         line-height:1.4;
       }
@@ -6841,7 +6841,7 @@
         box-shadow:0 0 8px currentColor;
       }
       .vgl-time{
-        font-weight:800;font-size:16px;color:var(--fg); /* Hora protagonista */
+        font-weight:800;font-size:var(--t-lead);color:var(--fg); /* Hora protagonista */
         white-space:nowrap;font-variant-numeric:tabular-nums;
         letter-spacing:.2px;
       }
@@ -6857,18 +6857,18 @@
         background:rgba(var(--rgb-ambar),.30);color:inherit;
         border-radius:6px;padding:0 3px
       }
-      .vgl-doc{color:var(--fg3);font-size:12px;font-weight:500;flex-shrink:0} /* Mínimo 12px */
+      .vgl-doc{color:var(--fg3);font-size:var(--t-micro);font-weight:500;flex-shrink:0} /* Mínimo 12px */
 
       /* Badge & Flags */
       .vgl-badge{
-        font-size:12px;font-weight:800;padding:4px 11px; /* Mínimo 12px + padding */
+        font-size:var(--t-micro);font-weight:800;padding:4px 11px; /* Mínimo 12px + padding */
         border-radius:var(--r-pill);white-space:nowrap;
         letter-spacing:.2px;color:var(--fg);flex-shrink:0;
         line-height:1.3;
         box-shadow:inset 0 0 0 1px rgba(255,255,255,.10);
       }
       .vgl-flag{
-        font-size:12px;font-weight:800;padding:3px 9px; /* Mínimo 12px */
+        font-size:var(--t-micro);font-weight:800;padding:3px 9px; /* Mínimo 12px */
         border-radius:var(--r-pill);background:var(--c-rojo);
         color:var(--bg-solid);white-space:nowrap;letter-spacing:.4px;flex-shrink:0;
         box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
@@ -6876,7 +6876,7 @@
       .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
 
       .vgl-cd{
-        font-size:12px;font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
+        font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
         padding:3px 9px;border-radius:var(--r-pill);
         white-space:nowrap;background:var(--bg3);color:var(--fg2);
         flex-shrink:0;box-shadow:var(--glow-edge);
@@ -6956,7 +6956,7 @@
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.25);
       }
       #vgl-root:not(.light) .vgl-chip{color:var(--c-azul)}
-      .vgl-none{margin-top:6px;font-size:12px;color:var(--fg2);font-style:italic} /* Mínimo 12px */
+      .vgl-none{margin-top:6px;font-size:var(--t-micro);color:var(--fg2);font-style:italic} /* Mínimo 12px */
       .vgl-none.falta{color:var(--fg3);font-style:normal;font-weight:700}
 
       /* ---- Hoja Deslizante (Resumen / Ajustes) — bandeja bento ---- */
@@ -6987,9 +6987,9 @@
         padding:10px 0;border-bottom:1px solid var(--line)
       }
       .vgl-fld:last-child{border-bottom:0}
-      .vgl-fld label{font-size:14px;color:var(--fg);font-weight:500;line-height:1.4} /* Base 14px */
+      .vgl-fld label{font-size:var(--t-body);color:var(--fg);font-weight:500;line-height:1.4} /* Base 14px */
       .vgl-fld .vgl-hint{
-        display:block;font-size:12px;color:var(--fg2); /* Mínimo 12px */
+        display:block;font-size:var(--t-micro);color:var(--fg2); /* Mínimo 12px */
         font-weight:400;margin-top:3px;max-width:280px;line-height:1.45 /* Interlineado 1.45 */
       }
       .vgl-fld input[type=text],.vgl-fld input[type=number],
@@ -7046,8 +7046,8 @@
       #vgl-root:not(.light) .vgl-btn.off{color:var(--c-rojo)}
 
       /* KPIs y Barras */
-      .vgl-bar .vgl-lb{font-size:12px;color:var(--fg3);font-weight:700} /* Mínimo 12px */
-      .vgl-kpi .vgl-l{font-size:12px;color:var(--fg3);margin-top:4px;font-weight:700;letter-spacing:.4px} /* Mínimo 12px */
+      .vgl-bar .vgl-lb{font-size:var(--t-micro);color:var(--fg3);font-weight:700} /* Mínimo 12px */
+      .vgl-kpi .vgl-l{font-size:var(--t-micro);color:var(--fg3);margin-top:4px;font-weight:700;letter-spacing:.4px} /* Mínimo 12px */
 
       /* ---- Pastilla Flotante (Dock) — cápsula HUD ---- */
       #vgl-dock{
@@ -7072,7 +7072,7 @@
       }
       #vgl-dock b{
         background:var(--c-rojo);color:var(--bg-solid);
-        border-radius:var(--r-pill);padding:1px 7px;font-size:12px;font-weight:800;
+        border-radius:var(--r-pill);padding:1px 7px;font-size:var(--t-micro);font-weight:800;
         box-shadow:0 0 10px rgba(var(--rgb-rojo),.40) /* [UI-CSS] */
       }
 
@@ -7108,11 +7108,11 @@
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
         font-size:12.5px;
-        margin-top:3px;font-size:12px;color:var(--fg2);
+        margin-top:3px;font-size:var(--t-micro);color:var(--fg2);
         white-space:pre-line;line-height:1.45
       }
       .vgl-toast-x{
-        cursor:pointer;color:var(--fg3);font-size:16px;
+        cursor:pointer;color:var(--fg3);font-size:var(--t-lead);
         line-height:1;padding:2px 6px;border-radius:var(--r-chip);
         transition:background .14s var(--ease-out),color .14s var(--ease-out)
       }
@@ -7140,11 +7140,11 @@
       }
       .vgl-modal-dot{background:var(--ac);box-shadow:0 0 22px rgba(var(--ac-rgb),.85);width:18px;height:18px;border-radius:50%;margin:0 auto 14px}
       .vgl-modal-t{font-size:19px;font-weight:800;color:var(--fg) !important;margin-bottom:8px;letter-spacing:.2px}
-      .vgl-modal-b{font-size:14px;color:var(--fg2) !important;white-space:pre-line;line-height:1.55}
+      .vgl-modal-b{font-size:var(--t-body);color:var(--fg2) !important;white-space:pre-line;line-height:1.55}
       .vgl-modal-ok{
         background:linear-gradient(180deg,var(--ac),rgba(var(--ac-rgb),.82));color:var(--bg-solid) !important;box-shadow:0 10px 26px rgba(var(--ac-rgb),.35),inset 0 1px 0 rgba(255,255,255,.35);
         margin-top:22px;border:0;border-radius:var(--r-chip);
-        padding:11px 28px;font-size:14px;font-weight:800;
+        padding:11px 28px;font-size:var(--t-body);font-weight:800;
         cursor:pointer;font-family:inherit;
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
       }
@@ -7176,12 +7176,12 @@
         justify-content:center;margin-bottom:16px
       }
       .vgl-pym-chip{
-        font-size:12px;font-weight:700;padding:6px 13px;
+        font-size:var(--t-micro);font-weight:700;padding:6px 13px;
         border-radius:var(--r-pill);
         background:rgba(var(--rgb-recordatorio),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-recordatorio),.35)
       }
-      .vgl-pym-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pym-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pym-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7214,7 +7214,7 @@
       .vgl-pes-lead{
         font-size:12.5px;color:var(--fg2) !important;margin-bottom:14px;line-height:1.55
       }
-      .vgl-pes-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-pes-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-pes-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7254,12 +7254,12 @@
         justify-content:center;margin-bottom:16px
       }
       .vgl-labsv-chip{
-        font-size:12px;font-weight:700;padding:6px 13px;
+        font-size:var(--t-micro);font-weight:700;padding:6px 13px;
         border-radius:var(--r-pill);
         background:rgba(var(--rgb-rojo),.13);color:var(--fg);
         border:1px solid rgba(var(--rgb-rojo),.35)
       }
-      .vgl-labsv-foot{font-size:12px;color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
+      .vgl-labsv-foot{font-size:var(--t-micro);color:var(--fg3) !important;margin-bottom:4px} /* [UI-CSS] */
       .vgl-labsv-ok{
         border:0;border-radius:var(--r-chip);padding:10px 26px;
         font-size:13px;font-weight:800;color:var(--bg-solid);
@@ -7368,12 +7368,12 @@
          el cartel verde de "Cita asignada exitosamente" salía sin ningún estilo y los
          botones de turno y de plazo perdían el ajuste de línea que tenían en línea. */
       .vgl-msg-success{
-        background:rgba(var(--rgb-verde),.16);color:var(--c-verde);font-size:14px;font-weight:700;padding:13px;
+        background:rgba(var(--rgb-verde),.16);color:var(--c-verde);font-size:var(--t-body);font-weight:700;padding:13px;
         text-align:center;margin-top:14px;border:1px solid rgba(var(--rgb-verde),.50);border-radius:var(--r-field);
         box-shadow:0 0 22px rgba(var(--rgb-verde),.12);
       }
       .vgl-agm-sbtn.vgl-wrap{white-space:normal;text-align:left;height:auto;padding:6px 10px}
-      .vgl-agm-pbtn.vgl-sm{font-size:12px;padding:3px 9px}
+      .vgl-agm-pbtn.vgl-sm{font-size:var(--t-micro);padding:3px 9px}
       .vgl-agm-sbtn{
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
@@ -7505,10 +7505,10 @@
       .vgl-postcita-x{
         position:absolute;top:8px;right:10px;
         background:transparent;border:0;color:var(--fg3);
-        font-size:16px;cursor:pointer;line-height:1;padding:2px
+        font-size:var(--t-lead);cursor:pointer;line-height:1;padding:2px
       }
       .vgl-postcita-x:hover{color:var(--fg)}
-      .vgl-postcita-title{font-size:14px;font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
+      .vgl-postcita-title{font-size:var(--t-body);font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
       .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
@@ -7575,7 +7575,7 @@
         color: var(--c-azul);
       }
       .vgl-ord-cups {
-        font-size: 12px; /* [UI-CSS] */
+        font-size: var(--t-micro); /* [UI-CSS] */
         color: var(--fg2);
         font-weight: 400;
         margin-top: 4px;
@@ -7704,7 +7704,7 @@
       /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
       #vgl-labs-modal .vgl-labs-pdfcol{text-align:center;width:1%}
       #vgl-labs-modal .vgl-labs-pdf{
-        all:unset;cursor:pointer;font-size:16px;padding:4px 8px;border-radius:var(--r-chip);
+        all:unset;cursor:pointer;font-size:var(--t-lead);padding:4px 8px;border-radius:var(--r-chip);
         transition:transform .15s var(--ease-out),background .15s var(--ease-out)
       }
       #vgl-labs-modal .vgl-labs-pdf:hover{background:var(--bg3);transform:scale(1.12)}
@@ -7820,7 +7820,7 @@
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
         display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-        margin-top:8px;font-size:12px;color:var(--fg2)
+        margin-top:8px;font-size:var(--t-micro);color:var(--fg2)
       }
       #vgl-agendar-modal .vgl-agm-fieldrow>label, #vgl-ordenar-modal .vgl-agm-fieldrow>label{
         flex:none;font-weight:800;font-size:11px;letter-spacing:.6px;
@@ -8108,9 +8108,9 @@
       #vgl-root #vgl-sheet .vgl-kpi .vgl-n{font-size:38px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.5px;color:rgb(var(--kpi-rgb));text-shadow:0 0 18px rgba(var(--kpi-rgb),.35)}
       #vgl-root #vgl-sheet .vgl-kpi .vgl-l{color:var(--fg2);letter-spacing:.6px;margin-top:7px}
       #vgl-root #vgl-sheet .vgl-tile-chart{padding:14px 16px 12px}
-      #vgl-root #vgl-sheet .vgl-chart-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--fg3);font-weight:700;letter-spacing:.4px}
+      #vgl-root #vgl-sheet .vgl-chart-cap{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:var(--t-micro);color:var(--fg3);font-weight:700;letter-spacing:.4px}
       #vgl-root #vgl-sheet .vgl-leg{display:flex;gap:12px;flex-wrap:wrap}
-      #vgl-root #vgl-sheet .vgl-leg-i{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--fg2);letter-spacing:0}
+      #vgl-root #vgl-sheet .vgl-leg-i{display:inline-flex;align-items:center;gap:5px;font-size:var(--t-micro);font-weight:600;color:var(--fg2);letter-spacing:0}
       #vgl-root #vgl-sheet .vgl-leg-i i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--lg-rgb));box-shadow:0 0 8px rgba(var(--lg-rgb),.55)}
       #vgl-root #vgl-sheet .vgl-lg-verde{--lg-rgb:var(--rgb-verde)}
       #vgl-root #vgl-sheet .vgl-lg-ambar{--lg-rgb:var(--rgb-ambar)}
@@ -8137,7 +8137,7 @@
 
       /* ==== [v12.3.13] CSS de Ajustes — antes inline en renderSettings(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura de la hoja ==== */
       /* [HUD-2026] Ajustes — celdas claras + switches grandes. Scope estricto: #vgl-root #vgl-sheet. */
-      #vgl-root #vgl-sheet .vgl-set-cap{display:flex;align-items:center;gap:8px;padding:12px 0 7px;font-size:12px;font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:var(--fg3)}
+      #vgl-root #vgl-sheet .vgl-set-cap{display:flex;align-items:center;gap:8px;padding:12px 0 7px;font-size:var(--t-micro);font-weight:800;letter-spacing:.9px;text-transform:uppercase;color:var(--fg3)}
       #vgl-root #vgl-sheet .vgl-set-cap i{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:rgb(var(--cap-rgb));box-shadow:0 0 10px rgba(var(--cap-rgb),.55)}
       #vgl-root #vgl-sheet .vgl-cap-azul{--cap-rgb:var(--rgb-azul)}
       #vgl-root #vgl-sheet .vgl-cap-ambar{--cap-rgb:var(--rgb-ambar)}
