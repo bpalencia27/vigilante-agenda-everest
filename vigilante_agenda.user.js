@@ -10042,7 +10042,7 @@
       selectedTurnoCtx = null;
       confirmBtn.disabled = true;
       confirmBtn.textContent = "✓ Sí, Crear Cita";
-      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${selectedDateInfo.fmt}</b> <span style="color:var(--c-verde)">(${selectedDateInfo.lbl})</span>`;
+      dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span style="color:var(--c-verde)">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
       if (labLbl) labLbl.textContent = `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
@@ -10058,7 +10058,7 @@
 
 
 
-      slotsEl.innerHTML = `<div class="vgl-agm-loading">Buscando agendas de ${escapeHtml(selectedEspName)} para el ${selectedDateInfo.fmt}...</div>`;
+      slotsEl.innerHTML = `<div class="vgl-agm-loading">Buscando agendas de ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}...</div>`;
 
       if (!pacienteIdAcceso) {
         pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
@@ -10147,7 +10147,7 @@
       const agendas = extractAgendasList(resAgendas);
 
       if (!agendas || !agendas.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas abiertas de ${escapeHtml(selectedEspName)} para el ${selectedDateInfo.fmt}. Prueba haciendo clic en otro día vecino arriba (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas abiertas de ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Prueba haciendo clic en otro día vecino arriba (±3 días).</div>`;
         return;
       }
 
@@ -10157,7 +10157,7 @@
       // no era el que el médico eligió en los chips.
       const agendasDelDia = agendas.filter((a) => String(a.fechaAgenda || "").trim() === selectedDateInfo.fmt);
       if (!agendasDelDia.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${selectedDateInfo.fmt}. Elija otro día del rango (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${escapeHtml(selectedDateInfo.fmt)}. Elija otro día del rango (±3 días).</div>`;
         return;
       }
 
@@ -10221,7 +10221,7 @@
       if (token !== _cargarHorasToken) return;
 
       if (!turnosAcumulados.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">Sin horas libres en ${escapeHtml(selectedEspName)} para el ${selectedDateInfo.fmt}. Seleccione otro día del rango (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">Sin horas libres en ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Seleccione otro día del rango (±3 días).</div>`;
         return;
       }
 
@@ -10240,7 +10240,7 @@
         console.log("[Vigilante Agendamiento] turnos del", selectedDateInfo.fmt, "→ total:", turnosAcumulados.length, "· libres:", turnosLibres.length, "· estados:", dist);
       } catch (e) {}
       if (!turnosLibres.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${selectedDateInfo.fmt} pero ninguno está activo. Elija otro día.</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${escapeHtml(selectedDateInfo.fmt)} pero ninguno está activo. Elija otro día.</div>`;
         return;
       }
       if (avisoAgendaAjena) {
@@ -10348,7 +10348,7 @@
             }).join("");
             if (labChk) { labChk.disabled = false; }
           } else {
-            labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${selectedLabDateInfo.fmt}. Elija otro día arriba.</option>`;
+            labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${escapeHtml(selectedLabDateInfo.fmt)}. Elija otro día arriba.</option>`;
             if (labChk) { labChk.checked = false; labChk.disabled = true; }
           }
         }
@@ -11408,7 +11408,7 @@
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-agm-dinfo";
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
-          successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${agrupadores.join(", ")}</b>`;
+          successMsg.innerHTML = `✅ <b>${creadasCount} Orden(es) PyM Generada(s) Exitosamente</b><br>Agrupadores: <b>${escapeHtml(agrupadores.join(", "))}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
 
           // v12.5.13 — Imprimir directamente la(s) orden(es) recién creada(s). Contrato real,
