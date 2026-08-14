@@ -509,12 +509,19 @@ module.exports = {
       // el tamaño de letra de una tabla clínica densa, justo lo contrario de "densidad
       // antes que aire" (§4.3.4); queda documentado como pregunta abierta para el médico,
       // no una migración mecánica segura.
-      // v14.0.0 (T5, rebasado sobre TL1/TL2) — el dock de widgets suma 1 uso más de
-      // var(--t-micro) en .vgl-dock-toggle (36 -> 37) y 1 de var(--t-lead) en
-      // .vgl-dock-btn (5 -> 6). No toca var(--t-body).
-      t.cierto(microUsos.length === 37, `var(--t-micro) debe aparecer 37 veces (36 de TL1/TL2 + el toggle del dock de T5). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 11, `var(--t-body) debe aparecer 11 veces (incluidos los 5 usos nuevos de TL1; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
-      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5). Salieron ${leadUsos.length}.`);
+      // v14.0.0 (release unificado T4+T5+T7 sobre TL1/TL2) — los dos contenedores nuevos
+      // suman sobre la base de TL1/TL2 (micro 36, body 11, lead 5):
+      //   · T5, dock de widgets: +1 var(--t-micro) (.vgl-dock-toggle) y +1 var(--t-lead)
+      //     (.vgl-dock-btn). No usa var(--t-body).
+      //   · T7, banner PyM: +4 var(--t-micro) (contador, aviso de "no se pudo verificar",
+      //     nombre de cada actividad y el botón "Ordenar") y +2 var(--t-body) (el
+      //     contenedor #vgl-pym-banner y el botón de minimizar). No usa var(--t-lead).
+      // Total: micro 36+1+4=41, body 11+2=13, lead 5+1=6. Los tres números se
+      // recalcularon ejecutando este mismo regex contra el CSS ya fusionado, no sumando a
+      // mano las cifras de cada rama por separado.
+      t.cierto(microUsos.length === 41, `var(--t-micro) debe aparecer 41 veces (36 de TL1/TL2 + 1 del dock de T5 + 4 del banner de T7). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 13, `var(--t-body) debe aparecer 13 veces (11 de TL1 + los 2 del banner de T7; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
+      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
       t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
@@ -550,7 +557,8 @@ module.exports = {
       const strongUsos = css.match(/var\(--t-strong\)/g) || [];
       const titleUsos = css.match(/var\(--t-title\)/g) || [];
       const heroUsos = css.match(/var\(--t-hero\)/g) || [];
-      t.cierto(strongUsos.length === 3, `var(--t-strong) debe aparecer 3 veces. Salieron ${strongUsos.length}.`);
+      // v14.0.0 (T7) — el título del banner PyM (.vgl-pymb-titulo) suma 1 uso nuevo.
+      t.cierto(strongUsos.length === 4, `var(--t-strong) debe aparecer 4 veces (incluido .vgl-pymb-titulo de T7). Salieron ${strongUsos.length}.`);
       t.cierto(titleUsos.length === 4, `var(--t-title) debe aparecer 4 veces. Salieron ${titleUsos.length}.`);
       t.cierto(heroUsos.length === 6, `var(--t-hero) debe aparecer 6 veces. Salieron ${heroUsos.length}.`);
 
@@ -584,12 +592,15 @@ module.exports = {
       const zWidget = css.match(/z-index:var\(--z-widget\)/g) || [];
       const zModal = css.match(/z-index:var\(--z-modal\)/g) || [];
       const zAlerta = css.match(/z-index:var\(--z-alerta\)/g) || [];
+      const zBanner = css.match(/z-index:var\(--z-banner\)/g) || [];
       t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios.
       t.cierto(zWidget.length === 2, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn y #vgl-acciones-dock (2 sitios). Salieron ${zWidget.length}.`);
       t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
       t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
+      // v14.0.0 (T7) — el banner PyM superior ya tiene consumidor real.
+      t.cierto(zBanner.length === 1, `var(--z-banner) debe usarse en #vgl-pym-banner (1 sitio, T7). Salieron ${zBanner.length}.`);
 
       // Orden relativo exigido por D6, verificado sobre los valores reales de los tokens (no solo
       // que existan): las alertas SIEMPRE deben poder ganarle a los modales de flujo.
@@ -601,6 +612,37 @@ module.exports = {
       t.cierto(valorToken("z-modal") > valorToken("z-panel"), "un modal debe ganarle al panel/dock");
       t.cierto(valorToken("z-panel") > valorToken("z-banner"), "el panel debe ganarle al banner de PyM (T7, aún no existe)");
       t.cierto(valorToken("z-banner") > valorToken("z-widget"), "el banner debe ganarle al dock de widgets (T5, aún no existe)");
+    });
+
+    // v14.0.0 (T8) — Regla K (dirigida, no genérica): repite exactamente el bug ya
+    // documentado en v12.6.6/v12.10.2 (#vgl-postcita-panel/#vgl-labsv-modal), esta vez en
+    // #vgl-pym-banner: la entrada "simple" de la lista de escudos
+    // (`#vgl-pym-banner span,#vgl-pym-banner b{color:inherit}`, especificidad id+tag) le
+    // ganaba en cascada a `.vgl-pymb-contador{color:var(--bg-solid)}` (especificidad de 1
+    // clase), dejando el contador con el color heredado del banner en vez del suyo propio
+    // — invisible sobre su fondo ámbar. Detectado por auditoría real de contraste WCAG en
+    // Chromium (ratio 1.5/2.64, ambos bajo el mínimo AA de 4.5), no por esta suite: el
+    // harness de pruebas no aplica cascada CSS real. El fix fue quitar la entrada simple y
+    // apoyarse solo en la armadura segura `:where(span:not([class]),...)`, que por
+    // construcción nunca compite con un elemento que ya tiene su propia clase. Esta regla
+    // ancla que esa entrada insegura no vuelva: cualquier regla dentro de #vgl-pym-banner
+    // que fije 'color' sobre span/b SIN exigir una clase propia, con especificidad >= la de
+    // .vgl-pymb-contador, es exactamente la reincidencia del bug.
+    t.caso("Regla K - el contador del banner PyM no pierde su color propio contra el escudo del banner", () => {
+      const contador = reglasCss.find((r) => r.selector === ".vgl-pymb-contador" && r.props.has("color"));
+      t.cierto(!!contador, "existe una regla .vgl-pymb-contador que fija 'color' (si esto falla, el selector cambió de forma y hay que revisar a mano)");
+
+      const escudosPeligrosos = reglasCss.filter((r) => {
+        if (!r.props.has("color")) return false;
+        if (!r.selector.includes("#vgl-pym-banner")) return false;
+        if (r.selector.includes(":where(")) return false; // la armadura segura, no compite por diseño
+        const tagPelado = /(^|[\s>+~])(span|b|small|label|p)(\[|:|\.|$|[\s>+~])/.test(r.selector) && !r.targetClasses.has("vgl-pymb-contador");
+        return tagPelado;
+      });
+
+      for (const r of escudosPeligrosos) {
+        t.cierto(r.specificity < contador.specificity, `la regla '${r.selector}' (especificidad ${r.specificity}) NO debe igualar/superar a '.vgl-pymb-contador' (especificidad ${contador.specificity}) fijando 'color' — es la reincidencia exacta del bug v12.6.6/v12.10.2/T8 que dejaba el contador ilegible`);
+      }
     });
 
   }
