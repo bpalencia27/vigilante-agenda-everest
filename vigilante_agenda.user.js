@@ -8362,6 +8362,16 @@
         padding:7px 10px;margin-top:8px;
         box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
       }
+      /* v14.0.0 — Cruce antiduplicado (D4): aviso de que YA hay una orden vigente en
+         Everest para este paquete. Verde, no rojo: no es un error ni un bloqueo, es
+         información positiva ("esto ya está cubierto") — mismo tratamiento visual que
+         .vgl-ord-sexwarn/.vgl-ord-pymsrc, solo cambia el acento de color. */
+      #vgl-ordenar-modal .vgl-ord-vigwarn{
+        font-size:11.5px;font-weight:700;line-height:1.45;
+        color:var(--c-verde);background:rgba(var(--rgb-verde),.13);
+        border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+      }
 
       /* ---- Pie flotante (sticky glass) ---- */
       #vgl-ordenar-modal .vgl-agm-foot{
@@ -11791,14 +11801,30 @@
     // viene en la ficha de BuscarPacienteDetallado. Si la consulta falla, se sigue adelante
     // sin el aviso — nunca se bloquea el ordenamiento por no haber podido comprobarlo.
     let sexoPacienteReal = "";
+    let pid = null;
     try {
-      const pid = await apiAccesoBuscarPaciente(apt.doc_id);
+      pid = await apiAccesoBuscarPaciente(apt.doc_id);
       if (pid) {
         const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pid}`);
         sexoPacienteReal = String((det && det.data && det.data.sexo) || "").trim().toUpperCase().charAt(0);
       }
     } catch (e) { console.warn("[Vigilante PyM] no se pudo consultar el sexo del paciente:", e); }
     if (!vivo()) return; // el médico ya cerró el modal mientras se verificaba el sexo
+
+    // v14.0.0 — CRUCE ANTIDUPLICADO al ordenar (pedido explícito del médico): antes este
+    // modal no cruzaba nada contra Everest, así que un paquete YA vigente (ordenado hace
+    // poco, dentro de su propia vigencia clínica) podía volver a marcarse y duplicarse sin
+    // ningún aviso. Reutiliza EXACTAMENTE la misma consulta y la misma regla de vigencia
+    // que T6/T7 ya usan para el banner (apiHcObtenerOrdenamientosVigentes +
+    // pymCubiertoPorOrdenVigente) — no se inventa una segunda tabla de vigencias (D4). Un
+    // fallo de red aquí NO bloquea nada: simplemente ningún paquete se marca como vigente
+    // (el mismo comportamiento de antes de este cambio), nunca se oculta la opción de
+    // ordenar por una duda.
+    let ordenesVigentesEnEverest = null;
+    try {
+      if (pid) ordenesVigentesEnEverest = await apiHcObtenerOrdenamientosVigentes(pid);
+    } catch (e) { console.warn("[Vigilante PyM] no se pudo verificar órdenes vigentes:", e); }
+    if (!vivo()) return;
 
     // v12.3.x — Antes solo se sabía SI había coincidencia con la base de PyM (booleano);
     // ahora se guarda también CUÁL actividad concreta del Excel del SharePoint la
@@ -11822,6 +11848,13 @@
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
     const sexoPaciente = sexoPacienteReal || String((apt && apt.sexo) || "").trim().toUpperCase().charAt(0);
+
+    // v14.0.0 — pymCubiertoPorOrdenVigente devuelve el subconjunto de PENDIENTES (aún sin
+    // cubrir): lo que sobra al restarlo de pkgsToRender es lo que YA está vigente en
+    // Everest. Un paquete sin vigenciaDias confirmado nunca cae aquí (ver comentario de la
+    // propia función) — se sigue mostrando como cualquier otro, sin marcar.
+    const pendientesEnEverest = pymCubiertoPorOrdenVigente(pkgsToRender, ordenesVigentesEnEverest, todayStamp());
+    const yaVigentesEnEverest = new Set(pkgsToRender.filter((p) => pendientesEnEverest.indexOf(p) === -1));
 
     // v12.3.22 — Contenido real, reemplazando TODO el innerHTML de una sola vez (igual
     // que el código original) ahora que ya se conoce el sexo. Los botones de la ventana
@@ -11851,7 +11884,8 @@
               // registrado no contradiga la actividad.
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
               const chocaSexo = !!(sexoReq && sexoPaciente && sexoReq !== sexoPaciente);
-              const marcar = hayCoincidencia && !chocaSexo;
+              const yaVigente = yaVigentesEnEverest.has(pkg);
+              const marcar = hayCoincidencia && !chocaSexo && !yaVigente;
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               return `
               <div class="vgl-ord-item">
@@ -11860,6 +11894,7 @@
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
                     ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}

@@ -304,7 +304,7 @@ module.exports = {
     // base original no contaba bien, sino CUALQUIER declaración futura escrita así,
     // sin importar si tenía !important o no. Verificado con una regla nueva inyectada
     // en ese formato: la suite quedaba en verde sin verla. BASE_CONOCIDA ahora es la
-    // lista real y completa (73 infracciones únicas, filtro quitado).
+    // lista real y completa (74 infracciones únicas tras v14.0.0/vgl-ord-vigwarn, filtro quitado).
     t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
       const BASE_CONOCIDA = [
         "#vgl-agendar-modal #vgl-agm-sms-nota|color:var(--fg3)",
@@ -370,6 +370,7 @@ module.exports = {
         "#vgl-ordenar-modal .vgl-ord-cup|color:var(--fg2)",
         "#vgl-ordenar-modal .vgl-ord-pymsrc|color:var(--c-morado)",
         "#vgl-ordenar-modal .vgl-ord-sexwarn|color:var(--c-rojo)",
+        "#vgl-ordenar-modal .vgl-ord-vigwarn|color:var(--c-verde)",
         "#vgl-ordenar-modal.light .vgl-agm-card|color:var(--fg)",
         "#vgl-ordenar-modal.light .vgl-agm-close|color:var(--fg)",
         "#vgl-ordenar-modal.light .vgl-agm-dinfo b|color:var(--c-verde)",

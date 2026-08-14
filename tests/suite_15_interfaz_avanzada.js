@@ -1927,6 +1927,61 @@ module.exports = {
       t.falso(modal.innerHTML.includes("VDRL"), "las ETS descartadas no se ofrecen");
     });
 
+    // v14.0.0 — CRUCE ANTIDUPLICADO al ordenar (pedido explícito del médico, ver el
+    // banner T6/T7 que ya hacía esto mismo para el aviso pasivo): ahora el propio modal de
+    // Órdenes reutiliza apiHcObtenerOrdenamientosVigentes + pymCubiertoPorOrdenVigente para
+    // que un paquete YA vigente en Everest no se premarque ni se pida en silencio otra vez.
+    // I10X (RCV exprés) es el único paquete con vigenciaDias confirmado hoy — los demás,
+    // por D4, siempre cuentan como pendientes (ver PYM_CATALOG).
+    const iso_N_diasAtras = (n) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    };
+    await t.casoAsync("openOrdenamientoModal v14: un paquete YA vigente en Everest (RCV exprés, orden reciente) no se premarca y avisa", async () => {
+      const cVig = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
+            return respuestaJson([{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) }]);
+          }
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cVig);
+      const ultimoOrdVig = () => cVig.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      await cVig.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["RCV Exprés"] });
+      const modal = ultimoOrdVig();
+      t.cierto(!!modal, "el modal se pinta igual, con o sin cruce antiduplicado");
+      t.cierto(modal.innerHTML.includes("PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS"), "el paquete RCV exprés se ofrece");
+      t.falso(modal.innerHTML.includes(" checked"), "con una orden vigente de hace 30 días (dentro de los 180), NO se premarca");
+      t.cierto(modal.innerHTML.includes("Ya existe una orden vigente en Everest"), "el aviso verde explica por qué no se premarcó");
+    });
+
+    await t.casoAsync("openOrdenamientoModal v14: un fallo de red al verificar vigentes NO bloquea el premarcado normal", async () => {
+      const cVigFalla = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
+          if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) throw new Error("red caída");
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cVigFalla);
+      const ultimoOrdF = () => cVigFalla.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      await cVigFalla.api.openOrdenamientoModal({ doc_id: "444", nombre: "LUIS TORRES", sexo: "M", pym: ["RCV Exprés"] });
+      const modal = ultimoOrdF();
+      t.cierto(modal.innerHTML.includes('data-idx="0" checked'), "sin poder verificar vigentes, el paquete se premarca como siempre — un fallo de red no bloquea nada");
+      t.falso(modal.innerHTML.includes("Ya existe una orden vigente en Everest"), "sin verificación exitosa, tampoco se avisa un falso 'ya vigente'");
+    });
+
     // =====================================================================
     // v12.6.6 — El correo de la orden va con UsuarioId = id del PACIENTE. Confirmado en la
     // grabación real del consultorio: en la MISMA corrida, Everest pide
