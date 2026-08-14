@@ -606,6 +606,27 @@ module.exports = {
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
 
+    // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
+    // manual del botón también dejaba SIN cachear un resultado vacío, así que
+    // checkLabsVencidos seguía sin poder revisar a ese paciente ni tras el clic explícito
+    // del médico.
+    await t.casoAsync("createLabInjectorUI (clic manual): SIN laboratorios encontrados también actualiza _labsPrefetch — checkLabsVencidos ya no queda mudo (bug real de auditoría)", async () => {
+      const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      cLab.env.doc.getElementById = (id) => {
+        if (id === "vgl-lab-injector") return btn;
+        if (id === "anamesis") return {};
+        return null;
+      };
+      cLab.env.doc.querySelector = () => null;
+      cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
+      cLab.ctx.alert = () => {};
+      const uid = "labsv|" + cLab.api.normalizeKey("999888777");
+      t.falso(cLab.api.avisoYaVisto(uid));
+      await btn.onclick();
+      cLab.api.checkLabsVencidos();
+      t.cierto(cLab.api.avisoYaVisto(uid), "bug real de auditoría: antes, un clic manual sin resultados tampoco cacheaba, y checkLabsVencidos seguía mudo");
+    });
+
     // ================= createExamenFisicoInjectorUI (plantilla por posición) =================
     // v12.9.0 — Diagnóstico real en consultorio (13-08-2026): 45 de 56 campos de la pestaña
     // "Revisión por sistema y Examen físico" comparten LITERALMENTE el mismo id="alert_message"

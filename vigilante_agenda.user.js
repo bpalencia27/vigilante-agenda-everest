@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.14
+// @version      12.10.15
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.14";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.15";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2584,7 +2584,13 @@
   const RAC_VIGENCIA_UMBRAL_ALBUMINURIA = 30; // mg/g
   function _vigenciaDiasParaAnalito(key, resultValCrudo) {
       if (key === "RAC") {
-          const n = Number(String(resultValCrudo == null ? "" : resultValCrudo).replace(",", "."));
+          // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
+          // rango con desigualdad ("> 300", ">= 30"). Number("> 300") es NaN, así que sin
+          // sanitizar el umbral nunca se cumplía justo para la albuminuria más franca —el
+          // caso de mayor riesgo— y la vigencia volvía a los 180 días completos en vez de
+          // acortarse a 90. Se quita todo lo que no sea dígito/coma/punto antes de parsear.
+          const limpio = String(resultValCrudo == null ? "" : resultValCrudo).replace(/[^\d.,]/g, "").replace(",", ".");
+          const n = Number(limpio);
           if (Number.isFinite(n) && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
       }
       return RCV_VIGENCIA_DIAS;
@@ -2837,11 +2843,23 @@
 
       try {
           const labs = await getAtheneaLabsAuto(docId);
-          if (labs && labs.length > 0) {
+          // v12.10.15 — Bug real de auditoría (informe nocturno): antes solo se cacheaba
+          // aquí cuando labs.length > 0, así que un paciente SIN laboratorios en Athenea
+          // —el caso de mayor riesgo real, porque le faltan los 7 analitos RCV— nunca
+          // actualizaba _labsPrefetch.docId/ts. Eso encadenaba dos fallas: (1) el piso de
+          // 30 s dejaba de ser un piso real y el robot volvía a golpear Athenea con 3-4
+          // peticiones cada 30 s mientras la historia siguiera abierta (riesgo de bloqueo
+          // de IP), y (2) checkLabsVencidos() —que exige _labsPrefetch.docId === doc antes
+          // de revisar— nunca llegaba a evaluar a ese paciente, silenciando justo la alerta
+          // que más le hace falta. getAtheneaLabsAuto siempre resuelve a un arreglo (nunca
+          // null/undefined); si algo lanza antes de esta línea, el catch de abajo evita
+          // este bloque sin tocar la caché, que es lo correcto (reintentar, no cachear un
+          // error como si fuera "cero laboratorios").
+          _labsPrefetch = { docId, labs, ts: Date.now() };
+          if (labs.length > 0) {
               // v12.3.34 — AQUÍ YA NO SE ESCRIBE NADA: injectLabsIntoCronicos solo corre
               // cuando el médico pulsa el botón. El robot deja los resultados listos y
               // avisa UNA sola vez por paciente.
-              _labsPrefetch = { docId, labs, ts: Date.now() };
               vglLog("ATHENEA", "LabsAutoPrefetched", { docId, totalLabs: labs.length });
               if (_labsAvisoDoc !== docId) {
                   _labsAvisoDoc = docId;
@@ -2881,7 +2899,10 @@
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
               const labs = await getAtheneaLabsAuto(docId);
-              if (labs && labs.length) _labsPrefetch = { docId, labs, ts: Date.now() };
+              // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
+              // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
+              // el robot no repita esta misma consulta 30 s después.
+              if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
                   uxTrack("labs.autollenado.casillas", { n: r.count });
