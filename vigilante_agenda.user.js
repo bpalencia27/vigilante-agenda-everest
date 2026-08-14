@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.0
+// @version      14.1.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -706,8 +706,10 @@
   - Aviso cuando algún examen de un paquete de órdenes no se pudo resolver.
 
   PENDIENTE (documentado, no resuelto aquí)
-  - La contraseña de Athenea sigue en claro como respaldo heredado: hay que ROTARLA y
-    después fijarla por equipo con GM_setValue, sin volver a publicarla.
+  - (RESUELTO en v14.1.1) La contraseña de Athenea ya NO está en el código: las
+    credenciales solo se leen de GM_getValue y, si no están fijadas, no hay autologin.
+    OJO: retirarla del código no la desactiva — sigue siendo válida en Athenea y sigue
+    en el historial de git. ROTARLA en Athenea sigue pendiente y es acción del médico.
   - ProgramaId en AsignarTurno y BuscarCitasDisponibles: la aplicación oficial los envía y
     el script no. Sin más capturas, cambiarlo es más arriesgado que el defecto.
   - (RESUELTO en v12.3.0) El módulo de órdenes PyM ya está verificado contra una captura
@@ -887,21 +889,34 @@
       const passInput = document.querySelector("#Password") || document.querySelector("input[name='Password']");
       const loginBtn = document.querySelector("button[type='submit']") || document.querySelector("input[type='submit']");
 
-      // v11.0.1 — Las credenciales se leen PRIMERO del almacén local de Tampermonkey
-      // (vgl_ath_user / vgl_ath_pass), que no sale del equipo. Los valores de abajo son
-      // solo el respaldo heredado para no dejar sin autologin a los equipos ya instalados.
-      // ⚠ Esta contraseña está en claro en un script que se distribuye por URL: ROTARLA.
-      //   Tras rotarla, fijarla por equipo desde la consola de Tampermonkey con
+      // v14.1.1 — CREDENCIAL RETIRADA DEL CÓDIGO. Hasta esta versión había un usuario y
+      // una contraseña de Athenea EN CLARO aquí como "respaldo heredado", con un aviso al
+      // lado que decía "ROTARLA" y que llevaba versiones sin atenderse.
+      //
+      // Por qué se retira ahora y no "algún día": el repositorio se va a compartir con
+      // agentes externos (Jules clona el repo entero en una VM de Google CON internet;
+      // pegar el archivo en un modelo lo sube a otro servicio). Una credencial en el
+      // código deja de ser un riesgo teórico en el momento en que el archivo sale del
+      // equipo — y este archivo, además, se distribuye por URL a cada instalación.
+      //
+      // Ahora las credenciales SOLO viven en el almacén local de Tampermonkey, que no sale
+      // del computador. Si no están fijadas, el autologin sencillamente no ocurre y el
+      // médico entra a mano, como haría igual: NO se degrada a una credencial de fábrica.
+      // Para fijarlas una vez por equipo, desde la consola de Tampermonkey:
       //   GM_setValue("vgl_ath_user", "USUARIO"); GM_setValue("vgl_ath_pass", "CLAVE");
-      let athUser = "CONSULTAMED", athPass = "Viva1a*md04";
+      //
+      // ⚠ RETIRARLA DEL CÓDIGO NO LA DESACTIVA: la contraseña que estuvo publicada sigue
+      // siendo válida en Athenea y permanece en el historial de git. Hay que ROTARLA en
+      // Athenea, y solo entonces fijar la nueva por GM_setValue.
+      let athUser = "", athPass = "";
       try {
         if (typeof GM_getValue !== "undefined") {
-          athUser = GM_getValue("vgl_ath_user", "") || athUser;
-          athPass = GM_getValue("vgl_ath_pass", "") || athPass;
+          athUser = GM_getValue("vgl_ath_user", "") || "";
+          athPass = GM_getValue("vgl_ath_pass", "") || "";
         }
       } catch (e) {}
 
-      if (userInput && passInput && loginBtn && !userInput.value) {
+      if (userInput && passInput && loginBtn && !userInput.value && athUser && athPass) {
         userInput.value = athUser;
         passInput.value = athPass;
         userInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -938,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
