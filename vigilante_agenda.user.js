@@ -10516,6 +10516,33 @@
           propias: agendasFiltradas === agendasDelDia ? 0 : agendasFiltradas.length,
           fechasRecibidas: [...new Set(agendas.map((a) => String(a.fechaAgenda || "").trim()))].slice(0, 12),
         });
+        // v14.0.0 — DIAGNÓSTICO DEL SÁBADO QUE TRABAJA ESTE MÉDICO (opción elegida por el
+        // médico el 14-ago frente a buscar un campo propio en Everest, que nadie ha visto).
+        // Cada médico trabaja un sábado cada 15 días y el script necesita saber CUÁL para
+        // ofrecerlo como día agendable (encargo del 12-ago). No se inventa la regla ni se
+        // añade ninguna petición: se OBSERVA la respuesta que esta pantalla YA trae, se
+        // anotan los sábados con agenda propia real y se deja constancia en consola para
+        // deducir la cadencia con datos de campo antes de cablear nada.
+        // Deliberadamente NO decide ni agenda: solo registra. Cablear la cadencia sin
+        // varias observaciones sería adivinar en qué sábados trabaja el médico.
+        const sabadosConAgenda = agendas
+          .map((a) => String(a.fechaAgenda || "").trim())
+          .filter((f) => f)
+          .filter((f, i, arr) => arr.indexOf(f) === i)
+          .filter((f) => {
+            // fechaAgenda viene como dd/mm/aaaa en esta respuesta (mismo formato que
+            // selectedDateInfo.fmt); se convierte a Date sin depender del locale del PC.
+            const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(f);
+            if (!m) return false;
+            const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+            return d.getDay() === 6;   // 6 = sábado
+          });
+        if (sabadosConAgenda.length) {
+          console.log("[Vigilante Agendamiento] diagnóstico SÁBADO del médico — sábados con agenda en esta respuesta:",
+            sabadosConAgenda,
+            "· médico:", (state.activeDoctor && state.activeDoctor.id) || "(sin id)",
+            "· NOTA: junte varias de estas líneas de días distintos para deducir cada cuántos sábados le toca. Aún no se usa para agendar.");
+        }
       } catch (e) {}
 
       slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
@@ -11158,9 +11185,19 @@
         { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL]" },
         { codigo: "903818", desc: "Colesterol Total" },
         { codigo: "903868", desc: "Triglicéridos" },
-        { codigo: "903895", desc: "Creatinina En Suero" },
+        { codigo: "903895", desc: "Creatinina En Suero U Otros Fluidos" },
         { codigo: "903841", desc: "Glucosa En Suero (Glicemia)" },
-        { codigo: "907106", desc: "Uroanálisis / Parcial de Orina" }
+        { codigo: "907106", desc: "Uroanálisis / Parcial de Orina" },
+        // v14.0.0 — HALLAZGO A de AUDITORIA_MOTOR_RCV_v68.md, cerrado con los CUPS que
+        // entregó el médico (14-ago, contra la tabla oficial). El script marcaba la RAC
+        // como VENCIDA en rojo (está en RCV_VIGENCIA_KEYS) y su propio paquete NO PODÍA
+        // PEDIRLA: la relación albúmina/creatinina se produce con estos DOS exámenes
+        // juntos, y ninguno existía en el archivo — por eso el médico los añadía a mano
+        // en cada paciente. Van SIEMPRE los dos: uno solo no produce la RAC.
+        // OJO con el código: la microalbuminuria es 903026, NO 903028 como afirmaba la
+        // auditoría — error de esa nota, corregido por el médico contra la tabla real.
+        { codigo: "903876", desc: "Creatinina En Orina Parcial" },
+        { codigo: "903026", desc: "Microalbuminuria Automatizada En Orina Parcial" }
       ]
     },
     // v12.4.0 — Paquetes alineados con la TABLA OFICIAL de CUPS de la IPS (actividad

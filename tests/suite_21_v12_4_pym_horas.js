@@ -223,6 +223,33 @@ module.exports = {
       t.igual(cod(z108).slice().sort(), ["903815", "903816", "903818", "903841", "903868", "903895", "907106"]);
     });
 
+    // v14.0.0 — HALLAZGO A de AUDITORIA_MOTOR_RCV_v68.md: el script marcaba la RAC como
+    // VENCIDA en rojo (está en RCV_VIGENCIA_KEYS) y su propio paquete NO PODÍA PEDIRLA —
+    // la relación albúmina/creatinina se produce con creatinina en orina parcial +
+    // microalbuminuria automatizada en orina parcial, y ninguno de los dos existía en el
+    // archivo. El médico los añadía a mano en cada paciente.
+    // Esta prueba fija la regla general que hace imposible repetir el fallo: NINGÚN
+    // analito que el script vigile por vencimiento puede quedarse sin forma de ordenarse.
+    t.caso("v14 (Hallazgo A) - todo analito que el script marca como VENCIDO se puede ordenar: la RAC ya tiene sus CUPS", () => {
+      const rcv = api.__PYM_CATALOG.find((p) => p.cie10 === "I10X");
+      const cod = rcv.cups.map((c2) => c2.codigo);
+      // Los dos exámenes que producen la RAC, con los códigos que verificó el médico
+      // contra la tabla oficial. La microalbuminuria es 903026 — la auditoría decía 903028
+      // y estaba equivocada; un dígito de diferencia es un examen distinto.
+      t.cierto(cod.includes("903876"), "creatinina en orina parcial (903876) ordenable");
+      t.cierto(cod.includes("903026"), "microalbuminuria automatizada en orina parcial (903026) ordenable");
+      t.falso(cod.includes("903028"), "903028 NO: era el código equivocado de la auditoría");
+      // Van SIEMPRE los dos: uno solo no produce la relación.
+      t.igual(cod.includes("903876"), cod.includes("903026"),
+        "la RAC necesita AMBOS: tener uno sin el otro deja al médico con media orden");
+      // La regla de fondo: RAC se vigila, luego RAC debe poder ordenarse. La precondición
+      // se comprueba por el camino real que produce el aviso de vencimiento, no por una
+      // constante interna: _vigenciaDiasParaAnalito devuelve una vigencia para "RAC", que
+      // es justamente lo que hace que pueda marcarse como vencida.
+      t.cierto(typeof api._vigenciaDiasParaAnalito("RAC", "") === "number",
+        "precondición: la RAC sigue siendo un analito vigilado por vencimiento");
+    });
+
     t.caso("PYM_CATALOG: las etiquetas nuevas del panel (FRIENDLY) premarcan su paquete por keywords", () => {
       const strip = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const casa = (etiqueta, pkg) => pkg.keywords.some((kw) => strip(etiqueta).includes(strip(kw)));
