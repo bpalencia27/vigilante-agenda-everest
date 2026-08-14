@@ -60,7 +60,14 @@
   //  Envuelve fetch y XMLHttpRequest para anotar QUÉ endpoints existen y QUÉ
   //  NOMBRES DE CAMPO devuelven. Nunca el contenido.
   // =========================================================================
-  const RED = new Map();   // "MÉTODO ruta" -> { metodo, ruta, params, claves, vistas }
+  // El acumulador vive en `window`, NO en este closure, y la razón es un fallo real de la
+  // 3ª pasada: salió con CERO endpoints. Al pegar el archivo por segunda vez en la misma
+  // pestaña, la guarda de abajo impide reinstalar los enganches —correcto, envolver dos
+  // veces duplicaría cada anotación— pero los enganches del PRIMER pegado siguen
+  // escribiendo en el Map de aquel closure, mientras el pegado nuevo estrena uno vacío
+  // que ya nadie alimenta. Compartiéndolo en `window`, repegar el archivo continúa la
+  // misma recolección en vez de empezar de cero a ciegas.
+  const RED = window.__VGL_RED_MAPA__ || (window.__VGL_RED_MAPA__ = new Map());
 
   function clavesDe(obj, prof) {
     // Recorre hasta 3 niveles y devuelve rutas de CLAVES: "datos.paciente.edad".
@@ -111,6 +118,9 @@
     } catch (e) {}
   }
 
+  if (window.__VGL_RED_ENGANCHADA__) {
+    console.log("%c[Mapa] La escucha de red ya estaba puesta de un pegado anterior: se conserva y se sigue acumulando sobre ella (" + RED.size + " endpoints hasta ahora).", "color:#06c");
+  }
   if (!window.__VGL_RED_ENGANCHADA__) {
     window.__VGL_RED_ENGANCHADA__ = true;
 
