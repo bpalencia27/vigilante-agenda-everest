@@ -283,6 +283,15 @@ module.exports = {
       });
     });
 
+    // v14.0.1 — San Pedro y San Pablo (29 de junio, Ley Emiliani) trasladado al lunes
+    // siguiente: en 2027 el 29 cae martes, así que el trasladado real es el 5 de julio.
+    // Faltaba en la tabla (a diferencia de 2026, donde el 29 YA cae lunes, sin traslado).
+    t.caso("esFestivo: 2027-07-05 (San Pedro trasladado) es festivo", () => {
+      runWithMockDate("2027-07-05T12:00:00", (mockApi, env, ctx) => {
+        t.cierto(mockApi.esFestivo(new ctx.Date("2027-07-05T12:00:00")));
+      });
+    });
+
     t.caso("calcBusinessTargetDate: Una fecha objetivo que cae en festivo se desplaza al siguiente día hábil", () => {
       runWithMockDate("2026-07-17T12:00:00", (mockApi) => {
         const r = mockApi.calcBusinessTargetDate(0, 3);
