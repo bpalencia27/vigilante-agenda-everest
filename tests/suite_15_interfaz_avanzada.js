@@ -2039,7 +2039,11 @@ module.exports = {
           if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { sexo: "M" } });
           if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 4321 } });
           if (u.includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
-            return respuestaJson([{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) }]);
+            // v14.1.4 — Con la regla `every` (decisión del médico), el paquete solo cuenta
+            // como vigente si TODOS sus exámenes lo están. Antes bastaba el 903818 suelto.
+            // Los diez CUPS del RCV exprés, todos ordenados hace 30 días.
+            const CUPS_RCV = ["903815", "903817", "903818", "903868", "903895", "903841", "907106", "903876", "903026", "903426"];
+            return respuestaJson(CUPS_RCV.map((c) => ({ cup: { codigo: c }, estado: "PEN", fechaCreacion: iso_N_diasAtras(30) })));
           }
           return respuestaJson({});
         },

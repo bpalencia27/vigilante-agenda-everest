@@ -1147,9 +1147,11 @@ module.exports = {
       { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-06-01" },
       { codigo: "903895", nombre: "CREATININA", Resultado: "0.9", Fecha: "2026-06-01" },
       { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-06-01" },
+      // v14.1.4 — LDL entra a la vigilancia por decisión del médico (14-ago-2026).
+      { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "100", Fecha: "2026-06-01" },
     ];
 
-    t.caso("_analitosRcvVencidos: los 7 analitos con resultado reciente -> ningún faltante", () => {
+    t.caso("_analitosRcvVencidos: los 8 analitos con resultado reciente -> ningún faltante", () => {
       // 2026-08-11 - 2026-06-01 = 71 días, bien dentro de la vigencia de 180.
       t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11"), []);
     });
@@ -1181,20 +1183,20 @@ module.exports = {
     });
 
     t.caso("_analitosRcvVencidos: mezcla real de faltantes — uno VENCIDO (con resultDate/dias) junto a otros NUNCA REALIZADOS (sin esos campos) en la misma llamada (v12.5.7 — hallazgo de la revisión adversarial)", () => {
-      // Un solo analito presente (y vencido) entre los 7 de la regla produce, en la misma
-      // llamada, 1 faltante "vencido" + 6 faltantes "nunca realizados" — la mezcla real que
+      // Un solo analito presente (y vencido) entre los 8 de la regla produce, en la misma
+      // llamada, 1 faltante "vencido" + 7 faltantes "nunca realizados" — la mezcla real que
       // ninguna prueba anterior verificaba de punta a punta (longitud total Y forma de cada
       // tipo de faltante).
       const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-11" }];
       const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
-      t.igual(faltantes.length, 7, "los 7 analitos de la regla: 1 vencido + 6 nunca realizados");
+      t.igual(faltantes.length, 8, "los 8 analitos de la regla: 1 vencido + 7 nunca realizados");
       const vencido = faltantes.find((f) => f.key === "COLESTEROL_TOTAL");
       t.cierto(!!vencido);
       t.igual(vencido.resultDate, "2026-02-11");
       t.igual(vencido.dias, 181);
       const nuncaRealizados = faltantes.filter((f) => f.key !== "COLESTEROL_TOTAL");
-      t.igual(nuncaRealizados.length, 6);
-      t.igual(nuncaRealizados.map((f) => f.key).sort(), ["COLESTEROL_HDL", "CREATININA", "GLUCOSA", "RAC", "TRIGLICERIDOS", "UROANALISIS"], "las 6 claves restantes de RCV_VIGENCIA_KEYS, sin duplicados ni omisiones");
+      t.igual(nuncaRealizados.length, 7);
+      t.igual(nuncaRealizados.map((f) => f.key).sort(), ["COLESTEROL_HDL", "COLESTEROL_LDL", "CREATININA", "GLUCOSA", "RAC", "TRIGLICERIDOS", "UROANALISIS"], "las 7 claves restantes de RCV_VIGENCIA_KEYS, sin duplicados ni omisiones");
       for (const f of nuncaRealizados) {
         t.igual(f.resultDate, undefined, f.key + ": nunca realizado no debe traer resultDate");
         t.igual(f.dias, undefined, f.key + ": nunca realizado no debe traer dias");
@@ -1283,7 +1285,7 @@ module.exports = {
     t.caso("_analitosRcvVencidos: varios analitos ausentes a la vez, todos reportados", () => {
       const soloColesterol = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
       const faltantes = testApi._analitosRcvVencidos(soloColesterol, "2026-08-11");
-      t.igual(faltantes.length, 6, "faltan los otros 6 de los 7 (Colesterol Total sí está al día)");
+      t.igual(faltantes.length, 7, "faltan los otros 7 de los 8 (Colesterol Total sí está al día)");
       t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"));
     });
 

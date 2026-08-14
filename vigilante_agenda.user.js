@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.3
+// @version      14.1.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.3";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2735,10 +2735,16 @@
   //  eso ya lo hace injectLabsIntoCronicos con el whitelist completo, sin cambios.
   // =====================================================================
   const RCV_VIGENCIA_DIAS = 180;
-  const RCV_VIGENCIA_KEYS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "TRIGLICERIDOS", "GLUCOSA", "UROANALISIS", "CREATININA", "RAC"];
+  // v14.1.4 — LDL AÑADIDO A LA VIGILANCIA (decisión del médico, 14-ago-2026). Estaba en
+  // WHITELIST_13_LABS (se leía), en PYM_CATALOG (se podía ordenar) y en la tabla de
+  // vigencias por estadio (180 días)… pero NO aquí, que es la lista de lo que el script
+  // avisa cuando vence. Resultado: un LDL vencido no generaba ninguna alerta — un punto
+  // ciego justo en el analito que fija la meta terapéutica del riesgo cardiovascular.
+  const RCV_VIGENCIA_KEYS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS", "GLUCOSA", "UROANALISIS", "CREATININA", "RAC"];
   const RCV_VIGENCIA_NOMBRES = {
       COLESTEROL_TOTAL: "Colesterol Total",
       COLESTEROL_HDL: "Colesterol HDL",
+      COLESTEROL_LDL: "Colesterol LDL",
       TRIGLICERIDOS: "Triglicéridos",
       GLUCOSA: "Glucosa en Suero",
       UROANALISIS: "Uroanálisis",
@@ -2999,6 +3005,7 @@
           COLESTEROL_TOTAL: "colesterol_total",
           TRIGLICERIDOS: "trigliceridos",
           COLESTEROL_HDL: "hdl",
+          COLESTEROL_LDL: "ldl",
           RAC: "rac",
       };
       return Object.prototype.hasOwnProperty.call(MAPA, clave) ? MAPA[clave] : null;
@@ -10075,7 +10082,20 @@
     return lista.filter((act) => {
       if (!Number.isFinite(act.vigenciaDias) || act.vigenciaDias <= 0) return true; // sin vigencia confirmada: siempre pendiente (D4)
       const cups = Array.isArray(act.cups) ? act.cups : [];
-      const cubierta = cups.some((c) => {
+      // v14.1.4 — `every`, no `some` (decisión del médico, 14-ago-2026). Con `some`, una
+      // actividad se daba por cubierta si UNO SOLO de sus CUPS estaba vigente: en el paquete
+      // RCV exprés, que trae diez exámenes, bastaba una glicemia de hace un mes para que el
+      // banner dejara de pedir los otros nueve —creatinina, perfil lipídico y RAC incluidos—.
+      // El caso que lo delató es la RAC: el propio catálogo documenta que se produce con DOS
+      // exámenes (903876 creatinina en orina + 903026 microalbuminuria) y que "van SIEMPRE
+      // los dos: uno solo no produce la RAC", pero `some` la daba por hecha con cualquiera.
+      // Es el mismo agujero para toda actividad de más de un CUPS; las de un solo CUPS se
+      // comportan exactamente igual que antes.
+      // Efecto buscado: el banner pide MÁS, no menos. Es la dirección segura de D4 ("ante la
+      // duda, se muestra") y la correcta: un paquete a medias no está hecho.
+      // El `cups.length > 0` NO es decorativo: `[].every()` es `true` por definición, así que
+      // sin él una actividad sin CUPS se daría por cubierta sin haber comprobado nada.
+      const cubierta = cups.length > 0 && cups.every((c) => {
         if (!c || c.codigo === undefined || c.codigo === null) return false;
         const fcMs = masRecientePorCup.get(String(c.codigo));
         if (fcMs === undefined) return false;

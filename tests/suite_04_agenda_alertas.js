@@ -251,9 +251,9 @@ module.exports = {
         else o.onload({ status: 200, responseText: "" });
       };
     }
-    // Variante "al día": entrega los 7 analitos de la regla de vigencia, todos con la
+    // Variante "al día": entrega los 8 analitos de la regla de vigencia, todos con la
     // MISMA fecha reciente — a diferencia de planLabsVencidos (que solo entrega uno, así
-    // que los otros 6 quedarían "faltantes" con toda razón: nunca se consultaron).
+    // que los otros 7 quedarían "faltantes" con toda razón: nunca se consultaron).
     function planLabsAlDia(fechaAnalito) {
       return (o) => {
         const url = String(o.url || "");
@@ -268,6 +268,8 @@ module.exports = {
               { CodigoParametro: "903815", NombreParametro: "COLESTEROL HDL", Resultado: "45", Fecha: fechaAnalito },
               { CodigoParametro: "903868", NombreParametro: "TRIGLICERIDOS", Resultado: "150", Fecha: fechaAnalito },
               { CodigoParametro: "903841", NombreParametro: "GLUCOSA EN SUERO", Resultado: "90", Fecha: fechaAnalito },
+              // v14.1.4 — LDL entra a la vigilancia por decisión del médico (14-ago-2026).
+              { CodigoParametro: "903817", NombreParametro: "COLESTEROL LDL", Resultado: "100", Fecha: fechaAnalito },
               { CodigoParametro: "907106", NombreParametro: "UROANALISIS", Resultado: "NORMAL", Fecha: fechaAnalito },
               { CodigoParametro: "903895", NombreParametro: "CREATININA", Resultado: "0.9", Fecha: fechaAnalito },
               { CodigoParametro: "8779", NombreParametro: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: fechaAnalito },
@@ -355,7 +357,7 @@ module.exports = {
       await c.api.autoFetchAtheneaLabsForActivePatient();
       const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
       c.api.checkLabsVencidos();
-      t.falso(c.api.avisoYaVisto(uid), "los 7 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
+      t.falso(c.api.avisoYaVisto(uid), "los 8 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
     });
 
     t.caso("labsVencidosAlert: no lanza con una lista real de faltantes, ni con la lista vacía (v12.5.7)", () => {

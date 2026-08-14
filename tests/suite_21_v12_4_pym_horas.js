@@ -287,9 +287,14 @@ module.exports = {
       const HACE_181D = "2026-02-14";   // un día más allá del límite
       const HACE_200D = "2026-01-26";
 
-      t.caso("pymCubiertoPorOrdenVigente: RCV con una orden reciente (dentro de 180 días) cubre la actividad", () => {
-        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
-        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [], "orden de hace 30 días, bien dentro de los 180 de RCV_VIGENCIA_DIAS");
+      // v14.1.4 — Con la regla `every` (decisión del médico), un paquete solo cuenta como
+      // cubierto cuando TODOS sus CUPS están vigentes. Este ayudante fabrica esa situación
+      // a partir del catálogo real, en vez de repetir a mano los diez códigos del RCV.
+      const todasLasOrdenesDe = (act, fecha) => act.cups.map((c) => ({ cup: { codigo: c.codigo }, estado: "PEN", fechaCreacion: fecha }));
+
+      t.caso("pymCubiertoPorOrdenVigente: RCV con TODOS sus exámenes ordenados hace poco (dentro de 180 días) cubre la actividad", () => {
+        const ordenes = todasLasOrdenesDe(rcv(), HACE_30D);
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [], "los diez exámenes de hace 30 días, bien dentro de los 180 de RCV_VIGENCIA_DIAS");
       });
 
       t.caso("pymCubiertoPorOrdenVigente: sin ningún CUPS coincidente, la actividad sigue pendiente", () => {
@@ -297,13 +302,41 @@ module.exports = {
         t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()]);
       });
 
-      t.caso("pymCubiertoPorOrdenVigente: coincide con SOLO UNO de los 7 CUPS del paquete -> el paquete completo cuenta como cubierto (cruce por paquete, no por examen suelto)", () => {
+      // v14.1.4 — REGLA INVERTIDA POR DECISIÓN DEL MÉDICO (14-ago-2026). Antes bastaba UNO
+      // de los diez CUPS para dar el paquete por cubierto, y esta misma prueba lo fijaba
+      // como intencional ("cruce por paquete, no por examen suelto"). El caso que lo tumbó
+      // es la RAC: el catálogo dice que necesita DOS exámenes y que "van SIEMPRE los dos:
+      // uno solo no produce la RAC", pero la regla vieja la daba por hecha con cualquiera.
+      // Con `every`, una glicemia de hace un mes ya no silencia los otros nueve exámenes.
+      t.caso("pymCubiertoPorOrdenVigente v14.1.4: con SOLO UNO de los diez CUPS del paquete, la actividad SIGUE pendiente", () => {
         const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
-        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), []);
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()], "un examen de diez no es el paquete hecho");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente v14.1.4: faltando UN SOLO examen de los diez, la actividad SIGUE pendiente", () => {
+        const todas = todasLasOrdenesDe(rcv(), HACE_30D);
+        const menosUno = todas.slice(0, -1);
+        t.igual(menosUno.length, todas.length - 1, "precondición: se quitó exactamente un examen");
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], menosUno, HOY), [rcv()], "nueve de diez tampoco es el paquete hecho");
+      });
+
+      // El caso concreto que motivó el cambio, con los dos CUPS reales de la RAC.
+      t.caso("pymCubiertoPorOrdenVigente v14.1.4: la RAC necesita SUS DOS exámenes (903876 + 903026), no uno", () => {
+        const soloCreatOrina = [{ cup: { codigo: "903876" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], soloCreatOrina, HOY), [rcv()], "con la creatinina en orina sola no hay RAC");
+        const soloMicro = [{ cup: { codigo: "903026" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], soloMicro, HOY), [rcv()], "con la microalbuminuria sola tampoco");
+      });
+
+      // Guarda del borde que `every` introduce y `some` no tenía: [].every() es true.
+      t.caso("pymCubiertoPorOrdenVigente v14.1.4: una actividad SIN CUPS nunca se da por cubierta ([].every() es true)", () => {
+        const vacia = { cie10: "XXX", titulo: "Actividad sin CUPS", vigenciaDias: 180, cups: [] };
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([vacia], ordenes, HOY), [vacia], "sin CUPS no hay nada que comprobar: no puede estar cubierta");
       });
 
       t.caso("pymCubiertoPorOrdenVigente (D4, vigencia clínica): a los 180 días EXACTOS todavía cubre (límite inclusive)", () => {
-        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_180D }];
+        const ordenes = todasLasOrdenesDe(rcv(), HACE_180D);
         t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), []);
       });
 
@@ -319,10 +352,11 @@ module.exports = {
       });
 
       t.caso("pymCubiertoPorOrdenVigente: mismo CUPS con dos órdenes -> gana la fecha MÁS RECIENTE (una vieja fuera de ventana no descarta la cobertura si hay una nueva vigente)", () => {
-        const ordenes = [
-          { cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_200D },
-          { cup: { codigo: "903818" }, estado: "PRO", fechaCreacion: HACE_30D },
-        ];
+        // v14.1.4 — El paquete entero va vigente (regla `every`) y ADEMÁS el 903818 tiene
+        // una orden vieja fuera de ventana. Lo que se comprueba es que esa vieja no
+        // "desvigente" al examen, no que baste ella sola.
+        const ordenes = todasLasOrdenesDe(rcv(), HACE_30D)
+          .concat([{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_200D }]);
         t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [], "la orden reciente (30 días) es la que decide, no la vieja (200 días)");
       });
 
@@ -332,9 +366,12 @@ module.exports = {
       });
 
       t.caso("pymCubiertoPorOrdenVigente: NO interpreta `estado` — 'PEN' y 'PRO' cubren igual, por CUPS+vigencia únicamente", () => {
-        const cubrePen = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }], HOY);
-        const cubrePro = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "PRO", fechaCreacion: HACE_30D }], HOY);
-        const cubreRaro = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "ALGO-NUNCA-VISTO", fechaCreacion: HACE_30D }], HOY);
+        // v14.1.4 — con `every` hace falta el paquete completo; el estado se varía en TODAS
+        // las órdenes, que es lo que esta prueba mide.
+        const conEstado = (est) => todasLasOrdenesDe(rcv(), HACE_30D).map((o) => ({ ...o, estado: est }));
+        const cubrePen = api.pymCubiertoPorOrdenVigente([rcv()], conEstado("PEN"), HOY);
+        const cubrePro = api.pymCubiertoPorOrdenVigente([rcv()], conEstado("PRO"), HOY);
+        const cubreRaro = api.pymCubiertoPorOrdenVigente([rcv()], conEstado("ALGO-NUNCA-VISTO"), HOY);
         t.igual(cubrePen, []); t.igual(cubrePro, []); t.igual(cubreRaro, [], "un estado desconocido no descarta la orden: no se interpreta");
       });
 
