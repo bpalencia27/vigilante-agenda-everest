@@ -3976,17 +3976,45 @@
   // sea instantáneo en vez de esperar los 20 s.
   const LEADER_KEY = "vgl_leader_beat", LEADER_TTL_MS = 20000;
   state.leader = false;
+  // v14.1.5 — AVISOS TARDÍOS (reportado por los compañeros del médico, 14-ago-2026:
+  // "a veces no te avisa con tiempo, es como si estuvieran asincrónicas").
+  //
+  // El sondeo vive en `setInterval(tick, 5000)` DENTRO de la pestaña líder. Y el líder
+  // se elegía por orden de llegada, sin mirar si esa pestaña está a la vista. Ahí está
+  // la causa: **el navegador estrangula los temporizadores de las pestañas OCULTAS a
+  // uno por minuto** (y pasados unos minutos aplica el estrangulamiento intensivo). Si
+  // la pestaña que ganó el liderazgo es la de la agenda y el médico se pasa a trabajar
+  // en la historia clínica —que es lo normal—, el vigilante deja de latir cada 5 s y
+  // late cada 60 s: un aviso que debía sonar al minuto 0 sale hasta 60 s tarde.
+  //
+  // Y hay un efecto encadenado: LEADER_TTL_MS son 20 s, MENOS que los 60 s del
+  // estrangulamiento. El líder oculto ni siquiera alcanza a renovar su propio latido,
+  // así que otra pestaña se lo queda y el liderazgo rebota.
+  //
+  // Arreglo: una pestaña VISIBLE puede quitarle el liderazgo a una OCULTA aunque su
+  // latido esté fresco. Entre dos visibles (o entre dos ocultas) manda la regla de
+  // siempre —el primero que llegó— para no introducir un forcejeo nuevo.
+  function _pestanaOculta() {
+    try { return document.visibilityState === "hidden"; } catch (e) { return false; }
+  }
   function heartbeat() {
     try {
       const ahora = Date.now();
       let beat = null;
       try { beat = JSON.parse(localStorage.getItem(LEADER_KEY) || "null"); } catch (e) {}
+      const yoOculta = _pestanaOculta();
       if (beat && beat.id && beat.id !== TABID && (ahora - beat.t) < LEADER_TTL_MS) {
-        state.leader = false;               // hay un líder ajeno y su latido está fresco
-        return false;
+        // Latido ajeno y fresco. Solo se le desafía si él está oculto —y por tanto
+        // estrangulado por el navegador— y yo estoy a la vista.
+        const relevoPorVisibilidad = beat.oculta === true && !yoOculta;
+        if (!relevoPorVisibilidad) {
+          state.leader = false;             // hay un líder ajeno y su latido está fresco
+          return false;
+        }
+        console.log("[Vigilante] Relevo de liderazgo: la pestaña líder está oculta y el navegador le estrangula el temporizador. Toma el mando esta, que está a la vista.");
       }
-      // Latido propio, vencido o inexistente: esta pestaña manda y renueva el latido.
-      try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: ahora })); } catch (e) {}
+      // Latido propio, vencido, inexistente, o de un líder oculto al que se releva.
+      try { localStorage.setItem(LEADER_KEY, JSON.stringify({ id: TABID, t: ahora, oculta: yoOculta })); } catch (e) {}
       if (!state.leader) API.ultimo = 0;    // al tomar el relevo: agenda fresca YA, sin esperar cadencia
       state.leader = true;
       return true;
@@ -5804,6 +5832,7 @@
     diaActual = d;
     state.sessionEpoch = Date.now(); // v8.1.0: KR-02 Invalida peticiones en vuelo de ayer
     state.historical.clear(); state.notified.clear();
+    try { localStorage.removeItem(SIEMBRA_KEY); } catch (e) {}   // v14.1.5 — día nuevo, siembra nueva
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
@@ -6268,8 +6297,52 @@
     startFlash(p.flashText, p.color);
     popupAlert(p.color, p.title, p.body);
   }
+  // v14.1.5 — SIEMBRA COMPARTIDA ENTRE PESTAÑAS. Guarda "qué se dio ya por visto hoy"
+  // fuera de la memoria de una sola pestaña, para que un relevo de liderazgo no vuelva
+  // a sembrar de cero y se trague el primer aviso de cada paciente (ver el bloque de
+  // `!state.summarized` en tick). Se rehace sola cada día: si el sello no es el de hoy,
+  // se ignora entera y la siembra vuelve a ser legítima.
+  const SIEMBRA_KEY = "vgl_siembra_dia";
+  function _siembraCompartidaLeer() {
+    try {
+      const g = readJSON(SIEMBRA_KEY, null);
+      if (!g || g.dia !== todayStamp() || !g.mapa) return null;
+      const m = new Map(Object.entries(g.mapa));
+      return m.size ? m : null;
+    } catch (e) { return null; }
+  }
+  function _siembraCompartidaGuardar(mapa) {
+    try {
+      const obj = {};
+      for (const [k, v] of mapa) obj[k] = v;
+      writeJSON(SIEMBRA_KEY, { dia: todayStamp(), mapa: obj });
+    } catch (e) {}
+  }
+
+  // v14.1.5 — La decisión de "sembrar de cero o heredar" vive aquí, fuera de `tick`, por
+  // una razón concreta: dentro de tick era código que ninguna prueba podía alcanzar. Una
+  // mutación que anulaba la herencia (`sembradoPrevio = null`) SOBREVIVIÓ al banco entero
+  // — es decir, el arreglo del aviso que no llega no estaba respaldado por nada. Sacarla
+  // a una función propia es lo que la hace comprobable.
+  function _sembrarEstadoInicial(processed) {
+    const sembradoPrevio = _siembraCompartidaLeer();
+    if (sembradoPrevio) {
+      // Otra pestaña ya sembró hoy: se HEREDA lo que ella dio por visto, en vez de volver
+      // a dar por vistos a todos. Lo que haya cambiado desde entonces sí avisa.
+      for (const [k, v] of sembradoPrevio) state.notified.set(k, v);
+      return "heredada";
+    }
+    (processed || []).forEach((a) => state.notified.set(a.key, nkey(a)));
+    _siembraCompartidaGuardar(state.notified);
+    return "nueva";
+  }
+
   function maybeNotify(a) {
     const k = nkey(a); const prev = state.notified.get(a.key); if (prev === k) return; state.notified.set(a.key, k);
+    // La siembra compartida se mantiene al día con cada aviso: si se quedara en la foto
+    // de la mañana, un relevo a media jornada heredaría un mapa viejo y volvería a
+    // tragarse en silencio todo lo avisado desde entonces — el mismo fallo, más tarde.
+    _siembraCompartidaGuardar(state.notified);
     if (a.color === "MORADO" && a.reason !== "tiempo") return;
     // v12.4.0 — Rescate de las DOS guardias originales (v8.2.0/bea69e6), perdidas en la
     // refactorización v11.0 y consolidada la pérdida en la unificación v12.0.0:
@@ -8961,7 +9034,16 @@
     }));
     // Al volver a la pestaña o hacer clic en el panel: reconocer (apaga sonido y parpadeo).
     root.addEventListener("click", (e) => { if (!e.target.closest("#vgl-sheet")) acknowledge(); });
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") stopFlash(); });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") return;
+      stopFlash();
+      // v14.1.5 — El relevo por visibilidad tiene que ser INMEDIATO. Si se esperara al
+      // siguiente tick, ese tick es justamente el que el navegador acaba de estrangular:
+      // se tardaría hasta un minuto en recuperar la cadencia, que es el retraso que se
+      // quiere eliminar. Al volver a esta pestaña se reclama el mando y se late ya.
+      try { heartbeat(); } catch (e) {}
+      try { tick(); } catch (e) {}
+    });
     el.file.addEventListener("change", (e) => { if (e.target.files[0]) loadPymFile(e.target.files[0]); e.target.value = ""; });
     root.querySelector("#vgl-tl-close").onclick = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } setWinState("dock"); };
     root.querySelector("#vgl-tl-min").onclick = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } setWinState(winState === "min" ? "full" : "min"); };
@@ -13684,8 +13766,17 @@
         const processed = data.citas.map((a) => colorAndAlert(a, now));
         if (!state.summarized) {
           // Estado inicial: se SIEMBRA sin notificar (no-inferencia v2.5: solo eventos EN DIRECTO).
+          // v14.1.5 — ...pero SOLO la primera vez del día en TODO el navegador, no una vez
+          // por pestaña. `state.notified` y `state.summarized` viven en memoria de cada
+          // pestaña, así que cada relevo de liderazgo estrenaba una siembra: el nuevo
+          // líder marcaba a TODOS los pacientes como ya vistos sin avisar de ninguno, y
+          // `maybeNotify` los tapaba después con su `if (prev === undefined) return`. Ese
+          // es el "a veces NO te avisa" — no un aviso tarde, un aviso que no llega nunca.
+          // Con el relevo por visibilidad de esta misma versión los relevos son MÁS
+          // frecuentes, así que sin esto el arreglo de arriba habría empeorado el otro
+          // síntoma. La siembra se comparte entre pestañas y se rehace cada día.
           state.summarized = true;
-          processed.forEach((a) => state.notified.set(a.key, nkey(a)));
+          _sembrarEstadoInicial(processed);
           // v12.5.14 — helloOncePerDay ya se auto-protege contra duplicados entre pestañas
           // (localStorage "vgl_hello" por día): no depende de "leader" para eso. Quitar esa
           // condición aquí es lo que permite que el saludo SÍ salga en cuanto esta pestaña

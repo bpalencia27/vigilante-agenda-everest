@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal"],
+  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -159,6 +159,65 @@ module.exports = {
       c.api.maybeNotify({ ...b, estado: "Sin presentarse", color: "AZUL", arrival: false });
       c.api.maybeNotify({ ...b, estado: "Atendido", color: "VERDE", arrival: false });
       t.igual(atiempoHoy(c), 1, "VERDE sin llegada en vivo no suma otro aviso");
+    });
+
+    // =====================================================================
+    // v14.1.5 — LA SIEMBRA SE COMPARTE ENTRE PESTAÑAS.
+    //
+    // La siembra silenciosa de v12.4 es correcta: un paciente que YA estaba En Sala al
+    // abrir el panel no fue una llegada que el vigilante viera, así que no suena. Pero
+    // `state.notified` y `state.summarized` viven en la memoria de CADA pestaña, así que
+    // cada relevo de liderazgo estrenaba una siembra nueva y daba por vistos a todos sin
+    // avisar de ninguno. Ese es el "a veces NO te avisa" que reportaron los compañeros:
+    // no un aviso tarde, un aviso que no llega jamás. El relevo por visibilidad de esta
+    // misma versión hace los relevos MÁS frecuentes, así que sin esto lo habría agravado.
+    // =====================================================================
+    t.caso("siembra compartida v14.1.5: lo ya avisado se guarda fuera de la pestaña, para que un relevo de liderazgo no lo vuelva a sembrar en silencio", () => {
+      const c = cargar();
+      const base = { hora_texto: "08:00 AM", doc_id: "123", key: "123@08:00 AM", nombre: "JUAN", elapsed: 1, reason: "" };
+      c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });
+      t.igual(atiempoHoy(c), 1, "el aviso salió en esta pestaña");
+
+      const guardado = c.api._siembraCompartidaLeer();
+      t.cierto(!!guardado, "quedó constancia fuera de la memoria de la pestaña");
+      t.cierto(guardado.has("123@08:00 AM"), "y ese paciente figura como ya visto");
+    });
+
+    t.caso("siembra compartida v14.1.5: SIN siembra previa se siembra de cero (primera pestaña del día) y queda guardada", () => {
+      const c = cargar();
+      const processed = [
+        { key: "123@08:00 AM", hora_texto: "08:00 AM", doc_id: "123", estado: "En sala", color: "VERDE", reason: "" },
+        { key: "456@09:00 AM", hora_texto: "09:00 AM", doc_id: "456", estado: "Sin presentarse", color: "AZUL", reason: "" },
+      ];
+      t.igual(c.api._sembrarEstadoInicial(processed), "nueva", "es la primera siembra del día");
+      t.cierto(c.api.__state.notified.has("123@08:00 AM"), "los dos pacientes quedan dados por vistos, sin sonar");
+      t.cierto(c.api.__state.notified.has("456@09:00 AM"));
+      t.cierto(!!c.api._siembraCompartidaLeer(), "y la siembra queda disponible para las demás pestañas");
+    });
+
+    t.caso("siembra compartida v14.1.5: CON siembra previa se HEREDA — un paciente que llegó tras la siembra ajena NO se da por visto, así que su aviso sí sale", () => {
+      const c = cargar();
+      // Otra pestaña ya sembró hoy y solo alcanzó a ver a JUAN.
+      c.api._siembraCompartidaGuardar(new Map([["123@08:00 AM", "123@08:00 AM|Sin presentarse|AZUL|"]]));
+
+      // Esta pestaña toma el relevo y ve a JUAN y, además, a ANA, que llegó después.
+      const processed = [
+        { key: "123@08:00 AM", hora_texto: "08:00 AM", doc_id: "123", estado: "Sin presentarse", color: "AZUL", reason: "" },
+        { key: "456@09:00 AM", hora_texto: "09:00 AM", doc_id: "456", estado: "En sala", color: "VERDE", reason: "" },
+      ];
+      t.igual(c.api._sembrarEstadoInicial(processed), "heredada", "no se vuelve a sembrar de cero");
+      t.cierto(c.api.__state.notified.has("123@08:00 AM"), "lo que la otra pestaña ya dio por visto sigue visto");
+      t.falso(
+        c.api.__state.notified.has("456@09:00 AM"),
+        "ANA NO se da por vista: es justo el paciente cuyo aviso se tragaba el relevo de liderazgo"
+      );
+    });
+
+    t.caso("siembra compartida v14.1.5: una siembra de OTRO DÍA se ignora — el día nuevo vuelve a sembrar de cero, como debe", () => {
+      const c = cargar();
+      c.env.win.localStorage.setItem("vgl_siembra_dia", JSON.stringify({ dia: "1999-01-01", mapa: { "123@08:00 AM": "x" } }));
+      t.igual(c.api._siembraCompartidaLeer(), null, "un sello viejo no contamina la jornada de hoy");
     });
 
     // =====================================================================

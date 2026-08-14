@@ -54,6 +54,7 @@ function crearDom() {
   const head = elem("head");
   return {
     readyState: "loading",           // clave: impide que boot() se ejecute
+    visibilityState: "visible",      // v14.1.5 — el relevo de liderazgo lo consulta
     body, head, documentElement: elem("html"),
     createElement: elem,
     createTextNode: (t) => ({ textContent: t }),

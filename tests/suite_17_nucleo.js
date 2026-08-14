@@ -84,6 +84,42 @@ module.exports = {
       t.igual(c.api.__state.leader, true);
     });
 
+    // v14.1.5 — AVISOS TARDÍOS. El sondeo vive en `setInterval(tick, 5000)` dentro de la
+    // pestaña líder, y el navegador estrangula los temporizadores de las pestañas OCULTAS
+    // a uno por minuto. Con el liderazgo asignado por orden de llegada, la pestaña de la
+    // agenda podía quedarse de líder y pasar al fondo en cuanto el médico entra a una
+    // historia clínica: el vigilante pasaba de latir cada 5 s a cada 60 s.
+    t.caso("heartbeat v14.1.5: una pestaña A LA VISTA releva a un líder OCULTO aunque su latido esté fresco (avisos tardíos por estrangulamiento del navegador)", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      c.env.doc.visibilityState = "visible";
+
+      // Líder ajeno OCULTO, con latido recién puesto (fresco por los 20 s de la regla vieja).
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), true, "la pestaña visible SÍ le quita el mando a la oculta");
+      const beat = JSON.parse(ls.getItem("vgl_leader_beat"));
+      t.igual(beat.oculta, false, "y deja constancia de que ahora manda una pestaña a la vista");
+
+      // La simétrica: una pestaña OCULTA nunca le quita el mando a una VISIBLE.
+      c.env.doc.visibilityState = "hidden";
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: false }));
+      t.igual(c.api.heartbeat(), false, "una pestaña oculta no le roba el mando a una que está a la vista");
+
+      // Y entre dos ocultas manda la regla de siempre: el latido fresco gana.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), false, "entre dos ocultas no se introduce forcejeo nuevo: gana el latido fresco");
+    });
+
+    t.caso("heartbeat v14.1.5: un latido antiguo SIN el campo `oculta` no dispara relevos (compatibilidad con pestañas de la versión anterior)", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      c.env.doc.visibilityState = "visible";
+      // Una pestaña que todavía corre v14.1.4 escribe latidos sin `oculta`. Tratarla como
+      // oculta la desalojaría cada pocos segundos durante la transición de versión.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "pestana-vieja", t: Date.now() }));
+      t.igual(c.api.heartbeat(), false, "sin dato de visibilidad se respeta el latido fresco, como antes");
+    });
+
     // ---------- __VGL_DIAG__ (v12.5.14) ----------
     // No está en `cubre`: se asigna a window.__VGL_DIAG__ (no una `function NOMBRE`
     // declarada), así que el cargador del banco no la expone en `api` — se prueba
