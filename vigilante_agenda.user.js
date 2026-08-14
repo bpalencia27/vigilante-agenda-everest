@@ -2735,6 +2735,22 @@
   // mitad (90 días en vez de 180). Los demás analitos, y un RAC por debajo del umbral,
   // conservan los 180 días normales.
   const RAC_VIGENCIA_UMBRAL_ALBUMINURIA = 30; // mg/g
+  // v14.1.0 — R1b. Convierte a número el resultado crudo de un laboratorio numérico.
+  // Es el MISMO saneo que _vigenciaDiasParaAnalito ya aplicaba solo a la RAC (ver abajo),
+  // extraído para reutilizarlo: los LIS reportan fuera de rango con desigualdad ("> 300",
+  // "< 0,3") y con coma decimal, y `Number("> 300")` es NaN. Devuelve null —nunca 0, que
+  // en una creatinina sería un valor "válido" y catastrófico— cuando no hay número real.
+  function _labNumerico(crudo) {
+      const txt = String(crudo == null ? "" : crudo);
+      // Un signo negativo se PIERDE al quitar todo lo que no sea dígito/coma/punto, así que
+      // "-1.2" saldría convertido en 1.2 — un valor plausible donde en realidad había basura.
+      // Ningún analito de esta lista puede ser negativo: se rechaza de plano.
+      if (/-\s*\d/.test(txt)) return null;
+      const limpio = txt.replace(/[^\d.,]/g, "").replace(",", ".");
+      if (!limpio) return null;
+      const n = Number(limpio);
+      return Number.isFinite(n) && n > 0 ? n : null;
+  }
   function _vigenciaDiasParaAnalito(key, resultValCrudo) {
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
@@ -9656,6 +9672,130 @@
       console.warn("[Vigilante] apiHcObtenerOrdenamientosVigentes falló:", e);
       return null;
     }
+  }
+
+  // v14.1.0 (R1b) — SIGNOS VITALES: la única pieza que le faltaba al motor renal.
+  // El médico decidió el 14-ago-2026 que la fórmula que gobierna el estadio es
+  // COCKCROFT-GAULT, y esa fórmula necesita el PESO REAL, que hasta hoy no existía en
+  // ninguna parte del script (verificado por grep: las únicas apariciones de "peso" eran
+  // comentarios de la fórmula y una variable de bytes de telemetría).
+  //
+  // Endpoint verificado EN VIVO en consultorio el 12-08-2026 con sesión real de Everest
+  // (documentado en PROMPT_JULES_R1_TFG_KDIGO.md:129-148). Respuesta real observada:
+  //   [{"fechaRegistro":"2026-08-12T18:56:06.535-05:00","presionSistolica":120,...,
+  //     "peso":65.0,"talla":152.0,"imc":28.13}]
+  // Un ARRAY con el registro más reciente PRIMERO. Se usa el primer elemento; si el array
+  // viene vacío, peso/talla quedan ausentes y NO se inventa un valor por defecto — un peso
+  // inventado saldría por la fórmula convertido en un estadio renal falso.
+  //
+  // Misma caché por paciente y mismo TTL que las órdenes vigentes: durante una consulta el
+  // peso no cambia, y este endpoint se consulta desde un flujo que puede repetirse.
+  let _signosVitalesCache = { pacienteId: "", data: null, ts: 0 };
+  function _signosVitalesInvalidar() { _signosVitalesCache = { pacienteId: "", data: null, ts: 0 }; }
+  async function apiHcObtenerSignosVitales(pacienteId) {
+    if (!pacienteId) return null;
+    const key = String(pacienteId);
+    const ahora = Date.now();
+    if (_signosVitalesCache.pacienteId === key && _signosVitalesCache.data &&
+        (ahora - _signosVitalesCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _signosVitalesCache.data;
+    }
+    const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=${encodeURIComponent(key)}`;
+    try {
+      const data = await pageFetchJson(path);
+      // Mismo criterio de prudencia que apiHcObtenerOrdenamientosVigentes: solo un ARRAY
+      // es una respuesta utilizable (vacío incluido — un paciente sin signos vitales
+      // registrados es un resultado real). Cualquier otra forma sube como null.
+      if (!Array.isArray(data)) return null;
+      _signosVitalesCache = { pacienteId: key, data, ts: Date.now() };
+      return data;
+    } catch (e) {
+      console.warn("[Vigilante] apiHcObtenerSignosVitales falló:", e);
+      return null;
+    }
+  }
+
+  // v14.1.0 (R1b) — Extrae el peso del registro MÁS RECIENTE. Devuelve
+  // { peso, fechaRegistro } o null. No promedia ni rellena: si el registro más nuevo no
+  // trae peso utilizable, es null aunque uno más viejo sí lo tuviera — un peso de hace
+  // dos años no describe a este paciente hoy, y la fórmula no tiene forma de saberlo.
+  function _pesoDeSignosVitales(arr) {
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const r = arr[0];
+    if (!r || typeof r !== "object") return null;
+    const peso = Number(r.peso);
+    if (!Number.isFinite(peso) || peso <= 0) return null;
+    return { peso, fechaRegistro: r.fechaRegistro || "" };
+  }
+
+  // v14.1.0 (R1b) — EL ORQUESTADOR. Junta las cuatro entradas y devuelve el estadio, o
+  // dice EXACTAMENTE qué falta. Aquí vive toda la seguridad clínica de esta función:
+  //
+  //  1. Es PURA (no hace red): recibe ya resueltos edad/peso/creatinina/sexo. Quien la
+  //     llama decide cuándo pagar las llamadas. Así se puede probar de verdad.
+  //  2. NUNCA devuelve un estadio a medias. Si falta UNA sola entrada, `estadio` es null y
+  //     `faltan` nombra cuál — el consumidor debe mostrar el hueco, no rellenarlo. Es la
+  //     regla del proyecto ("casilla vacía antes que dato inventado") aplicada al dato con
+  //     más consecuencias de todo el script: de este estadio cuelga qué exámenes se piden.
+  //  3. La fórmula que MANDA es Cockcroft-Gault — decisión del médico del 14-ago-2026,
+  //     frente a CKD-EPI (que no habría necesitado el peso y era más barata de implementar).
+  //     Se calcula CKD-EPI igualmente, solo para contrastar: `evaluarDiscordanciaTFG` ya
+  //     existía escrita para esto y hasta hoy nadie la llamaba.
+  //  4. La creatinina se pasa por `_labNumerico`: los LIS mandan "> 5,0" y `Number()` daría
+  //     NaN. Un NaN aquí se lo tragarían las guardas de las fórmulas devolviendo 0, y un 0
+  //     no es "no evaluable" para `estadioKDIGO` — devolvería G5, el estadio más grave.
+  //     Por eso la creatinina se valida ANTES de entrar a la fórmula, no después.
+  //
+  // Devuelve siempre un objeto (nunca null) para que el consumidor no tenga que distinguir
+  // "no se pudo" de "se rompió":
+  //   { estadio, tfg, formula, faltan: [], entradas: {...}, discordancia }
+  function estadioRenalDelPaciente(opts) {
+    // `= {}` en la firma solo cubre `undefined`, NO `null` — desestructurar null lanza.
+    // Un llamador que pase el resultado de otra función que devolvió null es el caso obvio.
+    const { edad, peso, creatininaCruda, sexo, fechaCreatinina, fechaPeso } = (opts || {});
+    const faltan = [];
+    const edadN = Number(edad);
+    if (!Number.isFinite(edadN) || edadN <= 0 || edadN >= 140) faltan.push("edad");
+    const pesoN = Number(peso);
+    if (!Number.isFinite(pesoN) || pesoN <= 0) faltan.push("peso");
+    const creatN = _labNumerico(creatininaCruda);
+    if (creatN == null) faltan.push("creatinina");
+    // El sexo NO bloquea: sin él la fórmula corre igual (el factor 0.85 solo se aplica a
+    // mujeres), pero se anota, porque un sexo ausente sesga la TFG al alza en una mujer.
+    const sexoTxt = String(sexo == null ? "" : sexo).trim();
+
+    const entradas = {
+      edad: Number.isFinite(edadN) && edadN > 0 ? edadN : null,
+      peso: Number.isFinite(pesoN) && pesoN > 0 ? pesoN : null,
+      creatinina: creatN,
+      creatininaCruda: creatininaCruda == null ? "" : String(creatininaCruda),
+      sexo: sexoTxt,
+      fechaCreatinina: fechaCreatinina || "",
+      fechaPeso: fechaPeso || "",
+    };
+
+    if (faltan.length) {
+      return { estadio: null, tfg: null, formula: "Cockcroft-Gault", faltan, entradas, discordancia: null, sexoAusente: !sexoTxt };
+    }
+
+    const tfgCG = cockcroftGault(edadN, pesoN, creatN, sexoTxt);
+    if (!(tfgCG > 0)) {
+      // Las fórmulas devuelven el centinela 0 = "no evaluable". No se degrada a un estadio.
+      return { estadio: null, tfg: null, formula: "Cockcroft-Gault", faltan: ["tfg_no_evaluable"], entradas, discordancia: null, sexoAusente: !sexoTxt };
+    }
+    const tfgCKD = ckdEpi2021(edadN, creatN, sexoTxt);
+    return {
+      estadio: estadioKDIGO(tfgCG),
+      tfg: tfgCG,
+      formula: "Cockcroft-Gault",
+      faltan: [],
+      entradas,
+      // Contraste informativo con la otra fórmula: no cambia el estadio que manda, pero un
+      // desacuerdo grande merece verse (bajo peso muscular, obesidad, amputados…).
+      discordancia: evaluarDiscordanciaTFG(tfgCG, tfgCKD),
+      tfgCkdEpi: tfgCKD > 0 ? tfgCKD : null,
+      sexoAusente: !sexoTxt,
+    };
   }
 
   // v14.0.0 (T6, CORREGIDO tras releer D4 completo en el superprompt — la ventana por
