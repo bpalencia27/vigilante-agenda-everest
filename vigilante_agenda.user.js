@@ -10343,7 +10343,7 @@
           </div>
 
           <div class="vgl-agm-cell vgl-agm-c7">
-            <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±3 días hábiles)</label>
+            <label class="vgl-agm-lbl"><span class="vgl-agm-step">2</span>Plazo y fecha objetivo (±7 días hábiles + sábados)</label>
             <div class="vgl-agm-presets" id="vgl-time-presets">
               <button class="vgl-agm-pbtn" data-m="0" data-d="15">15 días</button>
               <button class="vgl-agm-pbtn active" data-m="1" data-d="0">1 mes</button>
@@ -10434,6 +10434,11 @@
     let selectedTimeframe = { m: 1, d: 0 };
     let selectedDateInfo = null;
     let selectedLabDateInfo = null; // v12.3.20 — día elegido para la toma de muestras (editable con chips)
+    // v14.0.1 — Rango de días candidatos y su mapa iso->botón, hechos visibles fuera de
+    // renderDayChips: cargarHoras() los necesita para el salto automático a "otro día del
+    // mismo médico" cuando el día elegido no trae agenda PROPIA (ver más abajo).
+    let diaRangeActual = [];
+    let diaBotonesPorIso = new Map();
     let pacienteIdAcceso = null;
     // v12.5.13 — Eps/nombreCompleto del paciente, capturados del mismo BuscarPacienteDetallado
     // que ya se llamaba para los programas (más abajo): son exactamente los parámetros que pide
@@ -10484,6 +10489,48 @@
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+
+    // v14.0.1 — Extraída de cargarHoras (misma regla, ahora también la usa el sondeo en
+    // segundo plano de renderDayChips): qué agendas de una lista pertenecen de verdad al
+    // médico activo, por coincidencia de nombre. Sin nombre no se filtra nada (nm.includes("")
+    // sería siempre cierto y elegiría cualquier agenda como "propia").
+    function _agendasPropias(agendasDelDia, nombreMedico) {
+      const normMedDoc = stripAccents(String(nombreMedico || "").toLowerCase()).trim();
+      if (!normMedDoc) return [];
+      const toks = normMedDoc.split(/\s+/).filter(Boolean);
+      return agendasDelDia.filter((a) => {
+        const nm = stripAccents(String(a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre || "").toLowerCase());
+        return nm.includes(normMedDoc) || (toks.length > 0 && toks.every((tok) => tok.length > 2 && nm.includes(tok)));
+      });
+    }
+
+    // v14.0.1 — Pedido explícito del médico (reportado en consultorio con pantallazo): si
+    // el día elegido no tiene su agenda propia, no basta con avisar — hay que buscar SOLO
+    // otro día del rango que sí la tenga, empezando por el más cercano en el tiempo (antes
+    // o después, el que quede más próximo). Consulta uno por uno (no hay forma de pedirle
+    // varios días a la vez a este endpoint) y se detiene en el primero que sí encuentra
+    // agenda propia real. `tokenOriginal` cancela la búsqueda si el médico cierra el modal
+    // o cambia de día a mano mientras tanto — igual que el resto de cargarHoras.
+    async function _buscarDiaConAgendaPropia(tokenOriginal) {
+      const centroIso = selectedDateInfo.iso;
+      const centroMs = new Date(centroIso + "T12:00:00").getTime();
+      const candidatos = diaRangeActual
+        .filter((it) => it.iso !== centroIso)
+        .slice()
+        .sort((a, b) => {
+          const da = Math.abs(new Date(a.iso + "T12:00:00").getTime() - centroMs);
+          const db = Math.abs(new Date(b.iso + "T12:00:00").getTime() - centroMs);
+          return da - db;
+        });
+      for (const item of candidatos) {
+        if (!vivo() || tokenOriginal !== _cargarHorasToken) return null;
+        let res;
+        try { res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId); } catch (e) { continue; }
+        const agendasDeEseDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === item.fmt);
+        if (_agendasPropias(agendasDeEseDia, doctorName).length) return item;
+      }
+      return null;
+    }
 
     let _cargarHorasToken = 0;
     let _cargarHorasLabToken = 0;
@@ -10599,7 +10646,7 @@
       const agendas = extractAgendasList(resAgendas);
 
       if (!agendas || !agendas.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas abiertas de ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Prueba haciendo clic en otro día vecino arriba (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas abiertas de ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Prueba haciendo clic en otro día vecino arriba.</div>`;
         return;
       }
 
@@ -10609,32 +10656,42 @@
       // no era el que el médico eligió en los chips.
       const agendasDelDia = agendas.filter((a) => String(a.fechaAgenda || "").trim() === selectedDateInfo.fmt);
       if (!agendasDelDia.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${escapeHtml(selectedDateInfo.fmt)}. Elija otro día del rango (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">No hay agendas de ${escapeHtml(selectedEspName)} el ${escapeHtml(selectedDateInfo.fmt)}. Elija otro día del rango.</div>`;
         return;
       }
 
       let agendasFiltradas = agendasDelDia;
-      let avisoAgendaAjena = "";
       if (selectedEspId === 12) {
-        const normMedDoc = stripAccents(String(doctorName || "").toLowerCase()).trim();
-        // OJO: con el nombre vacío, `nm.includes("")` sería SIEMPRE cierto y elegiría la
-        // primera agenda de la lista (la de otro profesional). Sin nombre no se filtra.
-        const toks = normMedDoc.split(/\s+/).filter(Boolean);
         // v12.4.0 — BLINDAJE "solo aparece 5:30 PM": antes se usaba .find() — la PRIMERA
         // agenda propia del día y las demás a la basura. Con jornada partida (mañana +
         // tarde = dos agendas el mismo día), el médico veía únicamente los turnos de la
         // agenda que el servidor listara primero (p. ej. la de tarde con un solo cupo a
         // las 17:30) y "su agenda" parecía tener un único horario, todos los días.
         // Ahora se consultan TODAS las agendas propias del día.
-        const misAgendas = !normMedDoc ? [] : agendasDelDia.filter((a) => {
-          const nm = stripAccents(String(a.medico || a.usuarioNombreCompleto || a.nombreMedico || a.profesional || a.nombre || "").toLowerCase());
-          return nm.includes(normMedDoc) || (toks.length > 0 && toks.every((tok) => tok.length > 2 && nm.includes(tok)));
-        });
-        // v11.0.1 — Antes, si no se reconocía la agenda propia se caía EN SILENCIO a las
-        // agendas de TODOS los profesionales, y la etiqueta del turno ocultaba el nombre
-        // en Medicina General: el médico podía agendar en la agenda de otro sin notarlo.
-        if (misAgendas.length) agendasFiltradas = misAgendas;
-        else avisoAgendaAjena = "⚠ No se identificó su agenda propia. Los turnos de abajo pueden ser de OTRO profesional — verifique el nombre antes de confirmar.";
+        const misAgendas = _agendasPropias(agendasDelDia, doctorName);
+        if (misAgendas.length) {
+          agendasFiltradas = misAgendas;
+        } else {
+          // v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: antes, si no se
+          // reconocía la agenda propia, se caía a mostrar los turnos de OTRO profesional
+          // con solo un aviso rojo ("verifique el nombre antes de confirmar") — un clic
+          // distraído podía agendar al paciente con el médico equivocado. Ahora este día
+          // se BLOQUEA (nunca se ofrecen turnos ajenos) y se busca automáticamente, entre
+          // los demás días del rango, el más cercano que sí tenga agenda propia real.
+          slotsEl.innerHTML = `<div class="vgl-agm-loading">Este día solo tiene agenda de otro profesional — buscando el día más cercano con SU agenda propia...</div>`;
+          const otroDia = await _buscarDiaConAgendaPropia(token);
+          if (!vivo() || token !== _cargarHorasToken) return;
+          if (otroDia) {
+            diaBotonesPorIso.forEach((b) => b.classList.remove("active"));
+            const btnNuevo = diaBotonesPorIso.get(otroDia.iso);
+            if (btnNuevo) btnNuevo.classList.add("active");
+            selectedDateInfo = otroDia;
+            cargarHoras();
+            return;
+          }
+          slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ Ningún día del rango tiene su agenda propia identificada — solo se encontraron agendas de otros profesionales. Verifique su nombre en Ajustes, o elija la fecha desde la agenda oficial de Everest.</div>`;
+          return;
+        }
       }
 
       // v12.4.0 — Evidencia en consola para diagnosticar agendas incompletas: cuántas
@@ -10700,7 +10757,7 @@
       if (token !== _cargarHorasToken) return;
 
       if (!turnosAcumulados.length) {
-        slotsEl.innerHTML = `<div class="vgl-agm-err">Sin horas libres en ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Seleccione otro día del rango (±3 días).</div>`;
+        slotsEl.innerHTML = `<div class="vgl-agm-err">Sin horas libres en ${escapeHtml(selectedEspName)} para el ${escapeHtml(selectedDateInfo.fmt)}. Seleccione otro día del rango.</div>`;
         return;
       }
 
@@ -10721,12 +10778,6 @@
       if (!turnosLibres.length) {
         slotsEl.innerHTML = `<div class="vgl-agm-err">Hay turnos en la agenda del ${escapeHtml(selectedDateInfo.fmt)} pero ninguno está activo. Elija otro día.</div>`;
         return;
-      }
-      if (avisoAgendaAjena) {
-        const w = document.createElement("div");
-        w.className = "vgl-agm-err";
-        w.textContent = avisoAgendaAjena;
-        slotsEl.appendChild(w);
       }
       // v12.4.0 — Detector de agenda congelada: la firma de los turnos (ids ordenados) se
       // compara entre fechas distintas dentro del mismo modal. Si DOS fechas devuelven
@@ -10916,6 +10967,7 @@
     function renderDayChips(m, d) {
       const isoBase = calcBusinessTargetDate(m, d).iso;
       const range = calcRangoSondeoIso(isoBase);
+      diaRangeActual = range;
       dayChipsEl.innerHTML = "";
       const miToken = ++_sweepAgendaToken;
       // Mapa iso -> botón, guardado por CIERRE en vez de buscarse luego con querySelector:
@@ -10923,6 +10975,7 @@
       // (mismo hallazgo ya documentado varias veces en este proyecto), y en el navegador
       // real esto además evita un recorrido del DOM por cada uno de los ~17 días del sondeo.
       const botonesPorIso = new Map();
+      diaBotonesPorIso = botonesPorIso;
 
       range.forEach((item) => {
         const btn = document.createElement("button");

@@ -1441,7 +1441,7 @@ module.exports = {
       t.cierto(modal.querySelector("#vgl-agm-slots").innerHTML.includes("No se encontró el paciente en el sistema de agenda con el documento 424242"));
     });
 
-    await t.casoAsync("openAgendamientoModal: flujo completo — turnos reales, aviso de agenda ajena y confirmación habilitada", async () => {
+    await t.casoAsync("openAgendamientoModal: flujo completo — turnos reales de la agenda propia y confirmación habilitada", async () => {
       const iso2fmt = (iso) => iso.split("-").reverse().join("/");
       const cFull = cargar({
         silencioso: true,
@@ -1456,7 +1456,7 @@ module.exports = {
           if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
           if (u.includes("BuscarCitasDisponibles")) {
             const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
-            return respuestaJson({ agendas: [{ agendaId: 55, medico: "OTRO PROFESIONAL", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
           }
           if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false, mensaje: "Superó las validaciones" } });
           if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
@@ -1469,15 +1469,15 @@ module.exports = {
         },
       });
       enriquecerDom(cFull);
+      cFull.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
       cFull.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
       await esperar(60);
       const modal = cFull.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
       const slots = modal.querySelector("#vgl-agm-slots");
-      t.igual(slots.children.length, 2, "un aviso + un turno");
-      t.cierto(slots.children[0].textContent.includes("No se identificó su agenda propia"), "sin nombre de médico se advierte que la agenda puede ser ajena");
-      const botonTurno = slots.children[1];
+      t.igual(slots.children.length, 1, "con la agenda propia identificada, solo el turno — sin aviso de agenda ajena");
+      const botonTurno = slots.children[0];
       t.cierto(botonTurno.innerHTML.includes("08:00 AM"));
-      t.cierto(botonTurno.innerHTML.includes("OTRO PROFESIONAL"), "el profesional se muestra SIEMPRE");
+      t.cierto(botonTurno.innerHTML.includes("ANA MARIA PEREZ"), "el profesional se muestra SIEMPRE");
       // Programas del paciente: solo los swProgramaEspecial entran al selector
       const sel = modal.querySelector("#vgl-agm-prog-sel");
       t.cierto(sel.innerHTML.includes("Nefroprotección"));
@@ -1510,6 +1510,81 @@ module.exports = {
       t.igual(confirmar.disabled, false);
       t.cierto(confirmar.textContent.includes("(08:00 AM)"));
       t.cierto(botonTurno.classList.contains("active"));
+    });
+
+    // v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: antes, un día sin agenda
+    // propia caía a mostrar los turnos de OTRO profesional con solo un aviso rojo — un clic
+    // distraído podía agendar con el médico equivocado. Ahora ese día se BLOQUEA (nunca
+    // ofrece turnos ajenos) y busca automáticamente, entre los demás días del rango, el más
+    // cercano que sí tenga la agenda propia real.
+    await t.casoAsync("openAgendamientoModal v14.0.1: si el día elegido no tiene agenda PROPIA, se bloquea y salta solo al día más cercano que sí la tiene — nunca muestra turnos ajenos", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cAjena = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const dow = new Date(iso + "T12:00:00").getDay();
+            // El día CENTRO siempre cae en día hábil (nunca sábado) — con solo los sábados
+            // trayendo la agenda propia, el centro SIEMPRE arranca "ajeno" y el salto
+            // automático tiene que buscar hasta llegar a un sábado del rango.
+            const medico = dow === 6 ? "ANA MARIA PEREZ" : "OTRO PROFESIONAL";
+            return respuestaJson({ agendas: [{ agendaId: 61, medico, fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cAjena);
+      cAjena.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cAjena.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(1200);
+      const modal = cAjena.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      // v14.0.1 — El harness de pruebas no reconstruye textContent a partir de innerHTML ni
+      // de appendChild (textContent es una propiedad estática, ver tests/harness.js): igual
+      // que el resto de este archivo, se lee el innerHTML de cada botón hijo.
+      const textoSlots = [...slots.children].map((c) => c.innerHTML || "").join(" ");
+      t.falso(textoSlots.includes("OTRO PROFESIONAL"), "nunca se muestra un turno de otro profesional, ni de paso ni como último recurso");
+      t.cierto(textoSlots.includes("ANA MARIA PEREZ") && textoSlots.includes("07:00 AM"), "terminó mostrando el turno de la agenda propia, en el día que sí la tenía");
+      const chipsEl = modal.querySelector("#vgl-day-chips");
+      const activo = [...chipsEl.children].find((b) => b.classList.contains("active"));
+      t.cierto(!!activo && activo.className.includes("vgl-agm-pbtn-sabado"), "el chip activo saltó solo al sábado, el único día del rango con agenda propia real");
+    });
+
+    await t.casoAsync("openAgendamientoModal v14.0.1: si NINGÚN día del rango tiene agenda propia, avisa con claridad y no ofrece ningún turno ajeno", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cNinguno = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "OTRO PROFESIONAL", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cNinguno);
+      cNinguno.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cNinguno.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(1200);
+      const modal = cNinguno.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      // v14.0.1 — Este mensaje de error se asigna con slotsEl.innerHTML = "..." directo (no
+      // por appendChild), así que a diferencia del caso de arriba sí se lee bien en innerHTML.
+      t.falso(slots.innerHTML.includes("OTRO PROFESIONAL"), "nunca se muestra un turno de otro profesional, ni siquiera como último recurso");
+      t.cierto(slots.innerHTML.includes("Ningún día del rango tiene su agenda propia"), "avisa con claridad que no encontró ningún día con agenda propia");
     });
 
     await t.casoAsync("openAgendamientoModal v12.4: se consultan TODAS las agendas propias del día (jornada partida), no solo la primera", async () => {
