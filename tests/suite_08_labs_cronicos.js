@@ -67,6 +67,12 @@ module.exports = {
       t.igual(res, null, "903866 es TGP/ALT, ninguno de los 13 analitos autorizados — no debe emparejar con nada");
     });
 
+    t.caso("_matchLabInWhitelist: Fósforo casa aunque Athenea lo entregue como 'FOSFORO INORGANICO (FOSFATOS)' (v14.0.0, reportado por el médico)", () => {
+      const res = testApi._matchLabInWhitelist({ nombre: "FOSFORO INORGANICO (FOSFATOS)" });
+      t.cierto(!!res, "el nombre real que entrega Athenea debe casar, no solo 'FOSFORO EN SUERO'");
+      t.igual(res.key, "FOSFORO");
+    });
+
     t.caso("_matchLabInWhitelist: Analito desconocido devuelve null", () => {
       const res = testApi._matchLabInWhitelist({ CodigoParametro: "999999", nombre: "LABORATORIO INVENTADO" });
       t.igual(res, null);

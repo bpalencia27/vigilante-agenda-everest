@@ -1132,7 +1132,11 @@
     // para que el analito se avise como pendiente de escribir a mano, no para escribirlo.
     { key: "HBA1C", names: ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"], codes: ["2035", "903843"], resultId: "resultadoHBA1C", dateId: "fechaResultHBA1C" },
     { key: "PTH", names: ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"], codes: ["2065", "904921"], resultId: "resultadoPTH", dateId: "fechaResultPTH" },
-    { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
+    // v14.0.0 — Athenea entrega este analito como "FOSFORO INORGANICO (FOSFATOS)" (reporte
+    // del médico en consultorio), no como "FOSFORO EN SUERO": sin ese nombre en la lista,
+    // Auto-Labs nunca lo casaba y la casilla quedaba vacía. Se agrega el nombre real; los
+    // dos anteriores se conservan por si otra vista o laboratorio lo rotula distinto.
+    { key: "FOSFORO", names: ["FOSFORO EN SUERO", "FÓSFORO EN SUERO", "FOSFORO INORGANICO"], codes: ["2031", "903837"], resultId: "resultadoFosforo", dateId: "fechaResultFosforo" },
     { key: "ALBUMINA", names: ["ALBUMINA EN SUERO", "ALBÚMINA EN SUERO"], codes: ["2002", "903801"], resultId: "resultadoAlbumina", dateId: "fechaResultAlbumina" },
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
