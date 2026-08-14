@@ -1141,6 +1141,42 @@
     { key: "HEMOGLOBINA", names: ["HEMOGLOBINA"], codes: ["2034", "902207"], resultId: "resultadoHemoglobina", dateId: "fechaResultHemoglobina" }
   ];
 
+  // v14.0.2 — CUPS DE ESCRITURA (ordenamiento) para HbA1c/PTH/Fósforo/Albúmina, confirmados
+  // vía diagnóstico cruzado Copiloto↔Vigilante (`teamwork_projects/sync_copiloto_vigilante/
+  // MATRIZ_DIVERGENCIAS.md` en el repo del Copiloto, sección "brecha de capacidad de orden"),
+  // que a su vez toma el catálogo `NAME_TO_CUPS`/`CUPS_EMBEBIDOS` del Copiloto — ya en
+  // producción para ORDENAR (no solo leer) estos 4 analitos, y probado en
+  // `tests/test_catalogos_embebidos.py` de ese repo.
+  //
+  // OJO: estos códigos NO son los mismos que WHITELIST_13_LABS de arriba — esos son de
+  // LECTURA (reconocer un resultado que ya llegó de Athenea), estos son de ESCRITURA
+  // (pedir el examen). Para PTH/Fósforo/Albúmina difieren entre sí; para Hemoglobina
+  // coinciden en la práctica (902213 en ambos catálogos de escritura — 902207 de
+  // WHITELIST_13_LABS es solo lectura, se incluye aquí solo por completitud/referencia).
+  //
+  //   Analito     | lectura (arriba) | escritura (aquí) |
+  //   PTH         | 904921           | 903890            |
+  //   Fósforo     | 903837           | 903885            |
+  //   Albúmina    | 903801           | 903803            |
+  //   Hemoglobina | 902207           | 902213 (= lectura de facto, no divergen)  |
+  //   HbA1c       | 903843           | 904426            |
+  //
+  // NO están conectados a ningún botón todavía: el propio médico resolvió el 2026-08-11
+  // (`DECISIONES_PENDIENTES.md`, P4) que Vigilante solo debe ORDENAR estos 4 cuando el
+  // estadio ERC del paciente esté confirmado y la tabla de vigencias diga que corresponde
+  // — "si el script todavía no conoce el estadio del paciente, se omiten por ahora, no se
+  // piden a ciegas". Esa condición depende de que Vigilante se vuelva consciente del
+  // estadio renal (P6), todavía sin implementar. Este bloque solo deja los códigos
+  // correctos y ya verificados listos para cuando esa pieza exista — no se adivina nada
+  // nuevo, y no se ordena nada nuevo con este cambio.
+  const CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = {
+    HBA1C: "904426",
+    PTH: "903890",
+    FOSFORO: "903885",
+    ALBUMINA: "903803",
+    HEMOGLOBINA: "902213",
+  };
+
   // v12.3.37 — SECCIÓN URONÁLISIS DE LA RUTA CRÓNICOS (pedido del consultorio, pantallazo
   // del 2026-08-11): además del interruptor NORMAL/ANORMAL, la vista tiene 7 casillas de
   // texto para los componentes del parcial de orina, todas con placeholder

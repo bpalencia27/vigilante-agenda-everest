@@ -1425,5 +1425,27 @@ module.exports = {
 
       t.igual(warns2.filter((w) => w.indexOf(PREFIJO) === 0).length, 0, "laboratorios con fecha NO producen el aviso de fecha no reconocida");
     });
+
+    // v14.0.2 — CUPS de ESCRITURA (ordenamiento) para HbA1c/PTH/Fósforo/Albúmina/Hemoglobina,
+    // confirmados vía el diagnóstico cruzado Copiloto↔Vigilante (MATRIZ_DIVERGENCIAS.md del
+    // Copiloto, que a su vez toma el catálogo NAME_TO_CUPS/CUPS_EMBEBIDOS ya en producción
+    // en ese repo). Distintos de los códigos de LECTURA de WHITELIST_13_LABS de arriba —
+    // esta prueba solo fija los valores confirmados; no implica que ya se estén ordenando
+    // (siguen sin consumidor, a la espera de P6/estadio renal, ver el comentario en el
+    // propio script).
+    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO: los 5 códigos de escritura confirmados con el Copiloto, distintos de los de lectura", () => {
+      const w = c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO;
+      t.igual(w.HBA1C, "904426");
+      t.igual(w.PTH, "903890");
+      t.igual(w.FOSFORO, "903885");
+      t.igual(w.ALBUMINA, "903803");
+      t.igual(w.HEMOGLOBINA, "902213");
+      // Confirma que de verdad son de escritura, no una copia accidental de los de lectura
+      // de WHITELIST_13_LABS (que usan otros números para PTH/Fósforo/Albúmina).
+      const porClave = Object.fromEntries(c.api.__WHITELIST.map((x) => [x.key, x.codes]));
+      t.cierto(!porClave.PTH.includes(w.PTH), "PTH: escritura (903890) distinta de lectura (904921)");
+      t.cierto(!porClave.FOSFORO.includes(w.FOSFORO), "Fósforo: escritura (903885) distinta de lectura (903837)");
+      t.cierto(!porClave.ALBUMINA.includes(w.ALBUMINA), "Albúmina: escritura (903803) distinta de lectura (903801)");
+    });
   }
 };
