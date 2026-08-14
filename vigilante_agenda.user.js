@@ -6707,8 +6707,21 @@
       .vgl-sp-x{position:absolute;top:9px;right:11px;font-size:var(--t-strong);font-weight:700;color:#9aa7ba;cursor:pointer;line-height:1;padding:2px 7px;border-radius:999px}
 
       /* Botones inyectados globales */
+      /* v14.0.0 — INCIDENTE REAL EN CONSULTA: el botón "Normalidad fija" desapareció.
+         No estaba ausente: estaba PINTADO DETRÁS de Everest. #vgl-examen-normalidad se pega
+         a document.body y NO está en las listas de contenedores con tokens (a diferencia de
+         #vgl-examen-guardar/#vgl-examen-aplicar, que sí), así que --z-widget no resuelve
+         para él; y una declaración con una var() indefinida es INVÁLIDA entera, con lo que
+         z-index caía a "auto" y el contenido de Everest se le ponía encima. Verificado en
+         Chromium: Auto-Labs (#vgl-lab-injector, que SÍ está en las listas) resolvía
+         z-index:2147480000 y recibía el clic; el de examen físico resolvía "auto" y el clic
+         se lo llevaba el app-root de Everest.
+         La migración de z-index a tokens de D6 dejó este literal (antes 9999999) sin
+         reserva, siendo el ÚNICO token de esta regla sin ella — color, font-family y
+         font-size sí la llevan, y por exactamente este mismo motivo (incidente v12.6.6).
+         El valor de reserva es el mismo de --z-widget en la tabla de D6. */
       .vgl-lab-inj,.vgl-exf-btn{
-        position:fixed;left:15px;z-index:var(--z-widget);
+        position:fixed;left:15px;z-index:var(--z-widget,2147480000);
         color:var(--bg-solid, #fff);border:none;padding:10px 14px;border-radius:6px;
         font-family:var(--font-stack, sans-serif);font-size:var(--t-micro,12px);font-weight:bold;cursor:pointer;
         box-shadow:0 4px 10px rgba(0,0,0,0.5);transition:opacity 0.2s;

@@ -589,7 +589,11 @@ module.exports = {
       t.cierto(literalWidgetViejo.length === 0, `El z-index improvisado de .vgl-lab-inj/.vgl-exf-btn (9999999) debe haber migrado a var(--z-widget). Quedaron ${literalWidgetViejo.length}.`);
 
       const zPanel = css.match(/z-index:var\(--z-panel\)/g) || [];
-      const zWidget = css.match(/z-index:var\(--z-widget\)/g) || [];
+      // v14.0.0 — admite también la forma CON RESERVA, var(--z-widget,2147480000): el token
+      // se sigue consumiendo igual. La reserva es obligatoria en .vgl-lab-inj/.vgl-exf-btn
+      // porque #vgl-examen-normalidad vive fuera de las listas de contenedores (ver Regla M);
+      // sin ella la declaración quedaba inválida y el botón desaparecía tras Everest.
+      const zWidget = css.match(/z-index:var\(--z-widget(?:,\s*\d+)?\)/g) || [];
       const zModal = css.match(/z-index:var\(--z-modal\)/g) || [];
       const zAlerta = css.match(/z-index:var\(--z-alerta\)/g) || [];
       const zBanner = css.match(/z-index:var\(--z-banner\)/g) || [];
@@ -675,6 +679,44 @@ module.exports = {
         t.cierto(/var\(--bg-solid\)|var\(--bg\)/.test(decl),
           `${id} cuelga de document.body: su 'background' DEBE apoyarse en un token opaco (--bg-solid o --bg), no solo en un velo --surface-*, o su fondo real pasa a ser el que pinte Everest y el texto se vuelve ilegible según la pantalla del host. Declaración actual: "${decl}"`);
       }
+    });
+
+    // v14.0.0 — Regla M: los elementos que viven FUERA de las listas de contenedores con
+    // tokens deben consumir cada var() CON RESERVA. Bug real reportado en consulta: el
+    // botón "🩺 Normalidad fija" (#vgl-examen-normalidad) "desapareció". No estaba ausente:
+    // estaba PINTADO DETRÁS de Everest. Ese botón se pega a document.body y NO está en las
+    // listas de tokens (a diferencia de #vgl-examen-guardar/#vgl-examen-aplicar, que sí),
+    // así que --z-widget no resuelve para él — y en CSS una declaración con una var()
+    // indefinida y sin reserva es INVÁLIDA ENTERA, con lo que z-index caía a "auto" y el
+    // contenido de Everest se le ponía encima. Verificado en Chromium: #vgl-lab-injector
+    // (que SÍ está en las listas) resolvía z-index 2147480000 y recibía el clic; el de
+    // examen físico resolvía "auto" y el clic se lo llevaba el app-root de Everest.
+    // Lo introdujo la migración de z-index a tokens de D6, que dejó este literal (antes
+    // 9999999) como el ÚNICO token de su regla sin reserva — color, font-family y font-size
+    // sí la llevaban, y por exactamente el mismo motivo (incidente v12.6.6).
+    t.caso("Regla M - la regla de los botones inyectados consume TODOS sus tokens con reserva (viven fuera de las listas)", () => {
+      const bloque = /\.vgl-lab-inj\s*,\s*\.vgl-exf-btn\s*\{([^}]*)\}/.exec(cssClean);
+      t.cierto(!!bloque, "existe la regla base .vgl-lab-inj,.vgl-exf-btn (si falla, el selector cambió y hay que revisar a mano)");
+      const sinReserva = (bloque[1].match(/var\(--[\w-]+\)/g) || []);
+      t.cierto(sinReserva.length === 0,
+        `#vgl-examen-normalidad NO está en las listas de contenedores con tokens, así que toda var() de esta regla necesita valor de reserva —var(--x, valor)— o la declaración entera queda inválida para ese botón y desaparece detrás de Everest. Sin reserva: ${sinReserva.join(", ")}`);
+    });
+
+    // v14.0.0 — Guarda del pie: el bloque CSS vive dentro de un template literal de JS, así
+    // que un backtick suelto (por ejemplo en un comentario que cite `código`) NO rompe solo
+    // un estilo: cierra la plantilla y tumba el archivo ENTERO con SyntaxError — el médico
+    // se queda sin script. Pasó dos veces el mismo día escribiendo estos comentarios.
+    // `node -c` y el propio runner ya lo cazan, pero esta prueba lo dice por su nombre en
+    // vez de fallar con un error de sintaxis críptico a 13.000 líneas de distancia.
+    t.caso("Regla N - ningún backtick suelto dentro del bloque CSS (cierra el template literal y tumba el archivo)", () => {
+      const lineas = code.split("\n");
+      const ini = lineas.findIndex((l) => l.includes("style.textContent = `"));
+      t.cierto(ini >= 0, "se encontró el inicio del bloque CSS");
+      const fin = lineas.findIndex((l, i) => i > ini && l.includes("`;"));
+      t.cierto(fin > ini, "se encontró el cierre del bloque CSS");
+      const culpables = [];
+      for (let i = ini + 1; i < fin; i++) if (lineas[i].includes("`")) culpables.push(`${i + 1}: ${lineas[i].trim().slice(0, 60)}`);
+      t.cierto(culpables.length === 0, `Backtick dentro del bloque CSS — cierra el template literal y rompe el archivo entero. Líneas: ${culpables.join(" | ")}`);
     });
 
   }
