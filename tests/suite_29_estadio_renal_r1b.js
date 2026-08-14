@@ -71,6 +71,17 @@ module.exports = {
       t.igual(api._pesoDeSignosVitales(arr), null);
     });
 
+    // v14.1.3 — El peso pasa por _labNumerico, no por Number() a secas. La captura real de
+    // consultorio lo trae como número, pero si una instalación devolviera coma decimal o la
+    // unidad pegada, Number() daría NaN y se descartaría un peso VÁLIDO — y sin peso no hay
+    // Cockcroft-Gault, así que ese paciente se quedaría sin estadio por un formato.
+    t.caso("_pesoDeSignosVitales: acepta coma decimal y unidad pegada, no solo número puro", () => {
+      t.igual(api._pesoDeSignosVitales([{ peso: 65.0 }]).peso, 65, "el formato real capturado en consultorio (número)");
+      t.igual(api._pesoDeSignosVitales([{ peso: "72,5" }]).peso, 72.5, "coma decimal");
+      t.igual(api._pesoDeSignosVitales([{ peso: "70 kg" }]).peso, 70, "unidad pegada");
+      t.igual(api._pesoDeSignosVitales([{ peso: "-70" }]), null, "un peso negativo es basura, no 70");
+    });
+
     t.caso("_pesoDeSignosVitales: array vacío, no-array y peso inválido -> null, sin lanzar", () => {
       t.igual(api._pesoDeSignosVitales([]), null, "paciente sin signos vitales registrados");
       t.igual(api._pesoDeSignosVitales(null), null);
@@ -130,6 +141,30 @@ module.exports = {
       const r = api.estadioRenalDelPaciente({ edad: 63, peso: 70, creatininaCruda: "PENDIENTE", sexo: "F" });
       t.igual(r.estadio, null, "NO puede salir G5 de un resultado no numérico");
       t.igual(r.faltan, ["creatinina"]);
+    });
+
+    // v14.1.3 — GUARDA DE UNIDADES (hallazgo de la auditoría de Gemini, verificado): las
+    // fórmulas asumen mg/dL y el script descarta el campo `unidades` de Athenea desde
+    // v12.0.0. Una creatinina normal reportada en µmol/L llega como 88 en vez de 1,0, y
+    // Cockcroft-Gault daría una TFG ~88 veces menor: un paciente SANO saldría en falla renal
+    // terminal. No se convierte (adivinar la unidad de un dato clínico es justo lo que este
+    // proyecto prohíbe): se rechaza por rango de plausibilidad y se dice por qué.
+    t.caso("estadioRenalDelPaciente: una creatinina en µmol/L (fuera del rango de mg/dL) se RECHAZA, no se calcula", () => {
+      const r = api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "88", sexo: "M" });
+      t.igual(r.estadio, null, "88 mg/dL es imposible en suero: casi seguro son µmol/L");
+      t.igual(r.faltan, ["creatinina_fuera_de_rango"]);
+      const r2 = api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "0.05", sexo: "M" });
+      t.igual(r2.estadio, null, "por debajo de 0,1 mg/dL tampoco es plausible");
+      t.igual(r2.faltan, ["creatinina_fuera_de_rango"]);
+    });
+
+    t.caso("estadioRenalDelPaciente: los extremos PLAUSIBLES en mg/dL sí se calculan", () => {
+      // El rango tiene que dejar pasar la falla renal terminal real, que es justo el
+      // paciente en quien el estadio más importa.
+      t.cierto(!!api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "12", sexo: "M" }).estadio,
+        "12 mg/dL es una falla renal avanzada real, no un error de unidades");
+      t.cierto(!!api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "0.4", sexo: "F" }).estadio,
+        "0,4 mg/dL es plausible en una mujer de poca masa muscular");
     });
 
     t.caso("estadioRenalDelPaciente: una creatinina '0' tampoco se degrada a G5", () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.2
+// @version      14.1.3
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.3";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2773,9 +2773,14 @@
           // sanitizar el umbral nunca se cumplía justo para la albuminuria más franca —el
           // caso de mayor riesgo— y la vigencia volvía a los 180 días completos en vez de
           // acortarse a 90. Se quita todo lo que no sea dígito/coma/punto antes de parsear.
-          const limpio = String(resultValCrudo == null ? "" : resultValCrudo).replace(/[^\d.,]/g, "").replace(",", ".");
-          const n = Number(limpio);
-          if (Number.isFinite(n) && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
+          // v14.1.3 — Ahora usa _labNumerico en vez de repetir aquí el saneo. Cuando se
+          // extrajo esa función (v14.1.0) se dejó esta copia sin migrar, y las dos habían
+          // divergido: _labNumerico rechaza los negativos, esta no. Con un "-50" corrupto
+          // del LIS, el saneo de aquí borraba el signo y devolvía 50 — por encima del
+          // umbral de albuminuria (30), así que un dato inválido ACORTABA la vigencia a la
+          // mitad. Una sola función, un solo criterio.
+          const n = _labNumerico(resultValCrudo);
+          if (n != null && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
       }
       return RCV_VIGENCIA_DIAS;
   }
@@ -2816,6 +2821,16 @@
   // Estadificación KDIGO de la TFG (ml/min/1.73m²) en los seis estadios estándar.
   function estadioKDIGO(tfg) {
       const v = Number(tfg);
+      // v14.1.3 — GUARDA EN LA FUENTE. Sin esta línea, la función tenía el peor fallo
+      // posible escondido en la aritmética de JavaScript: TODA comparación de orden con
+      // NaN es false, así que un `tfg` no numérico (texto, null, undefined) caía por los
+      // seis `if` y salía por el `return "G5"` del final — el estadio MÁS GRAVE, falla
+      // renal terminal, a partir de un dato que ni siquiera se pudo leer. Lo mismo con el
+      // centinela 0 que devuelven cockcroftGault/ckdEpi2021 para decir "no evaluable".
+      // `estadioRenalDelPaciente` ya lo blindaba por fuera, pero esta función es pública y
+      // pura: quien la llame directo merece la misma protección. "No evaluable" es null,
+      // nunca el diagnóstico más grave.
+      if (!Number.isFinite(v) || v <= 0) return null;
       if (v >= 90) return "G1";
       if (v >= 60) return "G2";
       if (v >= 45) return "G3a";
@@ -9787,8 +9802,13 @@
     if (!Array.isArray(arr) || !arr.length) return null;
     const r = arr[0];
     if (!r || typeof r !== "object") return null;
-    const peso = Number(r.peso);
-    if (!Number.isFinite(peso) || peso <= 0) return null;
+    // v14.1.3 — Pasa por _labNumerico en vez de Number() a secas. La captura real de
+    // consultorio trae `"peso":65.0` como NÚMERO, así que Number() bastaba hoy; pero si
+    // alguna instalación devolviera "72,5" (coma decimal, formato local) o "70 kg",
+    // Number() daría NaN y se descartaría un peso VÁLIDO — y sin peso no hay
+    // Cockcroft-Gault, así que el paciente se quedaría sin estadificación por un formato.
+    const peso = _labNumerico(r.peso);
+    if (peso == null) return null;
     return { peso, fechaRegistro: r.fechaRegistro || "" };
   }
 
@@ -9875,6 +9895,17 @@
     if (!Number.isFinite(pesoN) || pesoN <= 0) faltan.push("peso");
     const creatN = _labNumerico(creatininaCruda);
     if (creatN == null) faltan.push("creatinina");
+    // v14.1.3 — GUARDA DE UNIDADES, por rango de plausibilidad. Las dos fórmulas asumen la
+    // creatinina en mg/dL, y el script descarta el campo `unidades` de Athenea desde
+    // v12.0.0. Si un laboratorio reportara en µmol/L —la otra unidad de uso corriente en el
+    // mundo— una creatinina normal de 1,0 mg/dL llegaría como 88, y Cockcroft-Gault
+    // devolvería una TFG ~88 veces menor: un paciente sano saldría en falla renal terminal,
+    // con todo lo que eso arrastra (remisión a nefrología, ajuste de dosis, suspensión de
+    // fármacos). No se convierte automáticamente —adivinar la unidad de un dato clínico es
+    // justo lo que este proyecto prohíbe—: se RECHAZA y se dice por qué.
+    // El rango 0,1–20 mg/dL cubre de sobra lo fisiológicamente posible en suero, incluida
+    // la falla renal terminal sin diálisis (rara vez pasa de 15).
+    else if (creatN < 0.1 || creatN > 20) faltan.push("creatinina_fuera_de_rango");
     // El sexo NO bloquea: sin él la fórmula corre igual (el factor 0.85 solo se aplica a
     // mujeres), pero se anota, porque un sexo ausente sesga la TFG al alza en una mujer.
     const sexoTxt = String(sexo == null ? "" : sexo).trim();
@@ -9959,6 +9990,10 @@
   function _renderEstadioRenalHtml(r) {
     if (!r) return "";
     const ETIQUETA = { edad: "la edad", peso: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    if ((r.faltan || []).indexOf("creatinina_fuera_de_rango") !== -1) {
+      const v = r.entradas && r.entradas.creatininaCruda;
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se calcula — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
+    }
     if (!r.estadio) {
       const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);
       const lista = faltan.length > 1

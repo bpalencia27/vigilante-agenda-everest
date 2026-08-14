@@ -56,6 +56,28 @@ module.exports = {
       t.igual(api.estadioKDIGO(14.9), "G5");
     });
 
+    // v14.1.3 — El peor fallo posible de esta función, y estaba escondido en la aritmética
+    // de JavaScript: TODA comparación de orden con NaN es false, así que un valor no
+    // numérico caía por los seis `if` y salía por el `return "G5"` del final — falla renal
+    // terminal a partir de un dato que ni siquiera se pudo leer. Lo mismo con el centinela 0
+    // que devuelven cockcroftGault/ckdEpi2021 para decir "no evaluable".
+    t.caso("estadioKDIGO - un valor NO evaluable devuelve null, JAMÁS G5 (el estadio más grave)", () => {
+      t.igual(api.estadioKDIGO(0), null, "0 es el centinela 'no evaluable' de las dos fórmulas, no una TFG de cero");
+      t.igual(api.estadioKDIGO(NaN), null);
+      t.igual(api.estadioKDIGO(null), null);
+      t.igual(api.estadioKDIGO(undefined), null);
+      t.igual(api.estadioKDIGO(""), null);
+      t.igual(api.estadioKDIGO("PENDIENTE"), null);
+      t.igual(api.estadioKDIGO("> 60"), null, "el texto con desigualdad del LIS no es un número");
+      t.igual(api.estadioKDIGO(-5), null, "una TFG negativa es un dato corrupto, no un estadio");
+    });
+
+    t.caso("estadioKDIGO - una TFG real muy baja SÍ es G5 (no se confunde con 'no evaluable')", () => {
+      t.igual(api.estadioKDIGO(14.9), "G5");
+      t.igual(api.estadioKDIGO(3), "G5");
+      t.igual(api.estadioKDIGO(0.1), "G5", "por encima de cero, por bajo que sea, es una TFG medida");
+    });
+
     t.caso("evaluarDiscordanciaTFG - diferencia de 2 estadios no es alerta", () => {
       t.igual(api.evaluarDiscordanciaTFG(95, 50), null);
     });
