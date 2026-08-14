@@ -520,6 +520,35 @@ module.exports = {
       t.falso(card.innerHTML.includes("vgl-pyms"), "sin fila de chips PyM");
     });
 
+    // v14.0.0 — Secuela real de T4: la fila inferior (.vgl-card-btm) llevaba los botones Y
+    // la fila de chips de PyM. T4 se llevó ambos contenidos pero dejó el contenedor, así
+    // que en las tarjetas SIN citaId —las que entran por lectura del DOM, donde no hay
+    // botón Atender que ofrecer— quedaba un div vacío cobrando su margin-top de 7px.
+    // Medido en Chromium con el CSS real: 96.3px de alto por tarjeta antes, 89.5px después.
+    // En un panel de 20+ pacientes al día son ~136px de scroll regalados, exactamente lo
+    // contrario de "densidad antes que aire" (§4.3.4).
+    t.caso("v14 — una tarjeta SIN botón Atender no emite la fila inferior vacía (hueco muerto al pie)", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      // Sin citaId: es la ruta de respaldo por scraping del DOM, donde atenderBtn no existe
+      // (no hay a qué CitaId apuntar) y por tanto `actions` queda vacío.
+      const sinCita = { key: "v14-sin", doc_id: "777", nombre: "PACIENTE SIN CITAID", hora_texto: "09:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.render([sinCita], "api", new Date());
+      const card = lista.children[0];
+      t.falso(card.innerHTML.includes("vgl-btn-atender"), "precondición: sin citaId no hay botón Atender");
+      t.falso(card.innerHTML.includes("vgl-card-btm"), "y sin nada que poner dentro, la fila inferior NO se emite: cero div vacío cobrando margen");
+
+      // Contraprueba en la misma prueba: con citaId, la fila SÍ debe seguir emitiéndose —
+      // el arreglo no puede llevarse por delante el botón Atender de las tarjetas normales.
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const conCita = { key: "v14-con", doc_id: "778", nombre: "PACIENTE CON CITAID", hora_texto: "09:30", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4242 };
+      cv.api.render([conCita], "api", new Date());
+      const card2 = lista.children[0];
+      t.cierto(card2.innerHTML.includes("vgl-btn-atender"), "con citaId el botón Atender sigue ahí");
+      t.cierto(card2.innerHTML.includes("vgl-card-btm"), "y su fila inferior se emite con normalidad");
+    });
+
     t.caso("T4 (D9) — la bandera PES usa el texto nuevo «ABANDONO PROGRAMA RCV»", () => {
       vaciarLista();
       cv.api.__S.abandonoPES = true;

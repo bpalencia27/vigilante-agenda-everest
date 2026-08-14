@@ -12500,10 +12500,17 @@
         <div class="vgl-card-mid vgl-card-mid-t1">
           <div class="vgl-name vgl-name-t1" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
           ${a.doc_id ? `<span class="vgl-doc vgl-doc-t1">CC ${highlight(String(a.doc_id))}</span>` : ""}
-        </div>
-        <div class="vgl-card-btm vgl-card-btm-t1">
-          ${actions}
-        </div>`;
+        </div>` +
+        // v14.0.0 — la fila inferior SOLO se emite si tiene algo dentro. Antes de T4 llevaba
+        // los botones Y la fila de chips de PyM; T4 se llevó ambos y dejó el contenedor,
+        // así que en las tarjetas sin `citaId` (las que entran por lectura del DOM, sin API,
+        // donde `actions` queda vacío) se pintaba un div VACÍO que igual cobraba su
+        // margin-top de 7px: un hueco muerto al pie de la tarjeta. No es cosmético en un
+        // panel de 20+ pacientes al día — son 7px de scroll regalados por tarjeta, justo lo
+        // contrario de "densidad antes que aire" (§4.3.4).
+        (actions
+          ? `<div class="vgl-card-btm vgl-card-btm-t1">${actions}</div>`
+          : "");
       card.__vglKey = a.key;
       const bAt = card.querySelector(".vgl-btn-atender");
       // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
