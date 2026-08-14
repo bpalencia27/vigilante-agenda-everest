@@ -1526,10 +1526,13 @@ module.exports = {
     // en ese repo). Distintos de los códigos de LECTURA de WHITELIST_13_LABS de arriba —
     // esta prueba solo fija los valores confirmados; no implica que ya se estén ordenando
     // (siguen sin consumidor, a la espera de P6/estadio renal, ver el comentario en el
-    // propio script).
-    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO: los 5 códigos de escritura confirmados con el Copiloto, distintos de los de lectura", () => {
+    // propio script). v14.0.4 — CORREGIDO: HbA1c NO es el 904426 del Copiloto (su variante
+    // corta "HEMOGLOBINA GLICOSILADA", sin más) — es 903426, el código YA vigente en
+    // PYM_CATALOG/I10X, tomado de una orden REAL ya guardada en Everest
+    // (EVIDENCIA_ORDENAMIENTO_CURADO.md §2), evidencia más fuerte que la del otro repo.
+    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO: los 5 códigos de escritura confirmados, distintos de los de lectura", () => {
       const w = c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO;
-      t.igual(w.HBA1C, "904426");
+      t.igual(w.HBA1C, "903426", "la orden REAL ya guardada en Everest manda sobre el catálogo corto del Copiloto");
       t.igual(w.PTH, "903890");
       t.igual(w.FOSFORO, "903885");
       t.igual(w.ALBUMINA, "903803");
@@ -1540,6 +1543,18 @@ module.exports = {
       t.cierto(!porClave.PTH.includes(w.PTH), "PTH: escritura (903890) distinta de lectura (904921)");
       t.cierto(!porClave.FOSFORO.includes(w.FOSFORO), "Fósforo: escritura (903885) distinta de lectura (903837)");
       t.cierto(!porClave.ALBUMINA.includes(w.ALBUMINA), "Albúmina: escritura (903803) distinta de lectura (903801)");
+    });
+
+    // v14.0.4 — Guarda de consistencia contra el bug real que este cambio corrige: HbA1c
+    // vive en DOS sitios de este archivo (aquí, sin conectar, y en PYM_CATALOG/I10X, YA
+    // vigente en el paquete RCV exprés) — si algún día vuelven a divergir (alguien copia un
+    // código de otra fuente sin cruzarlo contra el que YA está en producción), esta prueba
+    // debe caer antes de que el médico vea dos códigos distintos para el mismo examen.
+    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C coincide con el código YA vigente en PYM_CATALOG/I10X (RCV exprés)", () => {
+      const i10x = c.api.__PYM_CATALOG.find((p) => p.cie10 === "I10X");
+      const hba1cEnPaquete = i10x.cups.find((x) => x.desc.toUpperCase().includes("GLICOSILADA"));
+      t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
+      t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
     });
   }
 };

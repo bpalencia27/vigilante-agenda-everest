@@ -1154,23 +1154,37 @@
   // coinciden en la práctica (902213 en ambos catálogos de escritura — 902207 de
   // WHITELIST_13_LABS es solo lectura, se incluye aquí solo por completitud/referencia).
   //
+  // v14.0.4 — CORREGIDO: HbA1c NO es 904426. Ese era el código corto del Copiloto
+  // ("HEMOGLOBINA GLICOSILADA", sin más) — pero este mismo archivo YA tiene, más abajo en
+  // `PYM_CATALOG` (paquete I10X "RCV EXPRÉS", línea ~11545), el código `903426`
+  // "Hemoglobina Glicosilada AUTOMATIZADA", tomado de una orden REAL ya guardada en Everest
+  // (`ObtenerOrdenamientoPorPacienteIdVigente`, ver `EVIDENCIA_ORDENAMIENTO_CURADO.md` §2) —
+  // la fuente más confiable que existe (una orden real, no una intención), y EXACTAMENTE el
+  // mismo patrón semi/automatizado ya visto dos veces en este proyecto (LDL 903816/903817,
+  // Microalbuminuria 903028/903026): el 904426 del Copiloto es probablemente su variante
+  // SEMI/genérica, y este médico ordena la AUTOMATIZADA. El texto capturado en consultorio
+  // para el <li> ("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", ver CONDUCTA_LI_TEXTO_POR_ANALITO
+  // abajo) confirma que 903426 es el que corresponde a ese texto, no 904426. Se usa 903426
+  // — la evidencia PROPIA y más fuerte gana sobre la del otro repo.
+  //
   //   Analito     | lectura (arriba) | escritura (aquí) |
   //   PTH         | 904921           | 903890            |
   //   Fósforo     | 903837           | 903885            |
   //   Albúmina    | 903801           | 903803            |
   //   Hemoglobina | 902207           | 902213 (= lectura de facto, no divergen)  |
-  //   HbA1c       | 903843           | 904426            |
+  //   HbA1c       | 903843           | 903426 (YA vigente en PYM_CATALOG/I10X)    |
   //
-  // NO están conectados a ningún botón todavía: el propio médico resolvió el 2026-08-11
-  // (`DECISIONES_PENDIENTES.md`, P4) que Vigilante solo debe ORDENAR estos 4 cuando el
-  // estadio ERC del paciente esté confirmado y la tabla de vigencias diga que corresponde
-  // — "si el script todavía no conoce el estadio del paciente, se omiten por ahora, no se
-  // piden a ciegas". Esa condición depende de que Vigilante se vuelva consciente del
-  // estadio renal (P6), todavía sin implementar. Este bloque solo deja los códigos
-  // correctos y ya verificados listos para cuando esa pieza exista — no se adivina nada
-  // nuevo, y no se ordena nada nuevo con este cambio.
+  // NO están conectados a ningún botón todavía (salvo HbA1c, que ya vive en el paquete
+  // I10X desde antes de este bloque): el propio médico resolvió el 2026-08-11
+  // (`DECISIONES_PENDIENTES.md`, P4) que Vigilante solo debe ORDENAR PTH/Fósforo/Albúmina/
+  // Hemoglobina cuando el estadio ERC del paciente esté confirmado y la tabla de vigencias
+  // diga que corresponde — "si el script todavía no conoce el estadio del paciente, se
+  // omiten por ahora, no se piden a ciegas". Esa condición depende de que Vigilante se
+  // vuelva consciente del estadio renal (P6), todavía sin implementar. Este bloque solo
+  // deja los códigos correctos y ya verificados listos para cuando esa pieza exista — no
+  // se adivina nada nuevo, y no se ordena nada nuevo con este cambio.
   const CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = {
-    HBA1C: "904426",
+    HBA1C: "903426",
     PTH: "903890",
     FOSFORO: "903885",
     ALBUMINA: "903803",
