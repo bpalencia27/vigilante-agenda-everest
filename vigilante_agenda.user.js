@@ -6776,7 +6776,12 @@
          derecho, centrado verticalmente: no choca con #vgl-dock (abajo-derecha) ni con
          .vgl-lab-inj/.vgl-exf-btn (abajo-izquierda). */
       #vgl-acciones-dock{
-        position:fixed;top:50%;right:14px;transform:translateY(-50%);
+        /* v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: centrado verticalmente
+           (top:50%) el dock quedaba encima del propio riel de iconos nativo de Everest, que
+           vive justo en esa misma franja del borde derecho. Se sube cerca del borde superior
+           (fuera de la franja donde vive ese riel nativo) en vez de adivinar un nuevo punto
+           medio — si vuelve a chocar, hace falta otro pantallazo para ajustar el offset exacto. */
+        position:fixed;top:110px;right:14px;
         z-index:var(--z-widget);
         display:flex;flex-direction:column;align-items:center;gap:6px;
         padding:8px 6px;border-radius:var(--r-pill);
