@@ -96,7 +96,7 @@ module.exports = {
 
     // ---------- friendly / activityLabel ----------
     t.caso("friendly traduce los encabezados conocidos", () => {
-      t.igual(api.friendly("TAMIZACION_VIH"), "VIH");
+      t.igual(api.friendly("TAMIZACION_VIH"), "Tamización de VIH");
       t.igual(api.friendly("VALORACION_INTEGRAL"), "Valoración integral de salud");
     });
     t.caso("friendly respeta lo que ya viene escrito como texto", () => {
@@ -106,8 +106,8 @@ module.exports = {
       t.igual(api.friendly("OTRA_COSA_RARA"), "Otra cosa rara");
     });
     t.caso("activityLabel añade el detalle cuando lo hay", () => {
-      t.igual(api.activityLabel("TAMIZACION_VIH", "Susceptible"), "VIH");
-      t.igual(api.activityLabel("TAMIZACION_CERVIX", "Tamizar con CCU"), "Cáncer de cuello uterino — Tamizar con CCU");
+      t.igual(api.activityLabel("TAMIZACION_VIH", "Susceptible"), "Tamización de VIH");
+      t.igual(api.activityLabel("TAMIZACION_CERVIX", "Tamizar con CCU"), "Tamización de cérvix — Tamizar con CCU");
     });
 
     // ---------- isExcludedActivity: VIH nunca se oculta ----------
@@ -116,8 +116,8 @@ module.exports = {
       t.cierto(api.isExcludedActivity("TAMIZACION_HEPC", "Tamización de Hepatitis C"));
     });
     t.caso("isExcludedActivity NUNCA oculta el VIH", () => {
-      t.falso(api.isExcludedActivity("TAMIZACION_VIH", "VIH"));
-      t.falso(api.isExcludedActivity("Último VIH", "VIH"));
+      t.falso(api.isExcludedActivity("TAMIZACION_VIH", "Tamización de VIH"));
+      t.falso(api.isExcludedActivity("Último VIH", "Tamización de VIH"));
     });
 
     // ---------- detalleTipoCervix ----------

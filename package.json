@@ -1,6 +1,6 @@
 {
   "name": "vigilante-agenda-everest",
-  "version": "14.1.1",
+  "version": "12.3.19",
   "description": "Banco de pruebas del Vigilante (suites 01-20)",
   "private": true,
   "scripts": {

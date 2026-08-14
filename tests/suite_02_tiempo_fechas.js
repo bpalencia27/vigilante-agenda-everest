@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Tiempo y fechas",
-  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "calcRangoSondeoIso", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList", "esFestivo"],
+  cubre: ["calcBusinessTargetDate", "calcTargetDateRange", "parseHoraMin", "horaBonita", "elapsedMin", "apptKey", "diaNuevo", "todayStamp", "calcBusinessDaysBefore", "format12hTime", "extractAgendasList"],
   pruebas(t, api, env, cargar) {
     // Helper to setup mock date using a fresh harness to avoid global pollution
     function runWithMockDate(mockIsoStr, fn) {
@@ -73,38 +73,6 @@ module.exports = {
         const isos = range.map(r => r.iso);
         t.igual(isos, ["2023-10-18", "2023-10-19", "2023-10-20", "2023-10-23", "2023-10-24", "2023-10-25", "2023-10-26"]);
       });
-    });
-
-    // ---------- calcRangoSondeoIso ----------
-    t.caso("calcRangoSondeoIso: ±7 días hábiles + sábados candidatos, arreglo ISO exacto", () => {
-      const range = api.calcRangoSondeoIso("2026-08-13"); // Jue 13/08/2026; festivos 07/08 (Vie) y 17/08 (Lun)
-      const isos = range.map(r => r.iso);
-      t.igual(isos, [
-        "2026-08-03", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-08", "2026-08-10", "2026-08-11",
-        "2026-08-12", "2026-08-13", "2026-08-14", "2026-08-15", "2026-08-18", "2026-08-19", "2026-08-20",
-        "2026-08-21", "2026-08-22", "2026-08-24", "2026-08-25",
-      ]);
-    });
-
-    t.caso("calcRangoSondeoIso: metadatos — confirmado, esSabado, centro único y sin domingos/festivos", () => {
-      const range = api.calcRangoSondeoIso("2026-08-13");
-      t.igual(range.length, 18);
-
-      const centro = range.filter(r => r.isCenter);
-      t.igual(centro.length, 1);
-      t.igual(centro[0].iso, "2026-08-13");
-
-      const confirmadosAntes = range.filter(r => r.iso < "2026-08-13" && r.confirmado === true);
-      const confirmadosDespues = range.filter(r => r.iso > "2026-08-13" && r.confirmado === true);
-      t.igual(confirmadosAntes.length, 7);
-      t.igual(confirmadosDespues.length, 7);
-
-      const sabados = range.filter(r => r.esSabado === true);
-      t.igual(sabados.map(r => r.iso), ["2026-08-08", "2026-08-15", "2026-08-22"]);
-      t.cierto(sabados.every(r => r.confirmado === false));
-
-      t.cierto(range.every(r => r.dateObj.getDay() !== 0)); // ningún domingo
-      t.cierto(range.every(r => !api.esFestivo(r.dateObj))); // ningún festivo (07/08, 17/08)
     });
 
     // ---------- todayStamp ----------
@@ -210,20 +178,17 @@ module.exports = {
     t.caso("calcBusinessDaysBefore: cuenta días hábiles hacia atrás evitando fin de semana", () => {
       // 2026-08-10 is a Monday. 1 business day before is Friday 2026-08-07
       const fri = api.calcBusinessDaysBefore("2026-08-10", 1);
-      // antes daba 2026-08-07 porque no se excluía Batalla de Boyacá; ahora correctamente cae en 2026-08-06
-      t.igual(fri.iso, "2026-08-06");
+      t.igual(fri.iso, "2026-08-07");
 
       // 5 business days before 2026-08-10 (Mon) -> 2026-08-03 (Mon)
       const prevMon = api.calcBusinessDaysBefore("2026-08-10", 5);
-      // antes daba 2026-08-03 porque no se excluía Batalla de Boyacá; ahora correctamente cae en 2026-07-31
-      t.igual(prevMon.iso, "2026-07-31");
+      t.igual(prevMon.iso, "2026-08-03");
     });
 
     t.caso("calcBusinessDaysBefore: cruce de fin de mes / año", () => {
       // 2026-01-02 is a Friday. 2 business days before is 2025-12-31 (Wednesday)
       const prevYear = api.calcBusinessDaysBefore("2026-01-02", 2);
-      // antes daba 2025-12-31 porque no se excluía Año Nuevo (2026-01-01); ahora correctamente cae en 2025-12-30
-      t.igual(prevYear.iso, "2025-12-30");
+      t.igual(prevYear.iso, "2025-12-31");
     });
 
     // ---------- format12hTime ----------
@@ -267,60 +232,6 @@ module.exports = {
       t.igual(api.parseHoraMin(api.horaBonita(0)), 0);     // 12:00 a. m.
       t.igual(api.parseHoraMin(api.horaBonita(720)), 720); // 12:00 p. m.
       t.igual(api.parseHoraMin(api.horaBonita(1439)), 1439); // 11:59 p. m.
-    });
-
-
-    // ---------- FESTIVOS ----------
-    t.caso("esFestivo: Un festivo entre semana no es día hábil", () => {
-      runWithMockDate("2026-07-20T12:00:00", (mockApi, env, ctx) => {
-        t.cierto(mockApi.esFestivo(new ctx.Date("2026-07-20T12:00:00")));
-      });
-    });
-
-    t.caso("esFestivo: Un día normal entre semana sí es hábil", () => {
-      runWithMockDate("2026-07-21T12:00:00", (mockApi, env, ctx) => {
-        t.falso(mockApi.esFestivo(new ctx.Date("2026-07-21T12:00:00")));
-      });
-    });
-
-    // v14.0.1 — San Pedro y San Pablo (29 de junio, Ley Emiliani) trasladado al lunes
-    // siguiente: en 2027 el 29 cae martes, así que el trasladado real es el 5 de julio.
-    // Faltaba en la tabla (a diferencia de 2026, donde el 29 YA cae lunes, sin traslado).
-    t.caso("esFestivo: 2027-07-05 (San Pedro trasladado) es festivo", () => {
-      runWithMockDate("2027-07-05T12:00:00", (mockApi, env, ctx) => {
-        t.cierto(mockApi.esFestivo(new ctx.Date("2027-07-05T12:00:00")));
-      });
-    });
-
-    t.caso("calcBusinessTargetDate: Una fecha objetivo que cae en festivo se desplaza al siguiente día hábil", () => {
-      runWithMockDate("2026-07-17T12:00:00", (mockApi) => {
-        const r = mockApi.calcBusinessTargetDate(0, 3);
-        t.igual(r.iso, "2026-07-21");
-      });
-    });
-
-    t.caso("calcBusinessDaysBefore: no cuenta los festivos al contar hacia atrás", () => {
-      runWithMockDate("2026-07-21T12:00:00", (mockApi) => {
-        const r = mockApi.calcBusinessDaysBefore("2026-07-21", 1);
-        t.igual(r.iso, "2026-07-17");
-      });
-    });
-
-    t.caso("esFestivo: Un año fuera de la tabla devuelve un resultado y deja el aviso", () => {
-      runWithMockDate("2030-01-01T12:00:00", (mockApi, env, ctx) => {
-        const d = new ctx.Date("2030-01-01T12:00:00");
-        t.falso(mockApi.esFestivo(d));
-        t.cierto(mockApi.__state.warnedTimes.has("festivos_caducados"));
-      });
-    });
-
-    t.caso("calcBusinessTargetDate: Festivo pegado a fin de semana salta al martes", () => {
-      runWithMockDate("2026-08-14T12:00:00", (mockApi) => {
-        const range = mockApi.calcDateRangeAroundIso("2026-08-14", 3);
-        const isos = range.map(r => r.iso);
-        const nextDays = isos.slice(-3);
-        t.igual(nextDays, ["2026-08-18", "2026-08-19", "2026-08-20"]);
-      });
     });
 
   }

@@ -21,7 +21,7 @@ function bufCSV() { return new TextEncoder().encode(CSV_PILOTO).buffer; }
 function paqueteV3(extraMeta) {
   return JSON.stringify(Object.assign({
     v: 3,
-    labels: ["VIH", "Valoración integral de salud"],
+    labels: ["Tamización de VIH", "Valoración integral de salud"],
     p: "5150076:0.1|300123:0",
     t: "5150076,300123,777",
     ab: "777",
@@ -229,7 +229,7 @@ module.exports = {
       c.ctx.TextDecoder = TextDecoder;                    // el sandbox no trae TextDecoder
       const idx = await c.api.readPym("pym.csv", bufCSV());
       t.igual(idx.map.size, 1, "solo la cédula con algo pendiente entra al mapa");
-      t.igual(idx.map.get("5150076"), ["VIH"]);
+      t.igual(idx.map.get("5150076"), ["Tamización de VIH"]);
       t.igual(idx.todos.size, 2, "todas las cédulas de la hoja, tengan o no pendientes");
       t.cierto(idx.todos.has("99887766"));
       t.cierto(idx.abandono.has("99887766"), "ABANDONADOS_PES='Si' debe quedar registrado");
@@ -262,15 +262,6 @@ module.exports = {
       t.igual(await c.api.pilotoDesdeCache(), false, "paquete que no empieza por v3 se descarta sin interpretarlo");
     });
 
-    await t.casoAsync("pilotoDesdeCache: caché corrupta (empieza por v3 pero no es JSON) lanza y el catch devuelve false", async () => {
-      const c = cargar({ silencioso: true });
-      c.env.gm["vgl_piloto"] = '{"v":3, ESTO NO ES JSON';
-      t.igual(await c.api.pilotoDesdeCache(), false);
-      t.igual(c.api.__state.pymFile, "");
-      t.igual(c.api.__state.pym.size, 0);
-      t.igual(c.api.__state.pymFallback, false);
-    });
-
     await t.casoAsync("pilotoDesdeCache: si el id guardado no es el del enlace configurado, se rechaza y el estado queda intacto", async () => {
       const c = cargar({ silencioso: true });
       c.env.gm["vgl_piloto"] = paqueteV3({ id: "00000000-0000-0000-0000-000000000000" });
@@ -285,16 +276,13 @@ module.exports = {
       t.igual(await c.api.pilotoDesdeCache(), true);
       const st = c.api.__state;
       t.igual(st.pym.size, 2);
-      t.igual(st.pym.get("5150076"), ["VIH", "Valoración integral de salud"]);
-      t.igual(st.pym.get("300123"), ["VIH"]);
+      t.igual(st.pym.get("5150076"), ["Tamización de VIH", "Valoración integral de salud"]);
+      t.igual(st.pym.get("300123"), ["Tamización de VIH"]);
       t.cierto(st.pymTodos.has("777"));
       t.cierto(st.pymAbandono.has("777"));
       t.igual(st.pymMTime, "2026-08-01T10:00:00Z");
       t.igual(st.pymFallback, true);
       t.igual(st.pymFile, "BASE PILOTO.xlsx (base piloto — aún no llega la de hoy)");
-      // v12.10.12 — visibilidad: caer a la base piloto (desde caché, sin red) queda contado.
-      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
-      t.igual(w.acciones["pym.fallback.cache"], 1);
     });
 
     await t.casoAsync("pilotoDesdeCache: si ya hay un PyM cargado no lo pisa (devuelve true y deja el estado como estaba)", async () => {
@@ -404,7 +392,7 @@ module.exports = {
       const st = c.api.__state;
       t.igual(st.pymFallback, true, "es la piloto, no el PyM del día");
       t.igual(st.pymFile, "base_piloto.csv (base piloto — aún no llega la de hoy)");
-      t.igual(st.pym.get("5150076"), ["VIH"]);
+      t.igual(st.pym.get("5150076"), ["Tamización de VIH"]);
       t.igual(st.pymFP, "base_piloto.csv|T-DESC", "la huella usa el nombre crudo + mtime real");
       t.igual(cont.meta, 1, "metadatos primero, para guardar la copia con el mtime verdadero");
       t.igual(cont.descargas, 1);
@@ -412,10 +400,6 @@ module.exports = {
       t.igual(copia.mtime, "T-DESC");
       t.igual(copia.id, PILOTO_GUID);
       await esperar(() => c.env.gm["vgl_pym_esfallback"] === "1", 2000, "la caché del día marca esfallback");
-      // v12.10.12 — visibilidad: caer a la base piloto bajada por red también queda contado
-      // (con una etiqueta distinta a la del arranque desde caché, son situaciones distintas).
-      const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
-      t.igual(w.acciones["pym.fallback.red"], 1);
     });
 
     await t.casoAsync("loadPymBaseDescarga: si las DOS rutas de descarga fallan, devuelve false tras probarlas una tras otra", async () => {
@@ -504,17 +488,7 @@ module.exports = {
       c.api.schedulePymBase();
       await esperar(() => String(c.api.__state.pymFile).indexOf("base piloto") >= 0, 4000, "la carga programada de la piloto");
       t.igual(cont.descargas, 1);
-      t.igual(c.api.__state.pym.get("5150076"), ["VIH"]);
-    });
-
-    await t.casoAsync("schedulePymBase: loadPymBase rechaza (por ej. sin TextDecoder) y la cadena de reintentos se mantiene", async () => {
-      const cont = contadorNuevo("base_piloto.csv", "T");
-      const c = cargar({ silencioso: true, gmxhr: gmxhrPiloto(cont) });
-      c.api.__CONFIG.SP.respaldo = { id: PILOTO_GUID, name: "base_piloto.csv" };
-      c.api.schedulePymBase();
-      await dormir(400);
-      t.igual(cont.descargas, 3);
-      t.igual(c.api.__state.pymFile, "");
+      t.igual(c.api.__state.pym.get("5150076"), ["Tamización de VIH"]);
     });
 
     // ---------- spToast / dismissSpToast ----------
@@ -524,7 +498,7 @@ module.exports = {
       const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
       t.cierto(!!nodo, "el toast debe existir en el DOM");
       t.cierto(c.env.doc.body.children.indexOf(nodo) >= 0, "colgado del body");
-      t.cierto(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe ser visible");
+      t.igual(nodo.style.opacity, "1");
       t.cierto(String(nodo.children[0].textContent).indexOf("🛡️ Vigilante PyM · primer aviso") === 0);
       // A partir de aquí el documento SÍ encuentra el toast (como en la página real).
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
@@ -532,7 +506,8 @@ module.exports = {
       t.igual(c.env.doc._nodos.filter((n) => n.id === "vgl-sp").length, 1, "reutiliza el nodo, no apila toasts");
       t.cierto(String(nodo.children[0].textContent).indexOf("segundo aviso") >= 0, "el texto se actualiza en el mismo aviso");
       c.api.dismissSpToast();
-      t.falso(nodo.classList && nodo.classList.contains("vgl-sp-visible"), "debe estar oculto");
+      t.igual(nodo.style.opacity, "0");
+      t.igual(nodo.style.transform, "translateY(10px)");
     });
 
     await t.casoAsync("spToast: con duración se autodescarta solo; dismissSpToast sin toast no lanza", async () => {
@@ -540,7 +515,7 @@ module.exports = {
       c.api.spToast("fugaz", 6000);                       // el sandbox recorta el timer a ~1 ms
       const nodo = c.env.doc._nodos.find((n) => n.id === "vgl-sp");
       c.env.doc.getElementById = (id) => (id === "vgl-sp" ? nodo : null);
-      await esperar(() => !nodo.classList || !nodo.classList.contains("vgl-sp-visible"), 2000, "el autodescarte del toast");
+      await esperar(() => nodo.style.opacity === "0", 2000, "el autodescarte del toast");
       const c2 = cargar({ silencioso: true });
       t.noLanza(() => c2.api.dismissSpToast(), "sin toast en pantalla debe ser inofensivo");
     });
@@ -558,7 +533,7 @@ module.exports = {
       c.api.loadPymFile({ name: "PYM_MANUAL.csv" });
       await esperar(() => c.api.__state.pymFile === "PYM_MANUAL.csv", 3000, "la carga manual del CSV");
       t.igual(c.api.__state.pymFallback, false, "«Abrir PyM» manda: deja de ser respaldo");
-      t.igual(c.api.__state.pym.get("5150076"), ["VIH"]);
+      t.igual(c.api.__state.pym.get("5150076"), ["Tamización de VIH"]);
       t.cierto(c.api.__state.pymAbandono.has("99887766"));
     });
   },

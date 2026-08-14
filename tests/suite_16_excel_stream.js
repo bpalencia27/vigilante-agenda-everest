@@ -111,7 +111,7 @@ module.exports = {
       ix.push(["", "Susceptible", ""]);               // sin documento: se ignora entera
       ix.push(["555", "", ""]);                       // al día: entra en todos, no en map
       t.igual(ix.map.size, 1, "solo un paciente con pendientes");
-      t.igual(ix.map.get("123"), ["Tamización cardiometabólica", "Valoración integral de salud"]);
+      t.igual(ix.map.get("123"), ["Tamización de riesgo cardiometabólico", "Valoración integral de salud"]);
       t.igual(Array.from(ix.todos).sort(), ["123", "555"]);
     });
 
@@ -134,16 +134,16 @@ module.exports = {
     t.caso("makeIndexer: exclusiones de CONFIG (VDRL fuera) pero VIH siempre se conserva", () => {
       const ix = api.makeIndexer(["DOCUMENTO", "TAMIZACION_VDRL", "TAMIZACION_VIH"]);
       ix.push(["777", "Susceptible", "Susceptible"]);
-      t.igual(ix.map.get("777"), ["VIH"], "VDRL debía filtrarse y VIH quedarse");
+      t.igual(ix.map.get("777"), ["Tamización de VIH"], "VDRL debía filtrarse y VIH quedarse");
     });
 
     t.caso("makeIndexer: PRUEBA_CERVIX se funde en el chip de TAMIZACION_CERVIX con el tipo de prueba", () => {
       const ix = api.makeIndexer(["DOCUMENTO", "TAMIZACION_CERVIX", "PRUEBA_CERVIX"]);
       ix.push(["888", "Susceptible", "Tamizar con VPH"]);
-      t.igual(ix.map.get("888"), ["Cáncer de cuello uterino — VPH"], "un solo chip con el detalle VPH");
+      t.igual(ix.map.get("888"), ["Tamización cérvix — VPH"], "un solo chip con el detalle VPH");
       // Caso raro: el tipo viene pendiente pero la tamización no — no se pierde
       ix.push(["999", "", "Tamizar con CCU"]);
-      t.igual(ix.map.get("999"), ["Cáncer de cuello uterino — citología cervicouterina"]);
+      t.igual(ix.map.get("999"), ["Tamización cérvix — citología cervicouterina"]);
     });
 
     // =================================================================
@@ -154,7 +154,7 @@ module.exports = {
         ["NRO_DOCUMENTO", "TAMIZACION_MAMA"],
         [["11", "Susceptible"], ["22", ""]]
       );
-      t.igual(res.map.get("11"), ["Mamografía"]);
+      t.igual(res.map.get("11"), ["Tamización de mama (examen clínico + mamografía)"]);
       t.falso(res.map.has("22"), "el paciente al día no entra en el mapa");
       t.igual(Array.from(res.todos).sort(), ["11", "22"]);
       t.igual(res.abandono.size, 0);
@@ -294,7 +294,7 @@ module.exports = {
       t.igual(res.sheets, ["Portada", "Datos"]);
       t.igual(res.headers, ["NRO_IDENTIFICACION", "TAMIZACION_VIH", "AGUDEZA_VISUAL", "ABANDONADOS_PES"]);
       t.igual(res.rowCount, 5, "título + encabezado + 3 filas de datos");
-      t.igual(res.map.get("100200300"), ["VIH"]);
+      t.igual(res.map.get("100200300"), ["Tamización de VIH"]);
       // La cédula inlineStr "0004005006" pierde los ceros a la izquierda al normalizar
       t.igual(res.map.get("4005006"), ["Agudeza visual"]);
       t.falso(res.map.has("700800900"), "el paciente al día no entra en el mapa");

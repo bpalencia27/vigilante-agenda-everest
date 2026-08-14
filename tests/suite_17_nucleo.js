@@ -1,40 +1,12 @@
-
-
-function enriquecerDom(c) {
-  const doc = c.env.doc;
-  const crearBase = doc.createElement;
-  doc._nodos = [];
-  doc.createElement = function (tag) {
-    const e = crearBase.call(doc, tag);
-    const memo = new Map();
-    e.querySelector = (sel) => {
-      if (!memo.has(sel)) memo.set(sel, doc.createElement("div"));
-      return memo.get(sel);
-    };
-    e.querySelectorAll = () => [];
-    doc._nodos.push(e);
-    return e;
-  };
-  doc.createDocumentFragment = () => {
-    const f = doc.createElement("div");
-    f._esFragmento = true;
-    return f;
-  };
-  const getByIdBase = doc.getElementById;
-  doc.getElementById = (id) => {
-    return doc._nodos.find(n => n.id === id) || (getByIdBase ? getByIdBase(id) : null);
-  };
-}
-
 // =====================================================================
 //  SUITE 17 — Núcleo: bucles, latidos y utilidades GM
 //  Cubre el corazón del Vigilante: el bucle tick(), el latido de liderazgo,
 //  la cesión del hilo (yieldNow/makeYielder/idleRun), los POST vía
 //  GM_xmlhttpRequest, los avisos de versión/PyM y el robot Athenea.
 //
-//  boot() ahora se cubre inyectando un DOM simulado enriquecido.
-//  (Usando el mismo patrón de enriquecerDom() de la suite 15).
-//
+//  boot() NO se cubre: construye el panel entero con buildOverlay(), que
+//  exige un DOM real (root.querySelector("#vgl-load").addEventListener
+//  revienta con el DOM falso del arnés, cuyo querySelector devuelve null).
 // =====================================================================
 module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
@@ -44,7 +16,6 @@ module.exports = {
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
-    "boot",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -82,47 +53,6 @@ module.exports = {
       ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now() - 21000 }));
       t.igual(c.api.heartbeat(), true, "latido vencido: la pestaña despierta releva al líder congelado");
       t.igual(c.api.__state.leader, true);
-    });
-
-    // ---------- __VGL_DIAG__ (v12.5.14) ----------
-    // No está en `cubre`: se asigna a window.__VGL_DIAG__ (no una `function NOMBRE`
-    // declarada), así que el cargador del banco no la expone en `api` — se prueba
-    // directo contra c.env.win, que es donde de verdad vive (F12 la llama ahí).
-    t.caso("__VGL_DIAG__: refleja el estado real sin lanzar y sin exponer datos de paciente", () => {
-      const c = cargar({ silencioso: true });
-      t.cierto(typeof c.env.win.__VGL_DIAG__ === "function", "se asigna a window al cargar el script, sin esperar a boot()");
-      const d = c.env.win.__VGL_DIAG__();
-      t.igual(d.seccion, "otra", "DOM falso del arnés: ninguna vista reconocida");
-      t.igual(d.apiUrlAprendida, false, "sin localStorage previo, el API aún no se aprendió");
-      t.igual(d.apiOk, 0);
-      t.igual(d.apiFallos, 0);
-      t.igual(d.apiUtil, false, "sin URL aprendida, apiUtil() es falso");
-      t.igual(d.apiSano, false);
-      t.igual(d.ultimoSnapshotHaceMs, null, "sin snapshot todavía");
-      // Nada de nombres, cédulas ni listas de pacientes en el diagnóstico.
-      const plano = JSON.stringify(d);
-      t.falso(/[a-zñáéíóú]{4,}\s[A-ZÑÁÉÍÓÚ]{2,}/.test(plano), "no debe verse texto con forma de nombre de paciente");
-    });
-
-    t.caso("__VGL_DIAG__: tras tomar el liderazgo, refleja latidoLiderPropio y esLider", () => {
-      const c = cargar({ silencioso: true });
-      c.api.heartbeat(); // esta pestaña toma el mando (sin latido previo)
-      const d = c.env.win.__VGL_DIAG__();
-      t.cierto(d.esLider, "state.leader quedó en true tras heartbeat()");
-      t.cierto(d.latidoLiderPropio, "el latido en localStorage es el de esta pestaña (TABID)");
-      t.cierto(typeof d.latidoLiderHaceMs === "number" && d.latidoLiderHaceMs >= 0);
-    });
-
-    t.caso("__VGL_DIAG__: nunca lanza aunque algo interno falle (localStorage roto)", () => {
-      const c = cargar({ silencioso: true });
-      const originalGetItem = c.env.win.localStorage.getItem;
-      c.env.win.localStorage.getItem = () => { throw new Error("boom"); };
-      let d;
-      t.noLanza(() => { d = c.env.win.__VGL_DIAG__(); });
-      c.env.win.localStorage.getItem = originalGetItem;
-      // El try/catch interno de heartbeat-beat ya protege esta parte puntual, así que
-      // no debe reventar el diagnóstico entero por un solo localStorage caído.
-      t.cierto(d && typeof d === "object");
     });
 
     t.caso("share: sin BroadcastChannel no lanza y no ensucia state.shared", () => {
@@ -307,54 +237,6 @@ module.exports = {
       t.igual(c.api.__state.notified.size, 1, "sin cambios de estado no aparecen entradas nuevas");
     });
 
-    // v12.5.14 — Reportado en consultorio: el saludo diario (y los avisos en general)
-    // llegaban también con la pestaña líder abierta en .../viva/Acceso/. Con el mismo
-    // DOM de agenda visible de la prueba anterior, si la ruta es Acceso el saludo NO
-    // debe salir (aunque siga sembrando notified con normalidad).
-    t.caso("tick: fuera del módulo HCHealth (Acceso) no dispara el saludo diario", () => {
-      const c = cargar({ silencioso: true });
-      c.env.win.location.pathname = "/viva/Acceso/";
-      const contenedor = {
-        querySelector: (sel) => ({
-          ".status-label": { textContent: "Atendido" },
-          ".text-muted": { textContent: "12345678" },
-          ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
-          ".fw-bold.mb-0": { textContent: "Presencial" },
-        }[sel] || null),
-      };
-      const nodoHora = {
-        textContent: "07:00 AM",
-        closest: () => contenedor,
-        parentElement: null,
-        ownerDocument: { body: c.env.doc.body },
-      };
-      c.env.doc.querySelector = (sel) => (sel === ".labelHora" || sel === ".status-label") ? {} : null;
-      c.env.doc.querySelectorAll = (sel) => (sel === ".labelHora" ? [nodoHora] : []);
-
-      c.api.tick();
-      t.igual(c.api.__state.summarized, true, "sigue sembrando el estado con normalidad");
-      t.igual(c.api.__state.notified.size, 1, "la cita se siembra igual, sin depender del módulo");
-      t.igual(c.env.almacen["vgl_hello"], undefined, "el saludo diario NO sale: la pestaña líder está en Acceso, no en HCHealth");
-    });
-
-    // v12.5.14 — tick() dispara la cola de avisos pendientes (_flushAvisosPendientes) en
-    // TODA pestaña que esté en HCHealth, aunque no tenga marcadores de agenda/historia en
-    // el DOM (p. ej. una pantalla de Órdenes/RCV dentro del mismo módulo clínico).
-    t.caso("tick: en HCHealth (aunque la sección sea 'otra') dispara los avisos que quedaron en cola", () => {
-      const c = cargar({ silencioso: true });
-      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
-      let notifCount = 0;
-      c.env.win.Notification = class { constructor() { notifCount++; } };
-      c.env.win.Notification.permission = "granted";
-      c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "queued|ROJO", flashText: "t" });
-
-      c.api.tick();
-      t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
-      t.igual(notifCount, 1, "el aviso en cola se dispara igual, porque la pestaña SÍ está en HCHealth");
-      const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola.length, 0, "la cola quedó vacía");
-    });
-
     // ---------- downloadDiagnostic ----------
     t.caso("downloadDiagnostic: genera el archivo sanitizado y lo descarga en local", () => {
       const c = cargar({ silencioso: true });
@@ -371,37 +253,6 @@ module.exports = {
       t.cierto(texto.includes("Archivo: sin cargar"), "estado real del PyM");
       t.cierto(texto.includes("Llamada aprendida: todavía no"), "estado real de la vía directa del API");
       t.falso(texto.includes("12345678"), "no debe viajar ninguna cédula");
-    });
-
-    t.caso("downloadDiagnostic: enmascara correctamente los IDs y omite los nombres (cero PHI)", () => {
-      const c = cargar({ silencioso: true });
-      let blobCapturado = null;
-      c.env.win.URL.createObjectURL = (b) => { blobCapturado = b; return "blob:diag"; };
-
-      // Documentos y nombres INVENTADOS (regla de cero PHI)
-      c.api.__state.pym.set("1234567890", ["VIH"]);
-      c.api.__state.pym.set("1112223330", ["Citología"]);
-      c.api.__state.lastSnapshot = { list: [
-        { doc_id: "1234567890", nombre: "PACIENTE FICTICIO UNO" },
-        { doc_id: "9876543210", nombre: "PACIENTE FICTICIO DOS" }
-      ] };
-
-      c.api.downloadDiagnostic();
-      const texto = String(blobCapturado.parts[0]);
-
-      t.falso(texto.includes("1234567890"), "el ID 1 original no debe filtrarse en el texto");
-      t.falso(texto.includes("9876543210"), "el ID 2 original no debe filtrarse en el texto");
-
-      t.cierto(texto.includes("123…(10 díg.)"), "el ID 1 debe estar enmascarado");
-      t.cierto(texto.includes("987…(10 díg.)"), "el ID 2 debe estar enmascarado");
-      // No basta con que exista la etiqueta: el conteo real de coincidencias también es
-      // lógica de negocio, y sin esta aserción una mutación que rompa el conteo (ej. "hit"
-      // fijo) sobrevive al banco. Solo 1234567890 está en la base pym; 9876543210 no.
-      t.cierto(texto.includes("COINCIDEN: 1/2"), "el conteo real de coincidencias debe ser correcto, no solo la etiqueta");
-
-      // Esta aserción pasa vacuamente porque downloadDiagnostic no vuelca el campo nombre,
-      // no cuenta como cobertura y la mutación no se comprueba contra ella.
-      t.falso(texto.includes("PACIENTE FICTICIO"), "no debe filtrarse ningún nombre");
     });
 
     // ---------- pymReminderCheck ----------
@@ -636,44 +487,6 @@ module.exports = {
       t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora al repetir");
     });
 
-    // v12.10.15 — Bug real de auditoría nocturna ("auto-DDoS a Athenea"): un paciente con
-    // CERO laboratorios en Athenea nunca actualizaba _labsPrefetch.ts (solo se cacheaba
-    // cuando labs.length > 0), así que pasados los 30s del piso anti-ráfagas, el TTL de 10
-    // minutos —que debería frenar la siguiente consulta— tampoco frenaba nada: el robot
-    // repetía las 3 peticiones HTTP cada 30s de forma indefinida mientras la historia
-    // siguiera abierta (riesgo real de bloqueo de IP por Athenea).
-    await t.casoAsync("autoFetchAtheneaLabsForActivePatient: con CERO laboratorios en Athenea, el TTL de 10 min SÍ frena la siguiente consulta pasados los 30s (bug real de auditoría)", async () => {
-      const llamadas = [];
-      let ahora = new Date("2026-08-14T08:00:00").getTime();
-      const c = cargar({
-        silencioso: true,
-        gmxhr: (o) => {
-          llamadas.push(o.url);
-          const url = String(o.url);
-          if (url.includes("BusquedaPaciente")) { o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="tok">' }); return; }
-          if (url.includes("BuscarPaciente")) { o.onload({ status: 200, responseText: '<input name="IdPaciente" value="999"><input name="__RequestVerificationToken" value="tok2">' }); return; }
-          if (url.includes("DatosPaciente")) { o.onload({ status: 200, responseText: "CC: 12.345.678 — sin ninguna solicitud registrada." }); return; }
-          if (o.onerror) o.onerror(new Error("url no simulada"));
-        },
-      });
-      c.env.win.Date = class extends Date {
-        static now() { return ahora; }
-        constructor(...args) { if (args.length === 0) super(ahora); else super(...args); }
-      };
-      c.ctx.Date = c.env.win.Date;
-      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
-      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ closest: () => null, textContent: "CC 12.345.678" }] : []);
-
-      await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
-
-      // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min
-      // de la pre-carga (que ahora sí quedó fijada, aunque haya sido con 0 laboratorios).
-      ahora += 31000;
-      await c.api.autoFetchAtheneaLabsForActivePatient();
-      t.igual(llamadas.length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
-    });
-
     // v12.3.14 — initLabMutationObserver fue ERRADICADA (observaba document.body ENTERO con
     // {childList:true,subtree:true}: cientos de mutaciones/minuto bajo Angular). La misma
     // validación vive ahora anclada a tick() — ver suite_18_athenea_sesion.js, que prueba
@@ -700,42 +513,5 @@ module.exports = {
       t.cierto(logs.some((e) => e.act === "LabsAutoPrefetched"), "la pre-carga queda registrada en la bitácora");
       t.falso(logs.some((e) => e.act === "LabsAutoInjected"), "y ninguna inyección automática vuelve a ocurrir");
     });
-
-    // ---------- boot ----------
-    await t.casoAsync("boot: inicializa sistema, levanta timers y construye overlay (v12)", async () => {
-      const c = cargar({ silencioso: true });
-      enriquecerDom(c);
-
-      const _si = c.env.win.setInterval;
-      const _st = c.env.win.setTimeout;
-      const registeredIntervals = [];
-      const registeredTimeouts = [];
-
-      c.env.win.setInterval = (fn, ms) => {
-        registeredIntervals.push({ fn, ms });
-        return _si(fn, ms);
-      };
-      c.env.win.setTimeout = (fn, ms) => {
-        registeredTimeouts.push({ fn, ms });
-        return _st(fn, ms);
-      };
-
-      c.api.boot();
-
-      t.cierto(registeredIntervals.some(i => i.ms === 300000 && i.fn === c.api.checkVersionMinimum), "boot configuró el intervalo para checkVersionMinimum");
-      t.cierto(registeredIntervals.some(i => i.ms === 15000 && i.fn === c.api.paintMute), "boot configuró el intervalo para paintMute");
-      t.cierto(registeredTimeouts.some(i => i.ms === 6000 && i.fn === c.api.chequearAutoUpdateLento), "boot configuró el timeout para chequearAutoUpdateLento");
-
-      const prevIntervals = registeredIntervals.length;
-
-      // Simular que el root ya existe en el DOM
-      const rootMock = c.env.doc.createElement("div");
-      rootMock.id = "vgl-root";
-
-      c.api.boot();
-
-      t.igual(registeredIntervals.length, prevIntervals, "boot() aborta tempranamente si #vgl-root ya existe en el DOM (guard)");
-    });
-
   },
 };

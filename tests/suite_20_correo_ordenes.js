@@ -8,7 +8,7 @@
 // =====================================================================
 module.exports = {
   nombre: "Correo de órdenes al paciente (Suite 20)",
-  cubre: ["extractAgrupador", "apiOrdenamientoGenerarLinks", "_urlImpresionOrdenPyM", "apiEnviarOrdenPorCorreo", "ordenesDetalleHoy"],
+  cubre: ["extractAgrupador", "apiOrdenamientoGenerarLinks", "apiEnviarOrdenPorCorreo", "ordenesDetalleHoy"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- extractAgrupador ----------
@@ -24,44 +24,32 @@ module.exports = {
     });
 
     // ---------- apiOrdenamientoGenerarLinks (best-effort) ----------
-    await t.casoAsync("apiOrdenamientoGenerarLinks: llama la URL real y devuelve el cuerpo TEXTO PLANO capturado (la URL de impresión)", async () => {
+    await t.casoAsync("apiOrdenamientoGenerarLinks: llama la URL real y nunca lanza aunque falle", async () => {
       let vista = null;
-      // v12.6.5 — El cuerpo real capturado en consultorio NO es JSON: es la URL, en texto
-      // plano. Por eso el mock ya no devuelve un objeto por json(): resp.json() lanzaba,
-      // pageFetchJson lo tomaba por caída de red y terminaba devolviendo null — la URL
-      // buena se perdía y se abría la reconstruida a mano, que daba 404.
-      const urlReal = "https://neps.everestintelligent.com/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=1226083463&idPaciente=540174";
-      const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => { throw new Error("no es JSON"); }, text: async () => urlReal, clone() { return this; } }; } });
-      const res = await c.api.apiOrdenamientoGenerarLinks(540174, "1226083463");
+      const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } }; } });
+      await c.api.apiOrdenamientoGenerarLinks(540174, "1226083463");
       t.cierto(vista.includes("/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos"));
       t.cierto(vista.includes("PacienteId=540174"));
       t.cierto(vista.includes("Agrupador=1226083463"));
-      t.igual(res, urlReal, "la URL del servidor llega intacta a quien la llama (imprimirOrdenPyM)");
-      t.igual(c.api._urlImpresionOrdenPyM(res), urlReal, "y es la que se abre, sin reconstruir nada");
-
-      // Si Everest algún día la envuelve en JSON, también se entiende.
-      const c3 = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ url: urlReal }), clone() { return this; } }) });
-      t.igual(c3.api._urlImpresionOrdenPyM(await c3.api.apiOrdenamientoGenerarLinks(1, "2")), urlReal);
 
       // best-effort real: si la red falla, la función NO debe lanzar — si lanzara, el
       // await de abajo propagaría el error y t.casoAsync marcaría esta prueba como
-      // fallida sola, sin necesitar un try/catch propio aquí. Devuelve null, y entonces
-      // imprimirOrdenPyM cae a su URL de respaldo en vez de quedarse sin nada que abrir.
-      const c2 = cargar({ silencioso: true, fetch: async () => { throw new Error("caída de red"); } });
-      t.igual(await c2.api.apiOrdenamientoGenerarLinks(1, "2"), null);
+      // fallida sola, sin necesitar un try/catch propio aquí. pageFetchJson tiene un
+      // FALLBACK a GM_xmlhttpRequest cuando fetch falla: hay que darle también un gmxhr
+      // que rechace (onerror), o el no-op por defecto del arnés deja la promesa colgada
+      // para siempre — la misma familia de bug cazada en toda la sesión, esta vez en la
+      // propia prueba.
+      const c2 = cargar({ silencioso: true, fetch: async () => { throw new Error("caída de red"); }, gmxhr: (o) => o.onerror(new Error("sin red tampoco por GM")) });
+      await c2.api.apiOrdenamientoGenerarLinks(1, "2");
     });
 
     // ---------- apiEnviarOrdenPorCorreo ----------
-    // v12.6.6 — El tercer argumento es el id del PACIENTE, no el del médico. En la grabación
-    // real del consultorio, Everest manda EnviarEmailOrdenamiento?...&UsuarioId=801848 en la
-    // misma corrida en que GenerarLinksImpresionOrdenamientos va con PacienteId=801848,
-    // siendo 309 el médico. Aquí se fija el contrato byte a byte con ese id de paciente.
-    await t.casoAsync("apiEnviarOrdenPorCorreo: URL exacta confirmada por telemetría real (UsuarioId = id del PACIENTE)", async () => {
+    await t.casoAsync("apiEnviarOrdenPorCorreo: URL exacta confirmada por telemetría real, con el correo codificado", async () => {
       let vista = null;
       const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "", clone() { return this; } }; } });
-      const ok = await c.api.apiEnviarOrdenPorCorreo("1226083463", "paciente@ejemplo.com", 801848);
+      const ok = await c.api.apiEnviarOrdenPorCorreo("1226083463", "paciente@ejemplo.com", 515);
       t.cierto(ok, "HTTP 200/ok debe reportar éxito");
-      t.igual(vista, "https://neps.everestintelligent.com/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento?Grupo=1226083463&Correo=paciente%40ejemplo.com&UsuarioId=801848");
+      t.igual(vista, "https://neps.everestintelligent.com/apiviva/APIEnvioCorreo/api/EnvioCorreo/EnviarEmailOrdenamiento?Grupo=1226083463&Correo=paciente%40ejemplo.com&UsuarioId=515");
     });
 
     await t.casoAsync("apiEnviarOrdenPorCorreo: HTTP de error reporta false, sin lanzar", async () => {

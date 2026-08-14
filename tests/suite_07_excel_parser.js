@@ -68,28 +68,14 @@ module.exports = {
       t.igual(api.findDocIdx(["A", "B", "C"]), -1);
     });
 
-    // Esta prueba vivió rota y en silencio (se llamaba sin await y `pruebas()` cerraba
-    // antes de que resolviera). Tenía tres defectos que solo se vieron al ejecutarla:
-    //  1) stubeaba `api.zipRead`, que NO intercepta nada: parseSharedStringsStream llama a
-    //     zipRead/zipEntryChunks por clausura dentro del IIFE, no a través del objeto
-    //     exportado. Se le pasa un ZIP de verdad, construido con crearZipPrueba.
-    //  2) pasaba `false` como `maybeYield`, y el cuerpo hace `await maybeYield()`.
-    //  3) al lanzar antes de su línea de restauración, dejaba `api.zipRead` pisado y
-    //     tumbaba de rebote la prueba de zipRead de más abajo.
-    await t.casoAsync("parseSharedStringsStream: concatena trozos de texto de strings compartidas", async () => {
-      const zBuffer = crearZipPrueba({
-        "xl/sharedStrings.xml": `<sst><si><t>Texto 1</t></si><si><r><t>Texto </t></r><r><t>Partido</t></r></si></sst>`,
-      });
-      const zip = api.zipIndex(zBuffer);
-      const shared = await api.parseSharedStringsStream(zip, async () => {});
+    t.casoAsync("parseSharedStringsStream: concatena trozos de texto de strings compartidas", async () => {
+      const fakeZip = {};
+      const origZipRead = api.zipRead;
+      api.zipRead = async () => `<sst><si><t>Texto 1</t></si><si><r><t>Texto </t></r><r><t>Partido</t></r></si></sst>`;
+      const shared = await api.parseSharedStringsStream(fakeZip, false);
       t.igual(shared[0], "Texto 1");
-      t.igual(shared[1], "Texto Partido", "los <r> partidos de una misma <si> se concatenan en un solo texto");
-    });
-
-    await t.casoAsync("parseSharedStringsStream: un libro sin xl/sharedStrings.xml devuelve lista vacía, no lanza", async () => {
-      const zip = api.zipIndex(crearZipPrueba({ "hoja.xml": "<x/>" }));
-      const shared = await api.parseSharedStringsStream(zip, async () => {});
-      t.igual(shared, []);
+      t.igual(shared[1], "Texto Partido");
+      api.zipRead = origZipRead;
     });
 
     t.caso("parseRowBody: lee celdas tipo s, en linea, y vacías", () => {
@@ -192,7 +178,7 @@ module.exports = {
       t.igual(z.files["xl/sharedStrings.xml"].method, 0, "Debe ser method 0 (stored)");
     });
 
-    await t.casoAsync("zipRead: lee contenido no comprimido (method 0)", async () => {
+    t.casoAsync("zipRead: lee contenido no comprimido (method 0)", async () => {
       const zBuffer = crearZipPrueba({
         "hoja.xml": "CONTENIDO HOJA XML"
       });

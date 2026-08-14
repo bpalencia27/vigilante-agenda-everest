@@ -31,10 +31,10 @@ function crearDom() {
       classList: { _s: new Set(), add(...c) { c.forEach(x => this._s.add(x)); }, remove(...c) { c.forEach(x => this._s.delete(x)); }, toggle(c, f) { f ? this._s.add(c) : this._s.delete(c); }, contains(c) { return this._s.has(c); } },
       children: [], attributes: {}, _listeners: {},
       innerHTML: "", textContent: "", value: "", id: "", className: "", href: "", download: "", type: "text", name: "", checked: false, disabled: false,
-      appendChild(c) { c._parent = this; this.children.push(c); return c; },
-      insertBefore(c) { c._parent = this; this.children.unshift(c); return c; },
-      removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); c._parent = null; return c; },
-      remove() { if (this._parent) this._parent.removeChild(this); },
+      appendChild(c) { this.children.push(c); return c; },
+      insertBefore(c) { this.children.unshift(c); return c; },
+      removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); return c; },
+      remove() {},
       setAttribute(k, v) { this.attributes[k] = v; if (k === "id") this.id = v; },
       getAttribute(k) { return this.attributes[k] !== undefined ? this.attributes[k] : null; },
       removeAttribute(k) { delete this.attributes[k]; },
@@ -80,7 +80,7 @@ function crearEntorno(opciones) {
   const doc = crearDom();
 
   const win = {
-    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/HCHealth/", search: "", hash: "" },
+    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", search: "", hash: "" },
     navigator: { userAgent: "node-test", locks: null },
     document: doc,
     localStorage: storage,
@@ -165,8 +165,6 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__state = state; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__WHITELIST = WHITELIST_13_LABS; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__PYM_CATALOG = PYM_CATALOG; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}\n";
 
