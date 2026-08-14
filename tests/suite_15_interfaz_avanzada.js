@@ -1679,6 +1679,161 @@ module.exports = {
       t.falso(btn.innerHTML.includes("SUGERIDO"), "sin diabetes/HTA+DM no hay franja que imponer, sin insignia");
     });
 
+    // v14.0.0 — RANGO REAL DE DÍAS: encargo del médico (12-ago), conectado con
+    // calcRangoSondeoIso (existía, probada, 0 llamadores). Antes el selector de fecha usaba
+    // calcTargetDateRange (±3 días hábiles, SIN sábados) — un duplicado reducido de la misma
+    // idea que nunca se reemplazó.
+    await t.casoAsync("openAgendamientoModal v14: el selector de fecha trae ±7 días hábiles Y sábados, no ±3 sin sábados", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cR = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            // TODOS los días con agenda real, para medir el tamaño del rango sin que el
+            // sondeo en segundo plano retire ninguno — esa parte se prueba aparte.
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cR);
+      cR.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cR.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(80);
+      const modal = cR.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const chips = [...modal.querySelector("#vgl-day-chips").children];
+      // 7 antes + el centro + 7 después = 15 días hábiles como mínimo; más los sábados
+      // candidatos que calcRangoSondeoIso encuentre dentro de ese rango (al menos 2 en
+      // cualquier ventana de 15 días corridos).
+      t.cierto(chips.length >= 15, `esperaba al menos 15 chips (±7 hábiles + centro), salieron ${chips.length}`);
+      t.cierto(chips.some((b) => b.className.includes("vgl-agm-pbtn-sabado")), "al menos un sábado aparece en el rango — calcTargetDateRange nunca los traía");
+    });
+
+    // v14.0.0 — SONDEO EN SEGUNDO PLANO: "no se deben mostrar los días en los que no haya
+    // agenda". Conectado con mapConLimite (existía, probada, 0 llamadores) para no bloquear
+    // la apertura del modal con hasta 15 peticiones antes del primer pintado: los chips
+    // salen todos de inmediato y se retiran los que la verificación confirma vacíos.
+    await t.casoAsync("openAgendamientoModal v14: un sábado sin turnos reales se retira solo tras el sondeo en segundo plano", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cS = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            const dow = new Date(iso + "T12:00:00").getDay();
+            // Los sábados (6) NO traen agenda; los días hábiles sí — el escenario real que
+            // describió el médico ("cada médico trabaja un sábado cada 15 días").
+            if (dow === 6) return respuestaJson({ agendas: [] });
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cS);
+      cS.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cS.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      // El pintado de los chips es SÍNCRONO (renderDayChips los agrega todos antes de lanzar
+      // el sondeo en segundo plano, que es async): hay que comprobar la precondición ANTES de
+      // ceder el hilo con cualquier await, porque con remove() ya funcionando de verdad en el
+      // arnés el sondeo puede terminar de retirar el sábado desde el primer "tick".
+      const modal = cS.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const chipsEl = modal.querySelector("#vgl-day-chips");
+      t.cierto([...chipsEl.children].some((b) => b.className.includes("vgl-agm-pbtn-sabado")), "precondición: había al menos un sábado en el pintado inicial");
+      // El sondeo hace una petición POR DÍA con concurrencia acotada (3 a la vez): con la
+      // ventana de ±7 hábiles + sábados alcanza sobrando con una espera generosa.
+      await esperar(500);
+      t.falso([...chipsEl.children].some((b) => b.className.includes("vgl-agm-pbtn-sabado")), "los sábados sin agenda real ya no están: el sondeo los retiró");
+      // Los días HÁBILES normales, que sí tenían agenda en el mock, se conservan todos.
+      t.cierto(chipsEl.children.length >= 15, "los días hábiles con agenda real siguen ahí");
+    });
+
+    // v14.0.0 — SEGURIDAD ANTE FALLO DE RED: un error en la verificación NUNCA debe ocultar
+    // un día. Es más seguro mostrar un chip de más (el médico lo intenta y ve el mensaje de
+    // "no hay turnos" de cargarHoras si de verdad estaba vacío) que ocultar uno que sí tenía
+    // agenda por un problema de conexión pasajero.
+    await t.casoAsync("openAgendamientoModal v14: un fallo de red en el sondeo NO oculta el día — se deja tal cual", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      let llamadasCitas = 0;
+      const cF = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            llamadasCitas++;
+            // La primera llamada (la del día centro, que dispara cargarHoras() de una vez)
+            // responde bien; el resto del sondeo en segundo plano falla — simula una red
+            // que se cae a media consulta, no un endpoint roto desde el inicio.
+            if (llamadasCitas === 1) {
+              const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+              return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+            }
+            throw new Error("red caída");
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cF);
+      cF.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cF.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      // El conteo de referencia se toma ANTES de ceder el hilo (el pintado es síncrono):
+      // tomarlo tras un await ya podría estar viendo el resultado del sondeo a medias, lo que
+      // volvería la comparación de abajo una tautología en vez de una prueba real.
+      const modal = cF.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const chipsEl = modal.querySelector("#vgl-day-chips");
+      const antes = chipsEl.children.length;
+      await esperar(500);
+      t.igual(chipsEl.children.length, antes, "con la red caída en el sondeo, ningún chip se retira — el error se trata como 'no se sabe', no como 'no hay agenda'");
+    });
+
+    // v14.0.0 — EL CHIP ACTIVO NUNCA SE RETIRA: aunque el sondeo confirme (de verdad, sin
+    // error) que el día seleccionado en ese momento no tiene turnos, cargarHoras() ya le está
+    // mostrando ese mismo resultado con su propio aviso explícito — borrárselo de debajo de
+    // los dedos sería peor experiencia que dejarlo con el aviso a la vista.
+    await t.casoAsync("openAgendamientoModal v14: el chip del día ACTIVO nunca se retira, aunque el sondeo confirme que está vacío de verdad", async () => {
+      const cA = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          // TODOS los días, incluido el centro/activo, responden con una lista vacía
+          // LEGÍTIMA (sin lanzar) — el escenario que sí debe ocultar un día normal.
+          if (u.includes("BuscarCitasDisponibles")) return respuestaJson({ agendas: [] });
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cA);
+      cA.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cA.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      const modal = cA.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const chipsEl = modal.querySelector("#vgl-day-chips");
+      await esperar(500);
+      const activo = [...chipsEl.children].find((b) => b.classList.contains("active"));
+      t.cierto(!!activo, "el chip activo (día centro) sigue en el DOM tras el sondeo, aunque estaba confirmado vacío");
+      t.cierto(chipsEl.children.length < 18, "los días NO activos que sí estaban confirmados vacíos sí se retiraron");
+    });
+
     // ================= openLabSoloModal =================
     t.caso("openLabSoloModal: una cita sin documento solo deja un aviso warn", () => {
       cv.api.openLabSoloModal(null);

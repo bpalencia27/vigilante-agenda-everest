@@ -27,6 +27,7 @@ function crearT() {
       return p;
     },
     igual(a, b, nota) {
+      if (a === b) return;
       const A = JSON.stringify(a), B = JSON.stringify(b);
       if (A !== B) throw new Error((nota ? nota + ": " : "") + "esperaba " + B + " y obtuvo " + A);
     },

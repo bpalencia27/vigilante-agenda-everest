@@ -93,6 +93,18 @@ module.exports = {
       c.ctx.URL = { createObjectURL: () => "blob:reporte", revokeObjectURL() {} };
       c.ctx.alert = (m) => alertas.push(String(m));
 
+      // vglExportLogs hace appendChild + click + remove() en el mismo tick (patrón real y
+      // correcto de descarga por ancla efímera): con remove() ya funcionando de verdad en el
+      // arnés, el ancla ya no está en body.children para cuando el test la busca ahí. Se
+      // captura en el momento de la creación, no después de que la función ya la limpió.
+      let ancla = null;
+      const crearOriginal = c.env.doc.createElement;
+      c.env.doc.createElement = (tag) => {
+        const el = crearOriginal(tag);
+        if (String(tag).toLowerCase() === "a") ancla = el;
+        return el;
+      };
+
       c.api.vglLog("NAV", "Uno", {});
       c.api.vglLog("NAV", "Dos", {});
       c.api.vglExportLogs();
@@ -104,7 +116,6 @@ module.exports = {
       t.igual(reporte.logs[1].act, "Dos");
       t.cierto(typeof reporte.meta.version === "string" && reporte.meta.version.length > 0);
 
-      const ancla = c.env.doc.body.children.find((n) => n.tagName === "A");
       t.cierto(!!ancla, "debe añadir un ancla al body");
       t.cierto(ancla.download.indexOf("BITACORA_VIGILANTE_REAL_") === 0, "nombre del archivo");
       t.igual(ancla.href, "blob:reporte");

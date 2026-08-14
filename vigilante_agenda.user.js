@@ -7813,6 +7813,12 @@
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional{
         border-style:dashed;border-color:rgba(var(--rgb-morado),.55)
       }
+      /* v14.0.0 — Chip de día SÁBADO en el selector de fecha. Borde punteado (mismo
+         lenguaje visual que "no es la malla normal" de los cupos adicionales, pero en su
+         propio tono azul para no confundirse con ellos) mientras se confirma en segundo
+         plano si el médico tiene agenda ese sábado — si no la tiene, el chip se retira
+         solo y este estilo nunca llega a notarse. */
+      .vgl-agm-pbtn-sabado{border-style:dashed;border-color:rgba(var(--rgb-azul),.55)}
       .vgl-agm-loading{
         font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
       }
@@ -9070,7 +9076,17 @@
   }
 
   // Interfaz con APIAcceso: Buscar Agendas Disponibles (Soporta Medicina General, Med. Interna, Nutrición, Psicología y Odontología)
-  async function apiAccesoBuscarCitasDisponibles(pacienteId, fechaIso, especialidadId) {
+  // propagarError: por defecto false (compatibilidad con las llamadas existentes — un fallo
+  // de red se traduce silenciosamente en "sin agendas", como siempre). El sondeo en segundo
+  // plano de renderDayChips (D2) lo pasa en true, porque para esa lista SÍ necesita distinguir
+  // un fallo de red real (no debe ocultar el día) de una respuesta legítima vacía (si oculta).
+  //
+  // OJO: pageFetchJson/_pageFetchJsonCore NUNCA lanzan — tragan cualquier fallo (4xx, 5xx
+  // agotando reintentos, excepción de fetch) y devuelven `null`. Por eso la señal que hay que
+  // mirar aquí no es un catch, es que la respuesta haya sido `null`: eso es "no se sabe" (la
+  // red falló o el servidor no contestó nada útil), mientras que un objeto real —aunque
+  // describa una lista vacía— es una respuesta legítima del servidor y sí se puede confiar.
+  async function apiAccesoBuscarCitasDisponibles(pacienteId, fechaIso, especialidadId, propagarError) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     const espId = especialidadId || 12;
     const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;
@@ -9083,8 +9099,11 @@
     } catch (e) {}
 
     try {
-      return await pageFetchJson(path2, { method: "POST", body: "{}", __idempotent: true });
+      const res2 = await pageFetchJson(path2, { method: "POST", body: "{}", __idempotent: true });
+      if (propagarError && res2 == null) throw new Error("apiAccesoBuscarCitasDisponibles: ninguna vía dio una respuesta real");
+      return res2;
     } catch (e) {
+      if (propagarError) throw e;
       return {};
     }
   }
@@ -10837,25 +10856,84 @@
       cargarHorasLab();
     }
 
+    // v14.0.0 — Encargo del médico (12-ago), conectado con calcRangoSondeoIso (existía,
+    // probada, 0 llamadores): "los días que se muestren sean 7 días antes (hábiles) y 7
+    // días después (hábiles) a la cita sugerida... se deben incluir los sábados laborales
+    // ... no se deben mostrar los días en los que no haya agenda". Reemplaza a
+    // calcTargetDateRange (±3 días hábiles, SIN sábados), que quedaba como duplicado
+    // reducido de la misma idea. No se borra calcTargetDateRange: T5 la usa vía
+    // openLabSoloModal para los días de laboratorio, que no pidió este cambio.
+    let _sweepAgendaToken = 0;
     function renderDayChips(m, d) {
-      const range = calcTargetDateRange(m, d);
+      const isoBase = calcBusinessTargetDate(m, d).iso;
+      const range = calcRangoSondeoIso(isoBase);
       dayChipsEl.innerHTML = "";
+      const miToken = ++_sweepAgendaToken;
+      // Mapa iso -> botón, guardado por CIERRE en vez de buscarse luego con querySelector:
+      // el DOM falso del arnés de pruebas deja querySelector/querySelectorAll como no-op
+      // (mismo hallazgo ya documentado varias veces en este proyecto), y en el navegador
+      // real esto además evita un recorrido del DOM por cada uno de los ~17 días del sondeo.
+      const botonesPorIso = new Map();
 
       range.forEach((item) => {
         const btn = document.createElement("button");
-        btn.className = "vgl-agm-pbtn" + (item.isCenter ? " active" : "");
-        btn.className = "vgl-agm-pbtn vgl-sm" + (item.isCenter ? " active" : "");
+        btn.className = "vgl-agm-pbtn vgl-sm" + (item.esSabado ? " vgl-agm-pbtn-sabado" : "");
+        // El estado "active" se marca SIEMPRE por classList (nunca concatenado en el string
+        // inicial): así el sondeo en segundo plano, que decide qué chip no retirar mirando
+        // classList.contains("active"), lee la misma fuente de verdad que el clic de arriba.
+        if (item.isCenter) btn.classList.add("active");
         btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
+        if (item.esSabado) btn.title = "Sábado — este médico no siempre tiene agenda los sábados. Se está verificando en segundo plano; si no hay turnos, este día se retirará solo.";
         btn.addEventListener("click", () => {
-          dayChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
+          botonesPorIso.forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           selectedDateInfo = item;
           cargarHoras();
         });
         dayChipsEl.appendChild(btn);
+        botonesPorIso.set(item.iso, btn);
         if (item.isCenter) selectedDateInfo = item;
       });
       cargarHoras();
+
+      // "No se deben mostrar los días en los que no haya agenda": se verifica en SEGUNDO
+      // PLANO, con concurrencia acotada (mapConLimite — existía, probada, 0 llamadores),
+      // para no bloquear la apertura del modal con hasta 15 peticiones antes del primer
+      // pintado. Solo se OCULTA un día si la consulta confirma cero turnos; ante un error
+      // de red el chip se deja tal cual — es más seguro mostrar de más que ocultar un día
+      // que sí tenía agenda por un problema de conexión.
+      _sondearAgendaDeCadaDia(range, botonesPorIso, miToken);
+    }
+
+    async function _sondearAgendaDeCadaDia(range, botonesPorIso, miToken) {
+      try {
+        if (!pacienteIdAcceso) pacienteIdAcceso = await apiAccesoBuscarPaciente(apt.doc_id);
+      } catch (e) { return; }
+      if (!vivo() || !pacienteIdAcceso || miToken !== _sweepAgendaToken) return;
+      // Los sábados van primero: son los únicos con probabilidad real de estar vacíos
+      // ("cada médico trabaja un sábado cada 15 días" — el propio médico lo describió así),
+      // así que se resuelven antes de gastar las peticiones acotadas en días hábiles que
+      // casi siempre sí tienen agenda.
+      const candidatos = range.slice().sort((x, y) => (y.esSabado ? 1 : 0) - (x.esSabado ? 1 : 0));
+      await mapConLimite(candidatos, 3, async (item) => {
+        if (miToken !== _sweepAgendaToken) return;
+        let hayAgenda = true; // por defecto NO se oculta: un fallo de red no debe borrar un día real
+        try {
+          const res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId, true);
+          const agendas = extractAgendasList(res);
+          hayAgenda = !!(agendas && agendas.length);
+        } catch (e) { hayAgenda = true; }
+        if (!vivo() || miToken !== _sweepAgendaToken) return;
+        if (!hayAgenda) {
+          // El botón ACTIVO (el que el médico tiene seleccionado en este momento) nunca se
+          // retira, aunque su consulta confirme cero turnos: cargarHoras() ya le está
+          // mostrando ese mismo resultado con su propio mensaje explícito
+          // ("⛔ No hay turnos... Elija otro día"), y borrarle el chip de debajo de los
+          // dedos sería peor experiencia que dejarlo con el error a la vista.
+          const btn = botonesPorIso.get(item.iso);
+          if (btn && !btn.classList.contains("active")) btn.remove();
+        }
+      }, () => miToken !== _sweepAgendaToken);
     }
 
     // Eventos para cambiar de Especialidad RCV
