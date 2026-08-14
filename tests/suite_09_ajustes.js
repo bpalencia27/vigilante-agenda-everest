@@ -10,7 +10,7 @@ module.exports = {
   nombre: "Ajustes y almacén local (Suite 09)",
   cubre: [
     "readJSON", "writeJSON", "saveSettings", "getProcessedToday",
-    "isCitaAgendadaHoy", "isOrdenesCreadasHoy", "markCitaAgendadaHoy", "markOrdenesCreadasHoy",
+    "isCitaAgendadaHoy", "isOrdenesCreadasHoy", "markCitaAgendadaHoy", "markOrdenesCreadasHoy", "_pymYaOrdenadoHoyDesdeElScript",
     "isLabAgendadaHoy", "markLabAgendadaHoy", "citaAgendadaFechaHoy",
     "applySettings", "darkPreferred", "isLight", "applyTheme", "restartPolling",
   ],
@@ -110,6 +110,25 @@ module.exports = {
       t.falso(A.isCitaAgendadaHoy("456"));
       A.markOrdenesCreadasHoy(456);                   // mismo documento como número: no duplica
       t.igual(A.getProcessedToday().ordenes, ["456"]);
+    });
+
+
+    t.caso("_pymYaOrdenadoHoyDesdeElScript: retorna arreglo vacío si no hay detalle o actividades", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      t.igual(A._pymYaOrdenadoHoyDesdeElScript(null), []);
+      t.igual(A._pymYaOrdenadoHoyDesdeElScript("999"), []);
+      A.markOrdenesCreadasHoy("999"); // Crea el registro pero sin arreglo de actividades
+      t.igual(A._pymYaOrdenadoHoyDesdeElScript("999"), [], "marca vieja sin detalle devuelve arreglo vacío");
+    });
+
+    t.caso("_pymYaOrdenadoHoyDesdeElScript: retorna las actividades cuando se pasan en markOrdenesCreadasHoy", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markOrdenesCreadasHoy("888", ["agrupador"], ["ACT_1", "ACT_2"]);
+      const res = A._pymYaOrdenadoHoyDesdeElScript("888");
+      t.cierto(Array.isArray(res));
+      t.igual(res.length, 2);
+      t.igual(res[0], "ACT_1");
+      t.igual(res[1], "ACT_2");
     });
 
     t.caso("mark…: con documento vacío no escriben nada (ni siquiera crean el registro)", () => {
