@@ -636,6 +636,44 @@ module.exports = {
       t.igual(logs2.length, 1, "y tampoco se reescribe la bitácora al repetir");
     });
 
+    // v12.10.15 — Bug real de auditoría nocturna ("auto-DDoS a Athenea"): un paciente con
+    // CERO laboratorios en Athenea nunca actualizaba _labsPrefetch.ts (solo se cacheaba
+    // cuando labs.length > 0), así que pasados los 30s del piso anti-ráfagas, el TTL de 10
+    // minutos —que debería frenar la siguiente consulta— tampoco frenaba nada: el robot
+    // repetía las 3 peticiones HTTP cada 30s de forma indefinida mientras la historia
+    // siguiera abierta (riesgo real de bloqueo de IP por Athenea).
+    await t.casoAsync("autoFetchAtheneaLabsForActivePatient: con CERO laboratorios en Athenea, el TTL de 10 min SÍ frena la siguiente consulta pasados los 30s (bug real de auditoría)", async () => {
+      const llamadas = [];
+      let ahora = new Date("2026-08-14T08:00:00").getTime();
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          llamadas.push(o.url);
+          const url = String(o.url);
+          if (url.includes("BusquedaPaciente")) { o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="tok">' }); return; }
+          if (url.includes("BuscarPaciente")) { o.onload({ status: 200, responseText: '<input name="IdPaciente" value="999"><input name="__RequestVerificationToken" value="tok2">' }); return; }
+          if (url.includes("DatosPaciente")) { o.onload({ status: 200, responseText: "CC: 12.345.678 — sin ninguna solicitud registrada." }); return; }
+          if (o.onerror) o.onerror(new Error("url no simulada"));
+        },
+      });
+      c.env.win.Date = class extends Date {
+        static now() { return ahora; }
+        constructor(...args) { if (args.length === 0) super(ahora); else super(...args); }
+      };
+      c.ctx.Date = c.env.win.Date;
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ closest: () => null, textContent: "CC 12.345.678" }] : []);
+
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(llamadas.length, 3, "primera consulta real completa: BusquedaPaciente + BuscarPaciente + DatosPaciente (0 solicitudes encontradas)");
+
+      // Avanza 31s — pasa el piso anti-ráfagas de 30s, pero sigue DENTRO del TTL de 10 min
+      // de la pre-carga (que ahora sí quedó fijada, aunque haya sido con 0 laboratorios).
+      ahora += 31000;
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(llamadas.length, 3, "bug real de auditoría: antes esto disparaba 3 peticiones MÁS cada 30s indefinidamente");
+    });
+
     // v12.3.14 — initLabMutationObserver fue ERRADICADA (observaba document.body ENTERO con
     // {childList:true,subtree:true}: cientos de mutaciones/minuto bajo Angular). La misma
     // validación vive ahora anclada a tick() — ver suite_18_athenea_sesion.js, que prueba

@@ -1099,6 +1099,15 @@ module.exports = {
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", null), 180);
     });
 
+    // v12.10.15 — Bug real de auditoría nocturna: los LIS suelen reportar valores fuera
+    // de rango con desigualdad ("> 300"). Number("> 300") da NaN, así que antes de
+    // sanitizar, precisamente la albuminuria más franca perdía el acortamiento a 90 días.
+    t.caso("_vigenciaDiasParaAnalito: RAC reportado con desigualdad del LIS ('> 300', '>= 30') sigue reduciendo a 90 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "> 300"), 90, "bug real de auditoría: antes NaN caía en 180");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", ">=30"), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "  30  "), 90, "espacios alrededor tampoco deben romper el parseo");
+    });
+
     t.caso("_analitosRcvVencidos: RAC con albuminuria franca (>=30 mg/g) vence a los 90 días, no a los 180", () => {
       // 2026-08-11 - 2026-05-07 = 96 días: vigente a 180, pero ya vencido a 90 (reducida).
       const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "35", Fecha: "2026-05-07" }];

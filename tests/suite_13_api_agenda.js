@@ -13,7 +13,7 @@ module.exports = {
     "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
     "apiDigiturnoFinalizarTicket", "apiMedicoAbrirHistoria", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
-    "apiAccesoObtenerTurnos"
+    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -655,6 +655,46 @@ module.exports = {
       t.igual(await e.c.api.apiAccesoObtenerLaboratoriosAnnar(55), { lab: "annar-gm" });
       t.cierto(e.reg.gm.length >= 1, "la segunda vía sí se usó");
       t.cierto(e.reg.gm[0].url.includes("ObtenerResultadosLaboratorioAnnar?pacienteId=55"));
+    });
+
+    // ---------- apiHcObtenerOrdenamientosVigentes (T6) ----------
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: pega al endpoint correcto y devuelve el arreglo tal cual", async () => {
+      const e = entornoApi();
+      const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: "2026-08-01" }];
+      e.setFetch(respuestaJson(ordenes));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), ordenes);
+      t.cierto(e.reg.fetches[0].url.includes("ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=999"));
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: sin pacienteId no consulta nada", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson([]));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(""), null);
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: fallo de red (404, sin rescate GM) devuelve null sin lanzar", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaError(404));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), null);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: respuesta malformada (no es un arreglo) devuelve null, no la respuesta cruda", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson({ inesperado: true }));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), null);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: cachea por paciente (una sola consulta real por paciente), incluido un arreglo vacío", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson([]));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(111), [], "arreglo vacío: paciente sin órdenes vigentes, no es un fallo");
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(111), [], "segunda llamada, mismo paciente");
+      t.igual(e.reg.fetches.length, 1, "la segunda llamada se sirvió de la caché, no repitió la consulta pesada");
+
+      e.setFetch(respuestaJson([{ cup: { codigo: "1" }, fechaCreacion: "2026-01-01" }]));
+      await e.c.api.apiHcObtenerOrdenamientosVigentes(222);
+      t.igual(e.reg.fetches.length, 2, "un paciente DISTINTO sí dispara una consulta nueva");
     });
 
     // ---------- apiAccesoAgdValidarAgenda ----------

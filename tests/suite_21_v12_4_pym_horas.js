@@ -4,7 +4,7 @@
 // REALES vistos en campo (tarjetas de Athenea, valores ASP.NET /Date(ms)/).
 module.exports = {
   nombre: "v12.4: horas, panel PyM y tabla CUPS",
-  cubre: ["_parseFechaHoraLike", "isPanelHiddenActivity", "panelActivities", "pymPendientesRestantes", "debeBuscarPymDiario"],
+  cubre: ["_parseFechaHoraLike", "isPanelHiddenActivity", "panelActivities", "pymPendientesRestantes", "debeBuscarPymDiario", "pymCubiertoPorOrdenVigente"],
   pruebas(t, api, env, cargar) {
 
     // ---------- _parseFechaHoraLike ----------
@@ -235,5 +235,103 @@ module.exports = {
       t.cierto(casa("SOMF (sangre oculta en materia fecal)", porCie("Z121")), "el nombre de la tabla y el 'Última SOMF' de la piloto casan con Z121");
       t.cierto(casa("Hemoglobina", porCie("Z103")));
     });
+
+    // ================= pymCubiertoPorOrdenVigente (T6) =================
+    // v14.0.0 (CORREGIDO tras releer D4 completo — ver el comentario junto a la función
+    // real: la ventana es la VIGENCIA CLÍNICA por actividad (PYM_CATALOG[].vigenciaDias),
+    // no el año calendario). Cruza actividades PyM (paquetes con forma de PYM_CATALOG)
+    // contra las órdenes VIGENTES ya existentes en Everest. Devuelve las que SIGUEN
+    // pendientes.
+    (() => {
+      const rcv = () => api.__PYM_CATALOG.find((p) => p.cie10 === "I10X"); // vigenciaDias=180 (RCV_VIGENCIA_DIAS); 903815/903817/903818/903868/903895/903841/907106
+      const z123 = () => api.__PYM_CATALOG.find((p) => p.cie10 === "Z123"); // 876802 (mamografía) — SIN vigenciaDias confirmado
+      const HOY = "2026-08-14";
+      const HACE_30D = "2026-07-15";
+      const HACE_180D = "2026-02-15";   // límite exacto de RCV_VIGENCIA_DIAS
+      const HACE_181D = "2026-02-14";   // un día más allá del límite
+      const HACE_200D = "2026-01-26";
+
+      t.caso("pymCubiertoPorOrdenVigente: RCV con una orden reciente (dentro de 180 días) cubre la actividad", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [], "orden de hace 30 días, bien dentro de los 180 de RCV_VIGENCIA_DIAS");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin ningún CUPS coincidente, la actividad sigue pendiente", () => {
+        const ordenes = [{ cup: { codigo: "999999" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: coincide con SOLO UNO de los 7 CUPS del paquete -> el paquete completo cuenta como cubierto (cruce por paquete, no por examen suelto)", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), []);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente (D4, vigencia clínica): a los 180 días EXACTOS todavía cubre (límite inclusive)", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_180D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), []);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente (D4, vigencia clínica): pasados los 180 días (181) YA NO cubre — sigue pendiente", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_181D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente (D4): una actividad SIN vigenciaDias confirmado SIEMPRE cuenta como pendiente, aunque exista una orden vigente reciente con el CUPS exacto", () => {
+        const ordenes = [{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([z123()], ordenes, HOY), [z123()], "Z123 (mamografía) todavía no tiene la periodicidad de la Resolución 3280 confirmada por el médico");
+        t.falso(Number.isFinite(z123().vigenciaDias), "confirma la premisa: el catálogo real no le puso vigenciaDias a Z123 todavía");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: mismo CUPS con dos órdenes -> gana la fecha MÁS RECIENTE (una vieja fuera de ventana no descarta la cobertura si hay una nueva vigente)", () => {
+        const ordenes = [
+          { cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_200D },
+          { cup: { codigo: "903818" }, estado: "PRO", fechaCreacion: HACE_30D },
+        ];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [], "la orden reciente (30 días) es la que decide, no la vieja (200 días)");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: una orden con fecha FUTURA se descarta por prudencia (dato absurdo)", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: "2026-12-25" }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: NO interpreta `estado` — 'PEN' y 'PRO' cubren igual, por CUPS+vigencia únicamente", () => {
+        const cubrePen = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }], HOY);
+        const cubrePro = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "PRO", fechaCreacion: HACE_30D }], HOY);
+        const cubreRaro = api.pymCubiertoPorOrdenVigente([rcv()], [{ cup: { codigo: "903818" }, estado: "ALGO-NUNCA-VISTO", fechaCreacion: HACE_30D }], HOY);
+        t.igual(cubrePen, []); t.igual(cubrePro, []); t.igual(cubreRaro, [], "un estado desconocido no descarta la orden: no se interpreta");
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: fecha de la orden ilegible -> por prudencia, NO cuenta como cobertura", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: "esto-no-es-una-fecha" }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, HOY), [rcv()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: respuesta vacía de órdenes -> TODO sigue pendiente", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv(), z123()], [], HOY), [rcv(), z123()]);
+      });
+
+      // v14.0.0 — LA MUTACIÓN MÁS IMPORTANTE DEL ENCARGO (según el propio criterio de
+      // aceptación de T6): "fallo = no cubierto". Si `ordenes` no es un arreglo utilizable
+      // (null por fallo de red, undefined, un objeto malformado), TODAS las actividades
+      // deben seguir pendientes — nunca se pierde en silencio un recordatorio real.
+      t.caso("pymCubiertoPorOrdenVigente (D4, LA MUTACIÓN OBLIGATORIA): fallo de red (ordenes=null) -> TODO sigue pendiente, nunca se descarta nada", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv(), z123()], null, HOY), [rcv(), z123()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: respuesta malformada (ni null ni arreglo) -> también todo pendiente", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], { inesperado: true }, HOY), [rcv()]);
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin actividades que revisar, devuelve la lista vacía sin lanzar", () => {
+        t.igual(api.pymCubiertoPorOrdenVigente([], [{ cup: { codigo: "903818" }, fechaCreacion: HACE_30D }], HOY), []);
+        t.noLanza(() => api.pymCubiertoPorOrdenVigente(null, null, HOY));
+      });
+
+      t.caso("pymCubiertoPorOrdenVigente: sin un 'hoy' fiable (fecha ilegible), no se puede calcular ninguna vigencia -> por prudencia, todo pendiente", () => {
+        const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: HACE_30D }];
+        t.igual(api.pymCubiertoPorOrdenVigente([rcv()], ordenes, "fecha-invalida"), [rcv()]);
+      });
+    })();
   }
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.15
+// @version      12.10.19
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.15";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.19";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2584,7 +2584,13 @@
   const RAC_VIGENCIA_UMBRAL_ALBUMINURIA = 30; // mg/g
   function _vigenciaDiasParaAnalito(key, resultValCrudo) {
       if (key === "RAC") {
-          const n = Number(String(resultValCrudo == null ? "" : resultValCrudo).replace(",", "."));
+          // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
+          // rango con desigualdad ("> 300", ">= 30"). Number("> 300") es NaN, así que sin
+          // sanitizar el umbral nunca se cumplía justo para la albuminuria más franca —el
+          // caso de mayor riesgo— y la vigencia volvía a los 180 días completos en vez de
+          // acortarse a 90. Se quita todo lo que no sea dígito/coma/punto antes de parsear.
+          const limpio = String(resultValCrudo == null ? "" : resultValCrudo).replace(/[^\d.,]/g, "").replace(",", ".");
+          const n = Number(limpio);
           if (Number.isFinite(n) && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
       }
       return RCV_VIGENCIA_DIAS;
@@ -2837,11 +2843,23 @@
 
       try {
           const labs = await getAtheneaLabsAuto(docId);
-          if (labs && labs.length > 0) {
+          // v12.10.15 — Bug real de auditoría (informe nocturno): antes solo se cacheaba
+          // aquí cuando labs.length > 0, así que un paciente SIN laboratorios en Athenea
+          // —el caso de mayor riesgo real, porque le faltan los 7 analitos RCV— nunca
+          // actualizaba _labsPrefetch.docId/ts. Eso encadenaba dos fallas: (1) el piso de
+          // 30 s dejaba de ser un piso real y el robot volvía a golpear Athenea con 3-4
+          // peticiones cada 30 s mientras la historia siguiera abierta (riesgo de bloqueo
+          // de IP), y (2) checkLabsVencidos() —que exige _labsPrefetch.docId === doc antes
+          // de revisar— nunca llegaba a evaluar a ese paciente, silenciando justo la alerta
+          // que más le hace falta. getAtheneaLabsAuto siempre resuelve a un arreglo (nunca
+          // null/undefined); si algo lanza antes de esta línea, el catch de abajo evita
+          // este bloque sin tocar la caché, que es lo correcto (reintentar, no cachear un
+          // error como si fuera "cero laboratorios").
+          _labsPrefetch = { docId, labs, ts: Date.now() };
+          if (labs.length > 0) {
               // v12.3.34 — AQUÍ YA NO SE ESCRIBE NADA: injectLabsIntoCronicos solo corre
               // cuando el médico pulsa el botón. El robot deja los resultados listos y
               // avisa UNA sola vez por paciente.
-              _labsPrefetch = { docId, labs, ts: Date.now() };
               vglLog("ATHENEA", "LabsAutoPrefetched", { docId, totalLabs: labs.length });
               if (_labsAvisoDoc !== docId) {
                   _labsAvisoDoc = docId;
@@ -2881,7 +2899,10 @@
               // consultas automáticas. Tras la consulta viva se refresca la pre-carga,
               // así el robot no vuelve a pedir lo que el clic acaba de traer.
               const labs = await getAtheneaLabsAuto(docId);
-              if (labs && labs.length) _labsPrefetch = { docId, labs, ts: Date.now() };
+              // v12.10.15 — mismo fix que autoFetchAtheneaLabsForActivePatient: cachear
+              // SIEMPRE que la consulta viva resuelva (incluida la lista vacía), para que
+              // el robot no repita esta misma consulta 30 s después.
+              if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
                   const r = injectLabsIntoCronicos(labs);
                   uxTrack("labs.autollenado.casillas", { n: r.count });
@@ -7322,7 +7343,7 @@
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
       #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
-      .vgl-agm-sub{font-size:13.5px;margin-top:3px;color:var(--fg2)}
+      .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2)}
       #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2)}
       .vgl-agm-sub b{color:var(--fg);font-weight:800}
       #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg)}
@@ -7338,7 +7359,7 @@
       .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
       .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
-        font-size:12.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+        font-size:var(--t-micro);font-weight:800;letter-spacing:.7px;text-transform:uppercase;
         display:block;margin-bottom:9px;color:var(--c-azul)
       }
       #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul)}
@@ -7347,7 +7368,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 15px;
-        font-size:12.5px;font-weight:600;cursor:pointer;
+        font-size:var(--t-micro);font-weight:600;cursor:pointer;
         transition:background .15s var(--ease-out),color .15s var(--ease-out),border-color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
         box-shadow:var(--glow-edge)
       }
@@ -7361,7 +7382,7 @@
         font-weight:800;box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),0 4px 14px rgba(var(--rgb-azul),.18)
       }
       .vgl-agm-dinfo{
-        font-size:12.5px;color:var(--fg);
+        font-size:var(--t-micro);color:var(--fg);
         background:rgba(var(--rgb-verde),.13);border:1px solid rgba(var(--rgb-verde),.45);
         border-radius:var(--r-field);padding:9px 13px;margin-top:7px;font-weight:600
       }
@@ -7393,7 +7414,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-pill);padding:7px 14px;
-        font-size:12.5px;font-weight:700;
+        font-size:var(--t-micro);font-weight:700;
         cursor:pointer;
         transition:background .15s var(--ease-out),border-color .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out);
         box-shadow:var(--glow-edge)
@@ -7431,16 +7452,16 @@
         background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
       }
       .vgl-agm-loading{
-        font-size:12.5px;color:var(--fg2);padding:6px;font-style:italic
+        font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
       }
       .vgl-agm-err{
-        font-size:12.5px;color:var(--c-rojo); /* [UI-CSS] */
+        font-size:var(--t-micro);color:var(--c-rojo); /* [UI-CSS] */
         background:rgba(var(--rgb-rojo),.13);border:1px solid rgba(var(--rgb-rojo),.35); /* [UI-CSS] */
         padding:9px 11px;border-radius:var(--r-field);font-weight:700
       }
       .vgl-agm-check-lbl{
         display:flex;align-items:center;gap:10px;
-        font-size:13.5px;font-weight:700;margin-bottom:8px;
+        font-size:var(--t-body);font-weight:700;margin-bottom:8px;
         cursor:pointer;color:var(--fg)
       }
       /* v12.3.20 — Sin min-width:0 el span no podía encogerse por debajo de su ancho
@@ -7452,7 +7473,7 @@
         background:var(--bg2);color:var(--fg);
         border:1px solid var(--edge);
         border-radius:var(--r-field);padding:11px 13px;
-        font-size:12.5px;font-family:inherit;resize:none;
+        font-size:var(--t-micro);font-family:inherit;resize:none;
         box-shadow:var(--glow-edge);
         transition:border-color .16s var(--ease-out),box-shadow .16s var(--ease-out)
       }
@@ -7475,7 +7496,7 @@
       #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde)}
       .vgl-agm-btn{
         border:0;border-radius:var(--r-chip);padding:11px 22px;
-        font-size:13.5px;font-weight:800;cursor:pointer;
+        font-size:var(--t-body);font-weight:800;cursor:pointer;
         transition:background .15s var(--ease-out),transform .2s var(--spring),box-shadow .2s var(--ease-out),color .15s var(--ease-out)
       }
       .vgl-agm-btn.sec{background:var(--bg3);color:var(--fg)}
@@ -7524,7 +7545,7 @@
       }
       .vgl-postcita-x:hover{color:var(--fg)}
       .vgl-postcita-title{font-size:var(--t-body);font-weight:800;color:var(--c-verde) !important;margin-bottom:2px}
-      .vgl-postcita-sub{font-size:12.5px;color:var(--fg2) !important;margin-bottom:12px}
+      .vgl-postcita-sub{font-size:var(--t-micro);color:var(--fg2) !important;margin-bottom:12px}
       #vgl-postcita-panel .vgl-agm-btn{width:100%;text-align:center;box-sizing:border-box}
 
       /* Items de Órdenes PyM — celdas bento */
@@ -7573,7 +7594,7 @@
       }
       .vgl-ord-title {
         color: var(--fg);
-        font-size: 13.5px;
+        font-size:var(--t-body);
         font-weight: 700;
         line-height: 1.45;
         word-break: break-word;
@@ -7629,12 +7650,12 @@
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:12.5px;color:var(--fg2);line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2);line-height:1.5;min-width:0}
       #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
         background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul);font-size:12.5px;font-weight:800;
+        color:var(--c-azul);font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -7699,7 +7720,7 @@
          titular: el 15.5px/900 de .vgl-labs-val es para un valor suelto, no para 30. */
       #vgl-labs-modal .vgl-labs-uro{
         display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));
-        gap:0 20px;font-size:12.5px;font-weight:600;letter-spacing:0
+        gap:0 20px;font-size:var(--t-micro);font-weight:600;letter-spacing:0
       }
       #vgl-labs-modal .vgl-labs-uro-i{
         min-width:0;overflow-wrap:break-word;line-height:1.5;
@@ -7932,7 +7953,7 @@
       #vgl-ordenar-modal .vgl-ord-label{gap:11px;border:1px solid transparent;border-radius:var(--r-field);padding:1px}
       #vgl-ordenar-modal .vgl-ord-chk{width:19px;height:19px;accent-color:var(--c-verde)}
       #vgl-ordenar-modal .vgl-ord-chk:focus-visible{outline:2px solid rgba(var(--rgb-verde),.80);outline-offset:2px;border-radius:4px}
-      #vgl-ordenar-modal .vgl-ord-title{font-size:13.5px;line-height:1.4}
+      #vgl-ordenar-modal .vgl-ord-title{font-size:var(--t-body);line-height:1.4}
       #vgl-ordenar-modal .vgl-ord-cie{
         display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.5px;
         color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
@@ -9070,6 +9091,101 @@
     try { return await pageFetchJson(path); } catch (e) { return null; }
   }
 
+  // v14.0.0 (T6) — Órdenes VIGENTES ya existentes en Everest para el paciente, para no
+  // pedirle al médico (banner de T7) algo que ya se ordenó. La respuesta real capturada en
+  // consultorio superó los 20.000 caracteres (truncada por el grabador de red): es pesada,
+  // así que se cachea por paciente además de la deduplicación que pageFetchJson ya trae vía
+  // GHOST.promises (esa solo evita llamadas CONCURRENTES idénticas, no repetir la consulta
+  // en cada tick mientras el médico sigue con el mismo paciente abierto).
+  let _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 };
+  const ORDENES_VIGENTES_TTL_MS = 10 * 60000;
+  function _ordenesVigentesInvalidar() { _ordenesVigentesCache = { pacienteId: "", data: null, ts: 0 }; }
+  async function apiHcObtenerOrdenamientosVigentes(pacienteId) {
+    if (!pacienteId) return null;
+    const key = String(pacienteId);
+    const ahora = Date.now();
+    if (_ordenesVigentesCache.pacienteId === key && _ordenesVigentesCache.data &&
+        (ahora - _ordenesVigentesCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _ordenesVigentesCache.data;
+    }
+    const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=${encodeURIComponent(key)}`;
+    try {
+      const data = await pageFetchJson(path);
+      // Solo se cachea una respuesta EXITOSA y utilizable (un arreglo — vacío incluido: un
+      // paciente sin órdenes vigentes es un resultado real, no un fallo). Cualquier otra
+      // forma (null, objeto, string) es una respuesta inesperada: ni se cachea ni se
+      // devuelve como si fuera válida — sube como null, igual que un fallo de red, para que
+      // pymCubiertoPorOrdenVigente la trate con la misma prudencia ("fallo = no cubierto").
+      if (!Array.isArray(data)) return null;
+      _ordenesVigentesCache = { pacienteId: key, data, ts: Date.now() };
+      return data;
+    } catch (e) {
+      console.warn("[Vigilante] apiHcObtenerOrdenamientosVigentes falló:", e);
+      return null;
+    }
+  }
+
+  // v14.0.0 (T6, CORREGIDO tras releer D4 completo en el superprompt — la ventana por
+  // año-calendario de la primera versión de esta función usaba una regla ya cerrada por el
+  // médico el 12-ago-2026, distinta de la que quedó escrita aquí; JULES_TAREAS_DISENO_V14.md
+  // traía el texto de tarea SIN esa actualización). La ventana correcta NO es "el año
+  // calendario en curso" (eso es solo la vigencia ADMINISTRATIVA de fechaVencimiento, que
+  // D4 dice explícitamente que no aplica) — es la VIGENCIA CLÍNICA del analito/actividad:
+  //   · Riesgo cardiovascular: máximo RCV_VIGENCIA_DIAS (180) días desde la orden.
+  //   · PyM que no es RCV: el campo `vigenciaDias` de PYM_CATALOG (Resolución 3280/2018).
+  // "Reutiliza eso; no escribas una segunda tabla de vigencias" (D4) — por eso el I10X
+  // (RCV exprés) toma vigenciaDias = RCV_VIGENCIA_DIAS en vez de un número repetido a mano.
+  //
+  // Las actividades SIN `vigenciaDias` confirmado (el médico aún no ha dado la periodicidad
+  // de la Resolución 3280 para ellas) SIEMPRE cuentan como pendientes — D4: "ante la duda,
+  // el banner se muestra". No se inventa un plazo. Ver PYM_CATALOG para el detalle de cuáles
+  // quedan así (anotado ahí mismo para que el médico las complete).
+  //
+  // `estado` ("PEN"/"PRO" vistos en la captura real, ver §1.6 del superprompt) NO SE
+  // INTERPRETA a propósito: su significado no está confirmado todavía. Ninguna orden se
+  // acepta ni se descarta por su valor de `estado` — solo por CUPS + vigencia clínica. Si el
+  // médico confirma después qué significan, se afina aquí.
+  //
+  // D4 ("fallo = no cubierto"): cualquier cosa que no sea un arreglo de órdenes utilizable
+  // (fallo de red, respuesta malformada, lista vacía) deja TODAS las actividades como
+  // pendientes — nunca se oculta en silencio un recordatorio de prevención real.
+  function pymCubiertoPorOrdenVigente(actividades, ordenes, hoy) {
+    const lista = Array.isArray(actividades) ? actividades : [];
+    if (!lista.length) return lista;
+    if (!Array.isArray(ordenes) || !ordenes.length) return lista;
+    const hoyInfo = _parseFechaHoraLike(hoy);
+    if (!hoyInfo) return lista; // sin "hoy" fiable no hay vigencia que calcular
+    const hoyMs = new Date(hoyInfo.iso + "T00:00:00").getTime();
+    // Por cada CUPS, se guarda la fecha de creación MÁS RECIENTE entre las órdenes vigentes
+    // (si el mismo examen se ordenó varias veces, la repetición más nueva es la que importa).
+    // Cada actividad se compara luego contra SU PROPIA vigencia clínica — no hay un único
+    // límite global, porque RCV (180 días) y el resto de PyM (Resolución 3280) no comparten
+    // periodicidad.
+    const masRecientePorCup = new Map();
+    for (const o of ordenes) {
+      if (!o || !o.cup || o.cup.codigo === undefined || o.cup.codigo === null) continue;
+      const fc = _parseFechaHoraLike(o.fechaCreacion);
+      if (!fc) continue; // fecha ilegible: por prudencia, esta orden NO cuenta como cobertura
+      const fcMs = new Date(fc.iso + "T00:00:00").getTime();
+      if (fcMs > hoyMs) continue; // fecha futura: dato absurdo, se descarta por prudencia
+      const cup = String(o.cup.codigo);
+      const prev = masRecientePorCup.get(cup);
+      if (prev === undefined || fcMs > prev) masRecientePorCup.set(cup, fcMs);
+    }
+    return lista.filter((act) => {
+      if (!Number.isFinite(act.vigenciaDias) || act.vigenciaDias <= 0) return true; // sin vigencia confirmada: siempre pendiente (D4)
+      const cups = Array.isArray(act.cups) ? act.cups : [];
+      const cubierta = cups.some((c) => {
+        if (!c || c.codigo === undefined || c.codigo === null) return false;
+        const fcMs = masRecientePorCup.get(String(c.codigo));
+        if (fcMs === undefined) return false;
+        const dias = Math.round((hoyMs - fcMs) / 86400000);
+        return dias <= act.vigenciaDias;
+      });
+      return !cubierta;
+    });
+  }
+
   // Interfaz con APIAcceso: Validar Agenda
   async function apiAccesoAgdValidarAgenda(agendaId, pacienteId) {
     const path = `/apiviva/APIAcceso/api/Acceso/AgdValidarAgenda?agendaId=${agendaId}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;
@@ -9548,6 +9664,15 @@
     // del primer resultado de Athenea sin fecha reconocida.
     let diagFechaModalLogged = false;
     let diagHoraModalLogged = false; // v12.4.0
+    // v14.0.0 (TL2) — mismo diagnóstico que fecha/hora arriba, para el mismo hueco de
+    // evidencia: la columna "Ref. / Rango" sale vacía a menudo porque el nombre real del
+    // campo en el payload de Athenea no está confirmado (aquí se prueban `referencia`,
+    // `ValoresReferencia`, `Estado`; los 4 nombres de fecha ya probados tampoco existían
+    // en el objeto real — no se adivina un quinto nombre sin evidencia, se captura la de
+    // verdad). Al detenerse en el primer analito sin ninguno de los tres campos, la
+    // consola del navegador (F12) muestra las claves reales de ESE analito para copiarlas
+    // y confirmar en consultorio cuál es el nombre correcto.
+    let diagReferenciaModalLogged = false;
     let rowsHtml = _agruparUroanalisisParaTabla(todosLabs).map(lab => {
       // v12.5.16 — El bloque agrupado del uroanálisis (ver _agruparUroanalisisParaTabla)
       // trae sus componentes en __vglGrupoUroComponentes: el "Resultado" de la fila es la
@@ -9582,6 +9707,10 @@
       // v12.0.0 — Fuera `lab.unidades` de esta cadena: unas unidades ("mg/dL") no son un
       // rango de referencia, y colarlas aquí ensucia la única señal que usa el resaltado.
       const referencia = lab.referencia || lab.ValoresReferencia || lab.Estado || "";
+      if (!esGrupoUro && !referencia && !diagReferenciaModalLogged && String(lab.origen || "").includes("Athenea")) {
+        diagReferenciaModalLogged = true;
+        console.warn("[Vigilante Labs] diagnóstico Ref./Rango: ninguno de los campos probados (referencia/ValoresReferencia/Estado) trajo valor. Claves disponibles:", Object.keys(lab), lab);
+      }
       // v12.0.0 — El color por defecto ya NO es verde. Pintar de verde todo lo que no
       // reconoce equivale a declarar "normal" un resultado que el script no ha
       // interpretado: es una afirmación clínica que no le corresponde hacer. Ahora solo
@@ -10675,11 +10804,19 @@
   //  v8.0.0: GENERADOR AUTOMÁTICO DE ÓRDENES PYM EN 1-CLIC (APIOrdenamientoHealth)
   // =====================================================================
   // [COPY-UX] Catálogo de actividades de prevención y mantenimiento
+  // v14.0.0 (T6, D4) — `vigenciaDias`: cada cuántos días una orden vigente (§1.6,
+  // pymCubiertoPorOrdenVigente) deja de "tapar" la necesidad de esta actividad. I10X (RCV
+  // exprés) reutiliza RCV_VIGENCIA_DIAS — "no escribas una segunda tabla de vigencias" — en
+  // vez de repetir 180 a mano. Las demás actividades (Resolución 3280 de 2018) TODAVÍA NO
+  // tienen su periodicidad confirmada por el médico: quedan A PROPÓSITO sin `vigenciaDias`,
+  // así que pymCubiertoPorOrdenVigente las trata SIEMPRE como pendientes (D4: ante la duda,
+  // el banner se muestra) — anotado en cada una para que el médico las complete.
   const PYM_CATALOG = [
     {
       cie10: "I10X",
       titulo: "⚡ PAQUETE SUPER-ORDENAMIENTO RCV EXPRÉS (Perfil Lipídico + Renal + Glicemia)",
       keywords: ["rcv", "super", "expres", "paquete rcv"],
+      vigenciaDias: RCV_VIGENCIA_DIAS,
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad [HDL]" },
         { codigo: "903817", desc: "Colesterol De Baja Densidad [LDL]" },
@@ -10703,6 +10840,7 @@
       cie10: "Z124",
       titulo: "Cáncer de cuello uterino (Citología / ADN VPH)",
       keywords: ["cuello uterino", "cervix", "citologia", "ccu", "vph", "tamizar con ccu"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "908890", desc: "Deteccion Virus Del Papiloma Humano Por Pruebas Moleculares (Especifico)" },
         { codigo: "898001", desc: "Estudio de coloracion basica en citologia vaginal tumoral o funcional" },
@@ -10713,6 +10851,7 @@
       cie10: "Z113",
       titulo: "VIH (Anticuerpos VIH 1 y 2)",
       keywords: ["vih", "inmunodeficiencia", "hiv"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "906249", desc: "Virus De Inmunodeficiencia Humana 1 Y 2 Anticuerpos" }
       ]
@@ -10721,6 +10860,8 @@
       cie10: "Z108",
       titulo: "Tamización cardiometabólica (Perfil lipídico, Creatinina, Parcial de orina, Glicemia)",
       keywords: ["cardiometabolic", "colesterol", "creatinina", "uroanalisis", "glucosa", "trigliceridos"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018, tamización de pacientes SANOS —
+      // periodicidad distinta a la de RCV en crónicos) — pregunta abierta para el médico.
       cups: [
         { codigo: "903815", desc: "Colesterol De Alta Densidad" },
         { codigo: "903816", desc: "Colesterol De Baja Densidad Semiautomatizado" }, // tabla oficial: CMB de pacientes sanos (903817 es de crónicos, ver RCV exprés)
@@ -10735,6 +10876,7 @@
       cie10: "Z123",
       titulo: "Mamografía (Mamografía Bilateral)",
       keywords: ["mamografia", "mama", "seno"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "876802", desc: "Mamografia Bilateral" }
       ]
@@ -10743,6 +10885,7 @@
       cie10: "Z125",
       titulo: "PSA (antígeno de próstata)",
       keywords: ["psa", "prostata"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
       ]
@@ -10751,6 +10894,7 @@
       cie10: "Z121",
       titulo: "SOMF (sangre oculta en materia fecal)",
       keywords: ["somf", "omf", "sangre oculta", "materia fecal", "colon"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "907009", desc: "Sangre Oculta En Materia Fecal (Determinacion De Hemoglobina Humana Especifica)" }
       ]
@@ -10759,6 +10903,7 @@
       cie10: "Z103",
       titulo: "Hemoglobina y Hematocrito",
       keywords: ["hemoglobina", "hematocrito"],
+      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
       cups: [
         { codigo: "902213", desc: "Hemoglobina" },
         { codigo: "902211", desc: "Hematocrito" }
