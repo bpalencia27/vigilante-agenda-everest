@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.5
+// @version      14.1.6
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.6";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5027,20 +5027,67 @@
   // Solo se enganchan los errores que salen del PROPIO script: el userscript comparte
   // ventana con Everest y con Athenea, y subir los errores ajenos llenaría el tablero de
   // ruido que no podemos arreglar (la consola del consultorio está llena de ellos).
+  // v14.1.6 — EL CAZADOR DE ERRORES LLEVABA UNA SEMANA SIN CAZAR NADA.
+  //
+  // Hallazgo del export real del tablero (14-ago-2026, 20 equipos, ~6 días): la hoja
+  // `error` NO EXISTE. El servidor la crea al recibir el primer evento de ese tipo, así
+  // que su ausencia prueba que no ha llegado ninguno. Y la segunda confirmación, esta
+  // independiente: en `uso_detalle` no hay ni una clave `error.js`, `error.promesa` ni
+  // `error.distintos` — y esas se emiten desde `reportarError` ANTES del tope diario y
+  // ANTES de `repOn()`, así que aparecerían aunque el envío estuviera capado o apagado.
+  // Conclusión: `reportarError` no se ha llamado nunca, en ninguna máquina.
+  //
+  // La causa es el filtro de aquí. Estaba escrito contra `ev.filename` esperando leer
+  // algo con "userscript" o "vigilante" dentro, pero el nombre de archivo que el gestor
+  // de userscripts pone en un error depende de CÓMO inyecte el script, y en varias
+  // configuraciones no contiene ninguna de las dos palabras: puede ser la URL de la
+  // página, un blob:, una URL de extensión, o venir vacío. El filtro que debía dejar
+  // fuera los errores de Everest estaba dejando fuera también los nuestros.
+  //
+  // El arreglo no vuelve a adivinar cómo nos vemos: lo AVERIGUA al arrancar. Se provoca
+  // un error controlado y se anota de qué archivo dice venir. Esa firma es la de nuestro
+  // propio código, sea cual sea el gestor y el navegador, y contra ella se comparan los
+  // errores que lleguen después. La heurística vieja se conserva como respaldo por si la
+  // firma no se pudiera capturar.
+  let _firmaPropia = "";
+  try {
+    throw new Error("firma");
+  } catch (e) {
+    try {
+      // La primera línea del stack es el `throw` de aquí arriba: justo nuestro archivo.
+      const linea = String((e && e.stack) || "").split("\n").find((l) => /:\d+:\d+/.test(l)) || "";
+      const m = linea.match(/\(?([^()\s]+):\d+:\d+\)?\s*$/);
+      if (m && m[1] && m[1].length > 4) _firmaPropia = m[1];
+    } catch (e2) {}
+  }
+  function _esErrorPropio(pila, archivo) {
+    const s = String(pila || "") + " " + String(archivo || "");
+    if (_firmaPropia && s.indexOf(_firmaPropia) !== -1) return true;
+    return /userscript|vigilante|tampermonkey|greasemonkey|violentmonkey/i.test(s);
+  }
+  function _getFirmaPropiaParaTest() { return _firmaPropia; }
+  function _setFirmaPropiaParaTest(v) { _firmaPropia = v; }
+
   function _instalarCazaErrores() {
     try {
       window.addEventListener("error", (ev) => {
         try {
           const archivo = String((ev && ev.filename) || "");
-          if (!/userscript|vigilante/i.test(archivo)) return;
-          reportarError("js", (ev && ev.message) || "", archivo.split("/").pop() + ":" + ((ev && ev.lineno) || 0));
+          // El stack del Error real es mucho más fiable que `filename`: lleva TODOS los
+          // marcos, así que basta con que uno solo sea nuestro para reconocerlo.
+          const pila = String((ev && ev.error && ev.error.stack) || "");
+          if (!_esErrorPropio(pila, archivo)) return;
+          reportarError("js", (ev && ev.message) || "", (archivo.split("/").pop() || "?") + ":" + ((ev && ev.lineno) || 0));
         } catch (e) {}
       });
       window.addEventListener("unhandledrejection", (ev) => {
         try {
           const r = ev && ev.reason;
           const pila = String((r && r.stack) || "");
-          if (pila && !/userscript|vigilante/i.test(pila)) return;
+          // Sin stack no se puede saber de quién es. Se sigue dejando pasar —como antes—
+          // porque una promesa nuestra rechazada con un valor suelto (no un Error) no
+          // trae stack, y perder eso es peor que un poco de ruido ajeno.
+          if (pila && !_esErrorPropio(pila, "")) return;
           reportarError("promesa", (r && r.message) || r || "", "");
         } catch (e) {}
       });
