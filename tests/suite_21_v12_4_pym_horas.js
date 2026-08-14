@@ -250,6 +250,15 @@ module.exports = {
         "precondición: la RAC sigue siendo un analito vigilado por vencimiento");
     });
 
+    // v14.0.1 — EVIDENCIA_ORDENAMIENTO_CURADO.md §2: "LA LISTA CURADA REAL", tomada de un
+    // ordenamiento YA GUARDADO en Everest (no de un clic observado) — la fuente más
+    // confiable posible. La HbA1c automatizada es uno de sus 9 CUPS y faltaba en I10X.
+    t.caso("v14.0.1 (EVIDENCIA_ORDENAMIENTO_CURADO §2) - RCV exprés ordena la HbA1c automatizada (903426), confirmada contra una orden real ya guardada", () => {
+      const rcv = api.__PYM_CATALOG.find((p) => p.cie10 === "I10X");
+      const cod = rcv.cups.map((c2) => c2.codigo);
+      t.cierto(cod.includes("903426"), "hemoglobina glicosilada automatizada (903426) ordenable en RCV exprés");
+    });
+
     t.caso("PYM_CATALOG: las etiquetas nuevas del panel (FRIENDLY) premarcan su paquete por keywords", () => {
       const strip = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const casa = (etiqueta, pkg) => pkg.keywords.some((kw) => strip(etiqueta).includes(strip(kw)));

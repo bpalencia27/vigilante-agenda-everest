@@ -1244,10 +1244,26 @@
           if (f && (!mejorFecha || f.iso > mejorFecha.iso)) { representante = componentes[i]; mejorFecha = f; }
       }
 
-      const items = componentes.map((c) => ({
-          nombre: c.NombreParametro || c.nombre || c.examen || "",
-          resultado: c.Resultado || c.resultado || c.valor || "—",
-      }));
+      // v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: el mismo componente
+      // aparecía DOS veces en la lista ("GLUCOSA EN SUERO...", "CREATININA EN SUERO...",
+      // cada uno repetido), amontonando el bloque y volviéndolo ilegible. Causa real: esta
+      // función nunca deduplicaba — Athenea manda una fila por CADA solicitud histórica del
+      // mismo componente (una vieja, una nueva), y todas entraban a la rejilla sin criterio.
+      // Mismo patrón ya usado en _ultimaFechaPorAnalito (arriba, línea ~2254): por nombre
+      // canónico, se conserva SOLO el más reciente por fecha — un dato viejo repetido no
+      // aporta nada y sí ensucia la vista.
+      const porNombre = new Map();
+      componentes.forEach((c) => {
+          const nombre = c.NombreParametro || c.nombre || c.examen || "";
+          const clave = _canonNombreLab(nombre);
+          const resultado = c.Resultado || c.resultado || c.valor || "—";
+          const fechaInfo = _extractAtheneaFecha(c);
+          const resultDate = fechaInfo ? fechaInfo.iso : null;
+          const previo = porNombre.get(clave);
+          if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) return;
+          porNombre.set(clave, { nombre, resultado, resultDate });
+      });
+      const items = [...porNombre.values()].map((v) => ({ nombre: v.nombre, resultado: v.resultado }));
       const grupo = Object.assign({}, representante, {
           NombreParametro: "Uroanálisis",
           __vglGrupoUroComponentes: items,
@@ -8095,9 +8111,17 @@
          no un valor único. En rejilla auto-ajustable ocupan 2–4 columnas según el ancho
          disponible y la fila deja de medir varias pantallas. Tipografía de DATO, no de
          titular: el 15.5px/900 de .vgl-labs-val es para un valor suelto, no para 30. */
+      /* v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: la rejilla desbordaba
+         horizontalmente la celda (minmax(198px,...) es un MÍNIMO de pista — con menos
+         ancho disponible que eso, la rejilla fuerza el desborde en vez de encogerse, que es
+         justo lo que se vio: barra de scroll horizontal y la columna "Informe" cortada).
+         Se baja el mínimo a 150px (encoge mejor en modales angostos) y se añade separación
+         vertical explícita entre filas (antes 0, todo pegado contra el borde de abajo). El
+         principal culpable de lo amontonado era la falta de deduplicación de arriba —
+         menos ítems, aunque envuelvan en 2-3 líneas, ya se leen con claridad. */
       #vgl-labs-modal .vgl-labs-uro{
-        display:grid;grid-template-columns:repeat(auto-fill,minmax(198px,1fr));
-        gap:0 20px;font-size:var(--t-micro);font-weight:600;letter-spacing:0
+        display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+        gap:6px 18px;font-size:var(--t-micro);font-weight:600;letter-spacing:0
       }
       #vgl-labs-modal .vgl-labs-uro-i{
         min-width:0;overflow-wrap:break-word;line-height:1.5;
@@ -11382,7 +11406,17 @@
         // OJO con el código: la microalbuminuria es 903026, NO 903028 como afirmaba la
         // auditoría — error de esa nota, corregido por el médico contra la tabla real.
         { codigo: "903876", desc: "Creatinina En Orina Parcial" },
-        { codigo: "903026", desc: "Microalbuminuria Automatizada En Orina Parcial" }
+        { codigo: "903026", desc: "Microalbuminuria Automatizada En Orina Parcial" },
+        // v14.0.1 — EVIDENCIA_ORDENAMIENTO_CURADO.md §2 ("LA LISTA CURADA REAL"): tomada
+        // directamente de un ordenamiento YA GUARDADO en Everest (ObtenerOrdenamientoPorPacienteIdVigente,
+        // agrupador 12260710549, dx N189), no de un clic observado — es la fuente más
+        // confiable posible (una orden real, no una intención). La HbA1c automatizada es
+        // uno de los 9 CUPS de esa orden real y no estaba en este paquete.
+        // NO se tocan 902210/902213 (hemograma/hemoglobina) ni 903817 (LDL): la evidencia
+        // sobre esos tres es más débil (clics observados en la grabación, no confirmados
+        // contra una orden guardada) y el propio documento los deja como "pendiente de
+        // confirmar" — no se cambia una lista de CUPS clínicos sobre evidencia parcial.
+        { codigo: "903426", desc: "Hemoglobina Glicosilada Automatizada" }
       ]
     },
     // v12.4.0 — Paquetes alineados con la TABLA OFICIAL de CUPS de la IPS (actividad

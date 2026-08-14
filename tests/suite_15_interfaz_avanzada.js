@@ -1054,6 +1054,38 @@ module.exports = {
       t.igual(bloque.__vglHash, "h2", "el hash/token es del componente MÁS RECIENTE (el mismo que ganó la fecha), no de cualquiera");
     });
 
+    // v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: el mismo componente
+    // ("GLUCOSA EN SUERO...", "CREATININA EN SUERO...") aparecía DOS veces en el bloque,
+    // amontonando la rejilla. Causa real: Athenea manda una fila por CADA solicitud
+    // histórica del mismo componente (una vieja, una nueva) y nada las deduplicaba.
+    t.caso("_agruparUroanalisisParaTabla: el mismo componente repetido (solicitud vieja + nueva) se deduplica, solo sobrevive el más reciente", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO (SOLICITUD VIEJA)", Fecha: "2026-07-01" },
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "POSITIVO", Fecha: "2026-08-03" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      t.igual(bloque.__vglGrupoUroComponentes.length, 2, "GLUCOSA repetida cuenta como UN solo componente en el bloque, no dos");
+      const glucosa = bloque.__vglGrupoUroComponentes.find((x) => x.nombre === "GLUCOSA");
+      t.igual(glucosa.resultado, "NEGATIVO", "sobrevive el resultado de la solicitud MÁS RECIENTE, no el de la vieja");
+    });
+
+    t.caso("_agruparUroanalisisParaTabla: el orden de llegada NO decide — si la solicitud VIEJA llega DESPUÉS en el arreglo, igual pierde contra la más reciente", () => {
+      // Mismo caso que arriba pero con el orden invertido (la vieja llega SEGUNDA): si la
+      // deduplicación solo sobrescribiera por orden de llegada (el último gana, sin mirar
+      // fecha), este caso fallaría donde el anterior no — es el que de verdad prueba que se
+      // compara por FECHA y no por posición en el arreglo.
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-03" },
+        { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO (SOLICITUD VIEJA)", Fecha: "2026-07-01" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      t.igual(bloque.__vglGrupoUroComponentes.length, 1);
+      t.igual(bloque.__vglGrupoUroComponentes[0].resultado, "NEGATIVO", "la vieja llegó de última en el arreglo pero sigue siendo la vieja: no debe ganar");
+    });
+
     t.caso("_agruparUroanalisisParaTabla: sin componentes de orina, la lista sale intacta (ni un bloque de más)", () => {
       const c = cargar();
       const labs = [{ NombreParametro: "CREATININA", Resultado: "1.2" }, { NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
