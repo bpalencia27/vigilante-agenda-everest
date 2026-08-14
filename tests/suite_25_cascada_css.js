@@ -480,22 +480,41 @@ module.exports = {
       const literal12 = css.match(/font-size: *12px(?![0-9.])/g) || [];
       const literal14 = css.match(/font-size: *14px(?![0-9.])/g) || [];
       const literal16 = css.match(/font-size: *16px(?![0-9.])/g) || [];
-
       t.cierto(literal12.length === 0, `No deben quedar font-size:12px literales en la hoja (quedaron ${literal12.length})`);
       t.cierto(literal14.length === 0, `No deben quedar font-size:14px literales en la hoja (quedaron ${literal14.length})`);
       t.cierto(literal16.length === 0, `No deben quedar font-size:16px literales en la hoja (quedaron ${literal16.length})`);
+
+      // v14.0.0 (TL1) — piel de agendar/ordenar: 12.5px/13.5px eran parte de los "hoy hay
+      // 11px, 11.5px, 12.5px..." que el propio §4.2 pide eliminar. Migrados a
+      // var(--t-micro)/var(--t-body) (0.5px de diferencia, imperceptible) SOLO en las
+      // clases .vgl-agm-*/.vgl-ord-*/.vgl-postcita-* — el resto de la hoja (labs/pym/pes/
+      // labsv-modal, toasts, badges) queda fuera del alcance de TL1 a propósito, no tocado.
+      const clasesTL1 = /\.(vgl-agm-[\w-]+|vgl-ord-[\w-]+|vgl-postcita-sub)\s*\{[^}]*font-size:\s*1[23]\.5px/g;
+      const sinMigrarTL1 = css.match(clasesTL1) || [];
+      t.cierto(sinMigrarTL1.length === 0, `No deben quedar font-size:12.5px/13.5px literales en las clases de TL1 (agendar/ordenar) (quedaron ${sinMigrarTL1.length}: ${sinMigrarTL1.join(" | ")})`);
 
       const microUsos = css.match(/var\(--t-micro(?:,[^)]*)?\)/g) || [];
       const bodyUsos = css.match(/var\(--t-body\)/g) || [];
       const leadUsos = css.match(/var\(--t-lead\)/g) || [];
 
-      // v14.0.0 (T5) — el dock de widgets suma 1 uso más de var(--t-micro) en
-      // .vgl-dock-toggle (25 -> 26).
-      t.cierto(microUsos.length === 26, `var(--t-micro) debe aparecer 26 veces (incluida la reserva y el toggle del dock de T5). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 6, `var(--t-body) debe aparecer 6 veces. Salieron ${bodyUsos.length}.`);
-      // v14.0.0 (T5) — .vgl-dock-btn (los íconos del dock) también usa var(--t-lead):
-      // 5 sitios -> 6.
-      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (incluido .vgl-dock-btn de T5). Salieron ${leadUsos.length}.`);
+      // v14.0.0 (TL1) — 8 usos nuevos de var(--t-micro) (12.5px de .vgl-agm-lbl/-pbtn/-dinfo/
+      // -sbtn/-loading/-err/-input y .vgl-postcita-sub) y 5 de var(--t-body) (13.5px de
+      // .vgl-agm-sub/-check-lbl/-btn y las DOS declaraciones de .vgl-ord-title — la base
+      // compartida y el override más específico de #vgl-ordenar-modal, que antes le ganaba
+      // en especificidad y dejaba el cableado de la base sin efecto real): 25->33, 6->11.
+      // v14.0.0 (TL2) — 3 usos nuevos de var(--t-micro) en #vgl-labs-modal
+      // (.vgl-labs-srclbl, .vgl-labs-portal, .vgl-labs-uro): 33->36. Solo estos 3: el
+      // resto de tamaños del modal de labs (10.5/11/11.5/13/15.5px) se dejan a propósito
+      // — migrarlos a --t-body (14px, el valor VIGENTE, no el "oficial" de 13px) subiría
+      // el tamaño de letra de una tabla clínica densa, justo lo contrario de "densidad
+      // antes que aire" (§4.3.4); queda documentado como pregunta abierta para el médico,
+      // no una migración mecánica segura.
+      // v14.0.0 (T5, rebasado sobre TL1/TL2) — el dock de widgets suma 1 uso más de
+      // var(--t-micro) en .vgl-dock-toggle (36 -> 37) y 1 de var(--t-lead) en
+      // .vgl-dock-btn (5 -> 6). No toca var(--t-body).
+      t.cierto(microUsos.length === 37, `var(--t-micro) debe aparecer 37 veces (36 de TL1/TL2 + el toggle del dock de T5). Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length === 11, `var(--t-body) debe aparecer 11 veces (incluidos los 5 usos nuevos de TL1; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
+      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
       t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);

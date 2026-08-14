@@ -64,7 +64,7 @@ module.exports = {
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
-    "_agruparUroanalisisParaTabla", "mostrarPanelPostCita",
+    "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -640,6 +640,27 @@ module.exports = {
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
 
+    // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
+    // manual del botón también dejaba SIN cachear un resultado vacío, así que
+    // checkLabsVencidos seguía sin poder revisar a ese paciente ni tras el clic explícito
+    // del médico.
+    await t.casoAsync("createLabInjectorUI (clic manual): SIN laboratorios encontrados también actualiza _labsPrefetch — checkLabsVencidos ya no queda mudo (bug real de auditoría)", async () => {
+      const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
+      cLab.env.doc.getElementById = (id) => {
+        if (id === "vgl-lab-injector") return btn;
+        if (id === "anamesis") return {};
+        return null;
+      };
+      cLab.env.doc.querySelector = () => null;
+      cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
+      cLab.ctx.alert = () => {};
+      const uid = "labsv|" + cLab.api.normalizeKey("999888777");
+      t.falso(cLab.api.avisoYaVisto(uid));
+      await btn.onclick();
+      cLab.api.checkLabsVencidos();
+      t.cierto(cLab.api.avisoYaVisto(uid), "bug real de auditoría: antes, un clic manual sin resultados tampoco cacheaba, y checkLabsVencidos seguía mudo");
+    });
+
     // ================= createAccionesDockUI (T5 — dock de widgets sobre la HC) =================
     // v14.0.0 (T5): el dock flotante con las 3 acciones rápidas (agendar/ordenar/labs) que
     // T4 sacó de la tarjeta. Usa _enModuloHCHealth() (alcance amplio, por ruta) en vez de
@@ -1066,6 +1087,46 @@ module.exports = {
       t.cierto(contenido.innerHTML.includes("01/08/2026"));
       t.cierto(contenido.innerHTML.includes("Athenea (Principal)"), "la fila declara su fuente");
       t.cierto(contenido.innerHTML.includes("vgl-labs-tr vgl-labs-alert"), "un resultado que la fuente declara Elevado lleva la clase de resalte en rojo (vgl-labs-alert; el color vive en la hoja de estilos, no inline)");
+    });
+
+    // v14.0.0 (TL2) — mismo diagnóstico que ya existe para fecha/hora: si ninguno de los 3
+    // campos probados para "Ref. / Rango" trae valor, la consola vuelca las claves REALES
+    // del analito — evidencia para que el médico la capture en consultorio en vez de que
+    // el código adivine un cuarto nombre de campo sin datos reales.
+    await t.casoAsync("openLaboratoriosModal (TL2): sin ningún campo de referencia conocido, la consola vuelca las claves reales del analito (diagnóstico, no una adivinanza)", async () => {
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const url = o.url;
+          if (url.endsWith("/Resultados/BusquedaPaciente")) o.onload({ status: 200, responseText: '<input name="__RequestVerificationToken" value="TOK1">' });
+          else if (url.endsWith("/Resultados/BuscarPaciente")) o.onload({ status: 200, responseText: '<input name="IdPaciente" value="9"><input name="__RequestVerificationToken" value="TOK2">' });
+          else if (url.endsWith("/Resultados/DatosPaciente")) o.onload({ status: 200, responseText: 'CC 999888777 <form id="43212026" data-modulo="LAB" action="/Resultados/Reporte"></form>' });
+          else if (url.includes("consultaDetalleSolicitud")) o.onload({
+            status: 200,
+            responseText: JSON.stringify({
+              dataObject: JSON.stringify([
+                { NombreParametro: "PSA", Resultado: "1.1", Fecha: "2026-08-01", CampoRaroDesconocido: "0.0-4.0 ng/mL" },
+              ]),
+            }),
+          });
+          else if (o.onerror) o.onerror("url no simulada");
+        },
+      });
+      enriquecerDom(c);
+      const avisos = [];
+      c.ctx.console = { log: () => {}, warn: (...a) => avisos.push(a.map(String).join(" ")), error: () => {}, info: () => {} };
+      await c.api.openLaboratoriosModal({ doc_id: "999888777", nombre: "PACIENTE DIAGNOSTICO" });
+      const linea = avisos.find((a) => a.includes("diagnóstico Ref./Rango"));
+      t.cierto(!!linea, "debe avisar con el rótulo del diagnóstico");
+      t.cierto(linea.includes("CampoRaroDesconocido"), "las claves reales del analito (incluida la que de verdad trae el rango) deben aparecer en el aviso");
+      t.cierto(linea.includes("NombreParametro"), "también deben verse el resto de las claves reales del mismo analito, no solo la del rango");
+    });
+
+    await t.casoAsync("openLaboratoriosModal (TL2): CON un campo de referencia reconocido, la consola NO avisa nada (solo diagnostica el hueco real)", async () => {
+      const avisos = [];
+      cModal.ctx.console = { log: () => {}, warn: (...a) => avisos.push(a.map(String).join(" ")), error: () => {}, info: () => {} };
+      await cModal.api.openLaboratoriosModal({ doc_id: "12345678", nombre: "ANA PEREZ" });
+      t.falso(avisos.some((a) => a.includes("diagnóstico Ref./Rango")), "el fixture base SÍ trae ValoresReferencia: no hay hueco que diagnosticar");
     });
 
     await t.casoAsync("openLaboratoriosModal v12.5.4: sin hash/token en la tarjeta, la fila NO ofrece 'Ver informe'", async () => {

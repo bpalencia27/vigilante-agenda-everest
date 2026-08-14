@@ -304,6 +304,34 @@ module.exports = {
       t.falso(c.api.avisoYaVisto(uid));
     });
 
+    // Plan de red que resuelve el paciente pero SIN NINGÚN formulario de solicitud (0
+    // laboratorios reales en Athenea) — reproduce el caso de mayor riesgo real: el
+    // paciente al que le faltan los 7 analitos RCV.
+    function planLabsCero() {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC_LABSV} — sin ninguna solicitud registrada.` });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+
+    // v12.10.15 — Bug real de auditoría nocturna: antes, un paciente con CERO
+    // laboratorios en Athenea nunca actualizaba _labsPrefetch (solo se cacheaba cuando
+    // labs.length > 0), así que checkLabsVencidos (que exige _labsPrefetch.docId === doc)
+    // se abortaba en silencio para siempre — la alerta ROJA de "laboratorios RCV sin
+    // resultado vigente" quedaba muda justo para el paciente que más la necesita.
+    await t.casoAsync("checkLabsVencidos: paciente CON pre-carga real pero SIN ningún laboratorio en Athenea -> SÍ dispara el aviso con los 7 analitos faltantes (bug real de auditoría)", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
+      t.falso(c.api.avisoYaVisto(uid), "todavía no se ha revisado");
+      c.api.checkLabsVencidos();
+      t.cierto(c.api.avisoYaVisto(uid), "cero laboratorios en Athenea también cuenta como pre-carga resuelta: debe revisar y avisar");
+    });
+
     await t.casoAsync("checkLabsVencidos: analito RCV vencido de verdad (>180 días, vía autoFetch real) -> dispara el aviso una vez y queda marcado", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
       mockPacienteAbierto(c, DOC_LABSV);
