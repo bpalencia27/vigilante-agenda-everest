@@ -8,7 +8,7 @@ module.exports = {
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen"
+    "_conductaBuscarYAgregarExamen", "_evaluarAccionesRenales"
   ],
 
   async pruebas(t, api, env, cargar) {

@@ -10594,6 +10594,126 @@
   }
 
   // Modal de Laboratorios y Paraclínicos (Annar, Citi y Puente Athenea)
+
+
+  // v14.X — Conducta Renal: botones para pedir exámenes vencidos desde el modal de laboratorios
+  function _evaluarAccionesRenales(r, todosLabs, pId, sec) {
+    if (!r || !r.estadio || false) return; // Toggle o simplemente validación
+
+    const MAP_ANALITOS = [
+      { key: "HBA1C", tabla: "hba1c", nombre: "HbA1c" },
+      { key: "PTH", tabla: "pth", nombre: "PTH" },
+      { key: "FOSFORO", tabla: "fosforo", nombre: "Fósforo" },
+      { key: "ALBUMINA", tabla: "albumina", nombre: "Albúmina" },
+      { key: "HEMOGLOBINA", tabla: "hemoglobina", nombre: "Hemoglobina" }
+    ];
+
+    const hoyMs = Date.now();
+    const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(todosLabs) ? todosLabs : []);
+
+    const vencidos = [];
+
+    for (const a of MAP_ANALITOS) {
+      const vigenciaDias = vigenciaPorEstadio("ERC", r.estadio, a.tabla, { esDM2: true }); // Asumimos DM2 true para que hba1c aplique si corresponde
+      if (typeof vigenciaDias !== "number") continue;
+
+      const c = candidatos.get(a.key === "HBA1C" ? "HBA1C" : a.key); // Whitelist keys: HBA1C, PTH, FOSFORO, ALBUMINA, HEMOGLOBINA
+      let estaVencido = true;
+      if (c && c.resultDate) {
+        const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
+        const dias = Math.round((hoyMs - fechaMs) / 86400000);
+        if (dias <= vigenciaDias) estaVencido = false;
+      }
+
+      if (estaVencido) {
+        vencidos.push({
+          id: a.key,
+          nombreLi: CONDUCTA_LI_TEXTO_POR_ANALITO[a.key],
+          cups: [{ codigo: CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO[a.key] }],
+          vigenciaDias: vigenciaDias,
+          nombreBtn: a.nombre
+        });
+      }
+    }
+
+    if (!vencidos.length) return;
+
+    let renalDiv = sec.querySelector(".vgl-labs-renal");
+    if (!renalDiv) {
+       // Si no existe, igual intentamos anexarlo
+       renalDiv = sec;
+    }
+
+    const accionesDiv = document.createElement("div");
+    accionesDiv.className = "vgl-labs-renal-acciones";
+    accionesDiv.style.marginTop = "8px";
+    accionesDiv.style.display = "flex";
+    accionesDiv.style.flexWrap = "wrap";
+    accionesDiv.style.gap = "6px";
+
+    // Generar botones iniciales "Comprobando..."
+    const botones = new Map();
+    for (const v of vencidos) {
+      const btn = document.createElement("button");
+      btn.className = "vgl-agm-btn sec vgl-sm";
+      btn.textContent = "⏳ Comprobando " + v.nombreBtn + "...";
+      btn.disabled = true;
+      accionesDiv.appendChild(btn);
+      botones.set(v.id, { btn, act: v });
+    }
+
+    renalDiv.appendChild(accionesDiv);
+
+    // Consultar ordenes sin await
+    apiHcObtenerOrdenamientosVigentes(pId).then(ordenes => {
+      if (!sec.isConnected) return; // Si el modal se cerró
+
+      const pendientes = pymCubiertoPorOrdenVigente(vencidos, ordenes || [], todayStamp());
+      const setPendientes = new Set(pendientes.map(x => x.id));
+
+      for (const [id, val] of botones.entries()) {
+        if (setPendientes.has(id)) {
+           val.btn.textContent = "➕ Agregar " + val.act.nombreBtn;
+           val.btn.disabled = false;
+           val.btn.onclick = async () => {
+              val.btn.disabled = true;
+              val.btn.textContent = "⏳ Agregando...";
+              const exito = await _conductaBuscarYAgregarExamen(val.act.nombreLi);
+              if (exito) {
+                 val.btn.textContent = "✅ " + val.act.nombreBtn;
+                 val.btn.classList.add("vgl-bg-success");
+              } else {
+                 val.btn.textContent = "❌ Error en " + val.act.nombreBtn;
+                 val.btn.title = "No se encontró el examen en la pantalla actual de Conducta o ya está agregado.";
+              }
+           };
+        } else {
+           val.btn.textContent = "✓ " + val.act.nombreBtn + " vigente";
+           val.btn.title = "Ya existe una orden vigente para este examen.";
+           val.btn.disabled = true;
+        }
+      }
+    }).catch(e => {
+       console.warn("[Vigilante] Error al comprobar órdenes para botones renales", e);
+       for (const [id, val] of botones.entries()) {
+           val.btn.textContent = "➕ Agregar " + val.act.nombreBtn;
+           val.btn.disabled = false;
+           val.btn.onclick = async () => {
+              val.btn.disabled = true;
+              val.btn.textContent = "⏳ Agregando...";
+              const exito = await _conductaBuscarYAgregarExamen(val.act.nombreLi);
+              if (exito) {
+                 val.btn.textContent = "✅ " + val.act.nombreBtn;
+                 val.btn.classList.add("vgl-bg-success");
+              } else {
+                 val.btn.textContent = "❌ Error en " + val.act.nombreBtn;
+                 val.btn.title = "No se encontró el examen en la pantalla actual de Conducta o ya está agregado.";
+              }
+           };
+       }
+    });
+  }
+
   async function openLaboratoriosModal(apt) {
     if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
 
@@ -10720,7 +10840,12 @@
         const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
         if (!vivo()) return;
         const sec = modal.querySelector("#vgl-labs-renal-sec");
-        if (sec) sec.innerHTML = _renderEstadioRenalHtml(r);
+        if (sec) {
+          sec.innerHTML = _renderEstadioRenalHtml(r);
+          if (r && r.estadio && pacienteIdLabs) {
+            _evaluarAccionesRenales(r, todosLabs, pacienteIdLabs, sec);
+          }
+        }
       } catch (e) { console.warn("[Vigilante] recuadro renal no disponible:", e); }
     })();
 
