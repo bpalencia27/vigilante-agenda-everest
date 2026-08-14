@@ -7296,6 +7296,33 @@
       }
       .vgl-pymb-barra{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4)}
       .vgl-pymb-titulo{font-weight:700;font-size:var(--t-strong)}
+      /* v14.0.0 — INCIDENTE REAL EN CONSULTA: el banner se veía con el título y los nombres
+         de actividad ilegibles, "mezclado con el CSS de Everest". Causa: al quitar el
+         escudo simple "#vgl-pym-banner span{color:inherit}" para arreglar el contraste del
+         contador (T8), quedaron sin protección los elementos que NO declaran color propio y
+         solo lo HEREDABAN del contenedor. Y un valor heredado pierde contra CUALQUIER regla
+         que apunte al elemento directamente, por poca especificidad que tenga: el
+         "span{color:...}" global de Everest les pega directo y la herencia ni compite.
+         Prueba viva de la mecánica: el contador y el botón Ordenar SÍ se veían, porque son
+         los únicos que traen color propio.
+         El arreglo NO es devolver el escudo simple —eso reventaba el contador otra vez, es
+         el bucle de v12.6.6/v12.10.2— sino que cada elemento con clase declare SU color, sin
+         depender de la herencia. Van acotados por el id (1,1,0) para ganarle también a
+         reglas de Everest más específicas que un simple "span". */
+      #vgl-pym-banner .vgl-pymb-barra,
+      #vgl-pym-banner .vgl-pymb-lista,
+      #vgl-pym-banner .vgl-pymb-item,
+      #vgl-pym-banner .vgl-pymb-titulo,
+      #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg)}
+      /* Los dos que SÍ traían color propio también suben a 1,1,0: con una clase pelada
+         (0,1,0) perdían contra un ".contenedor span{color:...}" de Everest (0,1,1) —
+         verificado, el contador caía a contraste 1.54 en tema claro. Su color va sobre
+         fondo de acento, así que perderlo no los deja grises: los deja ilegibles. */
+      #vgl-pym-banner .vgl-pymb-contador{color:var(--bg-solid)}
+      #vgl-pym-banner .vgl-pymb-item-btn{color:var(--bg-solid)}
+      #vgl-pym-banner .vgl-pymb-aviso{color:var(--c-ambar)}
+      #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3)}
+      #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg)}
       .vgl-pymb-contador{
         background:var(--c-ambar);color:var(--bg-solid);font-weight:800;
         border-radius:var(--r-pill);padding:1px 8px;font-size:var(--t-micro);
