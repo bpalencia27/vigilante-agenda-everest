@@ -81,14 +81,15 @@
     return salida.slice(0, 200);
   }
 
-  function anota(metodo, url, cuerpo) {
+  function anota(metodo, url, cuerpo, motivo) {
     try {
       let u;
       try { u = new URL(url, location.origin); } catch (e) { u = { pathname: String(url), searchParams: new Map() }; }
       const ruta = lim(u.pathname, 160);
       const clave = metodo + " " + ruta;
-      const prev = RED.get(clave) || { metodo, ruta, params: [], claves: [], vistas: 0 };
+      const prev = RED.get(clave) || { metodo, ruta, params: [], claves: [], vistas: 0, comoLlego: "" };
       prev.vistas++;
+      if (motivo && !prev.comoLlego) prev.comoLlego = motivo;
       try {
         // Solo los NOMBRES de los parámetros: sus valores llevan la cédula.
         for (const k of u.searchParams.keys()) if (prev.params.indexOf(k) === -1) prev.params.push(k);
@@ -98,6 +99,10 @@
           const j = typeof cuerpo === "string" ? JSON.parse(cuerpo) : cuerpo;
           prev.claves = clavesDe(j, 0);
         } catch (e) { prev.claves = ["(la respuesta no es JSON)"]; }
+      } else if (!cuerpo && !prev.claves.length && motivo) {
+        // Que el fallo se VEA. La primera pasada devolvió trece `claves: []` sin
+        // decir por qué, y hubo que deducirlo leyendo el código a posteriori.
+        prev.claves = ["(sin cuerpo legible — " + motivo + ")"];
       }
       RED.set(clave, prev);
     } catch (e) {}
@@ -114,8 +119,8 @@
         return fetchOriginal.apply(this, arguments).then(function (res) {
           // Se lee un CLON: tocar el original le quitaría el cuerpo a la aplicación
           // y rompería Everest. Esto es lo único delicado del archivo.
-          try { res.clone().text().then((t) => anota(metodo, url, t)).catch(() => anota(metodo, url, null)); }
-          catch (e) { anota(metodo, url, null); }
+          try { res.clone().text().then((t) => anota(metodo, url, t, "fetch/text")).catch(() => anota(metodo, url, null, "fetch: no se pudo clonar")); }
+          catch (e) { anota(metodo, url, null, "fetch: " + e); }
           return res;
         });
       };
@@ -127,8 +132,23 @@
     XMLHttpRequest.prototype.send = function () {
       const xhr = this;
       xhr.addEventListener("load", function () {
-        try { anota(String(xhr.__vglM || "GET").toUpperCase(), xhr.__vglU, xhr.responseType === "" || xhr.responseType === "text" ? xhr.responseText : null); }
-        catch (e) {}
+        // CORRECCIÓN (2ª pasada). La primera versión leía el cuerpo así:
+        //     responseType === "" || responseType === "text" ? responseText : null
+        // y el HttpClient de Angular —que es lo que usa Everest— pide las respuestas
+        // con responseType = "json". Con ese valor, tocar `responseText` LANZA
+        // excepción, así que la guarda pasaba `null` y el cuerpo no se leía nunca.
+        // Resultado: los 13 endpoints salieron con `claves: []`, justo la parte que
+        // más valía. Con "json" hay que leer `xhr.response`, que YA viene parseado.
+        let cuerpo = null, motivo = "";
+        try {
+          const rt = xhr.responseType;
+          if (rt === "json") { cuerpo = xhr.response; motivo = "json"; }
+          else if (rt === "" || rt === "text") { cuerpo = xhr.responseText; motivo = "text"; }
+          else if (rt === "arraybuffer" || rt === "blob") { motivo = "binario (" + rt + ")"; }
+          else if (rt === "document") { motivo = "documento XML/HTML"; }
+          else { motivo = "responseType desconocido: " + rt; }
+        } catch (e) { motivo = "no se pudo leer: " + e; }
+        try { anota(String(xhr.__vglM || "GET").toUpperCase(), xhr.__vglU, cuerpo, motivo); } catch (e) {}
       });
       return enviarOriginal.apply(this, arguments);
     };
@@ -342,8 +362,10 @@
       "color:#0a0;font-weight:bold;font-size:14px");
 
     if (red.length) {
-      console.log("%c[Mapa] ENDPOINTS Y SUS CAMPOS — aquí es donde aparecen los datos que ya se descargan y nadie lee:", "color:#e54d42;font-weight:bold;font-size:13px");
-      console.table(red.map((r) => ({ metodo: r.metodo, ruta: r.ruta, params: r.params.join(","), nCampos: r.claves.length })));
+      const conCampos = red.filter((r) => r.claves.length && !String(r.claves[0]).startsWith("(")).length;
+      console.log("%c[Mapa] ENDPOINTS — " + conCampos + " de " + red.length + " entregaron sus nombres de campo:", "color:#e54d42;font-weight:bold;font-size:13px");
+      console.table(red.map((r) => ({ metodo: r.metodo, ruta: r.ruta, params: r.params.join(","), nCampos: r.claves.length, comoLlego: r.comoLlego })));
+      if (conCampos === 0) console.warn("[Mapa] Ningún endpoint entregó campos. Mire la columna `comoLlego` de la tabla: ahí dice por qué.");
     } else {
       console.log("%c[Mapa] Ningún endpoint anotado: la escucha de red solo ve lo que pase DESPUÉS de pegar el archivo. Navegue un poco y vuelva a ejecutarlo.", "color:#c80");
     }

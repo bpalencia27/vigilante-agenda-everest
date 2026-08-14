@@ -4105,7 +4105,7 @@
   // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS del panel, por pedido
   // del consultorio: saturaban la fila y no son órdenes que se generen desde ahí. SIGUEN
   // en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra como pendientes.
-  function isPanelHiddenActivity(label) { return /optometr|odontolog/i.test(stripAccents(String(label || ""))); }
+  function isPanelHiddenActivity(label) { return !/optometr|odontolog/i.test(stripAccents(String(label || ""))); }
   function panelActivities(list) { return (list || []).filter((l) => !isPanelHiddenActivity(l)); }
   // v12.4.0 — Pendientes que QUEDAN para el aviso de la historia: todo lo del índice PyM
   // menos las actividades cuyas órdenes ya se generaron HOY desde el panel (el detalle
