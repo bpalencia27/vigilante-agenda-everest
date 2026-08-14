@@ -720,5 +720,82 @@ module.exports = {
       t.cierto(culpables.length === 0, `Backtick dentro del bloque CSS — cierra el template literal y rompe el archivo entero. Líneas: ${culpables.join(" | ")}`);
     });
 
+    // v14.0.5 — Regla O: el piso de contraste de --fg3 se COMPRUEBA, no se declara.
+    // INFORME_AUDITORIA_T8.md midió 4.11 en Chromium real para .vgl-dock-toggle en tema
+    // claro (bajo el mínimo AA de 4.5) y dejó la corrección como decisión del médico,
+    // anotando que debía ser global (el token) y no un parche a un solo selector — porque
+    // --fg3 lo comparten ~30 usos, .vgl-toast-x entre ellos.
+    //
+    // Esta prueba calcula el ratio WCAG 2.x DE VERDAD (linealización sRGB + composición
+    // alpha), leyendo los valores del propio CSS en vez de fiarse de un número escrito a
+    // mano: si alguien vuelve a aclarar --fg3, o oscurece --bg-solid, o sube la opacidad
+    // del velo --bg3 del dock, el ratio se recalcula solo y la prueba cae. Es la única
+    // guarda de contraste automática del banco; el resto de la auditoría T8 fue manual y
+    // no puede reproducirse aquí (el arnés no aplica cascada ni layout reales).
+    t.caso("Regla O - el token --fg3 cumple el mínimo AA (4.5:1) sobre el fondo del dock en AMBOS temas", () => {
+      const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = ([r, g, b]) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      const ratio = (a, b) => { const la = lum(a), lb = lum(b); const hi = Math.max(la, lb), lo = Math.min(la, lb); return (hi + 0.05) / (lo + 0.05); };
+      const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+      // Composición alpha estándar: color con opacidad `a` pintado SOBRE `bg`.
+      const sobre = (fg, a, bg) => fg.map((c, i) => a * c + (1 - a) * bg[i]);
+
+      // Los tokens se leen del CSS real. Si un selector/-token cambia de forma, la prueba
+      // dice explícitamente que hay que revisarla a mano en vez de dar un falso verde.
+      const leerToken = (bloqueRe, token) => {
+        const bloque = bloqueRe.exec(cssClean);
+        if (!bloque) return null;
+        const m = new RegExp(`--${token}\\s*:\\s*([^;]+);`).exec(bloque[0]);
+        return m ? m[1].trim() : null;
+      };
+      const REclaro = /#vgl-root\.light[^{]*\{[\s\S]*?\}/;
+      // El bloque oscuro es el de la MISMA lista de contenedores pero sin `.light`.
+      const REoscuro = /(^|\n)\s*#vgl-root,#vgl-lab-injector[^{]*\{[\s\S]*?\}/;
+
+      const fg3Claro = leerToken(REclaro, "fg3");
+      const bgSolidClaro = leerToken(REclaro, "bg-solid");
+      const bg3Claro = leerToken(REclaro, "bg3");
+      t.cierto(!!fg3Claro && !!bgSolidClaro && !!bg3Claro,
+        `se leyeron --fg3/--bg-solid/--bg3 del bloque de tema claro (si esto falla, el bloque cambió de forma y hay que revisar el contraste A MANO, no borrar esta prueba). fg3=${fg3Claro} bgSolid=${bgSolidClaro} bg3=${bg3Claro}`);
+
+      // El dock apila el velo --surface-2 (= --bg3) SOBRE --bg-solid; ver #vgl-acciones-dock.
+      const mAlpha = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/.exec(bg3Claro);
+      t.cierto(!!mAlpha, `--bg3 del tema claro sigue siendo un rgba() con alpha (leído: ${bg3Claro})`);
+      const veloClaro = [Number(mAlpha[1]), Number(mAlpha[2]), Number(mAlpha[3])];
+      const fondoDockClaro = sobre(veloClaro, Number(mAlpha[4]), hex(bgSolidClaro));
+
+      const rClaro = ratio(hex(fg3Claro), fondoDockClaro);
+      t.cierto(rClaro >= 4.5,
+        `tema CLARO: --fg3 (${fg3Claro}) sobre el fondo del dock da ${rClaro.toFixed(2)}:1, por debajo del mínimo AA de 4.5:1. Es exactamente la regresión que T8 midió en Chromium (4.11) y que se corrigió subiendo el token — oscurezca --fg3, no parchee un selector suelto.`);
+
+      // Tema oscuro: el mismo token, el mismo dock, la otra piel. Nunca estuvo mal (6.87),
+      // pero un cambio de --bg-solid oscuro podría romperlo sin que nadie mirara.
+      const fg3Oscuro = leerToken(REoscuro, "fg3");
+      const bgSolidOscuro = leerToken(REoscuro, "bg-solid");
+      const bg3Oscuro = leerToken(REoscuro, "bg3");
+      // Se comprueba que se LEYERON, en vez de envolver todo en un `if` que se saltaría en
+      // silencio y daría verde sin haber medido nada (le pasó a la primera versión de esta
+      // prueba: el selector del bloque oscuro no casaba y la rama entera no se ejecutaba).
+      const mO = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/.exec(bg3Oscuro || "");
+      t.cierto(!!fg3Oscuro && !!bgSolidOscuro && !!mO,
+        `se leyeron --fg3/--bg-solid/--bg3 del bloque de tema OSCURO (si falla, el bloque cambió de forma: revise el contraste a mano, no borre la prueba). fg3=${fg3Oscuro} bgSolid=${bgSolidOscuro} bg3=${bg3Oscuro}`);
+      const fondoDockOscuro = sobre([Number(mO[1]), Number(mO[2]), Number(mO[3])], Number(mO[4]), hex(bgSolidOscuro));
+      const rOscuro = ratio(hex(fg3Oscuro), fondoDockOscuro);
+      t.cierto(rOscuro >= 4.5,
+        `tema OSCURO: --fg3 (${fg3Oscuro}) sobre el fondo del dock da ${rOscuro.toFixed(2)}:1, bajo el mínimo AA de 4.5:1`);
+
+      // Jerarquía: --fg3 debe seguir siendo MÁS CLARO que --fg2 en tema claro. Si al subir
+      // el contraste alguien lo oscurece de más, --fg3 dejaría de leerse como texto muteado
+      // y el panel perdería su escala de énfasis — un arreglo de contraste no debe pagarse
+      // rompiendo la jerarquía visual.
+      const fg2Claro = leerToken(REclaro, "fg2");
+      const mF2 = /rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/.exec(fg2Claro || "");
+      t.cierto(!!mF2, `se leyó --fg2 del tema claro como rgba() (leído: ${fg2Claro})`);
+      const fg2Compuesto = sobre([Number(mF2[1]), Number(mF2[2]), Number(mF2[3])], Number(mF2[4]), fondoDockClaro);
+      const rFg2 = ratio(fg2Compuesto, fondoDockClaro);
+      t.cierto(rClaro < rFg2,
+        `--fg3 (${rClaro.toFixed(2)}:1) quedó igual o MÁS contrastado que --fg2 (${rFg2.toFixed(2)}:1): se invirtió la jerarquía de énfasis del panel`);
+    });
+
   }
 };

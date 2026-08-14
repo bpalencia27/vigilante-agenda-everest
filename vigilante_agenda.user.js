@@ -6732,7 +6732,17 @@
         --rgb-rojo:153,27,27;--rgb-morado:91,33,182;--rgb-ambar:146,64,14;
         --rgb-verde:6,95,70;--rgb-azul:30,64,175;--rgb-recordatorio:17,94,89;
         --rgb-pes:157,23,77;--rgb-atendido:71,85,105;
-        --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#5b6b80;
+        /* v14.0.5 — INFORME_AUDITORIA_T8.md §"Llamadas de juicio" #1, decidido por el
+           médico: --fg3 medía 4.11 en tema claro sobre el dock (bajo el mínimo AA de
+           4.5). La auditoría dejó anotado que arreglarlo SOLO en .vgl-dock-toggle crearía
+           una inconsistencia con .vgl-toast-x y con las ~30 usos de --fg3 del resto del
+           panel, así que "debe ser un cambio global, no uno aislado a T5". Esto es ese
+           cambio global: se sube el piso del propio TOKEN, con lo que todos sus usos
+           (prosa muteada incluida, que también fallaba AA) suben a la vez y la convención
+           sigue siendo una sola. #5b6b80 -> #4a5a6e: 4.37 -> 5.66 sobre el dock claro y
+           7.05 sobre blanco puro (AAA), conservando la jerarquía --fg > --fg2 > --fg3.
+           El tema oscuro NO se toca: ya medía 6.87, holgado sobre AA. */
+        --fg:#0b1220;--fg2:rgba(30,41,59,.86);--fg3:#4a5a6e;
         --t-micro:12px;--t-body:14px;--t-lead:16px;--t-strong:15px;--t-title:18px;--t-hero:22px;
         --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;
         --surface-1:var(--bg2);--surface-2:var(--bg3);--surface-3:var(--bg4);

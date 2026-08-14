@@ -120,17 +120,35 @@ prueba nombrando el caso exacto). Commit `37cefb7` en `t7-banner-pym`, v12.10.19
 
 ### Llamadas de juicio pendientes de decisión (no corregidas — documentadas)
 
-1. **`.vgl-dock-toggle` bajo AA en tema claro (4.11 < 4.5).** El glyph ▶/◀ (no es
-   emoji, sí respeta `color`) usa `--fg3`, el mismo token que ya usa
-   `.vgl-toast-x` (botón "cerrar" del toast, código preexistente a T5) para el mismo
-   tipo de afordancia icónica secundaria. No es una regresión que T5 introduzca: es
-   consistente con la convención ya establecida en el resto del panel para íconos de
-   control (no prosa). Bajo WCAG 1.4.11 (Contraste No-Textual, aplicable a componentes
-   de interfaz/glifos funcionales en vez de 1.4.3 texto), el umbral relevante es 3:1 —
-   que sí se cumple en ambos temas (6.87/4.11). **No se corrigió en T5 en solitario**
-   porque hacerlo crearía una inconsistencia con `.vgl-toast-x` y el resto de íconos
-   `--fg3` ya en el panel; si el médico decide subir el piso de estos íconos a `--fg2`,
-   debe ser un cambio global, no uno aislado a T5.
+1. ~~**`.vgl-dock-toggle` bajo AA en tema claro (4.11 < 4.5).**~~ ✅ **RESUELTO en v14.0.5
+   — el médico decidió corregirlo (14-ago-2026).** El glyph ▶/◀ (no es emoji, sí respeta
+   `color`) usaba `--fg3`, el mismo token que ya usa `.vgl-toast-x` (botón "cerrar" del
+   toast, código preexistente a T5) para el mismo tipo de afordancia icónica secundaria.
+   No era una regresión que T5 introdujera: era consistente con la convención ya
+   establecida en el resto del panel para íconos de control (no prosa). Bajo WCAG 1.4.11
+   (Contraste No-Textual, aplicable a componentes de interfaz/glifos funcionales en vez de
+   1.4.3 texto), el umbral relevante es 3:1 — que sí se cumplía en ambos temas
+   (6.87/4.11). No se corrigió en T5 en solitario porque hacerlo habría creado una
+   inconsistencia con `.vgl-toast-x` y el resto de íconos `--fg3`; se dejó anotado que
+   **debía ser un cambio global, no uno aislado a T5**.
+
+   **Cómo se corrigió:** se subió el piso del propio TOKEN en tema claro,
+   `--fg3: #5b6b80 → #4a5a6e`, con lo que suben a la vez sus ~30 usos (incluida la prosa
+   muteada, que también fallaba AA) y la convención sigue siendo una sola. Medido:
+   **4.37 → 5.66** sobre el fondo del dock claro y **7.05** sobre blanco puro (AAA),
+   conservando la jerarquía `--fg` > `--fg2` > `--fg3`. El tema oscuro no se tocó (6.87,
+   ya holgado). *(Los números de esta línea salen del cálculo WCAG del propio banco, que
+   compone el velo `--bg3` sobre `--bg-solid`; difieren ~6 % de los 4.11 medidos en
+   Chromium real porque aquél incluía el borde y el apilado completo. Ambos coinciden en
+   lo que importa: el valor viejo estaba bajo 4.5 y el nuevo lo supera con margen.)*
+
+   **Guarda de regresión:** `suite_25_cascada_css.js` → *"Regla O"*. No comprueba una
+   cadena: calcula el ratio WCAG 2.x de verdad (linealización sRGB + composición alpha)
+   leyendo los tokens del propio CSS, en ambos temas, y además exige que `--fg3` siga
+   siendo menos contrastado que `--fg2` para que un arreglo de contraste no se pague
+   invirtiendo la jerarquía visual. Verificada con mutación (revertir el token hace caer
+   la prueba nombrando el ratio exacto). Es la única guarda de contraste automática del
+   banco — el resto de T8 fue manual y no es reproducible en el arnés.
 2. **`.vgl-dock-btn-ambar` y contador/aviso del banner no llegan a AAA (7:1) en tema
    claro.** Ninguno de los tres codifica un estado clínico POR SÍ SOLO (ver §5) — el
    número, el emoji y el texto llevan la información real, el color solo refuerza. Se
@@ -153,7 +171,17 @@ corrigió un bug real de contraste (T7, contador del banner, ya en `t7-banner-py
 v12.10.19) con guarda de regresión nueva (Regla K). Encontró tres llamadas de juicio de
 contraste que se documentan en vez de corregirse en solitario, para no introducir
 inconsistencia con convenciones ya establecidas en el resto del panel sin decisión del
-médico. Con esto, la tabla de FASES de `SUPERPROMPT_DISENO_V14.md` queda completa:
+médico.
+
+**Actualización 14-ago-2026 (v14.0.5):** el médico decidió la llamada de juicio #1 —
+corregir. Se hizo como el propio informe exigía, subiendo el TOKEN `--fg3` del tema claro
+(cambio global, no un parche a `.vgl-dock-toggle`), y se añadió la guarda automática
+"Regla O" que calcula el ratio WCAG real. Quedan abiertas las llamadas #2 y #3, que no
+son defectos: #2 es la decisión ya tomada de aplicar AA (4.5) y no AAA (7) a lo que no
+codifica estado clínico por sí solo, y #3 es una limitación de metodología (los emoji a
+color no obedecen `color`, así que su ratio medido no representa lo que el médico ve).
+
+Con esto, la tabla de FASES de `SUPERPROMPT_DISENO_V14.md` queda completa:
 T1–T3 y T6/TL1/TL2 ya fusionados en `claude/pym-agenda-blindaje-v12-4`; T4/T5/T7
 construidos, probados y con PR en borrador (#52/#54/#55), pendientes solo de la revisión
 visual del médico — ningún trabajo de implementación autónoma queda pendiente.
