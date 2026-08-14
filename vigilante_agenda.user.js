@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.12
+// @version      12.10.13
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.12";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.13";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2652,6 +2652,121 @@
           diferenciaEstadios,
           mensaje: "Discordancia entre TFG por Cockcroft-Gault (" + estadioCG + ") y CKD-EPI 2021 (" + estadioCKD + "): diferencia de " + diferenciaEstadios + " estadios KDIGO.",
       };
+  }
+  // =====================================================================
+  // R2 — Tabla de vigencias por estadio renal (MODO SOMBRA — no cambia ningún aviso).
+  //
+  // Transcripción EXACTA de PROMPT_JULES_R2_VIGENCIAS_ESTADIO.md líneas 35-70 (fuente:
+  // everest-rcv-copiloto/motor_vigencias.py líneas 30-84, ya en producción en el proyecto
+  // hermano). NO se recalcula ni se ajusta aquí. "BLOQ" = el analito no se pide en ese
+  // estadio. Vigencias en DÍAS. Los rangos de creatinina en G3a/G3b/G4 se conservan como
+  // rango {min, max} — colapsarlos a un número sería inventar una política que la tabla no
+  // fija; esa decisión es de la tarea R3, no de esta.
+  //
+  // Esta tabla NO está conectada a ningún aviso todavía (eso es R3, con visto bueno médico
+  // explícito): RCV_VIGENCIA_DIAS, _vigenciaDiasParaAnalito y el aviso de 180 días planos
+  // siguen exactamente igual que hoy.
+  //
+  // El estadio a usar aquí es SIEMPRE el de Cockcroft-Gault (estadioKDIGO(cockcroftGault(...))),
+  // nunca el de CKD-EPI — decisión clínica ya tomada (ver PROMPT_JULES_R2_VIGENCIAS_ESTADIO.md
+  // §1): Cockcroft-Gault es el "estadio administrativo" que rige vigencias ante la EPS;
+  // CKD-EPI es el "estadio clínico", para razonar función renal, no para esto. El cableado de
+  // cuál TFG se le pasa a estadioKDIGO antes de llamar a vigenciaPorEstadio es de otra tarea;
+  // esta función solo recibe el estadio ya calculado, como cadena.
+  const RCV_VIGENCIA_ESTADIO_TABLA = {
+      // Programa ERC (paciente con "Nefroprotección" confirmada — ver §3 del prompt fuente).
+      ERC: {
+          creatinina: { G1: 180, G2: 180, G3a: { min: 90, max: 121 }, G3b: { min: 90, max: 121 }, G4: { min: 60, max: 93 } },
+          glicemia: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 60 },
+          parcial_orina: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
+          hemoglobina: { G1: 365, G2: 365, G3a: 365, G3b: 365, G4: 180 },
+          pth: { G1: "BLOQ", G2: "BLOQ", G3a: 365, G3b: 365, G4: 180 },
+          albumina: { G1: "BLOQ", G2: "BLOQ", G3a: "BLOQ", G3b: 365, G4: 365 },
+          fosforo: { G1: "BLOQ", G2: "BLOQ", G3a: "BLOQ", G3b: 365, G4: 365 },
+          colesterol_total: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
+          trigliceridos: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 120 },
+          ldl: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
+          hdl: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
+          rac: { G1: 180, G2: 180, G3a: 180, G3b: 180, G4: 180 },
+          // Solo aplica si el paciente además es DM2 — lo exige vigenciaPorEstadio, no esta tabla.
+          hba1c: { G1: "BLOQ", G2: "BLOQ", G3a: 180, G3b: 180, G4: 120 },
+      },
+      // Programa DM2 (sin ERC activa, o ERC en G1/G2) — la tabla fuente no lo desglosa por
+      // estadio, son valores planos. No exige PTH/Albúmina/Fósforo (no están en este bloque).
+      DM2: {
+          hba1c: 180,
+          glicemia: 180,
+          creatinina: 180,
+          rac: 180,
+          parcial_orina: 180,
+          colesterol_total: 180,
+          ldl: 180,
+          hdl: 180,
+          trigliceridos: 180,
+          ecg: 365, // solo si opciones.edad >= 45 — lo exige vigenciaPorEstadio.
+      },
+      // Programa HTA (sin ERC activa, o ERC en G1/G2) — tampoco desglosado por estadio.
+      HTA: {
+          glicemia: 180,
+          creatinina: 180,
+          rac: 180,
+          parcial_orina: 180,
+          colesterol_total: 180,
+          ldl: 180,
+          hdl: 180,
+          trigliceridos: 180,
+          ecg: 365,
+          ecocardiograma: 365,
+          acido_urico: "BLOQ", // siempre — no se pide en este programa.
+      },
+  };
+  // Consulta PURA de la tabla anterior: sin DOM, sin red, sin estado global, sin deducir nada
+  // que no venga explícito en los parámetros. `opciones = { esDM2, edad }` — ambos SIEMPRE
+  // explícitos, nunca inferidos aquí dentro (eso es responsabilidad de quien llame).
+  // Devuelve: un número de días; `{min, max}` para los rangos de creatinina; la cadena
+  // "BLOQ"; o `null` cuando la combinación (programa/estadio/analito/opciones) no está
+  // contemplada por la tabla — nunca un número inventado.
+  function vigenciaPorEstadio(programa, estadio, analito, opciones) {
+      const opts = opciones || {};
+      if (programa === "ERC") {
+          const porAnalito = RCV_VIGENCIA_ESTADIO_TABLA.ERC[analito];
+          if (!porAnalito) return null;
+          if (analito === "hba1c" && opts.esDM2 !== true) return null;
+          if (!Object.prototype.hasOwnProperty.call(porAnalito, estadio)) return null;
+          const v = porAnalito[estadio];
+          if (v && typeof v === "object") return { min: v.min, max: v.max };
+          return v;
+      }
+      if (programa === "DM2") {
+          const tabla = RCV_VIGENCIA_ESTADIO_TABLA.DM2;
+          if (!Object.prototype.hasOwnProperty.call(tabla, analito)) return null;
+          if (analito === "ecg") return Number(opts.edad) >= 45 ? tabla.ecg : null;
+          return tabla[analito];
+      }
+      if (programa === "HTA") {
+          const tabla = RCV_VIGENCIA_ESTADIO_TABLA.HTA;
+          if (!Object.prototype.hasOwnProperty.call(tabla, analito)) return null;
+          return tabla[analito];
+      }
+      return null;
+  }
+  // Mapeo EXPLÍCITO clave RCV (RCV_VIGENCIA_KEYS, línea ~2570) -> nombre de analito de la
+  // tabla de vigencias por estadio (R2). Solo las 7 claves que hoy sí se vigilan tienen
+  // mapeo; el resto de analitos de la tabla — hemoglobina, pth, albumina, fosforo, ldl,
+  // hba1c, ecg, ecocardiograma, acido_urico (9) — NO tienen ninguna clave RCV que vigilar
+  // hoy (injectLabsIntoCronicos los autocompleta aparte, sin cambios de esta tarea) y no se
+  // les inventa una: cualquier clave fuera del mapa, o cualquiera de esas 9, devuelve `null`.
+  function analitoTablaDesdeClaveRcv(clave) {
+      const MAPA = {
+          CREATININA: "creatinina",
+          GLUCOSA: "glicemia",
+          UROANALISIS: "parcial_orina",
+          COLESTEROL_TOTAL: "colesterol_total",
+          TRIGLICERIDOS: "trigliceridos",
+          COLESTEROL_HDL: "hdl",
+          RAC: "rac",
+      };
+      return Object.prototype.hasOwnProperty.call(MAPA, clave) ? MAPA[clave] : null;
   }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
