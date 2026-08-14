@@ -1177,6 +1177,64 @@
     HEMOGLOBINA: "902213",
   };
 
+  // v14.0.3 — Nombre EXACTO con el que cada analito aparece como <li> en el buscador nativo
+  // de Conducta de Everest (Paquetes → HTA → agregar examen individual). NO son inventados
+  // ni tomados del catálogo del Copiloto (esos son descripciones cortas, p. ej. "HEMOGLOBINA
+  // GLICOSILADA" sin "AUTOMATIZADA") — son el texto LITERAL capturado por el grabador de
+  // clics del proyecto en consultorio el 12-08-2026 (`captura_ordenamiento_paquete_
+  // HTA_20260812.json`, ver también `EVIDENCIA_ORDENAMIENTO_CURADO.md` §2 y §4), en la
+  // MISMA sesión donde el médico agregó estos 4 uno por uno además del paquete HTA:
+  //   li "HORMONA PARATIROIDEA MOLÉCULA INTACTA" → Agregar   (PTH)
+  //   li "ALBUMINA EN SUERO U OTROS FLUIDOS"     → Agregar   (Albúmina)
+  //   li "FÓSFORO EN SUERO U OTROS FLUIDOS"      → Agregar   (Fósforo)
+  //   li "HEMOGLOBINA"                            → Agregar   (Hemoglobina)
+  //   li "HEMOGLOBINA GLICOSILADA AUTOMATIZADA"  → Agregar   (HbA1c)
+  // Usados por _conductaBuscarYAgregarExamen (más abajo), que reproduce EXACTAMENTE esa
+  // misma secuencia de clics. Coincidencia exacta de texto (normalizado con _canonTexto),
+  // nunca substring: un match parcial en un catálogo clínico real podría clickear el examen
+  // equivocado, algo que aquí es inaceptable.
+  const CONDUCTA_LI_TEXTO_POR_ANALITO = {
+    PTH: "HORMONA PARATIROIDEA MOLECULA INTACTA",
+    ALBUMINA: "ALBUMINA EN SUERO U OTROS FLUIDOS",
+    FOSFORO: "FOSFORO EN SUERO U OTROS FLUIDOS",
+    HEMOGLOBINA: "HEMOGLOBINA",
+    HBA1C: "HEMOGLOBINA GLICOSILADA AUTOMATIZADA",
+  };
+
+  // v14.0.3 — Reproduce en el DOM real de Everest el mismo gesto que el médico ya hace a
+  // mano en Conducta: clic en el <li> del examen (coincidencia EXACTA de texto, nunca
+  // parcial) y, tras darle a Angular un instante para reaccionar, clic en el botón
+  // "Agregar" que aparece. NO llama a ningún endpoint propio ni navega — solo dispara los
+  // mismos eventos de clic que ya dispararía el médico, así que el guardado real ocurre
+  // donde siempre ocurre: cuando él guarda el JSON completo de la historia.
+  // Fallo seguro: si el <li> no aparece (no está en la pantalla actual, o el texto no casó
+  // exacto) no se clickea nada por aproximación — "casilla vacía antes que clic inventado".
+  async function _conductaBuscarYAgregarExamen(nombreLiExacto) {
+    try {
+      const claveObjetivo = _canonTexto(nombreLiExacto);
+      const items = document.querySelectorAll("li");
+      let li = null;
+      for (const el of items) {
+        if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; }
+      }
+      if (!li) return false;
+      li.click();
+      // v14.0.3 — Mismo motivo que el reintento de 300-600ms del uroanálisis (arriba):
+      // Angular no monta el botón "Agregar" de forma síncrona con el clic. La ventana de
+      // espera imita la cadencia real observada en la captura (~700-1500ms entre el clic
+      // del <li> y el del botón en cada uno de los 5 exámenes agregados esa sesión).
+      await new Promise((r) => setTimeout(r, 700));
+      const botones = document.querySelectorAll("button");
+      let btnAgregar = null;
+      for (const b of botones) {
+        if (_canonTexto(b.textContent) === "AGREGAR" && !b.disabled) { btnAgregar = b; break; }
+      }
+      if (!btnAgregar) return false;
+      btnAgregar.click();
+      return true;
+    } catch (e) { console.warn("[Vigilante] _conductaBuscarYAgregarExamen falló:", e); return false; }
+  }
+
   // v12.3.37 — SECCIÓN URONÁLISIS DE LA RUTA CRÓNICOS (pedido del consultorio, pantallazo
   // del 2026-08-11): además del interruptor NORMAL/ANORMAL, la vista tiene 7 casillas de
   // texto para los componentes del parcial de orina, todas con placeholder

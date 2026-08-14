@@ -166,6 +166,7 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__WHITELIST = WHITELIST_13_LABS; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__PYM_CATALOG = PYM_CATALOG; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}\n";
 
