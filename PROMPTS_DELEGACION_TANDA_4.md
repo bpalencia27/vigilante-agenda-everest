@@ -261,3 +261,36 @@ Informe, sin código.
 | **Correr `VGL_COSECHA_TODO()`** en una historia clínica | Desbloquea tabaquismo y antecedentes, que es lo único que frena el Paso 3 del motor de RCV | 1 min |
 | **La captura del campo `unidades`** (sigue de la Tanda 3) | La RAC en mg/mmol se lee como normal cuando es nefropatía activa, y ninguna guarda de rango puede cazarlo | 5 min |
 | Avisar a tus compañeros de que actualicen a v14.1.5 | Es el arreglo de las notificaciones tardías | 1 min |
+
+---
+
+# 🛑 EL PR `refactor/t2-estilos-modales` NO SE PUEDE FUSIONAR
+
+Jules lo marcó "Ready for review 🎉", pero **está construido sobre una base de hace un mes**.
+Esto no es opinión, son los números de su propio informe comparados con los de hoy:
+
+| | Su PR | Hoy |
+|---|---|---|
+| `@version` del userscript | **12.3.37** | **14.1.5** |
+| comprobaciones | **498** | **976** |
+| funciones alcanzables | 303 | 391 |
+| suites de prueba | 26 | 32 |
+| líneas borradas | **−12.976** | — |
+
+Le faltan **8 commits míos**, y no son cosméticos. Fusionarlo revierte, entre otras cosas:
+
+- la **credencial de Athenea retirada del código** (volvería a quedar en claro),
+- el motor renal entero (Cockcroft-Gault, estadio KDIGO, R1b),
+- la guarda de `estadioKDIGO` que evitaba clasificar en **G5** un dato ilegible,
+- la guarda de unidades de creatinina (µmol/L → falla renal terminal en paciente sano),
+- las tablas oficiales 39/43/50 corregidas celda por celda,
+- el LDL en la vigilancia y el `some` → `every` del paquete RCV,
+- **el cruce de pacientes de Auto-Labs** y la guarda de la RAC,
+- **el arreglo de las notificaciones tardías** que acaban de reportar tus compañeros.
+
+**No lo fusiones.** Que Jules rebase sobre `claude/pym-agenda-blindaje-v12-4` y vuelva a
+correr `node tests/runner.js`: si el informe no dice **976 o más**, sigue estando mal la base.
+
+Y hay una lección de proceso: el CSS de los modales que él refactorizó **ya cambió** en TL1/TL2
+después de su base. Aunque rebase, ese trabajo puede haber quedado sin objeto. Que lo compruebe
+ANTES de rehacer el rebase, no después.
