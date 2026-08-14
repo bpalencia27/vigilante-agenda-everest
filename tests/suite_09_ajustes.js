@@ -12,7 +12,6 @@ module.exports = {
     "readJSON", "writeJSON", "saveSettings", "getProcessedToday",
     "isCitaAgendadaHoy", "isOrdenesCreadasHoy", "markCitaAgendadaHoy", "markOrdenesCreadasHoy",
     "isLabAgendadaHoy", "markLabAgendadaHoy", "citaAgendadaFechaHoy",
-    "isAtencionAbiertaHoy", "markAtencionAbiertaHoy",
     "applySettings", "darkPreferred", "isLight", "applyTheme", "restartPolling",
   ],
 
@@ -161,32 +160,6 @@ module.exports = {
       t.falso(A.isOrdenesCreadasHoy("777"));
       t.falso(A.isLabAgendadaHoy("777"), "el reset diario también protege al bloqueo de laboratorio");
       t.igual(A.citaAgendadaFechaHoy("777"), null, "y a la fecha recordada de la cita de control");
-    });
-
-    // ------------------------------------------------------------------
-    //  v13.0.0 — dedup del botón "Atender", keyed por citaId (no por doc_id: la
-    //  misma cédula puede tener sobrecupo el mismo día, y cada cita es su propia
-    //  apertura de historia).
-    // ------------------------------------------------------------------
-    t.caso("isAtencionAbiertaHoy / markAtencionAbiertaHoy: marca, persiste, invalida la firma y no duplica", () => {
-      c.env.storage.removeItem(PROC_KEY);
-      t.falso(A.isAtencionAbiertaHoy(null));
-      t.falso(A.isAtencionAbiertaHoy("4334837"), "citaId nunca marcado");
-      A.__state.lastSignature = "firma-sucia";
-      A.markAtencionAbiertaHoy(4334837);               // número a propósito: debe normalizar a texto
-      t.cierto(A.isAtencionAbiertaHoy("4334837"), "debe encontrarla como texto");
-      t.cierto(A.isAtencionAbiertaHoy(4334837), "y también como número");
-      t.igual(A.__state.lastSignature, "", "debe invalidar la firma para que el panel se repinte");
-      A.markAtencionAbiertaHoy("4334837");             // segunda vez: no debe duplicar
-      t.igual(A.getProcessedToday().atendidos, ["4334837"], "sin duplicados en el registro persistido");
-      t.falso(A.isCitaAgendadaHoy("4334837"), "es una lista independiente de citas/órdenes/labs");
-    });
-
-    t.caso("markAtencionAbiertaHoy: con citaId vacío no escribe nada", () => {
-      c.env.storage.removeItem(PROC_KEY);
-      A.markAtencionAbiertaHoy("");
-      A.markAtencionAbiertaHoy(null);
-      t.igual(c.env.storage.getItem(PROC_KEY), null, "el registro diario no debe existir");
     });
 
     // ------------------------------------------------------------------

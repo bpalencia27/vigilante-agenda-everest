@@ -350,80 +350,10 @@ module.exports = {
       t.falso(hFraude.includes("--c-atendido"), "El fraude NO se disfraza del color de atendido: manda el rojo de alerta");
     });
 
-    // ================= botón "Atender" (v13.0.0) =================
-    t.caso('botón Atender: solo aparece cuando la cita trae citaId real (API) — nunca por scraping de DOM', () => {
-      vaciarLista();
-      const conCitaId = { key: "atc1", doc_id: "1", nombre: "A", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4334823 };
-      const sinCitaId = { key: "atc2", doc_id: "2", nombre: "B", hora_texto: "07:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
-      cv.api.__state.lastSignature = "";
-      cv.api.render([conCitaId, sinCitaId], "api", new Date());
-      const hCon = lista.children[0].innerHTML, hSin = lista.children[1].innerHTML;
-      t.cierto(hCon.includes('aria-label="Registrar inicio de atención de'), "con citaId real y sin marcar, el botón está habilitado");
-      t.falso(hSin.includes("vgl-btn-atender"), "sin citaId (p. ej. el camino de respaldo por scraping de DOM) no hay botón: nunca se inventa el id");
-    });
-
-    t.caso("botón Atender: se deshabilita si Everest ya marca Atendido, o si ya se abrió hoy desde el panel", () => {
-      vaciarLista();
-      cv.env.storage.removeItem("vgl_proc_today");
-      const yaAtendido = { key: "atc3", doc_id: "3", nombre: "C", hora_texto: "07:00", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0, citaId: 111 };
-      const abiertoHoy = { key: "atc4", doc_id: "4", nombre: "D", hora_texto: "07:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 222 };
-      cv.api.markAtencionAbiertaHoy(222);
-      cv.api.__state.lastSignature = "";
-      cv.api.render([yaAtendido, abiertoHoy], "api", new Date());
-      const hAtendido = lista.children[0].innerHTML, hAbierto = lista.children[1].innerHTML;
-      t.cierto(hAtendido.includes('aria-label="Inicio de atención ya registrado para'), "ya Atendido en Everest: botón visible pero bloqueado");
-      t.cierto(hAbierto.includes('aria-label="Inicio de atención ya registrado para'), "ya se pulsó hoy desde el panel: bloqueado para no repetir la escritura");
-    });
-
-    await t.casoAsync("botón Atender: al pulsarlo llama a apiMedicoAbrirHistoria; si no hay éxito, avisa y se reactiva", async () => {
-      vaciarLista();
-      cv.env.storage.removeItem("vgl_proc_today");
-      const cita = { key: "atc5", doc_id: "5", nombre: "E", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 333 };
-      cv.api.__state.lastSignature = "";
-      cv.api.render([cita], "api", new Date());
-      const card = lista.children[0];
-      const bAt = card.querySelector(".vgl-btn-atender");
-      await disparar(bAt, "click", { stopPropagation() {} });
-      // El fetch por defecto del harness responde `{}` (no `true`): guardarHoraApertura
-      // se cuenta como fallo, así que NO debe marcarse como abierta ni quedar bloqueado.
-      t.falso(cv.api.isAtencionAbiertaHoy(333), "sin `true` real del servidor, no se marca como abierta");
-      t.falso(bAt.disabled, "al fallar, el botón se reactiva — no queda bloqueado para siempre por un error de red");
-    });
-
-    // v12.10.1 — Incidente real en consultorio: el botón decía "abre la Historia Clínica" y
-    // el aviso de éxito decía "Historia clínica abierta", pero apiMedicoAbrirHistoria() NUNCA
-    // navega ni pinta nada — solo registra un timestamp en el servidor de Everest. El médico
-    // pulsó, vio el mensaje de éxito, y la historia nunca se abrió: creyó (por el propio texto
-    // del script) que había revisado al paciente sin haberlo hecho. Esta prueba impide que
-    // vuelva a redactarse un texto que prometa "abrir"/"abierta" mientras la función solo
-    // registra un timestamp — si en el futuro SÍ se implementa la navegación real, hay que
-    // actualizar esta prueba a la vez que el código, no antes.
-    t.caso("botón Atender: ningún texto visible promete abrir/mostrar la historia clínica (solo registra, no navega)", () => {
-      vaciarLista();
-      cv.env.storage.removeItem("vgl_proc_today");
-      const habilitado = { key: "atc6", doc_id: "6", nombre: "F", hora_texto: "07:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 444 };
-      const bloqueado = { key: "atc7", doc_id: "7", nombre: "G", hora_texto: "07:20", estado: "Atendido", color: "VERDE", pym: [], elapsed: 0, citaId: 555 };
-      cv.api.__state.lastSignature = "";
-      cv.api.render([habilitado, bloqueado], "api", new Date());
-      const hHab = lista.children[0].innerHTML, hBloq = lista.children[1].innerHTML;
-
-      // Frases textuales del incidente real (v13.0.0 original) que NUNCA deben reaparecer —
-      // no se usa una heurística amplia porque el texto honesto ACTUAL dice a propósito
-      // "NO abre la historia clínica", que una heurística ingenua marcaría como falso positivo.
-      const FRASES_FALSAS = [
-        "abrir Historia Clínica de",
-        "abre la Historia Clínica de",
-        "Historia clínica abierta",
-        "Historia clínica ya abierta",
-      ];
-      for (const frase of FRASES_FALSAS) {
-        t.falso(hHab.includes(frase), `el botón habilitado no debe contener "${frase}"`);
-        t.falso(hBloq.includes(frase), `el botón bloqueado no debe contener "${frase}"`);
-      }
-    });
-
-
-
+    // v14.0.2 — El botón "Atender" (v13.0.0) se retiró a pedido explícito del médico: usa
+    // directamente el botón nativo "Historias Clínicas" de Everest. Las pruebas que cubrían
+    // apiMedicoAbrirHistoria/isAtencionAbiertaHoy/markAtencionAbiertaHoy y la generación del
+    // botón se retiraron con él (suite 13 y suite 09 tenían las de la API/persistencia).
 
     t.caso("T1 — Las tarjetas de render() se construyen usando clases y sin style inline (salvo --tc/--trgb)", () => {
       vaciarLista();
@@ -505,9 +435,10 @@ module.exports = {
       t.cierto(stats.innerHTML.includes("Sin pres. <b>1</b>"));
     });
 
-    // v14.0.0 (T4) — Criterio de aceptación explícito: "la tarjeta ya no genera esos tres
-    // botones, y sí sigue generando la bandera PES con el texto nuevo".
-    t.caso("T4 — la tarjeta ya NO genera los botones de agendar/ordenar/labs, solo Atender", () => {
+    // v14.0.0 (T4) / v14.0.2 — Criterio de aceptación de T4 ("la tarjeta ya no genera esos
+    // tres botones") sigue vigente; el botón Atender que T4 dejaba como único superviviente
+    // se retiró después, a pedido explícito del médico (usa el nativo "Historias Clínicas").
+    t.caso("T4/v14.0.2 — la tarjeta ya NO genera ningún botón de acción (agendar/ordenar/labs/atender)", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const pac = { key: "t4-1", doc_id: "999", nombre: "PACIENTE T4", hora_texto: "09:00", estado: "En sala", color: "VERDE", pym: ["MAMOGRAFÍA"], elapsed: 0, citaId: 12345 };
@@ -516,37 +447,26 @@ module.exports = {
       t.falso(card.innerHTML.includes("vgl-btn-agendar"), "sin botón de agendar");
       t.falso(card.innerHTML.includes("vgl-btn-ordenar"), "sin botón de ordenar");
       t.falso(card.innerHTML.includes("vgl-btn-labs"), "sin botón de labs");
-      t.cierto(card.innerHTML.includes("vgl-btn-atender"), "el botón Atender SÍ se sigue generando");
+      t.falso(card.innerHTML.includes("vgl-btn-atender"), "sin botón de Atender (retirado en v14.0.2)");
       t.falso(card.innerHTML.includes("vgl-pyms"), "sin fila de chips PyM");
     });
 
     // v14.0.0 — Secuela real de T4: la fila inferior (.vgl-card-btm) llevaba los botones Y
-    // la fila de chips de PyM. T4 se llevó ambos contenidos pero dejó el contenedor, así
-    // que en las tarjetas SIN citaId —las que entran por lectura del DOM, donde no hay
-    // botón Atender que ofrecer— quedaba un div vacío cobrando su margin-top de 7px.
-    // Medido en Chromium con el CSS real: 96.3px de alto por tarjeta antes, 89.5px después.
-    // En un panel de 20+ pacientes al día son ~136px de scroll regalados, exactamente lo
-    // contrario de "densidad antes que aire" (§4.3.4).
-    t.caso("v14 — una tarjeta SIN botón Atender no emite la fila inferior vacía (hueco muerto al pie)", () => {
+    // la fila de chips de PyM. T4 se llevó ambos contenidos pero dejó el contenedor, con un
+    // div vacío cobrando su margin-top de 7px. v14.0.2 retiró también el botón Atender (el
+    // último ocupante), así que ahora la fila nunca se emite, con o sin citaId.
+    t.caso("v14.0.2 — la tarjeta nunca emite la fila inferior vacía (hueco muerto al pie), con o sin citaId", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
-      // Sin citaId: es la ruta de respaldo por scraping del DOM, donde atenderBtn no existe
-      // (no hay a qué CitaId apuntar) y por tanto `actions` queda vacío.
       const sinCita = { key: "v14-sin", doc_id: "777", nombre: "PACIENTE SIN CITAID", hora_texto: "09:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
       cv.api.render([sinCita], "api", new Date());
-      const card = lista.children[0];
-      t.falso(card.innerHTML.includes("vgl-btn-atender"), "precondición: sin citaId no hay botón Atender");
-      t.falso(card.innerHTML.includes("vgl-card-btm"), "y sin nada que poner dentro, la fila inferior NO se emite: cero div vacío cobrando margen");
+      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "sin citaId: sin fila inferior");
 
-      // Contraprueba en la misma prueba: con citaId, la fila SÍ debe seguir emitiéndose —
-      // el arreglo no puede llevarse por delante el botón Atender de las tarjetas normales.
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const conCita = { key: "v14-con", doc_id: "778", nombre: "PACIENTE CON CITAID", hora_texto: "09:30", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4242 };
       cv.api.render([conCita], "api", new Date());
-      const card2 = lista.children[0];
-      t.cierto(card2.innerHTML.includes("vgl-btn-atender"), "con citaId el botón Atender sigue ahí");
-      t.cierto(card2.innerHTML.includes("vgl-card-btm"), "y su fila inferior se emite con normalidad");
+      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "con citaId: tampoco hay fila inferior — no queda nada que poner ahí");
     });
 
     t.caso("T4 (D9) — la bandera PES usa el texto nuevo «ABANDONO PROGRAMA RCV»", () => {
