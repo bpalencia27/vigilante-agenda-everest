@@ -8595,9 +8595,9 @@
     root.innerHTML = `
       <div id="vgl-head">
         <div id="vgl-tls">
-          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 1L5 5M5 1L1 5"/></svg></button>
-          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5"/></svg></button>
-          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
+          <button class="vgl-tl close" id="vgl-tl-close" title="Ocultar (se colapsa a una pastilla)" aria-label="Ocultar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 1L5 5M5 1L1 5"/></svg></button>
+          <button class="vgl-tl min" id="vgl-tl-min" title="Minimizar (solo la barra)" aria-label="Minimizar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5"/></svg></button>
+          <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo" aria-label="Restaurar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
         </div>
         <div id="vgl-title">Asistente Clínico<small>v${VERSION}</small></div>
         <span id="vgl-dot" title="origen de datos"></span>
@@ -9703,7 +9703,7 @@
       panel.className = isLight() ? "light" : "";
       panel.innerHTML = `
         <div class="vgl-postcita-card">
-          <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar">✕</button>
+          <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
           <div class="vgl-postcita-title">✅ Cita creada</div>
           <div class="vgl-postcita-sub">${escapeHtml(nombreCompleto || patientNameFallback || "")}</div>
           <button class="vgl-agm-btn sec" id="vgl-postcita-print">🖨️ Imprimir recordatorio de cita</button>
@@ -9967,7 +9967,7 @@
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-labs-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-labs-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
@@ -10280,7 +10280,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-grid">
@@ -11173,7 +11173,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Cita de control ya agendada para el <b>${escapeHtml(citaFechaFmt)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-agm-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-agm-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec">
@@ -11763,7 +11763,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">Verificando datos del paciente antes de sugerir actividades...</label>
@@ -11832,7 +11832,7 @@
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
-          <button class="vgl-agm-close" id="vgl-ord-x">✕</button>
+          <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
 
         <div class="vgl-agm-sec">
