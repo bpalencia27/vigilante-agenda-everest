@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      12.10.14
+// @version      12.10.15
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -938,7 +938,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.14";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "12.10.15";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5565,9 +5565,9 @@
       // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pes-card">
           <div class="vgl-pes-ic">🫀</div>
-          <div class="vgl-pes-t">Prioridad de Atención: Riesgo Cardiovascular</div>
+          <div class="vgl-pes-t">Abandono Programa RCV</div>
           <div class="vgl-pes-n"></div>
-          <div class="vgl-pes-lead">Este paciente tiene un <b>seguimiento pendiente</b> en el programa de protección cardiovascular. Se recomienda priorizar la valoración cardiovascular durante la consulta de hoy.</div>
+          <div class="vgl-pes-lead">Este paciente tiene un <b>abandono registrado</b> en el Programa de Riesgo Cardiovascular. <b>Priorice el control de riesgo cardiovascular sobre cualquier otra actividad de esta consulta.</b></div>
           <div class="vgl-pes-foot">Este recordatorio no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pes-ok">Entendido</button>
         </div>`;
@@ -11541,7 +11541,7 @@
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Asistencia clínica</div>
         <div class="vgl-fld"><label>Recordatorio al abrir la historia<span class="vgl-hint">Aviso al abrir la historia clínica si existen actividades preventivas pendientes.</span></label>${sw("c-pymrem", S.recordatorioPym)}</div>
-        <div class="vgl-fld"><label>Alerta de prioridad cardiovascular<span class="vgl-hint">Resalta pacientes con seguimiento cardiovascular pendiente al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
+        <div class="vgl-fld"><label>Alerta de Abandono Programa RCV<span class="vgl-hint">Resalta pacientes con abandono registrado en el Programa de Riesgo Cardiovascular al abrir su historia clínica.</span></label>${sw("c-pes", S.abandonoPES)}</div>
         <div class="vgl-fld"><label>Alerta de laboratorios RCV vencidos<span class="vgl-hint">Aviso en rojo al abrir la historia si Colesterol Total/HDL, Triglicéridos, Glucosa, Uroanálisis, Creatinina o RAC no tienen resultado en los últimos 180 días.</span></label>${sw("c-labsv", S.labsVencidos)}</div>
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Habilita la asignación rápida de citas de control desde cada tarjeta de paciente.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, envía al celular registrado el mensaje de recordatorio de Everest. Solo se envía si la cita quedó creada correctamente.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
@@ -11876,71 +11876,24 @@
       const atendidoLeyenda = esAtendido && a.color !== "ROJO";
       const badgeCol = atendidoLeyenda ? "var(--c-atendido)" : `var(--tc,${col})`;
       const badgeRgba = (alfa) => atendidoLeyenda ? `rgba(var(--rgb-atendido),${alfa})` : `rgba(var(--trgb),${alfa})`;
-      // Tres lecturas distintas y honestas: tiene pendientes / está al día / NO cruza
-      // con la base (paciente nuevo o cédula que no coincide — eso hay que verlo).
-      const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
-      // v7.8: sin base cargada NO se dice "Al día" (era mentira piadosa): se dice la verdad.
-      // v12.4.0 — Los chips del panel EXCLUYEN Optometría/Odontología (van en el aviso al
-      // abrir la historia); si al paciente SOLO le quedan esas, se dice — no un falso
-      // "al día". El tamaño del texto ahora lo gobierna la clase .vgl-chip (fila que
-      // envuelve, texto completo visible), sin estilo inline que la pise.
-      const pymsPanel = panelActivities(a.pym);
-      // v12.4.1 — Si el filtro ocultó remisiones (AV/OD), un chip compacto lo dice: sin
-      // él, con el aviso de la historia apagado en Ajustes esas remisiones quedaban
-      // invisibles en TODOS los canales (hallazgo de la revisión adversarial).
-      const ocultas = a.pym.length - pymsPanel.length;
-      const chipOcultas = ocultas > 0 ? `<span class="vgl-chip vgl-chip-ocultas">+ remisión AV/OD</span>` : "";
-      const pyms = pymsPanel.length
-        ? `<div class="vgl-pyms">${pymsPanel.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipOcultas}</div>`
-        : (a.pym.length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
-          : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
-          : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
-                   : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
       // Bandera de fraude EXPLÍCITA en texto (no solo color): así no depende de memorizar
       // el código de color, y sigue diciendo "fraude" aunque el estado cambie más tarde.
       const flag = a.color === "ROJO" ? `<span class="vgl-flag">⛔ NO CONFIRMADO</span>` : ""; // [COPY-UX]
       // v7.8.1: bandera de abandono PES, en texto — igual de explícita que la de fraude,
       // convive con ella si un paciente cayera en ambas categorías a la vez.
-      const pesFlag = esPes ? `<span class="vgl-flag pes">❤ SEGUIMIENTO CARDIOVASCULAR</span>` : ""; // [COPY-UX]
-      // v8.0.0: Botones de acción — icon-only con tooltip (Zero-Waste layout)
-      // v12.3.28 — Cita de control y toma de muestras ahora se bloquean POR SEPARADO
-      // (ver isLabAgendadaHoy más abajo, junto a ordDetalleHoy): antes, con la cita
-      // principal ya creada, el botón seguía abriendo el flujo COMPLETO, que habría
-      // vuelto a crear la cita de control como duplicado si el médico solo quería
-      // reintentar el laboratorio pendiente. Ahora hay tres estados: nada hecho (abre
-      // el flujo completo, sin cambios), solo falta el laboratorio (abre el modal
-      // ligero openLabSoloModal), y las dos hechas (bloqueado, mismo patrón que 📋).
-      const citaHechaHoy = a.doc_id ? isCitaAgendadaHoy(a.doc_id) : false;
-      const labHechoHoy = a.doc_id ? isLabAgendadaHoy(a.doc_id) : false;
-      const soloFaltaLab = citaHechaHoy && !labHechoHoy;
-      const agendarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? (citaHechaHoy && labHechoHoy
-            ? `<button class="vgl-btn-agendar vgl-btn-action" disabled aria-label="Cita y toma de muestras ya agendadas hoy para ${escapeHtml(a.nombre)}" title="✅ Cita de control y toma de muestras ya agendadas hoy. Bloqueado para evitar duplicados.">🗓️</button>`
-            : soloFaltaLab
-              // v12.3.30 — antes usaba el verde de "hecho/confirmado" (--rgb-verde) y el
-              // mismo 🗓️ de las otras 2 estados para un estado que en realidad significa
-              // "todavía falta algo": el verde es la señal de éxito en TODO el resto del
-              // script, así que aquí decía justo lo contrario de lo que pasa. Ámbar (mismo
-              // tono que usa notify("AMBAR", …) para avisos pendientes) + ícono 🧪 propio
-              // (igual al de la tooltip) para que se distinga a simple vista del 🗓️ normal.
-              ? `<button class="vgl-btn-agendar vgl-btn-action vgl-btn-ambar" aria-label="Falta agendar toma de muestras para ${escapeHtml(a.nombre)}" title="🧪 Cita de control ya agendada hoy — falta la toma de muestras. Clic para agendarla.">🧪</button>`
-              : `<button class="vgl-btn-agendar vgl-btn-action" aria-label="Agendar cita de control para ${escapeHtml(a.nombre)}" title="🗓️ Agendar cita de control para ${escapeHtml(a.nombre)}">🗓️</button>`)
-        : "";
-      // v12.3.x — "ID y bloqueo de seguridad": una vez el panel confirma que las órdenes
-      // de este paciente ya se generaron y (si aplica) se enviaron por correo HOY, el
-      // botón se deshabilita — evita la duplicación de ordenamientos por doble clic o
-      // por reabrir el paciente más tarde en la misma jornada. Se reactiva solo al
-      // cruzar la medianoche (mismo reloj que getProcessedToday/diaNuevo).
-      const ordDetalleHoy = a.doc_id ? ordenesDetalleHoy(a.doc_id) : null;
-      const yaOrdenadoHoy = a.doc_id ? isOrdenesCreadasHoy(a.doc_id) : false;
-      const ordenarBtn = (S.agendamientoRapido !== false && a.doc_id)
-        ? (yaOrdenadoHoy
-            ? `<button class="vgl-btn-ordenar vgl-btn-action" disabled aria-label="Órdenes PyM ya generadas hoy para ${escapeHtml(a.nombre)}" title="✅ Órdenes PyM ya generadas hoy${ordDetalleHoy && ordDetalleHoy.agrupadores && ordDetalleHoy.agrupadores.length ? " — agrupador(es): " + escapeHtml(ordDetalleHoy.agrupadores.join(", ")) : ""}. Bloqueado para evitar duplicados.">📋</button>`
-            : `<button class="vgl-btn-ordenar vgl-btn-action" aria-label="Generar órdenes PyM para ${escapeHtml(a.nombre)}" title="📋 Generar órdenes PyM para ${escapeHtml(a.nombre)}">📋</button>`)
-        : "";
-      const labsBtn = a.doc_id
-        ? `<button class="vgl-btn-labs vgl-btn-action" aria-label="Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}" title="🧪 Ver paraclínicos / laboratorios para ${escapeHtml(a.nombre)}">🧪</button>`
-        : "";
+      // v14.0.0 (T4, D9) — "SEGUIMIENTO CARDIOVASCULAR" pasa a "ABANDONO PROGRAMA RCV": el
+      // médico pidió que el texto oriente a priorizar el control del programa, no solo a
+      // notar un seguimiento pendiente. Mismos otros dos sitios en abandonoPESAlert() y en
+      // el rótulo de Ajustes.
+      const pesFlag = esPes ? `<span class="vgl-flag pes">❤ ABANDONO PROGRAMA RCV</span>` : ""; // [COPY-UX]
+      // v14.0.0 (T4) — AMPUTACIÓN DEL PANEL: agendar/ordenar/labs (🗓️/📋/🧪) y los chips de
+      // PyM salen de la tarjeta — el panel queda solo como vigía de agenda. Los tres flujos
+      // renacen como widgets sobre la Historia Clínica en T5, reutilizando exactamente las
+      // mismas funciones (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/
+      // openLabSoloModal) y los mismos bloqueos antiduplicado (isCitaAgendadaHoy/
+      // isLabAgendadaHoy/isOrdenesCreadasHoy) — por eso esas funciones NO se tocan aquí, solo
+      // dejan de tener llamador DENTRO de render(). panelActivities() tampoco se toca: T5 la
+      // reconecta para el propio widget.
       // v13.0.0 — "Atender": SOLO registra en el servidor de Everest la hora de apertura
       // (guardarHoraApertura), el mismo efecto de red que deja el botón nativo "Historias
       // Clínicas" — pero, a diferencia del nativo, este botón NUNCA navega ni pinta la
@@ -11958,8 +11911,8 @@
             ? `<button class="vgl-btn-atender vgl-btn-action" disabled aria-label="Inicio de atención ya registrado para ${escapeHtml(a.nombre)}" title="✅ Ya se registró en Everest el inicio de atención${esAtendido ? " — Everest ya la marca Atendido" : " hoy desde este panel"}. Esto NO abrió la historia clínica: úsela con \"Historias Clínicas\".">🩺</button>`
             : `<button class="vgl-btn-atender vgl-btn-action" aria-label="Registrar inicio de atención de ${escapeHtml(a.nombre)} en Everest" title="🩺 Registra en Everest que empezó a atender a ${escapeHtml(a.nombre)}. NO abre la historia clínica — ábrala con el botón nativo \"Historias Clínicas\".">🩺</button>`)
         : "";
-      const actions = (atenderBtn || agendarBtn || ordenarBtn || labsBtn)
-        ? `<span class="vgl-card-actions">${atenderBtn}${agendarBtn}${ordenarBtn}${labsBtn}</span>`
+      const actions = atenderBtn
+        ? `<span class="vgl-card-actions">${atenderBtn}</span>`
         : "";
       card.innerHTML = `
         <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"})">
@@ -11978,16 +11931,9 @@
           ${a.doc_id ? `<span class="vgl-doc vgl-doc-t1">CC ${highlight(String(a.doc_id))}</span>` : ""}
         </div>
         <div class="vgl-card-btm vgl-card-btm-t1">
-          ${pyms}
           ${actions}
         </div>`;
       card.__vglKey = a.key;
-      const bAg = card.querySelector(".vgl-btn-agendar");
-      if (bAg) bAg.addEventListener("click", (e) => { e.stopPropagation(); uxTrack(soloFaltaLab ? "panel.agendar.sololab" : "panel.agendar.abrir"); soloFaltaLab ? openLabSoloModal(a) : openAgendamientoModal(a); });
-      const bOrd = card.querySelector(".vgl-btn-ordenar");
-      if (bOrd) bOrd.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.ordenar.abrir"); openOrdenamientoModal(a); });
-      const bLabs = card.querySelector(".vgl-btn-labs");
-      if (bLabs) bLabs.addEventListener("click", (e) => { e.stopPropagation(); uxTrack("panel.labs.abrir"); openLaboratoriosModal(a); });
       const bAt = card.querySelector(".vgl-btn-atender");
       // v13.0.0 — A diferencia de agendar/ordenar/labs (abren un modal), Atender dispara
       // la llamada de red directamente: es lo mismo EFECTO DE RED que deja el botón nativo

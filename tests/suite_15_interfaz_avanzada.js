@@ -475,26 +475,60 @@ module.exports = {
     });
 
 
-    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude y chips PyM", () => {
+    // v14.0.0 (T4) — "chips PyM" salió del nombre y de las aserciones de esta prueba: los
+    // chips (y el texto "PyM sin cargar"/"Al día"/"Dato faltante" DENTRO de la tarjeta) se
+    // amputaron del panel. El "PyM sin cargar" de la BARRA DE RESUMEN (suma.textContent,
+    // no cardAna.innerHTML) es un sitio DISTINTO — con significado distinto — y se queda
+    // intacto (ver la Regla B4-T4 sobre el literal repetido).
+    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude (sin chips PyM, amputados en T4)", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
       t.cierto(suma.textContent.includes("Vigilando (directo) · 2 cita(s)"), "resumen de fuente directa");
+      t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen SÍ sigue diciendo esto (no se amputó, es el otro sitio)");
       t.igual(q("#vgl-dot").className, "bg", "el punto de origen marca API");
       t.igual(lista.children.length, 2, "una tarjeta por cita");
       const [cardAna, cardLuis] = lista.children;
       t.igual(cardAna.__vglKey, "111@07:00 AM");
       t.cierto(cardAna.innerHTML.includes("ANA PEREZ"));
       t.cierto(cardAna.innerHTML.includes("CC 111"));
-      t.cierto(cardAna.innerHTML.includes("PyM sin cargar"), "sin base cargada no se miente con 'Al día'");
+      t.falso(cardAna.innerHTML.includes("PyM sin cargar"), "dentro de la TARJETA ya no aparece — ese chip se amputó");
       t.falso(cardAna.innerHTML.includes("NO CONFIRMADO"), "la cita verde no lleva bandera de fraude");
       t.cierto(cardLuis.className.includes("rojo"), "la tarjeta roja lleva su clase");
-      t.cierto(cardLuis.innerHTML.includes("⛔ NO CONFIRMADO"), "bandera de fraude explícita");
-      t.cierto(cardLuis.innerHTML.includes("Tamización de mama"), "chip de PyM pendiente");
-      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida");
+      t.cierto(cardLuis.innerHTML.includes("⛔ NO CONFIRMADO"), "bandera de fraude explícita, se conserva");
+      t.falso(cardLuis.innerHTML.includes("Tamización de mama"), "el chip de PyM pendiente ya no se pinta en la tarjeta (T4)");
+      t.falso(cardLuis.innerHTML.includes("vgl-pyms") || cardLuis.innerHTML.includes("vgl-chip"), "ningún rastro de la fila de chips en el HTML");
+      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida — no la toca T4");
       t.cierto(cardLuis.innerHTML.includes("hace 4:00"), "lleva 4 min pasado de la tolerancia (6 - 10)");
       const stats = q("#vgl-stats");
       t.cierto(stats.innerHTML.includes("En sala <b>1</b>"));
       t.cierto(stats.innerHTML.includes("Sin pres. <b>1</b>"));
+    });
+
+    // v14.0.0 (T4) — Criterio de aceptación explícito: "la tarjeta ya no genera esos tres
+    // botones, y sí sigue generando la bandera PES con el texto nuevo".
+    t.caso("T4 — la tarjeta ya NO genera los botones de agendar/ordenar/labs, solo Atender", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = { key: "t4-1", doc_id: "999", nombre: "PACIENTE T4", hora_texto: "09:00", estado: "En sala", color: "VERDE", pym: ["MAMOGRAFÍA"], elapsed: 0, citaId: 12345 };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.falso(card.innerHTML.includes("vgl-btn-agendar"), "sin botón de agendar");
+      t.falso(card.innerHTML.includes("vgl-btn-ordenar"), "sin botón de ordenar");
+      t.falso(card.innerHTML.includes("vgl-btn-labs"), "sin botón de labs");
+      t.cierto(card.innerHTML.includes("vgl-btn-atender"), "el botón Atender SÍ se sigue generando");
+      t.falso(card.innerHTML.includes("vgl-pyms"), "sin fila de chips PyM");
+    });
+
+    t.caso("T4 (D9) — la bandera PES usa el texto nuevo «ABANDONO PROGRAMA RCV»", () => {
+      vaciarLista();
+      cv.api.__S.abandonoPES = true;
+      cv.api.__state.pymAbandono = new Set(["888"]);
+      cv.api.__state.lastSignature = "";
+      const pac = { key: "t4-pes", doc_id: "888", nombre: "PACIENTE PES", hora_texto: "09:10", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.cierto(card.innerHTML.includes("❤ ABANDONO PROGRAMA RCV"), "la bandera PES lleva el texto nuevo");
+      t.falso(card.innerHTML.includes("SEGUIMIENTO CARDIOVASCULAR"), "el texto viejo no debe sobrevivir en ningún sitio");
     });
 
     t.caso("render: el filtro 'ensala' deja solo la tarjeta que corresponde", () => {
