@@ -3519,6 +3519,15 @@
       p.ordenesDetalle[sDoc] = det;
     }
     writeJSON(PROC_KEY, p);
+    // v14.0.0 — El médico acaba de ordenar DESDE EL SCRIPT: el banner de PyM tiene que
+    // enterarse ya. Sin esto seguía insistiendo con las mismas actividades hasta que
+    // venciera su caché de 10 minutos (BANNER_PYM_TTL_MS) — el médico ordenaba y la franja
+    // seguía pidiéndole lo mismo, que es justo el comportamiento que T7 venía a eliminar.
+    // _bannerPymInvalidar existía desde T7 y NADIE la llamaba (salía como "sin cubrir" en
+    // el runner). También se invalida la caché de órdenes vigentes de T6: la orden recién
+    // creada ES una orden vigente nueva, y quien la consulte a continuación debe verla.
+    try { _bannerPymInvalidar(); } catch (e) {}
+    try { _ordenesVigentesInvalidar(); } catch (e) {}
     state.lastSignature = "";
     repaint();
   }
@@ -12009,8 +12018,24 @@
   const BANNER_PYM_TTL_MS = 10 * 60000;
   function _bannerPymInvalidar() { _bannerPymCache = { docId: "", pendientes: null, sinEmparejar: null, verificado: false, ts: 0 }; }
 
+  // v14.0.0 — Lo que el médico YA ordenó HOY DESDE EL SCRIPT no puede seguir apareciendo
+  // en el banner. El banner solo cruzaba contra las órdenes vigentes de Everest (T6), y ese
+  // endpoint tarda en reflejar una orden recién creada: el médico ordenaba, el banner se
+  // refrescaba y le volvía a pedir exactamente lo mismo. markOrdenesCreadasHoy ya guarda
+  // las actividades cubiertas (det.actividades) — es la MISMA fuente que usa
+  // pymPendientesRestantes para el aviso modal desde v12.4.0, así que el banner y el aviso
+  // clásico coinciden en qué consideran ya resuelto en vez de contradecirse.
+  function _pymYaOrdenadoHoyDesdeElScript(docId) {
+    const det = ordenesDetalleHoy(docId);
+    // Ojo con la distinción de v12.4.1: `undefined` = marca vieja sin detalle (no se puede
+    // descontar nada); `[]` = se ordenó y no cubrió ninguna actividad del Excel. Solo se
+    // descuenta cuando hay una lista real.
+    return (det && Array.isArray(det.actividades)) ? det.actividades : [];
+  }
+
   async function _refrescarBannerPym(docId) {
-    const etiquetas = getActivities(docId);
+    const yaOrdenadas = _pymYaOrdenadoHoyDesdeElScript(docId);
+    const etiquetas = getActivities(docId).filter((e) => yaOrdenadas.indexOf(e) === -1);
     if (!etiquetas.length) {
       _bannerPymCache = { docId, pendientes: [], sinEmparejar: [], verificado: true, ts: Date.now() };
       return;

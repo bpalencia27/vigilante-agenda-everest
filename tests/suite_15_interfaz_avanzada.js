@@ -2358,6 +2358,42 @@ module.exports = {
       t.cierto(removido, "el banner se quita del body al salir de HCHealth");
     });
 
+    // v14.0.0 — El médico ordena DESDE EL SCRIPT y el banner seguía pidiéndole lo mismo
+    // hasta 10 minutos después (BANNER_PYM_TTL_MS), que es justo el comportamiento que T7
+    // venía a eliminar. _bannerPymInvalidar existía desde T7 y NADIE la llamaba.
+    // El observable: con la caché viva, createPymBannerUI repinta desde ella; tras ordenar,
+    // la caché queda vacía y la función se va por su guarda `if (!cacheDelPaciente) return`
+    // en vez de volver a pintar los pendientes ya resueltos.
+    await t.casoAsync("markOrdenesCreadasHoy invalida la caché del banner: deja de insistir con lo que el médico acaba de ordenar", async () => {
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      mockPacienteBanner(c, "100000020");
+      c.api.__state.pym = new Map([["100000020", ["Tamización de VIH"]]]);
+      await c.api._refrescarBannerPym("100000020");
+      c.api.createPymBannerUI();
+      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
+      t.cierto(!!banner, "precondición: con la caché viva el banner se pinta");
+
+      // El médico ordena desde el script.
+      c.api.markOrdenesCreadasHoy("100000020", ["AGR-1"], ["Tamización de VIH"]);
+
+      // El DOM falso no borra de verdad con remove(): se espía la llamada.
+      let removido = false;
+      banner.remove = () => { removido = true; };
+      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : (id === "anamesis" ? { id: "anamesis" } : null));
+      // (a) La INVALIDACIÓN: sin refrescar todavía, el banner no puede seguir sirviendo la
+      // caché vieja. Sin invalidar, createPymBannerUI la daría por vigente durante 10 min.
+      c.api.createPymBannerUI();
+      t.cierto(removido, "sin caché válida, el banner viejo se retira en el acto en vez de repintarse con datos previos a la orden");
+
+      removido = false;
+      // (b) El DESCUENTO: al refrescar de verdad, lo recién ordenado ya no cuenta como
+      // pendiente — aunque Everest todavía no refleje la orden en sus vigentes.
+      await c.api._refrescarBannerPym("100000020");
+      c.api.createPymBannerUI();
+      t.cierto(removido,
+        "tras ordenar, el banner DESAPARECE: la caché se invalida Y el refresco descuenta lo que el médico acaba de ordenar desde el script. Antes seguía insistiendo con la misma actividad hasta 10 min (BANNER_PYM_TTL_MS) — y aun invalidando la caché habría vuelto igual, porque el refresco solo miraba las órdenes vigentes de Everest, que tardan en reflejar una orden recién creada.");
+    });
+
     // ============ v14.0.0 — RED DE SEGURIDAD DEL BANNER (interruptor + fallback) ============
     // El invariante que estas 4 pruebas defienden es UNO solo y es clínico, no cosmético:
     // el médico NUNCA puede quedarse sin ninguna de las dos alertas de PyM. T7 apaga el
