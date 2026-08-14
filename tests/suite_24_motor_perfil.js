@@ -130,5 +130,40 @@ module.exports = {
       t.igual(api.clasificaCupoAgenda(undefined), "desconocido");
       t.igual(api.clasificaCupoAgenda("cualquierotra"), "desconocido");
     });
+    // v14.0.0 — El encargo del médico (12-ago) eran DOS cosas: «se deben repintar de otro
+    // color Y escoger alguna de esas como sugerida». Solo se hacía la segunda: se marcaba
+    // UNA hora con la insignia ⭐ y `horasEnFranja` —que recomendacionHorario YA calculaba—
+    // se descartaba sin usar, así que las demás horas de la franja recomendada se veían
+    // exactamente igual que las de fuera. Esta prueba fija el contrato del que depende el
+    // repintado en openAgendamientoModal: la franja debe traer TODAS sus horas, no solo la
+    // elegida, y la sugerida debe ser una de ellas.
+    t.caso("v14 (repinte de franja) - horasEnFranja trae TODO el bloque recomendado, no solo la sugerida", () => {
+      const perfil = api.perfilPaciente(["Diabetes"]);
+      const rec = api.recomendacionHorario(perfil, [
+        { hora: "06:30" }, { hora: "07:00" }, { hora: "08:15" },   // dentro de AM 06:00-09:00
+        { hora: "10:00" }, { hora: "11:30" },                       // fuera de franja
+        { hora: "14:00" },                                          // dentro de PM 13:00-16:00
+        { hora: "17:00" },                                          // fuera de franja
+      ]);
+      t.igual(rec.sugerida, "06:30", "la sugerida es la más temprana de la franja");
+      t.cierto(rec.horasEnFranja.includes("06:30") && rec.horasEnFranja.includes("07:00") &&
+               rec.horasEnFranja.includes("08:15") && rec.horasEnFranja.includes("14:00"),
+        "las CUATRO horas dentro de franja vienen en horasEnFranja — son las que se repintan");
+      t.falso(rec.horasEnFranja.includes("10:00"), "10:00 está fuera de franja: no se repinta");
+      t.falso(rec.horasEnFranja.includes("11:30"), "11:30 está fuera de franja: no se repinta");
+      t.falso(rec.horasEnFranja.includes("17:00"), "17:00 está fuera de franja: no se repinta");
+      t.cierto(rec.horasEnFranja.includes(rec.sugerida), "la sugerida pertenece a la franja");
+      t.cierto(rec.horasEnFranja.length > 1,
+        "si la franja trajera una sola hora, repintar el bloque no aportaría nada sobre la insignia");
+    });
+
+    // Un paciente SIN franja impuesta no debe repintar nada: si horasEnFranja viniera con
+    // contenido, el modal pintaría medio calendario de ámbar a un hipertenso puro.
+    t.caso("v14 (repinte de franja) - perfil sin preferencia no repinta ninguna hora", () => {
+      const perfil = api.perfilPaciente(["Hipertensión"]);
+      const rec = api.recomendacionHorario(perfil, [{ hora: "06:30" }, { hora: "14:00" }]);
+      t.igual(rec.sugerida, null, "sin franja impuesta no hay hora sugerida");
+      t.igual(rec.horasEnFranja.length, 0, "ni ninguna hora que repintar");
+    });
   }
 };

@@ -7755,6 +7755,23 @@
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido{
         background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
       }
+      /* v14.0.0 — La FRANJA recomendada completa, no solo la hora elegida como sugerida.
+         El encargo del médico pedía las dos cosas ("se deben repintar de otro color Y
+         escoger alguna de esas como sugerida"): esto es la primera. Deliberadamente MÁS
+         SUAVE que la insignia ⭐ — mismo tono ámbar, sin escala ni resplandor — para que la
+         jerarquía siga siendo evidente: la franja se insinúa, la sugerida manda. Nunca
+         bloquea ni oculta las horas de fuera de franja: el médico elige la que quiera.
+         Lleva la MISMA armadura de especificidad que la insignia por el mismo motivo, el
+         bug real de v12.10.9: sin citar los tres ids,
+         "#vgl-agendar-modal.light .vgl-agm-sbtn" (id+2 clases) le ganaría y en tema claro la franja no se vería. */
+      .vgl-agm-sbtn-franja{
+        background:rgba(var(--rgb-ambar),.07);border-color:rgba(var(--rgb-ambar),.30)
+      }
+      #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-franja,
+      #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-franja,
+      #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-franja{
+        background:rgba(var(--rgb-ambar),.10);border-color:rgba(var(--rgb-ambar),.34)
+      }
       .vgl-agm-loading{
         font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
       }
@@ -10593,13 +10610,26 @@
       turnosLibres.forEach(({ turno: t, agendaId, profesional, sede, fecha }) => {
         const horaTxt = t.horaTexto || t.hora || t.horaInicio || "Hora s/d";
         const esSugerida = !!recHorario.sugerida && normalizeHora(horaTxt) === recHorario.sugerida;
+        // v14.0.0 — El encargo del médico eran DOS cosas, no una: «se deben repintar de
+        // otro color Y escoger alguna de esas como sugerida». Hasta ahora solo se hacía la
+        // segunda: se marcaba UNA hora con la insignia ⭐ y las demás horas de la franja
+        // recomendada quedaban idénticas a las de fuera de franja. De hecho
+        // recomendacionHorario() YA calculaba `horasEnFranja` (6:00–9:00 y 13:00–16:00,
+        // según D3-bis) y el valor se descartaba sin usar.
+        // Ahora toda hora dentro de la franja se repinta, y la elegida como sugerida
+        // conserva además su insignia — así el médico ve de un vistazo el BLOQUE
+        // recomendado para el perfil del paciente, no solo un punto suelto, y sigue
+        // pudiendo escoger cualquier otra hora (nada se bloquea ni se oculta).
+        const enFranja = !esSugerida && Array.isArray(recHorario.horasEnFranja) &&
+          recHorario.horasEnFranja.indexOf(normalizeHora(horaTxt)) !== -1;
         // v11.0.1 — El profesional y la fecha se muestran SIEMPRE (antes se ocultaban en
         // Medicina General, que es justo donde el fallback podía colar otra agenda).
-        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : "✓ ") + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
+        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : (enFranja ? "● " : "✓ ")) + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
-        btn.className = "vgl-agm-sbtn";
-        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") + (esSugerida ? " vgl-agm-sbtn-sugerido" : "");
+        btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") +
+          (esSugerida ? " vgl-agm-sbtn-sugerido" : "") + (enFranja ? " vgl-agm-sbtn-franja" : "");
         if (esSugerida) btn.title = `Horario sugerido para este paciente (franja ${recHorario.rangoTexto || "recomendada"})`;
+        else if (enFranja) btn.title = `Dentro de la franja recomendada para este paciente (${recHorario.rangoTexto || "recomendada"}) — puede elegir esta o cualquier otra`;
         btn.innerHTML = labelCompleto;
         btn.addEventListener("click", () => {
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
