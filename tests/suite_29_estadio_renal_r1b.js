@@ -161,6 +161,8 @@ module.exports = {
     t.caso("estadioRenalDelPaciente: los extremos PLAUSIBLES en mg/dL sí se calculan", () => {
       // El rango tiene que dejar pasar la falla renal terminal real, que es justo el
       // paciente en quien el estadio más importa.
+      t.cierto(!!api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "30", sexo: "M" }).estadio,
+        "30 mg/dL es el extremo máximo aceptado");
       t.cierto(!!api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "12", sexo: "M" }).estadio,
         "12 mg/dL es una falla renal avanzada real, no un error de unidades");
       t.cierto(!!api.estadioRenalDelPaciente({ edad: 60, peso: 70, creatininaCruda: "0.4", sexo: "F" }).estadio,

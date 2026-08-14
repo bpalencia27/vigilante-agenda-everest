@@ -8,7 +8,7 @@ module.exports = {
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia",
-    "_conductaBuscarYAgregarExamen"
+    "_conductaBuscarYAgregarExamen", "_esPlausibleParaAnalito"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -118,12 +118,12 @@ module.exports = {
         "fechaResultGlicemia": { value: "" }
       };
       const labs = [
-        { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-01-01" },
-        { codigo: "903841", nombre: "GLUCOSA (Duplicado)", Resultado: "9.9", Fecha: "2023-01-02" }
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2023-01-01" },
+        { codigo: "903841", nombre: "GLUCOSA (Duplicado)", Resultado: "99", Fecha: "2023-01-02" }
       ];
       const res = testApi.injectLabsIntoCronicos(labs);
       t.igual(res.count, 1, "Solo debe inyectar uno");
-      t.igual(mockDOM["resultadoGlicemia"].value, "9.9", "gana el resultado con la fecha más reciente, aunque llegue segundo en la lista");
+      t.igual(mockDOM["resultadoGlicemia"].value, "99", "gana el resultado con la fecha más reciente, aunque llegue segundo en la lista");
       t.igual(mockDOM["fechaResultGlicemia"].value, "2023-01-02", "la fecha escrita es la del resultado más reciente");
     });
 
@@ -133,11 +133,11 @@ module.exports = {
         "fechaResultGlicemia": { value: "" }
       };
       const labs = [
-        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
-        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" }
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "55" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "66", Fecha: "2024-06-01" }
       ];
       const res = testApi.injectLabsIntoCronicos(labs);
-      t.igual(mockDOM["resultadoGlicemia"].value, "6.6", "el resultado con fecha conocida es más informativo y gana");
+      t.igual(mockDOM["resultadoGlicemia"].value, "66", "el resultado con fecha conocida es más informativo y gana");
       t.igual(mockDOM["fechaResultGlicemia"].value, "2024-06-01");
     });
 
@@ -156,7 +156,7 @@ module.exports = {
         "resultadoGlicemia": { value: "120" },
         "fechaResultGlicemia": { value: "2026-01-01" }
       };
-      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2023-05-05" }];
       const r = testApi.injectLabsIntoCronicos(labs);
       t.igual(mockDOM["resultadoGlicemia"].value, "120", "el valor que ya estaba escrito manda");
       t.igual(mockDOM["fechaResultGlicemia"].value, "2026-01-01", "su fecha tampoco se toca");
@@ -169,21 +169,21 @@ module.exports = {
         "resultadoGlicemia": { value: "" },
         "fechaResultGlicemia": { value: "2026-02-02" }
       };
-      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2023-05-05" }];
       const r = testApi.injectLabsIntoCronicos(labs);
-      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "el valor vacío sí se diligencia");
+      t.igual(mockDOM["resultadoGlicemia"].value, "71", "el valor vacío sí se diligencia");
       t.igual(mockDOM["fechaResultGlicemia"].value, "2026-02-02", "la fecha del médico queda intacta");
       t.igual(r.count, 1);
     });
 
     t.caso("injectLabsIntoCronicos: si el valor ya escrito ES el de Athenea, un reintento completa la fecha que quedó vacía (v12.3.35)", () => {
       mockDOM = {
-        "resultadoGlicemia": { value: "7.1" },
+        "resultadoGlicemia": { value: "71" },
         "fechaResultGlicemia": { value: "" }
       };
-      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2023-05-05" }];
       const r = testApi.injectLabsIntoCronicos(labs);
-      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "el valor no se reescribe");
+      t.igual(mockDOM["resultadoGlicemia"].value, "71", "el valor no se reescribe");
       t.igual(mockDOM["fechaResultGlicemia"].value, "2023-05-05", "pero la fecha faltante sí se completa");
       t.igual(r.count, 0);
       t.igual(r.respetadas, 1);
@@ -329,7 +329,7 @@ module.exports = {
         "resultadoGlicemia": { value: "" },
         "fechaResultGlicemia": { value: "" }
       };
-      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", fechaTomaMuestra: "15/03/2026" }];
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "71", fechaTomaMuestra: "15/03/2026" }];
       testApi.injectLabsIntoCronicos(labs);
       t.igual(mockDOM["fechaResultGlicemia"].value, "2026-03-15", "convierte dd/mm/aaaa a ISO, el formato que exige <input type=date>");
     });
@@ -344,10 +344,10 @@ module.exports = {
       };
       const prevGetById = c.env.doc.getElementById;
       c.env.doc.getElementById = (id) => (id === "resultadoGlicemia" ? resultEl : null);
-      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2023-05-05" }];
+      const labs = [{ codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2023-05-05" }];
       testApi.injectLabsIntoCronicos(labs);
       c.env.doc.getElementById = prevGetById;
-      t.igual(resultEl.value, "7.1");
+      t.igual(resultEl.value, "71");
       t.igual(fechaHermana.value, "2023-05-05", "usa el input[type=date] hermano del .input-group, NO el id estático fechaResultGlicemia (que aquí ni siquiera existe en el DOM)");
     });
 
@@ -1087,25 +1087,25 @@ module.exports = {
 
     t.caso("_ultimaFechaPorAnalito: entre dos repeticiones del mismo analito, gana la de fecha MÁS RECIENTE (no la primera de la lista)", () => {
       const r = testApi._ultimaFechaPorAnalito([
-        { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2024-01-01" },
-        { codigo: "903841", nombre: "GLUCOSA", Resultado: "9.9", Fecha: "2024-06-01" },
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "71", Fecha: "2024-01-01" },
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "99", Fecha: "2024-06-01" },
       ]);
       const c = r.candidatos.get("GLUCOSA");
-      t.igual(c.resultVal, "9.9");
+      t.igual(c.resultVal, "99");
       t.igual(c.resultDate, "2024-06-01");
     });
 
     t.caso("_ultimaFechaPorAnalito: un resultado CON fecha le gana a uno SIN fecha, sin importar el orden", () => {
       const r1 = testApi._ultimaFechaPorAnalito([
-        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
-        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "66", Fecha: "2024-06-01" },
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "55" },
       ]);
-      t.igual(r1.candidatos.get("GLUCOSA").resultVal, "6.6");
+      t.igual(r1.candidatos.get("GLUCOSA").resultVal, "66");
       const r2 = testApi._ultimaFechaPorAnalito([
-        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
-        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "55" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "66", Fecha: "2024-06-01" },
       ]);
-      t.igual(r2.candidatos.get("GLUCOSA").resultVal, "6.6");
+      t.igual(r2.candidatos.get("GLUCOSA").resultVal, "66");
     });
 
     t.caso("_ultimaFechaPorAnalito: un resultado NUMÉRICO 0 es un valor real, no 'ausente' (v12.5.7 — hallazgo de la revisión adversarial)", () => {
@@ -1235,6 +1235,47 @@ module.exports = {
     // (≥30 mg/g) exige control más frecuente: su vigencia se reduce a la mitad, 90 días
     // en vez de 180. Los demás analitos, y un RAC por debajo del umbral, no cambian.
     // =====================================================================
+    // ---------- _esPlausibleParaAnalito ----------
+    t.caso("_esPlausibleParaAnalito: valida los extremos patológicos reales pero rechaza valores imposibles (error de unidades)", () => {
+      // Analitos con rango
+      t.cierto(testApi._esPlausibleParaAnalito("CREATININA", "12"), "CREATININA: 12 mg/dL es falla terminal real, pasa");
+      t.falso(testApi._esPlausibleParaAnalito("CREATININA", "88"), "CREATININA: 88 es µmol/L, rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("GLUCOSA", "20"), "GLUCOSA: 20 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("GLUCOSA", "5"), "GLUCOSA: 5 mg/dL es imposible en paciente vivo");
+
+      t.cierto(testApi._esPlausibleParaAnalito("HBA1C", "15"), "HBA1C: 15% pasa");
+      t.falso(testApi._esPlausibleParaAnalito("HBA1C", "1.5"), "HBA1C: 1.5% rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("COLESTEROL_TOTAL", "50"), "COLESTEROL_TOTAL: 50 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("COLESTEROL_TOTAL", "15"), "COLESTEROL_TOTAL: 15 mg/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("COLESTEROL_HDL", "10"), "COLESTEROL_HDL: 10 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("COLESTEROL_HDL", "1"), "COLESTEROL_HDL: 1 mg/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("COLESTEROL_LDL", "200"), "COLESTEROL_LDL: 200 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("COLESTEROL_LDL", "2"), "COLESTEROL_LDL: 2 mg/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("TRIGLICERIDOS", "500"), "TRIGLICERIDOS: 500 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("TRIGLICERIDOS", "5"), "TRIGLICERIDOS: 5 mg/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("ALBUMINA", "3.5"), "ALBUMINA: 3.5 g/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("ALBUMINA", "0.1"), "ALBUMINA: 0.1 g/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("HEMOGLOBINA", "15"), "HEMOGLOBINA: 15 g/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("HEMOGLOBINA", "1"), "HEMOGLOBINA: 1 g/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("FOSFORO", "10"), "FOSFORO: 10 mg/dL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("FOSFORO", "0.1"), "FOSFORO: 0.1 mg/dL rechazado");
+
+      t.cierto(testApi._esPlausibleParaAnalito("PTH", "1000"), "PTH: 1000 pg/mL pasa");
+      t.falso(testApi._esPlausibleParaAnalito("PTH", "0.5"), "PTH: 0.5 pg/mL rechazado");
+
+      // Analito sin rango (ej. RAC)
+      t.cierto(testApi._esPlausibleParaAnalito("RAC", "999999"), "RAC: sin rango definido, pasa cualquier valor numérico");
+    });
+
+    // ---------- _vigenciaDiasParaAnalito ----------
     t.caso("_vigenciaDiasParaAnalito: RAC bajo (<30 mg/g) conserva los 180 días normales", () => {
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "10"), 180);
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "29.9"), 180);

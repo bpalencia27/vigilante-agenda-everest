@@ -2371,6 +2371,28 @@
   // v12.3.37) que escribe cada uno en SU casilla; si este respaldo también corriera ahí,
   // el valor de un componente cualquiera (p. ej. "NEGATIVO" de Sangre) se colaría como si
   // fuera el resultado general del panel en la casilla resultadoUroanalisis.
+  const RANGOS_PLAUSIBILIDAD = {
+      CREATININA: { min: 0.1, max: 30 },
+      GLUCOSA: { min: 10, max: 2500 },
+      HBA1C: { min: 3, max: 25 },
+      COLESTEROL_TOTAL: { min: 30, max: 2000 },
+      COLESTEROL_HDL: { min: 3, max: 250 },
+      COLESTEROL_LDL: { min: 5, max: 1500 },
+      TRIGLICERIDOS: { min: 10, max: 15000 },
+      ALBUMINA: { min: 0.5, max: 7.5 },
+      HEMOGLOBINA: { min: 2, max: 28 },
+      FOSFORO: { min: 0.3, max: 22 },
+      PTH: { min: 1, max: 5000 },
+  };
+
+  function _esPlausibleParaAnalito(key, valorCrudo) {
+      const rango = RANGOS_PLAUSIBILIDAD[key];
+      if (!rango) return true; // Si no hay rango definido (ej. RAC), se acepta
+      const n = _labNumerico(valorCrudo);
+      if (n == null) return false;
+      return n >= rango.min && n <= rango.max;
+  }
+
   function _ultimaFechaPorAnalito(labsArray, opciones) {
       const uroPorComponentes = !!(opciones && opciones.uroanalisisPorComponentes);
       const candidatos = new Map();
@@ -2389,6 +2411,11 @@
           // todavía no existe.
           if (Number(lab.idEstado) === 1 || String(resultVal).trim().toUpperCase() === "PENDIENTE") { pendientesWhitelist++; return; }
           const fechaInfo = _extractAtheneaFecha(lab);
+          // v14.x — Guarda por rango de plausibilidad: un valor imposible no entra a la historia.
+          if (!_esPlausibleParaAnalito(matched.key, resultVal)) {
+              console.warn("[Vigilante] analito fuera de rango de plausibilidad, descartado:", matched.key, resultVal);
+              return;
+          }
           const resultDate = fechaInfo ? fechaInfo.iso : null;
           const previo = candidatos.get(matched.key);
           if (previo && !(resultDate && (!previo.resultDate || resultDate > previo.resultDate))) {
@@ -9910,9 +9937,9 @@
     // con todo lo que eso arrastra (remisión a nefrología, ajuste de dosis, suspensión de
     // fármacos). No se convierte automáticamente —adivinar la unidad de un dato clínico es
     // justo lo que este proyecto prohíbe—: se RECHAZA y se dice por qué.
-    // El rango 0,1–20 mg/dL cubre de sobra lo fisiológicamente posible en suero, incluida
+    // El rango 0,1–30 mg/dL cubre de sobra lo fisiológicamente posible en suero, incluida
     // la falla renal terminal sin diálisis (rara vez pasa de 15).
-    else if (creatN < 0.1 || creatN > 20) faltan.push("creatinina_fuera_de_rango");
+    else if (creatN < 0.1 || creatN > 30) faltan.push("creatinina_fuera_de_rango");
     // El sexo NO bloquea: sin él la fórmula corre igual (el factor 0.85 solo se aplica a
     // mujeres), pero se anota, porque un sexo ausente sesga la TFG al alza en una mujer.
     const sexoTxt = String(sexo == null ? "" : sexo).trim();
@@ -9999,7 +10026,7 @@
     const ETIQUETA = { edad: "la edad", peso: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
     if ((r.faltan || []).indexOf("creatinina_fuera_de_rango") !== -1) {
       const v = r.entradas && r.entradas.creatininaCruda;
-      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se calcula — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se calcula — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–30 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
     }
     if (!r.estadio) {
       const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);
