@@ -87,7 +87,10 @@
       try { u = new URL(url, location.origin); } catch (e) { u = { pathname: String(url), searchParams: new Map() }; }
       const ruta = lim(u.pathname, 160);
       const clave = metodo + " " + ruta;
-      const prev = RED.get(clave) || { metodo, ruta, params: [], claves: [], vistas: 0, comoLlego: "" };
+      const prev = RED.get(clave) || { metodo, ruta, params: [], claves: [], vistas: 0, comoLlego: "", _urlCompleta: "" };
+      // La URL CON sus valores se guarda SOLO en memoria, para poder repetir la petición
+      // más abajo. NUNCA se escribe en el archivo: los parámetros llevan la cédula.
+      if (!prev._urlCompleta) { try { prev._urlCompleta = u.href || String(url); } catch (e) {} }
       prev.vistas++;
       if (motivo && !prev.comoLlego) prev.comoLlego = motivo;
       try {
@@ -143,7 +146,14 @@
         try {
           const rt = xhr.responseType;
           if (rt === "json") { cuerpo = xhr.response; motivo = "json"; }
-          else if (rt === "" || rt === "text") { cuerpo = xhr.responseText; motivo = "text"; }
+          else if (rt === "" || rt === "text") {
+            cuerpo = xhr.responseText;
+            // 2ª pasada: SIETE endpoints salieron con motivo "text" y cuerpo VACÍO. Eso ya
+            // no es "no supe leerlo", es "lo leí y no había nada". Sin el estado HTTP ni la
+            // longitud no se puede distinguir un 304 de un 204 de un cuerpo perdido, así
+            // que el motivo ahora los lleva.
+            motivo = "text/" + (xhr.status || "?") + "/" + String(cuerpo || "").length + "b";
+          }
           else if (rt === "arraybuffer" || rt === "blob") { motivo = "binario (" + rt + ")"; }
           else if (rt === "document") { motivo = "documento XML/HTML"; }
           else { motivo = "responseType desconocido: " + rt; }
@@ -323,12 +333,51 @@
       console.log("[Mapa] " + (i + 1) + "/" + nombres.length + " — \"" + nombre + "\": " + inv.totalCampos + " casillas, " + inv.botones.length + " botones, " + inv.tablas.length + " tablas");
     }
 
+    // --- REPETIR LAS PETICIONES QUE NO SE PUDIERON LEER ---
+    // Interceptar depende de CÓMO pida las cosas la aplicación, y eso ya falló por dos
+    // causas distintas: primero el responseType de Angular, después un cuerpo que llegó
+    // vacío. Repetir la petición no depende de nada de eso — misma sesión, mismas
+    // cookies, y el cuerpo lo leemos nosotros, sin carreras ni clones.
+    //
+    // SOLO se repiten peticiones GET cuya ruta tenga forma de LECTURA (Obtener/Get/
+    // Historico/Consultar/Buscar). Nunca un POST, nunca un verbo desconocido: repetir a
+    // ciegas algo que escriba en la historia clínica sería exactamente el tipo de daño
+    // que este proyecto existe para evitar.
+    const LECTURA = /\/(obtener|get|historico|historial|consulta|buscar|listar|validar)/i;
+    const paraRepetir = Array.from(RED.values()).filter((r) =>
+      r.metodo === "GET" && r._urlCompleta && LECTURA.test(r.ruta) &&
+      (!r.claves.length || String(r.claves[0]).startsWith("("))
+    );
+    if (paraRepetir.length) {
+      console.log("%c[Mapa] Repitiendo " + paraRepetir.length + " peticiones de lectura para leer sus campos…", "color:#06c;font-weight:bold");
+      for (const r of paraRepetir) {
+        try {
+          const res = await fetch(r._urlCompleta, { credentials: "include", cache: "no-store" });
+          const texto = await res.text();
+          if (!texto) { r.claves = ["(repetida: " + res.status + ", cuerpo vacío)"]; r.comoLlego += " · repetida:" + res.status; continue; }
+          try {
+            r.claves = clavesDe(JSON.parse(texto));
+            r.comoLlego += " · repetida:" + res.status + " OK";
+          } catch (e) {
+            r.claves = ["(repetida: " + res.status + ", la respuesta no es JSON)"];
+            r.comoLlego += " · repetida:" + res.status + " no-json";
+          }
+        } catch (e) {
+          r.claves = ["(no se pudo repetir: " + e + ")"];
+        }
+        await dormir(120);   // sin ráfagas contra el servidor de la IPS
+      }
+    }
+
     // --- Claves de almacenamiento: SOLO los nombres ---
     const almacen = { local: [], sesion: [] };
     try { for (let i = 0; i < localStorage.length; i++) almacen.local.push(lim(localStorage.key(i), 80)); } catch (e) {}
     try { for (let i = 0; i < sessionStorage.length; i++) almacen.sesion.push(lim(sessionStorage.key(i), 80)); } catch (e) {}
 
-    const red = Array.from(RED.values()).sort((a, b) => b.vistas - a.vistas);
+    // La URL con valores NO sale del navegador: se elimina antes de construir la salida.
+    const red = Array.from(RED.values())
+      .sort((a, b) => b.vistas - a.vistas)
+      .map((r) => { const c = Object.assign({}, r); delete c._urlCompleta; return c; });
 
     const salida = {
       _nota: "Mapa de Everest. Solo NOMBRES: ni un valor de casilla, ni una celda de tabla, ni un dato de respuesta.",
