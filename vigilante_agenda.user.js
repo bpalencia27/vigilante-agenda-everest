@@ -12626,38 +12626,52 @@
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
+    let prevRow = [];
+    let currRow = [];
+    let prevPrevRow = [];
+
     for (const qToken of queryTokens) {
       let tokenMatched = false;
+      const m = qToken.length;
+      const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
+
       for (const tToken of textTokens) {
         if (tToken.includes(qToken)) {
           tokenMatched = true;
           break;
         }
-        const m = qToken.length;
-        const n = tToken.length;
-        const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
         if (maxErrors === 0) continue;
 
-        let matrix = [];
-        for (let i = 0; i <= m; i++) matrix[i] = [i];
-        for (let j = 0; j <= n; j++) matrix[0][j] = j;
+        const n = tToken.length;
+
+        // initialize 1st row
+        for (let j = 0; j <= n; j++) {
+          prevRow[j] = j;
+        }
 
         for (let i = 1; i <= m; i++) {
+          currRow[0] = i;
           for (let j = 1; j <= n; j++) {
             const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
-            matrix[i][j] = Math.min(
-              matrix[i - 1][j] + 1,
-              matrix[i][j - 1] + 1,
-              matrix[i - 1][j - 1] + cost
+            currRow[j] = Math.min(
+              prevRow[j] + 1,
+              currRow[j - 1] + 1,
+              prevRow[j - 1] + cost
             );
             if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
-              matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
+              currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
+          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
+          for (let j = 0; j <= n; j++) {
+            prevPrevRow[j] = prevRow[j];
+            prevRow[j] = currRow[j];
+          }
         }
+
         let minCost = Infinity;
         for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
-          if (matrix[m][j] < minCost) minCost = matrix[m][j];
+          if (prevRow[j] < minCost) minCost = prevRow[j];
         }
         if (minCost <= maxErrors) {
           tokenMatched = true;
