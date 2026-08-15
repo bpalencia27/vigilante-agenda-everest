@@ -3945,6 +3945,9 @@
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
     uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
+    motorPortado: false,      // v14.2.0 — avisos de seguridad farmacologica. NACE APAGADO:
+                              // el calculo esta verificado contra el Copiloto, pero nadie lo
+                              // ha visto en consulta real. Lo enciende el medico, uno a uno.
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
@@ -9104,6 +9107,7 @@
       #vgl-labs-modal .vgl-labs-renal-det{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
       #vgl-labs-modal .vgl-labs-renal-aviso{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
       #vgl-labs-modal .vgl-labs-renal-vacio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+      ${typeof MTR_CSS !== "undefined" ? MTR_CSS : ""}
       #vgl-labs-modal .vgl-labs-src{
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:10.5px;font-weight:800;letter-spacing:.4px;
@@ -11501,7 +11505,20 @@
         const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
         if (!vivo()) return;
         const sec = modal.querySelector("#vgl-labs-renal-sec");
-        if (sec) sec.innerHTML = _renderEstadioRenalHtml(r);
+        if (sec) {
+          // El bloque farmacologico va DEBAJO del renal y usa su misma TFG: si
+          // no se pudo calcular la funcion renal, `mtrRenderAvisosHtml` lo dice
+          // en vez de callar. Detras de la bandera `S.motorPortado`, apagada.
+          let extra = "";
+          try {
+            extra = mtrRenderAvisosHtml({
+              citaId: pacienteIdLabs,
+              tfgCkdEpi: (r && (r.tfgCkdEpi || r.tfg)) || null,
+              tfgCockcroftGault: (r && r.tfg) || null,
+            });
+          } catch (e) { console.warn("[Vigilante] bloque farmacologico no disponible:", e); }
+          sec.innerHTML = _renderEstadioRenalHtml(r) + extra;
+        }
       } catch (e) { console.warn("[Vigilante] recuadro renal no disponible:", e); }
     })();
 
@@ -13997,6 +14014,7 @@
             : `Vigente hasta el 31/12/${anioMax}.`;
           return `<div class="vgl-fld"><label>Tabla de festivos colombianos<span class="vgl-hint">${hint}</span></label></div>`;
         })()}
+        <div class="vgl-fld"><label>Avisos de seguridad farmacológica <b>(en pruebas)</b><span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Nace apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
         <div class="vgl-fld"><label>Mostrar opciones técnicas<span class="vgl-hint">Muestra los ajustes avanzados (reportes, pruebas y diagnóstico). No hacen falta para el uso diario.</span></label>${sw("c-tecnicas", S.opcionesTecnicas)}</div>
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
@@ -14094,6 +14112,8 @@
     // El interruptor de opciones técnicas repinta la hoja para mostrar u ocultar el bloque.
     const tecBtn = q("#c-tecnicas");
     if (tecBtn) tecBtn.addEventListener("change", () => { S.opcionesTecnicas = tecBtn.checked; saveSettings(); renderSettings(); });
+    const motorBtn = q("#c-motor");
+    if (motorBtn) motorBtn.addEventListener("change", () => { S.motorPortado = motorBtn.checked; saveSettings(); });
     bind("#c-base", "baseAuto", (n) => n.checked);
     bind("#c-fbid", "respaldoId", (n) => n.value);
     const baseBtn = q("#c-basego"); if (baseBtn) baseBtn.addEventListener("click", () => { loadPymBase(); q("#c-basen").textContent = "Buscando..."; });
@@ -16233,8 +16253,31 @@
   //   devuelve  []              -> se leyó y el paciente no tiene medicamentos activos
   //   devuelve  ["...", "..."]  -> nombres tal cual los escribe Everest, sin normalizar
   // El motor normaliza por su cuenta: aquí no se toca el texto.
-  function mtrLeerMedicamentos(_citaId) {
-    return null; // pendiente de la captura real de MedicamentoPorPaciente
+  // Sincrona por contrato: el motor no espera. Devuelve lo que haya en la
+  // cache que llena `mtrRefrescarMedicamentos`, y null si no hay nada — nunca
+  // una lista a medias, que se leeria como "esto es todo lo que toma".
+  let _mtrMedsCache = { pacienteId: null, lista: null, ts: 0 };
+  const MTR_MEDS_TTL_MS = 5 * 60 * 1000;
+
+  function mtrLeerMedicamentos(pacienteId) {
+    if (!pacienteId) return null;
+    const k = String(pacienteId);
+    if (_mtrMedsCache.pacienteId !== k) return null;
+    if ((Date.now() - _mtrMedsCache.ts) > MTR_MEDS_TTL_MS) return null;
+    return _mtrMedsCache.lista;
+  }
+
+  function mtrMedsInvalidar() {
+    _mtrMedsCache = { pacienteId: null, lista: null, ts: 0 };
+  }
+
+  // La unica que toca la red. Rellena la cache que lee la anterior.
+  async function mtrRefrescarMedicamentos(pacienteId) {
+    if (!pacienteId) return null;
+    const datos = await mtrPedirMedicamentos(pacienteId);
+    const lista = mtrMedicamentosDesdeRespuesta(datos, { estados: MTR_ESTADOS_VIGENTES });
+    _mtrMedsCache = { pacienteId: String(pacienteId), lista: lista, ts: Date.now() };
+    return lista;
   }
 
   // CONTRATO:
@@ -16275,6 +16318,466 @@
       legible: avisos.length ? (avisos.length + " aviso(s) de seguridad renal")
         : "Ningún medicamento de la lista requiere ajuste con esta función renal." };
   }
+
+
+
+  // =====================================================================
+  //  LA COSTURA — versión con el endpoint REAL
+  //
+  //  El endpoint ya no se adivina. Está capturado, con cuerpo de respuesta, en
+  //  `captura_ordenamiento_nativo_20260810.json` (rama `7df1a4b`), grabado por
+  //  el propio GRABADOR del proyecto el 10-ago-2026:
+  //
+  //    POST /apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente
+  //    petición:  { pacienteId, fechaInicial, fechaFinal, estado }
+  //               las fechas van en el formato de Date.toDateString():
+  //               "Sun May 04 2025" — NO ISO. Así las manda Everest.
+  //    respuesta: [ { tipo, agrupador, estado, fechaCreacion, fechaVencimiento,
+  //                   usuario:{...}, detalles:[ { codigo, descripcion,
+  //                   cantidadMedicamento, cantidadDias, dosificacion,
+  //                   presentacion, ... } ], urls:[...] } ]
+  //
+  //  El nombre del fármaco viaja como TEXTO LIBRE en `detalles[].descripcion`,
+  //  que es justo lo que `mtrDetectarPrincipios` sabe leer.
+  //
+  //  LO QUE SIGO SIN HACER, Y POR QUÉ:
+  //  No derivo la dosis diaria en mg. Están `dosificacion`, `cantidadDias`,
+  //  `cantidadMedicamento` y `presentacion`, pero la concentración solo aparece
+  //  dentro del texto de `descripcion`/`presentacion`, y sacarla de ahí es
+  //  inferencia. El GAP #8 (tope de furosemida por miligramos) sigue emitiendo
+  //  REVISAR conservador, que es la dirección segura del error.
+  //
+  //  EL PARSEO SE PRUEBA; LA LLAMADA DE RED NO.
+  //  `mtrMedicamentosDesdeRespuesta` es una función pura y tiene 14 pruebas
+  //  contra un fixture SINTÉTICO con la forma real (`tests/fixtures/
+  //  everest_medicamentos.json`, inventado carácter a carácter — cero datos de
+  //  pacientes). La única parte sin probar es el `pageFetchJson`, que es una
+  //  línea y sigue el mismo patrón que las otras once llamadas del script.
+  // =====================================================================
+
+  // Qué formulaciones cuentan como vigentes. El único estado visto en la
+  // captura real es "PENDIENTE"; "ANULADA" aparece en el fixture sintético
+  // porque una formulación anulada NO puede juzgarse como si el paciente la
+  // estuviera tomando. Si aparece un tercer estado en producción, esta lista
+  // es el sitio donde se decide — y hasta que se decida, se excluye.
+  const MTR_ESTADOS_VIGENTES = ["PENDIENTE"];
+
+  const MTR_RUTA_MEDICAMENTOS =
+    "/apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente";
+
+  // Everest manda las fechas como las escribe JavaScript con toDateString().
+  function mtrFechaEverest(f) {
+    if (!mtrEsFecha(f) || isNaN(f.getTime())) return null;
+    const D = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const M = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const p = (n) => String(n).padStart(2, "0");
+    return D[f.getUTCDay()] + " " + M[f.getUTCMonth()] + " " + p(f.getUTCDate()) + " " + f.getUTCFullYear();
+  }
+
+  // Aplana la respuesta a lo que el motor entiende: nombres de fármaco tal cual.
+  //
+  // Devuelve null si la respuesta no tiene la forma esperada — y null NO es lo
+  // mismo que lista vacía. Un array vacío es "el paciente no tiene formulaciones
+  // en la ventana", que es un resultado real.
+  function mtrMedicamentosDesdeRespuesta(datos, opciones) {
+    if (!Array.isArray(datos)) return null;
+    const o = opciones || {};
+    const soloEstados = o.estados || null;   // p.ej. ["PENDIENTE"]; null = todos
+    const fuera = [];
+    for (const form of datos) {
+      if (!form || typeof form !== "object") continue;
+      if (soloEstados && soloEstados.indexOf(String(form.estado || "")) < 0) continue;
+      const det = form.detalles;
+      if (!Array.isArray(det)) continue;
+      for (const d of det) {
+        if (!d || typeof d !== "object") continue;
+        const desc = (d.descripcion === null || d.descripcion === undefined) ? "" : String(d.descripcion).trim();
+        if (!desc) continue;          // sin nombre no hay nada que juzgar
+        fuera.push(desc);
+      }
+    }
+    return fuera;
+  }
+
+  // Igual que la anterior pero conservando el renglón completo, para la
+  // presentación: el médico necesita ver la dosificación y los días, no solo el
+  // nombre que disparó el aviso.
+  function mtrRenglonesMedicamentoDesdeRespuesta(datos, opciones) {
+    if (!Array.isArray(datos)) return null;
+    const o = opciones || {};
+    const soloEstados = o.estados || null;
+    const fuera = [];
+    for (const form of datos) {
+      if (!form || typeof form !== "object") continue;
+      if (soloEstados && soloEstados.indexOf(String(form.estado || "")) < 0) continue;
+      if (!Array.isArray(form.detalles)) continue;
+      for (const d of form.detalles) {
+        if (!d || typeof d !== "object") continue;
+        const desc = (d.descripcion === null || d.descripcion === undefined) ? "" : String(d.descripcion).trim();
+        if (!desc) continue;
+        fuera.push({
+          descripcion: desc,
+          codigo: (d.codigo === null || d.codigo === undefined) ? "" : String(d.codigo),
+          dosificacion: (d.dosificacion === null || d.dosificacion === undefined) ? "" : String(d.dosificacion),
+          cantidadDias: (d.cantidadDias === null || d.cantidadDias === undefined) ? "" : String(d.cantidadDias),
+          presentacion: (d.presentacion === null || d.presentacion === undefined) ? "" : String(d.presentacion),
+          estadoFormulacion: String(form.estado || ""),
+          fechaCreacion: mtrFechaIso(form.fechaCreacion),
+        });
+      }
+    }
+    return fuera;
+  }
+
+  // La llamada de red. Devuelve null ante CUALQUIER duda — nunca una lista
+  // parcial, que se leería como "esto es todo lo que toma".
+  async function mtrPedirMedicamentos(pacienteId, mesesAtras) {
+    if (!pacienteId) return null;
+    try {
+      const hoy = new Date();
+      const desde = new Date(hoy.getTime() - (Math.max(1, mesesAtras || 15) * 30 * 86400000));
+      const cuerpo = {
+        pacienteId: Number(pacienteId),
+        fechaInicial: mtrFechaEverest(desde),
+        fechaFinal: mtrFechaEverest(hoy),
+        estado: "",
+      };
+      const datos = await pageFetchJson(MTR_RUTA_MEDICAMENTOS, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cuerpo),
+      });
+      if (!Array.isArray(datos)) return null;
+      return datos;
+    } catch (e) {
+      console.warn("[Vigilante] mtrPedirMedicamentos falló:", e);
+      return null;
+    }
+  }
+
+
+
+  // =====================================================================
+  //  MOTOR PORTADO — INTERACCIONES FARMACOLÓGICAS
+  //
+  //  Las reglas de dosis renal miran un fármaco a la vez. Estas miran la lista
+  //  ENTERA: hay combinaciones que son seguras fármaco a fármaco y peligrosas
+  //  juntas. La primera de ellas, el Triple Whammy, es de las causas evitables
+  //  más frecuentes de falla renal aguda en consulta externa.
+  //
+  //  Ocho reglas, portadas de `evaluar_interacciones_farmacologicas`:
+  //
+  //    TRIPLE_WHAMMY              IECA/ARA-II + diurético + AINE
+  //    DOBLE_BLOQUEO_SRAA         IECA + ARA-II a la vez
+  //    GEMFIBROZILO_ESTATINA      rabdomiólisis
+  //    HIPERKALEMIA_SINERGICA     ahorrador de K + suplemento de K
+  //    RIESGO_SANGRADO_AINE_DOAC  anticoagulante directo + AINE
+  //    METFORMINA_CONTRASTE       metformina con eGFR<60 y contraste yodado
+  //    BETA_CCB_NODHP             betabloqueador + verapamilo/diltiazem
+  //    SGLT2_SULFONILUREA         hipoglucemia por sinergia
+  //
+  //  UNA DIVERGENCIA DELIBERADA — el orden de `par_farmacos`:
+  //
+  //  El Copiloto construye ese campo con `list(set(...))`, y el orden de un set
+  //  de cadenas en Python NO es determinista entre procesos. Comprobado: cuatro
+  //  corridas del mismo caso, cuatro órdenes distintos.
+  //
+  //  Aquí va ORDENADO. No es capricho: si ese texto llega a una nota firmada, dos
+  //  situaciones clínicas idénticas producirían documentos distintos, y una
+  //  prueba de regresión sobre ese campo parpadearía sin motivo. La suite 43
+  //  compara ese campo como conjunto, y la divergencia está declarada.
+  // =====================================================================
+
+  const MTR_SEV_ORDEN = { CRITICAL: 0, HIGH: 1, INFO: 2 };
+
+  function mtrAlertaInteraccion(pares, tipo, conducta, mensaje, severidad, mecanismo) {
+    return {
+      par_farmacos: pares,
+      tipo_interaccion: tipo,
+      conducta: conducta,
+      mensaje: mensaje,
+      severidad: severidad,
+      mecanismo: mecanismo || "",
+      override_llm: true,
+    };
+  }
+
+  // Une varias listas de fármacos quitando repetidos y ORDENANDO — ver la nota de
+  // la cabecera sobre por qué aquí sí se ordena y en el Copiloto no.
+  function mtrUnirFarmacos() {
+    const vistos = {};
+    const fuera = [];
+    for (let i = 0; i < arguments.length; i++) {
+      const l = arguments[i];
+      if (!Array.isArray(l)) continue;
+      for (const x of l) {
+        const s = String(x);
+        if (vistos[s]) continue;
+        vistos[s] = true;
+        fuera.push(s);
+      }
+    }
+    return fuera.sort();
+  }
+
+  function mtrEvaluarInteracciones(medicamentos, egfr, potasio) {
+    const alertas = [];
+    if (!medicamentos || !medicamentos.length) return alertas;
+
+    const g = mtrDetectarGruposFarmacologicos(medicamentos);
+    const tieneRaas = !!(g.ieca || g.ara2);
+    const tieneDiuretico = !!(g.diuretico_tiazida || g.diuretico_asa);
+    const tieneAine = !!g.aines;
+
+    // 1. Triple Whammy — la arteriola aferente se cierra (AINE), la eferente se
+    //    abre (IECA/ARA-II) y encima el paciente está hipovolémico (diurético).
+    if (tieneRaas && tieneDiuretico && tieneAine) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.ieca, g.ara2, g.diuretico_tiazida, g.diuretico_asa, g.aines),
+        "TRIPLE_WHAMMY", "SUSPENDER",
+        "TRIPLE WHAMMY DETECTADO: Combinación fatal de IECA/ARA-II + Diurético + AINE. Riesgo crítico de Falla Renal Aguda. SUSPENDER AINE inmediatamente.",
+        MTR_SEV_CRITICAL,
+        "Vasoconstricción de arteriola aferente (AINE) + Vasodilatación de eferente (IECA/ARA-II) + Hipovolemia (Diurético)"));
+    }
+
+    // 2. Doble bloqueo del SRAA
+    if (g.ieca && g.ara2) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.ieca, g.ara2),
+        "DOBLE_BLOQUEO_SRAA", "CONTRAINDICADA",
+        "DOBLE BLOQUEO SRAA DETECTADO: Uso simultáneo de IECA + ARA-II. Contraindicado por elevado riesgo de hiperkalemia, hipotensión y deterioro renal.",
+        MTR_SEV_CRITICAL,
+        "Inhibición dual del eje Renina-Angiotensina-Aldosterona"));
+    }
+
+    // 3. Gemfibrozilo + estatina
+    if (g.gemfibrozilo && g.estatina) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.gemfibrozilo, g.estatina),
+        "GEMFIBROZILO_ESTATINA", "CONTRAINDICADA",
+        "INTERACCIÓN GRAVE: Gemfibrozilo + Estatina. Alto riesgo de rabdomiólisis fatal. Reemplazar Gemfibrozilo por Fenofibrato.",
+        MTR_SEV_CRITICAL,
+        "Inhibición de glucuronidación de estatinas por Gemfibrozilo"));
+    }
+
+    // 4. Hiperkalemia sinérgica
+    const tieneAhorradorORaas = tieneRaas || !!g.espironolactona;
+    const tieneSupK = !!g.suplemento_k;
+    const potasioAlto = potasio !== null && potasio !== undefined && potasio >= 5.0;
+
+    if ((tieneAhorradorORaas && tieneSupK) ||
+        (tieneRaas && g.espironolactona && (potasioAlto || egfr < 30))) {
+      const sev = (potasio !== null && potasio !== undefined && potasio >= 5.5)
+        ? MTR_SEV_CRITICAL : MTR_SEV_HIGH;
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.ieca, g.ara2, g.espironolactona, g.suplemento_k),
+        "HIPERKALEMIA_SINERGICA", "EVITAR",
+        "RIESGO DE HIPERKALEMIA SEVERA: Combinación de ahorrador de potasio / IECA / ARA-II con suplementación de Potasio (o K+ elevado/eGFR baja). Desprescribir suplemento y monitorear electrolitos.",
+        sev,
+        "Retención sinérgica de potasio endógeno y exógeno"));
+    }
+
+    // 5. Anticoagulante directo + AINE
+    if (g.doac && g.aines) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.doac, g.aines),
+        "RIESGO_SANGRADO_AINE_DOAC", "EVITAR",
+        "ALTO RIESGO DE SANGRADO: Uso concomitante de Anticoagulante Directo (DOAC) con AINE. Duplica el riesgo de hemorragia digestiva mayor.",
+        MTR_SEV_HIGH,
+        "Inhibición plaquetaria por AINE combinada con anticoagulación directa"));
+    }
+
+    // 6. Metformina + contraste yodado, solo con función renal ya comprometida
+    if (g.metformina && g.contraste_yodado && egfr < 60) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.metformina, g.contraste_yodado),
+        "METFORMINA_CONTRASTE", "SUSPENDER",
+        "PRECAUCIÓN POR CONTRASTE: Metformina en paciente con eGFR < 60 mL/min/1.73m2 programado para contraste yodado. Suspender 48h antes/durante procedimiento.",
+        MTR_SEV_HIGH,
+        "Riesgo de acidosis láctica ante injuria renal aguda por contraste"));
+    }
+
+    // 7. Betabloqueador + calcioantagonista no dihidropiridínico
+    if (g.betabloqueador && g.ccb_no_dhp) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.betabloqueador, g.ccb_no_dhp),
+        "BETA_CCB_NODHP", "EVITAR",
+        "INTERACCIÓN CARDIACA: Betabloqueador + Calcioantagonista No Dihidropiridínico (Verapamilo/Diltiazem). Riesgo de bradicardia severa y bloqueo AV.",
+        MTR_SEV_HIGH,
+        "Efecto inotrópico y dromotrópico negativo aditivo"));
+    }
+
+    // 8. iSGLT2 + sulfonilurea
+    if (g.sglt2 && g.sulfonilurea) {
+      alertas.push(mtrAlertaInteraccion(
+        mtrUnirFarmacos(g.sglt2, g.sulfonilurea),
+        "SGLT2_SULFONILUREA", "REDUCIR",
+        "RIESGO DE HIPOGLUCEMIA: Adición de iSGLT2 a paciente en manejo con Sulfonilurea. Reducir Sulfonilurea al 50% o desprescribir.",
+        MTR_SEV_HIGH,
+        "Sinergia hipoglucemiante por excreción glucosúrica y secreción de insulina"));
+    }
+
+    return alertas;
+  }
+
+  // Todo lo que el médico tiene que ver de este paciente, en un solo sitio y con
+  // el motivo del silencio cuando lo hay. Ordenado por gravedad: lo CRITICAL
+  // primero, porque en consulta nadie lee la tercera línea.
+  function mtrAvisosFarmacologicos(ctx) {
+    const base = mtrAvisosDosisRenal(ctx);
+    if (base.motivo === "SIN_LISTA_DE_MEDICAMENTOS" || base.motivo === "SIN_FUNCION_RENAL") {
+      return { avisos: [], interacciones: [], motivo: base.motivo, legible: base.legible };
+    }
+    const c = ctx || {};
+    const meds = (c.medicamentos !== undefined) ? c.medicamentos : mtrLeerMedicamentos(c.citaId);
+    const inter = mtrEvaluarInteracciones(
+      meds || [], mtrFloat(c.tfgCkdEpi),
+      (c.potasio === undefined ? null : mtrFloat(c.potasio)));
+
+    const todo = base.avisos.concat(inter).slice().sort((a, b) =>
+      (MTR_SEV_ORDEN[a.severidad] === undefined ? 9 : MTR_SEV_ORDEN[a.severidad]) -
+      (MTR_SEV_ORDEN[b.severidad] === undefined ? 9 : MTR_SEV_ORDEN[b.severidad]));
+
+    const n = todo.length;
+    return {
+      avisos: base.avisos,
+      interacciones: inter,
+      todo: todo,
+      motivo: n ? "OK" : (base.motivo === "SIN_MEDICAMENTOS_ACTIVOS" ? base.motivo : "SIN_HALLAZGOS"),
+      legible: n ? (n + " aviso(s) de seguridad farmacológica") : base.legible,
+    };
+  }
+
+
+
+  // =====================================================================
+  //  CAPA DE PRESENTACIÓN — los avisos farmacológicos dentro de Everest
+  //
+  //  Lo único que separaba al motor de que el médico lo viera.
+  //
+  //  DÓNDE: debajo del recuadro de función renal del modal de laboratorios. Ahí
+  //  ya está la TFG y el estadio, que es de donde salen estos avisos: ponerlos en
+  //  otro sitio obligaría al médico a cruzar dos pantallas mentalmente.
+  //
+  //  DETRÁS DE LA BANDERA: `S.motorPortado` nace apagada. Con ella apagada esta
+  //  función devuelve cadena vacía y no se pinta nada.
+  //
+  //  TRES REGLAS DE LA VISTA, y las tres tienen prueba:
+  //
+  //   1. TODO texto que venga de Everest pasa por `escapeHtml`. Los nombres de
+  //      fármaco los escribe el EHR y llegan crudos: sin esto, un nombre con un
+  //      `<script>` dentro se ejecutaría en la historia clínica.
+  //   2. El silencio SIEMPRE lleva motivo. "No pude leer qué toma" y "leí y está
+  //      bien" son clínicamente opuestos y se pintan distinto.
+  //   3. Lo CRITICAL primero. En consulta nadie lee la tercera línea.
+  //
+  //  LO QUE ESTA VISTA NO HACE: no ordena, no cambia una conducta, no escribe en
+  //  la historia. Solo avisa. La decisión sigue siendo del médico.
+  // =====================================================================
+
+  const MTR_ICONO_SEV = { CRITICAL: "⛔", HIGH: "⚠", INFO: "ℹ" };
+
+  // Etiqueta corta y legible para el tipo de interacción. Si aparece uno nuevo en
+  // el Copiloto y aquí no está, se muestra el código crudo — feo pero honesto,
+  // nunca una etiqueta inventada.
+  const MTR_ETIQUETA_INTERACCION = {
+    TRIPLE_WHAMMY: "Triple Whammy",
+    DOBLE_BLOQUEO_SRAA: "Doble bloqueo del SRAA",
+    GEMFIBROZILO_ESTATINA: "Gemfibrozilo + estatina",
+    HIPERKALEMIA_SINERGICA: "Riesgo de hiperkalemia",
+    RIESGO_SANGRADO_AINE_DOAC: "Riesgo de sangrado",
+    METFORMINA_CONTRASTE: "Metformina y contraste",
+    BETA_CCB_NODHP: "Bradicardia por combinación",
+    SGLT2_SULFONILUREA: "Riesgo de hipoglucemia",
+  };
+
+  function mtrEtiquetaAviso(a) {
+    if (a.tipo_interaccion) {
+      return MTR_ETIQUETA_INTERACCION[a.tipo_interaccion] || String(a.tipo_interaccion);
+    }
+    return String(a.medicamento_detectado || a.principio_activo || "");
+  }
+
+  // Pinta un aviso. `escapeHtml` en TODO lo que venga de fuera.
+  function mtrPintarAviso(a) {
+    const sev = String(a.severidad || "INFO");
+    const icono = MTR_ICONO_SEV[sev] || "ℹ";
+    const clase = sev === "CRITICAL" ? "vgl-mtr-crit" : (sev === "HIGH" ? "vgl-mtr-alto" : "vgl-mtr-info");
+    const pares = Array.isArray(a.par_farmacos) && a.par_farmacos.length
+      ? `<div class="vgl-mtr-meds">${a.par_farmacos.map((m) => escapeHtml(String(m))).join(" · ")}</div>`
+      : "";
+    const mecanismo = a.mecanismo
+      ? `<div class="vgl-mtr-mec">${escapeHtml(String(a.mecanismo))}</div>` : "";
+    return `<div class="vgl-mtr-aviso ${clase}">
+        <div class="vgl-mtr-cab">
+          <span class="vgl-mtr-ico">${icono}</span>
+          <span class="vgl-mtr-tit">${escapeHtml(mtrEtiquetaAviso(a))}</span>
+          <span class="vgl-mtr-conducta">${escapeHtml(String(a.conducta || ""))}</span>
+        </div>
+        <div class="vgl-mtr-msg">${escapeHtml(String(a.mensaje || ""))}</div>
+        ${pares}${mecanismo}
+      </div>`;
+  }
+
+  // El bloque entero. Devuelve "" si la bandera está apagada.
+  function mtrRenderAvisosHtml(ctx) {
+    if (!mtrMotorEncendido()) return "";
+    let r;
+    try { r = mtrAvisosFarmacologicos(ctx); }
+    catch (e) { console.warn("[Vigilante] avisos farmacológicos no disponibles:", e); return ""; }
+
+    const todo = (r.todo || []).slice();
+
+    // El silencio se pinta, y se pinta distinto según por qué.
+    if (!todo.length) {
+      if (r.motivo === "SIN_LISTA_DE_MEDICAMENTOS" || r.motivo === "SIN_FUNCION_RENAL") {
+        return `<div class="vgl-mtr-bloque"><div class="vgl-mtr-sinjuicio">💊 <b>Seguridad farmacológica:</b> ${escapeHtml(String(r.legible || ""))}</div></div>`;
+      }
+      return `<div class="vgl-mtr-bloque"><div class="vgl-mtr-limpio">💊 <b>Seguridad farmacológica:</b> ${escapeHtml(String(r.legible || ""))}</div></div>`;
+    }
+
+    const criticos = todo.filter((a) => a.severidad === "CRITICAL").length;
+    const cabecera = criticos
+      ? `${criticos} de ${todo.length} requieren acción inmediata`
+      : `${todo.length} para revisar`;
+
+    return `<div class="vgl-mtr-bloque" role="region" aria-label="Avisos de seguridad farmacológica">
+        <div class="vgl-mtr-tope">💊 <b>Seguridad farmacológica</b> <span class="vgl-mtr-cuenta">${escapeHtml(cabecera)}</span></div>
+        ${todo.map(mtrPintarAviso).join("")}
+        <div class="vgl-mtr-pie">Calculado con la función renal de arriba. No se ordena ni se cambia nada: la decisión es suya.</div>
+      </div>`;
+  }
+
+  // CSS del bloque. Mismas convenciones que el recuadro renal: todo cuelga de
+  // #vgl-labs-modal y toda declaración de color lleva !important, porque el CSS de
+  // Everest pisa lo que no lo lleve (Regla E de la suite 25).
+  const MTR_CSS = `
+        #vgl-labs-modal .vgl-mtr-bloque{
+          background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
+          padding:10px 12px;display:flex;flex-direction:column;gap:7px;margin-top:8px
+        }
+        #vgl-labs-modal .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        #vgl-labs-modal .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-labs-modal .vgl-mtr-aviso{
+          border-radius:var(--r-chip);padding:7px 9px;display:flex;flex-direction:column;gap:3px;
+          box-shadow:inset 0 0 0 1px var(--edge)
+        }
+        #vgl-labs-modal .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
+        #vgl-labs-modal .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
+        #vgl-labs-modal .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
+        #vgl-labs-modal .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
+        #vgl-labs-modal .vgl-mtr-ico{font-size:var(--t-body)}
+        #vgl-labs-modal .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
+        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
+        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
+        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
+        #vgl-labs-modal .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
+        #vgl-labs-modal .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
+        #vgl-labs-modal .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+  `;
 
 
 })();

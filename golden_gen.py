@@ -237,10 +237,51 @@ def vectores_farmaco():
             v.append(("motor_deterministic", "evaluar_seguridad_dosis_renal",
                       [meds, float(tfg), float(tfg) * 1.05, k, None, None, None, None]))
 
-    # detección de grupos e interacciones
+    # detección de grupos
     for meds in LISTAS:
         v.append(("motor_deterministic", "detectar_grupos_farmacologicos", [meds]))
-        v.append(("motor_deterministic", "evaluar_interacciones_farmacologicas", [meds]))
+
+    # interacciones farmacológicas: (medicamentos, egfr, potasio)
+    #
+    # OJO: `par_farmacos` sale de un `list(set(...))` de Python, cuyo orden NO es
+    # determinista entre procesos (hash randomization). Comprobado: cuatro
+    # corridas, cuatro ordenes. Los dorados se generan con PYTHONHASHSEED=0 para
+    # que sean reproducibles, y la suite 43 compara ESE campo como conjunto.
+    LISTAS_INT = LISTAS + [
+        ["LOSARTAN 50 MG", "HIDROCLOROTIAZIDA 25 MG", "IBUPROFENO 400 MG"],
+        # las tres PARCIALES del Triple Whammy: ninguna debe disparar. Sin
+        # ellas, una mutacion que quite una pata de la condicion pasa el
+        # contraste sin que nadie se entere.
+        ["LOSARTAN 50 MG", "IBUPROFENO 400 MG"],
+        ["LOSARTAN 50 MG", "HIDROCLOROTIAZIDA 25 MG"],
+        ["HIDROCLOROTIAZIDA 25 MG", "IBUPROFENO 400 MG"],
+        ["ENALAPRIL 10 MG", "NAPROXENO 500 MG"],
+        ["FUROSEMIDA 40 MG", "IBUPROFENO 400 MG"],
+        # y las parciales del resto de reglas
+        ["ENALAPRIL 10 MG", "CAPTOPRIL 25 MG"],
+        ["LOSARTAN 50 MG", "VALSARTAN 80 MG"],
+        ["FENOFIBRATO 145 MG", "ATORVASTATINA 40 MG"],
+        ["WARFARINA 5 MG", "IBUPROFENO 400 MG"],
+        ["METOPROLOL 50 MG", "AMLODIPINO 5 MG"],
+        ["EMPAGLIFLOZINA 10 MG", "METFORMINA 850 MG"],
+        ["ENALAPRIL 10 MG", "FUROSEMIDA 40 MG", "NAPROXENO 500 MG"],
+        ["ENALAPRIL 10 MG", "LOSARTAN 50 MG"],
+        ["GEMFIBROZILO 600 MG", "ATORVASTATINA 40 MG"],
+        ["LOSARTAN 50 MG", "ESPIRONOLACTONA 25 MG", "CLORURO DE POTASIO"],
+        ["LOSARTAN 50 MG", "ESPIRONOLACTONA 25 MG"],
+        ["RIVAROXABAN 20 MG", "IBUPROFENO 400 MG"],
+        ["METFORMINA 850 MG", "MEDIO DE CONTRASTE YODADO"],
+        ["METOPROLOL 50 MG", "VERAPAMILO 80 MG"],
+        ["EMPAGLIFLOZINA 10 MG", "GLIBENCLAMIDA 5 MG"],
+        ["ENALAPRIL 10 MG", "HIDROCLOROTIAZIDA 25 MG", "IBUPROFENO 400 MG",
+         "ESPIRONOLACTONA 25 MG", "CLORURO DE POTASIO", "RIVAROXABAN 20 MG",
+         "GEMFIBROZILO 600 MG", "ATORVASTATINA 40 MG", "VERAPAMILO 80 MG",
+         "METOPROLOL 50 MG", "EMPAGLIFLOZINA 10 MG", "GLIBENCLAMIDA 5 MG"],
+    ]
+    for meds, tfg, k in itertools.product(LISTAS_INT, [15, 25, 29, 30, 45, 59, 60, 90],
+                                          [None, 4.0, 5.0, 5.4, 5.5, 6.0]):
+        v.append(("motor_deterministic", "evaluar_interacciones_farmacologicas",
+                  [meds, float(tfg), k]))
     return v
 
 

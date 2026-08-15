@@ -68,8 +68,16 @@ const MAPA = {
   _regla_glp1_ra: "mtrReglaGlp1Ra",
   _regla_gabapentinoide: "mtrReglaGabapentinoide",
   _regla_doac: "mtrReglaDoac",
+  evaluar_interacciones_farmacologicas: "mtrEvaluarInteracciones",
   detectar_grupos_farmacologicos: "mtrDetectarGruposFarmacologicos",
 };
+
+// `par_farmacos` sale en el Copiloto de un `list(set(...))`, y el orden de un
+// set de cadenas en Python NO es determinista entre procesos: cuatro corridas
+// del mismo caso dieron cuatro ordenes. El port lo devuelve ORDENADO, y aqui se
+// compara ese campo como CONJUNTO. Es una normalizacion declarada, no un
+// comodin: solo afecta a ese campo y solo en las alertas de interaccion.
+const NORMALIZA_CONJUNTO = { evaluar_interacciones_farmacologicas: "par_farmacos" };
 
 // El orquestador tiene firma distinta en JS a propósito: no acepta
 // `indicaciones` ni `dosis_mg` porque esas dos vías NO están portadas y no se
@@ -102,7 +110,17 @@ for (const v of [['"2026-06-28"', 14], ['"2026-07-11"', 1], ['"2026-07-11"', 2],
   DIVERGENCIAS["sumar_dias_habiles|[" + v[0] + "," + v[1] + "]"] = DIV_FESTIVO_EXTRA_PY;
 }
 
-const norm = (v) => JSON.stringify(v === undefined ? null : v);
+function norm(v, campoConjunto) {
+  if (campoConjunto && Array.isArray(v)) {
+    v = v.map((x) => {
+      if (!x || typeof x !== "object" || !Array.isArray(x[campoConjunto])) return x;
+      const copia = {};
+      for (const k of Object.keys(x)) copia[k] = (k === campoConjunto) ? x[k].slice().sort() : x[k];
+      return copia;
+    });
+  }
+  return JSON.stringify(v === undefined ? null : v);
+}
 
 module.exports = {
   nombre: "Conformidad cruzada con el Copiloto",
@@ -118,13 +136,14 @@ module.exports = {
     "mtrReglaArbIeca", "mtrReglaInsulina", "mtrReglaLmwh", "mtrReglaSuplementoK",
     "mtrReglaSglt2", "mtrReglaDpp4", "mtrReglaGlp1Ra", "mtrReglaGabapentinoide",
     "mtrReglaDoac", "mtrDetectarGruposFarmacologicos", "mtrEvaluarSeguridadDosisRenal",
+    "mtrEvaluarInteracciones",
   ],
 
   pruebas(t, api) {
     // ---- el banco de dorados tiene que existir y no estar vacío ----
     t.caso("hay vectores dorados y ninguno está vacío", () => {
       const archivos = fs.existsSync(GOLD) ? fs.readdirSync(GOLD).filter((x) => x.endsWith(".json")) : [];
-      t.cierto(archivos.length >= 35, "se esperaban al menos 35 archivos de vectores, hay " + archivos.length);
+      t.cierto(archivos.length >= 36, "se esperaban al menos 35 archivos de vectores, hay " + archivos.length);
       for (const a of archivos) {
         const g = JSON.parse(fs.readFileSync(path.join(GOLD, a), "utf8"));
         t.cierto(Array.isArray(g.vectores) && g.vectores.length > 0, a + " no tiene vectores");
@@ -176,7 +195,8 @@ module.exports = {
           }
 
           comparados++;
-          t.igual(norm(obtenido), norm(v.salida),
+          const conj = NORMALIZA_CONJUNTO[g.funcion];
+          t.igual(norm(obtenido, conj), norm(v.salida, conj),
             `${jsName}(${JSON.stringify(v.entrada)}) difiere del Copiloto`);
         }
       });
@@ -216,7 +236,7 @@ module.exports = {
     });
 
     t.caso("el contraste cubrió un volumen que sirve de algo", () => {
-      t.cierto(comparados > 4000, "solo se compararon " + comparados + " vectores; se esperaban más de 4000");
+      t.cierto(comparados > 5000, "solo se compararon " + comparados + " vectores; se esperaban más de 4000");
       t.cierto(comoLanza > 0, "ningún vector ejercitó el caso 'Python lanza -> JS null'");
     });
   },

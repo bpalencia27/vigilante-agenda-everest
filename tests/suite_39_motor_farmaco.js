@@ -19,9 +19,17 @@ module.exports = {
     "mtrEvaluarDiscrepanciaEstadios", "mtrClasificarEstadioTfg",
     "mtrReglaErcG3aA2", "mtrReglaFurosemida", "mtrAlerta", "mtrAlertaSuave",
     "mtrFmt0", "mtrFmt1", "mtrNumPy",
+    "mtrMedicamentosDesdeRespuesta", "mtrRenglonesMedicamentoDesdeRespuesta",
+    "mtrFechaEverest", "mtrMedsInvalidar",
+    "mtrRefrescarMedicamentos", "mtrPedirMedicamentos",
   ],
 
-  pruebas(t, api) {
+  async pruebas(t, api, env, cargar) {
+    const respuestaJson = (cuerpo, status) => async () => ({
+      ok: (status || 200) < 400, status: status || 200,
+      json: async () => cuerpo, text: async () => JSON.stringify(cuerpo),
+    });
+    const FIXTURE_RED = require("./fixtures/everest_medicamentos.json").respuesta;
     // ---------- lo que más importa: el silencio siempre lleva motivo ----------
 
     t.caso("sin lista de medicamentos NO se devuelve 'todo bien', se devuelve el motivo", () => {
@@ -62,12 +70,171 @@ module.exports = {
       t.igual(r.motivo, "SIN_MEDICAMENTOS_ACTIVOS");
     });
 
-    // ---------- la costura sigue desenganchada, y se comprueba ----------
+    // ---------- la costura, contra la forma REAL del endpoint ----------
+    //
+    // El endpoint ya no se adivina: está capturado con cuerpo de respuesta en
+    // captura_ordenamiento_nativo_20260810.json (rama 7df1a4b), grabado por el
+    // GRABADOR del propio proyecto. Estas pruebas corren contra un fixture
+    // SINTÉTICO con esa misma forma — cero datos de pacientes.
 
-    t.caso("la costura hacia Everest devuelve null: no hay endpoint adivinado", () => {
-      t.igual(api.mtrLeerMedicamentos("cita-123"), null,
-        "si esto deja de ser null, alguien enganchó un endpoint: hay que portar el contrato y sus pruebas");
-      t.igual(api.mtrLeerFactoresRCV("cita-123"), null);
+    const FIXTURE = require("./fixtures/everest_medicamentos.json").respuesta;
+
+    t.caso("del cuerpo real de Everest salen los nombres que el motor sabe leer", () => {
+      const l = api.mtrMedicamentosDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
+      t.cierto(Array.isArray(l));
+      t.cierto(l.indexOf("METFORMINA CLORHIDRATO 850 MG TABLETA RECUBIERTA") >= 0);
+      // y el motor los reconoce de verdad, que es el punto
+      t.cierto(api.mtrDetectarPrincipios(l[0]).indexOf("metformina") >= 0);
+    });
+
+    t.caso("una formulación ANULADA no se juzga como si el paciente la tomara", () => {
+      const vigentes = api.mtrMedicamentosDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
+      const todas = api.mtrMedicamentosDesdeRespuesta(FIXTURE, null);
+      t.cierto(todas.length > vigentes.length, "el fixture debe traer al menos una anulada");
+      t.cierto(vigentes.join("|").indexOf("ESPIRONOLACTONA") < 0,
+        "la espironolactona está en una formulación ANULADA y no puede contar");
+      t.cierto(todas.join("|").indexOf("ESPIRONOLACTONA") >= 0);
+    });
+
+    t.caso("los renglones sin nombre se descartan y no se cuelan como fármaco vacío", () => {
+      const l = api.mtrMedicamentosDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
+      t.igual(l.filter((x) => !x || !x.trim()).length, 0);
+      // el fixture trae un renglón con "   " y otro con descripcion null
+      t.igual(l.length, 4, "4 renglones útiles de los 6 vigentes del fixture");
+    });
+
+    t.caso("una respuesta con la forma equivocada devuelve null, no una lista vacía", () => {
+      for (const malo of [null, undefined, {}, "", 0, { detalles: [] }, "[]"]) {
+        t.igual(api.mtrMedicamentosDesdeRespuesta(malo, null), null, JSON.stringify(malo));
+      }
+      t.igual(api.mtrMedicamentosDesdeRespuesta([], null), [],
+        "un array vacío SÍ es una respuesta válida: el paciente no tiene formulaciones");
+    });
+
+    t.caso("la respuesta se aguanta basura dentro sin tumbarse", () => {
+      const roto = [null, { detalles: null }, { detalles: [null, 3, "x"] },
+        { estado: "PENDIENTE", detalles: [{ descripcion: "METFORMINA 850 MG" }] }];
+      let r;
+      t.noLanza(() => { r = api.mtrMedicamentosDesdeRespuesta(roto, null); });
+      t.igual(r, ["METFORMINA 850 MG"]);
+    });
+
+    t.caso("los renglones completos conservan dosificación y días para el médico", () => {
+      const r = api.mtrRenglonesMedicamentoDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
+      const met = r.filter((x) => x.descripcion.indexOf("METFORMINA") >= 0)[0];
+      t.igual(met.dosificacion, "2");
+      t.igual(met.cantidadDias, "30");
+      t.igual(met.estadoFormulacion, "PENDIENTE");
+      t.igual(met.fechaCreacion, "2026-08-10", "la fecha ISO con huso se recorta a la fecha");
+      t.igual(api.mtrRenglonesMedicamentoDesdeRespuesta("no-es-array", null), null);
+    });
+
+    t.caso("las fechas van en el formato que Everest espera, no en ISO", () => {
+      // La captura real muestra "Sun May 04 2025" — es Date.toDateString().
+      t.igual(api.mtrFechaEverest(api.mtrFechaDesdeIso("2025-05-04")), "Sun May 04 2025");
+      t.igual(api.mtrFechaEverest(api.mtrFechaDesdeIso("2026-08-10")), "Mon Aug 10 2026");
+      t.igual(api.mtrFechaEverest(api.mtrFechaDesdeIso("2026-01-01")), "Thu Jan 01 2026");
+      t.igual(api.mtrFechaEverest(null), null);
+      t.igual(api.mtrFechaEverest("2026-08-10"), null, "solo acepta un Date, no texto");
+    });
+
+    t.caso("sin caché fresca, leer medicamentos devuelve null y no una lista vieja", () => {
+      api.mtrMedsInvalidar();
+      t.igual(api.mtrLeerMedicamentos(12345), null);
+      t.igual(api.mtrLeerMedicamentos(null), null);
+    });
+
+    t.caso("el paso de la lista al aviso funciona de punta a punta", () => {
+      // el mismo paciente sintético, con función renal de G4
+      const meds = api.mtrMedicamentosDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
+      const r = api.mtrAvisosDosisRenal({
+        medicamentos: meds, tfgCkdEpi: 25, tfgCockcroftGault: 26,
+      });
+      t.igual(r.motivo, "OK");
+      const principios = r.avisos.map((a) => a.principio_activo);
+      t.cierto(principios.indexOf("metformina") >= 0, "metformina contraindicada con eGFR 25");
+      t.cierto(principios.indexOf("aines") >= 0, "el ibuprofeno con eGFR 25");
+      t.cierto(principios.indexOf("ieca_ara2") >= 0, "el losartán con eGFR 25");
+      t.cierto(principios.indexOf("lmwh") >= 0, "la enoxaparina con CrCl 26");
+      t.cierto(principios.indexOf("espironolactona") < 0,
+        "la espironolactona venía en una formulación ANULADA: no puede aparecer");
+    });
+
+    // ---------- la llamada de red, con fetch simulado ----------
+
+    await t.casoAsync("pega al endpoint real, por POST y con las fechas en el formato de Everest", async () => {
+      const vistas = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url, opt) => { vistas.push({ url: String(url), opt: opt }); return respuestaJson(FIXTURE_RED)(); },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      const lista = await c.api.mtrRefrescarMedicamentos(987654);
+      t.igual(vistas.length, 1, "debía hacer exactamente una petición");
+      t.cierto(vistas[0].url.indexOf("/apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente") >= 0,
+        "ruta equivocada: " + vistas[0].url);
+      t.igual(vistas[0].opt.method, "POST");
+      const cuerpo = JSON.parse(vistas[0].opt.body);
+      t.igual(cuerpo.pacienteId, 987654);
+      t.igual(cuerpo.estado, "");
+      t.cierto(/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4}$/.test(cuerpo.fechaInicial),
+        "fechaInicial no va en el formato de Everest: " + cuerpo.fechaInicial);
+      t.cierto(/^[A-Z][a-z]{2} [A-Z][a-z]{2} \d{2} \d{4}$/.test(cuerpo.fechaFinal), cuerpo.fechaFinal);
+      // y lo que devuelve ya viene filtrado por estado vigente
+      t.igual(lista.length, 4);
+      t.cierto(lista.join("|").indexOf("ESPIRONOLACTONA") < 0, "la anulada no puede llegar");
+    });
+
+    await t.casoAsync("tras refrescar, la lectura síncrona ya tiene la lista del paciente correcto", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => respuestaJson(FIXTURE_RED)(),
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      t.igual(c.api.mtrLeerMedicamentos(111), null, "antes de refrescar no hay nada");
+      await c.api.mtrRefrescarMedicamentos(111);
+      t.igual((c.api.mtrLeerMedicamentos(111) || []).length, 4);
+      t.igual(c.api.mtrLeerMedicamentos(222), null,
+        "la caché es POR PACIENTE: otro paciente jamás puede recibir esta lista");
+    });
+
+    await t.casoAsync("una respuesta que no es un array sube como null, nunca como lista vacía", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => respuestaJson({ error: "algo raro" })(),
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      t.igual(await c.api.mtrPedirMedicamentos(111), null);
+      t.igual(await c.api.mtrRefrescarMedicamentos(111), null,
+        "una lista vacía aquí diría 'no toma nada', que es falso y peligroso");
+    });
+
+    await t.casoAsync("si la red falla, devuelve null y no tumba la consulta", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("red caída"); },
+        gmxhr: (o) => { if (o.onerror) o.onerror("sin red"); },
+      });
+      let r;
+      await t.noLanza(async () => { r = await c.api.mtrPedirMedicamentos(111); });
+      t.igual(r, null);
+    });
+
+    await t.casoAsync("sin pacienteId no se pega al servidor siquiera", async () => {
+      let n = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { n++; return respuestaJson([])(); },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      t.igual(await c.api.mtrPedirMedicamentos(null), null);
+      t.igual(await c.api.mtrPedirMedicamentos(0), null);
+      t.igual(n, 0, "no debía hacer ninguna petición");
+    });
+
+    t.caso("mtrLeerFactoresRCV sigue en null: ese endpoint SÍ está sin capturar", () => {
+      t.igual(api.mtrLeerFactoresRCV("cita-123"), null,
+        "ObtenerDatosPuntajeFramingham aparece en test.har pero SIN cuerpo de respuesta");
     });
 
     t.caso("la bandera nace apagada", () => {

@@ -514,5 +514,91 @@ module.exports = {
       t.cierto(c.api.avisoYaVisto(uid), "sin colisión, labs vencidos se muestra y queda marcado como visto");
     });
 
+    // =====================================================================
+    // v14.2.0 — checkRecordatorioPym estaba en este `cubre` desde siempre, pero ninguna
+    // prueba lo invocaba nunca (lo destapó el nuevo chequeo de cobertura por ejecución
+    // del runner). No es cualquier función: es la RED DE SEGURIDAD D4 del banner de PyM
+    // (T7, v14.0.0) — si createPymBannerUI() lanza, o el médico apaga el banner desde
+    // Ajustes, ESTA es la única razón por la que el recordatorio de PyM no desaparece en
+    // silencio (ver el comentario "RED DE SEGURIDAD", línea ~14524). Mismo patrón "una
+    // vez por paciente por día" que checkAbandonoPES/checkLabsVencidos, arriba.
+    // =====================================================================
+    t.caso("checkRecordatorioPym: interruptor apagado -> no revisa nada, nunca marca el aviso como visto", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "444555666";
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, ["Remisión a Optometría"]]]);
+      mockPacienteAbierto(c, doc);
+      c.api.__S.recordatorioPym = false;
+      t.noLanza(() => c.api.checkRecordatorioPym());
+      t.falso(c.api.avisoYaVisto("pymrem|" + key), "con el interruptor apagado no debe evaluar nada");
+    });
+
+    t.caso("checkRecordatorioPym: sin paciente abierto -> no revisa nada, nunca lanza", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.getElementById = () => null;
+      t.noLanza(() => c.api.checkRecordatorioPym());
+    });
+
+    t.caso("checkRecordatorioPym: paciente al día (sin actividades PyM pendientes) -> no dispara nada", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "444555666";
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, []]]);   // en el índice, pero sin nada pendiente
+      mockPacienteAbierto(c, doc);
+      c.api.checkRecordatorioPym();
+      t.falso(c.api.avisoYaVisto("pymrem|" + key), "sin pendientes no hay nada que avisar");
+    });
+
+    t.caso("checkRecordatorioPym: con pendientes SÍ dispara el aviso, una sola vez por paciente por día", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "444555666";
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, ["Remisión a Optometría", "Remisión a Odontología"]]]);
+      mockPacienteAbierto(c, doc);
+      const uid = "pymrem|" + key;
+
+      c.api.checkRecordatorioPym();
+      t.cierto(c.api.avisoYaVisto(uid), "con pendientes reales, el aviso se muestra y queda marcado como visto");
+
+      // Repetirlo en el mismo día no debe volver a intentarlo — lo único observable desde
+      // aquí es que sigue marcado (sirve para detectar que se rompió la deduplicación).
+      t.noLanza(() => c.api.checkRecordatorioPym());
+      t.cierto(c.api.avisoYaVisto(uid));
+    });
+
+    t.caso("checkRecordatorioPym: si ya hay otro modal grande del mismo paciente en pantalla, se pospone en vez de superponerse", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "444555666";
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, ["Remisión a Optometría"]]]);
+      // Paciente abierto + #vgl-labsv-modal ya en el DOM: mismo choque real que entre
+      // checkAbandonoPES y checkLabsVencidos, arriba.
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return elTexto("");
+        if (id === "vgl-labsv-modal") return {};
+        return null;
+      };
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
+      const uid = "pymrem|" + key;
+
+      c.api.checkRecordatorioPym();
+      t.falso(c.api.avisoYaVisto(uid), "con otro modal ya abierto, el recordatorio de PyM NO se marca como visto todavía");
+
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : null);
+      c.api.checkRecordatorioPym();
+      t.cierto(c.api.avisoYaVisto(uid), "sin colisión, el recordatorio de PyM se muestra y queda marcado como visto");
+    });
+
+    t.caso("checkRecordatorioPym: nunca lanza aunque el estado del índice PyM venga sucio", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, "444555666");
+      for (const pym of [undefined, null, {}, "no-es-un-map"]) {
+        c.api.__state.pym = pym;
+        t.noLanza(() => c.api.checkRecordatorioPym(), JSON.stringify(pym));
+      }
+    });
+
   }
 };
