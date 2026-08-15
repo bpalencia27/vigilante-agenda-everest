@@ -1,38 +1,55 @@
 # Funciones Huérfanas (Sin llamadas en producción)
 
-A continuación, se listan todas las funciones declaradas en `vigilante_agenda.user.js` que no tienen referencias en el código de producción. Solo se incluyen llamadas dentro del código fuente real, ignorando las llamadas de tests (`harness.js`) y las referencias exportadas en `__VGL__`.
+## Método de la Auditoría
 
-| Función | Línea | Qué creo que iba a hacer (Análisis) |
-| :--- | :--- | :--- |
-| `_conductaBuscarYAgregarExamen` | 1241 | Iba a buscar en el DOM de la UI elementos `<li>` que coincidieran de forma exacta con un nombre de laboratorio, y les iba a hacer click para agregarlos. Su diseño intentaba evitar falsos positivos ("casilla vacía antes que clic inventado"). |
-| `vigenciaPorEstadio` | 3010 | Iba a calcular la vigencia en días/meses permitida para un analito específico basándose en el estadio (ej. ERC), verificando precondiciones como el programa o si el paciente padece de diabetes tipo 2. |
-| `analitoTablaDesdeClaveRcv` | 3040 | Iba a servir como un diccionario seguro (mapa de traducción) para convertir las claves nativas del sistema RCV (`CREATININA`, `UROANALISIS`) a las llaves semánticas de la tabla local en el script (`creatinina`, `parcial_orina`), devolviendo `null` si no la encontraba. |
-| `_getRacGuardiaParaTest` | 3090 | Función de _helper_ diseñada exclusivamente para exponer el estado interno de la guarda `_racGuardia` al conjunto de tests (__VGL__), que controla intentos de borrado de la RAC. |
-| `_setRacGuardiaParaTest` | 3091 | Función de _helper_ que iba a permitir a los tests inyectar valores manipulados dentro del estado `_racGuardia` para simular escenarios (por ejemplo en el guardado de laboratorios). |
-| `debounceVgl` | 3545 | Utilidad genérica clásica de `debounce` para retrasar la ejecución de una función; útil para mitigar pulsaciones múltiples o repeticiones de flujos rápidos, limitándolo mediante temporizadores. |
-| `_getUltimoRelevoParaTest` | 4002 | Función de _helper_ diseñada para que el entorno de test (__VGL__) pudiera leer la variable `_ultimoRelevoVisibilidad` usada en el sistema interno de heartbeat. |
-| `_setUltimoRelevoParaTest` | 4003 | Función de _helper_ diseñada para alterar el valor de la variable de estado `_ultimoRelevoVisibilidad` durante la ejecución de simulaciones en los tests. |
-| `panelActivities` | 4109 | Iba a filtrar una lista de etiquetas/actividades, removiendo ramas que no pertenecían a la visión principal del médico general (por ejemplo las de optometría u odontología) al analizar la estructura del panel de pendientes. |
-| `_getFirmaPropiaParaTest` | 5068 | Función de _helper_ de tests para leer el estado del token interno `_firmaPropia`, determinando si se ha firmado que se interactuó con el marco de la página activa. |
-| `_setFirmaPropiaParaTest` | 5069 | Función de _helper_ para inyectar/alterar el valor de `_firmaPropia` desde la suite de pruebas. |
-| `apiDigiturnoFinalizarTicket` | 9952 | Iba a hacer un request por XHR/fetch hacia la API `ApiIntegracionEverestDigiturno` para indicar al sistema en background la conclusión del ticket del paciente (`FinalizarTicket`), codificando el ID de cita en Base64 y usando el ID de usuario activo. |
-| `_signosVitalesInvalidar` | 10021 | Iba a destruir/limpiar la caché interna `_signosVitalesCache` reiniciando su TS y vaciando sus datos. Esto forzaría a que la función que obtiene los signos vitales hiciera otro fetch HTTP si se llamaba. |
-| `_demograficosInvalidar` | 10071 | **[Veredicto: Acierto de J3]** Iba a limpiar la caché interna demográfica del paciente para obligar a un re-fetch. Su definición no tiene absolutamente **ningún** llamador en el código (ni siquiera dentro de los `try...catch` de invalidación). |
-| `calcTargetDateRange` | 10548 | Iba a derivar un objeto de rango de fechas de agendamiento estableciendo un ±3 días hábiles a partir de un offset de meses y días indicado en los parámetros, sirviendo de soporte al calculador de rangos. |
-| `extractAgrupador` | 12451 | Función recursiva que iba a localizar el nodo `agrupador` en respuestas de payload JSON (de Atheneas u otros requests de ordenamiento) lidiando con el hecho de que a veces venía en un array anidado o un string embebido. |
+- **Base de escaneo:** Rama `claude/v14-continuacion` (commit actual, no la base congelada).
+- **Herramienta utilizada:** Script en Node.js que construye un AST del código fuente utilizando la librería `acorn` y `acorn-walk`.
+- **Declaraciones examinadas:** Se analizaron un total de **441** declaraciones de funciones.
+- **Formas cubiertas:**
+  - `function nombre() {}` (383 declaraciones)
+  - `const/let nombre = () => {}` y `const/let nombre = function() {}` (50 declaraciones flecha o expresiones anónimas asignadas)
+  - Declaraciones de propiedades en objetos como `nombre: function() {}` o `nombre: () => {}` (8 declaraciones)
+- **Exclusiones aplicadas:**
+  - Funciones genéricas del ciclo de vida y arrays que son llamadas nativamente por el navegador o librerías: `onload`, `onerror`, `ontimeout`, `constructor`, `subscribe`, `set`, `push`.
+  - Exportaciones específicas usadas exclusivamente para el test harness (`__VGL__`).
+  - Llamadas recursivas (la función invocándose a sí misma no cuenta como llamada de producción si nadie más la invoca).
+
+## Tabla de Resultados
+
+A continuación, se listan todas las funciones declaradas en `vigilante_agenda.user.js` que no tienen referencias en el código de producción.
+
+| Función | Línea | Categoría | Qué creo que iba a hacer (Análisis) |
+| :--- | :--- | :--- | :--- |
+| `_conductaBuscarYAgregarExamen` | 1241 | Deuda muerta | Iba a buscar en el DOM de la UI elementos `<li>` que coincidieran de forma exacta con un nombre de laboratorio, y les iba a hacer click para agregarlos. Su diseño intentaba evitar falsos positivos. |
+| `vigenciaPorEstadio` | 3286 | Deuda muerta | Iba a calcular la vigencia en días/meses permitida para un analito específico basándose en el estadio (ej. ERC), verificando precondiciones como el programa o si el paciente padece de DM2. |
+| `analitoTablaDesdeClaveRcv` | 3316 | Deuda muerta | Iba a servir como un mapa de traducción seguro para convertir las claves nativas del sistema RCV (`CREATININA`) a las llaves semánticas de la tabla local en el script (`creatinina`). |
+| `_getRacGuardiaParaTest` | 3366 | Costura de prueba | Función diseñada exclusivamente para exponer el estado interno de la guarda `_racGuardia` al conjunto de tests (__VGL__). |
+| `_setRacGuardiaParaTest` | 3367 | Costura de prueba | Función diseñada para permitir a los tests inyectar valores manipulados dentro del estado `_racGuardia` y simular escenarios. |
+| `debounceVgl` | 3823 | Deuda muerta | Utilidad genérica clásica de `debounce` para retrasar la ejecución de una función, útil para mitigar repeticiones de flujos rápidos. |
+| `_getUltimoRelevoParaTest` | 4280 | Costura de prueba | Función de helper diseñada para que el entorno de test pudiera leer la variable `_ultimoRelevoVisibilidad`. |
+| `_setUltimoRelevoParaTest` | 4281 | Costura de prueba | Función de helper diseñada para alterar el valor de la variable de estado `_ultimoRelevoVisibilidad` durante simulaciones en los tests. |
+| `panelActivities` | 4387 | A medio enganchar | Iba a filtrar una lista de etiquetas/actividades removiendo ramas no pertinentes. Se mantiene sin llamador aquí porque los comentarios del código indican expresamente que "T5 la reconecta para el propio widget". |
+| `_getFirmaPropiaParaTest` | 5346 | Costura de prueba | Función de helper de tests para leer el estado del token interno `_firmaPropia`. |
+| `_setFirmaPropiaParaTest` | 5347 | Costura de prueba | Función de helper para inyectar o alterar el valor de `_firmaPropia` desde la suite de pruebas. |
+| `apiDigiturnoFinalizarTicket` | 10230 | Deuda muerta | Iba a hacer un request por XHR/fetch hacia la API `ApiIntegracionEverestDigiturno` para indicar la conclusión del ticket del paciente, con capacidad de escritura. |
+| `_signosVitalesInvalidar` | 10299 | Deuda muerta | Iba a destruir/limpiar la caché interna `_signosVitalesCache` reiniciando su TS y vaciando sus datos. |
+| `apiHcValidacionExamenCronicos` | 10315 | Deuda muerta | Iba a hacer una petición a la API de la IPS (GetValidacionExamenCronicos). Esta es una segunda vía abandonada, ya que la tabla oficial ya llega por el interceptor `_instalarOyenteTablaOficial` que intercepta las peticiones que hace Everest nativamente. |
+| `_demograficosInvalidar` | 10459 | Deuda muerta | Iba a limpiar la caché interna demográfica del paciente para obligar a un re-fetch. Su definición no tiene ningún llamador en el código. **(Acierto del analizador J3)**. |
+| `calcTargetDateRange` | 10936 | A medio enganchar | Deriva un objeto de rango de fechas (±3 días hábiles). Aunque está huérfana en este hilo de ejecución principal, comentarios en el código advierten: "No se borra calcTargetDateRange: T5 la usa vía openLabSoloModal". |
+| `extractAgrupador` | 12839 | Deuda muerta | Función recursiva que iba a localizar el nodo `agrupador` en respuestas de payload JSON lidiando con anidación. |
 
 ---
 
 ## Análisis de los 3 invalidadores (Hallazgos J3)
 
-Como se solicitó, a continuación está el análisis explícito de los 3 invalidadores, revelando las siguientes discrepancias:
+Como se solicitó en el requerimiento original, a continuación está el análisis explícito de los 3 invalidadores reportados por el linter J3, revelando discrepancias en el análisis estático de este último:
 
 1. **`_demograficosInvalidar`**
-   - **Veredicto:** ✅ Coincide con J3.
-   - **Observaciones:** Realmente **no tiene** llamador en todo el archivo. Es una función completamente huérfana de producción.
+   - **Veredicto:** ✅ Coincide con J3 (Huérfana real).
+   - **Observaciones:** Realmente **no tiene** llamador en todo el archivo. Su declaración no tiene referencias y es listada en la tabla superior.
 2. **`_ordenesVigentesInvalidar`**
    - **Veredicto:** ⚠️ Discrepancia hallada.
-   - **Observaciones:** J3 indica que no tiene llamador o está sin cubrir, sin embargo mi rastreo AST encuentra que **SÍ** está siendo llamada en la **línea 3784** dentro de un bloque blindado: `try { _ordenesVigentesInvalidar(); } catch (e) {}`. Si J3 asume que está huérfana es probablemente un falso positivo del analizador o del linter anterior al no seguir flujos dentro de `try...catch`.
+   - **Observaciones:** J3 indica que no tiene llamador o está sin cubrir. Sin embargo, en el AST consta que **SÍ** está siendo llamada en la **línea 4062** dentro de un bloque blindado: `try { _ordenesVigentesInvalidar(); } catch (e) {}`. Si J3 asume que está huérfana, es un falso positivo al no analizar o ignorar los bloques `try...catch`.
 3. **`_bannerPymInvalidar`**
    - **Veredicto:** ⚠️ Discrepancia hallada.
-   - **Observaciones:** Al igual que la anterior, mi rastreo AST muestra que **SÍ** está siendo llamada en la **línea 3783**: `try { _bannerPymInvalidar(); } catch (e) {}`. El comentario inmediatamente superior (línea 3780) indica explícitamente: _"_bannerPymInvalidar existía desde T7 y NADIE la llamaba (salía como 'sin cubrir' en el runner)."_ pero actualmente, la llamada sí existe y está enganchada junto a `_ordenesVigentesInvalidar`.
+   - **Observaciones:** Al igual que la anterior, sí existe llamador registrado en el AST en la **línea 4061**: `try { _bannerPymInvalidar(); } catch (e) {}`. Aunque el comentario superior documenta que "NADIE la llamaba (salía como 'sin cubrir')", actualmente la invocación **sí existe** y se encuentra amarrada con `_ordenesVigentesInvalidar`.
