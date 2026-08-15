@@ -141,6 +141,7 @@ Lee las capturas de la raíz y rehace `API_EVEREST.md` y `esquemas/`. Para un ma
 
 ```bash
 node tools/sanear_mapa.js MAPA_EVEREST_<fecha>.json grounding/mapas/MAPA_EVEREST_<fecha>.json
-``` Es un generador y no un
-volcado a mano a propósito: cuando llegue una captura nueva, el corpus se rehace igual, sin
-que nadie tenga que acordarse de qué se podía copiar y qué no.
+```
+
+Son generadores y no volcados a mano a propósito: cuando llegue una captura nueva, el
+corpus se rehace igual, sin que nadie tenga que acordarse de qué se podía copiar y qué no.
