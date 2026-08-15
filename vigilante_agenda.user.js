@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.7
+// @version      14.1.8
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.7";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.8";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2812,6 +2812,192 @@
       const n = Number(limpio);
       return Number.isFinite(n) && n > 0 ? n : null;
   }
+  // =====================================================================
+  //  v14.1.8 — RANGOS Y UNIDADES OFICIALES, LEÍDOS DE EVEREST
+  //
+  //  Everest publica en `GetValidacionExamenCronicos?citaId=` una tabla de validación por
+  //  examen. Campos OBSERVADOS en la captura real del 12-08-2026 (28 filas):
+  //  `codigoExamen`, `sexo`, `edadMin`, `edadMax`, `valorMinimo`, `valorMaximo`,
+  //  `swRequerido` y `unidad`. `codigoExamen` NO es un CUPS: es el nombre interno del
+  //  campo ("HEMOGLOBINA", "HBA1C", "RELACION_ALBUMINURIA_CREATININA").
+  //
+  //  Cuidado con la forma: `sexo` llegó como null en una fila y AUSENTE en las otras 27, y
+  //  `edadMin`/`edadMax` solo venían en HEMOGLOBINA. Los dos casos —null y ausente— tienen
+  //  que dar el mismo resultado, y por eso nada aquí usa `Number()` a secas.
+  //  `mensajeMinimo`/`mensajeMaximo` NO aparecen en la captura: se leen por si la IPS los
+  //  activa, y mientras no estén el mensaje sale vacío. Eso es compatibilidad hacia
+  //  adelante, no un campo observado.
+  //
+  //  Por qué vale más que una tabla escrita a mano:
+  //
+  //  · Trae la UNIDAD declarada. Es el dato que se llevaba pidiendo desde que se vio que
+  //    la RAC puede venir en mg/g o en mg/mmol y que NINGUNA guarda de rango puede
+  //    distinguirlas: 15 mg/mmol y 15 mg/g son igual de plausibles y significan cosas
+  //    opuestas — nefropatía franca una, normalidad la otra.
+  //  · Los rangos son de la propia IPS y varían por SEXO y EDAD, cosa que una tabla fija
+  //    no hace: el límite bajo de hemoglobina de una mujer no es el de un hombre.
+  //  · No se desactualiza sola. Si la IPS cambia un criterio, el script obedece sin que
+  //    nadie tenga que acordarse de editar una constante.
+  //
+  //  LA REGLA QUE GOBIERNA TODO ESTO: ante la duda, la regla NO se aplica. Una fila cuyo
+  //  sexo no se reconozca, o que acote por edad cuando la del paciente no se pudo leer, se
+  //  descarta. Aplicar una regla que quizá no corresponde es peor que no aplicar ninguna:
+  //  convertiría un valor legítimo en una alarma falsa, y a la tercera alarma falsa el
+  //  médico deja de mirarlas.
+  // =====================================================================
+
+  // Número o null. NUNCA Number() a secas sobre datos de la API, y este es el motivo:
+  // `Number(null)`, `Number("")`, `Number(" ")`, `Number([])` y `Number(false)` valen 0, no
+  // NaN. Con `Number()` directo, una fila con `edadMin: null` —que es como Everest dice "no
+  // acoto por edad"— se leía como "acoto desde los 0 años", y entonces la fila se
+  // descartaba en todo paciente cuya edad no se hubiera podido leer. Peor todavía: una
+  // fila con `valorMinimo: null, valorMaximo: null` se convertía en el rango [0, 0], que
+  // declara ALTO cualquier valor positivo; y un resultado vacío ("" del LIS cuando el
+  // laboratorio aún no ha llegado) se volvía el número 0, marcado BAJO en vez de "no hay
+  // número que comparar". Tres alarmas falsas nacidas de la misma coerción.
+  function _numeroEstricto(v) {
+    if (v === null || v === undefined || typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ¿Esta fila de la tabla le corresponde a ESTE paciente? Conservadora a propósito.
+  function _reglaExamenAplicable(fila, opts) {
+    if (!fila || typeof fila !== "object") return false;
+    const { edad, sexo } = (opts || {});
+
+    // SEXO. Una fila sin sexo declarado vale para todos. Con sexo declarado tiene que
+    // coincidir — y si lo que trae no se reconoce como M o F, la fila se descarta: no se
+    // adivina a quién se refiere.
+    const sexoFila = String(fila.sexo == null ? "" : fila.sexo).trim().toUpperCase();
+    if (sexoFila && sexoFila !== "AMBOS" && sexoFila !== "A" && sexoFila !== "T") {
+      const inicial = sexoFila.charAt(0);
+      if (inicial !== "M" && inicial !== "F") return false;             // valor desconocido
+      if (!String(sexo == null ? "" : sexo).trim()) return false;       // sin sexo del paciente
+      if ((inicial === "F") !== _esSexoFemenino(sexo)) return false;
+    }
+
+    // EDAD. Solo se comprueba si la fila acota. Y si acota pero no sabemos la edad del
+    // paciente, la fila NO se aplica: es justo el caso en que podría no corresponderle.
+    const min = _numeroEstricto(fila.edadMin), max = _numeroEstricto(fila.edadMax);
+    if (min !== null || max !== null) {
+      const e = _numeroEstricto(edad);
+      if (e === null) return false;
+      if (min !== null && e < min) return false;
+      if (max !== null && e > max) return false;
+    }
+    return true;
+  }
+
+  // Filas aplicables a un examen concreto. `codigoExamen` se compara como texto exacto
+  // (sin espacios alrededor): un código clínico no se parece "un poco".
+  function _reglasDeExamen(tabla, codigoExamen, opts) {
+    if (!Array.isArray(tabla)) return [];
+    const buscado = String(codigoExamen == null ? "" : codigoExamen).trim();
+    if (!buscado) return [];
+    return tabla.filter((f) =>
+      f && String(f.codigoExamen == null ? "" : f.codigoExamen).trim() === buscado &&
+      _reglaExamenAplicable(f, opts)
+    );
+  }
+
+  // La unidad que Everest declara para ese examen. Si las filas aplicables NO coinciden
+  // entre sí se devuelve null: dos unidades distintas para el mismo paciente son una
+  // contradicción de la fuente, y elegir una sería exactamente adivinar.
+  function _unidadOficialDeExamen(reglas) {
+    if (!Array.isArray(reglas) || !reglas.length) return null;
+    const unidades = new Set();
+    for (const r of reglas) {
+      const u = String(r && r.unidad != null ? r.unidad : "").trim();
+      if (u) unidades.add(u);
+    }
+    return unidades.size === 1 ? [...unidades][0] : null;
+  }
+
+  // Veredicto de plausibilidad contra los rangos oficiales.
+  //
+  // Devuelve SIEMPRE un estado explícito, nunca null a secas, y esa es la diferencia que
+  // más importa: "no hay regla para este examen" y "el valor se sale del rango" son cosas
+  // distintas y el médico necesita distinguirlas. Fundirlas hace desaparecer el analito
+  // como si el laboratorio no hubiera llegado nunca.
+  function _plausibilidadOficial(valorNum, reglas) {
+    const v = _numeroEstricto(valorNum);
+    if (v === null) return { estado: "valor_no_numerico", unidad: null, min: null, max: null, mensaje: "" };
+    if (!Array.isArray(reglas) || !reglas.length) return { estado: "sin_regla", unidad: null, min: null, max: null, mensaje: "" };
+
+    const unidad = _unidadOficialDeExamen(reglas);
+    // Con varias filas aplicables se toma la ENVOLVENTE: el rango más permisivo de todos.
+    // Rechazar por el más estrecho marcaría como imposible un valor que alguna regla de la
+    // propia IPS considera válido.
+    let min = null, max = null, msgMin = "", msgMax = "";
+    for (const r of reglas) {
+      const a = _numeroEstricto(r.valorMinimo), b = _numeroEstricto(r.valorMaximo);
+      if (a !== null && (min === null || a < min)) { min = a; msgMin = String(r.mensajeMinimo || ""); }
+      if (b !== null && (max === null || b > max)) { max = b; msgMax = String(r.mensajeMaximo || ""); }
+    }
+    if (min === null && max === null) return { estado: "sin_regla", unidad, min: null, max: null, mensaje: "" };
+    if (min !== null && v < min) return { estado: "bajo", unidad, min, max, mensaje: msgMin };
+    if (max !== null && v > max) return { estado: "alto", unidad, min, max, mensaje: msgMax };
+    return { estado: "dentro", unidad, min, max, mensaje: "" };
+  }
+
+  // ---------------------------------------------------------------------
+  //  LO QUE LOS RANGOS DE EVEREST SON, Y LO QUE NO SON
+  //
+  //  Capturado en consultorio el 12-08-2026, la tabla real trae, entre otras:
+  //      HEMOGLOBINA   3.0 – 30.0  g/dL
+  //      CREATININA    0.2 – 20.0  mg/dL
+  //      HBA1C         3.0 – 25.0  %
+  //
+  //  Una hemoglobina de 3.2 g/dL cae DENTRO y es una urgencia transfusional. Estos son
+  //  rangos de PLAUSIBILIDAD —"¿este número puede ser un resultado de laboratorio de
+  //  verdad, o es un dedazo / una unidad equivocada?"— y NO rangos de normalidad clínica.
+  //  Por eso la función se llama `_plausibilidadOficial` y su estado bueno se llama
+  //  "dentro" y no "normal": quien pinte "dentro" como "normal" estará tranquilizando al
+  //  médico sobre un valor crítico. No se hace. Nunca.
+  //
+  //  Lo que sí resuelven, y era lo que se buscaba: la UNIDAD declarada por la IPS.
+  //  `RELACION_ALBUMINURIA_CREATININA` viene en mg/g — la pregunta de si la RAC de esta
+  //  IPS es mg/g o mg/mmol queda contestada por la fuente, no por una suposición.
+  // ---------------------------------------------------------------------
+
+  // Puente entre las claves de WHITELIST_13_LABS y los `codigoExamen` de Everest.
+  // Cada línea que no es una coincidencia literal lleva su evidencia al lado; ninguna
+  // sale de "me suena que es lo mismo".
+  const LAB_KEY_A_EXAMEN_EVEREST = {
+      COLESTEROL_TOTAL: "COLESTEROL_TOTAL",
+      COLESTEROL_HDL: "HDL",
+      COLESTEROL_LDL: "LDL",
+      TRIGLICERIDOS: "TRIGLICERIDOS",
+      GLUCOSA: "GLUCOSA_SUERO",          // la propia entrada se llama "GLUCOSA EN SUERO"
+      CREATININA: "CREATININA",
+      HBA1C: "HBA1C",
+      PTH: "PTH",
+      FOSFORO: "FOSFORO_SERICO",         // "FOSFORO EN SUERO" en la lista de nombres
+      ALBUMINA: "ALBUMINA_SERICA",       // "ALBUMINA EN SUERO" en la lista de nombres
+      HEMOGLOBINA: "HEMOGLOBINA",
+      // La casilla que usa el script es `resultadoRelacionAlbuminaCreatinina`, cuya
+      // etiqueta se leyó en consultorio (v12.0.5): "Relación albuminuria/Creatinina en
+      // orina (mg/g)". Everest declara RELACION_ALBUMINURIA_CREATININA en mg/g. Mismo
+      // nombre, misma unidad. NO es MICROALBUMINURIA_CREATINURIA, que también viene en
+      // mg/g pero corresponde a la OTRA casilla —`resultadoMicroAlbuminuriaCreatinuria`—
+      // que ese mismo comentario prohíbe expresamente usar: son dos exámenes distintos.
+      RAC: "RELACION_ALBUMINURIA_CREATININA",
+      // UROANALISIS no se mapea a propósito: no es un examen numérico (es el par SI/NO
+      // más siete componentes de texto) y Everest no lo parametriza. Inventarle una
+      // correspondencia sería juzgar con un rango algo que no tiene número.
+  };
+
+  // Reglas oficiales para una clave del catálogo del script (no para un `codigoExamen`).
+  function _reglasParaLabKey(tabla, labKey, opts) {
+      const codigo = LAB_KEY_A_EXAMEN_EVEREST[labKey];
+      if (!codigo) return [];
+      return _reglasDeExamen(tabla, codigo, opts);
+  }
+
   function _vigenciaDiasParaAnalito(key, resultValCrudo) {
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
@@ -10019,6 +10205,39 @@
   // peso no cambia, y este endpoint se consulta desde un flujo que puede repetirse.
   let _signosVitalesCache = { pacienteId: "", data: null, ts: 0 };
   function _signosVitalesInvalidar() { _signosVitalesCache = { pacienteId: "", data: null, ts: 0 }; }
+  // v14.1.8 — Tabla de validación por examen de la propia IPS (rangos + UNIDAD), por cita.
+  // Cacheada por citaId con el mismo TTL que las demás: dentro de una consulta la
+  // parametrización no cambia, y son datos de configuración, no del paciente.
+  // No hay `_validacionExamenInvalidar`: se escribió por simetría con las otras cachés y
+  // se borró antes de subirla, porque no hay ni un evento que deba invalidarla. Es
+  // parametrización de la IPS, no dato del paciente; la caché va por citaId, así que otro
+  // paciente ya falla por clave, y el TTL cubre un cambio de configuración a media
+  // jornada. Una función que nadie llama es la deuda que este proyecto ya arrastró tres
+  // veces (`_bannerPymInvalidar` vivió versiones enteras sin un solo llamador).
+  let _validacionExamenCache = { citaId: "", data: null, ts: 0 };
+  async function apiHcValidacionExamenCronicos(citaId) {
+    if (!citaId) return null;
+    const key = String(citaId);
+    const ahora = Date.now();
+    if (_validacionExamenCache.citaId === key && _validacionExamenCache.data &&
+        (ahora - _validacionExamenCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _validacionExamenCache.data;
+    }
+    const path = `/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=${encodeURIComponent(key)}`;
+    try {
+      const data = await pageFetchJson(path);
+      // Misma prudencia que en los demás: SOLO un arreglo es una respuesta utilizable.
+      // Vacío incluido — una cita sin parametrización es un resultado real, y significa
+      // "no hay reglas oficiales", que es distinto de "no se pudo consultar".
+      if (!Array.isArray(data)) return null;
+      _validacionExamenCache = { citaId: key, data, ts: Date.now() };
+      return data;
+    } catch (e) {
+      console.warn("[Vigilante] apiHcValidacionExamenCronicos falló:", e);
+      return null;
+    }
+  }
+
   async function apiHcObtenerSignosVitales(pacienteId) {
     if (!pacienteId) return null;
     const key = String(pacienteId);
