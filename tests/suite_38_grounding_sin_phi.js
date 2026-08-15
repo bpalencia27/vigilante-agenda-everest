@@ -83,6 +83,53 @@ module.exports = {
       t.igual(malos, [], "campo de persona sin la marca [OCULTO]");
     });
 
+    t.caso("los mapas no traen nombres de persona — la rendija por la que se colaron tres pacientes", () => {
+      // Los mapas prometían "solo NOMBRES", pero ahí "nombre" era *nombre de campo*. El
+      // capturador guardaba en `botones[].seccion` el título de la sección que contiene
+      // cada botón, y en la historia clínica ese título ES LA CABECERA DEL PACIENTE. En
+      // los cuatro mapas del 14-ago había 45 apariciones de tres pacientes distintos.
+      //
+      // Se detectó auditándolos antes de publicarlos como grounding, o sea a un paso de
+      // copiarlos a modelos de terceros. Los patrones de dígitos no habrían servido: un
+      // nombre no lleva ninguno.
+      //
+      // La regla se IMPORTA de la herramienta que sanea, no se reimplementa. El primer
+      // intento la copió aquí y las dos copias divergieron enseguida: la prueba empezó a
+      // marcar "OBESIDAD CLASE III" como si fuera una persona. Una prueba con falsos
+      // positivos termina relajada, y entonces ya no protege de nada.
+      //
+      // Y se recorren los VALORES del JSON, que es la misma unidad que evalúa la
+      // herramienta. Buscar fragmentos en mayúsculas dentro del texto crudo era el otro
+      // error del primer intento: partía etiquetas largas y las juzgaba a trozos.
+      const { pareceNombreDePersona } = require(path.join(RAIZ, "tools", "sanear_mapa.js"));
+      const sospechosas = [];
+      for (const f of lista.filter((x) => /mapas[/\\].*\.json$/.test(x))) {
+        const d = JSON.parse(fs.readFileSync(f, "utf8"));
+        const rel = path.relative(RAIZ, f);
+        (function rec(o) {
+          if (typeof o === "string") {
+            // No se vuelca la cadena en el mensaje: se dice dónde y de qué tamaño.
+            if (pareceNombreDePersona(o)) sospechosas.push(rel + ": un valor de " + o.split(/\s+/).length + " palabras que la regla de saneo clasifica como persona");
+          } else if (Array.isArray(o)) o.forEach(rec);
+          else if (o && typeof o === "object") Object.keys(o).forEach((k) => rec(o[k]));
+        })(d);
+      }
+      t.igual(sospechosas, [], "sobre los 853 valores reales de los mapas crudos esta regla marcaba EXACTAMENTE los 3 nombres y nada más: si vuelve a marcar algo, míralo antes de tocar la regla");
+    });
+
+    t.caso("cada mapa deja constancia de que se saneó y de cuánto se quitó", () => {
+      // Un mapa sin ese sello es un mapa que llegó por otro camino, sin pasar por
+      // `tools/sanear_mapa.js`. Es la señal de que alguien lo copió a mano.
+      const mapas = lista.filter((x) => /mapas[/\\].*\.json$/.test(x));
+      t.cierto(mapas.length >= 1, "no hay mapas que auditar");
+      const sinSello = [];
+      for (const f of mapas) {
+        const d = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (!d._saneado || !d._saneado.sustituciones) sinSello.push(path.relative(RAIZ, f));
+      }
+      t.igual(sinSello, [], "mapa sin el sello de saneado: entró sin pasar por tools/sanear_mapa.js");
+    });
+
     t.caso("la tabla de exámenes conserva la advertencia de que sus rangos NO son de normalidad", () => {
       // Es el artefacto que más se va a copiar de aquí, porque es el más útil. Si alguien
       // se lleva las 28 filas sin esta advertencia, lo natural es leer "dentro del rango"

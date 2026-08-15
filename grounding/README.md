@@ -87,6 +87,26 @@ La diferencia de 111 vs 160 campos no es un detalle de maquetación: el formular
 según el sexo** (49 campos ginecoobstétricos de más). Un contrato de DOM único para los dos
 genera falsos positivos.
 
+### `mapas/` — inventario de DOM y red por pantalla
+Cuatro mapas del 14-ago (16:11, 16:43, 17:06, 17:12), generados con `MAPA_TOTAL_EVEREST.js`
+pegado en la consola del consultorio. Por cada pantalla: pestañas, campos con su
+id/nombre/tipo/etiqueta, opciones de los desplegables, botones, tablas con sus encabezados, y
+las peticiones de red que dispara. Es el artefacto más completo del corpus.
+
+Y también **el que más cerca estuvo de ser una fuga**: contenían **45 apariciones de tres
+pacientes distintos**, por sus nombres completos.
+
+> El capturador prometía "solo NOMBRES", pero ahí *nombre* significaba **nombre de campo**.
+> Para cada botón subía por el DOM buscando el título de la sección que lo contiene, y en la
+> historia clínica ese título **es la cabecera del paciente**. Ningún patrón de dígitos lo
+> habría cazado: un nombre no lleva ninguno.
+
+Se detectó auditándolos antes de meterlos aquí. Están saneados con `tools/sanear_mapa.js`
+(los nombres son ahora `[PACIENTE]`), el capturador lleva ya la guarda para que no vuelva a
+ocurrir, y el banco lo comprueba en cada corrida — importando la regla de la propia
+herramienta en vez de copiarla, porque la primera versión la duplicó y las dos copias
+divergieron a los diez minutos.
+
 ### Capturas de origen — en la raíz del repositorio
 | Archivo | Qué demuestra |
 |---|---|
@@ -105,9 +125,6 @@ comportamiento del sistema que obligó a escribir una guarda con reloj y con cup
 
 - **La Ruta de Crónicos de un paciente de diabetes y de uno de ERC.** El formulario cambia
   por programa, igual que cambia por sexo, y solo hay capturas del programa general.
-- **Los mapas completos de DOM+red** (`MAPA_EVEREST_*.json`) que se generaron el 14-ago: se
-  compartieron por chat y nunca entraron al repositorio. Si se quieren como grounding, hay
-  que añadirlos y pasarles el mismo saneo.
 - **De dónde sale que un paciente es DM2.** Programa de inscripción, diagnóstico en la
   historia, o preguntárselo al médico: sin esa fuente, una regla que dependa de ello **no se
   aplica** en vez de suponer que sí.
@@ -120,6 +137,10 @@ comportamiento del sistema que obligó a escribir una guarda con reloj y con cup
 node tools/generar_grounding.js
 ```
 
-Lee las capturas de la raíz y rehace `API_EVEREST.md` y `esquemas/`. Es un generador y no un
+Lee las capturas de la raíz y rehace `API_EVEREST.md` y `esquemas/`. Para un mapa nuevo:
+
+```bash
+node tools/sanear_mapa.js MAPA_EVEREST_<fecha>.json grounding/mapas/MAPA_EVEREST_<fecha>.json
+``` Es un generador y no un
 volcado a mano a propósito: cuando llegue una captura nueva, el corpus se rehace igual, sin
 que nadie tenga que acordarse de qué se podía copiar y qué no.
