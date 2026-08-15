@@ -16,11 +16,14 @@
 //  El invariante que más importa aquí: NUNCA un estadio a medias. Si falta
 //  una entrada, el resultado dice cuál falta y `estadio` es null. De este
 //  estadio cuelga qué exámenes se le piden a un paciente real.
-// =====================================================================
 module.exports = {
   nombre: "Estadio renal (R1b, plomería)",
-  cubre: ["_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
-          "_signosVitalesInvalidar", "estadioRenalDelPaciente"],
+  cubre: [
+    "_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
+    "_signosVitalesInvalidar", "estadioRenalDelPaciente",
+    "_creatininaDeLabs", "apiAccesoObtenerDemograficos",
+    "calcularEstadioRenal", "_renderEstadioRenalHtml",
+  ],
 
   async pruebas(t, api, env, cargar) {
 
@@ -306,6 +309,152 @@ module.exports = {
       t.igual(r.tfg, c.api.cockcroftGault(82, 65, 1.4, "F"));
       t.cierto(!!r.estadio, "con las cuatro entradas reales, sí hay estadio");
       t.igual(r.entradas.fechaPeso, "2026-08-12T18:56:06.535-05:00", "la fecha del peso viaja hasta el resultado");
+    });
+
+    // ---------- apiAccesoObtenerDemograficos ----------
+    await t.casoAsync("apiAccesoObtenerDemograficos: extrae edad y sexo si la peticion tiene éxito", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => respuestaJson({ data: { edad: 63, sexo: "F" } })(),
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      const res = await c.api.apiAccesoObtenerDemograficos(111);
+      t.igual(res.edad, 63);
+      t.igual(res.sexo, "F");
+    });
+
+    await t.casoAsync("apiAccesoObtenerDemograficos: cachea por paciente", async () => {
+      let peticiones = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { peticiones++; return respuestaJson({ data: { edad: 60, sexo: "M" } })(); },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+
+      await c.api.apiAccesoObtenerDemograficos(111);
+      await c.api.apiAccesoObtenerDemograficos(111);
+      t.igual(peticiones, 1, "usa la caché en la segunda llamada");
+
+      await c.api.apiAccesoObtenerDemograficos(222);
+      t.igual(peticiones, 2, "paciente distinto dispara nueva petición");
+    });
+
+    await t.casoAsync("apiAccesoObtenerDemograficos: devuelve null si no hay pacienteId", async () => {
+      const c = cargar({ silencioso: true });
+      t.igual(await c.api.apiAccesoObtenerDemograficos(null), null);
+      t.igual(await c.api.apiAccesoObtenerDemograficos(""), null);
+    });
+
+    await t.casoAsync("apiAccesoObtenerDemograficos: maneja respuesta inesperada o error devolviendo null", async () => {
+      const c1 = cargar({
+        silencioso: true,
+        fetch: async () => respuestaJson({ data: null })(), // malformado
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      t.igual(await c1.api.apiAccesoObtenerDemograficos(111), null);
+
+      const c2 = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("Fallo de red"); }, // lanza error
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      t.igual(await c2.api.apiAccesoObtenerDemograficos(111), null);
+    });
+
+    // ---------- calcularEstadioRenal ----------
+    await t.casoAsync("calcularEstadioRenal: orquesta extracciones y llamada a estadioRenalDelPaciente", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          if (String(url).includes("BuscarPacienteDetallado")) {
+            return respuestaJson({ data: { edad: 65, sexo: "M" } })();
+          }
+          if (String(url).includes("ObtenerHistoricoSignosVitales")) {
+            return respuestaJson([{ peso: 70.5, fechaRegistro: "2026-08-16T10:00:00.000Z" }])();
+          }
+          return respuestaJson({})();
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      const labs = [{ codigo: "903825", nombre: "CREATININA", Resultado: "1.2", fechaTomaMuestra: "2026-08-15" }];
+      const res = await c.api.calcularEstadioRenal(111, labs);
+      t.igual(res.entradas.edad, 65);
+      t.igual(res.entradas.peso, 70.5);
+      t.igual(res.entradas.creatinina, 1.2);
+      t.igual(res.entradas.fechaCreatinina, "2026-08-15");
+      t.cierto(res.tfg > 0);
+      t.cierto(res.estadio != null);
+    });
+
+    await t.casoAsync("calcularEstadioRenal: devuelve faltantes si hay errores en la red", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("Fallo de red"); },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      const res = await c.api.calcularEstadioRenal(111, []);
+      t.igual(res.estadio, null);
+      t.cierto(res.faltan.includes("edad"));
+      t.cierto(res.faltan.includes("peso"));
+      t.cierto(res.faltan.includes("creatinina"));
+    });
+
+    // ---------- _renderEstadioRenalHtml ----------
+    t.caso("_renderEstadioRenalHtml: devuelve html vacío si el argumento es nulo", () => {
+      t.igual(api._renderEstadioRenalHtml(null), "");
+    });
+
+    t.caso("_renderEstadioRenalHtml: muestra mensaje de error si creatinina está fuera de rango", () => {
+      const result = api._renderEstadioRenalHtml({ faltan: ["creatinina_fuera_de_rango"], entradas: { creatininaCruda: "88" } });
+      t.cierto(result.includes("fuera del rango posible"));
+      t.cierto(result.includes("88"));
+    });
+
+    t.caso("_renderEstadioRenalHtml: muestra mensaje de error indicando qué falta", () => {
+      const result = api._renderEstadioRenalHtml({ faltan: ["edad", "peso"] });
+      t.cierto(result.includes("falta la edad y el peso"));
+      t.cierto(result.includes("El peso se toma de los signos vitales"));
+    });
+
+    t.caso("_renderEstadioRenalHtml: renderiza el estadio correctamente y fechas formateadas", () => {
+      const result = api._renderEstadioRenalHtml({
+        estadio: "G3a",
+        tfg: "55.5",
+        entradas: {
+          peso: 70,
+          edad: 65,
+          creatinina: 1.2,
+          fechaCreatinina: "2026-08-15T00:00:00Z",
+          fechaPeso: "2026-08-16T10:00:00Z"
+        }
+      });
+      t.cierto(result.includes("G3a"));
+      t.cierto(result.includes("55.5 mL/min"));
+      t.cierto(result.includes("(15/08/2026)")); // fechaCreatinina formateada
+      t.cierto(result.includes("(16/08/2026)")); // fechaPeso formateada
+    });
+
+    // ---------- _creatininaDeLabs ----------
+    t.caso("_creatininaDeLabs: extrae el valor y fecha correcta si hay CREATININA en el arreglo", () => {
+      const labs = [
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "100", fechaTomaMuestra: "2026-08-01" },
+        { codigo: "903825", nombre: "CREATININA", Resultado: "1.2", fechaTomaMuestra: "2026-08-15" }
+      ];
+      const res = api._creatininaDeLabs(labs);
+      t.igual(res.crudo, "1.2");
+      t.igual(res.fechaIso, "2026-08-15");
+    });
+
+    t.caso("_creatininaDeLabs: devuelve null si no encuentra CREATININA", () => {
+      const labs = [
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "100", fechaTomaMuestra: "2026-08-01" }
+      ];
+      t.igual(api._creatininaDeLabs(labs), null);
+    });
+
+    t.caso("_creatininaDeLabs: devuelve null si el input es basura o lanza error interno", () => {
+      t.igual(api._creatininaDeLabs(null), null);
+      t.igual(api._creatininaDeLabs("no-es-un-array"), null);
     });
   },
 };

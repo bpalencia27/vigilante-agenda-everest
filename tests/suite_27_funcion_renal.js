@@ -13,9 +13,26 @@
 // =====================================================================
 module.exports = {
   nombre: "Función renal (R1)",
-  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG"],
+  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG", "_esSexoFemenino"],
 
   pruebas(t, api) {
+    // ---------- _esSexoFemenino ----------
+    t.caso("_esSexoFemenino - reconoce 'F', 'FEMENINO' ignorando mayúsculas y espacios", () => {
+      t.cierto(api._esSexoFemenino("F"));
+      t.cierto(api._esSexoFemenino("f"));
+      t.cierto(api._esSexoFemenino("FEMENINO"));
+      t.cierto(api._esSexoFemenino("femenino"));
+      t.cierto(api._esSexoFemenino("  f  "));
+      t.cierto(api._esSexoFemenino("  FEMENINO  "));
+      t.falso(api._esSexoFemenino("M"));
+      t.falso(api._esSexoFemenino("m"));
+      t.falso(api._esSexoFemenino("MASCULINO"));
+      t.falso(api._esSexoFemenino("masculino"));
+      t.falso(api._esSexoFemenino(null));
+      t.falso(api._esSexoFemenino(undefined));
+      t.falso(api._esSexoFemenino(""));
+    });
+
     t.caso("cockcroftGault - caso 'paciente obesa' que motivó usar peso real (peso 113kg)", () => {
       t.igual(api.cockcroftGault(63, 113, 0.55, "F"), 186.8);
       t.igual(api.cockcroftGault(63, 113, 0.55, "M"), 219.7);
