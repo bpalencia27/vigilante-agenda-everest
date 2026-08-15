@@ -2502,10 +2502,10 @@
 
   function injectLabsIntoCronicos(labsArray, docIdEsperado, opts) {
       if (state.killed) {
-          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], abortadoPorKillSwitch: true };
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], obligatoriasVacias: [], abortadoPorKillSwitch: true };
       }
       if (state.disabledFeatures && state.disabledFeatures.has("autoLabs")) {
-          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], desactivadoRemoto: true };
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], obligatoriasVacias: [], desactivadoRemoto: true };
       }
       let count = 0;
       let pendientes = 0;
@@ -2513,10 +2513,10 @@
       const sinCasilla = [];
       const implausibles = [];
       const yaEscritas = new Set();
-      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [] };
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], obligatoriasVacias: [] };
       if (!_pacienteSigueAbierto(docIdEsperado)) {
           console.warn("[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.");
-          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], abortadoPorPaciente: true };
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], obligatoriasVacias: [], abortadoPorPaciente: true };
       }
       // v12.5.11 — se enciende en cuanto Athenea confirma AL MENOS un componente real
       // (no vacío, no PENDIENTE) del parcial de orina — la misma condición que ya decide
@@ -2854,7 +2854,8 @@
           }, 300);
       }
 
-      return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado, implausibles };
+      const obligatoriasVacias = _casillasObligatoriasVacias(opts && opts.tablaOficial, opts);
+      return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado, implausibles, obligatoriasVacias };
   }
 
   // =====================================================================
@@ -3090,6 +3091,54 @@
       const codigo = LAB_KEY_A_EXAMEN_EVEREST[labKey];
       if (!codigo) return [];
       return _reglasDeExamen(tabla, codigo, opts);
+  }
+
+  // Puente inverso: de `codigoExamen` de Everest a la clave del whitelist de 13 labs.
+  // Solo las claves declaradas en LAB_KEY_A_EXAMEN_EVEREST tienen correspondencia.
+  // Cualquier código no mapeado (CREATINURIA, ACIDO_URICO, CALCIO_SERICO, POTASIO_SERICO, etc.) devuelve null.
+  function _labKeyDesdeCodigoExamen(codigoExamen) {
+      if (!codigoExamen) return null;
+      const c = String(codigoExamen).trim().toUpperCase();
+      for (const [key, cod] of Object.entries(LAB_KEY_A_EXAMEN_EVEREST)) {
+          if (cod === c) return key;
+      }
+      return null;
+  }
+
+  // v14.2.0 — T4: detecta casillas OBLIGATORIAS (swRequerido === true en GetValidacionExamenCronicos)
+  // que existen en el DOM pero están vacías al momento de la consulta.
+  // Reglas estrictas:
+  //  · Solo exámenes con correspondencia en LAB_KEY_A_EXAMEN_EVEREST (los 9 candidatos
+  //    reducidos a los que sí tienen casilla conocida; no mapeados como CREATINURIA/ACIDO_URICO se omiten).
+  //  · Solo cuenta si la casilla EXISTE en el DOM y su valor actual está vacío (trim() === "").
+  //  · Es de SOLO LECTURA: no escribe, no marca, no rellena nada.
+  function _casillasObligatoriasVacias(tablaValidacion, opts) {
+      if (!Array.isArray(tablaValidacion)) return [];
+      const vacias = [];
+      const vistos = new Set();
+      for (const fila of tablaValidacion) {
+          if (!fila || fila.swRequerido !== true) continue;
+          if (!_reglaExamenAplicable(fila, opts)) continue;
+          const codigo = String(fila.codigoExamen == null ? "" : fila.codigoExamen).trim().toUpperCase();
+          if (!codigo || vistos.has(codigo)) continue;
+          vistos.add(codigo);
+          const key = _labKeyDesdeCodigoExamen(codigo);
+          if (!key) continue; // no mapeado en el catálogo -> no se reporta (§2.1 aplicada)
+          const item = WHITELIST_13_LABS.find((w) => w.key === key);
+          if (!item) continue;
+          const el = _findLabField(item.resultId, item.altIds);
+          if (!el) continue; // no existe en el DOM de esta vista -> no se reporta
+          const val = String(el.value == null ? "" : el.value).trim();
+          if (val === "") {
+              vacias.push({
+                  codigoExamen: codigo,
+                  key,
+                  nombre: (item.names && item.names[0]) || key,
+                  resultId: el.id || el.name || item.resultId,
+              });
+          }
+      }
+      return vacias;
   }
 
   function _vigenciaDiasParaAnalito(key, resultValCrudo, opts) {
