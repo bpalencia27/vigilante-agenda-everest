@@ -1,0 +1,101 @@
+{
+ "funcion": "evaluar_interacciones_farmacologicas",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    []
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 850 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 850 MG",
+     "LOSARTAN 50 MG",
+     "ATORVASTATINA 40 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 1000 MG",
+     "ESPIRONOLACTONA 25 MG",
+     "IBUPROFENO 400 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "ENOXAPARINA 40 MG",
+     "RIVAROXABAN 20 MG",
+     "GABAPENTINA 300 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "HIDROCLOROTIAZIDA 25 MG",
+     "ATENOLOL 50 MG",
+     "ALOPURINOL 300 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "GLIBENCLAMIDA 5 MG",
+     "NITROFURANTOINA 100 MG",
+     "DIGOXINA 0.25 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "INSULINA GLARGINA 20 UI",
+     "INSULINA LISPRO",
+     "CLORURO DE POTASIO"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "acetaminofen 500 mg",
+     "omeprazol 20 mg"
+    ]
+   ],
+   "lanza": "TypeError"
+  },
+  {
+   "entrada": [
+    [
+     "EMPAGLIFLOZINA 10 MG",
+     "FUROSEMIDA 40 MG",
+     "COLCHICINA 0.5 MG"
+    ]
+   ],
+   "lanza": "TypeError"
+  }
+ ]
+}

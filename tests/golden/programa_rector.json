@@ -1,0 +1,800 @@
+{
+ "funcion": "programa_rector",
+ "modulo": "motor_vigencias.py",
+ "sha256_origen": "f7612f81cb65fd1ab1e4b1d1e64866186b9c91e2e1e47a51d65166958272e1bd",
+ "bloque": "vigencias",
+ "vectores": [
+  {
+   "entrada": [
+    true,
+    null,
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    null,
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    null,
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    null,
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G1",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "G1",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "G1",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    true,
+    "G1",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G2",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "G2",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "G2",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    true,
+    "G2",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3a",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3a",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3a",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3a",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3b",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3b",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3b",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G3b",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G4",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G4",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G4",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G4",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G5",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G5",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G5",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "G5",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "g1",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "g1",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    "g1",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    true,
+    "g1",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    " G2 ",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    " G2 ",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    true,
+    " G2 ",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    true,
+    " G2 ",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "XX",
+    true,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "XX",
+    true,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "XX",
+    false,
+    true
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    true,
+    "XX",
+    false,
+    false
+   ],
+   "salida": "ERC"
+  },
+  {
+   "entrada": [
+    false,
+    null,
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    null,
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    null,
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    null,
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G1",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G1",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G1",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G1",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G2",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G2",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G2",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G2",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G3a",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G3a",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G3a",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G3a",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G3b",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G3b",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G3b",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G3b",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G4",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G4",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G4",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G4",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "G5",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G5",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "G5",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "G5",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "g1",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "g1",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "g1",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "g1",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    " G2 ",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    " G2 ",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    " G2 ",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    " G2 ",
+    false,
+    false
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    false,
+    "XX",
+    true,
+    true
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "XX",
+    true,
+    false
+   ],
+   "salida": "DM2"
+  },
+  {
+   "entrada": [
+    false,
+    "XX",
+    false,
+    true
+   ],
+   "salida": "HTA"
+  },
+  {
+   "entrada": [
+    false,
+    "XX",
+    false,
+    false
+   ],
+   "salida": null
+  }
+ ]
+}

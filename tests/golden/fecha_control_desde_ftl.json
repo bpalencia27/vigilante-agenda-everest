@@ -1,0 +1,106 @@
+{
+ "funcion": "fecha_control_desde_ftl",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "fechas",
+ "vectores": [
+  {
+   "entrada": [
+    "2026-01-01",
+    false
+   ],
+   "salida": "2026-01-05"
+  },
+  {
+   "entrada": [
+    "2026-01-01",
+    true
+   ],
+   "salida": "2026-01-15"
+  },
+  {
+   "entrada": [
+    "2026-06-28",
+    false
+   ],
+   "salida": "2026-07-02"
+  },
+  {
+   "entrada": [
+    "2026-06-28",
+    true
+   ],
+   "salida": "2026-07-11"
+  },
+  {
+   "entrada": [
+    "2026-07-11",
+    false
+   ],
+   "salida": "2026-07-15"
+  },
+  {
+   "entrada": [
+    "2026-07-11",
+    true
+   ],
+   "salida": "2026-07-25"
+  },
+  {
+   "entrada": [
+    "2026-12-24",
+    false
+   ],
+   "salida": "2026-12-28"
+  },
+  {
+   "entrada": [
+    "2026-12-24",
+    true
+   ],
+   "salida": "2027-01-07"
+  },
+  {
+   "entrada": [
+    "2027-01-01",
+    false
+   ],
+   "salida": "2027-01-05"
+  },
+  {
+   "entrada": [
+    "2027-01-01",
+    true
+   ],
+   "salida": "2027-01-15"
+  },
+  {
+   "entrada": [
+    "2026-08-15",
+    false
+   ],
+   "salida": "2026-08-19"
+  },
+  {
+   "entrada": [
+    "2026-08-15",
+    true
+   ],
+   "salida": "2026-08-28"
+  },
+  {
+   "entrada": [
+    "2026-05-17",
+    false
+   ],
+   "salida": "2026-05-21"
+  },
+  {
+   "entrada": [
+    "2026-05-17",
+    true
+   ],
+   "salida": "2026-05-30"
+  }
+ ]
+}

@@ -15147,4 +15147,1134 @@
   apiObservar(window); // document-start: aprende la llamada de la agenda en cuanto Everest la haga
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 
+
+  // =====================================================================
+  //  MOTOR PORTADO — cálculo puro traído del Copiloto RCV
+  //
+  //  QUÉ ES: el mismo cálculo que hace `motor_deterministic.py` y
+  //  `motor_vigencias.py` en el Copiloto, escrito en JavaScript para que el
+  //  Vigilante pueda hacerlo dentro de Everest, sin red y sin servidor.
+  //
+  //  NO ES una segunda implementación. Es un PORT VERIFICADO: cada función de
+  //  aquí está atada a un archivo de vectores dorados en `tests/golden/`,
+  //  generado ejecutando la función Python REAL. La suite 43 exige que
+  //  reproduzca cada salida. El día que la regla cambie en Python, cambia el
+  //  SHA-256 del dorado y la suite cae hasta que el cambio se porte.
+  //
+  //  REGLAS DEL PORT — no negociables:
+  //   1. Ninguna función de este bloque toca el DOM, la red ni el estado global.
+  //      Recibe valores planos y devuelve valores planos. Por eso se puede
+  //      ejercitar entera sin navegador.
+  //   2. Las fechas viajan como texto ISO "YYYY-MM-DD". Internamente se opera en
+  //      UTC, para que el huso del consultorio no mueva un día una vigencia.
+  //   3. Donde el Python LANZA (p. ej. float("abc")), aquí se devuelve `null`.
+  //      Es una diferencia deliberada y uniforme: una excepción a mitad de
+  //      consulta es peor que una casilla vacía, y este proyecto ya decidió
+  //      "casilla vacía antes que dato inventado". La suite 43 lo comprueba
+  //      explícitamente para cada vector marcado `lanza`.
+  //   4. `mtrRound` reproduce el redondeo de Python (mitad al par), no el de
+  //      JavaScript (mitad arriba). Sin esto, un LDL de 132.25 divergía.
+  // =====================================================================
+
+  // ---------- utilidades internas ----------
+
+  // Redondeo de Python: mitad al PAR sobre el flotante binario.
+  // JS: Math.round(2.5)=3 y Math.round(-2.5)=-2.  Python: round(2.5)=2, round(-2.5)=-2.
+  function mtrRound(x, n) {
+    if (typeof x !== "number" || !isFinite(x)) return null;
+    const f = Math.pow(10, n || 0);
+    const y = x * f;
+    const piso = Math.floor(y);
+    const resto = y - piso;
+    let r;
+    if (Math.abs(resto - 0.5) < 1e-9) {
+      // exactamente a medio camino -> al par
+      r = (piso % 2 === 0) ? piso : piso + 1;
+    } else {
+      r = Math.round(y);
+    }
+    // -0 se normaliza a 0, como en Python
+    const out = r / f;
+    return out === 0 ? 0 : out;
+  }
+
+  // Verdad de Python: 0, "", null y undefined son falsos. NaN también.
+  function mtrEsFalsy(v) {
+    return v === null || v === undefined || v === 0 || v === "" || v === false ||
+      (typeof v === "number" && isNaN(v));
+  }
+
+  // float() de Python: devuelve null donde Python lanzaría ValueError/TypeError.
+  function mtrFloat(v) {
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (typeof v === "boolean") return v ? 1 : 0;
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    if (s === "") return null;
+    if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s)) return null;
+    const n = parseFloat(s);
+    return isFinite(n) ? n : null;
+  }
+
+  // minúsculas sin tildes — equivalente de `_normalizar` del Python.
+  function mtrNormalizarTexto(t) {
+    if (mtrEsFalsy(t)) return "";
+    return String(t).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  }
+
+  // ---------- fechas: aritmética en UTC, texto ISO ----------
+
+  function mtrFechaDesdeIso(iso) {
+    if (typeof iso !== "string") return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return null;
+    const a = +m[1], me = +m[2], d = +m[3];
+    if (me < 1 || me > 12 || d < 1 || d > 31) return null;
+    const f = new Date(Date.UTC(a, me - 1, d));
+    // rechaza fechas que el calendario no tiene (31 de febrero, etc.)
+    if (f.getUTCFullYear() !== a || f.getUTCMonth() !== me - 1 || f.getUTCDate() !== d) return null;
+    return f;
+  }
+
+  // `instanceof Date` NO cruza realms: un Date creado dentro del iframe clon (o
+  // en el contexto de pruebas) no es `instanceof` el Date de esta ventana, y la
+  // comprobacion devolvia null en silencio. Se identifica por marca de tipo.
+  function mtrEsFecha(f) {
+    return Object.prototype.toString.call(f) === "[object Date]";
+  }
+
+  function mtrIsoDesdeFecha(f) {
+    if (!mtrEsFecha(f) || isNaN(f.getTime())) return null;
+    const p = (n, l) => String(n).padStart(l, "0");
+    return p(f.getUTCFullYear(), 4) + "-" + p(f.getUTCMonth() + 1, 2) + "-" + p(f.getUTCDate(), 2);
+  }
+
+  function mtrSumarDias(iso, n) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return null;
+    return mtrIsoDesdeFecha(new Date(f.getTime() + n * 86400000));
+  }
+
+  // `_fecha_iso` del Python: tolerante, nunca lanza. Acepta "YYYY-MM-DD" o un
+  // timestamp completo; cualquier otra cosa devuelve null.
+  function mtrFechaIso(valor) {
+    if (mtrEsFecha(valor)) return mtrIsoDesdeFecha(valor);
+    if (mtrEsFalsy(valor)) return null;
+    const s = String(valor).slice(0, 10);
+    return mtrFechaDesdeIso(s) ? s : null;
+  }
+
+  // ---------- festivos ----------
+  //
+  // OJO — DIVERGENCIA ABIERTA (15-ago-2026). La tabla del Copiloto tiene dos
+  // festivos que la del Vigilante no: 2026-07-13 y 2027-07-12. La suite 43 la
+  // declara y la mide; no se elige un lado sin fuente oficial. Ver
+  // docs/MOTOR_PORTADO.md §divergencias.
+  //
+  // Esta función lee la tabla FESTIVOS que ya vive en el userscript, para que
+  // haya UNA sola tabla y no una tercera.
+  function mtrEsFestivoCO(iso) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return false;
+    try {
+      if (typeof FESTIVOS === "undefined") return false;
+      const anios = new Set([...FESTIVOS].map((x) => x.slice(0, 4)));
+      // "si el año no está en la tabla, devuelve false (sin dato -> no se infiere)"
+      if (!anios.has(iso.slice(0, 4))) return false;
+      return FESTIVOS.has(iso.slice(0, 10));
+    } catch (e) { return false; }
+  }
+
+  // No hábil = domingo O festivo. El sábado SÍ es hábil (regla de la norma).
+  function mtrEsDiaNoHabil(iso) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return false;
+    return f.getUTCDay() === 0 || mtrEsFestivoCO(iso);
+  }
+
+  // Port fiel: mientras sea domingo o festivo, +1 día. Tope de 366.
+  function mtrAjustarFechaHabil(iso) {
+    let d = mtrFechaDesdeIso(iso);
+    if (!d) return null;
+    for (let i = 0; i < 366; i++) {
+      const s = mtrIsoDesdeFecha(d);
+      if (!mtrEsDiaNoHabil(s)) return s;
+      d = new Date(d.getTime() + 86400000);
+    }
+    return mtrIsoDesdeFecha(d);
+  }
+
+  // NUEVA — la decisión del médico del 5-ago-2026, que el Python todavía NO
+  // implementa: la toma de laboratorio que cae en domingo o festivo se ADELANTA
+  // al último día hábil, nunca se retrasa. CERO VENCIDOS manda sobre el
+  // "+1 hasta hábil": empujar la FTL un día la pone DESPUÉS del vencimiento del
+  // primer analito, que es exactamente lo que el motor existe para impedir.
+  // Se aplica SOLO a la fecha tope de laboratorio, no a la cita de control.
+  function mtrRetrocederADiaHabil(iso) {
+    let d = mtrFechaDesdeIso(iso);
+    if (!d) return null;
+    for (let i = 0; i < 366; i++) {
+      const s = mtrIsoDesdeFecha(d);
+      if (!mtrEsDiaNoHabil(s)) return s;
+      d = new Date(d.getTime() - 86400000);
+    }
+    return mtrIsoDesdeFecha(d);
+  }
+
+  function mtrSumarDiasHabiles(iso, dias) {
+    const base = mtrSumarDias(iso, Math.trunc(Number(dias) || 0));
+    if (!base) return null;
+    return mtrAjustarFechaHabil(base);
+  }
+
+  // La cita de control cae L-V, o sábado solo en la quincena anclada al 2026-07-11.
+  const MTR_ANCLA_SABADO_QUINCENAL = "2026-07-11";
+  const MTR_DIAS_MIN_CONTROL = 4;
+  const MTR_DIAS_MAX_CONTROL = 14;
+
+  function mtrDiaValidoParaControl(iso) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return false;
+    if (mtrEsFestivoCO(iso)) return false;
+    const dia = (f.getUTCDay() + 6) % 7; // 0=lunes … 6=domingo, como Python
+    if (dia === 6) return false;
+    if (dia === 5) {
+      const ancla = mtrFechaDesdeIso(MTR_ANCLA_SABADO_QUINCENAL);
+      const dif = Math.round((f.getTime() - ancla.getTime()) / 86400000);
+      return ((dif % 14) + 14) % 14 === 0;
+    }
+    return true;
+  }
+
+  // Control entre 4 y 14 días después de la toma. `preferirTarde` recorre la
+  // ventana al revés (Modo Estable de S3: "vigencia máxima, cita lo más tarde").
+  function mtrFechaControlDesdeFtl(isoFtl, preferirTarde) {
+    if (!mtrFechaDesdeIso(isoFtl)) return null;
+    const rango = [];
+    for (let n = MTR_DIAS_MIN_CONTROL; n <= MTR_DIAS_MAX_CONTROL; n++) rango.push(n);
+    if (preferirTarde) rango.reverse();
+    for (const n of rango) {
+      const cand = mtrSumarDias(isoFtl, n);
+      if (mtrDiaValidoParaControl(cand)) return cand;
+    }
+    return null;
+  }
+
+  // ---------- programa rector y vigencias ----------
+
+  function mtrProgramaRector(tieneErc, estadio, tieneDm2, tieneHta) {
+    const e = String(estadio == null ? "" : estadio).trim().toUpperCase();
+    const ercRectora = !!tieneErc && e !== "G1" && e !== "G2";
+    if (ercRectora) return "ERC";
+    if (tieneDm2) return "DM2";
+    if (tieneHta) return "HTA";
+    if (tieneErc) return "ERC";
+    return null;
+  }
+
+  const MTR_BLOQ = "BLOQ";
+  const MTR_ESTADIOS_ERC = ["G1", "G2", "G3a", "G3b", "G4"];
+
+  // Transcripción literal de SYS_MOTOR_RCV, columnas G1/G2/G3a/G3b/G4.
+  const MTR_ERC = {
+    creatinina:       [180, 180, [90, 121], [90, 121], [60, 93]],
+    glicemia:         [180, 180, 180, 180, 60],
+    parcial_orina:    [180, 180, 180, 180, 120],
+    hemoglobina:      [365, 365, 365, 365, 180],
+    pth:              [MTR_BLOQ, MTR_BLOQ, 365, 365, 180],
+    albumina:         [MTR_BLOQ, MTR_BLOQ, MTR_BLOQ, 365, 365],
+    fosforo:          [MTR_BLOQ, MTR_BLOQ, MTR_BLOQ, 365, 365],
+    colesterol_total: [180, 180, 180, 180, 120],
+    trigliceridos:    [180, 180, 180, 180, 120],
+    ldl:              [180, 180, 180, 180, 180],
+    hdl:              [180, 180, 180, 180, 180],
+    rac:              [180, 180, 180, 180, 180],
+    hba1c:            [MTR_BLOQ, MTR_BLOQ, 180, 180, 120],
+  };
+  const MTR_ERC_SOLO_DM2 = ["hba1c"];
+
+  const MTR_DM2 = {
+    hba1c: 180, glicemia: 180, creatinina: 180, rac: 180, parcial_orina: 180,
+    colesterol_total: 180, ldl: 180, hdl: 180, trigliceridos: 180, ecg: 365,
+  };
+  const MTR_DM2_SOLO_EDAD_45 = ["ecg"];
+
+  const MTR_HTA = {
+    glicemia: 180, creatinina: 180, rac: 180, parcial_orina: 180,
+    colesterol_total: 180, ldl: 180, hdl: 180, trigliceridos: 180,
+    ecg: 365, ecocardiograma: 365, acido_urico: MTR_BLOQ,
+  };
+
+  // D-4 (decisión del médico, 4-ago-2026): G5 hereda la columna G4 mientras el
+  // protocolo no tabule una propia. Sin esto el paciente MÁS grave recibía las
+  // vigencias MÁS largas.
+  const MTR_MAPA_ESTADIO_ERC = {
+    G1: "G1", G2: "G2", G3A: "G3a", G3B: "G3b", G4: "G4", G5: "G4",
+  };
+
+  function mtrIdxEstadio(estadio) {
+    if (mtrEsFalsy(estadio)) return null;
+    const canon = MTR_MAPA_ESTADIO_ERC[String(estadio).trim().toUpperCase()];
+    if (!canon) return null;
+    return MTR_ESTADIOS_ERC.indexOf(canon);
+  }
+
+  // La RAC se repite a la MITAD de su vigencia cuando hay albuminuria (>=30 mg/g).
+  // Decisión clínica del médico del 3-ago-2026, y solo sobre la propia RAC.
+  const MTR_RAC_QUE_ACORTA_VIGENCIA = 30.0;
+
+  function mtrAcortarRacSiAlbuminuria(analito, vigencia, rac) {
+    if (analito !== "rac" || rac === null || rac === undefined) return vigencia;
+    const r = mtrFloat(rac);
+    if (r === null) return vigencia;
+    if (r < MTR_RAC_QUE_ACORTA_VIGENCIA) return vigencia;
+    if (Array.isArray(vigencia)) {
+      return [Math.max(1, Math.floor(vigencia[0] / 2)), Math.max(1, Math.floor(vigencia[1] / 2))];
+    }
+    if (typeof vigencia === "number") return Math.max(1, Math.floor(vigencia / 2));
+    return vigencia; // BLOQ o null: no hay nada que acortar
+  }
+
+  // Retorno: número (días) | [min,max] | "BLOQ" | null (no aplica).
+  function mtrVigenciaDias(programa, analito, estadio, esDm2, edad, rac) {
+    const prog = String(programa == null ? "" : programa).trim().toUpperCase();
+    const ana = String(analito == null ? "" : analito).trim().toLowerCase();
+
+    if (prog === "ERC") {
+      const fila = Object.prototype.hasOwnProperty.call(MTR_ERC, ana) ? MTR_ERC[ana] : null;
+      if (fila === null) return null;
+      const idx = mtrIdxEstadio(estadio || "");
+      if (idx === null || idx < 0) return null;
+      if (MTR_ERC_SOLO_DM2.indexOf(ana) >= 0 && !esDm2) return MTR_BLOQ;
+      return mtrAcortarRacSiAlbuminuria(ana, fila[idx], rac);
+    }
+    if (prog === "DM2") {
+      if (!Object.prototype.hasOwnProperty.call(MTR_DM2, ana)) return null;
+      if (MTR_DM2_SOLO_EDAD_45.indexOf(ana) >= 0) {
+        const e = (edad === null || edad === undefined) ? null : mtrFloat(edad);
+        if (e === null || e < 45) return null;
+      }
+      return mtrAcortarRacSiAlbuminuria(ana, MTR_DM2[ana], rac);
+    }
+    if (prog === "HTA") {
+      const v = Object.prototype.hasOwnProperty.call(MTR_HTA, ana) ? MTR_HTA[ana] : null;
+      return mtrAcortarRacSiAlbuminuria(ana, v, rac);
+    }
+    return null;
+  }
+
+  // ---------- Agujero Negro Renal: ventana de recontrol ----------
+
+  const MTR_ESTADIOS_ANR = ["G3a", "G3b", "G4", "G5"];
+  const MTR_MAPA_ESTADIO_ANR = { G1: "G1", G2: "G2", G3A: "G3a", G3B: "G3b", G4: "G4", G5: "G5" };
+
+  function mtrNormEstadio(estadio) {
+    if (mtrEsFalsy(estadio)) return null;
+    const c = MTR_MAPA_ESTADIO_ANR[String(estadio).trim().toUpperCase()];
+    return c === undefined ? null : c;
+  }
+
+  function mtrVentanaAnrDias(estadio, categoriaRiesgo, vigilanciaEstrecha) {
+    const est = mtrNormEstadio(estadio || "");
+    if (MTR_ESTADIOS_ANR.indexOf(est) < 0) return null;
+    if (vigilanciaEstrecha) return 30;
+    const cat = String(categoriaRiesgo == null ? "" : categoriaRiesgo).trim().toLowerCase().replace(/_/g, " ");
+    if (cat.indexOf("muy alto") >= 0) return 45;
+    if (cat === "alto" || (cat.indexOf("alto") >= 0 && cat.indexOf("muy") < 0)) return 60;
+    if (cat.indexOf("moderado") >= 0 || cat.indexOf("bajo") >= 0) return 90;
+    return null; // categoría desconocida: no se infiere
+  }
+
+  // ---------- lípidos ----------
+
+  // cNoHDL = CT - HDL. null si falta algún insumo (no infiere).
+  function mtrCnoHDL(ct, hdl) {
+    if (mtrEsFalsy(ct) || mtrEsFalsy(hdl)) return null;
+    const a = mtrFloat(ct), b = mtrFloat(hdl);
+    if (a === null || b === null) return null;   // Python lanzaría; aquí, casilla vacía
+    return mtrRound(a - b, 1);
+  }
+
+  // Reducción porcentual de LDL respecto al basal. null si falta un insumo.
+  function mtrReduccionLdlPct(ldlBasal, ldlActual) {
+    if (mtrEsFalsy(ldlBasal) || ldlActual === null || ldlActual === undefined) return null;
+    const b = mtrFloat(ldlBasal), a = mtrFloat(ldlActual);
+    if (b === null || a === null) return null;
+    if (b <= 0) return null;
+    return mtrRound((b - a) / b * 100.0, 1);
+  }
+
+  // Mapea la etiqueta de riesgo a una categoría canónica. null si no reconoce.
+  // El orden importa: 'muy alto' contiene 'alto'.
+  function mtrNormalizarRiesgoCv(riesgo) {
+    const n = mtrNormalizarTexto(riesgo).replace(/_/g, " ").trim();
+    if (!n) return null;
+    if (n.indexOf("muy alto") >= 0 || n.indexOf("muyalto") >= 0 || n.indexOf("very high") >= 0) return "muy alto";
+    if (n.indexOf("alto") >= 0 || n.indexOf("high") >= 0) return "alto";
+    if (n.indexOf("moderado") >= 0 || n.indexOf("intermedio") >= 0 || n.indexOf("moderate") >= 0) return "moderado";
+    if (n.indexOf("bajo") >= 0 || n.indexOf("low") >= 0) return "bajo";
+    return null;
+  }
+
+  // =====================================================================
+  //  MOTOR PORTADO — SEGURIDAD DE DOSIS RENAL
+  //
+  //  Port verificado de las reglas de `motor_deterministic.py` que deciden si un
+  //  fármaco que el paciente ya toma es seguro con su función renal actual.
+  //
+  //  QUÉ RESUELVE: un paciente con eGFR de 25 tomando metformina está en riesgo
+  //  de acidosis láctica, y hoy nadie se lo dice al médico dentro de Everest.
+  //  Estas reglas son el aviso.
+  //
+  //  LO QUE ESTE BLOQUE NO HACE, Y ES DELIBERADO:
+  //   · No lee la lista de medicamentos. La costura `_leerMedicamentos()` está
+  //     definida y devuelve null hasta que exista la captura real del endpoint
+  //     `MedicamentoPorPaciente` (guion `DIAGNOSTICO_MEDICAMENTOS.js`, sin correr
+  //     todavía). Adivinar los nombres de campo es lo que este proyecto ya pagó
+  //     caro en v12.3.30, con cuatro nombres supuestos y ninguno existente.
+  //   · No cambia ninguna conducta ni ordena nada. Solo avisa.
+  //   · No decide política clínica: cada umbral viene del Copiloto, y el
+  //     contraste de la suite 43 exige que siga viniendo de ahí.
+  //
+  //  Los mensajes están copiados carácter a carácter del Python, tildes incluidas
+  //  (y su ausencia donde el Python no las lleva). No se "arreglan": si divergen,
+  //  la suite 43 cae, y ese es justo el punto.
+  // =====================================================================
+
+  const MTR_FORMULA_CG = "Cockcroft-Gault (CrCl)";
+  const MTR_FORMULA_CKDEPI = "CKD-EPI 2021 (eGFR)";
+  const MTR_SEV_CRITICAL = "CRITICAL";
+  const MTR_SEV_HIGH = "HIGH";
+  const MTR_SEV_INFO = "INFO";
+  const MTR_FUENTE = "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>";
+
+  // El orden de las claves importa: la suite 43 compara el objeto serializado
+  // contra el `model_dump()` del pydantic del Copiloto.
+  function mtrAlerta(principio, med, conducta, mensaje, formula, valor, severidad) {
+    return {
+      principio_activo: principio,
+      medicamento_detectado: med,
+      conducta: conducta,
+      mensaje: mensaje,
+      formula_tfg: formula,
+      valor_tfg: valor,
+      severidad: severidad,
+      fuente: MTR_FUENTE,
+      override_llm: true,
+    };
+  }
+
+  // f"{x:.1f}" de Python.
+  function mtrFmt1(x) {
+    const n = mtrFloat(x);
+    return n === null ? "" : n.toFixed(1);
+  }
+
+  // Sinónimos: principio activo canónico -> subcadenas que lo identifican en el
+  // texto libre del EHR. Transcripción literal de `_SINONIMOS`.
+  const MTR_SINONIMOS = {
+    metformina: ["metformina"],
+    rosuvastatina: ["rosuvastatina", "simvastatina"],
+    estatina: ["atorvastatina", "rosuvastatina", "simvastatina", "lovastatina", "pravastatina", "pitavastatina"],
+    sglt2: ["gliflozina", "empagliflozina", "dapagliflozina", "canagliflozina", "ertugliflozina"],
+    espironolactona: ["espironolactona", "eplerenona"],
+    fenofibrato: ["fenofibrato"],
+    gabapentinoide: ["gabapentina", "pregabalina"],
+    ieca: ["enalapril", "captopril", "ramipril", "lisinopril", "perindopril"],
+    ara2: ["losartan", "valsartan", "candesartan", "irbesartan", "olmesartan", "telmisartan"],
+    ieca_ara2: ["telmisartan", "losartan", "enalapril", "captopril", "valsartan", "candesartan",
+      "ramipril", "lisinopril", "perindopril", "irbesartan", "olmesartan"],
+    betabloqueador_hidrofilico: ["atenolol", "nadolol"],
+    doac: ["rivaroxaban", "apixaban", "dabigatran", "edoxaban"],
+    tiazida: ["hidroclorotiazida", "clortalidona", "indapamida"],
+    diuretico_tiazida: ["hidroclorotiazida", "clortalidona", "indapamida"],
+    dpp4: ["sitagliptina", "vildagliptina", "saxagliptina", "linagliptina", "gliptina"],
+    sulfonilurea: ["glibenclamida", "glimepirida", "gliclazida"],
+    alopurinol: ["alopurinol"],
+    colchicina: ["colchicina"],
+    digoxina: ["digoxina"],
+    aines: ["ibuprofeno", "naproxeno", "diclofenaco", "meloxicam", "piroxicam", "celecoxib",
+      "etoricoxib", "ketorolaco", "nimesulida", "indometacina"],
+    nitrofurantoina: ["nitrofurantoina"],
+    insulina: ["insulina", "glargina", "detemir", "degludec", "lispro", "aspart", "nph"],
+    lmwh: ["enoxaparina", "dalteparina", "clexane"],
+    glp1_ra: ["exenatida", "liraglutida", "semaglutida", "dulaglutida"],
+    suplemento_k: ["cloruro de potasio", "kcl", "potasio oral", "potasio"],
+    contraste_yodado: ["contraste", "medio de contraste", "tomografia contrastada"],
+    gemfibrozilo: ["gemfibrozilo"],
+    ccb_no_dhp: ["verapamilo", "diltiazem"],
+    betabloqueador: ["atenolol", "metoprolol", "carvedilol", "bisoprolol", "nebivolol", "propranolol", "nadolol"],
+    diuretico_asa: ["furosemida", "torasemida", "bumetanida"],
+    antiagregante: ["aspirina", "acido acetilsalicilico", "clopidogrel", "prasugrel", "ticagrelor"],
+  };
+
+  function mtrPrincipioEnTexto(principio, textoNorm) {
+    const agujas = MTR_SINONIMOS[principio] || [principio];
+    for (const a of agujas) if (textoNorm.indexOf(a) >= 0) return true;
+    return textoNorm.indexOf(principio) >= 0;
+  }
+
+  // ---------------------------------------------------------------------
+  //  Las reglas. Cada una: (med, tfg, potasio) -> alerta | null
+  // ---------------------------------------------------------------------
+
+  function mtrReglaMetformina(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("metformina", med, "CONTRAINDICADA",
+        "Metformina CONTRAINDICADA con eGFR < 30 mL/min/1.73m2. Suspender y orientar a alternativa segura.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 45) {
+      return mtrAlerta("metformina", med, "CAP_DOSIS",
+        "Metformina: dosis maxima 1000 mg/dia con eGFR 30-44 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaRosuvastatina(med, egfr, potasio) {
+    const norm = mtrNormalizarTexto(med);
+    if (norm.indexOf("simvastatina") >= 0 && egfr < 30) {
+      return mtrAlerta("rosuvastatina", med, "CAP_DOSIS",
+        "Simvastatina: dosis máxima 10 mg/día con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    if (egfr < 30) {
+      return mtrAlerta("rosuvastatina", med, "CAP_DOSIS",
+        "Rosuvastatina: dosis maxima 10 mg/dia con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaEspironolactona(med, egfr, potasio) {
+    if (potasio !== null && potasio !== undefined && potasio >= 5.0) {
+      return mtrAlerta("espironolactona", med, "CONTRAINDICADA",
+        "Espironolactona: CONTRAINDICADA con potasio sérico " + mtrFmt1(potasio) + " mEq/L (>= 5.0 mEq/L).",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 30) {
+      return mtrAlerta("espironolactona", med, "EVITAR",
+        "Espironolactona: evitar con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  function mtrReglaFenofibrato(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("fenofibrato", med, "EVITAR",
+        "Fenofibrato: evitar con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 60) {
+      return mtrAlerta("fenofibrato", med, "REDUCIR",
+        "Fenofibrato: reducir dosis con eGFR 30-59 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaBetabloqueadorHidrofilico(med, egfr, potasio) {
+    if (egfr < 15) {
+      return mtrAlerta("betabloqueador_hidrofilico", med, "CAP_DOSIS",
+        "Atenolol/Nadolol: máximo 25 mg/día o 50 mg interdiarios con eGFR < 15 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    if (egfr < 35) {
+      return mtrAlerta("betabloqueador_hidrofilico", med, "CAP_DOSIS",
+        "Atenolol/Nadolol: máximo 50 mg/día con eGFR < 35 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaTiazida(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("tiazida", med, "INEFICAZ",
+        "Tiazidas (Hidroclorotiazida/Clortalidona): pierden eficacia con eGFR < 30. Sugerir cambio a diurético de asa (Furosemida).",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaSulfonilurea(med, egfr, potasio) {
+    if (egfr === null || egfr === undefined || egfr <= 0.0) {
+      return mtrAlerta("sulfonilurea", med, "FALTAN_DATOS_RENALES",
+        "Imposible calcular seguridad renal para " + med + " por TFG ausente o inválida.",
+        MTR_FORMULA_CKDEPI, (egfr === null || egfr === undefined) ? 0.0 : egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 60) {
+      return mtrAlerta("sulfonilurea", med, "EVITAR",
+        "Sulfonilureas (Glibenclamida/Glimepirida): EVITAR con eGFR < 60 por alto riesgo de hipoglucemia prolongada.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  function mtrReglaAlopurinol(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("alopurinol", med, "CAP_DOSIS",
+        "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaColchicina(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("colchicina", med, "REDUCIR",
+        "Colchicina: reducir dosis 50% o evitar profilaxis con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaDigoxina(med, egfr, potasio) {
+    if (egfr < 50) {
+      return mtrAlerta("digoxina", med, "REDUCIR",
+        "Digoxina: reducir dosis 50% y monitorizar niveles séricos con eGFR < 50 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaAines(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("aines", med, "CONTRAINDICADA",
+        "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  function mtrReglaNitrofurantoina(med, egfr, potasio) {
+    if (egfr < 30) {
+      return mtrAlerta("nitrofurantoina", med, "CONTRAINDICADA",
+        "Nitrofurantoína: Contraindicada con eGFR < 30 por riesgo de toxicidad e ineficacia.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  function mtrReglaArbIeca(med, egfr, potasio) {
+    if (potasio !== null && potasio !== undefined && potasio > 5.5) {
+      return mtrAlerta("ieca_ara2", med, "SUSPENDER",
+        "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ " + mtrFmt1(potasio) + " mEq/L > 5.5 mEq/L).",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 30) {
+      return mtrAlerta("ieca_ara2", med, "CAP_DOSIS",
+        "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaInsulina(med, egfr, potasio) {
+    if (egfr < 10) {
+      return mtrAlerta("insulina", med, "REDUCIR",
+        "Insulina: reducir dosis total diaria un 50% con eGFR < 10 mL/min/1.73m2 por aclaramiento renal disminuido.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    if (egfr < 50) {
+      return mtrAlerta("insulina", med, "REDUCIR",
+        "Insulina: reducir dosis total diaria un 25% con eGFR 10-49 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaLmwh(med, crcl, potasio) {
+    if (crcl === null || crcl === undefined || crcl <= 0.0) {
+      return mtrAlerta("lmwh", med, "FALTAN_DATOS_RENALES",
+        "Imposible calcular seguridad renal para " + med + " por TFG ausente o inválida.",
+        MTR_FORMULA_CG, (crcl === null || crcl === undefined) ? 0.0 : crcl, MTR_SEV_CRITICAL);
+    }
+    if (crcl < 30) {
+      return mtrAlerta("lmwh", med, "REDUCIR",
+        "Enoxaparina / HBPM: reducir dosis a 1 mg/kg cada 24 horas (reducción 50%) con CrCl < 30 mL/min.",
+        MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaSuplementoK(med, egfr, potasio) {
+    if (egfr < 30 || (potasio !== null && potasio !== undefined && potasio >= 5.0)) {
+      // `if potasio` de Python: un potasio de 0 no imprime el paréntesis.
+      const valStr = mtrEsFalsy(potasio) ? "" : (" (K+ " + mtrFmt1(potasio) + " mEq/L)");
+      return mtrAlerta("suplemento_k", med, "CONTRAINDICADA",
+        "Suplementación oral de Potasio CONTRAINDICADA con eGFR < 30 mL/min/1.73m2 o K+ >= 5.0 mEq/L" + valStr + ".",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  // f"{x:.0f}" de Python (mitad al par, igual que mtrRound).
+  function mtrFmt0(x) {
+    const n = mtrFloat(x);
+    return n === null ? "" : String(mtrRound(n, 0));
+  }
+
+  // Variante de alerta con `override_llm` explícito: la usa el gabapentinoide,
+  // que en el Copiloto NO sobrescribe al LLM (override_llm=False).
+  function mtrAlertaSuave(principio, med, conducta, mensaje, formula, valor, severidad) {
+    const a = mtrAlerta(principio, med, conducta, mensaje, formula, valor, severidad);
+    a.override_llm = false;
+    return a;
+  }
+
+  // iSGLT2 — cuarto argumento: la HbA1c cambia la conducta en ERC avanzada.
+  function mtrReglaSglt2(med, egfr, potasio, hba1c) {
+    const norm = mtrNormalizarTexto(med);
+    const esEmpa = norm.indexOf("empagliflozina") >= 0;
+    const esDapa = norm.indexOf("dapagliflozina") >= 0;
+    const esCana = norm.indexOf("canagliflozina") >= 0;
+
+    if (egfr < 20) {
+      return mtrAlerta("sglt2", med, "SUSPENDER",
+        "iSGLT2: suspender con eGFR < 20 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (egfr < 45) {
+      if (egfr >= 20 && egfr < 30 && hba1c !== null && hba1c !== undefined && hba1c > 8.0) {
+        if (esEmpa) {
+          return mtrAlerta("sglt2", med, "CAP_DOSIS",
+            "Empagliflozina: con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2 (G4) y " +
+            "HbA1c " + mtrFmt1(hba1c) + "% (>8%), el efecto glucemico esta atenuado. " +
+            "REDUCIR DOSIS de 25 mg a 10 mg al dia.  Mantener por " +
+            "renoproteccion/cardio-proteccion (KDIGO 2022 / ADA 2024).",
+            MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+        }
+        if (esDapa || esCana) {
+          return mtrAlerta("sglt2", med, "SUSPENDER",
+            (esDapa ? "Dapagliflozina" : "Canagliflozina") + ": " +
+            "con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2 (G4) y HbA1c " + mtrFmt1(hba1c) + "% " +
+            "(>8%) no tiene ajuste de dosis valido.  Suspender y considerar " +
+            "Empagliflozina 10mg (unico iSGLT2 con ajuste en G4) o insulina.",
+            MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+        }
+      }
+      return mtrAlerta("sglt2", med, "REVISAR_FICHA_TECNICA",
+        "iSGLT2: efecto glucemico bajo con eGFR < 45; se mantiene por renoproteccion hasta ~20-25 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_INFO);
+    }
+    return null;
+  }
+
+  // iDPP-4 — la linagliptina no se ajusta por riñón: se excluye antes de nada.
+  function mtrReglaDpp4(med, egfr, potasio) {
+    const norm = mtrNormalizarTexto(med);
+    if (norm.indexOf("linagliptina") >= 0) return null;
+    if (egfr < 30) {
+      return mtrAlerta("dpp4", med, "REDUCIR",
+        "iDPP-4 (Sitagliptina/Vildagliptina/Saxagliptina): reducir dosis a 25% (ej. Sitagliptina 25mg) con eGFR < 30.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    if (egfr < 50) {
+      return mtrAlerta("dpp4", med, "REDUCIR",
+        "iDPP-4: reducir dosis a 50% (ej. Sitagliptina 50mg, Vildagliptina 50mg) con eGFR < 50.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  function mtrReglaGlp1Ra(med, egfr, potasio) {
+    const norm = mtrNormalizarTexto(med);
+    if (norm.indexOf("exenatida") >= 0 && egfr < 30) {
+      return mtrAlerta("glp1_ra", med, "CONTRAINDICADA",
+        "Exenatida CONTRAINDICADA con eGFR < 30 mL/min/1.73m2.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    return null;
+  }
+
+  // Gabapentinoides — escalera por CrCl y por molécula. No sobrescribe al LLM.
+  function mtrReglaGabapentinoide(med, crcl, potasio) {
+    if (crcl === null || crcl === undefined || crcl <= 0.0) {
+      return mtrAlerta("gabapentinoide", med, "FALTAN_DATOS_RENALES",
+        "Imposible calcular seguridad renal para " + med + " por TFG ausente o inválida.",
+        MTR_FORMULA_CG, (crcl === null || crcl === undefined) ? 0.0 : crcl, MTR_SEV_CRITICAL);
+    }
+    if (crcl < 60) {
+      const norm = mtrNormalizarTexto(med);
+      if (norm.indexOf("pregabalina") >= 0) {
+        if (crcl < 15) return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Pregabalina: dosis máxima 75 mg/día con CrCl < 15 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+        if (crcl < 30) return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Pregabalina: dosis máxima 150 mg/día con CrCl 15-29 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+        return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Pregabalina: dosis máxima 300 mg/día con CrCl 30-59 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+      }
+      if (norm.indexOf("gabapentina") >= 0) {
+        if (crcl < 15) return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Gabapentina: dosis máxima 300 mg/día con CrCl < 15 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+        if (crcl < 30) return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Gabapentina: dosis máxima 700 mg/día con CrCl 15-29 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+        return mtrAlertaSuave("gabapentinoide", med, "CAP_DOSIS",
+          "Gabapentina: dosis máxima 1400 mg/día con CrCl 30-59 mL/min.", MTR_FORMULA_CG, crcl, MTR_SEV_HIGH);
+      }
+      return mtrAlertaSuave("gabapentinoide", med, "REVISAR_FICHA_TECNICA",
+        "Gabapentina/Pregabalina: ajustar segun CrCl (Cockcroft-Gault) por ficha tecnica. CrCl reducido detectado.",
+        MTR_FORMULA_CG, crcl, MTR_SEV_INFO);
+    }
+    return null;
+  }
+
+  // Anticoagulantes directos.
+  //
+  // OJO con la normalización: el Copiloto usa `_normalizar` y NO `.lower()` a
+  // secas, y el comentario del Python explica por qué — con `.lower()`,
+  // "Dabigatrán" (que el ETL escribe con tilde) no casaba con "dabigatran", y un
+  // paciente con CrCl 15-29 pasaba de CONTRAINDICADA/CRITICAL a CAP_DOSIS/HIGH:
+  // un anticoagulante prohibido se quedaba formulado con un aviso blando. El port
+  // hereda esa corrección, y la suite 43 la vigila.
+  function mtrReglaDoac(med, cg, potasio) {
+    if (cg === null || cg === undefined || cg <= 0.0) {
+      return mtrAlerta("doac", med, "FALTAN_DATOS_RENALES",
+        "Imposible calcular seguridad renal para " + med + " por TFG ausente o inválida.",
+        MTR_FORMULA_CG, (cg === null || cg === undefined) ? 0.0 : cg, MTR_SEV_CRITICAL);
+    }
+    const norm = mtrNormalizarTexto(med);
+    if (norm.indexOf("dabigatran") >= 0) {
+      if (cg < 30) return mtrAlerta("doac", med, "CONTRAINDICADA",
+        "Dabigatrán CONTRAINDICADO con CrCl < 30 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
+      if (cg < 50) return mtrAlerta("doac", med, "CAP_DOSIS",
+        "Dabigatrán: reducir a 110 mg c/12h con CrCl 30-49 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+    }
+    if (norm.indexOf("rivaroxaban") >= 0) {
+      if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
+        "Rivaroxabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
+      if (cg < 50) return mtrAlerta("doac", med, "REDUCIR",
+        "Rivaroxabán: reducir dosis a 15 mg/día con CrCl 15-49 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+    }
+    if (norm.indexOf("apixaban") >= 0) {
+      if (cg < 15) return mtrAlerta("doac", med, "CONTRAINDICADA",
+        "Apixabán CONTRAINDICADO con CrCl < 15 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
+      if (cg < 30) return mtrAlerta("doac", med, "CAP_DOSIS",
+        "Apixabán: reducir dosis a 2.5 mg cada 12 horas con CrCl < 30 mL/min.", MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+    }
+    if (cg < 15) {
+      return mtrAlerta("doac", med, "CONTRAINDICADA",
+        "Anticoagulante Directo (Rivaroxabán/Apixabán/Dabigatrán): EVITAR con CrCl < 15 mL/min.",
+        MTR_FORMULA_CG, cg, MTR_SEV_CRITICAL);
+    }
+    if (cg < 50) {
+      return mtrAlerta("doac", med, "CAP_DOSIS",
+        "Anticoagulante Directo: revisar ajuste de dosis según ficha técnica para CrCl < 50 mL/min.",
+        MTR_FORMULA_CG, cg, MTR_SEV_HIGH);
+    }
+    return null;
+  }
+
+  // Diurético de asa — GAP #8. Sin dosis explícita emite REVISAR conservador.
+  function mtrReglaFurosemida(med, egfr, potasio, dosisMg) {
+    if (egfr >= 30) return null;
+    if (potasio !== null && potasio !== undefined && potasio < 3.5) {
+      return mtrAlerta("furosemida", med, "REVISAR_FICHA_TECNICA",
+        "Furosemida con eGFR " + mtrFmt0(egfr) + " y K+ " + mtrFmt1(potasio) + " mEq/L (<3.5): " +
+        "riesgo de hipokalemia sinergica con ERC.  Considerar suspender " +
+        "o agregar AEE (espironolactona/eplerenona) si K+<5.0.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+    }
+    if (dosisMg !== null && dosisMg !== undefined && dosisMg > 40) {
+      return mtrAlerta("furosemida", med, "CAP_DOSIS",
+        "Furosemida: dosis " + mtrFmt0(dosisMg) + " mg/dia con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2 " +
+        "(G3b-G5).  Ambulatorio, CAPAR DOSIS a 40 mg/dia maximo.  Si requiere " +
+        "mayor efecto diuretico, rotar a Torasemida o usar combinacion con " +
+        "tiazida (secuencia nefrotica) bajo control estrecho.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_CRITICAL);
+    }
+    if (dosisMg !== null && dosisMg !== undefined && dosisMg > 0 && dosisMg <= 40) {
+      return mtrAlerta("furosemida", med, "REVISAR_FICHA_TECNICA",
+        "Furosemida " + mtrFmt0(dosisMg) + " mg/dia con eGFR " + mtrFmt0(egfr) + ": dosis tolerable " +
+        "(<=40 mg/d), pero vigilar respuesta clinica y K+ serico.",
+        MTR_FORMULA_CKDEPI, egfr, MTR_SEV_INFO);
+    }
+    return mtrAlerta("furosemida", med, "REVISAR_FICHA_TECNICA",
+      "Furosemida con eGFR " + mtrFmt0(egfr) + " mL/min/1.73m2: en ERC avanzada la dosis " +
+      "ambulatoria no debe superar 40 mg/dia.  Verificar dosis prescrita y " +
+      "ajustar si excede el techo.",
+      MTR_FORMULA_CKDEPI, egfr, MTR_SEV_HIGH);
+  }
+
+  // ---------------------------------------------------------------------
+  //  Detección de grupos y discrepancia de estadios
+  // ---------------------------------------------------------------------
+
+  const MTR_ORDEN_ESTADIOS = { G1: 1, G2: 2, G3a: 3, G3b: 4, G4: 5, G5: 6 };
+
+  function mtrClasificarEstadioTfg(tfg) {
+    if (tfg === null || tfg === undefined) return "";
+    if (tfg >= 90) return "G1";
+    if (tfg >= 60) return "G2";
+    if (tfg >= 45) return "G3a";
+    if (tfg >= 30) return "G3b";
+    if (tfg >= 15) return "G4";
+    return "G5";
+  }
+
+  // Dos fórmulas que discrepan más de dos estadios significan que uno de los dos
+  // insumos (peso, talla, creatinina) está mal. No se elige una: se avisa.
+  function mtrEvaluarDiscrepanciaEstadios(tfgCg, tfgCkd) {
+    if (tfgCg === null || tfgCg === undefined || tfgCkd === null || tfgCkd === undefined) return null;
+    const a = mtrFloat(tfgCg), b = mtrFloat(tfgCkd);
+    if (a === null || b === null || a <= 0 || b <= 0) return null;
+    const estCg = mtrClasificarEstadioTfg(a), estCkd = mtrClasificarEstadioTfg(b);
+    const diff = Math.abs((MTR_ORDEN_ESTADIOS[estCg] || 0) - (MTR_ORDEN_ESTADIOS[estCkd] || 0));
+    if (diff > 2) {
+      return {
+        alerta: true,
+        estadio_cg: estCg,
+        estadio_ckd: estCkd,
+        diferencia_estadios: diff,
+        mensaje: "ALERTA CLÍNICA: Discrepancia significativa (" + diff + " estadios) entre " +
+          "Cockcroft-Gault (" + estCg + ": " + mtrNumPy(tfgCg) + " mL/min) y CKD-EPI (" +
+          estCkd + ": " + mtrNumPy(tfgCkd) + " mL/min/1.73m2).",
+      };
+    }
+    return null;
+  }
+
+  // `str(x)` de Python para un float: 10.0 -> "10.0", no "10" como haría JS.
+  function mtrNumPy(x) {
+    if (typeof x !== "number") return String(x);
+    return Number.isInteger(x) ? x.toFixed(1) : String(x);
+  }
+
+  function mtrDetectarGruposFarmacologicos(medicamentos) {
+    const grupos = {};
+    if (!medicamentos || !medicamentos.length) return grupos;
+    for (const med of medicamentos) {
+      if (!med || !String(med).trim()) continue;
+      const norm = mtrNormalizarTexto(String(med));
+      for (const grupo of Object.keys(MTR_SINONIMOS)) {
+        if (MTR_SINONIMOS[grupo].some((a) => norm.indexOf(a) >= 0)) {
+          if (!grupos[grupo]) grupos[grupo] = [];
+          grupos[grupo].push(String(med));
+        }
+      }
+    }
+    return grupos;
+  }
+
+  function mtrDetectarPrincipios(medicamento) {
+    const norm = mtrNormalizarTexto(medicamento);
+    const out = [];
+    for (const canonico of Object.keys(MTR_SINONIMOS)) {
+      if (MTR_SINONIMOS[canonico].some((a) => norm.indexOf(a) >= 0)) out.push(canonico);
+    }
+    return out;
+  }
+
+  // GAP #1 — la única regla GLOBAL: mira toda la lista, y puede recomendar
+  // INICIAR terapia, no solo suspenderla. Sin RAC no se puede estadificar la
+  // albuminuria, así que calla: no se infiere.
+  function mtrReglaErcG3aA2(medicamentos, tfgCkdepi, rac) {
+    const alertas = [];
+    if (!(tfgCkdepi >= 45 && tfgCkdepi < 60)) return alertas;
+    if (rac === null || rac === undefined || !(rac >= 30 && rac < 300)) return alertas;
+
+    const grupos = mtrDetectarGruposFarmacologicos(medicamentos || []);
+    const tieneRaas = !!(grupos.ieca || grupos.ara2);
+    const tieneAine = !!grupos.aines;
+
+    if (!tieneRaas) {
+      alertas.push(mtrAlerta("erc_g3a_a2_sin_raas", "ERC G3a + A2 (sin IECA/ARA-II)", "INICIAR",
+        "ERC G3a/A2 (TFG " + mtrFmt0(tfgCkdepi) + " mL/min/1.73m2, " +
+        "RAC " + mtrFmt0(rac) + " mg/g): INDICACION CLASE IA de IECA o ARA-II " +
+        "(KDIGO 2022). Iniciar Enalapril 10 mg/d VO o Losartan " +
+        "50 mg/d VO. Beneficio probado: reduccion 20-30% de " +
+        "progresion a falla renal.",
+        MTR_FORMULA_CKDEPI, tfgCkdepi, MTR_SEV_CRITICAL));
+    }
+    if (tieneAine) {
+      alertas.push(mtrAlerta("erc_g3a_a2_con_aine", "AINE en ERC G3a/A2", "SUSPENDER",
+        "AINE en contexto de ERC G3a/A2 (TFG " + mtrFmt0(tfgCkdepi) + ", " +
+        "RAC " + mtrFmt0(rac) + "): CONTRAINDICADO. Riesgo de deterioro renal " +
+        "agudo, hiperkalemia y sangrado GI. Rotar a Paracetamol " +
+        "1 g c/8h.  Si dolor inflamatorio: COX-2 selectivo solo " +
+        "con IECA/ARA-II activo y monitoria estrecha.",
+        MTR_FORMULA_CKDEPI, tfgCkdepi, tieneRaas ? MTR_SEV_HIGH : MTR_SEV_CRITICAL));
+    }
+    return alertas;
+  }
+
+  // principio canónico -> [regla, usaCrCl]
+  const MTR_REGLAS = {
+    metformina: [mtrReglaMetformina, false],
+    rosuvastatina: [mtrReglaRosuvastatina, false],
+    sglt2: [mtrReglaSglt2, false],
+    espironolactona: [mtrReglaEspironolactona, false],
+    fenofibrato: [mtrReglaFenofibrato, false],
+    gabapentinoide: [mtrReglaGabapentinoide, true],
+    ieca_ara2: [mtrReglaArbIeca, false],
+    betabloqueador_hidrofilico: [mtrReglaBetabloqueadorHidrofilico, false],
+    doac: [mtrReglaDoac, true],
+    tiazida: [mtrReglaTiazida, false],
+    dpp4: [mtrReglaDpp4, false],
+    sulfonilurea: [mtrReglaSulfonilurea, false],
+    alopurinol: [mtrReglaAlopurinol, false],
+    colchicina: [mtrReglaColchicina, false],
+    digoxina: [mtrReglaDigoxina, false],
+    aines: [mtrReglaAines, false],
+    nitrofurantoina: [mtrReglaNitrofurantoina, false],
+    insulina: [mtrReglaInsulina, false],
+    lmwh: [mtrReglaLmwh, true],
+    glp1_ra: [mtrReglaGlp1Ra, false],
+    suplemento_k: [mtrReglaSuplementoK, false],
+    diuretico_asa: [mtrReglaFurosemida, false],
+  };
+
+  // ---------------------------------------------------------------------
+  //  EL ORQUESTADOR
+  //
+  //  ALCANCE PORTADO: la vía sin `indicaciones` y sin `dosis_mg`, que es la que
+  //  el Vigilante puede alimentar hoy (Everest no expone ni la indicación
+  //  prescrita ni la dosis diaria en un campo que sepamos leer). El Copiloto
+  //  tiene además la validación de timing de insulinas (GAP #6) y el tope de
+  //  dosis de furosemida por miligramos (GAP #8): NO están portadas, y no se
+  //  simulan. Cuando exista la captura del endpoint de medicamentos se sabrá si
+  //  esos dos campos vienen, y entonces se portan con sus propios dorados.
+  //
+  //  La suite 43 contrasta exactamente esta vía. Lo no portado no aparenta
+  //  estarlo: `mtrEvaluarSeguridadDosisRenal` ni siquiera acepta esos argumentos.
+  // ---------------------------------------------------------------------
+  function mtrEvaluarSeguridadDosisRenal(medicamentos, tfgCkdepi, tfgCg, potasio, hba1c, rac) {
+    const alertas = [];
+
+    const disc = mtrEvaluarDiscrepanciaEstadios(tfgCg, tfgCkdepi);
+    if (disc !== null) {
+      const a = mtrAlerta("discrepancia_estadio_renal", "Cockcroft-Gault vs CKD-EPI 2021",
+        "REVISAR_FICHA_TECNICA", disc.mensaje, "Cockcroft-Gault vs CKD-EPI",
+        tfgCkdepi, MTR_SEV_HIGH);
+      a.override_llm = false;
+      alertas.push(a);
+    }
+
+    if (!medicamentos || !medicamentos.length) {
+      // Sin medicamentos las reglas globales SIGUEN corriendo: pueden recomendar
+      // INICIAR una terapia, no solo suspenderla.
+      for (const g of mtrReglaErcG3aA2(medicamentos || [], tfgCkdepi, rac)) alertas.push(g);
+      return alertas;
+    }
+
+    const vistos = {};
+    for (const med of medicamentos) {
+      if (!med || !String(med).trim()) continue;
+      for (const canonico of mtrDetectarPrincipios(med)) {
+        const par = MTR_REGLAS[canonico];
+        if (!par) continue;
+        const valor = par[1] ? tfgCg : tfgCkdepi;
+        let alerta = null;
+        if (canonico === "sglt2") alerta = par[0](String(med), Number(valor), potasio, hba1c);
+        else alerta = par[0](String(med), Number(valor), potasio);
+        if (alerta === null || alerta === undefined) continue;
+        const clave = canonico + "|" + alerta.conducta;
+        if (vistos[clave]) continue;
+        vistos[clave] = true;
+        alertas.push(alerta);
+      }
+    }
+
+    for (const g of mtrReglaErcG3aA2(medicamentos, tfgCkdepi, rac)) {
+      const claveG = g.principio_activo + "|" + g.conducta;
+      if (vistos[claveG]) continue;
+      vistos[claveG] = true;
+      alertas.push(g);
+    }
+    return alertas;
+  }
+
+
+
+  // =====================================================================
+  //  LA COSTURA — el único punto donde el motor toca Everest
+  //
+  //  El motor portado no sabe qué es Everest: recibe valores planos. Estas dos
+  //  funciones son las que traducen la historia clínica a esos valores planos.
+  //
+  //  Y HOY DEVUELVEN null A PROPÓSITO.
+  //
+  //  El endpoint candidato para los medicamentos es `MedicamentoPorPaciente`,
+  //  visto de pasada en una captura antigua. Nunca se capturó su respuesta real:
+  //  no se sabe cómo se llaman los campos, si el fármaco viene como texto libre o
+  //  como código, ni si trae la dosis. Lo mismo con el tabaquismo.
+  //
+  //  Escribir aquí un nombre de campo supuesto es exactamente lo que este
+  //  proyecto ya pagó en v12.3.30: se supusieron CUATRO nombres para la fecha de
+  //  un resultado de Athenea y NINGUNO existía. La casilla salía vacía y nadie se
+  //  enteraba.
+  //
+  //  QUÉ LAS DESBLOQUEA: correr `DIAGNOSTICO_MEDICAMENTOS.js` y
+  //  `DIAGNOSTICO_FACTORES_RCV.js` (ya escritos, en la raíz del repo) sobre un
+  //  paciente real. Un minuto cada uno. Los dos redactan la identidad antes de
+  //  guardar y conservan solo los nombres de campo.
+  //
+  //  MIENTRAS TANTO: `mtrAvisosDosisRenal` devuelve una lista vacía con el motivo
+  //  dentro, no un array pelado. Así el llamador puede distinguir "no hay avisos
+  //  porque el paciente está bien" de "no hay avisos porque no sé qué toma", que
+  //  clínicamente son cosas opuestas.
+  // =====================================================================
+
+  // Interruptor maestro. NACE APAGADO. Enciende la capa de presentación; el
+  // motor puro se carga siempre porque el banco de pruebas lo ejercita entero.
+  const MTR_BANDERA_POR_DEFECTO = false;
+
+  function mtrMotorEncendido() {
+    try {
+      if (typeof S !== "undefined" && S && typeof S.motorPortado === "boolean") return S.motorPortado;
+    } catch (e) {}
+    return MTR_BANDERA_POR_DEFECTO;
+  }
+
+  // CONTRATO que tiene que cumplir el día que se enganche:
+  //   devuelve  null            -> no se pudo leer (no es lo mismo que "no toma nada")
+  //   devuelve  []              -> se leyó y el paciente no tiene medicamentos activos
+  //   devuelve  ["...", "..."]  -> nombres tal cual los escribe Everest, sin normalizar
+  // El motor normaliza por su cuenta: aquí no se toca el texto.
+  function mtrLeerMedicamentos(_citaId) {
+    return null; // pendiente de la captura real de MedicamentoPorPaciente
+  }
+
+  // CONTRATO:
+  //   null -> no se pudo leer
+  //   { fuma: true|false|null, ... } -> `fuma` en null significa "el campo existe
+  //   pero está sin diligenciar", que NO es lo mismo que "no fuma".
+  function mtrLeerFactoresRCV(_citaId) {
+    return null; // pendiente de la captura real de los factores de riesgo
+  }
+
+  // Composición: del paciente a los avisos. Devuelve SIEMPRE un objeto con
+  // `motivo`, para que la ausencia de avisos nunca se lea como "todo bien".
+  function mtrAvisosDosisRenal(ctx) {
+    const c = ctx || {};
+    const meds = (c.medicamentos !== undefined) ? c.medicamentos : mtrLeerMedicamentos(c.citaId);
+
+    if (meds === null || meds === undefined) {
+      return { avisos: [], motivo: "SIN_LISTA_DE_MEDICAMENTOS", legible:
+        "No se pudo leer qué medicamentos toma el paciente, así que no se juzga ninguno. No significa que no haya riesgo." };
+    }
+    const ckd = mtrFloat(c.tfgCkdEpi);
+    const cg = mtrFloat(c.tfgCockcroftGault);
+    if (ckd === null || cg === null || ckd <= 0 || cg <= 0) {
+      return { avisos: [], motivo: "SIN_FUNCION_RENAL",
+        legible: "Falta la función renal (creatinina, peso, talla o edad), así que no se puede juzgar la dosis." };
+    }
+    if (!meds.length) {
+      return { avisos: [], motivo: "SIN_MEDICAMENTOS_ACTIVOS",
+        legible: "El paciente no tiene medicamentos activos registrados." };
+    }
+    const avisos = mtrEvaluarSeguridadDosisRenal(
+      meds, ckd, cg,
+      (c.potasio === undefined ? null : mtrFloat(c.potasio)),
+      (c.hba1c === undefined ? null : mtrFloat(c.hba1c)),
+      (c.rac === undefined ? null : mtrFloat(c.rac))
+    );
+    return { avisos: avisos, motivo: avisos.length ? "OK" : "SIN_HALLAZGOS",
+      legible: avisos.length ? (avisos.length + " aviso(s) de seguridad renal")
+        : "Ningún medicamento de la lista requiere ajuste con esta función renal." };
+  }
+
+
 })();
