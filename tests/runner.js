@@ -73,6 +73,33 @@ function crearT() {
   return { t, res };
 }
 
+// v14.1.9 — EL EJECUTOR NO PUEDE SALIR VERDE SIN HABER TERMINADO.
+//
+// Hermano del arreglo de 2026-08-11 (el `exit(0)` incondicional que hacía CONSULTIVO todo
+// el banco) y del mismo tipo: allí el código de salida mentía al final; aquí ni siquiera
+// se llegaba al final.
+//
+// Si una suite deja una promesa que NO resuelve —un `await` a algo que nunca se cumple—,
+// `main()` se queda esperando, el bucle de eventos de Node se vacía y el proceso **sale
+// solo, con código 0**. No se imprime el resumen, las suites siguientes no llegan a
+// correr, y el CI lo lee como verde. Se detectó en real: una prueba nueva colgaba el banco
+// desde la suite 31 y las siguientes no se ejecutaron nunca, con el CI en verde.
+//
+// El arreglo no depende de acordarse de nada: se declara ROJO de entrada, y solo el final
+// legítimo lo pone en verde. Cualquier camino que no llegue al final —cuelgue, salida
+// temprana, excepción sin capturar— sale distinto de cero.
+process.exitCode = 1;
+let _terminoDeVerdad = false;
+process.on("beforeExit", () => {
+  if (_terminoDeVerdad) return;
+  console.error("");
+  console.error(COL.mal + "  EL EJECUTOR NO LLEGÓ AL FINAL — el banco NO está verde." + COL.fin);
+  console.error(COL.dim + "  Alguna suite dejó una promesa sin resolver: Node se quedó sin trabajo y salió" + COL.fin);
+  console.error(COL.dim + "  antes de contar nada. Las suites posteriores NO se ejecutaron." + COL.fin);
+  console.error(COL.dim + "  Mira cuál fue la última suite que imprimió su línea: el cuelgue está en la siguiente." + COL.fin);
+  console.error("");
+});
+
 async function main() {
   const soloEste = process.argv[2];
   const archivos = fs.readdirSync(__dirname).filter(f => /^suite_.*\.js$/.test(f)).sort()
@@ -171,6 +198,7 @@ async function main() {
   // Hallado en revisión adversarial (2026-08-11): con exit(0) incondicional, todo el
   // banco era CONSULTIVO — un runner con "N fallan" salía verde y el CI lo aceptaba.
   // El código de salida debe decir la verdad: distinto de cero si algo falló.
+  _terminoDeVerdad = true;
   process.exit(tf ? 1 : 0);
 }
 

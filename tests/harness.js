@@ -148,7 +148,25 @@ function crearEntorno(opciones) {
   };
   win.GM_getValue = (k, d) => (k in gm ? gm[k] : d);
   win.GM_setValue = (k, v) => { gm[k] = v; };
-  win.GM_xmlhttpRequest = o.gmxhr || (() => {});
+  // v14.1.9 — El stub por defecto NO puede ser un agujero negro.
+  //
+  // Era `() => {}`. Parece inofensivo, pero `_pageFetchJsonCore` usa GM_xmlhttpRequest como
+  // segunda vía cuando `fetch` falla, y lo envuelve en `new Promise((resolve, reject) => …)`
+  // que SOLO se cierra desde `onload`, `onerror` u `ontimeout`. Con un stub que no llama a
+  // ninguno, esa promesa no se cierra jamás: la prueba se cuelga, `main()` se queda
+  // esperando, el bucle de eventos se vacía y Node salía con código 0 — banco en verde sin
+  // haber corrido las suites siguientes. Costó encontrarlo justamente porque era silencioso.
+  //
+  // Ahora el defecto simula lo que hace Tampermonkey de verdad ante un fallo de red: llamar
+  // a `onerror`. En el navegador real esa promesa SIEMPRE se cierra (la llamada lleva
+  // `timeout: 15000`), así que este defecto se parece más a la realidad que el anterior, no
+  // menos. Una prueba que quiera otro comportamiento sigue pasando su propio `gmxhr`.
+  win.GM_xmlhttpRequest = o.gmxhr || ((opts) => {
+    setTimeout(() => {
+      try { if (opts && typeof opts.onerror === "function") opts.onerror(new Error("gmxhr: sin mock en esta prueba")); }
+      catch (e) { /* el stub jamás propaga */ }
+    }, 0);
+  });
   return { win, storage, gm, doc, almacen };
 }
 
