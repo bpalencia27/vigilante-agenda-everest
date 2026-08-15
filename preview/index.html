@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vigilante de Agenda — Checkpoint de Preview v15</title>
+  <style>
+    :root {
+      --bg: #07090e;
+      --bg-surface: #0e131c;
+      --bg-card: #141b27;
+      --bg-card-hover: #1b2434;
+      --fg: #f8fafc;
+      --fg2: #94a3b8;
+      --fg3: #64748b;
+      --edge: rgba(255, 255, 255, 0.08);
+      --edge-strong: rgba(255, 255, 255, 0.16);
+
+      /* Código Clínico de 5 Colores */
+      --c-verde: #10b981;
+      --c-morado: #a855f7;
+      --c-ambar: #f59e0b;
+      --c-rojo: #ef4444;
+      --c-azul: #3b82f6;
+
+      --t-micro: 11px;
+      --t-body: 13px;
+      --t-strong: 14px;
+      --t-title: 16px;
+      --t-hero: 22px;
+
+      --r-sm: 4px;
+      --r-md: 8px;
+      --r-lg: 12px;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-card: #f1f5f9;
+      --bg-card-hover: #e2e8f0;
+      --fg: #0f172a;
+      --fg2: #475569;
+      --fg3: #64748b;
+      --edge: rgba(0, 0, 0, 0.08);
+      --edge-strong: rgba(0, 0, 0, 0.16);
+    }
+
+    body.perf * {
+      backdrop-filter: none !important;
+      box-shadow: none !important;
+      transition: none !important;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--fg); font-size: var(--t-body); min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Barra Superior del Preview */
+    .preview-header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--edge);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .preview-title h1 { font-size: var(--t-strong); font-weight: 800; }
+    .preview-title p { font-size: var(--t-micro); color: var(--fg2); }
+
+    .preview-controls { display: flex; align-items: center; gap: 10px; }
+    .btn { background: var(--bg-card); border: 1px solid var(--edge); color: var(--fg); padding: 6px 12px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-micro); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: var(--bg-card-hover); }
+    .btn.active { border-color: var(--c-azul); background: rgba(59, 130, 246, 0.15); color: var(--c-azul); }
+
+    /* Contenedor Principal */
+    .main-layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; padding: 24px; flex: 1; }
+
+    /* Panel de Citas */
+    .panel { background: var(--bg-surface); border: 1px solid var(--edge); border-radius: var(--r-md); display: flex; flex-direction: column; overflow: hidden; height: fit-content; }
+    .panel-head { padding: 12px 16px; background: var(--bg-card); border-bottom: 1px solid var(--edge); display: flex; justify-content: space-between; align-items: center; }
+    .panel-head b { font-size: var(--t-strong); }
+    .clock-live { font-size: var(--t-title); font-weight: 900; font-variant-numeric: tabular-nums; color: var(--c-azul); }
+
+    .triaje-strip { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--edge); background: var(--bg-surface); }
+    .t-box { padding: 4px; text-align: center; border-radius: var(--r-sm); border: 1px solid var(--edge); }
+    .t-box.verde { border-color: var(--c-verde); color: var(--c-verde); background: rgba(16, 185, 129, 0.1); }
+    .t-box.morado { border-color: var(--c-morado); color: var(--c-morado); background: rgba(168, 85, 247, 0.1); }
+    .t-box.ambar { border-color: var(--c-ambar); color: var(--c-ambar); background: rgba(245, 158, 11, 0.1); }
+    .t-box.rojo { border-color: var(--c-rojo); color: var(--c-rojo); background: rgba(239, 68, 68, 0.1); }
+    .t-box.azul { border-color: var(--c-azul); color: var(--c-azul); background: rgba(59, 130, 246, 0.1); }
+    .t-box span { font-size: 9px; font-weight: 700; display: block; }
+    .t-box b { font-size: var(--t-strong); font-weight: 800; }
+
+    .citas-list { display: flex; flex-direction: column; gap: 6px; padding: 12px; max-height: 560px; overflow-y: auto; }
+    .cita-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: var(--r-sm); background: var(--bg-card); border: 1px solid var(--edge); cursor: pointer; transition: all 0.15s ease; border-left-width: 4px; }
+    .cita-item:hover { background: var(--bg-card-hover); border-color: var(--edge-strong); }
+    .cita-item.c-verde { border-left-color: var(--c-verde); }
+    .cita-item.c-morado { border-left-color: var(--c-morado); }
+    .cita-item.c-ambar { border-left-color: var(--c-ambar); }
+    .cita-item.c-rojo { border-left-color: var(--c-rojo); }
+    .cita-item.c-azul { border-left-color: var(--c-azul); }
+
+    .cita-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .time-tag { font-size: var(--t-strong); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .name-tag { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--t-body); }
+    .doc-tag { font-size: var(--t-micro); color: var(--fg2); }
+
+    .badge-status { font-size: 10px; font-weight: 800; padding: 3px 6px; border-radius: 3px; letter-spacing: 0.3px; }
+    .b-verde { background: var(--c-verde); color: #fff; }
+    .b-morado { background: var(--c-morado); color: #fff; }
+    .b-ambar { background: var(--c-ambar); color: #000; }
+    .b-rojo { background: var(--c-rojo); color: #fff; }
+    .b-azul { background: var(--bg-surface); color: var(--fg2); border: 1px solid var(--edge); }
+
+    /* Área de Trabajo Clínica */
+    .workspace { display: flex; flex-direction: column; gap: 16px; }
+
+    .banner-pym { background: var(--bg-surface); border: 1px solid var(--edge); border-left: 4px solid var(--c-azul); border-radius: var(--r-md); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+    .chip { font-size: var(--t-micro); font-weight: 700; padding: 3px 8px; border-radius: var(--r-sm); background: var(--bg-card); border: 1px solid var(--edge); }
+    .chip.crit { background: rgba(239, 68, 68, 0.15); border-color: var(--c-rojo); color: var(--c-rojo); }
+
+    .card-section { background: var(--bg-surface); border: 1px solid var(--edge); border-radius: var(--r-md); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .card-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
+    .card-head h2 { font-size: var(--t-strong); font-weight: 800; }
+
+    .grid-labs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .lab-box { background: var(--bg-card); border: 1px solid var(--edge); border-radius: var(--r-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+    .lab-val { font-size: var(--t-hero); font-weight: 900; }
+
+    .alert-farmaco { background: var(--bg-card); border: 1px solid var(--edge); border-radius: var(--r-sm); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .alert-farmaco.crit { border-left: 4px solid var(--c-rojo); background: rgba(239, 68, 68, 0.08); }
+    .alert-farmaco.alto { border-left: 4px solid var(--c-ambar); background: rgba(245, 158, 11, 0.08); }
+
+    /* Dock Flotante Demostrativo */
+    .dock-pill {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      background: var(--bg-surface);
+      border: 1px solid var(--edge-strong);
+      border-radius: 30px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 99990;
+    }
+    .dock-led { width: 8px; height: 8px; border-radius: 50%; background: var(--c-verde); box-shadow: 0 0 8px var(--c-verde); }
+  </style>
+</head>
+<body data-theme="dark">
+  <!-- Barra de Control del Checkpoint -->
+  <header class="preview-header">
+    <div class="preview-title">
+      <h1>🩺 Vigilante de Agenda — Checkpoint de Vista Previa v15 (Fase 1)</h1>
+      <p>Vista previa navegable con datos 100% sintéticos (cero PHI). No modifica el código de producción.</p>
+    </div>
+    <div class="preview-controls">
+      <button class="btn active" onclick="setProposal(0)">⚡ Propuesta Síntesis</button>
+      <button class="btn" onclick="openWindow('propuesta_1_minimal_clinico.html')">📐 Propuesta 1 (Minimal)</button>
+      <button class="btn" onclick="openWindow('propuesta_2_bento_moderno.html')">🍱 Propuesta 2 (Bento)</button>
+      <button class="btn" onclick="openWindow('propuesta_3_frost_glass_elevado.html')">🧊 Propuesta 3 (Frost)</button>
+      <button class="btn" onclick="toggleTheme()">🌓 Tema Claro / Oscuro</button>
+      <button class="btn" id="perfBtn" onclick="togglePerf()">🚀 Modo .perf (Off)</button>
+    </div>
+  </header>
+
+  <!-- Contenido de Demostración -->
+  <div class="main-layout">
+    <!-- Columna Izquierda: Panel Principal de Citas con Triaje -->
+    <aside class="panel">
+      <div class="panel-head">
+        <b>Agenda de Consultorio</b>
+        <span class="clock-live" id="reloj">08:24:15</span>
+      </div>
+      <div class="triaje-strip">
+        <div class="t-box verde"><span>A TIEMPO</span><b>8</b></div>
+        <div class="t-box morado"><span>PRE-AL</span><b>2</b></div>
+        <div class="t-box ambar"><span>AUSEN</span><b>3</b></div>
+        <div class="t-box rojo"><span>FRAUDE</span><b>1</b></div>
+        <div class="t-box azul"><span>TOTAL</span><b>14</b></div>
+      </div>
+      <div class="citas-list">
+        <div class="cita-item c-rojo">
+          <div class="cita-main">
+            <span class="time-tag">08:00</span>
+            <div>
+              <div class="name-tag">Pérez Morales, Juan Carlos</div>
+              <div class="doc-tag">CC 10.234.567 • 82a • G4 / RCV</div>
+            </div>
+          </div>
+          <span class="badge-status b-rojo">FRAUDE</span>
+        </div>
+
+        <div class="cita-item c-morado">
+          <div class="cita-main">
+            <span class="time-tag">08:15</span>
+            <div>
+              <div class="name-tag">Gómez Restrepo, María Helena</div>
+              <div class="doc-tag">CC 43.123.890 • 64a • G3a / HTA</div>
+            </div>
+          </div>
+          <span class="badge-status b-morado">1 MIN</span>
+        </div>
+
+        <div class="cita-item c-verde">
+          <div class="cita-main">
+            <span class="time-tag">08:30</span>
+            <div>
+              <div class="name-tag">Ramírez Díaz, Carlos Arturo</div>
+              <div class="doc-tag">CC 71.555.221 • 58a • G2 / DM2</div>
+            </div>
+          </div>
+          <span class="badge-status b-verde">SALA</span>
+        </div>
+
+        <div class="cita-item c-ambar">
+          <div class="cita-main">
+            <span class="time-tag">08:45</span>
+            <div>
+              <div class="name-tag">Torres Vargas, Ana Lucía</div>
+              <div class="doc-tag">CC 32.889.001 • 70a • G1 / HTA</div>
+            </div>
+          </div>
+          <span class="badge-status b-ambar">+7 MIN</span>
+        </div>
+
+        <div class="cita-item c-azul">
+          <div class="cita-main">
+            <span class="time-tag">09:00</span>
+            <div>
+              <div class="name-tag">Martínez Silva, Jorge Enrique</div>
+              <div class="doc-tag">CC 98.441.776 • 61a • Control</div>
+            </div>
+          </div>
+          <span class="badge-status b-azul">PROGRAM</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Columna Derecha: Interfaz de Paciente Activo -->
+    <main class="workspace">
+      <!-- Banner PyM -->
+      <section class="banner-pym">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:16px;">🎗️</span>
+          <div>
+            <b>Metas de Detección Temprana (PyM):</b>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <span class="chip crit">VIH (Vencido)</span>
+              <span class="chip crit">Mamografía (Pendiente)</span>
+              <span class="chip">Sangre Oculta en Materia Fecal</span>
+            </div>
+          </div>
+        </div>
+        <button class="btn">📋 Ver Ficha PyM</button>
+      </section>
+
+      <!-- Auditoría Renal -->
+      <section class="card-section">
+        <div class="card-head">
+          <h2>🧪 Función Renal KDIGO & Vigencias por Estadio (Cockcroft-Gault)</h2>
+          <span class="chip" style="background:rgba(168,85,247,0.15); border-color:var(--c-morado); color:var(--c-morado);">
+            ESTADIO G3a • TFG: 55.5 mL/min (Discordancia CKD-EPI: 59.3)
+          </span>
+        </div>
+        <div class="grid-labs">
+          <div class="lab-box">
+            <div style="display:flex; justify-content:space-between; font-size:var(--t-micro); font-weight:700; color:var(--fg2);">
+              <span>CREATININA SÉRICA</span>
+              <span style="color:var(--c-verde);">VIGENTE</span>
+            </div>
+            <div class="lab-val" style="color:var(--c-verde);">1.20 <span style="font-size:13px; font-weight:600; color:var(--fg2);">mg/dL</span></div>
+            <div style="font-size:var(--t-micro); color:var(--fg3);">Toma: 15/08/2026 (Hace 3 días)</div>
+          </div>
+
+          <div class="lab-box">
+            <div style="display:flex; justify-content:space-between; font-size:var(--t-micro); font-weight:700; color:var(--fg2);">
+              <span>GLICEMIA EN AYUNAS</span>
+              <span style="color:var(--c-rojo);">VENCIDO</span>
+            </div>
+            <div class="lab-val" style="color:var(--c-rojo);">142 <span style="font-size:13px; font-weight:600; color:var(--fg2);">mg/dL</span></div>
+            <div style="font-size:var(--t-micro); color:var(--c-rojo);">Toma: 10/05/2026 (Vigencia 60d en G4 superada)</div>
+          </div>
+
+          <div class="lab-box">
+            <div style="display:flex; justify-content:space-between; font-size:var(--t-micro); font-weight:700; color:var(--fg2);">
+              <span>RELACIÓN ALB/CREAT (RAC)</span>
+              <span style="color:var(--c-ambar);">A1 (&lt; 30)</span>
+            </div>
+            <div class="lab-val" style="color:var(--c-ambar);">18.4 <span style="font-size:13px; font-weight:600; color:var(--fg2);">mg/g</span></div>
+            <div style="font-size:var(--t-micro); color:var(--fg3);">Toma: 12/06/2026 (Vigencia 180 días)</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Seguridad Farmacológica -->
+      <section class="card-section">
+        <div class="card-head">
+          <h2>💊 Alertas de Seguridad Farmacológica e Interacciones (Motor Portado)</h2>
+          <span style="font-size:var(--t-micro); font-weight:800; color:var(--c-rojo);">1 CRÍTICO • 1 PRECAUCIÓN</span>
+        </div>
+
+        <div class="alert-farmaco crit">
+          <div style="display:flex; justify-content:space-between; font-size:var(--t-micro); font-weight:800; color:var(--c-rojo);">
+            <span>⛔ TRIPLE WHAMMY — RIESGO DE INJURIA RENAL AGUDA</span>
+            <span>CRITICAL (Prioridad 0)</span>
+          </div>
+          <b style="font-size:var(--t-body);">Losartán 50mg + Hidroclorotiazida 25mg + Ibuprofeno 400mg</b>
+          <p style="font-size:var(--t-micro); color:var(--fg2); line-height:1.4;">
+            <b>Mecanismo:</b> Vasoconstricción de arteriola aferente (AINE) + Vasodilatación de eferente (ARA-II) + Hipovolemia (Diurético).
+          </p>
+          <div style="font-size:var(--t-micro); color:var(--c-rojo); font-weight:700;">
+            Conducta: Suspender AINE. Preferir analgesia segura sin nefrotoxicidad.
+          </div>
+        </div>
+
+        <div class="alert-farmaco alto">
+          <div style="display:flex; justify-content:space-between; font-size:var(--t-micro); font-weight:800; color:var(--c-ambar);">
+            <span>⚠ AJUSTE DE DOSIS RENAL</span>
+            <span>HIGH (Prioridad 1)</span>
+          </div>
+          <b style="font-size:var(--t-body);">Metformina 850mg (TFG 35 mL/min)</b>
+          <p style="font-size:var(--t-micro); color:var(--fg2);">
+            <b>Recomendación:</b> Dosis máxima recomendada 1000 mg/día en TFG entre 30 y 44 mL/min. Monitorear función renal semestral.
+          </p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Dock Flotante (Demostración de componente) -->
+  <div class="dock-pill">
+    <div class="dock-led"></div>
+    <span style="font-size:var(--t-micro); font-weight:800;">Vigilante • 8 en sala</span>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const b = document.body;
+      b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+
+    function togglePerf() {
+      const b = document.body;
+      b.classList.toggle('perf');
+      const active = b.classList.contains('perf');
+      document.getElementById('perfBtn').innerText = active ? '🚀 Modo .perf (ON)' : '🚀 Modo .perf (Off)';
+    }
+
+    function openWindow(url) {
+      window.open(url, '_blank');
+    }
+
+    function setProposal(p) {
+      alert('Esta es la vista integrada de la propuesta sintetizada. Puedes abrir las propuestas 1, 2 y 3 en ventanas individuales con los botones superiores.');
+    }
+
+    // Reloj en vivo
+    setInterval(() => {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('reloj').innerText = `${h}:${m}:${s}`;
+    }, 1000);
+  </script>
+</body>
+</html>

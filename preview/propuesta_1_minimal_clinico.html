@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propuesta 1 — Minimalismo Clínico de Alta Densidad</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --bg-surface: #121722;
+      --bg-card: #181f2c;
+      --bg-card-hover: #1e2636;
+      --fg: #f1f5f9;
+      --fg2: #94a3b8;
+      --fg3: #64748b;
+      --edge: rgba(255, 255, 255, 0.08);
+      --edge-strong: rgba(255, 255, 255, 0.16);
+      
+      /* Colores clínicos de triaje */
+      --c-verde: #10b981;
+      --c-morado: #a855f7;
+      --c-ambar: #f59e0b;
+      --c-rojo: #ef4444;
+      --c-azul: #3b82f6;
+      
+      /* Escala tipográfica */
+      --t-micro: 11px;
+      --t-body: 13px;
+      --t-strong: 14px;
+      --t-title: 16px;
+      --t-hero: 20px;
+      
+      --r-sm: 4px;
+      --r-md: 6px;
+      --r-lg: 8px;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-card: #f1f5f9;
+      --bg-card-hover: #e2e8f0;
+      --fg: #0f172a;
+      --fg2: #475569;
+      --fg3: #64748b;
+      --edge: rgba(0, 0, 0, 0.08);
+      --edge-strong: rgba(0, 0, 0, 0.16);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { background: var(--bg); color: var(--fg); padding: 24px; display: flex; flex-direction: column; gap: 20px; font-size: var(--t-body); }
+
+    .top-bar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--edge); padding-bottom: 12px; }
+    .theme-btn { background: var(--bg-card); border: 1px solid var(--edge); color: var(--fg); padding: 6px 12px; border-radius: var(--r-sm); cursor: pointer; font-size: var(--t-micro); font-weight: 600; }
+    .theme-btn:hover { background: var(--bg-card-hover); }
+
+    .panel-container { display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+
+    /* Panel Citas */
+    .panel { background: var(--bg-surface); border: 1px solid var(--edge); border-radius: var(--r-md); display: flex; flex-direction: column; overflow: hidden; }
+    .panel-head { padding: 12px 16px; background: var(--bg-card); border-bottom: 1px solid var(--edge); display: flex; justify-content: space-between; align-items: center; }
+    .panel-head h2 { font-size: var(--t-title); font-weight: 700; }
+    .panel-clock { font-size: var(--t-strong); font-weight: 800; font-variant-numeric: tabular-nums; }
+
+    .triaje-bar { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 8px 12px; background: var(--bg-surface); border-bottom: 1px solid var(--edge); }
+    .triaje-pill { display: flex; flex-direction: column; align-items: center; padding: 4px; border-radius: var(--r-sm); border: 1px solid var(--edge); }
+    .triaje-pill.verde { border-color: var(--c-verde); background: rgba(16, 185, 129, 0.1); color: var(--c-verde); }
+    .triaje-pill.morado { border-color: var(--c-morado); background: rgba(168, 85, 247, 0.1); color: var(--c-morado); }
+    .triaje-pill.ambar { border-color: var(--c-ambar); background: rgba(245, 158, 11, 0.1); color: var(--c-ambar); }
+    .triaje-pill.rojo { border-color: var(--c-rojo); background: rgba(239, 68, 68, 0.1); color: var(--c-rojo); }
+    .triaje-pill.azul { border-color: var(--c-azul); background: rgba(59, 130, 246, 0.1); color: var(--c-azul); }
+    .triaje-pill span:first-child { font-size: var(--t-micro); font-weight: 700; }
+    .triaje-pill span:last-child { font-size: var(--t-strong); font-weight: 800; }
+
+    .citas-list { display: flex; flex-direction: column; gap: 6px; padding: 12px; max-height: 520px; overflow-y: auto; }
+    .cita-card { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--r-sm); background: var(--bg-card); border-left: 4px solid transparent; border-top: 1px solid var(--edge); border-right: 1px solid var(--edge); border-bottom: 1px solid var(--edge); }
+    .cita-card:hover { background: var(--bg-card-hover); }
+    .cita-card.c-verde { border-left-color: var(--c-verde); }
+    .cita-card.c-morado { border-left-color: var(--c-morado); }
+    .cita-card.c-ambar { border-left-color: var(--c-ambar); }
+    .cita-card.c-rojo { border-left-color: var(--c-rojo); }
+    .cita-card.c-azul { border-left-color: var(--c-azul); }
+
+    .cita-time { font-size: var(--t-strong); font-weight: 800; font-variant-numeric: tabular-nums; width: 44px; }
+    .cita-info { flex: 1; min-width: 0; }
+    .cita-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--t-body); }
+    .cita-meta { font-size: var(--t-micro); color: var(--fg2); display: flex; gap: 8px; }
+    .cita-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
+
+    /* Modales y Contenido Principal */
+    .content-area { display: flex; flex-direction: column; gap: 16px; }
+
+    .banner-pym { background: var(--bg-surface); border: 1px solid var(--edge); border-left: 4px solid var(--c-azul); border-radius: var(--r-sm); padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; }
+    .banner-pym-left { display: flex; align-items: center; gap: 10px; }
+    .banner-chips { display: flex; gap: 6px; }
+    .chip { font-size: var(--t-micro); padding: 2px 8px; border-radius: var(--r-sm); background: var(--bg-card); border: 1px solid var(--edge); font-weight: 600; }
+    .chip.alert { background: rgba(239, 68, 68, 0.15); border-color: var(--c-rojo); color: var(--c-rojo); }
+
+    .modal-box { background: var(--bg-surface); border: 1px solid var(--edge); border-radius: var(--r-md); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--edge); padding-bottom: 8px; }
+    .modal-head h3 { font-size: var(--t-strong); font-weight: 700; }
+
+    .labs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .lab-item { background: var(--bg-card); border: 1px solid var(--edge); border-radius: var(--r-sm); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+    .lab-item-head { display: flex; justify-content: space-between; font-size: var(--t-micro); font-weight: 700; color: var(--fg2); }
+    .lab-item-val { font-size: var(--t-strong); font-weight: 800; }
+    .lab-item-date { font-size: var(--t-micro); color: var(--fg3); }
+
+    /* Farmacología */
+    .farmaco-card { background: var(--bg-card); border: 1px solid var(--edge); border-radius: var(--r-sm); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .farmaco-crit { border-left: 4px solid var(--c-rojo); background: rgba(239, 68, 68, 0.08); }
+    .farmaco-alto { border-left: 4px solid var(--c-ambar); background: rgba(245, 158, 11, 0.08); }
+    .farmaco-head { display: flex; justify-content: space-between; font-size: var(--t-micro); font-weight: 800; }
+    .farmaco-crit .farmaco-head { color: var(--c-rojo); }
+    .farmaco-alto .farmaco-head { color: var(--c-ambar); }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="top-bar">
+    <div>
+      <h1 style="font-size: var(--t-title); font-weight: 800;">Vigilante de Agenda — Propuesta 1 (Minimalismo Clínico)</h1>
+      <p style="font-size: var(--t-micro); color: var(--fg2);">Densidad máxima, líneas limpias, cero distracciones, código de 5 colores exacto</p>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()">🌓 Alternar Modo Claro / Oscuro</button>
+  </div>
+
+  <div class="panel-container">
+    <!-- Panel Izquierdo: Citas -->
+    <div class="panel">
+      <div class="panel-head">
+        <h2>Agenda Hoy</h2>
+        <span class="panel-clock">08:24:15</span>
+      </div>
+      <div class="triaje-bar">
+        <div class="triaje-pill verde"><span>A TIEMPO</span><span>8</span></div>
+        <div class="triaje-pill morado"><span>PRE-ALERTA</span><span>2</span></div>
+        <div class="triaje-pill ambar"><span>AUSENTE</span><span>3</span></div>
+        <div class="triaje-pill rojo"><span>FRAUDE</span><span>1</span></div>
+        <div class="triaje-pill azul"><span>TOTAL</span><span>14</span></div>
+      </div>
+      <div class="citas-list">
+        <div class="cita-card c-rojo">
+          <span class="cita-time">08:00</span>
+          <div class="cita-info">
+            <div class="cita-name">Pérez Morales, Juan Carlos</div>
+            <div class="cita-meta"><span>CC 10.234.567</span><span>• 82a • G4</span></div>
+          </div>
+          <span class="cita-badge" style="background: var(--c-rojo); color: #fff;">FRAUDE</span>
+        </div>
+        <div class="cita-card c-morado">
+          <span class="cita-time">08:15</span>
+          <div class="cita-info">
+            <div class="cita-name">Gómez Restrepo, María Helena</div>
+            <div class="cita-meta"><span>CC 43.123.890</span><span>• 64a • G3a</span></div>
+          </div>
+          <span class="cita-badge" style="background: var(--c-morado); color: #fff;">1 MIN</span>
+        </div>
+        <div class="cita-card c-verde">
+          <span class="cita-time">08:30</span>
+          <div class="cita-info">
+            <div class="cita-name">Ramírez Díaz, Carlos Arturo</div>
+            <div class="cita-meta"><span>CC 71.555.221</span><span>• 58a • G2</span></div>
+          </div>
+          <span class="cita-badge" style="background: var(--c-verde); color: #fff;">SALA</span>
+        </div>
+        <div class="cita-card c-ambar">
+          <span class="cita-time">08:45</span>
+          <div class="cita-info">
+            <div class="cita-name">Torres Vargas, Ana Lucía</div>
+            <div class="cita-meta"><span>CC 32.889.001</span><span>• 70a • G1</span></div>
+          </div>
+          <span class="cita-badge" style="background: var(--c-ambar); color: #000;">+7 MIN</span>
+        </div>
+        <div class="cita-card c-azul">
+          <span class="cita-time">09:00</span>
+          <div class="cita-info">
+            <div class="cita-name">Martínez Silva, Jorge Enrique</div>
+            <div class="cita-meta"><span>CC 98.441.776</span><span>• 61a • RCV</span></div>
+          </div>
+          <span class="cita-badge" style="background: var(--bg-surface); color: var(--fg2); border: 1px solid var(--edge);">PROGRAM</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel Derecho: Contenido Clínico -->
+    <div class="content-area">
+      <!-- Banner PyM -->
+      <div class="banner-pym">
+        <div class="banner-pym-left">
+          <b style="font-size: var(--t-strong);">🎗️ Actividades PyM Pendientes (Gómez Restrepo, María):</b>
+          <div class="banner-chips">
+            <span class="chip alert">VIH (Vencido)</span>
+            <span class="chip alert">Mamografía</span>
+            <span class="chip">Sangre Oculta</span>
+          </div>
+        </div>
+        <span style="font-size: var(--t-micro); color: var(--fg2);">2 de 3 críticas</span>
+      </div>
+
+      <!-- Auditoría Renal y Labs -->
+      <div class="modal-box">
+        <div class="modal-head">
+          <h3>🧪 Auditoría de Laboratorios y Función Renal (Cockcroft-Gault / KDIGO)</h3>
+          <span class="chip" style="background: rgba(168, 85, 247, 0.15); color: var(--c-morado); border-color: var(--c-morado);">ESTADIO G3a (TFG: 55.5 mL/min)</span>
+        </div>
+        <div class="labs-grid">
+          <div class="lab-item">
+            <div class="lab-item-head"><span>CREATININA</span><span style="color: var(--c-verde);">VIGENTE</span></div>
+            <div class="lab-item-val">1.2 mg/dL</div>
+            <div class="lab-item-date">Toma: 15/08/2026 (Hace 3d)</div>
+          </div>
+          <div class="lab-item">
+            <div class="lab-item-head"><span>GLICEMIA</span><span style="color: var(--c-rojo);">VENCIDO</span></div>
+            <div class="lab-item-val">142 mg/dL</div>
+            <div class="lab-item-date">Toma: 10/05/2026 (Hace 97d)</div>
+          </div>
+          <div class="lab-item">
+            <div class="lab-item-head"><span>RAC (mg/g)</span><span style="color: var(--c-ambar);">A1 (&lt;30)</span></div>
+            <div class="lab-item-val">18.4 mg/g</div>
+            <div class="lab-item-date">Toma: 12/06/2026 (Hace 64d)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seguridad Farmacológica (Motor Portado) -->
+      <div class="modal-box">
+        <div class="modal-head">
+          <h3>💊 Seguridad Farmacológica y Dosis Renal (Motor Portado)</h3>
+          <span style="font-size: var(--t-micro); color: var(--c-rojo); font-weight: 700;">1 ALERTA CRÍTICA • 1 PRECAUCIÓN</span>
+        </div>
+        <div class="farmaco-card farmaco-crit">
+          <div class="farmaco-head">
+            <span>⛔ TRIPLE WHAMMY (Injuria Renal Aguda)</span>
+            <span>CRITICAL</span>
+          </div>
+          <p style="font-size: var(--t-body); font-weight: 600;">Losartán 50mg + Hidroclorotiazida 25mg + Ibuprofeno 400mg</p>
+          <p style="font-size: var(--t-micro); color: var(--fg2); font-style: italic;">Mecanismo: Vasoconstricción aferente (AINE) + Vasodilatación eferente (ARA-II) + Hipovolemia.</p>
+        </div>
+        <div class="farmaco-card farmaco-alto">
+          <div class="farmaco-head">
+            <span>⚠ AJUSTE DE DOSIS RENAL</span>
+            <span>HIGH</span>
+          </div>
+          <p style="font-size: var(--t-body); font-weight: 600;">Metformina 850mg (TFG 35 mL/min)</p>
+          <p style="font-size: var(--t-micro); color: var(--fg2);">Conducta recomendada: Dosis máxima 1000 mg/día en TFG 30-44 mL/min.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const b = document.body;
+      b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+  </script>
+</body>
+</html>

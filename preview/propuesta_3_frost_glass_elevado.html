@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propuesta 3 — Spatial Frost Glass Clínico (WCAG AAA)</title>
+  <style>
+    :root {
+      --bg: #07090e;
+      --bg-glass: rgba(13, 17, 26, 0.85);
+      --bg-card: rgba(22, 28, 42, 0.7);
+      --bg-card-hover: rgba(30, 39, 58, 0.9);
+      --fg: #ffffff;
+      --fg2: #a1b0cb;
+      --fg3: #6c7d9d;
+      --border-glass: rgba(255, 255, 255, 0.12);
+      
+      /* Colores clínicos de triaje */
+      --c-verde: #05df72;
+      --c-morado: #c084fc;
+      --c-ambar: #fbbf24;
+      --c-rojo: #f87171;
+      --c-azul: #60a5fa;
+
+      --t-micro: 11px;
+      --t-body: 13px;
+      --t-strong: 14px;
+      --t-title: 16px;
+      --t-hero: 22px;
+      
+      --r-glass: 10px;
+    }
+
+    [data-theme="light"] {
+      --bg: #eef2f6;
+      --bg-glass: rgba(255, 255, 255, 0.9);
+      --bg-card: rgba(241, 245, 249, 0.85);
+      --bg-card-hover: rgba(226, 232, 240, 0.95);
+      --fg: #0a0f1d;
+      --fg2: #41516c;
+      --fg3: #62748f;
+      --border-glass: rgba(0, 0, 0, 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--fg); padding: 24px; display: flex; flex-direction: column; gap: 20px; font-size: var(--t-body); }
+
+    .header-nav { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border-glass); }
+    .theme-switch { background: var(--bg-card); border: 1px solid var(--border-glass); color: var(--fg); padding: 8px 14px; border-radius: var(--r-glass); cursor: pointer; font-weight: 700; font-size: var(--t-micro); backdrop-filter: blur(8px); }
+
+    .spatial-grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+
+    /* Spatial Panel */
+    .glass-panel { background: var(--bg-glass); border: 1px solid var(--border-glass); border-radius: var(--r-glass); padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); backdrop-filter: blur(12px); }
+    .glass-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px; }
+    .clock-tag { font-size: var(--t-hero); font-weight: 900; font-variant-numeric: tabular-nums; background: linear-gradient(135deg, var(--fg), var(--fg2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+    /* Triaje Neón-Pastel */
+    .triage-pills { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+    .t-pill { padding: 6px 2px; text-align: center; border-radius: 6px; font-weight: 800; font-size: 10px; border: 1px solid transparent; }
+    .t-pill.v { background: rgba(5, 223, 114, 0.15); color: var(--c-verde); border-color: rgba(5, 223, 114, 0.4); }
+    .t-pill.m { background: rgba(192, 132, 252, 0.15); color: var(--c-morado); border-color: rgba(192, 132, 252, 0.4); }
+    .t-pill.a { background: rgba(251, 191, 36, 0.15); color: var(--c-ambar); border-color: rgba(251, 191, 36, 0.4); }
+    .t-pill.r { background: rgba(248, 113, 113, 0.15); color: var(--c-rojo); border-color: rgba(248, 113, 113, 0.4); }
+    .t-pill.b { background: rgba(96, 165, 250, 0.15); color: var(--c-azul); border-color: rgba(96, 165, 250, 0.4); }
+
+    .citas-flow { display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow-y: auto; }
+    .glass-cita { background: var(--bg-card); border: 1px solid var(--border-glass); border-radius: 8px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+    .glass-cita.rojo { box-shadow: inset 3px 0 0 var(--c-rojo); }
+    .glass-cita.morado { box-shadow: inset 3px 0 0 var(--c-morado); }
+    .glass-cita.verde { box-shadow: inset 3px 0 0 var(--c-verde); }
+    .glass-cita.ambar { box-shadow: inset 3px 0 0 var(--c-ambar); }
+    .glass-cita.azul { box-shadow: inset 3px 0 0 var(--c-azul); }
+
+    .badge-pill { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="header-nav">
+    <div>
+      <h1 style="font-size: var(--t-title); font-weight: 800;">Vigilante de Agenda — Propuesta 3 (Spatial Frost Glass)</h1>
+      <p style="font-size: var(--t-micro); color: var(--fg2);">Vidrio frost sobre negro OLED, contrastes vibrantes WCAG AAA, triaje con acentos neón-pastel</p>
+    </div>
+    <button class="theme-switch" onclick="toggleTheme()">🌓 Alternar Tema</button>
+  </div>
+
+  <div class="spatial-grid">
+    <!-- Panel Izquierdo: Citas -->
+    <div class="glass-panel">
+      <div class="glass-head">
+        <span style="font-weight: 800; font-size: var(--t-strong);">AGENDA CLÍNICA</span>
+        <span class="clock-tag">08:24:15</span>
+      </div>
+
+      <div class="triage-pills">
+        <div class="t-pill v"><b>8</b><br>VERDE</div>
+        <div class="t-pill m"><b>2</b><br>MORADO</div>
+        <div class="t-pill a"><b>3</b><br>ÁMBAR</div>
+        <div class="t-pill r"><b>1</b><br>ROJO</div>
+        <div class="t-pill b"><b>14</b><br>TOTAL</div>
+      </div>
+
+      <div class="citas-flow">
+        <div class="glass-cita rojo">
+          <b style="font-size: var(--t-strong); font-variant-numeric: tabular-nums;">08:00</b>
+          <div style="flex:1;">
+            <div style="font-weight:700;">Pérez Morales, Juan</div>
+            <div style="font-size: var(--t-micro); color: var(--fg2);">CC 10.234.567 • 82a • G4</div>
+          </div>
+          <span class="badge-pill" style="background: rgba(248,113,113,0.2); color: var(--c-rojo); border: 1px solid var(--c-rojo);">FRAUDE</span>
+        </div>
+
+        <div class="glass-cita morado">
+          <b style="font-size: var(--t-strong); font-variant-numeric: tabular-nums;">08:15</b>
+          <div style="flex:1;">
+            <div style="font-weight:700;">Gómez Restrepo, María</div>
+            <div style="font-size: var(--t-micro); color: var(--fg2);">CC 43.123.890 • 64a • G3a</div>
+          </div>
+          <span class="badge-pill" style="background: rgba(192,132,252,0.2); color: var(--c-morado); border: 1px solid var(--c-morado);">1 MIN</span>
+        </div>
+
+        <div class="glass-cita verde">
+          <b style="font-size: var(--t-strong); font-variant-numeric: tabular-nums;">08:30</b>
+          <div style="flex:1;">
+            <div style="font-weight:700;">Ramírez Díaz, Carlos</div>
+            <div style="font-size: var(--t-micro); color: var(--fg2);">CC 71.555.221 • 58a • G2</div>
+          </div>
+          <span class="badge-pill" style="background: rgba(5,223,114,0.2); color: var(--c-verde); border: 1px solid var(--c-verde);">SALA</span>
+        </div>
+
+        <div class="glass-cita ambar">
+          <b style="font-size: var(--t-strong); font-variant-numeric: tabular-nums;">08:45</b>
+          <div style="flex:1;">
+            <div style="font-weight:700;">Torres Vargas, Ana</div>
+            <div style="font-size: var(--t-micro); color: var(--fg2);">CC 32.889.001 • 70a • G1</div>
+          </div>
+          <span class="badge-pill" style="background: rgba(251,191,36,0.2); color: var(--c-ambar); border: 1px solid var(--c-ambar);">+7 MIN</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel Derecho: Contenido Clínico -->
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="glass-panel">
+        <div class="glass-head">
+          <span style="font-weight: 800; font-size: var(--t-strong);">🧪 AUDITORÍA KDIGO / FUNCIÓN RENAL</span>
+          <span class="badge-pill" style="background: rgba(192,132,252,0.2); color: var(--c-morado); border: 1px solid var(--c-morado);">G3a • 55.5 mL/min</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+          <div style="background: var(--bg-card); padding: 10px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            <div style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">CREATININA</div>
+            <div style="font-size: var(--t-hero); font-weight: 900; color: var(--c-verde);">1.20</div>
+            <div style="font-size: 10px; color: var(--fg3);">15/08/2026 (Vigente)</div>
+          </div>
+          <div style="background: var(--bg-card); padding: 10px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            <div style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">GLICEMIA</div>
+            <div style="font-size: var(--t-hero); font-weight: 900; color: var(--c-rojo);">142</div>
+            <div style="font-size: 10px; color: var(--c-rojo);">Vencido (hace 97d)</div>
+          </div>
+          <div style="background: var(--bg-card); padding: 10px; border-radius: 8px; border: 1px solid var(--border-glass);">
+            <div style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">RAC (mg/g)</div>
+            <div style="font-size: var(--t-hero); font-weight: 900; color: var(--c-ambar);">18.4</div>
+            <div style="font-size: 10px; color: var(--fg3);">A1 Normal</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass-panel">
+        <div class="glass-head">
+          <span style="font-weight: 800; font-size: var(--t-strong);">💊 SEGURIDAD FARMACOLÓGICA (MOTOR PORTADO)</span>
+          <span class="badge-pill" style="background: rgba(248,113,113,0.2); color: var(--c-rojo); border: 1px solid var(--c-rojo);">CRITICAL</span>
+        </div>
+        <div style="background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.3); border-radius: 8px; padding: 12px;">
+          <b style="color: var(--c-rojo); font-size: var(--t-strong);">⛔ TRIPLE WHAMMY (Losartán + HCTZ + Ibuprofeno)</b>
+          <p style="font-size: var(--t-micro); color: var(--fg2); margin-top: 4px;">Riesgo crítico de insuficiencia renal aguda por interacción triple. Suspender el AINE inmediatamente.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const b = document.body;
+      b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Propuesta 2 — Bento Grid Clínico Moderno</title>
+  <style>
+    :root {
+      --bg: #090c10;
+      --surface-1: #0e131b;
+      --surface-2: #151c27;
+      --surface-3: #1c2534;
+      --fg: #f8fafc;
+      --fg2: #94a3b8;
+      --fg3: #64748b;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-accent: rgba(255, 255, 255, 0.16);
+      
+      /* Colores clínicos de triaje */
+      --c-verde: #10b981;
+      --c-morado: #a855f7;
+      --c-ambar: #f59e0b;
+      --c-rojo: #ef4444;
+      --c-azul: #3b82f6;
+
+      --t-micro: 11px;
+      --t-body: 13px;
+      --t-strong: 14px;
+      --t-title: 16px;
+      --t-hero: 22px;
+      
+      --r-bento: 12px;
+      --r-chip: 6px;
+    }
+
+    [data-theme="light"] {
+      --bg: #f1f5f9;
+      --surface-1: #ffffff;
+      --surface-2: #f8fafc;
+      --surface-3: #e2e8f0;
+      --fg: #0f172a;
+      --fg2: #475569;
+      --fg3: #64748b;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-accent: rgba(0, 0, 0, 0.14);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--fg); padding: 24px; display: flex; flex-direction: column; gap: 20px; font-size: var(--t-body); }
+
+    .header-bar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .theme-toggle { background: var(--surface-2); border: 1px solid var(--border); color: var(--fg); padding: 8px 14px; border-radius: var(--r-chip); cursor: pointer; font-weight: 700; font-size: var(--t-micro); }
+    .theme-toggle:hover { background: var(--surface-3); }
+
+    /* Bento Grid */
+    .bento-layout { display: grid; grid-template-columns: 380px 1fr 1fr; gap: 16px; }
+
+    .bento-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r-bento); padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .bento-title { font-size: var(--t-strong); font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
+
+    /* Triaje */
+    .triaje-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .stat-box { padding: 6px 4px; border-radius: var(--r-chip); text-align: center; border: 1px solid var(--border); }
+    .stat-box.verde { background: rgba(16, 185, 129, 0.12); color: var(--c-verde); border-color: rgba(16, 185, 129, 0.3); }
+    .stat-box.morado { background: rgba(168, 85, 247, 0.12); color: var(--c-morado); border-color: rgba(168, 85, 247, 0.3); }
+    .stat-box.ambar { background: rgba(245, 158, 11, 0.12); color: var(--c-ambar); border-color: rgba(245, 158, 11, 0.3); }
+    .stat-box.rojo { background: rgba(239, 68, 68, 0.12); color: var(--c-rojo); border-color: rgba(239, 68, 68, 0.3); }
+    .stat-box.azul { background: rgba(59, 130, 246, 0.12); color: var(--c-azul); border-color: rgba(59, 130, 246, 0.3); }
+    .stat-box b { font-size: var(--t-strong); display: block; }
+    .stat-box span { font-size: 10px; font-weight: 700; }
+
+    .citas-container { display: flex; flex-direction: column; gap: 8px; max-height: 480px; overflow-y: auto; }
+    .bento-cita { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-chip); padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px; transition: transform 0.15s ease; }
+    .bento-cita:hover { transform: translateY(-1px); border-color: var(--border-accent); }
+    .bento-cita-left { display: flex; align-items: center; gap: 12px; }
+    .bento-time { font-size: var(--t-strong); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .bento-name { font-weight: 700; font-size: var(--t-body); }
+    .bento-doc { font-size: var(--t-micro); color: var(--fg2); }
+
+    .status-badge { font-size: 11px; font-weight: 800; padding: 4px 8px; border-radius: var(--r-chip); letter-spacing: 0.3px; }
+    .badge-verde { background: var(--c-verde); color: #fff; }
+    .badge-morado { background: var(--c-morado); color: #fff; }
+    .badge-ambar { background: var(--c-ambar); color: #000; }
+    .badge-rojo { background: var(--c-rojo); color: #fff; }
+    .badge-azul { background: var(--surface-3); color: var(--fg2); border: 1px solid var(--border); }
+
+    /* Labs Bento */
+    .lab-metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .lab-metric-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-chip); padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .lab-metric-card .val { font-size: var(--t-hero); font-weight: 900; }
+
+    /* Farmaco Bento */
+    .farmaco-alert-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-chip); padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .farmaco-alert-box.crit { background: rgba(239, 68, 68, 0.1); border-color: var(--c-rojo); }
+    .farmaco-alert-box.alto { background: rgba(245, 158, 11, 0.1); border-color: var(--c-ambar); }
+  </style>
+</head>
+<body data-theme="dark">
+  <div class="header-bar">
+    <div>
+      <h1 style="font-size: var(--t-title); font-weight: 800;">Vigilante de Agenda — Propuesta 2 (Bento Grid Clínico)</h1>
+      <p style="font-size: var(--t-micro); color: var(--fg2);">Micro-elevaciones, modularidad por tarjetas, badges claros, jerarquía visual equilibrada</p>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Alternar Tema</button>
+  </div>
+
+  <div class="bento-layout">
+    <!-- Columna 1: Agenda -->
+    <div class="bento-card">
+      <div class="bento-title">
+        <span>📋 Agenda y Triage</span>
+        <span style="font-variant-numeric: tabular-nums; font-weight: 800; color: var(--c-azul);">08:24:15</span>
+      </div>
+
+      <div class="triaje-stats">
+        <div class="stat-box verde"><b>8</b><span>TIEMPO</span></div>
+        <div class="stat-box morado"><b>2</b><span>PRE-AL</span></div>
+        <div class="stat-box ambar"><b>3</b><span>AUSEN</span></div>
+        <div class="stat-box rojo"><b>1</b><span>FRAUD</span></div>
+        <div class="stat-box azul"><b>14</b><span>TOTAL</span></div>
+      </div>
+
+      <div class="citas-container">
+        <div class="bento-cita" style="border-left: 4px solid var(--c-rojo);">
+          <div class="bento-cita-left">
+            <span class="bento-time">08:00</span>
+            <div>
+              <div class="bento-name">Pérez Morales, Juan</div>
+              <div class="bento-doc">CC 10.234.567 • 82a • G4</div>
+            </div>
+          </div>
+          <span class="status-badge badge-rojo">FRAUDE</span>
+        </div>
+
+        <div class="bento-cita" style="border-left: 4px solid var(--c-morado);">
+          <div class="bento-cita-left">
+            <span class="bento-time">08:15</span>
+            <div>
+              <div class="bento-name">Gómez Restrepo, María</div>
+              <div class="bento-doc">CC 43.123.890 • 64a • G3a</div>
+            </div>
+          </div>
+          <span class="status-badge badge-morado">1 MIN</span>
+        </div>
+
+        <div class="bento-cita" style="border-left: 4px solid var(--c-verde);">
+          <div class="bento-cita-left">
+            <span class="bento-time">08:30</span>
+            <div>
+              <div class="bento-name">Ramírez Díaz, Carlos</div>
+              <div class="bento-doc">CC 71.555.221 • 58a • G2</div>
+            </div>
+          </div>
+          <span class="status-badge badge-verde">SALA</span>
+        </div>
+
+        <div class="bento-cita" style="border-left: 4px solid var(--c-ambar);">
+          <div class="bento-cita-left">
+            <span class="bento-time">08:45</span>
+            <div>
+              <div class="bento-name">Torres Vargas, Ana</div>
+              <div class="bento-doc">CC 32.889.001 • 70a • G1</div>
+            </div>
+          </div>
+          <span class="status-badge badge-ambar">+7 MIN</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Columna 2: Labs y Función Renal -->
+    <div class="bento-card">
+      <div class="bento-title">
+        <span>🧪 Función Renal (KDIGO)</span>
+        <span class="status-badge badge-morado">G3a • 55.5 mL/min</span>
+      </div>
+
+      <div class="lab-metric-grid">
+        <div class="lab-metric-card">
+          <span style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">CREATININA</span>
+          <span class="val" style="color: var(--c-verde);">1.20</span>
+          <span style="font-size: var(--t-micro); color: var(--fg3);">15/08/2026 (Vigente)</span>
+        </div>
+        <div class="lab-metric-card">
+          <span style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">GLICEMIA</span>
+          <span class="val" style="color: var(--c-rojo);">142</span>
+          <span style="font-size: var(--t-micro); color: var(--c-rojo);">Vencido (hace 97d)</span>
+        </div>
+        <div class="lab-metric-card">
+          <span style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">RAC (mg/g)</span>
+          <span class="val" style="color: var(--c-ambar);">18.4</span>
+          <span style="font-size: var(--t-micro); color: var(--fg3);">A1 Normal-leve</span>
+        </div>
+        <div class="lab-metric-card">
+          <span style="font-size: var(--t-micro); color: var(--fg2); font-weight: 700;">PESO REAL</span>
+          <span class="val">65.0 kg</span>
+          <span style="font-size: var(--t-micro); color: var(--fg3);">Signos vitales</span>
+        </div>
+      </div>
+
+      <div style="background: var(--surface-2); border-radius: var(--r-chip); padding: 10px; border: 1px solid var(--border);">
+        <b style="font-size: var(--t-micro); color: var(--c-azul);">🎗️ Promoción y Mantenimiento:</b>
+        <p style="font-size: var(--t-micro); color: var(--fg2); margin-top: 4px;">VIH (Vencido) • Mamografía pendiente • Sangre oculta al día</p>
+      </div>
+    </div>
+
+    <!-- Columna 3: Farmacología y Alertas -->
+    <div class="bento-card">
+      <div class="bento-title">
+        <span>💊 Seguridad Farmacológica</span>
+        <span style="font-size: var(--t-micro); font-weight: 800; color: var(--c-rojo);">MOTOR PORTADO</span>
+      </div>
+
+      <div class="farmaco-alert-box crit">
+        <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: var(--t-micro); color: var(--c-rojo);">
+          <span>⛔ TRIPLE WHAMMY</span>
+          <span>CRITICAL</span>
+        </div>
+        <b style="font-size: var(--t-body);">Losartán + HCTZ + Ibuprofeno</b>
+        <p style="font-size: var(--t-micro); color: var(--fg2);">Riesgo inminente de daño renal agudo. Suspender AINE y reevaluar.</p>
+      </div>
+
+      <div class="farmaco-alert-box alto">
+        <div style="display: flex; justify-content: space-between; font-weight: 800; font-size: var(--t-micro); color: var(--c-ambar);">
+          <span>⚠ DOSIS RENAL</span>
+          <span>HIGH</span>
+        </div>
+        <b style="font-size: var(--t-body);">Metformina 850mg (TFG 35)</b>
+        <p style="font-size: var(--t-micro); color: var(--fg2);">Tope máximo 1000 mg/día en este estadio de filtración glomerular.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const b = document.body;
+      b.setAttribute('data-theme', b.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+  </script>
+</body>
+</html>
