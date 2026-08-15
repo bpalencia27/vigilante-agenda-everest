@@ -15,9 +15,9 @@ completas del proyecto y el historial de bugs de CSS ya encontrados hoy.
 
 | Dato | Valor real |
 |---|---|
-| Archivo de producción | `vigilante_agenda.user.js`, **~853 KB**, un solo archivo |
-| Banco de pruebas | `node tests/runner.js` (= `npm test`), **930 comprobaciones en verde** |
-| Suites | `tests/suite_01…suite_28` — ya NO existe `PARA_JULES/`, se migró |
+| Archivo de producción | `vigilante_agenda.user.js`, **~885 KB** (14.158 líneas), un solo archivo |
+| Banco de pruebas | `node tests/runner.js` (= `npm test`), **976 comprobaciones en verde** |
+| Suites | `tests/suite_01…suite_29` (30 suites) — ya NO existe `PARA_JULES/`, se migró |
 | Python | **No hay** `pytest` en este repo (eso es el repo hermano del Copiloto) |
 | CI | `.github/workflows/tests.yml` |
 | Rama de trabajo | `claude/pym-agenda-blindaje-v12-4` |

@@ -23,8 +23,6 @@
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
 // @connect      googleusercontent.com
-// @connect      localhost
-// @connect      127.0.0.1
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -1026,7 +1024,7 @@
       a.click();
       a.remove();
       alert("✅ Bitácora de Telemetría descargada exitosamente. Envía este archivo para depurar con datos reales.");
-    } catch (e) { alert("❌ Error al exportar bitácora: " + e); }
+    } catch (e) { alert("❌ No se pudo exportar la bitácora de telemetría en este momento. Inténtelo nuevamente."); }
   }
 
   // Interceptores Globales de Errores y Excepciones
@@ -2503,6 +2501,12 @@
   }
 
   function injectLabsIntoCronicos(labsArray, docIdEsperado, opts) {
+      if (state.killed) {
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], abortadoPorKillSwitch: true };
+      }
+      if (state.disabledFeatures && state.disabledFeatures.has("autoLabs")) {
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], desactivadoRemoto: true };
+      }
       let count = 0;
       let pendientes = 0;
       let respetadas = 0;
@@ -3122,7 +3126,7 @@
   // administrativo) — nunca peso ideal ni ajustado. Centinela 0 = "no evaluable".
   function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
       const edad = Number(edadAnios), peso = Number(pesoKg), creat = Number(creatininaSerica);
-      if (!(edad > 0) || !(peso > 0) || !(creat > 0) || edad >= 140) return 0;
+      if (!(edad >= 18 && edad <= 120) || !(peso >= 20 && peso <= 300) || !(creat >= 0.1 && creat <= 20)) return 0;
       let v = ((140 - edad) * peso) / (72 * creat);
       if (_esSexoFemenino(sexo)) v *= 0.85;
       return Math.round(v * 10) / 10;
@@ -3130,7 +3134,7 @@
   // CKD-EPI 2021 (sin el término de raza, ya retirado). Centinela 0 = "no evaluable".
   function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
       const edad = Number(edadAnios), creat = Number(creatininaSerica);
-      if (!(edad > 0) || !(creat > 0)) return 0;
+      if (!(edad >= 18 && edad <= 120) || !(creat >= 0.1 && creat <= 20)) return 0;
       const femenino = _esSexoFemenino(sexo);
       const k = femenino ? 0.7 : 0.9;
       const a = femenino ? -0.241 : -0.302;
@@ -3529,7 +3533,7 @@
                     + "\n\nConsulte los resultados directamente en el portal. No se diligenció ninguna casilla.");
               }
           } catch (e) {
-              alert("❌ Error al consultar Athenea: " + e);
+              alert("❌ No se pudo conectar con el Portal de Athenea para consultar los paraclínicos. Por favor verifique su conexión o intente desde el portal.");
           }
           btn.innerHTML = "🧬 Auto-Labs (Athenea)";
       };
@@ -3829,9 +3833,31 @@
       };
   }
 
-  function sanitizePII(text) {
-      if (!text) return text;
-      return text.replace(/\b\d{6,11}\b/g, '[CENSURADO]');
+  // Saneamiento profundo y recursivo de PHI/PII (R1.4, R1.5)
+  function scrubPII(input) {
+    if (input == null || typeof input === "boolean") return input;
+    if (typeof input === "number") {
+      if (input >= 100000 && input <= 9999999999) return "[CENSURADO]";
+      return input;
+    }
+    if (Array.isArray(input)) return input.map(scrubPII);
+    if (typeof input === "object") {
+      const res = {};
+      for (const k of Object.keys(input)) {
+        res[k] = scrubPII(input[k]);
+      }
+      return res;
+    }
+    let str = String(input);
+    str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[CORREO_CENSURADO]");
+    str = str.replace(/(?:Av(?:enida)?\s+El\s+Dorado|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)(?:\s+[a-zA-Z0-9]+)?)\s*#\s*[\d-]+/gi, "[DIR_CENSURADA]");
+    str = str.replace(/(?:\+57\s*)?(?:\(?3\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|\b3\d{9}\b)/g, "[TEL_CENSURADO]");
+    str = str.replace(/\b\d{1,3}(?:[.-]\d{3}){1,3}\b/g, "[CENSURADO]");
+    str = str.replace(/(?<=\b|_)\d{6,10}(?=\b|_)/g, "[CENSURADO]");
+    return str;
+  }
+  function sanitizePII(input) {
+    return scrubPII(input);
   }
 
   // v11.0.1 — RETIRADA la telemetría remota a ".../AKfycby_TELEMETRY/exec". Ese
@@ -3903,7 +3929,7 @@
     recordatorio: "07:30",    // avisa si a esta hora aún no hay PyM cargado ("" = nunca)
     baseAuto: true,           // bajar la base PyM de la sede UNA vez al día (por identificador)
     respaldoId: "",           // opcional: otro archivo de base (enlace o identificador)
-    reporte: true,            // reporte MÍNIMO al tablero (resumen diario + fraudes; nada más)
+    reporte: false,           // reporte MÍNIMO al tablero (Default-off R1.8)
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
@@ -3917,37 +3943,162 @@
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
-    uxTelemetria: true,       // v12.5.0 — conteo ANÓNIMO de acciones del panel (sin datos de paciente) para mejora continua; 1 fila agregada cada 30 min
+    uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
-  function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
+  function safeReadJSON(k, def) {
+    try {
+      const r = localStorage.getItem(k);
+      if (r === null || r === undefined) return def;
+      return JSON.parse(r);
+    } catch (e) {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const qKey = `vgl_quarantine_${k}_${Date.now()}`;
+          localStorage.setItem(qKey, raw);
+        }
+      } catch (e2) {}
+      return def;
+    }
+  }
+  function readJSON(k, def) { return safeReadJSON(k, def); }
+
   // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
   // ~40% más viejo de las estadísticas y bitácoras DEL PROPIO script (deja 18 de los
   // 30 días), reutilizando purgeOld y purgeEventDays con ventana reducida. Jamás toca
-  // claves ajenas de Everest. Los literales "vgl_stats"/18 (en vez de STATS_KEY /
-  // KEEP_DAYS*0.6) son a propósito: permiten que la purga funcione incluso si la
-  // cuota se llena durante el arranque, antes de que esas constantes se declaren.
+  // claves ajenas de Everest.
   function purgaPorCuota() {
     try {
-      const dias = 18; // = KEEP_DAYS(30) * 0.6 — conserva solo lo más reciente
-      try { const a = readJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
+      const dias = 18;
+      try { const a = safeReadJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
       try { purgeEventDays(dias); } catch (e) {}
       if (!quotaAvisada) { quotaAvisada = true; console.warn("[Vigilante] Almacenamiento del navegador lleno (QuotaExceeded): se purgó lo más viejo de los registros propios (vgl_*) y se reintenta la escritura."); }
     } catch (e) {}
   }
-  function writeJSON(k, v) {
+
+  function safeWriteJSON(k, v) {
     try { localStorage.setItem(k, JSON.stringify(v)); return true; }
     catch (e) {
-      // QuotaExceededError (e.name), code 22, o cualquier otro fallo de setItem:
-      // una purga de emergencia y UN único reintento; si vuelve a fallar, false como
-      // siempre. En el banco de pruebas el localStorage simulado nunca lanza, así
-      // que esta ruta solo corre en el navegador real.
       purgaPorCuota();
       try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e2) { return false; }
     }
   }
+  function writeJSON(k, v) { return safeWriteJSON(k, v); }
+
+  const SCHEMA_TARGET_VERSION = 14;
+  function migrarEsquemaVgl() {
+    let schema = safeReadJSON("vgl_schema", null);
+    if (!schema || typeof schema !== "object") {
+      schema = { version: 0, migrationsApplied: [] };
+    }
+    if (schema.version > SCHEMA_TARGET_VERSION) {
+      try {
+        localStorage.setItem(`vgl_future_backup_${schema.version}_${Date.now()}`, JSON.stringify(schema));
+      } catch (e) {}
+      return schema;
+    }
+    const applied = Array.isArray(schema.migrationsApplied) ? [...schema.migrationsApplied] : [];
+    let v = schema.version || 0;
+    if (v < 4) {
+      applied.push("v0->v4: normalizar configuraciones");
+      v = 4;
+    }
+    if (v < 7) {
+      applied.push("v4->v7: purga de eventos legados");
+      try { localStorage.removeItem("vgl_events"); } catch (e) {}
+      try { localStorage.setItem("vgl_v73", "1"); } catch (e) {}
+      v = 7;
+    }
+    if (v < 12) {
+      applied.push("v7->v12: migracion de agenda y RCV");
+      v = 12;
+    }
+    if (v < 13) {
+      applied.push("v12->v13: modularizacion de storage");
+      v = 13;
+    }
+    if (v < 14) {
+      applied.push("v13->v14: esquema unificado v14");
+      v = 14;
+    }
+    const nuevo = Object.assign({}, schema, { version: 14, migrationsApplied: applied, updated: new Date().toISOString() });
+    safeWriteJSON("vgl_schema", nuevo);
+    return nuevo;
+  }
+
+  const _circuitBreakers = new Map();
+  function getCircuitBreaker(endpointKey) {
+    if (!_circuitBreakers.has(endpointKey)) {
+      _circuitBreakers.set(endpointKey, {
+        state: "CLOSED",
+        failures: 0,
+        threshold: 3,
+        resetTimeoutMs: 60000,
+        nextAttemptTs: 0
+      });
+    }
+    return _circuitBreakers.get(endpointKey);
+  }
+
+  async function circuitBreakerExec(endpointKey, fn, fallbackFn) {
+    const cb = getCircuitBreaker(endpointKey);
+    const now = Date.now();
+    if (cb.state === "OPEN") {
+      if (now >= (cb.nextAttemptTs || 0)) {
+        cb.state = "HALF-OPEN";
+      } else {
+        if (typeof fallbackFn === "function") return fallbackFn();
+        return null;
+      }
+    }
+    try {
+      const result = await fn();
+      if (cb.state === "HALF-OPEN") {
+        if (result === null || result === undefined) {
+          cb.state = "OPEN";
+          cb.resetTimeoutMs = Math.min(300000, (cb.resetTimeoutMs || 60000) * 2);
+          cb.nextAttemptTs = Date.now() + cb.resetTimeoutMs;
+          if (typeof fallbackFn === "function") return fallbackFn();
+          return null;
+        }
+        cb.state = "CLOSED";
+        cb.failures = 0;
+        cb.resetTimeoutMs = 60000;
+      } else if (cb.state === "CLOSED") {
+        cb.failures = 0;
+      }
+      return result;
+    } catch (err) {
+      cb.failures++;
+      if (cb.state === "HALF-OPEN") {
+        cb.state = "OPEN";
+        cb.resetTimeoutMs = Math.min(300000, (cb.resetTimeoutMs || 60000) * 2);
+        cb.nextAttemptTs = Date.now() + cb.resetTimeoutMs;
+      } else if (cb.failures >= cb.threshold) {
+        cb.state = "OPEN";
+        cb.nextAttemptTs = Date.now() + (cb.resetTimeoutMs || 60000);
+      }
+      if (typeof fallbackFn === "function") return fallbackFn(err);
+      return null;
+    }
+  }
+
+  function invalidarApiSiCambioMedico(nuevoMedicoId) {
+    if (!nuevoMedicoId) return;
+    const previo = localStorage.getItem("vgl_api_medico");
+    if (previo && String(previo) !== String(nuevoMedicoId)) {
+      localStorage.removeItem("vgl_api_url");
+      if (state.apiCitas) state.apiCitas = null;
+      state.apiEn = 0;
+      state.lastSnapshot = null;
+      state.lastSignature = "";
+    }
+    localStorage.setItem("vgl_api_medico", String(nuevoMedicoId));
+  }
+
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
   // Migración desde v4.x: la ventana emergente se guardaba en una clave aparte.
   try { const viejo = localStorage.getItem("vgl_popup"); if (viejo !== null && !("popup" in (readJSON(SETTINGS_KEY, {}) || {}))) S.popup = viejo === "1"; } catch (e) {}
@@ -4195,6 +4346,14 @@
     userWinState: "full",
     // v7.9.0: médico activo detectado dinámicamente desde la sesión / API
     activeDoctor: { id: 0, name: "" },
+    // Red de seguridad remota y Kill-Switch (R5.1, R5.3)
+    killed: false,
+    killReason: "",
+    disabledFeatures: new Set(),
+    timers: [],
+    // Detección de Instancia Duplicada (R5.8)
+    isDuplicateInstance: false,
+    duplicateVersion: "",
   };
 
   const state = new Proxy(rawState, {
@@ -6168,7 +6327,7 @@
   // Vuelve a escribirla como la muestra Everest, para que el panel se lea igual
   // venga del API o de la pantalla.
   function horaBonita(min) {
-    if (min == null) return "";
+    if (typeof min !== "number" || !Number.isFinite(min) || min < 0 || min >= 1440) return "";
     const h24 = Math.floor(min / 60) % 24, mi = min % 60, h12 = (h24 % 12) === 0 ? 12 : (h24 % 12);
     return h12 + ":" + String(mi).padStart(2, "0") + (h24 < 12 ? " a. m." : " p. m.");
   }
@@ -6321,6 +6480,80 @@
     } catch (e) {}
   }
 
+  // Universal Modal Accessibility Manager (R6.4)
+  function _activarAccesibilidadModal(modalEl, closeCallback) {
+    if (!modalEl || typeof modalEl.addEventListener !== "function") return () => {};
+    const previoFoco = typeof document !== "undefined" ? document.activeElement : null;
+    try {
+      if (typeof modalEl.getAttribute === "function" && typeof modalEl.setAttribute === "function") {
+        if (!modalEl.getAttribute("role")) modalEl.setAttribute("role", "dialog");
+        if (!modalEl.getAttribute("aria-modal")) modalEl.setAttribute("aria-modal", "true");
+      }
+    } catch (e) {}
+
+    const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function getFocusableElements() {
+      if (typeof modalEl.querySelectorAll !== "function") return [];
+      return Array.from(modalEl.querySelectorAll(FOCUSABLE_SELECTOR) || []).filter(
+        (el) => !el.getAttribute || el.getAttribute("aria-hidden") !== "true"
+      );
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        if (typeof e.stopPropagation === "function") e.stopPropagation();
+        if (typeof e.preventDefault === "function") e.preventDefault();
+        cleanup();
+        if (typeof closeCallback === "function") closeCallback();
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusables = getFocusableElements();
+        if (!focusables.length) {
+          if (typeof e.preventDefault === "function") e.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || (modalEl.contains && !modalEl.contains(document.activeElement))) {
+            if (typeof e.preventDefault === "function") e.preventDefault();
+            if (last && typeof last.focus === "function") last.focus();
+          }
+        } else {
+          if (document.activeElement === last || (modalEl.contains && !modalEl.contains(document.activeElement))) {
+            if (typeof e.preventDefault === "function") e.preventDefault();
+            if (first && typeof first.focus === "function") first.focus();
+          }
+        }
+      }
+    }
+
+    modalEl.addEventListener("keydown", onKeyDown);
+
+    setTimeout(() => {
+      try {
+        const focusables = getFocusableElements();
+        if (focusables.length > 0 && typeof focusables[0].focus === "function") focusables[0].focus();
+        else if (typeof modalEl.focus === "function") modalEl.focus();
+      } catch (e) {}
+    }, 0);
+
+    function cleanup() {
+      try {
+        if (typeof modalEl.removeEventListener === "function") {
+          modalEl.removeEventListener("keydown", onKeyDown);
+        }
+        if (previoFoco && typeof previoFoco.focus === "function") {
+          previoFoco.focus();
+        }
+      } catch (e) {}
+    }
+
+    return cleanup;
+  }
+
   // (4) CARTEL GRANDE dentro de Everest para el FRAUDE: imposible de ignorar
   //     cuando el navegador está a la vista.
   // [COPY-UX] Cartel modal de confirmación fuera de secuencia
@@ -6331,23 +6564,23 @@
       if (ov) ov.remove();
       const c = COLORS[color] || COLORS.AZUL;
       ov = document.createElement("div"); ov.id = "vgl-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // [v12.3.13] El CSS estático de este cartel vive al final de la hoja maestra de buildOverlay()
-      // (se inyecta UNA vez, no en cada alerta). El único valor dinámico —el color del estado— entra
-      // aquí como custom property inline (--ac / --ac-rgb) sobre la tarjeta; las reglas de la hoja
-      // maestra lo consumen con var(), de modo que el estilo computado es idéntico al de antes.
       ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
           <div class="vgl-modal-dot"></div>
-          <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
+          <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
           <button class="vgl-modal-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-modal-t").textContent = title;
-      ov.querySelector(".vgl-modal-b").textContent = body;
-      const ok = ov.querySelector(".vgl-modal-ok");
-      ok.addEventListener("click", () => { ov.remove(); acknowledge(); });
+      const tEl = ov.querySelector ? ov.querySelector(".vgl-modal-t") : null;
+      if (tEl) tEl.textContent = title;
+      const bEl = ov.querySelector ? ov.querySelector(".vgl-modal-b") : null;
+      if (bEl) bEl.textContent = body;
+      const ok = ov.querySelector ? ov.querySelector(".vgl-modal-ok") : null;
+      const closeMod = () => { ov.remove(); acknowledge(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
     } catch (e) {}
   }
 
@@ -6360,35 +6593,32 @@
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
+      ov.setAttribute("role", "dialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // v12.4.0 — Abandono del programa de riesgo cardiovascular: el cuadro entero se
-      // repinta con el ROSA del panel (--c-pes). Basta con re-apuntar las dos variables
-      // de color que usa todo el CSS del recordatorio: hereda a chips, botón y borde.
       if (esPes) {
         ov.classList.add("pes");
         ov.style.setProperty("--rgb-recordatorio", "var(--rgb-pes)");
         ov.style.setProperty("--c-recordatorio", "var(--c-pes)");
       }
-      const chips = actividades.map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
-      // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
-      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
+      const chips = (actividades || []).map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
       ov.innerHTML = `<div class="vgl-pym-card">
           <div class="vgl-pym-ic">🩺</div>
           <div class="vgl-pym-t">Actividades preventivas pendientes</div>
-          <div class="vgl-pym-n"></div>
+          <div class="vgl-pym-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-pym-lead">Se sugiere revisar y solicitar las siguientes actividades de prevención:</div>
           <div class="vgl-pym-list">${chips}</div>
           <div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pym-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-pym-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-pym-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pym.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.pym.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack(esPes ? "aviso.pym.mostrado.pes" : "aviso.pym.mostrado", { n: (actividades || []).length });
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
     } catch (e) {}
   }
 
@@ -6398,25 +6628,25 @@
       let ov = document.getElementById("vgl-pes-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pes-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // [v12.3.13] El CSS de esta alerta vive al final de la hoja maestra de buildOverlay():
-      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pes-card">
           <div class="vgl-pes-ic">🫀</div>
           <div class="vgl-pes-t">Abandono Programa RCV</div>
-          <div class="vgl-pes-n"></div>
+          <div class="vgl-pes-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-pes-lead">Este paciente tiene un <b>abandono registrado</b> en el Programa de Riesgo Cardiovascular. <b>Priorice el control de riesgo cardiovascular sobre cualquier otra actividad de esta consulta.</b></div>
           <div class="vgl-pes-foot">Este recordatorio no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pes-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-pes-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-pes-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pes.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-pes-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-pes-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.pes.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack("aviso.pes.mostrado");
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
       playTone("PES");
     } catch (e) {}
   }
@@ -6444,27 +6674,27 @@
       let ov = document.getElementById("vgl-labsv-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-labsv-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // El CSS de esta alerta vive al final de la hoja maestra de buildOverlay() (mismo
-      // patrón que el resto de modales): se inyecta UNA vez, aquí solo queda HTML puro.
       const chips = (faltantes || []).map((f) => `<span class="vgl-labsv-chip">${escapeHtml(f.nombre)}</span>`).join("");
       ov.innerHTML = `<div class="vgl-labsv-card">
           <div class="vgl-labsv-ic">🧪</div>
           <div class="vgl-labsv-t">Laboratorios RCV sin resultado vigente</div>
-          <div class="vgl-labsv-n"></div>
+          <div class="vgl-labsv-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-labsv-lead">Este paciente no tiene resultado en los <b>últimos 180 días</b> para:</div>
           <div class="vgl-labsv-list">${chips}</div>
           <div class="vgl-labsv-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-labsv-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-labsv-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-labsv-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.labsv.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-labsv-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-labsv-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.labsv.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack("aviso.labsv.mostrado", { n: (faltantes || []).length });
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
       playTone("ROJO");
     } catch (e) {}
   }
@@ -6900,7 +7130,8 @@
   function apiObservar(win) {
     try {
       const w = win || window;
-      if (!w.PerformanceObserver || w.__vglPO) return;
+      if (!w.PerformanceObserver || w.__vglPO || w.__VGL_OBSERVADOR_ACTIVO__) return;
+      w.__VGL_OBSERVADOR_ACTIVO__ = true;
       const po = new w.PerformanceObserver((l) => {
         const es = l.getEntries();
         for (let i = 0; i < es.length; i++) {
@@ -7250,7 +7481,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-instancia-duplicada{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -7336,8 +7567,8 @@
       }
 
       /* ---- Modo Claro — cerámica ---- */
-      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
+      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-instancia-duplicada.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -7476,7 +7707,7 @@
       .vgl-op-half{opacity:0.5}
       .vgl-line-through{text-decoration:line-through}
       .vgl-border-err{border:1px solid var(--c-rojo, #e54d42)}
-      .vgl-bg-success{background:var(--c-verde, #10b981) !important}
+      .vgl-bg-success{background:var(--c-verde, #10b981) !important;color:var(--bg-solid, #0b0e15)}
       .vgl-btn-wait{opacity:0.5;cursor:wait}
 
       .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
@@ -7584,8 +7815,11 @@
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
-      .vgl-btn-action:focus-visible{
-        outline:2px solid var(--c-azul);outline-offset:2px
+      .vgl-btn-action:focus-visible,.vgl-agm-btn:focus-visible,.vgl-agm-pbtn:focus-visible,
+      .vgl-agm-sbtn:focus-visible,.vgl-agm-input:focus-visible,.vgl-agm-close:focus-visible,
+      .vgl-sb-btn:focus-visible,.vgl-dock:focus-visible,#vgl-dock:focus-visible,
+      .vgl-pymb-toggle:focus-visible,.vgl-postcita-x:focus-visible{
+        outline:2px solid var(--c-azul);outline-offset:2px;box-shadow:0 0 0 4px rgba(var(--rgb-azul),.25)
       }
       .vgl-sw:focus-within i{outline:2px solid var(--c-azul);outline-offset:2px}
 
@@ -9419,6 +9653,7 @@
     `;
     document.body.appendChild(root);
     el = { root, sum: root.querySelector("#vgl-sum"), stats: root.querySelector("#vgl-stats"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot"), sheet: root.querySelector("#vgl-sheet"), q: root.querySelector("#vgl-q") };
+    if (el.sum) el.sum.setAttribute("aria-live", "polite");
     root.querySelector("#vgl-load").addEventListener("click", () => { uxTrack("panel.pym.abrir_archivo"); el.file.click(); });
     root.querySelector("#vgl-bell").addEventListener("click", () => { uxTrack("panel.notificaciones.activar"); enableOsNotifications(); });
     root.querySelector("#vgl-rep").addEventListener("click", () => { uxTrack("panel.hoja.resumen"); toggleSheet("resumen"); });
@@ -9454,13 +9689,29 @@
     root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     // [COPY-UX] Dock flotante del asistente clínico
     const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Asistente Clínico (Alt+V)";
+    dock.setAttribute("role", "button");
+    dock.setAttribute("tabindex", "0");
+    dock.setAttribute("aria-label", "Mostrar Asistente Clínico (Alt+V)");
     dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
     dock.addEventListener("click", () => setWinState("full"));
+    dock.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWinState("full"); } });
     document.body.appendChild(dock); el.dock = dock; el.dockB = dock.querySelector("#vgl-dock-b");
-    const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
+    const toasts = document.createElement("div"); toasts.id = "vgl-toasts";
+    toasts.setAttribute("role", "status");
+    toasts.setAttribute("aria-live", "polite");
+    document.body.appendChild(toasts);
     makeDraggable(root, root.querySelector("#vgl-head"));
-    // Atajo de teclado: Alt+V muestra u oculta el panel sin tocar el mouse.
-    document.addEventListener("keydown", (e) => { if (e.altKey && !e.ctrlKey && (e.key === "v" || e.key === "V")) { e.preventDefault(); setWinState(winState === "dock" ? "full" : "dock"); } });
+    // Atajo de teclado: Alt+V muestra u oculta el panel sin tocar el mouse. Escape cierra sheet si está abierto.
+    document.addEventListener("keydown", (e) => {
+      if (e.altKey && !e.ctrlKey && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        setWinState(winState === "dock" ? "full" : "dock");
+      } else if (e.key === "Escape" && el && el.root && el.root.classList.contains("sheet")) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSheet();
+      }
+    });
     restorePos(); applyTheme(); paintMute(); updateBell();
     // El tema "auto" sigue al modo claro/oscuro de Windows en vivo.
     try { if (PAGEWIN.matchMedia) PAGEWIN.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.tema === "auto") applyTheme(); }); } catch (e) {}
@@ -9612,6 +9863,16 @@
   // sesión ya existe a document-start; el timeout evita depender del orden de las const).
   try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
   const FESTIVOS = new Set([
+    // 2024
+    "2024-01-01", "2024-01-08", "2024-03-25", "2024-03-28", "2024-03-29",
+    "2024-05-01", "2024-05-13", "2024-06-03", "2024-06-10", "2024-07-01",
+    "2024-07-20", "2024-08-07", "2024-08-19", "2024-10-14", "2024-11-04",
+    "2024-11-18", "2024-12-08", "2024-12-25",
+    // 2025
+    "2025-01-01", "2025-01-06", "2025-03-24", "2025-04-17", "2025-04-18",
+    "2025-05-01", "2025-06-02", "2025-06-23", "2025-06-30", "2025-07-20",
+    "2025-08-07", "2025-08-18", "2025-10-13", "2025-11-03", "2025-11-17",
+    "2025-12-08", "2025-12-25",
     // 2026
     "2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03",
     "2026-05-01", "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29",
@@ -10550,21 +10811,13 @@
     const { edad, peso, creatininaCruda, sexo, fechaCreatinina, fechaPeso } = (opts || {});
     const faltan = [];
     const edadN = Number(edad);
-    if (!Number.isFinite(edadN) || edadN <= 0 || edadN >= 140) faltan.push("edad");
+    if (Number.isFinite(edadN) && edadN > 0 && edadN < 18) faltan.push("edad_pediatrica");
+    else if (!Number.isFinite(edadN) || edadN <= 0 || edadN > 120) faltan.push("edad");
     const pesoN = Number(peso);
     if (!Number.isFinite(pesoN) || pesoN <= 0) faltan.push("peso");
+    else if (pesoN < 20 || pesoN > 300) faltan.push("peso_fuera_de_rango");
     const creatN = _labNumerico(creatininaCruda);
     if (creatN == null) faltan.push("creatinina");
-    // v14.1.3 — GUARDA DE UNIDADES, por rango de plausibilidad. Las dos fórmulas asumen la
-    // creatinina en mg/dL, y el script descarta el campo `unidades` de Athenea desde
-    // v12.0.0. Si un laboratorio reportara en µmol/L —la otra unidad de uso corriente en el
-    // mundo— una creatinina normal de 1,0 mg/dL llegaría como 88, y Cockcroft-Gault
-    // devolvería una TFG ~88 veces menor: un paciente sano saldría en falla renal terminal,
-    // con todo lo que eso arrastra (remisión a nefrología, ajuste de dosis, suspensión de
-    // fármacos). No se convierte automáticamente —adivinar la unidad de un dato clínico es
-    // justo lo que este proyecto prohíbe—: se RECHAZA y se dice por qué.
-    // El rango 0,1–20 mg/dL cubre de sobra lo fisiológicamente posible en suero, incluida
-    // la falla renal terminal sin diálisis (rara vez pasa de 15).
     else if (creatN < 0.1 || creatN > 20) faltan.push("creatinina_fuera_de_rango");
     // El sexo NO bloquea: sin él la fórmula corre igual (el factor 0.85 solo se aplica a
     // mujeres), pero se anota, porque un sexo ausente sesga la TFG al alza en una mujer.
@@ -10638,21 +10891,15 @@
     });
   }
 
-  // v14.1.1 (R1b) — Cómo se le cuenta al médico. Dos reglas gobiernan este HTML:
-  //
-  //  1. Si falta una entrada, se dice CUÁL falta y no se muestra ningún número. Nunca un
-  //     estadio a medias, nunca un "aproximadamente". De este estadio cuelga qué exámenes
-  //     se le piden a una persona.
-  //  2. Se muestran SIEMPRE las entradas que se usaron y CUÁNDO se tomaron. Una TFG
-  //     calculada con un peso de hace dos años o una creatinina de hace ocho meses puede ser
-  //     engañosa, y el médico solo puede juzgarlo si ve las fechas. El script no decide por
-  //     él si el dato está demasiado viejo: se lo enseña.
   function _renderEstadioRenalHtml(r) {
     if (!r) return "";
-    const ETIQUETA = { edad: "la edad", peso: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    const ETIQUETA = { edad: "la edad", edad_pediatrica: "edad adulta", peso: "el peso", peso_fuera_de_rango: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    if ((r.faltan || []).indexOf("edad_pediatrica") !== -1) {
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular en pacientes menores de 18 años (paciente pediátrico). Las fórmulas Cockcroft-Gault y CKD-EPI solo aplican a adultos.</div>`;
+    }
     if ((r.faltan || []).indexOf("creatinina_fuera_de_rango") !== -1) {
       const v = r.entradas && r.entradas.creatininaCruda;
-      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se calcula — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
     }
     if (!r.estadio) {
       const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);
@@ -10779,8 +11026,8 @@
   // confirmación: el médico debe poder ver a qué número salió). Vacío = no se envió.
   let ultimoSmsEnviado = "";
 
-  // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
+    if (state.killed) return { error: true, mensaje: "Pausa de seguridad remota activa (Kill-Switch activo): el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios." };
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
     // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
@@ -10871,6 +11118,9 @@
       const panel = document.createElement("div");
       panel.id = "vgl-postcita-panel";
       panel.className = isLight() ? "light" : "";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+      panel.setAttribute("aria-label", "Confirmación de Cita");
       panel.innerHTML = `
         <div class="vgl-postcita-card">
           <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
@@ -10882,6 +11132,9 @@
       document.body.appendChild(panel);
       const cerrar = () => { try { panel.innerHTML = ""; panel.remove(); } catch (e) {} };
       panel.querySelector("#vgl-postcita-x").addEventListener("click", cerrar);
+      panel.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrar(); }
+      });
       panel.querySelector("#vgl-postcita-print").addEventListener("click", () => {
         uxTrack("cita.imprimir");
         imprimirRecordatorioCita(citaId, epsNombre, nombreCompleto);
@@ -11116,24 +11369,18 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const modal = document.createElement("div");
     modal.id = "vgl-labs-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-labs-title");
     if (isLight()) modal.classList.add("light");
 
     const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
 
-    // [UI-CSS] HUD Espacial 2026 — placa de laboratorios. Desde v12.3.13 el CSS de este
-    // modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez en
-    // document.head: antes iba en un <style> inline aquí dentro del innerHTML y el motor
-    // lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
-    // CADA selector sigue anclado a #vgl-labs-modal, así que nada se fuga fuera del modal
-    // aunque la hoja sea global. Modo rendimiento: el modal cuelga de document.body
-    // (fuera de #vgl-root), así que los efectos pesados nuevos se apagan con el
-    // combinador de hermanos #vgl-root.perf ~ #vgl-labs-modal (#vgl-root se inserta en
-    // body ANTES que el modal).
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-labs-kicker">🧪 Exámenes de Laboratorio · Portal Athenea Soluciones</div>
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">🧪 Exámenes de Laboratorio · Portal Athenea Soluciones</div>
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
@@ -11151,7 +11398,7 @@
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Resultados de Paraclínicos (Búsqueda Prioritaria en Athenea Soluciones):</label>
-          <div id="vgl-labs-content" class="vgl-agm-slots" style="max-height:420px;overflow-y:auto;display:block">
+          <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:420px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámen de laboratorios en Portal Athenea Soluciones...</div>
           </div>
         </div>
@@ -11164,17 +11411,13 @@
 
     document.body.appendChild(modal);
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
-    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
-    // la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
       cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
-      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
       modal.innerHTML = "";
       modal.remove();
     };
@@ -11185,6 +11428,7 @@
 
     const bgClick = (e) => { if (e.target === modal) closeMod(); };
     modal.addEventListener("click", bgClick);
+    _activarAccesibilidadModal(modal, closeMod);
 
 
     const contentEl = modal.querySelector("#vgl-labs-content");
@@ -11425,7 +11669,7 @@
           setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
         } catch (e) {
           if (pestana) pestana.close();
-          alert("No se pudo mostrar el informe: " + e);
+          alert("No se pudo visualizar el informe de resultados. Por favor intente consultarlo directamente en el portal.");
         }
       },
       onerror: () => { restaurar(); if (pestana) pestana.close(); alert("No se pudo conectar con Athenea para traer el informe."); },
@@ -11445,27 +11689,20 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
-    modal.id = "vgl-agendar-modal";   // v8.2.1 fix: was "vgl-ordenar-modal" (ID mismatch -> CSS position:fixed missing -> modal inlined in page)
+    modal.id = "vgl-agendar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-agm-title");
     modal.className = isLight() ? "light" : "";
 
     let selectedEspId = 12; // 12: Med General (Control) por defecto
     let selectedEspName = "Medicina General (Control)";
 
-    // [COPY-UX] Modal de agendamiento de cita de control y remisión a especialidades RCV
-    // [UI-CSS] HUD Espacial 2026 — placa bento del agendamiento. Desde v12.3.13 el CSS de
-    // este modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez
-    // en document.head: antes iba en un <style> inline aquí dentro del innerHTML y el
-    // motor lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
-    // CADA selector sigue anclado a #vgl-agendar-modal, así que nada se fuga fuera del
-    // modal aunque la hoja sea global. Modo rendimiento: los modales cuelgan de
-    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
-    // con el combinador de hermanos #vgl-root.perf ~ #vgl-agendar-modal (#vgl-root se
-    // inserta en body ANTES que el modal).
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:720px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📅 Programación de Cita · Remisión RCV</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 Programación de Cita · Remisión RCV</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -11611,24 +11848,22 @@
     const confirmBtn = modal.querySelector("#vgl-agm-confirm");
     const dateInfoEl = modal.querySelector("#vgl-agm-date-info");
     const slotsEl = modal.querySelector("#vgl-agm-slots");
+    if (slotsEl) slotsEl.setAttribute("aria-live", "polite");
     const dayChipsEl = modal.querySelector("#vgl-day-chips");
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
-    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
-    // la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
       cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
-      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
       modal.innerHTML = "";
       modal.remove();
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     // v14.0.1 — Extraída de cargarHoras (misma regla, ahora también la usa el sondeo en
     // segundo plano de renderDayChips): qué agendas de una lista pertenecen de verdad al
@@ -12409,6 +12644,9 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const modal = document.createElement("div");
     modal.id = "vgl-agendar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-labsolo-title");
     modal.className = isLight() ? "light" : "";
 
     const suggestedLab = calcBusinessDaysBefore(citaFechaIso, 5);
@@ -12421,7 +12659,7 @@
       <div class="vgl-agm-card" style="max-width:520px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">🧪 Toma de Muestras Pendiente</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-labsolo-title">🧪 Toma de Muestras Pendiente</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Cita de control ya agendada para el <b>${escapeHtml(citaFechaFmt)}</b></div>
           </div>
@@ -12464,6 +12702,7 @@
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     let selectedLabDateInfo = null;
     let _tokenLabSolo = 0;
@@ -12810,6 +13049,10 @@
   // cuerpo distinto (camelCase, el objeto completo del paciente, citaId real y swHC:true).
   // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
+    if (state.killed) {
+      alert("Pausa de seguridad remota activa: el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios.");
+      return null;
+    }
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
     // órdenes clínicas a nombre de otro profesional.
@@ -12990,13 +13233,11 @@
     const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-ordenar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-ord-title");
     modal.className = isLight() ? "light" : "";
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
-    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
-    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
-    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     let xBtn, cancelBtn;
@@ -13008,20 +13249,11 @@
       modal.remove();
     };
 
-    // v12.3.22 — Reportado en consultorio como "el botón no funciona": antes se
-    // esperaba (await, en cadena) a resolver el sexo real del paciente en el servidor
-    // ANTES de crear siquiera la ventana del modal, así que entre el clic y cualquier
-    // indicio visual podían pasar varios segundos en silencio total. El resto de los
-    // modales (agendar cita, laboratorios) ya seguían el patrón correcto: abrir YA, con
-    // un estado de carga, y llenar el contenido real después. Este se alinea ahora: se
-    // pinta una ventana de carga de inmediato y, cuando los datos estén listos, se
-    // reemplaza TODO el innerHTML de una sola vez (igual que hacía el código original)
-    // — nunca se parchean nodos hijos sueltos por querySelector.
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -13041,6 +13273,7 @@
     cancelBtn = modal.querySelector("#vgl-ord-cancel");
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
     // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
@@ -13113,7 +13346,7 @@
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -13450,12 +13683,15 @@
     if (esNuevo) {
       banner = document.createElement("div");
       banner.id = "vgl-pym-banner";
+      banner.setAttribute("role", "region");
+      banner.setAttribute("aria-label", "Alertas de Prevención y Mantenimiento");
       document.body.insertBefore(banner, document.body.firstChild);
     }
     const minimizado = esNuevo
       ? (typeof GM_getValue !== "undefined" ? GM_getValue("vgl_banner_pym_minimizado", "") === "1" : false)
       : banner.classList.contains("minimizado");
     banner.className = "vgl-pym-banner" + (isLight() ? " light" : "") + (minimizado ? " minimizado" : "");
+    banner.setAttribute("aria-expanded", String(!minimizado));
 
     while (banner.children.length) banner.removeChild(banner.children[0]);
 
@@ -13476,6 +13712,7 @@
       e.stopPropagation();
       const nuevoMinimizado = !banner.classList.contains("minimizado");
       banner.classList.toggle("minimizado", nuevoMinimizado);
+      banner.setAttribute("aria-expanded", String(!nuevoMinimizado));
       toggle.textContent = nuevoMinimizado ? "▼" : "▲";
       toggle.title = nuevoMinimizado ? "Expandir" : "Minimizar";
       toggle.setAttribute("aria-label", nuevoMinimizado ? "Expandir" : "Minimizar");
@@ -14149,6 +14386,26 @@
   // La versión anterior omitía comilla simple y backtick, riesgo latente si se usan en contextos de atributo con comilla simple.
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"'`]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;', '`': '&#x60;' }[c])); }
 
+
+  // Autocomprobación criptográfica de integridad SHA-256 (R1.9)
+  async function verificarIntegridadArranque(fuenteOpcional) {
+    try {
+      let src = fuenteOpcional;
+      if (!src && typeof GM_info !== "undefined" && GM_info && GM_info.scriptSource) {
+        src = GM_info.scriptSource;
+      }
+      if (!src) return { status: "skipped", reason: "no_source" };
+      const encoder = new TextEncoder();
+      const data = encoder.encode(src);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+      return { status: "ok", sha256: hashHex };
+    } catch (e) {
+      return { status: "error", error: e.message };
+    }
+  }
+
   // Saludo AZUL: UNA sola vez al día en todo el navegador (antes salía en cada pestaña/recarga).
   // v7.3.3: si el Vigilante arranca TARDE (turno ya empezado), NO se dispara ningún aviso
   // de lo que ya pasó: sale este ÚNICO resumen de lo corrido y desde ahí solo se avisa
@@ -14534,10 +14791,128 @@
     } catch (e) {}
   }
 
+  // =====================================================================
+  //  RED DE SEGURIDAD REMOTA, KILL-SWITCH Y CANARIO (R5.1, R5.3)
+  // =====================================================================
+  function emergencyTeardown(reason) {
+    state.killed = true;
+    state.killReason = reason || "Apagado remoto de emergencia";
+    if (typeof GM_setValue !== "undefined") {
+      GM_setValue("vgl_kill_active", true);
+      GM_setValue("vgl_kill_reason", state.killReason);
+    }
+    if (Array.isArray(state.timers)) {
+      state.timers.forEach((t) => {
+        try { clearTimeout(t); } catch (e) {}
+        try { clearInterval(t); } catch (e) {}
+      });
+      state.timers.length = 0;
+    }
+    try {
+      const root = document.getElementById("vgl-root");
+      if (root) root.remove();
+      const dock = document.getElementById("vgl-dock");
+      if (dock) dock.remove();
+      const accDock = document.getElementById("vgl-acciones-dock");
+      if (accDock) accDock.remove();
+      const banner = document.getElementById("vgl-pym-banner");
+      if (banner) banner.remove();
+      if (document.querySelectorAll) {
+        const injected = document.querySelectorAll("[id^='vgl-']");
+        injected.forEach((el) => { try { el.remove(); } catch (e) {} });
+      }
+    } catch (e) {}
+    _mostrarAvisoPausaClinica(state.killReason);
+  }
+
+  function _mostrarAvisoPausaClinica(motivo) {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      let aviso = document.getElementById("vgl-pausa-clinica");
+      if (aviso) aviso.remove();
+      aviso = document.createElement("div");
+      aviso.id = "vgl-pausa-clinica";
+      aviso.style.cssText = "position:fixed;top:10px;right:10px;z-index:2147483647;background:#991b1b;color:#fff;padding:12px 18px;border-radius:12px;font-family:system-ui,sans-serif;font-size:14px;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.5);";
+      const texto = "🛡️ Pausa de seguridad remota activa: " + (motivo || "Asistente clínico desactivado remotamente para proteger la historia clínica.");
+      const span = document.createElement("span");
+      span.textContent = texto;
+      aviso.appendChild(span);
+      document.body.appendChild(aviso);
+    } catch (e) {}
+  }
+
+  // --- Detección de Instancia Duplicada de Tampermonkey (R5.8) ---
+  function _detectarInstanciaDuplicada() {
+    try {
+      if (typeof window === "undefined") return false;
+
+      // 1. Detección por variable global de ventana
+      const inst = window.__VGL_ACTIVE_INSTANCE__;
+      if (inst && inst.id && inst.id !== TABID) {
+        state.isDuplicateInstance = true;
+        state.duplicateVersion = inst.version || "desconocida";
+        console.warn("[Vigilante] Se detectó otra instancia activa de Vigilante de Agenda (v" + state.duplicateVersion + "). Esta instancia (v" + VERSION + ") aborta su inicio para evitar duplicidad.");
+        _mostrarAvisoInstanciaDuplicada(state.duplicateVersion, VERSION);
+        return true;
+      }
+
+      // 2. Detección por marcador en el DOM
+      if (typeof document !== "undefined" && document.documentElement) {
+        const domInst = document.documentElement.getAttribute("data-vgl-instance");
+        const domVer = document.documentElement.getAttribute("data-vgl-version") || "";
+        if (domInst && domInst !== TABID) {
+          state.isDuplicateInstance = true;
+          state.duplicateVersion = domVer || "desconocida";
+          console.warn("[Vigilante] Se detectó instancia duplicada por marcador en DOM (v" + state.duplicateVersion + "). Abortando inicio.");
+          _mostrarAvisoInstanciaDuplicada(state.duplicateVersion, VERSION);
+          return true;
+        }
+      }
+
+      // Registrar la instancia activa actual
+      window.__VGL_ACTIVE_INSTANCE__ = { version: VERSION, id: TABID, ts: Date.now() };
+      if (typeof document !== "undefined" && document.documentElement) {
+        document.documentElement.setAttribute("data-vgl-instance", TABID);
+        document.documentElement.setAttribute("data-vgl-version", VERSION);
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _mostrarAvisoInstanciaDuplicada(verActiva, verDuplicada) {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      if (document.getElementById("vgl-instancia-duplicada")) return;
+
+      const aviso = document.createElement("div");
+      aviso.id = "vgl-instancia-duplicada";
+      aviso.setAttribute("role", "alert");
+      aviso.setAttribute("aria-live", "assertive");
+      aviso.style.cssText = "position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#78350f;color:#fef3c7 !important;border:2px solid #f59e0b;padding:14px 20px;border-radius:10px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;line-height:1.5;box-shadow:0 10px 25px rgba(0,0,0,0.6);max-width:650px;display:flex;align-items:center;gap:14px;";
+
+      const span = document.createElement("span");
+      span.style.cssText = "color:#fef3c7 !important;";
+      span.textContent = "⚠️ Atención: Se detectaron dos copias de Vigilante de Agenda activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
+      aviso.appendChild(span);
+
+      const btn = document.createElement("button");
+      btn.textContent = "Entendido";
+      btn.setAttribute("aria-label", "Cerrar advertencia de copia duplicada");
+      btn.style.cssText = "background:#f59e0b;color:#78350f !important;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;flex-shrink:0;";
+      btn.onclick = () => { try { aviso.remove(); } catch (e) {} };
+      aviso.appendChild(btn);
+
+      document.body.appendChild(aviso);
+    } catch (e) {}
+  }
+
   // v7.8.1: chequea versión mínima requerida contra Google Apps Script público
   // Si la versión actual es menor y NO hay historia clínica abierta, fuerza reload + limpia caché
   function checkVersionMinimum() {
     try {
+      if (state.killed) return;
       if (typeof GM_xmlhttpRequest === "undefined") return;
       if (Date.now() - (state.lastVersionCheck || 0) < 300000) return; // chequea max 1 vez cada 5 min
       state.lastVersionCheck = Date.now();
@@ -14551,17 +14926,53 @@
         onload: (res) => {
           try {
             const data = JSON.parse(res.responseText);
-            const minVer = String(data.minVersion || "").trim();
+            if (!data || typeof data !== "object") return;
+
+            // 1. Evaluación de Kill-Switch remoto
+            if (data.killSwitch && data.killSwitch.active) {
+              const scope = data.killSwitch.scope || "all";
+              const eqId = _equipoId();
+              const aplica = scope === "all" || (Array.isArray(scope) && (scope.includes(eqId) || scope.includes("all")));
+              if (aplica) {
+                emergencyTeardown(data.killSwitch.reason || "Apagado remoto de emergencia");
+                return;
+              }
+            }
+
+            // 2. Evaluación de características desactivadas (Feature flags)
+            if (data.killSwitch && Array.isArray(data.killSwitch.disabledFeatures)) {
+              state.disabledFeatures = new Set(data.killSwitch.disabledFeatures);
+            } else if (data.disabledFeatures && Array.isArray(data.disabledFeatures)) {
+              state.disabledFeatures = new Set(data.disabledFeatures);
+            }
+
+            // 3. Evaluación de versión mínima requerida (con soporte canario)
+            let minVer = String(data.minVersion || "").trim();
+            if (data.canary && data.canary.enabled) {
+              const eqId = _equipoId();
+              const pct = typeof data.canary.percentage === "number" ? data.canary.percentage : 0;
+              const allowed = Array.isArray(data.canary.allowedEquipos) && data.canary.allowedEquipos.includes(eqId);
+              let hash = 0;
+              for (let i = 0; i < eqId.length; i++) hash = ((hash << 5) - hash) + eqId.charCodeAt(i) | 0;
+              const eqPct = Math.abs(hash) % 100;
+              if (allowed || (pct > 0 && eqPct < pct)) {
+                if (data.canary.minVersion) minVer = String(data.canary.minVersion).trim();
+                if (Array.isArray(data.canary.enabledFeatures)) {
+                  data.canary.enabledFeatures.forEach((f) => state.disabledFeatures.delete(f));
+                }
+              }
+            }
+
             if (!minVer) return;
 
-            // Comparar versiones: "7.8.1" vs "7.8.0" — parsea como [major, minor, patch]
+            // Comparar versiones: "14.1.6" vs "14.1.5"
             const parse = (v) => String(v).split(".").map(x => parseInt(x, 10) || 0);
             const [maj, min, pat] = parse(VERSION);
             const [minMaj, minMin, minPat] = parse(minVer);
 
             const needsUpdate = (minMaj > maj) || (minMaj === maj && minMin > min) ||
                                 (minMaj === maj && minMin === min && minPat > pat);
-            const forceReload = data.force === true;
+            const forceReload = data.force === true || data.forceReload === true;
 
             if (needsUpdate || forceReload) {
               // v7.8.1: SOLO reload si NO hay historia clínica abierta (evita pérdida de datos)
@@ -14569,19 +14980,10 @@
                 setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
                 return;
               }
-              // v11.0.1 — DOS fallos graves corregidos aquí:
-              // 1) BUCLE INFINITO DE RECARGA. Recargar la página NO actualiza el script
-              //    (eso solo lo hace Tampermonkey desde el Gist), así que al volver a
-              //    cargar se cumplía otra vez la misma condición y se recargaba de nuevo
-              //    cada pocos segundos: el equipo quedaba inutilizable.
-              // 2) localStorage.clear() borraba la BITÁCORA DE AUDITORÍA de fraudes e
-              //    inasistencias (vgl_ev_*, 30 días), los contadores, los ajustes y el
-              //    registro anti-duplicados del día, cuya pérdida permite volver a crear
-              //    citas y órdenes ya creadas.
               const marca = "vgl_upd|" + minVer;
               try {
                 if (sessionStorage.getItem(marca)) {
-                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde Tampermonkey → «Check for userscript updates».`, "warn");
+                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».`, "warn");
                   return;
                 }
                 sessionStorage.setItem(marca, "1");
@@ -14592,33 +14994,49 @@
             }
           } catch (e) { console.error("[Vigilante] version check parse:", e); }
         },
-        onerror: () => { /* silencio si falla */ }
+        onerror: () => {},
+        ontimeout: () => {}
       });
     } catch (e) { console.error("[Vigilante] checkVersionMinimum:", e); }
   }
 
   function boot() {
+    try {
+      const killActivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_active", false)) === true;
+      const bypass = (typeof localStorage !== "undefined" && localStorage.getItem("vgl_override_kill") === "1") ||
+                     (typeof location !== "undefined" && String(location.search || "").includes("vgl_bypass=1"));
+      if (killActivo && !bypass) {
+        state.killed = true;
+        const motivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_reason", "")) || "Apagado remoto de emergencia";
+        state.killReason = motivo;
+        _mostrarAvisoPausaClinica(motivo);
+        console.warn("[Vigilante] Inicio cancelado: Pausa de seguridad activa (" + motivo + ").");
+        return;
+      }
+    } catch (e) {}
+
+    if (_detectarInstanciaDuplicada()) return;
     if (document.getElementById("vgl-root")) return;
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
     buildOverlay();
     applySettings();   // aplica tus ajustes guardados (tolerancia, refresco, tema, sonido…) y arranca el reloj
     avisarSiActualizado();
-    setTimeout(chequearAutoUpdateLento, 6000);
+    const tAutoUpd = setTimeout(chequearAutoUpdateLento, 6000);
     heartbeat();
     tick();
     checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
-    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
-    setInterval(paintMute, 15000);
-    setInterval(pymReminderCheck, 60000);
+    const tVer = setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
+    const tPaint = setInterval(paintMute, 15000);
+    const tPymRem = setInterval(pymReminderCheck, 60000);
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
-    setTimeout(repDailySummary, 8000);
-    setInterval(repFlush, 600000);
+    const tRepSum = setTimeout(repDailySummary, 8000);
+    const tRepFlush = setInterval(repFlush, 600000);
     // v12.5.0 — telemetría de uso del panel: la ventana pendiente de otro día sale al
     // arrancar (45 s, tras estabilizarse el liderazgo) y luego una fila agregada cada
     // 30 minutos. Solo la pestaña líder envía; el toggle vive en Ajustes (uxTelemetria).
-    setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
-    setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
+    const tUxBoot = setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
+    const tUxFlush = setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
     // v12.6.9 — Errores y entorno. La caza de errores se engancha YA (un fallo temprano
     // es justo el que más falta hace ver); la fila de entorno sale a los 12 s, cuando la
     // pestaña ya se estabilizó, y solo una vez al día.
@@ -14627,7 +15045,10 @@
     // misma razón que la caza de errores: Everest pide esa tabla al ABRIR la Ruta
     // Crónicos, y si el oyente llega después, esa carga ya pasó y nos la perdimos.
     try { _instalarOyenteTablaOficial(); } catch (e) {}
-    setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    if (Array.isArray(state.timers)) {
+      state.timers.push(tAutoUpd, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+    }
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue

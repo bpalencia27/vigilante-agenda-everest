@@ -20,7 +20,7 @@
 module.exports = {
   nombre: "Auto-Labs contra rangos oficiales (v14.1.8)",
   cubre: [
-    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos",
+    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
     "_guardarTablaOficialVista", "_tablaOficialVigente", "_instalarOyenteTablaOficial",
     "_base64SinRelleno",
   ],
@@ -280,6 +280,34 @@ module.exports = {
       t.igual(c.api._instalarOyenteTablaOficial(null), false);
       t.igual(c.api._instalarOyenteTablaOficial({ XMLHttpRequest: function () {} }), false,
         "sin open en el prototipo no hay nada que envolver");
+    });
+
+    // ---------- reunir el contexto no puede estorbar nunca ----------
+
+    await t.casoAsync("_contextoOficialParaLabs: si nada se puede consultar, devuelve un contexto vacío y NO lanza", async () => {
+      // Es la garantía de que v14.1.8 no puede empeorar nada. Este contexto se reúne justo
+      // antes de escribir en la historia: si una consulta caída pudiera lanzar, tumbaría el
+      // Auto-Labs entero y el médico se quedaría sin la función, no solo sin los rangos.
+      const c = cargar({ silencioso: true, fetch: async () => { throw new Error("red caída"); } });
+      let ctx = null;
+      await t.noLanza(async () => { ctx = await c.api._contextoOficialParaLabs("1234567890"); },
+        "reunir el contexto JAMÁS puede lanzar: se ejecuta en el camino de escritura");
+      t.igual(ctx.tablaOficial, null, "sin tabla vista, no hay tabla");
+      t.igual(ctx.edad, null);
+      t.igual(ctx.sexo, "");
+      // Y con eso, `_objecionOficialAlValor` no objeta nada: Auto-Labs escribe como siempre.
+      t.igual(api._objecionOficialAlValor("CREATININA", "88", ctx), null);
+    });
+
+    await t.casoAsync("_contextoOficialParaLabs: entrega la tabla que el oyente capturó de Everest", async () => {
+      const c = cargar({ silencioso: true, fetch: async () => { throw new Error("sin demografía"); } });
+      c.api._guardarTablaOficialVista(TABLA);
+      const ctx = await c.api._contextoOficialParaLabs("1234567890");
+      t.igual(ctx.tablaOficial.length, TABLA.length, "la tabla escuchada llega al camino de escritura");
+      // Aunque la demografía falle, la tabla sirve igual para los exámenes que no acotan
+      // por edad — que en la tabla real son 27 de 28.
+      t.cierto(!!c.api._objecionOficialAlValor("CREATININA", "88", ctx),
+        "sin demografía, la creatinina se sigue pudiendo juzgar: su regla no depende de la edad");
     });
 
     // ---------- el identificador de la cita va codificado ----------

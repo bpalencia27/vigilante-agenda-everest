@@ -530,7 +530,7 @@ module.exports = {
         else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":333}' });
         else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 500, responseText: "gateway caido" });
       });
-      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3194194489");
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3000000000");
       t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
       t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
       t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
@@ -577,12 +577,12 @@ module.exports = {
         else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":13525848}' });
         else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 200, responseText: "{}" });
       });
-      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "319 419-4489");
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "300 000-0000");
       t.cierto(ok);
       t.igual(e.reg.gm.length, 3, "esta vez sí llama al SMS además de las 2 de siempre");
       const urlSms = e.reg.gm[2].url;
       t.cierto(urlSms.startsWith("https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio"));
-      t.cierto(urlSms.includes("Celular=3194194489"), "el celular se limpia de espacios y guiones antes de mandarlo");
+      t.cierto(urlSms.includes("Celular=3000000000"), "el celular se limpia de espacios y guiones antes de mandarlo");
       t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
       t.cierto(urlSms.includes("codigoSede=378"));
       t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
@@ -604,6 +604,15 @@ module.exports = {
       await e.c.api.apiDigiturnoFinalizarTicket(null);
       await e.c.api.apiDigiturnoFinalizarTicket(0);
       t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiDigiturnoFinalizarTicket: captura errores de red sin lanzar (MUT-AGD-044)", async () => {
+      const e = entornoApi();
+      e.c.api.__state.activeDoctor = { id: 888 };
+      e.c.ctx.Date = class extends Date { static now() { throw new Error("Digiturno crash"); } };
+      await t.noLanza(async () => {
+        await e.c.api.apiDigiturnoFinalizarTicket(1234);
+      }, "Digiturno no debe lanzar excepción al fallar el transporte");
     });
 
     // ---------- apiAccesoObtenerLaboratoriosAnnar / Citi ----------
@@ -678,6 +687,13 @@ module.exports = {
       e.setFetch(respuestaJson(veredicto));
       t.igual(await e.c.api.apiAccesoAgdValidarAgenda(10, 20), veredicto);
       t.cierto(e.reg.fetches[0].url.includes("AgdValidarAgenda?agendaId=10&pacienteId=20"));
+    });
+
+    await t.casoAsync("apiAccesoAgdValidarAgenda: fallo o excepción en la red retorna null (MUT-AGD-048)", async () => {
+      const e = entornoApi();
+      e.c.ctx.Date = class extends Date { static now() { throw new Error("AgdValidarAgenda crash"); } };
+      const r = await e.c.api.apiAccesoAgdValidarAgenda(10, 20);
+      t.igual(r, null, "debe retornar strictly null ante fallo");
     });
 
     // ---------- apiAccesoObtenerTurnos ----------
