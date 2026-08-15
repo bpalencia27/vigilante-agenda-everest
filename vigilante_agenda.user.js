@@ -12130,7 +12130,7 @@
         }
       } catch (e) {}
 
-      slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
+      slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${escapeHtml(String(agendasFiltradas.length))} agenda(s)...</div>`;
 
       const turnosAcumulados = [];
       for (const ag of agendasFiltradas.slice(0, 8)) {
@@ -12575,7 +12575,7 @@
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-agm-dinfo";
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
-          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${escapeHtml(fechaElegida.fmt)}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
         }
 
