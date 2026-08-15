@@ -40,12 +40,11 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia", "_urlDiagnostico", "_tituloDiagnostico",
+    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
-    "_pestanaOculta", "_getUltimoRelevoParaTest", "_setUltimoRelevoParaTest",
-    "_dispararAvisoAudible", "_dispararAvisoCartel",
+    "_setUltimoRelevoParaTest",
     "boot",
   ],
 

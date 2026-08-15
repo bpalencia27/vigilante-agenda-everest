@@ -21,9 +21,9 @@ const respuesta404 = () => ({
 module.exports = {
   nombre: "Telemetría de uso del panel (v12.5)",
   cubre: [
-    "_esErrorPropio", "_getFirmaPropiaParaTest", "_setFirmaPropiaParaTest", "_instalarCazaErrores","uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
-    "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario", "_instalarCazaErrores",
-    "_rumEndpointLabel", "_rumTrack", "_migaPush"],
+    "_esErrorPropio", "_getFirmaPropiaParaTest", "_setFirmaPropiaParaTest", "_instalarCazaErrores", "uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "reportar",
+    "_equipoId", "_sanearMensajeError", "reportarError",
+    "_rumEndpointLabel"],
   async pruebas(t, api, env, cargar) {
 
     // =====================================================================

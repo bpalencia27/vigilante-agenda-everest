@@ -3,7 +3,7 @@ const path = require("path");
 
 module.exports = {
   nombre: "Cascada CSS",
-  cubre: ["buildOverlay"],
+  cubre: [],
   pruebas: function (t, api, env) {
     const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 

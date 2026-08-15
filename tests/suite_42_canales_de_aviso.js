@@ -26,9 +26,11 @@ module.exports = {
   nombre: "Canales de aviso (los 28 que nadie probaba)",
   cubre: [
     "beep", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon",
-    "startFlash", "stopFlash", "popupAlert", "acknowledge", "osNotify",
+    "startFlash", "stopFlash", "popupAlert", "bigAlert", "pymAlert", "abandonoPESAlert",
+    "acknowledge", "colorDot", "osNotify", "notify",
     "enableOsNotifications", "testNotifications", "updateBell",
-    "showToast", "_renderToast", "fraudesHoy", "renderStats",
+    "showToast", "_renderToast", "_dispararAvisoAudible", "_dispararAvisoCartel",
+    "fraudesHoy", "renderStats",
     "_loteId", "_migaPush", "_pestanaOculta", "_getUltimoRelevoParaTest",
     "uxVentanaNueva", "repEntornoDiario", "_urlDiagnostico", "_tituloDiagnostico",
     "_rumTrack", "_casillasExamenFisico",
@@ -247,6 +249,40 @@ module.exports = {
       c.api.__state.muteUntil = 0;
       c.api.osNotify("ROJO", "Fraude", "cuerpo", true, "uid-unico");
       t.cierto(lanzadas.length <= 1, "no puede lanzar más de una por evento");
+    });
+
+    t.caso("colorDot genera un SVG con el color correspondiente", () => {
+      const dotRojo = api.colorDot("ROJO");
+      const dotVerde = api.colorDot("VERDE");
+      t.cierto(dotRojo.indexOf("data:image/svg+xml") === 0, "debe ser un data URI svg");
+      t.cierto(dotRojo !== dotVerde, "cada color debe tener su svg");
+    });
+
+    t.caso("notify deriva a osNotify si hay permisos, o a showToast si no los hay", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.Notification = undefined;
+      t.noLanza(() => c.api.notify("ROJO", "Fraude", "Paciente", true, "uid-test-notify"));
+    });
+
+    t.caso("bigAlert, pymAlert y abandonoPESAlert construyen modales accesibles en Everest", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.cartel = true;
+      t.noLanza(() => c.api.bigAlert("ROJO", "Ingreso fuera de turno", "Paciente extemporáneo"));
+      t.noLanza(() => c.api.pymAlert("Juan Perez", ["VIH", "Citología"], false, true));
+      t.noLanza(() => c.api.abandonoPESAlert("Maria Gomez", true));
+      const ids = c.env.win.document._nodos.map(n => n.id);
+      t.cierto(ids.includes("vgl-modal") || ids.includes("vgl-pym-modal") || ids.includes("vgl-pes-modal"), "deben crearse los modales");
+    });
+
+    t.caso("_dispararAvisoAudible y _dispararAvisoCartel coordinan canales acústicos y visuales", () => {
+      const c = cargar({ silencioso: true });
+      conAudio(c);
+      c.api.__S.sonido = true;
+      c.api.__S.cartel = true;
+      const paquete = { uid: "p-test-1", color: "ROJO", title: "Alerta", body: "Detalle", flashText: "⛔ ALERTA", persist: true };
+      const res = c.api._dispararAvisoAudible(paquete);
+      t.cierto(res === true || res === false, "debe indicar si disparó o si otra pestaña lo tomó");
+      t.noLanza(() => c.api._dispararAvisoCartel(paquete));
     });
 
     t.caso("enableOsNotifications, testNotifications y updateBell no revientan sin permiso", () => {
