@@ -10106,10 +10106,34 @@
   }
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)
+  // v14.1.9 — CACHÉ POR CÉDULA. La búsqueda prueba rutas EN CASCADA, así que cada llamada
+  // cuesta hasta 4 peticiones secuenciales contra el servidor de la IPS. Hay 8 llamadores
+  // de producción, y desde v14.1.8 uno de ellos está en el camino del clic de Auto-Labs:
+  // el médico esperaba la cascada ENTERA, encima de los 2-4 s que ya había esperado a
+  // Athenea, antes de que se escribiera una sola casilla.
+  //
+  // La relación cédula → id interno de Everest no cambia, así que cachearla es seguro. El
+  // propio comentario de v12.0.3 tres líneas más abajo ya se quejaba de "un goteo constante
+  // de 404 contra el servidor" por repetir estas búsquedas: esto es lo que faltaba.
+  //
+  // Solo se cachea el ACIERTO. Un `null` significa "no se pudo" —red caída, sesión vencida,
+  // paciente que aún no existe en Everest— y eso sí cambia de un momento a otro: cachearlo
+  // dejaría al médico sin poder reintentar hasta que venciera el TTL.
+  //
+  // La clave lleva el id del médico porque va en la URL de la consulta.
+  // (No hay `_pacienteIdInvalidarTodo`: se escribió por costumbre y se borró antes de
+  // subirla. No hay ningún evento que deba invalidar esto — la relación cédula → id interno
+  // no cambia, la clave ya separa por médico y por cédula, y el TTL cubre el resto. Es la
+  // cuarta vez que este proyecto casi mete un invalidador sin llamador.)
+  const _pacienteIdCache = new Map();
   async function apiAccesoBuscarPaciente(docId) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
+
+    const clave = uId + "|" + cleanDoc;
+    const enCache = _pacienteIdCache.get(clave);
+    if (enCache && (Date.now() - enCache.ts) < ORDENES_VIGENTES_TTL_MS) return enCache.pid;
 
     const paths = [
       // v12.0.3 — RETIRADAS las dos rutas de APIPacienteV2: en la consola del consultorio
@@ -10130,7 +10154,7 @@
       try {
         const res = await pageFetchJson(path);
         const pid = extractPatientId(res);
-        if (pid) return pid;
+        if (pid) { _pacienteIdCache.set(clave, { pid, ts: Date.now() }); return pid; }
       } catch (e) {}
     }
     return null;

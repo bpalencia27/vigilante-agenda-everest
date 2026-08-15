@@ -22,7 +22,7 @@ module.exports = {
   cubre: [
     "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
     "_guardarTablaOficialVista", "_tablaOficialVigente", "_instalarOyenteTablaOficial",
-    "_base64SinRelleno",
+    "_base64SinRelleno", "apiAccesoBuscarPaciente",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -308,6 +308,47 @@ module.exports = {
       // por edad — que en la tabla real son 27 de 28.
       t.cierto(!!c.api._objecionOficialAlValor("CREATININA", "88", ctx),
         "sin demografía, la creatinina se sigue pudiendo juzgar: su regla no depende de la edad");
+    });
+
+    // ---------- la latencia del clic ----------
+
+    await t.casoAsync("apiAccesoBuscarPaciente se cachea por cédula — el clic de Auto-Labs no repite la cascada", async () => {
+      // v14.1.8 metió esta búsqueda en el camino del clic, y la búsqueda prueba rutas EN
+      // CASCADA: hasta 4 peticiones secuenciales antes de escribir la primera casilla,
+      // encima de los 2-4 s que el médico ya esperó a Athenea. La relación cédula → id
+      // interno no cambia, así que repetirla es puro coste.
+      let llamadas = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          llamadas++;
+          return { ok: true, status: 200, json: async () => ({ idPaciente: 4242 }), text: async () => "{}" };
+        },
+      });
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), 4242);
+      const tras1 = llamadas;
+      t.cierto(tras1 >= 1, "la primera vez sí consulta");
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), 4242, "y devuelve lo mismo");
+      t.igual(llamadas, tras1, "la segunda vez NO vuelve a salir a la red");
+      // Otra cédula es otro paciente: no puede heredar el id de la anterior.
+      await c.api.apiAccesoBuscarPaciente("9876543210");
+      t.cierto(llamadas > tras1, "una cédula DISTINTA sí dispara consulta nueva — jamás se mezclan pacientes");
+    });
+
+    await t.casoAsync("un fallo NO se cachea: el médico tiene que poder reintentar en el acto", async () => {
+      // Un `null` significa "no se pudo" —red caída, sesión de Everest vencida, paciente
+      // que aún no existe—, y eso cambia de un momento a otro. Cachearlo dejaría al médico
+      // sin poder reintentar hasta que venciera el TTL, que es justo cuando más urge.
+      let llamadas = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => { if (o && o.onerror) o.onerror(new Error("red")); },
+        fetch: async () => { llamadas++; return { ok: false, status: 500, json: async () => null, text: async () => "" }; },
+      });
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), null);
+      const tras1 = llamadas;
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), null);
+      t.cierto(llamadas > tras1, "tras un fallo, el siguiente intento SÍ vuelve a consultar");
     });
 
     // ---------- el identificador de la cita va codificado ----------
