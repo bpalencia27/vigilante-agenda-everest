@@ -10807,8 +10807,29 @@
 
   // v14.1.0 (R1b) — Extrae el peso del registro MÁS RECIENTE. Devuelve
   // { peso, fechaRegistro } o null. No promedia ni rellena: si el registro más nuevo no
-  // trae peso utilizable, es null aunque uno más viejo sí lo tuviera — un peso de hace
-  // dos años no describe a este paciente hoy, y la fórmula no tiene forma de saberlo.
+  // v14.x.x — Extrae PAS, PAD, IMC y peso del registro MÁS RECIENTE de signos vitales.
+  // Solo lee arr[0]. Si a este le falta un dato, no cae a los anteriores para rellenarlo.
+  // Rechaza por plausibilidad clínica los valores fuera de rango.
+  function _signosVitalesDelRegistro(arr) {
+    if (!Array.isArray(arr) || !arr.length) return null;
+    const r = arr[0];
+    if (!r || typeof r !== "object") return null;
+
+    let peso = _labNumerico(r.peso);
+    if (peso == null || peso <= 0) peso = null;
+
+    let pas = _labNumerico(r.presionSistolica);
+    if (pas !== null && (pas < 60 || pas > 300)) pas = null;
+
+    let pad = _labNumerico(r.presionDiastolica);
+    if (pad !== null && (pad < 30 || pad > 200)) pad = null;
+
+    let imc = _labNumerico(r.imc);
+    if (imc !== null && (imc < 10 || imc > 100)) imc = null;
+
+    return { peso, pas, pad, imc, fechaIso: r.fechaRegistro || "" };
+  }
+
   function _pesoDeSignosVitales(arr) {
     if (!Array.isArray(arr) || !arr.length) return null;
     const r = arr[0];
@@ -10898,7 +10919,7 @@
   function estadioRenalDelPaciente(opts) {
     // `= {}` en la firma solo cubre `undefined`, NO `null` — desestructurar null lanza.
     // Un llamador que pase el resultado de otra función que devolvió null es el caso obvio.
-    const { edad, peso, creatininaCruda, sexo, fechaCreatinina, fechaPeso } = (opts || {});
+    const { edad, peso, creatininaCruda, sexo, fechaCreatinina, fechaPeso, pas, pad, imc } = (opts || {});
     const faltan = [];
     const edadN = Number(edad);
     if (Number.isFinite(edadN) && edadN > 0 && edadN < 18) faltan.push("edad_pediatrica");
@@ -10921,6 +10942,9 @@
       sexo: sexoTxt,
       fechaCreatinina: fechaCreatinina || "",
       fechaPeso: fechaPeso || "",
+      pas: pas == null ? null : pas,
+      pad: pad == null ? null : pad,
+      imc: imc == null ? null : imc,
     };
 
     if (faltan.length) {
@@ -10970,14 +10994,17 @@
         ]);
       } catch (e) { /* ninguna de las dos lanza; el catch es por si Promise.all se rompe */ }
     }
-    const p = _pesoDeSignosVitales(sv);
+    const p = _signosVitalesDelRegistro(sv);
     return estadioRenalDelPaciente({
       edad: demo && demo.edad,
       peso: p && p.peso,
+      pas: p && p.pas,
+      pad: p && p.pad,
+      imc: p && p.imc,
       creatininaCruda: creat && creat.crudo,
       sexo: demo && demo.sexo,
       fechaCreatinina: creat && creat.fechaIso,
-      fechaPeso: p && p.fechaRegistro,
+      fechaPeso: p && p.fechaIso,
     });
   }
 
@@ -11018,6 +11045,7 @@
           <span class="vgl-labs-renal-estadio">${escapeHtml(String(r.estadio))}</span>
         </div>
         <div class="vgl-labs-renal-det">Por <b>${escapeHtml(String(r.formula))}</b> · creatinina ${escapeHtml(String(e.creatininaCruda || e.creatinina))}${escapeHtml(fecha(e.fechaCreatinina))} · peso ${escapeHtml(String(e.peso))} kg${escapeHtml(fecha(e.fechaPeso))} · ${escapeHtml(String(e.edad))} años${e.sexo ? " · " + escapeHtml(String(e.sexo)) : ""}${r.tfgCkdEpi ? " · CKD-EPI: " + escapeHtml(String(r.tfgCkdEpi)) : ""}</div>
+        ${(e.pas || e.pad || e.imc) ? `<div class="vgl-labs-renal-det"><b>Signos vitales:</b> ${[e.pas || e.pad ? `TA ${escapeHtml(String(e.pas || "-"))}/${escapeHtml(String(e.pad || "-"))} mmHg` : null, e.imc ? `IMC ${escapeHtml(String(e.imc))} kg/m²` : null].filter(Boolean).join(" · ")}${escapeHtml(fecha(e.fechaPeso))}</div>` : ""}
         ${avisos.map((a) => `<div class="vgl-labs-renal-aviso">${a}</div>`).join("")}
       </div>`;
   }

@@ -90,6 +90,8 @@ module.exports = {
 
     t.caso("Regla A - Clases que conviven no dependen del orden", () => {
       let fallos = [];
+      t.cierto(combos.length > 0, "debe encontrar combos de clases para validar");
+      t.cierto(reglasCss.length > 0, "debe extraer reglas CSS");
       for (const combo of combos) {
         const comboSet = new Set(combo);
 
@@ -129,13 +131,12 @@ module.exports = {
       }
 
       const unicos = [...new Set(fallos)];
-      if (unicos.length > 0) {
-        throw new Error("Dependencia del orden detectada:\n" + unicos.join("\n"));
-      }
+      t.cierto(unicos.length === 0, "Dependencia del orden detectada:\n" + unicos.join("\n"));
     });
 
     t.caso("Regla B - !important contra estilo inline", () => {
       const classImportantProps = new Map();
+      t.cierto(reglasCss.length > 0, "debe extraer reglas CSS");
       for (const r of reglasCss) {
         if (r.importantProps.size > 0) {
           for (const c of r.targetClasses) {
@@ -145,26 +146,31 @@ module.exports = {
         }
       }
 
+      t.cierto(classImportantProps.size > 0, "debe encontrar propiedades con !important");
+
       let fallos = [];
 
       const htmlTagRegex = /<[a-zA-Z0-9-]+([^>]+)>/g;
-      while ((match = htmlTagRegex.exec(code)) !== null) {
-        const attrs = match[1];
-        const classMatch = attrs.match(/class="([^"]+)"/);
-        const styleMatch = attrs.match(/style="([^"]+)"/);
+      let tagMatch;
+      while ((tagMatch = htmlTagRegex.exec(code)) !== null) {
+        const attrs = tagMatch[1];
+        const classMatch = /class="([^"]+)"/.exec(attrs);
+        const styleMatch = /style="([^"]+)"/.exec(attrs);
+
         if (classMatch && styleMatch) {
-          const classes = classMatch[1].split(/\s+/);
-          const styles = styleMatch[1].split(';').map(s => s.split(':')[0].trim());
+          const classes = classMatch[1].split(/\s+/).filter(Boolean);
+          const styleProps = styleMatch[1].split(';')
+            .map(s => s.trim().split(':')[0].trim())
+            .filter(Boolean)
+            .map(p => p.replace(/([A-Z])/g, "-$1").toLowerCase());
+
           for (const cls of classes) {
             if (classImportantProps.has(cls)) {
-              const impProps = classImportantProps.get(cls);
-              for (const style of styles) {
-                for (const imp of impProps) {
-                  if (imp.prop === style) {
-                    const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
-                    if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
-                       fallos.push(`Regla B: Clase '.${cls}' pura declara '${style}: !important', pero en HTML usa style inline.`);
-                    }
+              for (const imp of classImportantProps.get(cls)) {
+                if (styleProps.includes(imp.prop)) {
+                  const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
+                  if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
+                    fallos.push(`Regla B: Clase '.${cls}' pura declara '${imp.prop}: !important' (${imp.selector}), pero en HTML usa style inline.`);
                   }
                 }
               }

@@ -19,7 +19,7 @@
 module.exports = {
   nombre: "Estadio renal (R1b, plomería)",
   cubre: [
-    "_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
+    "_labNumerico", "_pesoDeSignosVitales", "_signosVitalesDelRegistro", "apiHcObtenerSignosVitales",
     "_signosVitalesInvalidar", "estadioRenalDelPaciente",
     "_creatininaDeLabs", "apiAccesoObtenerDemograficos",
     "calcularEstadioRenal", "_renderEstadioRenalHtml",
@@ -51,6 +51,43 @@ module.exports = {
       // valor plausible. Ningún analito de la lista puede ser negativo: se rechaza.
       t.igual(api._labNumerico("-1.2"), null, "un negativo NO puede colarse como positivo válido");
       t.igual(api._labNumerico("- 0,8"), null, "tampoco con espacio y coma decimal");
+    });
+
+    // ---------- _signosVitalesDelRegistro ----------
+    t.caso("_signosVitalesDelRegistro: extrae peso, PAS, PAD e IMC del registro más reciente", () => {
+      const arr = [
+        { fechaRegistro: "2026-08-12T18:56:06.535-05:00", peso: 65.0, presionSistolica: 120, presionDiastolica: 80, imc: 28.13 },
+        { fechaRegistro: "2024-01-05T10:00:00.000-05:00", peso: 88.0, presionSistolica: 140, presionDiastolica: 90, imc: 32.0 },
+      ];
+      const r = api._signosVitalesDelRegistro(arr);
+      t.igual(r.peso, 65.0, "peso del primer registro");
+      t.igual(r.pas, 120, "PAS del primer registro");
+      t.igual(r.pad, 80, "PAD del primer registro");
+      t.igual(r.imc, 28.13, "IMC del primer registro");
+      t.igual(r.fechaIso, "2026-08-12T18:56:06.535-05:00");
+    });
+
+    t.caso("_signosVitalesDelRegistro: maneja plausibilidad rechazando imposibles", () => {
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 350 }]).pas, null, "PAS de 350 es imposible");
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 220 }]).pas, 220, "PAS de 220 crisis pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 50 }]).pas, null, "PAS de 50 rechazada");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 250 }]).pad, null, "PAD de 250 rechazada");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 180 }]).pad, 180, "PAD de 180 crisis pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 20 }]).pad, null, "PAD de 20 rechazada");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 150 }]).imc, null, "IMC de 150 rechazado");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 80 }]).imc, 80, "IMC de 80 obesidad severa pasa");
+    });
+
+    t.caso("_signosVitalesDelRegistro: no hereda de registros anteriores si falta en el más nuevo", () => {
+      const arr = [
+        { fechaRegistro: "2026-08-12", peso: 65.0 },
+        { fechaRegistro: "2024-01-05", peso: 88.0, presionSistolica: 120, presionDiastolica: 80, imc: 28.1 },
+      ];
+      const r = api._signosVitalesDelRegistro(arr);
+      t.igual(r.peso, 65.0);
+      t.igual(r.pas, null, "NO hereda la PAS vieja");
+      t.igual(r.pad, null, "NO hereda la PAD vieja");
+      t.igual(r.imc, null, "NO hereda el IMC viejo");
     });
 
     // ---------- _pesoDeSignosVitales ----------
