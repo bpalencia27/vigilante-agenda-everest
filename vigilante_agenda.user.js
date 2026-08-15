@@ -3092,7 +3092,19 @@
       return _reglasDeExamen(tabla, codigo, opts);
   }
 
-  function _vigenciaDiasParaAnalito(key, resultValCrudo) {
+  function _vigenciaDiasParaAnalito(key, resultValCrudo, opts) {
+      if (opts && (opts.estadio || opts.programa)) {
+          const analito = analitoTablaDesdeClaveRcv(key);
+          if (analito) {
+              const programa = opts.programa || (opts.estadio ? "ERC" : null);
+              const v = vigenciaPorEstadio(programa, opts.estadio, analito, opts);
+              if (typeof v === "number") return v;
+              if (v && typeof v === "object") {
+                  if (Number.isFinite(v.max)) return v.max;
+                  if (Number.isFinite(v.min)) return v.min;
+              }
+          }
+      }
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
           // rango con desigualdad ("> 300", ">= 30"). Number("> 300") es NaN, así que sin
@@ -3332,7 +3344,8 @@
   }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
-  function _analitosRcvVencidos(labsArray, hoyIso) {
+  // `opts` opcional: { estadio, programa, esDM2, edad } para vigencia por estadio (T3).
+  function _analitosRcvVencidos(labsArray, hoyIso, opts) {
       const hoy = _parseFechaHoraLike(hoyIso);
       if (!hoy) return [];
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
@@ -3343,7 +3356,7 @@
           if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
           const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
           const dias = Math.round((hoyMs - fechaMs) / 86400000);
-          const vigenciaDias = _vigenciaDiasParaAnalito(key, c.resultVal);
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, c.resultVal, opts);
           if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
       }
       return faltantes;
