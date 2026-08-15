@@ -1,0 +1,72 @@
+{
+  "metodo": "POST",
+  "ruta": "/apiviva/APIAcceso/api/Acceso/AsignarTurno",
+  "parametros": [
+    "OrdenMongoId",
+    "TurnoId",
+    "Marcacion",
+    "PacienteId",
+    "FechaDeseada",
+    "TipoConsulta",
+    "Ip",
+    "UsuarioId",
+    "CodigoCups",
+    "SwProgramaEspecial",
+    "swIsPac",
+    "swIsPyM",
+    "ObservacionCita",
+    "FechaMinimaConsultaOrden",
+    "ProgramaId",
+    "Tratamiento",
+    "Consulta",
+    "Emergencia",
+    "PresupuestoId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ],
+  "esquemaPeticion": {},
+  "esquemaRespuesta": {
+    "error": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "mensaje": "null",
+    "data": {
+      "radicado": "number",
+      "swEmail": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "swImprimir": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "swSms": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "motivo": "string(22 car)",
+      "consultorioAtencion": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "swExtramural": {
+        "tipo": "boolean",
+        "ejemplo": false
+      }
+    },
+    "imprimir": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "valor": {
+      "tipo": "number",
+      "ejemplo": 0
+    },
+    "link": "null"
+  }
+}

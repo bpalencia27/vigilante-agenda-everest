@@ -1,0 +1,46 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos",
+  "parametros": [
+    "citaId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_rutacronicos_borrado_rac_20260812.json"
+  ],
+  "nota": "CATÁLOGO OFICIAL de las casillas de la Ruta Crónicos: nombre interno de cada examen, rango válido, unidad y cuáles son OBLIGATORIAS (swRequerido). El script NO usa hoy este endpoint.",
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 28,
+    "de": {
+      "codigoExamen": {
+        "tipo": "string(11 car)",
+        "ejemplo": "HEMOGLOBINA"
+      },
+      "sexo": "null",
+      "edadMin": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "edadMax": {
+        "tipo": "number",
+        "ejemplo": 110
+      },
+      "valorMinimo": {
+        "tipo": "number",
+        "ejemplo": 3
+      },
+      "valorMaximo": {
+        "tipo": "number",
+        "ejemplo": 30
+      },
+      "swRequerido": {
+        "tipo": "boolean",
+        "ejemplo": true
+      },
+      "unidad": "string(4 car)"
+    }
+  }
+}

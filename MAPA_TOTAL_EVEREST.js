@@ -177,13 +177,48 @@
   // =========================================================================
   //  2. INVENTARIO DE UNA PANTALLA
   // =========================================================================
+  // El vocabulario de interfaz/clínica que se espera en un TÍTULO DE SECCIÓN. Si una
+  // cadena en MAYÚSCULAS está hecha solo de estas palabras, es una etiqueta; si trae
+  // alguna que no está, se asume que es el nombre de una persona.
+  const VOC_SECCION = new Set(("HISTORIA CLINICA CLÍNICA PACIENTE PACIENTES AGENDA CITA CITAS CONSULTA EXAMEN EXAMENES " +
+    "EXÁMENES ORDEN ORDENES ÓRDENES ORDENAMIENTO ORDENAMIENTOS LABORATORIO LABORATORIOS RESULTADO RESULTADOS FECHA " +
+    "HORA ESTADO TIPO CODIGO CÓDIGO NOMBRE DOCUMENTO IDENTIFICACION IDENTIFICACIÓN TOTAL PARCIAL GENERAL CONTROL " +
+    "PROGRAMA RUTA CRONICOS CRÓNICOS RIESGO CARDIOVASCULAR RENAL SANGRE ORINA SUERO ANTECEDENTES FAMILIARES " +
+    "PATOLOGICOS PATOLÓGICOS QUIRURGICOS QUIRÚRGICOS ALERGIAS DIAGNOSTICO DIAGNÓSTICO CONDUCTA RECOMENDACIONES " +
+    "MEDICAMENTOS SIGNOS VITALES ANALISIS ANÁLISIS PLAN HISTORIAL EXTERNOS IMAGENOLOGIA IMAGENOLOGÍA SERVICIOS " +
+    "PAQUETES PREVENCION PREVENCIÓN FISICO FÍSICO MOTIVO ACOMPAÑANTE REPRESENTANTE LEGAL SELECCIONE OPCION OPCIÓN " +
+    "DE DEL LA EL LOS LAS Y O EN POR PARA CON SIN UN UNA UNOS UNAS SU SUS AL A ES SON QUE").split(/\s+/));
+
+  // v2 — LA CABECERA DEL PACIENTE NO ES UN TÍTULO DE SECCIÓN.
+  //
+  // Este capturador promete "solo NOMBRES: ni un valor de casilla, ni una celda de tabla,
+  // ni un dato de respuesta", y para las casillas lo cumple. Pero `seccionDe` sube por el
+  // DOM buscando el encabezado que contiene a cada elemento, y en la historia clínica ese
+  // encabezado ES LA CABECERA DEL PACIENTE — con su nombre completo.
+  //
+  // En los cuatro mapas del 14-ago se colaron así 45 apariciones de tres pacientes
+  // distintos. Se detectó auditándolos antes de publicarlos como material de referencia
+  // para otros modelos; es decir, a un paso de copiarlos a un sistema de terceros.
+  //
+  // Falla cerrada: ante un título que no se reconoce como etiqueta, se devuelve
+  // "[PACIENTE]". Perder el nombre de una sección es barato; publicar el de alguien no.
+  function pareceNombreDePersona(t) {
+    const pal = String(t || "").trim().split(/\s+/);
+    if (pal.length < 2 || pal.length > 5) return false;
+    if (!pal.every((p) => /^[A-ZÁÉÍÓÚÑ]{3,}$/.test(p))) return false;
+    return !pal.every((p) => VOC_SECCION.has(p));
+  }
+
   function seccionDe(el) {
     try {
       let n = el;
       for (let i = 0; i < 12 && n; i++) {
         n = n.parentElement; if (!n) break;
         const h = n.querySelector("h1,h2,h3,h4,h5,legend,.card-header,.panel-title,[class*=titulo],[class*=title]");
-        if (h) { const t = lim(h.textContent); if (t) return t; }
+        if (h) {
+          const t = lim(h.textContent);
+          if (t) return pareceNombreDePersona(t) ? "[PACIENTE]" : t;
+        }
       }
     } catch (e) {}
     return "";
