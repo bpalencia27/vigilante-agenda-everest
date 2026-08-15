@@ -4,7 +4,11 @@ module.exports = {
     "_matchLabInWhitelist", "_findLabField",
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
-    "_esAnalitoDeOrina", "_matchUroComponente", "_findUroInput", "_canonTexto"
+    "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
+    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
+    "_conductaBuscarYAgregarExamen"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -59,6 +63,17 @@ module.exports = {
       t.igual(trigli.key, "TRIGLICERIDOS");
     });
 
+    t.caso("_matchLabInWhitelist: CUPS 903866 (TGP/ALT) ya NO cae en Triglicéridos (v12.6.0 — auditoría cruzada con el Copiloto)", () => {
+      const res = testApi._matchLabInWhitelist({ codigo: "903866", nombre: "TGP" });
+      t.igual(res, null, "903866 es TGP/ALT, ninguno de los 13 analitos autorizados — no debe emparejar con nada");
+    });
+
+    t.caso("_matchLabInWhitelist: Fósforo casa aunque Athenea lo entregue como 'FOSFORO INORGANICO (FOSFATOS)' (v14.0.0, reportado por el médico)", () => {
+      const res = testApi._matchLabInWhitelist({ nombre: "FOSFORO INORGANICO (FOSFATOS)" });
+      t.cierto(!!res, "el nombre real que entrega Athenea debe casar, no solo 'FOSFORO EN SUERO'");
+      t.igual(res.key, "FOSFORO");
+    });
+
     t.caso("_matchLabInWhitelist: Analito desconocido devuelve null", () => {
       const res = testApi._matchLabInWhitelist({ CodigoParametro: "999999", nombre: "LABORATORIO INVENTADO" });
       t.igual(res, null);
@@ -93,7 +108,11 @@ module.exports = {
       t.igual(mockDOM["resultadoColesterolTotal"].value, "");
     });
 
-    t.caso("injectLabsIntoCronicos: Primer valor gana en colisión", () => {
+    t.caso("injectLabsIntoCronicos: en colisión gana la fecha MÁS RECIENTE, no el primero de la lista (v12.5.6, pedido del médico)", () => {
+      // Antes ganaba "el primero de la lista" asumiendo que Athenea siempre entrega de
+      // más reciente a más antigua — un supuesto de orden, no una comparación real de
+      // fechas. Aquí el duplicado MÁS VIEJO va primero en labsArray a propósito: si el
+      // fix funciona, igual gana el de fecha 2023-01-02 (el más reciente de verdad).
       mockDOM = {
         "resultadoGlicemia": { value: "" },
         "fechaResultGlicemia": { value: "" }
@@ -104,8 +123,22 @@ module.exports = {
       ];
       const res = testApi.injectLabsIntoCronicos(labs);
       t.igual(res.count, 1, "Solo debe inyectar uno");
-      t.igual(mockDOM["resultadoGlicemia"].value, "7.1", "El primer valor debe prevalecer");
-      t.igual(mockDOM["fechaResultGlicemia"].value, "2023-01-01", "Debe usar la fecha del primer resultado");
+      t.igual(mockDOM["resultadoGlicemia"].value, "9.9", "gana el resultado con la fecha más reciente, aunque llegue segundo en la lista");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2023-01-02", "la fecha escrita es la del resultado más reciente");
+    });
+
+    t.caso("injectLabsIntoCronicos: en colisión, un resultado CON fecha le gana a uno SIN fecha (sin importar el orden)", () => {
+      mockDOM = {
+        "resultadoGlicemia": { value: "" },
+        "fechaResultGlicemia": { value: "" }
+      };
+      const labs = [
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" }
+      ];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoGlicemia"].value, "6.6", "el resultado con fecha conocida es más informativo y gana");
+      t.igual(mockDOM["fechaResultGlicemia"].value, "2024-06-01");
     });
 
     t.caso("injectLabsIntoCronicos: Sin fecha real, la casilla de fecha queda vacía", () => {
@@ -169,16 +202,24 @@ module.exports = {
       t.igual(anoAjeno[0].fechaIso, null, "la fecha no es del año de la solicitud: se descarta");
     });
 
-    t.caso("_atheneaExtraerSolicitudes: la fecha DESPUÉS del formulario también cuenta (v12.3.36 — disposición real de la tarjeta confirmada en campo)", () => {
-      // El diagnóstico de la .35 mostró que antes del <form> solo hay apertura de
-      // tarjeta ("<div class=card>...") y la fecha visible viene después, dentro de
-      // la misma tarjeta — exactamente esta estructura.
+    t.caso("_atheneaExtraerSolicitudes: v12.3.36 quedó SUPERADA por la tarjeta REAL de campo (v12.5.5) — la fecha después del formulario ya no se busca, a propósito", () => {
+      // La v12.3.36 creyó (con un diagnóstico incompleto de esa época) que la fecha
+      // visible iba DESPUÉS del <form>, dentro de la misma tarjeta, y por eso dejaba un
+      // margen de búsqueda hacia adelante. La tarjeta REAL de consultorio (captura de
+      // pantalla + volcado de HTML, 2026-08-11, ver el resto de esta suite y la 18)
+      // demostró que la fecha y el "Numero" van SIEMPRE ANTES del formulario — y ese
+      // margen hacia adelante, con tarjetas reales pegadas una tras otra, era la vía por
+      // la que la fecha (y el hash/token) de una solicitud VECINA se colaban en la
+      // actual (hallazgo BLOQUEANTE de la revisión adversarial de v12.5.4). Por eso desde
+      // v12.5.5 la ventana ya NO mira después del formulario: este fixture, con la fecha
+      // deliberadamente puesta DESPUÉS (una disposición que ya no se cree real), ahora
+      // devuelve sin fecha — fail-safe, no una fecha equivocada.
       const html = '<div class="card">\r\n  <div class="card-body p-5">\r\n' +
         '<form id="7368152026" data-modulo="LAB" action="/Resultados/Reporte"></form>' +
         '<h5>Solicitud 736815</h5><span>Fecha: 05/08/2026</span></div></div>';
       const out = testApi._atheneaExtraerSolicitudes(html);
       t.igual(out.length, 1);
-      t.igual(out[0].fechaIso, "2026-08-05");
+      t.igual(out[0].fechaIso, null, "la fecha después del formulario ya no se busca (ver la tarjeta REAL: siempre va antes)");
     });
 
     t.caso("injectLabsIntoCronicos: sinCasilla acumula analitos válidos sin destino en el DOM", () => {
@@ -391,6 +432,175 @@ module.exports = {
       t.igual(res.respetadas, 1, "solo Nitritos se respeta; el HEMOGLOBINA viejo se OMITE por dedup, no se cuenta");
     });
 
+    // =====================================================================
+    // v12.6.7 — Reportado en consultorio con captura: el script marcó SI en
+    // "¿Uroanálisis?" y dejó TODO el bloque vacío — ni el resultado, ni la fecha, ni las
+    // 7 casillas de componente. Causa: el "SI" se marcaba DESPUÉS de recorrer los labs e
+    // intentar escribir cada casilla, y esas casillas solo existen en el DOM cuando el
+    // interruptor está en SI (Angular las monta con *ngIf). En la primera visita, por
+    // tanto, no existía ninguna. Estas pruebas fijan el ORDEN: primero el click, después
+    // la escritura. La casilla falsa de abajo solo "aparece" una vez marcado el SI —
+    // igual que el *ngIf real—, así que si alguien vuelve a invertir el orden, aquí se ve.
+    // =====================================================================
+    t.caso("injectLabsIntoCronicos v12.6.7: marca SI ANTES de buscar las casillas (si no, el bloque *ngIf ni existe)", () => {
+      mockDOM = {};
+      let siMarcado = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const radioNo = { checked: false, parentElement: { textContent: "NO" }, click: () => {} };
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi, radioNo];
+        // El bloque del uroanálisis NO existe hasta que el SI está marcado.
+        if (sel === 'input[placeholder]') return siMarcado ? [inputSangre] : [];
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(siMarcado, "se pulsó SI");
+      t.cierto(res.uroanalisisMarcado, "y se reporta como marcado en esta corrida");
+      t.igual(inputSangre.value, "NEGATIVO", "la casilla se llenó en la MISMA corrida: el SI fue primero");
+      t.igual(res.count, 1);
+      t.falso(res.sinCasilla.includes("URO_SANGRE"), "ya no se reporta 'sin casilla' por un bloque que el propio script hace aparecer");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.6.7: sin ningún componente REAL no se marca SI (un PENDIENTE no cuenta)", () => {
+      mockDOM = {};
+      let siMarcado = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? [radioSi] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(siMarcado, "un resultado PENDIENTE no autoriza a marcar SI en la historia");
+      t.falso(res.uroanalisisMarcado);
+    });
+
+    // El click en SI y el re-render del *ngIf de Angular no ocurren en el mismo tick de
+    // JS: aunque el orden ya sea el correcto, la casilla puede no existir todavía en ese
+    // instante. Reintento acotado (300 ms y 900 ms) y se abandona — nunca un sondeo eterno.
+    // El arnés recorta todo setTimeout del script a 1 ms, así que aquí no se mide tiempo:
+    // se cuenta cuántas veces se ha ido a buscar la casilla. Aparece recién en la TERCERA
+    // búsqueda (síncrona + reintento 1 + reintento 2), que es justo lo que prueba que los
+    // DOS reintentos existen.
+    await t.casoAsync("injectLabsIntoCronicos v12.6.7: si Angular tarda en montar la casilla, el reintento la completa", async () => {
+      mockDOM = {};
+      let siMarcado = false, busquedas = 0;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const inputSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
+        if (sel === 'input[placeholder]') { busquedas++; return busquedas >= 3 ? [inputSangre] : []; }
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }
+      ]);
+      t.cierto(siMarcado);
+      t.igual(inputSangre.value, "", "en la corrida síncrona la casilla aún no existía");
+      t.cierto(res.sinCasilla.includes("URO_SANGRE"), "y se reportó como sin casilla en ese momento");
+      await new Promise((r) => setTimeout(r, 60));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputSangre.value, "NEGATIVO", "el reintento la completó cuando Angular la montó");
+      t.igual(busquedas, 3, "una búsqueda síncrona y exactamente DOS reintentos: acotado, nunca un sondeo eterno");
+    });
+
+    // v14.0.0 — BUG REPORTADO EN CONSULTA DOS VECES: "Auto-Labs no pone la fecha del
+    // uroanálisis". El reintento del uroanálisis (el que espera al *ngIf de Angular tras
+    // marcar SI) salía con `if (valorActual !== "") return;` en cuanto la casilla de
+    // RESULTADO ya tenía algo, y se llevaba por delante la escritura de la FECHA aunque su
+    // casilla estuviera vacía. Basta con que el resultado se haya puesto en una corrida
+    // anterior para que la fecha no se escriba nunca, por más veces que se pulse el botón.
+    // El camino principal ya separaba valor y fecha desde v12.3.35; a ESTE reintento no.
+    // Usa instancia PROPIA: sustituye getElementById/querySelectorAll y el reintento es
+    // asíncrono, así que con la instancia compartida los mocks se filtrarían a otras pruebas.
+    await t.casoAsync("injectLabsIntoCronicos v14: el reintento del UROANÁLISIS completa la fecha aunque el resultado YA estuviera escrito (bug real de consulta)", async () => {
+      const cu = cargar({ silencioso: true });
+      cu.ctx.Event = class Event { constructor(tipo, init) { this.type = tipo; this.bubbles = !!(init && init.bubbles); } };
+      let siMarcado = false, montada = false;
+      const radioSi = { checked: false, parentElement: { textContent: "SI" }, click: () => { siMarcado = true; } };
+      const compSangre = { placeholder: "Resultado Sangre", value: "", dispatchEvent: () => {} };
+      // La casilla de resultado del uroanálisis YA trae el valor de Athenea (corrida
+      // anterior) y su FECHA está VACÍA — el escenario exacto que reportó el médico.
+      const fechaUro = { value: "", dispatchEvent: () => {} };
+      const resultadoUro = {
+        value: "NORMAL", dispatchEvent: () => {},
+        closest: () => ({ querySelector: (s) => (s === 'input[type="date"]' ? fechaUro : null) }),
+      };
+      cu.env.doc.getElementById = (id) => {
+        if (id === "resultadoUroanalisis") return montada ? resultadoUro : null; // *ngIf tardío
+        if (id === "fechaResultUroanalisis") return montada ? fechaUro : null;
+        return null;
+      };
+      cu.env.doc.querySelector = () => null;
+      cu.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return [radioSi];
+        if (sel === "input[placeholder]") return montada ? [compSangre] : [];
+        return [];
+      };
+      // Un COMPONENTE real dispara el marcado del SI (la fila padre sola no lo hace), y la
+      // fila padre es la que crea el candidato UROANALISIS con su fecha.
+      const res = cu.api.injectLabsIntoCronicos([
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-08-10" }
+      ]);
+      t.cierto(siMarcado, "un componente real marca el SI de ¿Uroanálisis?");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"), "en la corrida síncrona la casilla del resultado aún no existía");
+      t.igual(fechaUro.value, "", "y por tanto la fecha tampoco se pudo escribir todavía");
+
+      montada = true;                       // Angular monta el *ngIf
+      await new Promise((r) => setTimeout(r, 80));
+
+      t.igual(resultadoUro.value, "NORMAL", "el resultado NO se reescribe: ya era el de Athenea");
+      t.igual(fechaUro.value, "2026-08-10", "y la FECHA vacía SÍ se completa — esto es lo que fallaba en consulta");
+    });
+
+    // =====================================================================
+    // v12.6.8 — Reportado en consultorio con el PDF del laboratorio: una paciente con
+    // resultado real de RAC (6.93 mg/gr) no se completó en la historia. El emparejamiento
+    // por nombre era texto crudo: un separador distinto ("/" o "-" en vez de espacio) o
+    // una tilde bastaban para que el analito no casara con NINGUNA entrada y su resultado
+    // se perdiera sin dejar rastro. Normalización tipográfica, no clínica: no se amplía
+    // qué examen casa con qué casilla.
+    // =====================================================================
+    t.caso("_matchLabInWhitelist v12.6.8: el mismo examen casa venga con espacio, barra, guion o tildes", () => {
+      const variantes = [
+        "RELACION MICROALBUMINURIA CREATININA",
+        "RELACION MICROALBUMINURIA/CREATININA",
+        "RELACION MICROALBUMINURIA-CREATININA",
+        "Relación Microalbuminuria / Creatinina",
+        "RELACIÓN ALBÚMINA/CREATININA",
+        "RELACION ALBUMINA CREATININA"
+      ];
+      for (const nombre of variantes) {
+        const m = testApi._matchLabInWhitelist({ NombreParametro: nombre, NombreParametroPadre: "QUIMICA URINARIA" });
+        t.cierto(!!m && m.key === "RAC", "debe casar con RAC: " + nombre);
+      }
+    });
+
+    t.caso("_matchLabInWhitelist v12.6.8: la normalización NO afloja las exclusiones ni mezcla exámenes", () => {
+      // La creatinina sérica y la creatinina EN ORINA siguen siendo distintas (Incidente v11.0.1).
+      const orina = testApi._matchLabInWhitelist({ NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA" });
+      t.falso(orina && orina.key === "CREATININA", "la creatinina en orina no puede caer en la casilla de creatinina sérica");
+      // Y una microalbuminuria a secas no es el cociente RAC.
+      const micro = testApi._matchLabInWhitelist({ NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA" });
+      t.falso(micro && micro.key === "RAC", "la microalbuminuria sola (mg/L) no es la relación albuminuria/creatinina (mg/g)");
+    });
+
+    t.caso("_hayComponenteUroReal: distingue componente real de pendiente, vacío y de analito ajeno al parcial", () => {
+      t.cierto(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "" }]));
+      t.falso(testApi._hayComponenteUroReal([{ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "HEMOGRAMA", Resultado: "8500" }]), "los leucocitos del hemograma NO son del parcial de orina");
+      t.falso(testApi._hayComponenteUroReal([]));
+      t.falso(testApi._hayComponenteUroReal(null));
+    });
+
     t.caso("_findUroInput y _canonTexto: placeholder normalizado (tildes, espacios dobles, bordes) y null si no existe", () => {
       t.igual(testApi._canonTexto("Resultado  Hematíes "), "RESULTADO HEMATIES", "tildes fuera, espacios colapsados y recortados");
       const inputHematies = { placeholder: "Resultado Hematíes", value: "", dispatchEvent: () => {} };
@@ -401,6 +611,306 @@ module.exports = {
       t.igual(testApi._findUroInput("RESULTADO CILINDROS"), inputCilindros, "el doble espacio del placeholder real también casa");
       t.igual(testApi._findUroInput("RESULTADO GLUCOSURIA"), null);
       c.env.doc.querySelectorAll = prevQSA;
+    });
+
+    // ================= v12.5.11 — "¿Uroanálisis?" (interruptor SI/NO) =================
+    // Confirmado en consultorio (pantallazo del 12-08-2026): dos radios `name=
+    // "resultadoPrograma.swUroanalisis"`, SIN atributo `value` (Angular los distingue por
+    // FormControl, no por HTML) — la única ancla real es el texto visible del <label> que
+    // envuelve cada radio, igual que _findUroInput usa el placeholder.
+    function crearRadiosUro({ siChecked = false, noChecked = false } = {}) {
+      const radioSi = { checked: siChecked, parentElement: { textContent: " SI " }, clicked: false, click() { this.checked = true; this.clicked = true; } };
+      const radioNo = { checked: noChecked, parentElement: { textContent: " NO " }, clicked: false, click() { this.checked = true; this.clicked = true; } };
+      return { radioSi, radioNo, lista: [radioSi, radioNo] };
+    }
+
+    t.caso("_marcarUroanalisisSi: ningún radio elegido todavía -> marca SI y devuelve true", () => {
+      const { radioSi, radioNo, lista } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(r, "debe reportar que sí marcó");
+      t.cierto(radioSi.clicked, "el radio SI recibe el click");
+      t.falso(radioNo.clicked, "el radio NO no se toca");
+    });
+
+    t.caso("_marcarUroanalisisSi: el médico YA eligió SI -> no lo vuelve a tocar (idempotente) y devuelve false", () => {
+      const { radioSi, lista } = crearRadiosUro({ siChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+      t.falso(radioSi.clicked, "ya estaba marcado por el médico: ni siquiera se vuelve a hacer click");
+    });
+
+    t.caso("_marcarUroanalisisSi: el médico YA eligió NO -> se respeta, jamás se sobrescribe con SI", () => {
+      const { radioSi, radioNo, lista } = crearRadiosUro({ noChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? lista : []);
+      const r = testApi._marcarUroanalisisSi();
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+      t.falso(radioSi.clicked, "el NO del médico es una decisión clínica: no se pisa con SI");
+      t.cierto(radioNo.checked, "el NO del médico sigue intacto");
+    });
+
+    t.caso("_marcarUroanalisisSi: sin radios en esta vista -> no lanza, devuelve false", () => {
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      t.noLanza(() => testApi._marcarUroanalisisSi());
+      c.env.doc.querySelectorAll = () => [];
+      t.falso(testApi._marcarUroanalisisSi());
+      c.env.doc.querySelectorAll = prevQSA;
+    });
+
+    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (Conducta nativa) =================
+    // Reproduce el clic <li>→espera→"Agregar" capturado en consultorio el 12-08-2026
+    // (captura_ordenamiento_paquete_HTA_20260812.json) para PTH/Fósforo/Albúmina/Hemoglobina/
+    // HbA1c. Nunca llama a la red — solo dispara los mismos clics que el médico ya hace a mano.
+    function crearLi(texto) {
+      return { textContent: texto, clicked: false, click() { this.clicked = true; } };
+    }
+    function crearBotonAgregar({ texto = "Agregar", disabled = false } = {}) {
+      return { textContent: texto, disabled, clicked: false, click() { this.clicked = true; } };
+    }
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: <li> exacto encontrado + botón Agregar habilitado -> clickea ambos y devuelve true", async () => {
+      const li = crearLi("HORMONA PARATIROIDEA MOLECULA INTACTA");
+      const otroLi = crearLi("ALBUMINA EN SUERO U OTROS FLUIDOS");
+      const btnAgregar = crearBotonAgregar();
+      const btnCancelar = crearBotonAgregar({ texto: "Cancelar" });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [otroLi, li] : sel === "button" ? [btnCancelar, btnAgregar] : []);
+      const r = await testApi._conductaBuscarYAgregarExamen("HORMONA PARATIROIDEA MOLECULA INTACTA");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(r, "reporta éxito");
+      t.cierto(li.clicked, "el <li> del examen correcto recibe el clic");
+      t.falso(otroLi.clicked, "el otro <li> del listado no se toca");
+      t.cierto(btnAgregar.clicked, "el botón Agregar recibe el clic");
+      t.falso(btnCancelar.clicked, "Cancelar no se toca");
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: coincidencia EXACTA de texto, nunca por substring — un examen parecido no debe clickearse", async () => {
+      // 'FOSFORO EN SUERO U OTROS FLUIDOS' es substring de un <li> más largo hipotético —
+      // si la búsqueda no fuera exacta, esto clickearía el examen EQUIVOCADO en un catálogo
+      // clínico real. La coincidencia parcial debe fallar limpio, no acertar por casualidad.
+      const liParecido = crearLi("FOSFORO EN SUERO U OTROS FLUIDOS (PANEL AMPLIADO)");
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [liParecido] : []);
+      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+      t.falso(liParecido.clicked, "sin coincidencia exacta, no se clickea el parecido");
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: tildes/mayúsculas no importan (mismo _canonTexto que el resto del script)", async () => {
+      const li = crearLi("Fósforo en Suero u Otros Fluidos");
+      const btnAgregar = crearBotonAgregar();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnAgregar] : []);
+      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(r);
+      t.cierto(li.clicked);
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: el examen no está en esta pantalla -> no clickea nada, devuelve false (fallo seguro)", async () => {
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: el <li> aparece pero Angular nunca habilita Agregar -> devuelve false, no lanza", async () => {
+      const li = crearLi("HEMOGLOBINA");
+      const btnDeshabilitado = crearBotonAgregar({ disabled: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnDeshabilitado] : []);
+      // La propia llamada no debe lanzar (no se envuelve en try/catch aquí a propósito: si
+      // _conductaBuscarYAgregarExamen lanzara, casoAsync lo reportaría como fallo solo).
+      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.cierto(li.clicked, "el <li> sí se clickeó — el fallo es solo en el paso del botón");
+      t.falso(r);
+      t.falso(btnDeshabilitado.clicked, "un botón deshabilitado nunca se clickea");
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: DOM roto (querySelectorAll lanza) -> no propaga la excepción, devuelve false", async () => {
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => { throw new Error("DOM no disponible"); };
+      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(r);
+    });
+
+    t.caso("CONDUCTA_LI_TEXTO_POR_ANALITO: los 5 textos son los capturados LITERALMENTE en consultorio (no una paráfrasis del catálogo del Copiloto)", () => {
+      const tabla = testApi.__CONDUCTA_LI_TEXTO_POR_ANALITO;
+      t.igual(tabla.PTH, "HORMONA PARATIROIDEA MOLECULA INTACTA");
+      t.igual(tabla.ALBUMINA, "ALBUMINA EN SUERO U OTROS FLUIDOS");
+      t.igual(tabla.FOSFORO, "FOSFORO EN SUERO U OTROS FLUIDOS");
+      t.igual(tabla.HEMOGLOBINA, "HEMOGLOBINA");
+      // El catálogo del Copiloto dice solo "HEMOGLOBINA GLICOSILADA" — el <li> real de
+      // Everest capturado en consultorio trae además "AUTOMATIZADA", y es ese texto exacto
+      // el que hace falta para que el clic case.
+      t.igual(tabla.HBA1C, "HEMOGLOBINA GLICOSILADA AUTOMATIZADA");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: un componente REAL del parcial de orina marca \"SI\" en ¿Uroanálisis? y lo reporta en uroanalisisMarcado", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputNitritos.value, "NEGATIVO", "el componente sí se escribió, como siempre");
+      t.cierto(res.uroanalisisMarcado, "injectLabsIntoCronicos reporta que marcó el interruptor");
+      t.cierto(radioSi.clicked, "y de verdad hizo click en el radio SI");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: SOLO componentes PENDIENTES/vacíos -> NO marca el interruptor (no hay evidencia de que el examen ya se hizo)", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1 }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.uroanalisisMarcado, "un resultado PENDIENTE no es evidencia de un uroanálisis ya realizado");
+      t.falso(radioSi.clicked);
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: componente real, pero el médico YA había marcado NO -> se respeta, no se pisa con SI", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { radioSi, radioNo, lista: radios } = crearRadiosUro({ noChecked: true });
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const labs = [{ NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(inputNitritos.value, "NEGATIVO", "el componente igual se escribe: eso no depende del interruptor");
+      t.falso(res.uroanalisisMarcado, "el NO del médico es una decisión clínica, no se sobrescribe");
+      t.falso(radioSi.clicked);
+      t.cierto(radioNo.checked);
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.11: sin ningún componente de orina en labsArray (solo suero) -> no marca el interruptor", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const { radioSi, lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[name="resultadoPrograma.swUroanalisis"]' ? radios : []);
+      const labs = [{ NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.uroanalisisMarcado);
+      t.falso(radioSi.clicked, "nunca se hizo click porque no hay evidencia de un componente de orina real");
+    });
+
+    // ================= v12.5.12 — casilla de RESULTADO del uroanálisis =================
+    // Confirmado en campo: resultadoUroanalisis/fechaResultUroanalisis (los mismos
+    // resultId/dateId que WHITELIST_13_LABS ya tenía) solo existen en el DOM cuando
+    // "¿Uroanálisis?" está en SI (Angular los monta con *ngIf). Si se acaba de marcar SI
+    // en ESTA corrida y la casilla no apareció a tiempo, un único reintento de 300ms (1ms
+    // en el banco, ver harness) la busca de nuevo.
+    function labsUroConResultado(resultado, fecha) {
+      return [
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO" },
+        { NombreParametro: "UROANALISIS", CodigoParametro: "907106", Resultado: resultado, Fecha: fecha },
+      ];
+    }
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: la casilla aparece tras el reintento (Angular tardó en montarla después de marcar SI) -> se completa sola", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.cierto(res.uroanalisisMarcado, "se acaba de marcar SI en esta corrida");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"), "todavía no existía la casilla en el momento síncrono");
+      // Angular ya montó el *ngIf para cuando dispare el reintento.
+      mockDOM.resultadoUroanalisis = { value: "" };
+      mockDOM.fechaResultUroanalisis = { value: "" };
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL", "el reintento encontró la casilla y escribió el resultado verbatim");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10", "y también la fecha, porque estaba vacía");
+    });
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si el interruptor SI YA estaba elegido antes (no se marcó en esta corrida), NO se programa reintento", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro({ siChecked: true }); // el médico ya lo había puesto en SI antes
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.falso(res.uroanalisisMarcado, "ya estaba en SI: esta corrida no lo marcó");
+      t.cierto(res.sinCasilla.includes("UROANALISIS"));
+      mockDOM.resultadoUroanalisis = { value: "" }; // aparece igual, por otra razón cualquiera
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "", "sin reintento programado, la casilla queda vacía hasta el próximo click de Auto-Labs");
+    });
+
+    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si entre el click y el reintento el médico YA escribió algo, se respeta (no se pisa)", async () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      t.cierto(res.uroanalisisMarcado);
+      mockDOM.resultadoUroanalisis = { value: "ANORMAL — leucocitos +++ (escrito por el médico)" };
+      await new Promise((r) => setTimeout(r, 15));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "ANORMAL — leucocitos +++ (escrito por el médico)", "casilla sagrada: el reintento nunca sobrescribe lo que el médico ya haya escrito");
+    });
+
+    t.caso("injectLabsIntoCronicos v12.5.12: si la casilla YA existe en el momento síncrono (Angular no tardó), se llena de una vez por el camino genérico, sin necesitar reintento", () => {
+      mockDOM = { resultadoUroanalisis: { value: "" }, fechaResultUroanalisis: { value: "" } };
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const { lista: radios } = crearRadiosUro();
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[placeholder]') return [inputNitritos];
+        if (sel === 'input[name="resultadoPrograma.swUroanalisis"]') return radios;
+        return [];
+      };
+      const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.falso(res.sinCasilla.includes("UROANALISIS"), "el camino genérico ya la encontró: no hace falta reintento");
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10");
     });
 
     t.caso("v12.3.37: padres 'URINARIO' (sedimento/citoquímico) también disparan la guarda de orina", () => {
@@ -498,6 +1008,683 @@ module.exports = {
       t.igual(cuentaVolcados(), 1, "el mismo panel no se vuelve a imprimir (control de ruido v12.3.36)");
       c4.api.injectLabsIntoCronicos([{ NombreParametro: "CILINDROS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NO SE OBSERVAN", idEstado: 2 }]);
       t.igual(cuentaVolcados(), 2, "un nombre nuevo (otro paciente del día) sí genera evidencia nueva");
+    });
+
+    // =====================================================================
+    // v12.5.7 — _ultimaFechaPorAnalito (extraído de injectLabsIntoCronicos en v12.5.6)
+    // =====================================================================
+    t.caso("_ultimaFechaPorAnalito: entrada vacía o inválida -> Map vacío, nunca lanza", () => {
+      t.igual(testApi._ultimaFechaPorAnalito(null).candidatos.size, 0);
+      t.igual(testApi._ultimaFechaPorAnalito(undefined).candidatos.size, 0);
+      t.igual(testApi._ultimaFechaPorAnalito([]).candidatos.size, 0);
+      t.noLanza(() => testApi._ultimaFechaPorAnalito("no es un arreglo"));
+    });
+
+    t.caso("_ultimaFechaPorAnalito: analito no-whitelist se ignora; PENDIENTE cuenta pero no compite por la casilla", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { CodigoParametro: "999999", NombreParametro: "ALGO NO AUTORIZADO", Resultado: "1" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "PENDIENTE", idEstado: 1 },
+      ]);
+      t.igual(r.candidatos.size, 0);
+      t.igual(r.pendientesWhitelist, 1);
+    });
+
+    // Las DOS condiciones del guard de pendientes se prueban por separado a propósito. El
+    // caso de arriba trae idEstado:1 Y Resultado:"PENDIENTE" a la vez, así que romper
+    // cualquiera de las dos ramas seguía pasando por culpa de la otra — la mutación
+    // `idEstado === 1` -> `=== 2` sobrevivía al banco entero (documentado en
+    // INFORME_MUTACIONES.md). Aquí cada rama va sola.
+    t.caso("_ultimaFechaPorAnalito: idEstado 1 con un valor numérico viejo en el campo NO se escribe (es un resultado que aún no existe)", () => {
+      // El caso clínicamente peligroso: Athenea marca el analito como pendiente (estado 1)
+      // pero el campo trae un número —un valor de arrastre, no el resultado de hoy—. Sin el
+      // guard, ese número entraría a la casilla como si fuera el resultado vigente.
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "126", idEstado: 1, Fecha: "2026-08-01" },
+      ]);
+      t.igual(r.candidatos.size, 0, "un analito en estado pendiente jamás compite por la casilla, traiga el valor que traiga");
+      t.falso(r.candidatos.has("GLUCOSA"), "GLUCOSA no queda como candidata");
+      t.igual(r.pendientesWhitelist, 1, "pero sí se cuenta como pendiente para el resumen");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: Resultado 'PENDIENTE' sin idEstado tampoco se escribe (la rama del texto, sola)", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "PENDIENTE", Fecha: "2026-08-01" },
+      ]);
+      t.igual(r.candidatos.size, 0, "sin idEstado, el texto PENDIENTE basta para descartarlo");
+      t.igual(r.pendientesWhitelist, 1);
+      // Y no depende de la caja: Athenea lo manda en minúscula en algunas respuestas.
+      const r2 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "pendiente", Fecha: "2026-08-01" },
+      ]);
+      t.igual(r2.candidatos.size, 0, "'pendiente' en minúscula se descarta igual");
+    });
+
+    t.caso("injectLabsIntoCronicos: componente de orina con idEstado 1 pero valor aparentemente real no llega a la historia clinica", () => {
+      mockDOM = {};
+      const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => (sel === 'input[placeholder]' ? [inputNitritos] : []);
+      const res = testApi.injectLabsIntoCronicos([
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "PARCIAL DE ORINA", Resultado: "NEGATIVO", idEstado: 1 }
+      ]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(res.pendientes, 1);
+      t.igual(res.count, 0);
+      t.igual(inputNitritos.value, "");
+    });
+
+    t.caso("injectLabsIntoCronicos: entrada que no es arreglo devuelve objeto de estado vacio", () => {
+      const casos = [null, undefined, "no es un arreglo", {}];
+      for (const val of casos) {
+        const r = testApi.injectLabsIntoCronicos(val);
+        t.igual(r.count, 0);
+        t.igual(r.pendientes, 0);
+        t.cierto(Array.isArray(r.sinCasilla) && r.sinCasilla.length === 0);
+        t.igual(r.respetadas, 0);
+        t.falso(r.uroanalisisMarcado);
+      }
+    });
+
+    t.caso("_ultimaFechaPorAnalito: entre dos repeticiones del mismo analito, gana la de fecha MÁS RECIENTE (no la primera de la lista)", () => {
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "7.1", Fecha: "2024-01-01" },
+        { codigo: "903841", nombre: "GLUCOSA", Resultado: "9.9", Fecha: "2024-06-01" },
+      ]);
+      const c = r.candidatos.get("GLUCOSA");
+      t.igual(c.resultVal, "9.9");
+      t.igual(c.resultDate, "2024-06-01");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: un resultado CON fecha le gana a uno SIN fecha, sin importar el orden", () => {
+      const r1 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+      ]);
+      t.igual(r1.candidatos.get("GLUCOSA").resultVal, "6.6");
+      const r2 = testApi._ultimaFechaPorAnalito([
+        { codigo: "903841", nombre: "GLUCOSA (sin fecha)", Resultado: "5.5" },
+        { codigo: "903841", nombre: "GLUCOSA (con fecha)", Resultado: "6.6", Fecha: "2024-06-01" },
+      ]);
+      t.igual(r2.candidatos.get("GLUCOSA").resultVal, "6.6");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: un resultado NUMÉRICO 0 es un valor real, no 'ausente' (v12.5.7 — hallazgo de la revisión adversarial)", () => {
+      // RAC=0 en un paciente sano es clínicamente posible: un 0 numérico (JS number, no
+      // el texto "0") es falsy y `||` lo descartaba como si el analito nunca se hubiera
+      // hecho -> _analitosRcvVencidos lo reportaba como "nunca realizado" (falso aviso
+      // ROJO) pese a existir un resultado real y reciente.
+      const r = testApi._ultimaFechaPorAnalito([
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" },
+      ]);
+      const c = r.candidatos.get("RAC");
+      t.cierto(!!c, "un resultado 0 sí debe registrarse como candidato");
+      t.igual(c.resultVal, 0);
+      t.igual(c.resultDate, "2026-08-01");
+    });
+
+    t.caso("_ultimaFechaPorAnalito: cadena vacía sigue tratándose como ausente (distinto de 0 numérico)", () => {
+      const r = testApi._ultimaFechaPorAnalito([{ codigo: "8779", nombre: "RAC", Resultado: "" }]);
+      t.igual(r.candidatos.size, 0);
+    });
+
+    t.caso("_analitosRcvVencidos: un resultado 0 vigente NO dispara el aviso de faltante (v12.5.7)", () => {
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "RAC"), "RAC=0 (10 días de antigüedad) es un resultado real y vigente, no un faltante");
+    });
+
+    // =====================================================================
+    // v12.5.7 — _analitosRcvVencidos: aviso de laboratorios RCV sin resultado en 180 días
+    // (pedido explícito del médico, 11-08-2026). HbA1c se busca en el whitelist pero
+    // NUNCA entra en esta regla (no todo paciente es diabético); PTH/Hemoglobina/
+    // Fósforo/Albúmina tampoco: esos solo autocompletan si Athenea los trae.
+    // =====================================================================
+    const LABS_RCV_AL_DIA = [
+      { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-06-01" },
+      { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "45", Fecha: "2026-06-01" },
+      { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: "2026-06-01" },
+      { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: "2026-06-01" },
+      { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-06-01" },
+      { codigo: "903895", nombre: "CREATININA", Resultado: "0.9", Fecha: "2026-06-01" },
+      { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-06-01" },
+      // v14.1.4 — LDL entra a la vigilancia por decisión del médico (14-ago-2026).
+      { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "100", Fecha: "2026-06-01" },
+    ];
+
+    t.caso("_analitosRcvVencidos: los 8 analitos con resultado reciente -> ningún faltante", () => {
+      // 2026-08-11 - 2026-06-01 = 71 días, bien dentro de la vigencia de 180.
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11"), []);
+    });
+
+    t.caso("_analitosRcvVencidos: un analito completamente ausente de Athenea aparece como faltante", () => {
+      const sinCreatinina = LABS_RCV_AL_DIA.filter((l) => l.nombre !== "CREATININA");
+      const faltantes = testApi._analitosRcvVencidos(sinCreatinina, "2026-08-11");
+      t.igual(faltantes.length, 1);
+      t.igual(faltantes[0].key, "CREATININA");
+      t.igual(faltantes[0].nombre, "Creatinina en Suero");
+      t.igual(faltantes[0].resultDate, undefined, "sin resultado -> sin fecha que mostrar");
+    });
+
+    t.caso("_analitosRcvVencidos: exactamente 180 días -> TODAVÍA vigente (el límite no cuenta como vencido)", () => {
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-12" }];
+      // 2026-08-11 - 2026-02-12 = 180 días exactos.
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"), "180 días exactos sigue dentro de la vigencia");
+    });
+
+    t.caso("_analitosRcvVencidos: 181 días -> VENCIDO", () => {
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-11" }];
+      // 2026-08-11 - 2026-02-11 = 181 días.
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const f = faltantes.find((x) => x.key === "COLESTEROL_TOTAL");
+      t.cierto(!!f, "181 días ya superó la vigencia de 180");
+      t.igual(f.dias, 181);
+      t.igual(f.resultDate, "2026-02-11");
+    });
+
+    t.caso("_analitosRcvVencidos: mezcla real de faltantes — uno VENCIDO (con resultDate/dias) junto a otros NUNCA REALIZADOS (sin esos campos) en la misma llamada (v12.5.7 — hallazgo de la revisión adversarial)", () => {
+      // Un solo analito presente (y vencido) entre los 8 de la regla produce, en la misma
+      // llamada, 1 faltante "vencido" + 7 faltantes "nunca realizados" — la mezcla real que
+      // ninguna prueba anterior verificaba de punta a punta (longitud total Y forma de cada
+      // tipo de faltante).
+      const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-02-11" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.igual(faltantes.length, 8, "los 8 analitos de la regla: 1 vencido + 7 nunca realizados");
+      const vencido = faltantes.find((f) => f.key === "COLESTEROL_TOTAL");
+      t.cierto(!!vencido);
+      t.igual(vencido.resultDate, "2026-02-11");
+      t.igual(vencido.dias, 181);
+      const nuncaRealizados = faltantes.filter((f) => f.key !== "COLESTEROL_TOTAL");
+      t.igual(nuncaRealizados.length, 7);
+      t.igual(nuncaRealizados.map((f) => f.key).sort(), ["COLESTEROL_HDL", "COLESTEROL_LDL", "CREATININA", "GLUCOSA", "RAC", "TRIGLICERIDOS", "UROANALISIS"], "las 7 claves restantes de RCV_VIGENCIA_KEYS, sin duplicados ni omisiones");
+      for (const f of nuncaRealizados) {
+        t.igual(f.resultDate, undefined, f.key + ": nunca realizado no debe traer resultDate");
+        t.igual(f.dias, undefined, f.key + ": nunca realizado no debe traer dias");
+      }
+    });
+
+    t.caso("_analitosRcvVencidos: entre dos resultados del mismo analito, se juzga la vigencia contra el MÁS RECIENTE", () => {
+      // Uno viejo (hace 2 años, vencido) y uno reciente (hace 10 días, vigente) del mismo
+      // analito: debe ganar el reciente y NO aparecer como faltante.
+      const labs = [
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "220", Fecha: "2024-01-01" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" },
+      ];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"), "el resultado reciente del mismo analito cubre la vigencia");
+    });
+
+    t.caso("_analitosRcvVencidos: HbA1c NUNCA entra en la regla, ni ausente ni vencido", () => {
+      // Ni un solo resultado de HBA1C en toda la lista: si estuviera en la regla,
+      // aparecería como faltante. No debe aparecer jamás.
+      const faltantes = testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "HBA1C"), "HbA1c está excluido de esta regla por pedido explícito del médico");
+    });
+
+    t.caso("_analitosRcvVencidos: PTH, Hemoglobina, Fósforo y Albúmina nunca generan aviso (solo autocompletan)", () => {
+      // Ninguno de los 4 está en LABS_RCV_AL_DIA: si entraran en la regla de vigencia,
+      // los 4 aparecerían como faltantes. Deben quedar completamente fuera.
+      const faltantes = testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11");
+      for (const key of ["PTH", "HEMOGLOBINA", "FOSFORO", "ALBUMINA"]) {
+        t.falso(faltantes.some((f) => f.key === key), key + " no debe entrar nunca en el aviso de vigencia RCV");
+      }
+    });
+
+    // =====================================================================
+    // v12.6.0 (portado desde la versión desplegada) — RAC con albuminuria franca
+    // (≥30 mg/g) exige control más frecuente: su vigencia se reduce a la mitad, 90 días
+    // en vez de 180. Los demás analitos, y un RAC por debajo del umbral, no cambian.
+    // =====================================================================
+    t.caso("_vigenciaDiasParaAnalito: RAC bajo (<30 mg/g) conserva los 180 días normales", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "10"), 180);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "29.9"), 180);
+    });
+
+    t.caso("_vigenciaDiasParaAnalito: RAC con albuminuria franca (>=30 mg/g) se reduce a 90 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "30"), 90, "el umbral mismo (30) ya cuenta como franca");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "45,5"), 90, "también reconoce coma decimal (formato de Athenea)");
+    });
+
+    t.caso("_vigenciaDiasParaAnalito: analitos distintos de RAC, y un valor no numérico, conservan 180 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_TOTAL", "999"), 180, "el umbral es exclusivo de RAC");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "no-numerico"), 180, "sin poder leer el valor, nunca se acorta por prudencia");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", null), 180);
+    });
+
+    // v12.10.15 — Bug real de auditoría nocturna: los LIS suelen reportar valores fuera
+    // de rango con desigualdad ("> 300"). Number("> 300") da NaN, así que antes de
+    // sanitizar, precisamente la albuminuria más franca perdía el acortamiento a 90 días.
+    t.caso("_vigenciaDiasParaAnalito: RAC reportado con desigualdad del LIS ('> 300', '>= 30') sigue reduciendo a 90 días", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "> 300"), 90, "bug real de auditoría: antes NaN caía en 180");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", ">=30"), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "  30  "), 90, "espacios alrededor tampoco deben romper el parseo");
+    });
+
+    t.caso("_analitosRcvVencidos: RAC con albuminuria franca (>=30 mg/g) vence a los 90 días, no a los 180", () => {
+      // 2026-08-11 - 2026-05-07 = 96 días: vigente a 180, pero ya vencido a 90 (reducida).
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "35", Fecha: "2026-05-07" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const f = faltantes.find((x) => x.key === "RAC");
+      t.cierto(!!f, "con RAC>=30, 96 días ya superó la vigencia reducida de 90");
+      t.igual(f.dias, 96);
+    });
+
+    t.caso("_analitosRcvVencidos: el mismo RAC (96 días) con valor normal (<30 mg/g) SIGUE vigente (180 días)", () => {
+      const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "12", Fecha: "2026-05-07" }];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "RAC"), "sin albuminuria franca, 96 días sigue dentro de los 180 normales");
+    });
+
+    t.caso("_analitosRcvVencidos: 'hoy' inválido o ausente -> [] en vez de reventar (nunca adivina una fecha de referencia)", () => {
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "fecha-invalida"), []);
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, ""), []);
+      t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, null), []);
+      t.noLanza(() => testApi._analitosRcvVencidos(null, "2026-08-11"));
+    });
+
+    t.caso("_analitosRcvVencidos: varios analitos ausentes a la vez, todos reportados", () => {
+      const soloColesterol = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }];
+      const faltantes = testApi._analitosRcvVencidos(soloColesterol, "2026-08-11");
+      t.igual(faltantes.length, 7, "faltan los otros 7 de los 8 (Colesterol Total sí está al día)");
+      t.falso(faltantes.some((f) => f.key === "COLESTEROL_TOTAL"));
+    });
+
+    // =====================================================================
+    // v12.5.15 — Reportado en consultorio con el PDF real del laboratorio Y la captura de
+    // Athenea: un uroanálisis SÍ realizado (con ~28 componentes reales: Color, Glucosa,
+    // Nitritos, Sangre, Leucocitos, Hematíes...) aparecía SIEMPRE como "faltante" en el
+    // aviso de vigencia RCV, porque Athenea nunca manda una fila llamada literalmente
+    // "UROANALISIS" — solo las filas de sus componentes, cada una con
+    // NombreParametroPadre="UROANALISIS". _matchLabInWhitelist exige el nombre del panel
+    // completo, así que _analitosRcvVencidos jamás encontraba candidato para esa key.
+    // =====================================================================
+    const LABS_URO_POR_COMPONENTES = (fecha) => [
+      { NombreParametro: "COLOR", NombreParametroPadre: "UROANALISIS", Resultado: "AMARILLO", Fecha: fecha },
+      { NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: fecha },
+      { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: "30.70", Fecha: fecha },
+      { NombreParametro: "CILINDROS", NombreParametroPadre: "UROANALISIS", Resultado: "0", Fecha: fecha },
+    ];
+
+    t.caso("_analitosRcvVencidos: un uroanálisis real, mandado por componentes (sin fila 'UROANALISIS'), SÍ cuenta como vigente", () => {
+      const labs = [...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"), ...LABS_URO_POR_COMPONENTES("2026-08-01")];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.falso(faltantes.some((f) => f.key === "UROANALISIS"), "con componentes reales y recientes, ya NO debe salir como faltante");
+    });
+
+    t.caso("_analitosRcvVencidos: uroanálisis por componentes VENCIDO (>180 días) sí se reporta, con su fecha real", () => {
+      const labs = [...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"), ...LABS_URO_POR_COMPONENTES("2025-10-01")];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      const uro = faltantes.find((f) => f.key === "UROANALISIS");
+      t.cierto(!!uro, "más de 180 días desde el componente más reciente: sigue vencido, no queda invisible");
+      t.igual(uro.resultDate, "2025-10-01");
+    });
+
+    t.caso("_analitosRcvVencidos: solo componentes PENDIENTES/vacíos -> el uroanálisis sigue faltando (sin evidencia real, no se inventa vigencia)", () => {
+      const labs = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "NITRITOS", NombreParametroPadre: "UROANALISIS", Resultado: "PENDIENTE", idEstado: 1, Fecha: "2026-08-01" },
+      ];
+      const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
+      t.cierto(faltantes.some((f) => f.key === "UROANALISIS"), "un componente PENDIENTE no es evidencia de un examen ya resuelto");
+    });
+
+    t.caso("injectLabsIntoCronicos: el respaldo por componentes de _analitosRcvVencidos NO se activa aquí — la casilla de resultado general sigue sin recibir el valor de un componente suelto", () => {
+      // Guarda de regresión: _ultimaFechaPorAnalito es compartida por injectLabsIntoCronicos
+      // y por _analitosRcvVencidos. El respaldo por componentes (v12.5.15) es SOLO para
+      // vigencia — si se activara también aquí, el valor de un componente cualquiera (p.
+      // ej. "NEGATIVO" de Sangre) se escribiría como si fuera el resultado GENERAL del
+      // panel, algo que injectLabsIntoCronicos nunca debe hacer (ese resultado general
+      // solo viene de una fila real "UROANALISIS"/"PARCIAL DE ORINA", ver v12.5.12).
+      mockDOM = { resultadoUroanalisis: { value: "" }, fechaResultUroanalisis: { value: "" } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      const res = testApi.injectLabsIntoCronicos(LABS_URO_POR_COMPONENTES("2026-08-01"));
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "", "ningún componente suelto debe terminar en la casilla de resultado general");
+      // Sin fallback activado aquí, "UROANALISIS" ni siquiera entra a candidatosPorClave
+      // (no hay fila real del panel completo) — no cuenta como "casilla no encontrada"
+      // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
+      // candidato que buscar casilla para él.
+      t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    });
+
+    t.caso("RAC Guardia: restaura la casilla cuando Everest la vacía y se apaga en edición real", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      const prevQSA = c.env.doc.querySelectorAll;
+      const prevQS = c.env.doc.querySelector;
+      const prevGetById = c.env.doc.getElementById;
+
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 123456", closest: () => null }] : []);
+
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return { id: "anamesis", tagName: "DIV" };
+        if (id === "resultadoRelacionAlbuminaCreatinina") return mockDOM.resultadoRelacionAlbuminaCreatinina;
+        return prevGetById(id);
+      };
+
+      c.ctx.uxTrack = () => {};
+
+      mockDOM = {
+        resultadoRelacionAlbuminaCreatinina: {
+          id: "resultadoRelacionAlbuminaCreatinina", tagName: "INPUT",
+          dispatchEvent: () => {}, _val: "",
+          set value(v) { this._val = v; }, get value() { return this._val; }
+        }
+      };
+
+      const labRac = { codigo: "8779", nombre: "RELACION MICROALBUMINURIA CREATININA", Resultado: "35.5" };
+      testApi.injectLabsIntoCronicos([labRac], "123456");
+
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "35.5", "el robot escribió la RAC");
+      let guardia = testApi._getRacGuardiaParaTest();
+      t.cierto(guardia.activa, "la guardia se activó");
+      t.igual(guardia.docId, "123456", "guardó el paciente");
+      t.igual(guardia.valor, "35.5", "guardó el valor");
+
+      // Simular borrado de Everest
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "35.5", "el tick restauró el valor tras ser vaciado");
+      t.cierto(testApi._getRacGuardiaParaTest().activa, "la guardia sigue activa tras restaurar");
+
+      // Simular edición real del médico a un valor distinto
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "40.0";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "40.0", "el tick respeta el valor editado a mano");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apagó para siempre por edición real");
+
+      // Simular nuevo borrado (ahora que está apagada)
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "";
+      testApi.checkRacGuardia();
+      t.igual(mockDOM.resultadoRelacionAlbuminaCreatinina.value, "", "ya no restaura, la guardia murió");
+
+      // Simular cambio de paciente
+      testApi._setRacGuardiaParaTest({ activa: true, docId: "PAC_999", valor: "50" });
+      mockDOM.resultadoRelacionAlbuminaCreatinina.value = "50";
+      testApi.checkRacGuardia(); // el docId devuelto será 123456 (extractPacienteAbierto mock via DOM)
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apaga si cambia el paciente");
+
+      delete c.ctx.uxTrack;
+      c.env.doc.querySelectorAll = prevQSA;
+      c.env.doc.querySelector = prevQS;
+      c.env.doc.getElementById = prevGetById;
+    });
+
+    // =====================================================================
+    // v14.1.5 — CRUCE DE PACIENTES. El peor caso clínico del script: entre pedir los
+    // laboratorios y escribirlos pasan 2-4 s de red, y en ese lapso el médico puede
+    // haber abierto OTRA historia. Las casillas se buscan por id global, así que sin
+    // esta guarda los resultados del paciente A caen en la historia del paciente B.
+    // =====================================================================
+    const montarDomDePaciente = (cedulaEnPantalla) => {
+      const prev = {
+        qsa: c.env.doc.querySelectorAll,
+        qs: c.env.doc.querySelector,
+        byId: c.env.doc.getElementById,
+      };
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) =>
+        (sel === ".text-muted" && cedulaEnPantalla ? [{ textContent: "CC " + cedulaEnPantalla, closest: () => null }] : []);
+      c.env.doc.getElementById = (id) => {
+        if (id === "anamesis") return { id: "anamesis", tagName: "DIV" };
+        if (mockDOM[id]) return mockDOM[id];
+        return null;
+      };
+      return () => {
+        c.env.doc.querySelectorAll = prev.qsa;
+        c.env.doc.querySelector = prev.qs;
+        c.env.doc.getElementById = prev.byId;
+      };
+    };
+    const casillaFalsa = (id) => ({
+      id, tagName: "INPUT", dispatchEvent: () => {}, _val: "",
+      set value(v) { this._val = v; }, get value() { return this._val; },
+    });
+
+    t.caso("Cruce de pacientes: si la historia abierta cambió durante la espera de red, NO se escribe una sola casilla", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      // Se pidieron los labs con el paciente 111111 abierto; ahora en pantalla hay otro.
+      const restaurar = montarDomDePaciente("222222");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.cierto(r.abortadoPorPaciente, "el resultado avisa que se abortó por cambio de paciente");
+      t.igual(r.count, 0, "no se diligenció ninguna casilla");
+      t.igual(mockDOM.resultadoCreatinina.value, "", "la creatinina de 4.5 del paciente A NO cayó en la historia del paciente B");
+      restaurar();
+    });
+
+    t.caso("Cruce de pacientes: con el MISMO paciente todavía abierto, la inyección procede con normalidad", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      const restaurar = montarDomDePaciente("111111");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.falso(!!r.abortadoPorPaciente, "no se aborta cuando es el mismo paciente");
+      t.igual(mockDOM.resultadoCreatinina.value, "4.5", "la creatinina se escribió en la historia correcta");
+      restaurar();
+    });
+
+    t.caso("Cruce de pacientes: si la cédula NO se puede leer del DOM, se aborta (falla cerrada, no se escribe a ciegas)", () => {
+      testApi._setRacGuardiaParaTest({ activa: false, docId: "", valor: "" });
+      mockDOM = { resultadoCreatinina: casillaFalsa("resultadoCreatinina") };
+      // Angular re-renderizando la cabecera: no hay .text-muted legible.
+      const restaurar = montarDomDePaciente("");
+      const labs = [{ codigo: "903895", nombre: "CREATININA EN SUERO", Resultado: "4.5" }];
+
+      const r = testApi.injectLabsIntoCronicos(labs, "111111");
+
+      t.cierto(r.abortadoPorPaciente, "sin cédula legible NO se asume que sigue siendo el mismo paciente");
+      t.igual(mockDOM.resultadoCreatinina.value, "", "no se escribió nada");
+      restaurar();
+    });
+
+    t.caso("_pacienteSigueAbierto: sin docId esperado deja pasar (los tests montan DOM sin cabecera); con uno, exige coincidencia exacta", () => {
+      const restaurar = montarDomDePaciente("111111");
+      t.cierto(testApi._pacienteSigueAbierto(""), "cadena vacía = nadie preguntó, deja pasar");
+      t.cierto(testApi._pacienteSigueAbierto(undefined), "sin argumento deja pasar");
+      t.cierto(testApi._pacienteSigueAbierto("111111"), "coincide");
+      t.falso(testApi._pacienteSigueAbierto("111112"), "una cédula parecida NO coincide");
+      restaurar();
+    });
+
+    // =====================================================================
+    // v14.1.5 — LA GUARDA DE LA RAC SE RINDE. Antes reescribía indefinidamente lo que
+    // el médico borraba a propósito. Ahora tiene ventana de 20 s y cupo de 2.
+    // =====================================================================
+    t.caso("RAC Guardia: al TERCER vaciado cede y deja la casilla como el médico la dejó", () => {
+      mockDOM = { resultadoRelacionAlbuminaCreatinina: casillaFalsa("resultadoRelacionAlbuminaCreatinina") };
+      const restaurar = montarDomDePaciente("123456");
+      c.ctx.uxTrack = () => {};
+      const casilla = mockDOM.resultadoRelacionAlbuminaCreatinina;
+
+      testApi.injectLabsIntoCronicos([{ codigo: "8779", nombre: "RELACION MICROALBUMINURIA CREATININA", Resultado: "35.5" }], "123456");
+      t.igual(casilla.value, "35.5", "el robot escribió la RAC");
+
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "35.5", "1er vaciado: restaura (esto sí parece el re-render de Everest)");
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "35.5", "2do vaciado: restaura, último del cupo");
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "", "3er vaciado: CEDE — quien borra tres veces es una persona, no un re-render");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia se apaga para siempre en este paciente");
+
+      // Y una vez apagada, no revive.
+      casilla.value = ""; testApi.checkRacGuardia();
+      t.igual(casilla.value, "", "sigue sin tocarla");
+      delete c.ctx.uxTrack;
+      restaurar();
+    });
+
+    t.caso("RAC Guardia: pasada la ventana de 20 s ya no restaura, aunque le quede cupo", () => {
+      mockDOM = { resultadoRelacionAlbuminaCreatinina: casillaFalsa("resultadoRelacionAlbuminaCreatinina") };
+      const restaurar = montarDomDePaciente("123456");
+      c.ctx.uxTrack = () => {};
+      const casilla = mockDOM.resultadoRelacionAlbuminaCreatinina;
+      casilla.value = "35.5";
+      // Guardia armada hace 21 s, con el cupo intacto: solo el reloj la desactiva.
+      testApi._setRacGuardiaParaTest({ activa: true, docId: "123456", valor: "35.5", ts: Date.now() - 21000, restauraciones: 0 });
+
+      casilla.value = "";
+      testApi.checkRacGuardia();
+
+      t.igual(casilla.value, "", "el borrado del médico un minuto después se respeta");
+      t.falso(testApi._getRacGuardiaParaTest().activa, "la guardia caducó");
+      delete c.ctx.uxTrack;
+      restaurar();
+    });
+
+    // =====================================================================
+    // _canonNombreLab: Normalización de nombres de analitos
+    // =====================================================================
+    t.caso("_canonNombreLab: normaliza null y undefined a cadena vacía sin fallar", () => {
+      t.igual(testApi._canonNombreLab(null), "");
+      t.igual(testApi._canonNombreLab(undefined), "");
+      t.igual(testApi._canonNombreLab(""), "");
+    });
+
+    t.caso("_canonNombreLab: elimina tildes y convierte a mayúsculas", () => {
+      t.igual(testApi._canonNombreLab("Glucosa"), "GLUCOSA");
+      t.igual(testApi._canonNombreLab("RELACIÓN"), "RELACION");
+      t.igual(testApi._canonNombreLab("ácido úrico"), "ACIDO URICO");
+      t.igual(testApi._canonNombreLab("PROTEÍNAS"), "PROTEINAS");
+    });
+
+    t.caso("_canonNombreLab: convierte separadores especiales a espacios simples", () => {
+      // Test the regex /[\/\-_,.;:()]+/g
+      t.igual(testApi._canonNombreLab("RELACION MICROALBUMINURIA/CREATININA"), "RELACION MICROALBUMINURIA CREATININA");
+      t.igual(testApi._canonNombreLab("MICROALBUMINURIA-CREATININA"), "MICROALBUMINURIA CREATININA");
+      t.igual(testApi._canonNombreLab("A_B,C.D;E:F(G)"), "A B C D E F G");
+    });
+
+    t.caso("_canonNombreLab: recorta espacios múltiples y laterales", () => {
+      t.igual(testApi._canonNombreLab("  DOBLE  ESPACIO  "), "DOBLE ESPACIO");
+      t.igual(testApi._canonNombreLab("RELACION   MICROALBUMINURIA/ CREATININA  "), "RELACION MICROALBUMINURIA CREATININA");
+    });
+
+    // =====================================================================
+    // _findHbA1cFields: Búsqueda específica del input de HbA1c (Evitando colisiones)
+    // =====================================================================
+    t.caso("_findHbA1cFields: encuentra el input correcto por type=number y max=30 y asocia la fecha hermana", () => {
+      // Simular DOM con los dos inputs que colisionan y sus fechas
+      const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", getAttribute: (k) => null, closest: () => null };
+
+      const fakeHbA1cDate = { tagName: "INPUT", type: "date" };
+      const fakeHbA1cGroup = { querySelector: (sel) => (sel === 'input[type="date"]' ? fakeHbA1cDate : null) };
+      const fakeHbA1c = {
+        tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "number",
+        getAttribute: (k) => (k === "max" ? "30" : null),
+        closest: (sel) => (sel === ".input-group" ? fakeHbA1cGroup : null)
+      };
+
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') {
+          return [fakeHemoNormal, fakeHbA1c];
+        }
+        return [];
+      };
+
+      const campos = testApi._findHbA1cFields();
+
+      c.env.doc.querySelectorAll = prevQSA;
+
+      t.igual(campos.resultEl, fakeHbA1c, "debe encontrar el segundo input que tiene type=number y max=30");
+      t.igual(campos.dateEl, fakeHbA1cDate, "debe encontrar el input de fecha hermano dentro del .input-group");
+    });
+
+    t.caso("_findHbA1cFields: retorna nulls si ningún input cumple las condiciones de HbA1c", () => {
+      const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", getAttribute: (k) => null, closest: () => null };
+
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') {
+          return [fakeHemoNormal];
+        }
+        return [];
+      };
+
+      const campos = testApi._findHbA1cFields();
+
+      c.env.doc.querySelectorAll = prevQSA;
+
+      t.igual(campos.resultEl, null, "debe ser null si ninguno tiene type=number y max=30");
+      t.igual(campos.dateEl, null);
+    });
+
+    t.caso("el aviso 'no se reconoció ninguna fecha' sale UNA sola vez por sesión", () => {
+      const EventShim = class Event { constructor(tipo, init) { this.type = tipo; this.bubbles = !!(init && init.bubbles); } };
+      const PREFIJO = "[Vigilante] diagnóstico: no se reconoció ninguna fecha";
+
+      const c1 = cargar({ silencioso: true });
+      c1.ctx.Event = EventShim;
+      const warns1 = [];
+      c1.ctx.console = { log: () => {}, warn: (...a) => warns1.push(a.map(String).join(" ")), error: () => {}, info: () => {}, debug: () => {} };
+      const dom1 = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      c1.env.doc.getElementById = (id) => (dom1[id] ? Object.assign(dom1[id], { id, tagName: "INPUT", dispatchEvent: () => {} }) : null);
+      c1.env.doc.querySelectorAll = () => [];
+
+      c1.api.injectLabsIntoCronicos([{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "10" }]);
+      c1.api.injectLabsIntoCronicos([{ codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "10" }]);
+
+      t.igual(warns1.filter((w) => w.indexOf(PREFIJO) === 0).length, 1, "dos laboratorios sin fecha en la misma sesión solo producen UN aviso en consola");
+
+      const c2 = cargar({ silencioso: true });
+      c2.ctx.Event = EventShim;
+      const warns2 = [];
+      c2.ctx.console = { log: () => {}, warn: (...a) => warns2.push(a.map(String).join(" ")), error: () => {}, info: () => {}, debug: () => {} };
+      const dom2 = { resultadoColesterolTotal: { value: "" }, resultadoTrigliceridos: { value: "" } };
+      c2.env.doc.getElementById = (id) => (dom2[id] ? Object.assign(dom2[id], { id, tagName: "INPUT", dispatchEvent: () => {} }) : null);
+      c2.env.doc.querySelectorAll = () => [];
+
+      c2.api.injectLabsIntoCronicos([{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "10", Fecha: "2026-08-01" }]);
+
+      t.igual(warns2.filter((w) => w.indexOf(PREFIJO) === 0).length, 0, "laboratorios con fecha NO producen el aviso de fecha no reconocida");
+    });
+
+    // v14.0.2 — CUPS de ESCRITURA (ordenamiento) para HbA1c/PTH/Fósforo/Albúmina/Hemoglobina,
+    // confirmados vía el diagnóstico cruzado Copiloto↔Vigilante (MATRIZ_DIVERGENCIAS.md del
+    // Copiloto, que a su vez toma el catálogo NAME_TO_CUPS/CUPS_EMBEBIDOS ya en producción
+    // en ese repo). Distintos de los códigos de LECTURA de WHITELIST_13_LABS de arriba —
+    // esta prueba solo fija los valores confirmados; no implica que ya se estén ordenando
+    // (siguen sin consumidor, a la espera de P6/estadio renal, ver el comentario en el
+    // propio script). v14.0.4 — CORREGIDO: HbA1c NO es el 904426 del Copiloto (su variante
+    // corta "HEMOGLOBINA GLICOSILADA", sin más) — es 903426, el código YA vigente en
+    // PYM_CATALOG/I10X, tomado de una orden REAL ya guardada en Everest
+    // (EVIDENCIA_ORDENAMIENTO_CURADO.md §2), evidencia más fuerte que la del otro repo.
+    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO: los 5 códigos de escritura confirmados, distintos de los de lectura", () => {
+      const w = c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO;
+      t.igual(w.HBA1C, "903426", "la orden REAL ya guardada en Everest manda sobre el catálogo corto del Copiloto");
+      t.igual(w.PTH, "903890");
+      t.igual(w.FOSFORO, "903885");
+      t.igual(w.ALBUMINA, "903803");
+      t.igual(w.HEMOGLOBINA, "902213");
+      // Confirma que de verdad son de escritura, no una copia accidental de los de lectura
+      // de WHITELIST_13_LABS (que usan otros números para PTH/Fósforo/Albúmina).
+      const porClave = Object.fromEntries(c.api.__WHITELIST.map((x) => [x.key, x.codes]));
+      t.cierto(!porClave.PTH.includes(w.PTH), "PTH: escritura (903890) distinta de lectura (904921)");
+      t.cierto(!porClave.FOSFORO.includes(w.FOSFORO), "Fósforo: escritura (903885) distinta de lectura (903837)");
+      t.cierto(!porClave.ALBUMINA.includes(w.ALBUMINA), "Albúmina: escritura (903803) distinta de lectura (903801)");
+    });
+
+    // v14.0.4 — Guarda de consistencia contra el bug real que este cambio corrige: HbA1c
+    // vive en DOS sitios de este archivo (aquí, sin conectar, y en PYM_CATALOG/I10X, YA
+    // vigente en el paquete RCV exprés) — si algún día vuelven a divergir (alguien copia un
+    // código de otra fuente sin cruzarlo contra el que YA está en producción), esta prueba
+    // debe caer antes de que el médico vea dos códigos distintos para el mismo examen.
+    t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C coincide con el código YA vigente en PYM_CATALOG/I10X (RCV exprés)", () => {
+      const i10x = c.api.__PYM_CATALOG.find((p) => p.cie10 === "I10X");
+      const hba1cEnPaquete = i10x.cups.find((x) => x.desc.toUpperCase().includes("GLICOSILADA"));
+      t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
+      t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
     });
   }
 };

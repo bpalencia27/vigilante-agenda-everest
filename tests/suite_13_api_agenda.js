@@ -13,7 +13,7 @@ module.exports = {
     "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
     "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
-    "apiAccesoObtenerTurnos"
+    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -146,6 +146,22 @@ module.exports = {
       t.igual(campos, { hora: "horaCita", estado: "estado", doc: "numeroDocumento", nombres: ["nombrePaciente", "apellidoPaciente"] });
     });
 
+    // v13.0.0 — citaId (para el botón "Atender") se detecta por COINCIDENCIA EXACTA del
+    // nombre del campo, tal como aparece de verdad en /ObtenerConsultas (captura real de
+    // consultorio) — no por heurística, para no adivinar cuál columna es cuál id.
+    t.caso("apiCampos: detecta citaId por coincidencia EXACTA del nombre del campo", () => {
+      const filas = [{ horaCita: "07:00", estado: "EN SALA", citaId: 4334823 }, { horaCita: "07:20", estado: "ATENDIDO", citaId: 4334837 }];
+      t.igual(api.apiCampos(filas).citaIdKey, "citaId");
+      t.igual(api.apiCampos(FILAS).citaIdKey, undefined, "sin ese campo real, no hay a qué apuntar");
+    });
+
+    t.caso("apiParse: cuando la fila trae citaId, lo propaga como número al objeto de la cita", () => {
+      const c2 = cargar({ silencioso: true });
+      const filas = [{ horaCita: "07:00", estado: "EN SALA", numeroDocumento: "1", nombrePaciente: "A", citaId: 4334823 }];
+      const citas = c2.api.apiParse(filas);
+      t.igual(citas[0].citaId, 4334823);
+    });
+
     t.caso("apiCampos: penaliza las columnas de hora de FIN aunque también parezcan horas", () => {
       const filas = [
         { horaCita: "07:00", horaFinal: "07:20", estado: "ATENDIDO" },
@@ -189,6 +205,7 @@ module.exports = {
       t.igual(citas[0].estado, "EN SALA");
       t.igual(citas[0].index, 0);
       t.igual(citas[1].estado, "SIN PRESENTAR");
+      t.igual(citas[0].citaId, undefined, "FILAS no trae citaId real: casilla vacía, nunca un id inventado");
     });
 
     t.caso("apiParse: GUARDA — si los estados dejan de reconocerse, no se usa el API", () => {
@@ -513,7 +530,7 @@ module.exports = {
         else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":333}' });
         else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 500, responseText: "gateway caido" });
       });
-      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3194194489");
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3000000000");
       t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
       t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
       t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
@@ -560,12 +577,12 @@ module.exports = {
         else if (o.url.includes("AgendarCita")) o.onload({ status: 200, responseText: '{"error":false,"radicado":13525848}' });
         else if (o.url.includes("EnviarMensajeTextoLaboratorio")) o.onload({ status: 200, responseText: "{}" });
       });
-      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "319 419-4489");
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "300 000-0000");
       t.cierto(ok);
       t.igual(e.reg.gm.length, 3, "esta vez sí llama al SMS además de las 2 de siempre");
       const urlSms = e.reg.gm[2].url;
       t.cierto(urlSms.startsWith("https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio"));
-      t.cierto(urlSms.includes("Celular=3194194489"), "el celular se limpia de espacios y guiones antes de mandarlo");
+      t.cierto(urlSms.includes("Celular=3000000000"), "el celular se limpia de espacios y guiones antes de mandarlo");
       t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
       t.cierto(urlSms.includes("codigoSede=378"));
       t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
@@ -587,6 +604,15 @@ module.exports = {
       await e.c.api.apiDigiturnoFinalizarTicket(null);
       await e.c.api.apiDigiturnoFinalizarTicket(0);
       t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiDigiturnoFinalizarTicket: captura errores de red sin lanzar (MUT-AGD-044)", async () => {
+      const e = entornoApi();
+      e.c.api.__state.activeDoctor = { id: 888 };
+      e.c.ctx.Date = class extends Date { static now() { throw new Error("Digiturno crash"); } };
+      await t.noLanza(async () => {
+        await e.c.api.apiDigiturnoFinalizarTicket(1234);
+      }, "Digiturno no debe lanzar excepción al fallar el transporte");
     });
 
     // ---------- apiAccesoObtenerLaboratoriosAnnar / Citi ----------
@@ -614,6 +640,46 @@ module.exports = {
       t.cierto(e.reg.gm[0].url.includes("ObtenerResultadosLaboratorioAnnar?pacienteId=55"));
     });
 
+    // ---------- apiHcObtenerOrdenamientosVigentes (T6) ----------
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: pega al endpoint correcto y devuelve el arreglo tal cual", async () => {
+      const e = entornoApi();
+      const ordenes = [{ cup: { codigo: "903818" }, estado: "PEN", fechaCreacion: "2026-08-01" }];
+      e.setFetch(respuestaJson(ordenes));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), ordenes);
+      t.cierto(e.reg.fetches[0].url.includes("ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=999"));
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: sin pacienteId no consulta nada", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson([]));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(""), null);
+      t.igual(e.reg.fetches.length, 0);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: fallo de red (404, sin rescate GM) devuelve null sin lanzar", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaError(404));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), null);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: respuesta malformada (no es un arreglo) devuelve null, no la respuesta cruda", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson({ inesperado: true }));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(999), null);
+    });
+
+    await t.casoAsync("apiHcObtenerOrdenamientosVigentes: cachea por paciente (una sola consulta real por paciente), incluido un arreglo vacío", async () => {
+      const e = entornoApi();
+      e.setFetch(respuestaJson([]));
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(111), [], "arreglo vacío: paciente sin órdenes vigentes, no es un fallo");
+      t.igual(await e.c.api.apiHcObtenerOrdenamientosVigentes(111), [], "segunda llamada, mismo paciente");
+      t.igual(e.reg.fetches.length, 1, "la segunda llamada se sirvió de la caché, no repitió la consulta pesada");
+
+      e.setFetch(respuestaJson([{ cup: { codigo: "1" }, fechaCreacion: "2026-01-01" }]));
+      await e.c.api.apiHcObtenerOrdenamientosVigentes(222);
+      t.igual(e.reg.fetches.length, 2, "un paciente DISTINTO sí dispara una consulta nueva");
+    });
+
     // ---------- apiAccesoAgdValidarAgenda ----------
     await t.casoAsync("apiAccesoAgdValidarAgenda: devuelve el veredicto del servidor en vez de descartarlo", async () => {
       const e = entornoApi();
@@ -621,6 +687,13 @@ module.exports = {
       e.setFetch(respuestaJson(veredicto));
       t.igual(await e.c.api.apiAccesoAgdValidarAgenda(10, 20), veredicto);
       t.cierto(e.reg.fetches[0].url.includes("AgdValidarAgenda?agendaId=10&pacienteId=20"));
+    });
+
+    await t.casoAsync("apiAccesoAgdValidarAgenda: fallo o excepción en la red retorna null (MUT-AGD-048)", async () => {
+      const e = entornoApi();
+      e.c.ctx.Date = class extends Date { static now() { throw new Error("AgdValidarAgenda crash"); } };
+      const r = await e.c.api.apiAccesoAgdValidarAgenda(10, 20);
+      t.igual(r, null, "debe retornar strictly null ante fallo");
     });
 
     // ---------- apiAccesoObtenerTurnos ----------

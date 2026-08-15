@@ -16,6 +16,7 @@ XMLHttpRequest.prototype.send=function(b){const u=this.__u||"";const k=salta.tes
  if(k)put(k,base);
  if(k)this.addEventListener("readystatechange",function(){if(this.readyState===4){try{base.status=this.status;const x=this.responseText||"";base.resBody=x.length>LIM?x.slice(0,LIM)+"...[CORTADO]":x;put(k,base);}catch(e){}}});
  return os.apply(this,[b]);};
-document.addEventListener("click",e=>{try{const el=e.target.closest("button,a,input,select,.btn,[role=button],li,td")||e.target;const tx=(el.innerText||el.value||el.title||"").trim().slice(0,90);if(tx||el.id)put(nuevo(),{v:"click",t:new Date().toISOString(),tag:el.tagName.toLowerCase()+(el.id?"#"+el.id:""),text:tx.replace(/\n/g," ")});}catch(x){}},true);
+document.addEventListener("click",e=>{try{const el=e.target.closest("button,a,input,select,.btn,[role=button],li,td")||e.target;const tx=(el.innerText||el.value||el.title||"").trim().slice(0,90);if(tx||el.id)put(nuevo(),{v:"click",t:new Date().toISOString(),tag:el.tagName.toLowerCase()+(el.id?"#"+el.id:""),text:tx.replace(/\n/g," "),html:(el.outerHTML||"").slice(0,4000)});}catch(x){}},true);
+document.addEventListener("input",e=>{try{const el=e.target;if(!(el&&(el.tagName==="INPUT"||el.tagName==="TEXTAREA")))return;put(nuevo(),{v:"input",t:new Date().toISOString(),tag:el.tagName.toLowerCase()+(el.id?"#"+el.id:""),html:(el.outerHTML||"").slice(0,4000)});}catch(x){}},true);
 console.log("%c● GRABANDO (sobrevive a recargas) — al terminar pega el CÓDIGO 2","color:#e54d42;font-size:15px;font-weight:bold");
 alert("● GRABANDO\n\nYa guarda en el navegador: aunque la página se recargue NO se pierde.\n\nHaz la acción completa. Al terminar, pega el CÓDIGO 2 para descargar.\n\nGrabado hasta ahora: "+(+(S.getItem(K+"n")||0))+" registros.");})()

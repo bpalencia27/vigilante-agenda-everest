@@ -93,6 +93,18 @@ module.exports = {
       c.ctx.URL = { createObjectURL: () => "blob:reporte", revokeObjectURL() {} };
       c.ctx.alert = (m) => alertas.push(String(m));
 
+      // vglExportLogs hace appendChild + click + remove() en el mismo tick (patrón real y
+      // correcto de descarga por ancla efímera): con remove() ya funcionando de verdad en el
+      // arnés, el ancla ya no está en body.children para cuando el test la busca ahí. Se
+      // captura en el momento de la creación, no después de que la función ya la limpió.
+      let ancla = null;
+      const crearOriginal = c.env.doc.createElement;
+      c.env.doc.createElement = (tag) => {
+        const el = crearOriginal(tag);
+        if (String(tag).toLowerCase() === "a") ancla = el;
+        return el;
+      };
+
       c.api.vglLog("NAV", "Uno", {});
       c.api.vglLog("NAV", "Dos", {});
       c.api.vglExportLogs();
@@ -104,7 +116,6 @@ module.exports = {
       t.igual(reporte.logs[1].act, "Dos");
       t.cierto(typeof reporte.meta.version === "string" && reporte.meta.version.length > 0);
 
-      const ancla = c.env.doc.body.children.find((n) => n.tagName === "A");
       t.cierto(!!ancla, "debe añadir un ancla al body");
       t.cierto(ancla.download.indexOf("BITACORA_VIGILANTE_REAL_") === 0, "nombre del archivo");
       t.igual(ancla.href, "blob:reporte");
@@ -236,6 +247,47 @@ module.exports = {
       const c = cargar({ silencioso: true });
       c.api.evFlush();
       t.igual(c.env.storage.getItem(c.api.evKey()), null);
+    });
+
+    t.caso("evFlush: la tanda no se pierde si falla la escritura (reencolado)", () => {
+      const c = cargar({ silencioso: true });
+      const origSetItem = c.env.win.localStorage.setItem;
+      c.env.win.localStorage.setItem = () => { throw new Error("QuotaExceededError"); };
+      c.api.logEvent({ ev: "X1" });
+      c.api.logEvent({ ev: "X2" });
+      c.api.evFlush();
+      c.env.win.localStorage.setItem = origSetItem;
+      c.api.evFlush();
+      const arr = leerJSON(c, c.api.evKey());
+      t.igual(arr.length, 2);
+      t.igual(arr[0].ev, "X1");
+      t.igual(arr[1].ev, "X2");
+    });
+
+    t.caso("evFlush: la tanda reencolada por fallo de escritura tiene un tope de 200", () => {
+      const c = cargar({ silencioso: true });
+      const origSetItem = c.env.win.localStorage.setItem;
+      c.env.win.localStorage.setItem = () => { throw new Error("QuotaExceededError"); };
+
+      // Nota técnica sobre un mecanismo engañoso:
+      // `logEvent` (L4128) se auto-vacía (llama a `evFlush`) al llegar a 200 eventos en evBuffer.
+      // Al ingresar 250 eventos con la escritura rota, no hay 1 flush de 250, sino ~51 flushes seguidos.
+      // Tras el evento 200, `evFlush` falla y reencola los 200.
+      // El evento 201 ve un buffer de 201 y vuelve a llamar a `evFlush`, que reencola los últimos 200.
+      // El 202 igual, etc. Finalmente, se mantienen los 200 más recientes.
+      // Además, mutar el catch de L4120 (evBuffer = [] -> evBuffer = {}) es equivalente y
+      // sobrevivirá, ya que `evBuffer = []` ya se ejecutó dentro del try (L4115) y ni
+      // readJSON ni writeJSON lanzan excepciones jamás.
+      for (let i = 0; i < 250; i++) {
+        c.api.logEvent({ ev: "E" + i });
+      }
+
+      c.env.win.localStorage.setItem = origSetItem;
+      c.api.evFlush();
+      const arr = leerJSON(c, c.api.evKey());
+      t.igual(arr.length, 200);
+      t.igual(arr[0].ev, "E50");
+      t.igual(arr[199].ev, "E249");
     });
 
     t.caso("logEvent: el turno que cruza la medianoche parte la bitácora en dos días", () => {

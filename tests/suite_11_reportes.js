@@ -73,13 +73,14 @@ module.exports = {
     });
 
     // ---------- repOn ----------
-    t.caso("repOn: encendido de fábrica; se apaga con S.reporte=false o sin GM_xmlhttpRequest", () => {
-      const c = cargar({ silencioso: true });
-      t.cierto(c.api.repOn(), "de fábrica S.reporte=true y GM existe");
-      c.api.__S.reporte = false;
-      t.falso(c.api.repOn(), "con el ajuste apagado no reporta");
+    t.caso("repOn: apagado de fábrica (Default-Off); se enciende con S.reporte=true y GM_xmlhttpRequest", () => {
+      const c = cargar({ silencioso: true, defaultOff: true });
+      t.falso(c.api.repOn(), "de fábrica S.reporte=false (Default-off R1.8)");
       c.api.__S.reporte = true;
-      t.cierto(c.api.repOn());
+      t.cierto(c.api.repOn(), "con el ajuste encendido reporta");
+      c.api.__S.reporte = false;
+      t.falso(c.api.repOn());
+      c.api.__S.reporte = true;
       c.ctx.GM_xmlhttpRequest = undefined; // sin el permiso de Tampermonkey no hay canal
       t.falso(c.api.repOn());
     });
@@ -144,14 +145,17 @@ module.exports = {
       t.igual(c4.env.gm["vgl_repq"], "[]");
     });
 
-    t.caso("repQLoad: cachea en memoria — no relee GM si la cola ya está cargada", () => {
+    t.caso("repQLoad v12.5.1: SIEMPRE relee el almacén — una pestaña con cola vieja ya no pisa lo de otra", () => {
+      // Contrato invertido a propósito (revisión adversarial v12.5.1): la caché en
+      // memoria hacía que la cola vieja de una pestaña sobreescribiera filas recién
+      // encoladas por otra al compartir GM. Ahora la verdad vive en el almacén.
       const c = cargar({ silencioso: true });
       c.env.gm["vgl_repq"] = '[{"evento":"primero"}]';
       c.api.repQLoad();
-      // alguien pisa GM por fuera: la cola en memoria manda
-      c.env.gm["vgl_repq"] = "[]";
+      // otra pestaña actualiza GM por fuera: la relectura la respeta
+      c.env.gm["vgl_repq"] = '[{"evento":"primero"},{"evento":"segundo"}]';
       c.api.repQLoad(); c.api.repQSave();
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]), [{ evento: "primero" }]);
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]), [{ evento: "primero" }, { evento: "segundo" }]);
     });
 
     t.caso("repQSave: recorta la cola a las últimas 30 entradas", () => {
