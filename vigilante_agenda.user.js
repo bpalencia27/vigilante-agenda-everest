@@ -9624,7 +9624,7 @@
       <div id="vgl-body">
         <div id="vgl-sidebar">
           <div id="vgl-find">
-            <input id="vgl-q" type="text" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
+            <input id="vgl-q" type="text" aria-label="Buscar paciente por nombre o cédula" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
           </div>
           <div class="vgl-sb-lbl">Filtros</div>
           <nav id="vgl-filters">
@@ -13557,7 +13557,7 @@
           const mailBox = document.createElement("div");
           mailBox.className = "vgl-ord-mailbox";
           mailBox.innerHTML = `
-            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <label class="vgl-agm-lbl" for="vgl-ord-mail-input" style="margin-top:14px;cursor:pointer">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
             <div class="vgl-agm-fieldrow">
               <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
               <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
