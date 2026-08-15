@@ -1,0 +1,62 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIAcceso/api/Acceso/ObtenerTurnos",
+  "parametros": [
+    "agendaid",
+    "fecha",
+    "pacienteId",
+    "ordenMongo",
+    "cup",
+    "swParticular"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "error": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "mensaje": "null",
+    "data": {
+      "error": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "mensaje": "string(21 car)",
+      "data": {
+        "tipo": "array",
+        "elementos": 6,
+        "de": {
+          "id": "number",
+          "hora": "string(7 car)",
+          "estado": {
+            "tipo": "string(3 car)",
+            "ejemplo": "ACT"
+          }
+        }
+      },
+      "imprimir": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "valor": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "link": "null"
+    },
+    "imprimir": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "valor": {
+      "tipo": "number",
+      "ejemplo": 0
+    },
+    "link": "null"
+  }
+}

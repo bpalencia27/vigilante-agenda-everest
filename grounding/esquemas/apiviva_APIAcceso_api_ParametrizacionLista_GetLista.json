@@ -1,0 +1,34 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIAcceso/api/ParametrizacionLista/GetLista",
+  "parametros": [
+    "tipo",
+    "pacienteId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 1,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 9
+      },
+      "codigo": "null",
+      "descripcion": {
+        "tipo": "string(17 car)",
+        "ejemplo": "VIVA 1A IPS BELLO"
+      },
+      "estado": "null",
+      "appId": {
+        "tipo": "number",
+        "ejemplo": 0
+      }
+    }
+  }
+}

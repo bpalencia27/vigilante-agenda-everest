@@ -1,0 +1,28 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIOrdenamientoHealth/api/Combo/ObtenerListadoDiagnostico",
+  "parametros": [
+    "filter"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 1,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 24300
+      },
+      "codigo": {
+        "tipo": "string(4 car)",
+        "ejemplo": "Z113"
+      },
+      "descripcion": "string(84 car)"
+    }
+  }
+}

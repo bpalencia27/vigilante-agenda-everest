@@ -1,0 +1,25 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIParametrizacionHealth/apiparametrizacion/ParMedicamento/GetPresentacionMedicamentos",
+  "parametros": [],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_paquete_HTA_20260812.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 64,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 1
+      },
+      "descripcion": {
+        "tipo": "string(7 car)",
+        "ejemplo": "AMPOLLA"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIOrdenamientoHealth/api/Combo/ObtenerListadoCupsPorPaciente",
+  "parametros": [
+    "pacienteId",
+    "filter"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 1,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 19984
+      },
+      "codigo": {
+        "tipo": "string(6 dígitos)",
+        "ejemplo": "906249"
+      },
+      "descripcion": "string(51 car)"
+    }
+  }
+}
