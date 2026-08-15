@@ -1,0 +1,31 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIAcceso/api/SMS/EnviarSMS",
+  "parametros": [
+    "Telefono",
+    "AgendaTurnoId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "error": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "mensaje": "string(45 car)",
+    "data": "null",
+    "imprimir": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "valor": {
+      "tipo": "number",
+      "ejemplo": 0
+    },
+    "link": "null"
+  }
+}

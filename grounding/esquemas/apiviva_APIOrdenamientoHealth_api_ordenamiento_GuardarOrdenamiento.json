@@ -1,0 +1,88 @@
+{
+  "metodo": "POST",
+  "ruta": "/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento",
+  "parametros": [],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaPeticion": {
+    "DiagnosticoId": {
+      "tipo": "number",
+      "ejemplo": 24300
+    },
+    "RemisorId": {
+      "tipo": "number",
+      "ejemplo": 12
+    },
+    "paciente": {
+      "Id": {
+        "tipo": "number",
+        "ejemplo": 636997
+      }
+    },
+    "SwHc": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "perfil": {
+      "tipo": "string(11 car)",
+      "ejemplo": "PROFESIONAL"
+    },
+    "CitaId": {
+      "tipo": "string(1 dígitos)",
+      "ejemplo": "0"
+    },
+    "UsuarioId": {
+      "tipo": "number",
+      "ejemplo": 515
+    },
+    "ordenes": {
+      "tipo": "array",
+      "elementos": 1,
+      "de": {
+        "tipo": {
+          "tipo": "string(3 car)",
+          "ejemplo": "ORD"
+        },
+        "nota": "string(0 car)",
+        "cup": {
+          "Id": {
+            "tipo": "number",
+            "ejemplo": 19984
+          },
+          "Codigo": "string(0 car)",
+          "Descripcion": "string(51 car)",
+          "Nivel": {
+            "tipo": "number",
+            "ejemplo": 1
+          },
+          "Cantidad": {
+            "tipo": "number",
+            "ejemplo": 1
+          }
+        }
+      }
+    }
+  },
+  "esquemaRespuesta": {
+    "agrupador": "string(10 dígitos)",
+    "irFrente": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "ordenAuth": {
+      "tipo": "array",
+      "elementos": 1,
+      "de": {
+        "numeroAutorizacion": "string(13 dígitos)",
+        "cupsId": {
+          "tipo": "number",
+          "ejemplo": 19984
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "metodo": "POST",
+  "ruta": "/apiviva/APIOrdenamientoHealth/api/solicitud/CargarSolicitudesExternasPaciente",
+  "parametros": [],
+  "estadosVistos": [
+    400
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaPeticion": {
+    "pacienteId": {
+      "tipo": "number",
+      "ejemplo": 636997
+    },
+    "fechaInicial": "string(15 car)",
+    "fechaFinal": "string(15 car)",
+    "estado": "string(0 car)"
+  }
+}
