@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.8
+// @version      14.1.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -953,7 +953,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.8";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5414,7 +5414,31 @@
   // texto ajeno, incluso PII, al tablero).
   // Además del filtro de caracteres, toda tira de 6+ dígitos se elimina: una cédula
   // jamás puede sobrevivir en una clave, ni siquiera inyectada por un tercero.
-  function uxClaveLimpia(k) { return String(k == null ? "" : k).toLowerCase().replace(/\d{6,}/g, "").replace(/[^a-z0-9.:_-]/g, "").slice(0, 60); }
+  // v14.1.9 — LA BARRERA TENÍA LOS PASOS EN EL ORDEN EQUIVOCADO, y por eso no paraba
+  // ninguna cédula escrita como se escriben las cédulas.
+  //
+  // La versión anterior era: quitar los tramos de 6+ dígitos, y DESPUÉS quitar todo lo que
+  // no fuera `[a-z0-9.:_-]`. Con ese orden se colaban tres formas, todas cotidianas:
+  //
+  //   · "1.143.142.498"  — el punto está en la lista de caracteres PERMITIDOS, así que no
+  //     hay ningún tramo de 6 dígitos seguidos que quitar. La cédula salía entera.
+  //   · "300-123-4567"   — igual con el guion. El celular salía entero.
+  //   · "1 143 142 498"  — el espacio SÍ se quitaba… pero en el segundo paso, cuando el
+  //     primero ya había pasado. Los dígitos se pegaban DESPUÉS de la única comprobación
+  //     que los habría cazado, y salía "1143142498".
+  //
+  // Ahora se normaliza primero y se cuentan los dígitos IGNORANDO los separadores: si un
+  // tramo suma 6 o más, se va entero. Las 38 claves reales del script son literales y
+  // ninguna lleva dígitos (la más cargada es "panel.silenciar15", con dos), así que esto
+  // no puede tragarse telemetría legítima — hay prueba que lo fija.
+  function uxClaveLimpia(k) {
+    let s = String(k == null ? "" : k).toLowerCase().replace(/[^a-z0-9.:_-]/g, "");
+    s = s.replace(/\d[\d.:_-]*\d/g, (m) => (m.replace(/\D/g, "").length >= 6 ? "" : m));
+    // Al quitar un tramo quedan separadores pegados ("labs..fin"); se colapsan para que la
+    // clave saneada no dependa de dónde estaba el dato que se fue.
+    s = s.replace(/([.:_-])[.:_-]+/g, "$1").replace(/^[.:_-]+|[.:_-]+$/g, "");
+    return s.slice(0, 60);
+  }
   function uxTrack(accion, extra) {
     try {
       if (S.uxTelemetria === false) return;
@@ -14333,6 +14357,37 @@
     } catch (e) { console.error("[Vigilante] tick:", e); }
   }
 
+  // v14.1.9 — La cabecera del informe descargable filtraba lo que todo el resto del
+  // informe se cuidaba de ocultar. `san()` sustituye cada nodo de texto por "···" y
+  // `mask()` recorta las cédulas a 3 dígitos… y dos líneas más arriba se escribían
+  // `location.href` y `document.title` en crudo.
+  //
+  // `document.title` es el peor de los dos: en un sistema de historia clínica suele llevar
+  // el NOMBRE del paciente. Y la URL lleva los identificadores en la consulta y en el
+  // fragmento — el propio script construye `...BusquedaPaciente#doc=<cédula>`.
+  //
+  // Se conserva lo que sirve para diagnosticar (qué vista es, cuántos parámetros había) y
+  // se tira lo que identifica. El título no se recorta ni se sanea: se omite. Recortarlo
+  // dejaría el principio del nombre, que es justo la parte que identifica.
+  function _urlDiagnostico() {
+    try {
+      const href = String((typeof location !== "undefined" && location.href) || "");
+      if (!href) return "(no disponible)";
+      const sinFrag = href.split("#")[0];
+      const partes = sinFrag.split("?");
+      const nParams = partes[1] ? partes[1].split("&").filter(Boolean).length : 0;
+      return partes[0]
+        + (nParams ? " · (" + nParams + " parámetro(s) omitido(s))" : "")
+        + (href.indexOf("#") !== -1 ? " · (fragmento omitido)" : "");
+    } catch (e) { return "(no se pudo leer la URL)"; }
+  }
+  function _tituloDiagnostico() {
+    try {
+      const t = String((typeof document !== "undefined" && document.title) || "");
+      return t ? "(omitido — " + t.length + " caracteres)" : "(vacío)";
+    } catch (e) { return "(no se pudo leer el título)"; }
+  }
+
   function downloadDiagnostic() {
     const ddoc = document; const KEEP = new Set(["class", "role", "routerlink", "type", "name"]); const out = [];
     const sels = [".labelHora", ".status-label", ".card", ".card-body", ".text-muted", ".text-uppercase", ".fw-bold.mb-0", ".fecha", ".text-uppercase.fw-bold"];
@@ -14341,7 +14396,7 @@
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 120);
     const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
     let card = ""; try { const h = ddoc.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
-    out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "URL: " + location.href, "Título: " + document.title,
+    out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "URL: " + _urlDiagnostico(), "Título: " + _tituloDiagnostico(),
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
       "\n--- CLASES MÁS FRECUENTES (top 120) ---", top.map(([c, n]) => n + "  ." + c).join("\n"),
       "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card,
