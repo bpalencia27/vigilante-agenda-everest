@@ -1,0 +1,408 @@
+{
+  "subsistema": "ordenes_cups",
+  "descripcion": "Catálogo de mutantes para Ordenamiento Médico, CUPS, Diagnósticos CIE-10 y Cobertura PyM",
+  "total_funciones": 8,
+  "total_mutantes": 40,
+  "mutantes": [
+    {
+      "id": "MUT-ORD-001",
+      "funcion": "apiHcObtenerOrdenamientosVigentes",
+      "linea": 10181,
+      "original": "const ORDENES_VIGENTES_TTL_MS = 10 * 60000;",
+      "mutacion": "const ORDENES_VIGENTES_TTL_MS = 600 * 60000;",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Extiende TTL a 10 horas sirviendo órdenes desactualizadas"
+    },
+    {
+      "id": "MUT-ORD-002",
+      "funcion": "apiHcObtenerOrdenamientosVigentes",
+      "linea": 10184,
+      "original": "if (!pacienteId) return null;",
+      "mutacion": "if (!pacienteId) return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Devuelve arreglo vacío confundiendo error con 0 órdenes"
+    },
+    {
+      "id": "MUT-ORD-003",
+      "funcion": "apiHcObtenerOrdenamientosVigentes",
+      "linea": 10191,
+      "original": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerOrdenamientoPorPacienteIdVigente?pacienteid=${encodeURIComponent(key)}`;",
+      "mutacion": "const path = `/apiviva/APIHCHealth/api/Historicos/Ordenes?id=${encodeURIComponent(key)}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera ruta oficial del endpoint de órdenes vigentes"
+    },
+    {
+      "id": "MUT-ORD-004",
+      "funcion": "apiHcObtenerOrdenamientosVigentes",
+      "linea": 10187,
+      "original": "if (_ordenesVigentesCache.pacienteId === key && _ordenesVigentesCache.data &&",
+      "mutacion": "if (false && _ordenesVigentesCache.pacienteId === key",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Anula caché de órdenes saturando peticiones"
+    },
+    {
+      "id": "MUT-ORD-005",
+      "funcion": "apiHcObtenerOrdenamientosVigentes",
+      "linea": 10199,
+      "original": "if (!Array.isArray(data)) return null;",
+      "mutacion": "if (!Array.isArray(data)) return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Devuelve arreglo vacío en fallo de red"
+    },
+    {
+      "id": "MUT-ORD-006",
+      "funcion": "pymCubiertoPorOrdenVigente",
+      "linea": 10531,
+      "original": "if (!Array.isArray(ordenes) || !ordenes.length) return lista;",
+      "mutacion": "if (!Array.isArray(ordenes) || !ordenes.length) return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Falla abierta peligrosa: oculta pendientes al fallar consulta"
+    },
+    {
+      "id": "MUT-ORD-007",
+      "funcion": "pymCubiertoPorOrdenVigente",
+      "linea": 10546,
+      "original": "if (fcMs > hoyMs) continue;",
+      "mutacion": "// if (fcMs > hoyMs) continue;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Acepta fechas futuras absurdas como órdenes válidas"
+    },
+    {
+      "id": "MUT-ORD-008",
+      "funcion": "pymCubiertoPorOrdenVigente",
+      "linea": 10567,
+      "original": "const cubierta = cups.length > 0 && cups.every((c) => {",
+      "mutacion": "const cubierta = cups.length > 0 && cups.some((c) => {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Regresión crítica: revierte every a some dando por hecho paquete con 1 solo examen"
+    },
+    {
+      "id": "MUT-ORD-009",
+      "funcion": "pymCubiertoPorOrdenVigente",
+      "linea": 10574,
+      "original": "return !cubierta;",
+      "mutacion": "return cubierta;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Invierte cobertura de actividades PyM"
+    },
+    {
+      "id": "MUT-ORD-010",
+      "funcion": "pymCubiertoPorOrdenVigente",
+      "linea": 10530,
+      "original": "if (!lista.length) return lista;",
+      "mutacion": "if (!lista.length) return [{}];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Devuelve objeto en lista vacía"
+    },
+    {
+      "id": "MUT-ORD-011",
+      "funcion": "apiOrdenamientoBuscarPaciente",
+      "linea": 12565,
+      "original": "const path = `/apiviva/APIOrdenamientoHealth/api/Paciente/BuscarPaciente?Identificacion=${encodeURIComponent(cleanDoc)}&TipoDocumento=CC&epsId=2`;",
+      "mutacion": "const path = `/apiviva/APIOrdenamientoHealth/api/Paciente/Buscar?Identificacion=${encodeURIComponent(cleanDoc)}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Altera ruta de búsqueda de paciente en módulo de órdenes"
+    },
+    {
+      "id": "MUT-ORD-012",
+      "funcion": "apiOrdenamientoBuscarPaciente",
+      "linea": 12564,
+      "original": "if (!cleanDoc) return null;",
+      "mutacion": "if (!cleanDoc) return 0;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Devuelve cero para doc vacío"
+    },
+    {
+      "id": "MUT-ORD-013",
+      "funcion": "apiOrdenamientoBuscarPaciente",
+      "linea": 12567,
+      "original": "const res = await pageFetchJson(path);",
+      "mutacion": "const res = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Anula petición de búsqueda de órdenes"
+    },
+    {
+      "id": "MUT-ORD-014",
+      "funcion": "apiOrdenamientoBuscarPaciente",
+      "linea": 12569,
+      "original": "return res.id || res.Id || (res.data && (res.data.id || res.data.Id)) || null;",
+      "mutacion": "return res.Id || null;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Ignora estructura res.data.id del contrato"
+    },
+    {
+      "id": "MUT-ORD-015",
+      "funcion": "apiOrdenamientoBuscarPaciente",
+      "linea": 12571,
+      "original": "catch (e) {}",
+      "mutacion": "catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Relanza excepción en lugar de null"
+    },
+    {
+      "id": "MUT-ORD-016",
+      "funcion": "apiOrdenamientoObtenerDx",
+      "linea": 12578,
+      "original": "if (DX_CACHE[cie10]) return DX_CACHE[cie10];",
+      "mutacion": "if (false && DX_CACHE[cie10]) return DX_CACHE[cie10];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Anula caché de diagnósticos CIE-10"
+    },
+    {
+      "id": "MUT-ORD-017",
+      "funcion": "apiOrdenamientoObtenerDx",
+      "linea": 12579,
+      "original": "const path = `/apiviva/APIOrdenamientoHealth/api/Combo/ObtenerListadoDiagnostico?filter=${encodeURIComponent(cie10)}`;",
+      "mutacion": "const path = `/apiviva/APIOrdenamientoHealth/api/Combo/Diagnosticos?filter=${encodeURIComponent(cie10)}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Altera path de consulta de diagnósticos"
+    },
+    {
+      "id": "MUT-ORD-018",
+      "funcion": "apiOrdenamientoObtenerDx",
+      "linea": 12583,
+      "original": "const item = items.find((x) => String(x.codigo || x.Codigo || \"\").toUpperCase() === cie10.toUpperCase());",
+      "mutacion": "const item = items[0];",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Regresión: toma primer diagnóstico arbitrario al no encontrar exacto"
+    },
+    {
+      "id": "MUT-ORD-019",
+      "funcion": "apiOrdenamientoObtenerDx",
+      "linea": 12587,
+      "original": "const dxId = item.id || item.Id || item.DiagnosticoId;",
+      "mutacion": "const dxId = item.DiagnosticoId;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "No busca en propiedad .id ni .Id"
+    },
+    {
+      "id": "MUT-ORD-020",
+      "funcion": "apiOrdenamientoObtenerDx",
+      "linea": 12571,
+      "original": "catch (e) {}",
+      "mutacion": "catch (e) { return {}; }",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Devuelve objeto vacío al fallar"
+    },
+    {
+      "id": "MUT-ORD-021",
+      "funcion": "apiOrdenamientoObtenerCup",
+      "linea": 12598,
+      "original": "if (CUP_CACHE[key]) return CUP_CACHE[key];",
+      "mutacion": "if (false && CUP_CACHE[key]) return CUP_CACHE[key];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Anula caché de CUPS"
+    },
+    {
+      "id": "MUT-ORD-022",
+      "funcion": "apiOrdenamientoObtenerCup",
+      "linea": 12599,
+      "original": "const path = `/apiviva/APIOrdenamientoHealth/api/Combo/ObtenerListadoCupsPorPaciente?pacienteId=${pacienteId}&filter=${encodeURIComponent(cupCodigo)}`;",
+      "mutacion": "const path = `/apiviva/APIOrdenamientoHealth/api/Combo/Cups?filter=${encodeURIComponent(cupCodigo)}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Altera ruta de consulta CUPS"
+    },
+    {
+      "id": "MUT-ORD-023",
+      "funcion": "apiOrdenamientoObtenerCup",
+      "linea": 12603,
+      "original": "const item = items.find((x) => String(x.codigo || x.Codigo || \"\").trim() === cupCodigo.trim());",
+      "mutacion": "const item = items[0];",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Regresión: sustituye por primer CUPS de la lista"
+    },
+    {
+      "id": "MUT-ORD-024",
+      "funcion": "apiOrdenamientoObtenerCup",
+      "linea": 12608,
+      "original": "Id: item.id || item.Id || item.cupId,",
+      "mutacion": "Id: item.cupId,",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Ignora propiedades id e Id del contrato Everest"
+    },
+    {
+      "id": "MUT-ORD-025",
+      "funcion": "apiOrdenamientoObtenerCup",
+      "linea": 12571,
+      "original": "catch (e) {}",
+      "mutacion": "catch (e) { return {}; }",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Devuelve objeto vacío al fallar"
+    },
+    {
+      "id": "MUT-ORD-026",
+      "funcion": "apiOrdenamientoGuardar",
+      "linea": 12631,
+      "original": "if (state.killed) { alert(\"Vigilante en pausa de seguridad (Kill-Switch activo). NO se generaron las órdenes.\"); return null; }",
+      "mutacion": "// if (state.killed)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Bypasea Kill-Switch guardando órdenes en emergencia"
+    },
+    {
+      "id": "MUT-ORD-027",
+      "funcion": "apiOrdenamientoGuardar",
+      "linea": 12636,
+      "original": "if (!uId) { alert(\"No se pudo identificar al médico en Everest. NO se generaron las órdenes.\\n\\nIndique su identificador en Ajustes.\"); return null; }",
+      "mutacion": "if (false && !uId)",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Guarda órdenes sin identificar al médico"
+    },
+    {
+      "id": "MUT-ORD-028",
+      "funcion": "apiOrdenamientoGuardar",
+      "linea": 12637,
+      "original": "const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/GuardarOrdenamiento`;",
+      "mutacion": "const path = `/apiviva/APIOrdenamientoHealth/api/ordenamiento/Guardar`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Altera endpoint oficial de GuardarOrdenamiento"
+    },
+    {
+      "id": "MUT-ORD-029",
+      "funcion": "apiOrdenamientoGuardar",
+      "linea": 12642,
+      "original": "SwHc: false,",
+      "mutacion": "SwHc: true,",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Rompe contrato nativo cambiando SwHc a true"
+    },
+    {
+      "id": "MUT-ORD-030",
+      "funcion": "apiOrdenamientoGuardar",
+      "linea": 12639,
+      "original": "DiagnosticoId: dxId,",
+      "mutacion": "DiagnosticoId: 0,",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Asocia orden a diagnóstico ID 0"
+    },
+    {
+      "id": "MUT-ORD-031",
+      "funcion": "apiOrdenamientoGenerarLinks",
+      "linea": 12714,
+      "original": "const url = location.origin + \"/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos\"",
+      "mutacion": "const url = location.origin + \"/apiviva/APIHCHealth/api/Morbilidad/Links\"",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_20_correo_ordenes.js",
+      "descripcion": "Altera URL de enlaces de impresión"
+    },
+    {
+      "id": "MUT-ORD-032",
+      "funcion": "apiOrdenamientoGenerarLinks",
+      "linea": 12715,
+      "original": "+ \"?PacienteId=\" + encodeURIComponent(pacienteId) + \"&Agrupador=\" + encodeURIComponent(agrupador);",
+      "mutacion": "+ \"?PacienteId=\" + encodeURIComponent(pacienteId);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_20_correo_ordenes.js",
+      "descripcion": "Omite parámetro Agrupador en URL"
+    },
+    {
+      "id": "MUT-ORD-033",
+      "funcion": "apiOrdenamientoGenerarLinks",
+      "linea": 12716,
+      "original": "headers: { \"Accept\": \"application/json\" }",
+      "mutacion": "headers: { \"Accept\": \"text/plain\" }",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_20_correo_ordenes.js",
+      "descripcion": "Cambia header Accept a text/plain"
+    },
+    {
+      "id": "MUT-ORD-034",
+      "funcion": "apiOrdenamientoGenerarLinks",
+      "linea": 12722,
+      "original": "return res;",
+      "mutacion": "return null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_20_correo_ordenes.js",
+      "descripcion": "Devuelve null ignorando enlaces generados"
+    },
+    {
+      "id": "MUT-ORD-035",
+      "funcion": "apiOrdenamientoGenerarLinks",
+      "linea": 12723,
+      "original": "catch (e) { console.warn(\"[Vigilante PyM] GenerarLinksImpresionOrdenamientos falló (no bloquea el envío del correo):\", e); return null; }",
+      "mutacion": "catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_20_correo_ordenes.js",
+      "descripcion": "Relanza error bloqueando el envío del correo"
+    },
+    {
+      "id": "MUT-ORD-036",
+      "funcion": "_pymYaOrdenadoHoyDesdeElScript",
+      "linea": 13214,
+      "original": "const det = ordenesDetalleHoy(docId);",
+      "mutacion": "const det = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Anula detalle de órdenes provocando órdenes duplicadas"
+    },
+    {
+      "id": "MUT-ORD-037",
+      "funcion": "_pymYaOrdenadoHoyDesdeElScript",
+      "linea": 13218,
+      "original": "return (det && Array.isArray(det.actividades)) ? det.actividades : [];",
+      "mutacion": "return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Retorna vacío impidiendo descontar actividades"
+    },
+    {
+      "id": "MUT-ORD-038",
+      "funcion": "_pymYaOrdenadoHoyDesdeElScript",
+      "linea": 13213,
+      "original": "function _pymYaOrdenadoHoyDesdeElScript(docId) {",
+      "mutacion": "function _pymYaOrdenadoHoyDesdeElScript(docId) { return []; } function _old_pymYaOrdenadoHoyDesdeElScript(docId) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Fuerza retorno vacío perdiendo trazabilidad"
+    },
+    {
+      "id": "MUT-ORD-039",
+      "funcion": "_pymYaOrdenadoHoyDesdeElScript",
+      "linea": 13218,
+      "original": "Array.isArray(det.actividades)",
+      "mutacion": "typeof det.actividades === \"object\"",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Relaja chequeo de arreglo"
+    },
+    {
+      "id": "MUT-ORD-040",
+      "funcion": "_pymYaOrdenadoHoyDesdeElScript",
+      "linea": 13210,
+      "original": "det.actividades",
+      "mutacion": "det.items",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_21_v12_4_pym_horas.js",
+      "descripcion": "Busca propiedad .items en vez de .actividades"
+    }
+  ]
+}
