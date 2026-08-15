@@ -58,9 +58,14 @@ function crearDom() {
     body, head, documentElement: elem("html"),
     createElement: elem,
     createTextNode: (t) => ({ textContent: t }),
-    getElementById: () => null,
+    getElementById: (id) => nodos.find(n => n.id === id && n._parent) || null,
     querySelector: () => null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel) => {
+      if (typeof sel === "string" && sel.startsWith("[id^='vgl-']")) {
+        return nodos.filter(n => n.id && n.id.startsWith("vgl-") && n._parent);
+      }
+      return [];
+    },
     addEventListener() {}, removeEventListener() {},
     _nodos: nodos,
   };
@@ -68,7 +73,10 @@ function crearDom() {
 
 function crearEntorno(opciones) {
   const o = opciones || {};
-  const almacen = {};
+  const almacen = o.almacen || {};
+  if (!o.defaultOff && !("vgl_cfg" in almacen)) {
+    almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
+  }
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),
     setItem: (k, v) => { almacen[k] = String(v); },
@@ -108,6 +116,8 @@ function crearEntorno(opciones) {
     Blob: function (p) { this.parts = p; },
     btoa: (s) => Buffer.from(String(s), "binary").toString("base64"),
     atob: (s) => Buffer.from(String(s), "base64").toString("binary"),
+    TextEncoder: typeof TextEncoder !== "undefined" ? TextEncoder : require("util").TextEncoder,
+    crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }),
     console: o.silencioso ? { log() {}, warn() {}, error() {}, info() {} } : console,
     DecompressionStream: undefined,
     Worker: undefined,
@@ -117,6 +127,25 @@ function crearEntorno(opciones) {
   win.unsafeWindow = win;
   win.window = win;
   win.globalThis = win;
+  let version = o.version;
+  if (!version) {
+    try {
+      const cabecera = fs.readFileSync(RUTA, "utf8").slice(0, 2000);
+      const m = cabecera.match(/\/\/\s*@version\s+(\S+)/);
+      if (m) version = m[1];
+    } catch (e) {}
+  }
+  if (!version) version = "14.1.5";
+
+  win.GM_info = {
+    script: {
+      version: version,
+      name: "Vigilante de Agenda — Copiloto Everest PyM",
+    },
+    scriptHandler: "Tampermonkey",
+    version: "5.3.3",
+    scriptSource: o.scriptSource || undefined,
+  };
   win.GM_getValue = (k, d) => (k in gm ? gm[k] : d);
   win.GM_setValue = (k, v) => { gm[k] = v; };
   win.GM_xmlhttpRequest = o.gmxhr || (() => {});

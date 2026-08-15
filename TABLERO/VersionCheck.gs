@@ -20,14 +20,35 @@
   toda la flota en vez de esperar el ciclo propio de cada Tampermonkey.
 */
 
-const MIN_VERSION = "12.5.9";  // ← CAMBIA ESTO para futuras actualizaciones críticas
+const MIN_VERSION = "14.1.5";  // ← Versión mínima requerida
 const FORCE = false;           // ← true = todos auto-reload incluso si están al día
+
+// Configuración de Kill-Switch remoto de emergencia (R5.3)
+const KILL_SWITCH = {
+  active: false,               // true = activa apagado de emergencia inmediato
+  reason: "Mantenimiento central preventivo",
+  scope: "all",                // "all" o lista de IDs de equipo ["eq-xxxx", ...]
+  disabledFeatures: []         // ["autoLabs", "ordenamiento", "agendamiento", "telemetria"]
+};
+
+// Configuración de despliegues canarios graduales (R5.3)
+const CANARY = {
+  enabled: false,
+  percentage: 0,               // 0-100% de equipos
+  allowedEquipos: [],          // Lista blanca de consultorios piloto
+  minVersion: "14.1.5",
+  enabledFeatures: []
+};
 
 function doGet(e) {
   return ContentService.createTextOutput(
     JSON.stringify({
+      status: "ok",
       minVersion: MIN_VERSION,
       force: FORCE,
+      forceReload: FORCE,
+      killSwitch: KILL_SWITCH,
+      canary: CANARY,
       timestamp: new Date().toISOString()
     })
   ).setMimeType(ContentService.MimeType.JSON);

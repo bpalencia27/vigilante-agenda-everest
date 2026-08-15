@@ -48,8 +48,38 @@ module.exports = {
       t.igual(payload.DiagnosticoId, "dx456");
       t.igual(payload.paciente.Id, "pac123");
       t.igual(payload.ordenes[0].cup.Id, "cup1");
+      t.igual(payload.SwHc, false, "SwHc debe ser false en GuardarOrdenamiento (MUT-ORD-029)");
       // v11.0.1 — una ESCRITURA no se reintenta: ocho POST serían ocho órdenes reales.
       t.igual(String(fetchOpts.method).toUpperCase(), "POST");
+    });
+
+    await t.casoAsync("apiOrdenamientoGuardar aborta y avisa bajo Kill-Switch (MUT-ORD-026)", async () => {
+      let fetchCount = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { fetchCount++; return respuesta({ id: "ok" }); }
+      });
+      c.api.__state.activeDoctor = { id: 777, name: "DR. TEST" };
+      c.api.__state.killed = true;
+
+      const res = await c.api.apiOrdenamientoGuardar("pac123", "dx456", [{ Id: "cup1", Descripcion: "desc1" }]);
+      t.igual(res, null, "debe retornar null bajo kill-switch");
+      t.igual(fetchCount, 0, "no debe emitir peticiones a la red");
+    });
+
+    await t.casoAsync("apiAccesoAsignarTurno aborta bajo Kill-Switch activo (MUT-AGD-056)", async () => {
+      let fetchCount = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { fetchCount++; return respuesta({ id: "ok" }); }
+      });
+      c.api.__state.activeDoctor = { id: 777, name: "BRANDON PALENCIA" };
+      c.api.__state.killed = true;
+
+      const res = await c.api.apiAccesoAsignarTurno("turno", "pac123", "2026-08-10", "obs");
+      t.cierto(res.error);
+      t.cierto(res.mensaje.includes("Kill-Switch activo"));
+      t.igual(fetchCount, 0, "no debe emitir peticiones a la red");
     });
 
     await t.casoAsync("apiAccesoAsignarTurno aborta si no hay ID de médico (v12.0.0)", async () => {
@@ -126,11 +156,11 @@ module.exports = {
       let fetchCount = 0;
       const c = cargar({
         silencioso: true,
-        fetch: async () => { fetchCount++; return respuesta([{ Codigo: "I10X", Id: "dx999" }]); },
+        fetch: async () => { fetchCount++; return respuesta([{ Codigo: "Z000", Id: "dx000" }, { Codigo: "I10X", Id: "dx999" }]); },
       });
 
       const dxId = await c.api.apiOrdenamientoObtenerDx("I10X");
-      t.igual(dxId, "dx999");
+      t.igual(dxId, "dx999", "debe seleccionar I10X ignorando el primer item Z000 (MUT-ORD-018)");
       t.igual(fetchCount, 1);
 
       // Siguiente llamada debería usar la caché
@@ -143,12 +173,12 @@ module.exports = {
       let fetchCount = 0;
       const c = cargar({
         silencioso: true,
-        fetch: async () => { fetchCount++; return respuesta([{ Codigo: "902207", Id: "cup999", Descripcion: "Prueba" }]); },
+        fetch: async () => { fetchCount++; return respuesta([{ Codigo: "903841", Id: "cup000", Descripcion: "Glucosa" }, { Codigo: "902207", Id: "cup999", Descripcion: "Prueba" }]); },
       });
 
       const cup = await c.api.apiOrdenamientoObtenerCup("pac1", "902207");
       t.cierto(!!cup, "el CUPS se resuelve");
-      t.igual(cup.Id, "cup999");
+      t.igual(cup.Id, "cup999", "debe seleccionar 902207 ignorando primer item 903841 (MUT-ORD-023)");
       t.igual(cup.Descripcion, "Prueba");
       t.igual(fetchCount, 1);
 
@@ -166,6 +196,11 @@ module.exports = {
 
       const pacId = await c.api.apiOrdenamientoBuscarPaciente("CC 123456");
       t.igual(pacId, 111);
+
+      // Entradas vacías o sin dígitos retornan strictly null (MUT-ORD-012)
+      t.igual(await c.api.apiOrdenamientoBuscarPaciente(""), null, "doc vacío retorna null (MUT-ORD-012)");
+      t.igual(await c.api.apiOrdenamientoBuscarPaciente(null), null, "doc null retorna null (MUT-ORD-012)");
+      t.igual(await c.api.apiOrdenamientoBuscarPaciente("CC"), null, "doc sin dígitos retorna null (MUT-ORD-012)");
     });
 
     // v12.3.3 — getAtheneaIdSolicitudAuto (bridge a localhost:5050) fue REEMPLAZADA por el
