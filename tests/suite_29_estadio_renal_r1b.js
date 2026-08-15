@@ -19,8 +19,7 @@
 // =====================================================================
 module.exports = {
   nombre: "Estadio renal (R1b, plomería)",
-  cubre: ["_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
-          "_signosVitalesInvalidar", "estadioRenalDelPaciente"],
+  cubre: ["_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales"],
 
   async pruebas(t, api, env, cargar) {
 
