@@ -385,7 +385,14 @@ module.exports = {
         silencioso: true,
         fetch: async (url) => {
           llamadas++;
-          const cual = String(url).includes("citaId=111") ? "111" : "222";
+          // OJO: se compara contra el citaId CODIFICADO, no contra "111". Cuando el
+          // lector empezó a mandar base64 (como hace Everest de verdad), la versión
+          // anterior de esta línea —`includes("citaId=111")`— dejó de casar y las dos
+          // citas devolvían lo mismo… y la prueba SIGUIÓ EN VERDE, porque ninguna
+          // aserción notaba que el mock había dejado de distinguirlas. La suite 31 fija
+          // ya la codificación; aquí se deriva de la misma función para que el mock no
+          // pueda volver a quedarse mudo.
+          const cual = String(url).includes("citaId=" + c.api._base64SinRelleno("111")) ? "111" : "222";
           return { ok: true, status: 200, json: async () => [{ codigoExamen: cual }], text: async () => JSON.stringify([{ codigoExamen: cual }]) };
         },
       });
