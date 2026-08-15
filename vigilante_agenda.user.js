@@ -14187,9 +14187,9 @@
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = new Uint16Array(64);
+    let currRow = new Uint16Array(64);
+    let prevPrevRow = new Uint16Array(64);
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14204,6 +14204,14 @@
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+
+        // Ensure buffers are large enough
+        if (n + 1 > prevRow.length) {
+            const size = Math.max(n + 1, prevRow.length * 2);
+            prevRow = new Uint16Array(size);
+            currRow = new Uint16Array(size);
+            prevPrevRow = new Uint16Array(size);
+        }
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -14224,10 +14232,10 @@
             }
           }
           // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
