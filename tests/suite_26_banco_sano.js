@@ -19,11 +19,53 @@ module.exports = {
   nombre: "El banco se ejecuta de verdad",
   cubre: [],
 
-  pruebas(t) {
+  async pruebas(t) {
     const dir = __dirname;
     const suites = fs.readdirSync(dir)
       .filter((f) => /^suite_.*\.js$/.test(f) && f !== path.basename(__filename))
       .sort();
+
+    // v14.1.7 — LAS PROPIAS ASERCIONES DEL BANCO, PROBADAS.
+    // `t.lanza` y `t.noLanza` solo atrapaban lo síncrono, así que con una función `async`
+    // no podían fallar jamás. El arreglo es fácil de escribir y fácil de revertir sin que
+    // nadie note nada — de hecho, al mutarlo de vuelta a la versión vieja el banco entero
+    // seguía en verde, porque en la base no hay ni un uso async de los 49 que hay. Un
+    // arreglo que ninguna prueba ejercita no está arreglado: está esperando a que alguien
+    // lo deshaga. Estos cuatro casos son los que lo sujetan.
+    await t.casoAsync("t.noLanza con una función async: CAE si la promesa se rechaza, y pasa si se resuelve", async () => {
+      let cayo = false;
+      try { await t.noLanza(async () => { throw new Error("fallo de verdad"); }, "debía caer"); }
+      catch (e) { cayo = true; }
+      t.cierto(cayo, "una promesa rechazada TIENE que hacer caer la prueba; si no, es una prueba que no puede fallar");
+
+      let cayoSinMotivo = false;
+      try { await t.noLanza(async () => 42); } catch (e) { cayoSinMotivo = true; }
+      t.falso(cayoSinMotivo, "una promesa que resuelve no debe hacer caer nada");
+    });
+
+    await t.casoAsync("t.lanza con una función async: pasa si la promesa se rechaza, y CAE si se resuelve", async () => {
+      let cayoSinMotivo = false;
+      try { await t.lanza(async () => { throw new Error("esperada"); }); } catch (e) { cayoSinMotivo = true; }
+      t.falso(cayoSinMotivo, "si se esperaba excepción y la promesa se rechaza, la prueba pasa");
+
+      let cayo = false;
+      try { await t.lanza(async () => 42, "debía caer"); } catch (e) { cayo = true; }
+      t.cierto(cayo, "si se esperaba excepción y la promesa resuelve, la prueba TIENE que caer");
+    });
+
+    t.caso("t.noLanza y t.lanza siguen funcionando igual con funciones síncronas (los 49 usos que ya había)", () => {
+      let cayo = false;
+      try { t.noLanza(() => { throw new Error("x"); }, "debía caer"); } catch (e) { cayo = true; }
+      t.cierto(cayo, "noLanza síncrono que lanza sigue cayendo");
+
+      let cayoSinMotivo = false;
+      try { t.noLanza(() => 42); } catch (e) { cayoSinMotivo = true; }
+      t.falso(cayoSinMotivo, "noLanza síncrono que no lanza sigue pasando");
+
+      let cayo2 = false;
+      try { t.lanza(() => 42, "debía caer"); } catch (e) { cayo2 = true; }
+      t.cierto(cayo2, "lanza síncrono sin excepción sigue cayendo");
+    });
 
     t.caso("hay suites que auditar (si esto falla, el propio guard quedó ciego)", () => {
       t.cierto(suites.length > 10, "se esperaban más de 10 suites, se hallaron " + suites.length);
@@ -53,6 +95,25 @@ module.exports = {
       });
       t.cierto(vistas > 0, "se esperaban llamadas a injectLabsIntoCronicos en el userscript; si son 0, esta prueba quedó ciega");
       t.igual(sinGuarda, [], "llamadas sin docId esperado: escribirían en la historia que esté abierta AHORA, no en la del paciente consultado");
+    });
+
+    // v14.1.7 — Hermano del centinela de t.casoAsync, y por el mismo motivo.
+    // `t.lanza` y `t.noLanza` ahora entienden promesas, pero solo si el llamador ESPERA
+    // el resultado. Una llamada async sin `await` devuelve una promesa que nadie mira: la
+    // prueba termina antes de que se sepa si falló, y queda verde pase lo que pase.
+    // Es exactamente el agujero que tenían antes, solo que movido un paso más allá.
+    t.caso("toda llamada async a t.lanza / t.noLanza se invoca con await — si no, vuelve a ser una prueba que no puede fallar", () => {
+      const huerfanos = [];
+      for (const f of suites) {
+        const src = fs.readFileSync(path.join(dir, f), "utf8");
+        src.split("\n").forEach((linea, i) => {
+          const limpia = linea.replace(/\/\/.*$/, "");                   // fuera comentarios
+          if (!/\bt\.(lanza|noLanza)\s*\(\s*async\b/.test(limpia)) return;
+          if (/\bawait\s+t\.(lanza|noLanza)\s*\(/.test(limpia)) return;
+          huerfanos.push(f + ":" + (i + 1) + "  " + limpia.trim().slice(0, 80));
+        });
+      }
+      t.igual(huerfanos, [], "llamada async a t.lanza/t.noLanza sin await: la prueba no puede fallar aunque el código esté roto");
     });
 
     t.caso("todo t.casoAsync se invoca con await — si no, sus aserciones caen fuera de la cuenta", () => {

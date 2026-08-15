@@ -33,8 +33,42 @@ function crearT() {
     },
     cierto(v, nota) { if (!v) throw new Error((nota || "se esperaba verdadero") + " (obtuvo " + JSON.stringify(v) + ")"); },
     falso(v, nota) { if (v) throw new Error((nota || "se esperaba falso") + " (obtuvo " + JSON.stringify(v) + ")"); },
-    lanza(fn, nota) { let l = false; try { fn(); } catch (e) { l = true; } if (!l) throw new Error(nota || "se esperaba una excepción"); },
-    noLanza(fn, nota) { try { fn(); } catch (e) { throw new Error((nota || "no debía lanzar") + ": " + e.message); } },
+    // v14.1.7 — `lanza` y `noLanza` ENTIENDEN PROMESAS. Hasta aquí solo atrapaban lo que
+    // se lanzara de forma SÍNCRONA, así que al pasarles una función `async` no podían
+    // fallar jamás: una función async no lanza, devuelve una promesa rechazada, y el
+    // `catch` no llegaba a saltar nunca.
+    //
+    // En la base no había ni un solo uso async de los 49 que hay, así que el agujero
+    // estaba latente — pero ya atrapó a un PR real, que añadió
+    // `await t.noLanza(async () => await c.api.pageFetchJson("url"))`. Se comprobó
+    // haciendo que `pageFetchJson` lanzara siempre: cayeron 11 pruebas antiguas y ESA se
+    // quedó verde mientras la función fallaba en cada llamada.
+    //
+    // El arreglo tiene su propia trampa, y por eso NO se convierten en `async` a secas:
+    // eso haría que los 49 llamadores síncronos —que no esperan nada— recibieran una
+    // promesa suelta, y un fallo pasaría de excepción a rechazo no capturado. Silencioso
+    // otra vez, y en 49 sitios en vez de en uno.
+    //
+    // Así que se bifurca por lo que la función DEVUELVE: si no es un thenable, se
+    // comporta exactamente como antes y lanza en el acto; si lo es, se devuelve una
+    // promesa que el llamador tiene que esperar. Y para que nadie se olvide de ese
+    // `await`, hay un centinela en la suite 26 que lee el código de las suites y falla si
+    // encuentra una llamada async sin esperar — el mismo patrón que ya cazó los
+    // `t.casoAsync` sin await.
+    lanza(fn, nota) {
+      const fallo = () => new Error(nota || "se esperaba una excepción");
+      let r;
+      try { r = fn(); } catch (e) { return; }                    // lanzó síncrono: correcto
+      if (!r || typeof r.then !== "function") throw fallo();     // no lanzó y no hay promesa
+      return r.then(() => { throw fallo(); }, () => {});         // rechazó: correcto
+    },
+    noLanza(fn, nota) {
+      const fallo = (e) => new Error((nota || "no debía lanzar") + ": " + (e && e.message ? e.message : e));
+      let r;
+      try { r = fn(); } catch (e) { throw fallo(e); }
+      if (!r || typeof r.then !== "function") return;
+      return r.then(() => {}, (e) => { throw fallo(e); });
+    },
   };
   return { t, res };
 }

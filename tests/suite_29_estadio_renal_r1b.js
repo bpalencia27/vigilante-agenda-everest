@@ -20,8 +20,8 @@
 module.exports = {
   nombre: "Estadio renal (R1b, plomería)",
   cubre: ["_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
-          "_signosVitalesInvalidar", "estadioRenalDelPaciente", "_creatininaDeLabs",
-          "apiAccesoObtenerDemograficos", "calcularEstadioRenal", "_renderEstadioRenalHtml"],
+          "_creatininaDeLabs", "apiAccesoObtenerDemograficos",
+          "calcularEstadioRenal", "_renderEstadioRenalHtml"],
 
   async pruebas(t, api, env, cargar) {
     const respuestaJson = (obj) => async () => ({ ok: true, status: 200, json: async () => obj });
