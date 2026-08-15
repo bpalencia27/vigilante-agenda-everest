@@ -8,7 +8,7 @@ module.exports = {
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen"
+    "_conductaBuscarYAgregarExamen", "_evaluarAccionesRenales"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1660,6 +1660,50 @@ module.exports = {
     // corta "HEMOGLOBINA GLICOSILADA", sin más) — es 903426, el código YA vigente en
     // PYM_CATALOG/I10X, tomado de una orden REAL ya guardada en Everest
     // (EVIDENCIA_ORDENAMIENTO_CURADO.md §2), evidencia más fuerte que la del otro repo.
+
+    // ================= v14.X — Conducta Renal: evaluar acciones =================
+    await t.casoAsync("_evaluarAccionesRenales: el no diabético (sin DM2 confirmado) no recibe botón de HbA1c", async () => {
+      const c2 = cargar({ fetch: async () => ({ ok: true, json: async () => [] }) });
+      const modalSec = c2.env.doc.createElement("div");
+      modalSec.className = "vgl-labs-renal";
+
+      c2.api.pymCubiertoPorOrdenVigente = () => [];
+
+      const r = { estadio: "G4" };
+      const todosLabs = [{ NombreParametro: "HEMOGLOBINA GLICOSILADA", Resultado: "5.5", Fecha: "2020-01-01" }];
+
+      c2.api._evaluarAccionesRenales(r, todosLabs, "123", modalSec);
+      await new Promise(res => setTimeout(res, 10));
+
+      const acciones = modalSec.children.length > 0 ? modalSec.children[0].children : [];
+      const textos = acciones.map(b => String(b.textContent));
+
+      t.falso(textos.some(t => t.includes("HbA1c")), "No debe crear botón de HbA1c porque esDM2 no se pasó como true");
+    });
+
+    await t.casoAsync("_evaluarAccionesRenales: el estadio manda (PTH en G4 se vence, en G1 es BLOQ y se ignora)", async () => {
+      const hoyMs = Date.now();
+      const hace200dias = new Date(hoyMs - 200 * 86400000).toISOString().split("T")[0];
+
+      // G4
+      const cG4 = cargar({ fetch: async () => ({ ok: true, json: async () => [] }) });
+      const modalSecG4 = cG4.env.doc.createElement("div");
+      cG4.api.pymCubiertoPorOrdenVigente = () => [];
+      cG4.api._evaluarAccionesRenales({ estadio: "G4" }, [{ NombreParametro: "PTH MOLECULA INTACTA", Resultado: "50", Fecha: hace200dias }], "123", modalSecG4);
+      await new Promise(res => setTimeout(res, 10));
+      const accionesG4 = modalSecG4.children.length > 0 ? modalSecG4.children[0].children : [];
+      t.cierto(accionesG4.some(b => String(b.textContent).includes("PTH")), "En G4 la PTH de 200 días está vencida y genera botón");
+
+      // G1
+      const cG1 = cargar({ fetch: async () => ({ ok: true, json: async () => [] }) });
+      const modalSecG1 = cG1.env.doc.createElement("div");
+      cG1.api.pymCubiertoPorOrdenVigente = () => [];
+      cG1.api._evaluarAccionesRenales({ estadio: "G1" }, [{ NombreParametro: "PTH MOLECULA INTACTA", Resultado: "50", Fecha: hace200dias }], "123", modalSecG1);
+      await new Promise(res => setTimeout(res, 10));
+      const accionesG1 = modalSecG1.children.length > 0 ? modalSecG1.children[0].children : [];
+      t.falso(accionesG1.some(b => String(b.textContent).includes("PTH")), "En G1 la PTH es BLOQ, no debe generar botón");
+    });
+
     t.caso("CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO: los 5 códigos de escritura confirmados, distintos de los de lectura", () => {
       const w = c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO;
       t.igual(w.HBA1C, "903426", "la orden REAL ya guardada en Everest manda sobre el catálogo corto del Copiloto");
