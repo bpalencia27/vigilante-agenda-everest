@@ -610,7 +610,7 @@ module.exports = {
       const e = entornoApi();
       e.c.api.__state.activeDoctor = { id: 888 };
       e.c.ctx.Date = class extends Date { static now() { throw new Error("Digiturno crash"); } };
-      t.noLanza(async () => {
+      await t.noLanza(async () => {
         await e.c.api.apiDigiturnoFinalizarTicket(1234);
       }, "Digiturno no debe lanzar excepción al fallar el transporte");
     });

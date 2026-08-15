@@ -542,7 +542,7 @@ module.exports = {
       });
       cError.api.__state.activeDoctor = { id: 888 };
 
-      t.noLanza(async () => {
+      await t.noLanza(async () => {
         await cError.api.apiDigiturnoFinalizarTicket(1234);
       }, "Digiturno no debe lanzar excepción al fallar la red");
 
