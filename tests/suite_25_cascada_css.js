@@ -547,8 +547,15 @@ module.exports = {
       // document.body), así que la Regla E exige !important en cada una: el CSS de Everest
       // es una caja negra que puede ganarle a una regla sin él. No son 6 !important
       // decorativos: son exactamente los que esa regla obliga a poner.
+      // v15.0.0: 158 -> 160. Los 2 nuevos son de `.vgl-agm-pbtn-sabado-suyo`
+      // (border-style y border-color), el chip del sábado que SÍ le toca a este
+      // médico. Necesitan !important por una razón concreta y comprobable: la
+      // regla que los pisa es `.vgl-agm-pbtn-sabado`, declarada ANTES en la misma
+      // hoja y con la misma especificidad (una clase). Sin !important el borde
+      // punteado de "por confirmar" ganaría por orden de aparición y el médico
+      // vería como dudoso un sábado que el script ya sabe que es suyo.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 158, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 y los 6 del recuadro renal de R1b (esperado 158, salió ${importantTotal})`);
+      t.cierto(importantTotal === 160, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b y los 2 del chip de sábado propio de v15 (esperado 160, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {

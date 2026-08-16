@@ -8900,6 +8900,9 @@
          plano si el médico tiene agenda ese sábado — si no la tiene, el chip se retira
          solo y este estilo nunca llega a notarse. */
       .vgl-agm-pbtn-sabado{border-style:dashed;border-color:rgba(var(--rgb-azul),.55)}
+      /* v15.0.0 — sábado que SÍ le toca a este médico: borde continuo, no punteado.
+         El punteado significa "por confirmar"; si le toca, ya no está por confirmar. */
+      .vgl-agm-pbtn-sabado-suyo{border-style:solid !important;border-color:rgba(var(--rgb-verde),.65) !important}
       .vgl-agm-loading{
         font-size:var(--t-micro);color:var(--fg2);padding:6px;font-style:italic
       }
@@ -12278,11 +12281,29 @@
             const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
             return d.getDay() === 6;   // 6 = sábado
           });
-        if (sabadosConAgenda.length) {
-          console.log("[Vigilante Agendamiento] diagnóstico SÁBADO del médico — sábados con agenda en esta respuesta:",
-            sabadosConAgenda,
-            "· médico:", (state.activeDoctor && state.activeDoctor.id) || "(sin id)",
-            "· NOTA: junte varias de estas líneas de días distintos para deducir cada cuántos sábados le toca. Aún no se usa para agendar.");
+        // v15.0.0 — LA OBSERVACIÓN YA NO SE QUEDA EN LA CONSOLA. El médico cerró la
+        // regla el 16-08-2026: no es "un sábado cada 15 días", es que el personal está
+        // repartido en dos grupos — uno atiende el 1º y el 3º sábado del mes, el otro
+        // el 2º y el 4º. Con esa regla, cada sábado observado con agenda propia ya
+        // identifica el grupo, y dos coherentes lo confirman.
+        //
+        // Se sigue sin añadir ni una petición: se anota lo que esta respuesta YA trae.
+        // Lo que cambia es que ahora se guarda por médico (GM_storage) en vez de
+        // imprimirse, y que la memoria distingue lo observado de lo que el médico fije
+        // a mano — su corrección siempre gana.
+        const medicoId = (state.activeDoctor && state.activeDoctor.id) || "";
+        if (sabadosConAgenda.length && medicoId) {
+          for (const f of sabadosConAgenda) {
+            const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(f);
+            if (!m) continue;
+            const iso = m[3] + "-" + String(m[2]).padStart(2, "0") + "-" + String(m[1]).padStart(2, "0");
+            try { mtrSabadoRegistrarObservacion(medicoId, iso); } catch (e) {}
+          }
+          try {
+            const g = mtrSabadoGrupoDeMedico(medicoId);
+            console.log("[Vigilante Agendamiento] sábados del médico:", sabadosConAgenda,
+              "· grupo:", g.grupo || "(sin determinar)", "· confianza:", g.confianza);
+          } catch (e) {}
         }
       } catch (e) {}
 
@@ -12540,7 +12561,32 @@
         // classList.contains("active"), lee la misma fuente de verdad que el clic de arriba.
         if (item.isCenter) btn.classList.add("active");
         btn.innerHTML = item.isCenter ? `<b>${escapeHtml(item.shortLbl)} 🎯</b>` : escapeHtml(item.shortLbl);
-        if (item.esSabado) btn.title = "Sábado — este médico no siempre tiene agenda los sábados. Se está verificando en segundo plano; si no hay turnos, este día se retirará solo.";
+        // v15.0.0 — El chip de sábado ya sabe si a ESTE médico le toca. La regla
+        // (1º y 3º del mes, o 2º y 4º) sale de lo observado en su propia agenda y
+        // el médico puede corregirla desde Ajustes. Tres textos distintos, porque
+        // "no le toca" y "no lo sé todavía" no son lo mismo y decir lo segundo
+        // como si fuera lo primero le haría descartar un día que sí tiene libre.
+        if (item.esSabado) {
+          let toca = null;
+          try {
+            const g = mtrSabadoGrupoDeMedico((state.activeDoctor && state.activeDoctor.id) || "");
+            toca = mtrMedicoTrabajaSabado(item.iso, g.grupo);
+            if (toca === true) {
+              btn.classList.add("vgl-agm-pbtn-sabado-suyo");
+              btn.title = "Sábado que sí atiende este médico (grupo " + g.grupo + ", " +
+                (g.confianza === "manual" ? "fijado por usted" : "deducido de su agenda") +
+                "). Se verifica igual en segundo plano.";
+            } else if (toca === false) {
+              btn.title = "Sábado del OTRO grupo (este médico atiende el grupo " + g.grupo +
+                "). Se ofrece por si acaso, pero lo normal es que no tenga agenda.";
+            }
+          } catch (e) { toca = null; }
+          if (toca === null) {
+            btn.title = "Sábado — todavía no se sabe si a este médico le toca (se deduce " +
+              "observando su agenda; el 5º sábado del mes no es de ningún grupo). " +
+              "Se está verificando en segundo plano; si no hay turnos, este día se retirará solo.";
+          }
+        }
         btn.addEventListener("click", () => {
           botonesPorIso.forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
