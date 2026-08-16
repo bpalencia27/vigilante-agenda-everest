@@ -4,6 +4,17 @@ module.exports = {
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
+    t.caso("todayTokens retorna tokens de fecha con formatos numericos y mes en letras", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const toks = c.api.todayTokens();
+      t.cierto(Array.isArray(toks), "retorna arreglo");
+      t.cierto(toks.includes("20260810"), "incluye formato YYYYMMDD");
+      t.cierto(toks.includes("10082026"), "incluye formato DDMMYYYY");
+      t.cierto(toks.some(t => t.includes("agosto")), "incluye mes en letras");
+    });
+
     t.caso("normName normaliza el nombre del archivo", () => {
       t.igual(api.normName("Agenda_Dia_CMB_20260810.xlsx"), "agendadiacmb20260810xlsx");
       t.igual(api.normName(" 2026-08-10.xls "), "20260810xls");

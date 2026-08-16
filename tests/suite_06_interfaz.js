@@ -40,6 +40,23 @@ module.exports = {
       t.igual(c.api.countdown({ hora_texto: "1", elapsed: -10, estado: "Sin presentarse" }), "<span class=\"vgl-cd\" title=\"Le quedan 16:00 para confirmar\">en 16:00</span>");
     });
 
+    t.caso("escapeHtml sanea caracteres especiales HTML", () => {
+      const c = cargar();
+      t.igual(c.api.escapeHtml('<script>alert("x")&\'test\'</script>'), '&lt;script&gt;alert(&quot;x&quot;)&amp;&#039;test&#039;&lt;/script&gt;');
+      t.igual(c.api.escapeHtml(""), "");
+      t.igual(c.api.escapeHtml(null), "");
+    });
+
+    t.caso("fraudesHoy lee la cuenta de fraudes de hoy", () => {
+      const c = cargar();
+      t.igual(typeof c.api.fraudesHoy(), "number");
+    });
+
+    t.caso("renderStats no lanza cuando no hay elemento stats montado", () => {
+      const c = cargar();
+      t.noLanza(() => c.api.renderStats([]));
+    });
+
     // =====================================================================
     // v12.6.6 — Reportado en consultorio con captura: el aviso "Laboratorios RCV sin
     // resultado vigente" salía como TEXTO SUELTO encima de la historia clínica —sin

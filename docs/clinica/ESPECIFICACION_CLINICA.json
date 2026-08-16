@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "resumen_ejecutivo": {
+    "elementos_verificados": 15,
+    "elementos_discrepantes_corregidos": 4,
+    "elementos_sin_verificar_fuente_primaria": 0
+  },
+  "version": "14.1.9",
+  "fecha": "2026-08-15",
+  "salvedad_metodologica": {
+    "cockcroft_gault": "Estima Aclaramiento de Creatinina (CrCl, mL/min) utilizando el peso real del paciente. Definido como el anclaje administrativo obligatorio para fijar vigencias y periodicidades ante la EPS.",
+    "ckd_epi_2021": "Estima Tasa de Filtración Glomerular (eGFR, mL/min/1.73m²). Utilizado para juicio clínico fisiológico.",
+    "politica_discordancia": "Si la diferencia entre ambas ecuaciones supera 2 estadios KDIGO, el sistema emite una alerta no bloqueante al médico."
+  }
+}

@@ -584,6 +584,7 @@ function _celdaVersion(v) {
 function _sinDigitosLargos(v) {
   return String(v == null ? "" : v)
     .replace(/https?:\/\/[^\s)]+/g, "<url>")
+    .replace(/\b\d{1,3}(?:\s+\d{3}){2,3}\b/g, "")
     .replace(/\d{6,}/g, "")
     .replace(/["'`]/g, " ")
     .replace(/\s+/g, " ")

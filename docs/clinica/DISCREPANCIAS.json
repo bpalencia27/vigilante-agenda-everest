@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discrepancias": [
+    {
+      "id": "DISC-001",
+      "elemento": "CUPS Triglicéridos vs RAC",
+      "severidad": "ALTA",
+      "descripcion": "El CUPS 903868 figuraba originalmente asignado por error a RAC y 903866 (TGP/ALT) a Triglicéridos, provocando que los triglicéridos se inyectaran en la casilla de relación albuminuria/creatinina.",
+      "estado": "CORREGIDO",
+      "linea_userscript": 1109,
+      "consecuencia": "Sobreescritura de analitos con rangos biológicos diferentes en la historia clínica."
+    },
+    {
+      "id": "DISC-002",
+      "elemento": "CUPS Escritura HbA1c (903426 vs 904426)",
+      "severidad": "ALTA",
+      "descripcion": "El Copiloto sugería 904426 (semiautomatizada), pero en Everest la orden institucional real exige 903426 (HEMOGLOBINA GLICOSILADA AUTOMATIZADA).",
+      "estado": "CORREGIDO",
+      "linea_userscript": 1188,
+      "consecuencia": "Rechazo de la orden de laboratorio en la IPS por código no parametrizado."
+    },
+    {
+      "id": "DISC-003",
+      "elemento": "Casilla DOM de HbA1c en Crónicos",
+      "severidad": "MEDIA",
+      "descripcion": "Se asumía la existencia de un selector 'resultadoHBA1C' en la Ruta de Crónicos. La auditoría de los 64 campos demostró que esa casilla no existe en la interfaz web de esa ruta.",
+      "estado": "MITIGADO",
+      "linea_userscript": 1146,
+      "consecuencia": "El analito no se escribe automáticamente en DOM, se presenta como aviso de diligenciamiento manual."
+    },
+    {
+      "id": "DISC-004",
+      "elemento": "Vigencia LDL en Estadio 4 (120 vs 180 días)",
+      "severidad": "MEDIA",
+      "descripcion": "La versión previa asignaba 180 días a LDL en Estadio G4, cuando la Tabla 50 oficial exige 120 días.",
+      "estado": "CORREGIDO",
+      "linea_userscript": 3285,
+      "consecuencia": "Menor frecuencia de solicitud de perfil lipídico en pacientes con falla renal avanzada."
+    }
+  ]
+}

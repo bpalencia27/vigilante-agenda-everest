@@ -39,6 +39,14 @@ module.exports = {
 
     const testApi = c.api;
 
+    t.caso("_valorCrudoLab: conserva valores legitimos y descarta vacios", () => {
+      t.igual(testApi._valorCrudoLab(0), 0);
+      t.igual(testApi._valorCrudoLab("120"), "120");
+      t.igual(testApi._valorCrudoLab(""), undefined);
+      t.igual(testApi._valorCrudoLab(null), undefined);
+      t.igual(testApi._valorCrudoLab(undefined), undefined);
+    });
+
     t.caso("_matchLabInWhitelist: El código manda sobre el nombre (Incidente v11.0.1)", () => {
       const labHbA1c = { CodigoParametro: "903843", nombre: "GLUCOSA EN SUERO (TRUCO)" };
       const matched = testApi._matchLabInWhitelist(labHbA1c);

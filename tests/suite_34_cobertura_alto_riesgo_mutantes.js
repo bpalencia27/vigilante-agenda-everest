@@ -47,7 +47,6 @@ module.exports = {
     "_matchUroComponente",
     "_agruparUroanalisisParaTabla",
     "_findUroInput",
-    "_marcarUroanalisisSi",
     "_atheneaCedulaCoincide",
     "_fechaDesdeNumeroSolicitud",
     "_findLabField",

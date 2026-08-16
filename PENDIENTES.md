@@ -140,19 +140,20 @@ porte la regla). El mapa función a función y las divergencias, en `docs/MOTOR_
 
 ---
 
-## 3. Enjambres
+## 3. Enjambres y Satélites (Estado al Cierre)
 
-| | Estado | Espera a |
-|---|---|---|
-| **S0** — arqueología de ramas | ✅ Entregado y revisado | — |
-| **S5** — seguridad y PHI | 🟡 Corriendo (Hito 0) | — |
-| **S6** — apagado y reversión | ⬜ Sin lanzar | Nada. Desbloquea al tronco |
-| **S4** — verificación clínica | ⬜ Sin lanzar | Las fuentes en `docs/fuentes/` |
-| **Tronco** — PRR | ⬜ Sin lanzar | Hito 1 de S6 + decisión #5 |
-| **S2** — banco y mutación | ⬜ Sin escribir | Mapa de riesgo del M0 del tronco |
-| **S3** — frontera real / DOM | ⬜ Sin escribir | Mapa de riesgo + volcados de DOM redactados |
+| Satélite / Grupo | Estado | Entregables Principales |
+|---|:---:|---|
+| **S0** — arqueología de ramas | ✅ Entregado | `docs/RAMAS.md` (721 commits rastreados). |
+| **S2** — banco y mutación | ✅ Entregado | `tests/LEEME_PRUEBAS.md`, `docs/auditoria/INFORME_COBERTURA_S2.md`, 47 suites, 377 mutaciones. |
+| **S3 / Grupo I** — frontera real / DOM | ✅ Entregado | `CONTRATO_DOM.json`, `docs/frontera/*`, `e2e/canario_simulador.js` (34/34 ok), `docs/cambios-pendientes/CANARIO_PRODUCCION_MODO_SEGURO.md`. |
+| **S4 / Grupo H** — verificación clínica | ✅ Entregado | `docs/clinica/ESPECIFICACION_CLINICA.md` (firmable), `ESPECIFICACION_ACTUAL.json`, `FUENTES_REQUERIDAS.md`, `CONTRATO_PRUEBAS.md`. |
+| **S5** — seguridad y PHI | ✅ Entregado | `docs/SECRETOS_EXPUESTOS.md`, `docs/AUDITORIA_XSS.md`, `docs/auditoria/AUDITORIA_OLA_E.md`. |
+| **S6 / Grupo G** — operación y apagado | ✅ Entregado | `docs/operacion/INTERRUPTOR.md`, `RUNBOOK.md`, `ROLLBACK.md`, `RECALL_CLINICO.md`, `CHANGELOG.md`. |
+| **Grupo V** — verificación adversarial | ✅ Entregado | `docs/auditoria/AUDITORIA_OLA_A.md`, `AUDITORIA_OLA_C.md`, `AUDITORIA_OLA_D.md`, `AUDITORIA_OLA_E.md`. |
+| **Tronco** — PRR | 🟢 Listo para Merge | `feat/motor-portado` (1.372 / 1.405 comprobaciones en verde). |
 
-**Jules:** J4 → PR #68 (contenido listo, rama a rehacer). J3 → PR #69 (dos correcciones pedidas). J1a en curso. J2 y J1b en espera.
+**Jules:** J4 → PR #68 (contenido listo). J3 → PR #69 (resuelto). J1a, J1b y J2 documentados.
 
 ---
 

@@ -119,7 +119,8 @@ module.exports = {
       const primerCrit = h.indexOf("vgl-mtr-crit");
       const primerAlto = h.indexOf("vgl-mtr-alto");
       t.cierto(primerCrit >= 0, "no hay ningún aviso crítico y debía haberlo");
-      if (primerAlto >= 0) t.cierto(primerCrit < primerAlto, "un HIGH quedó antes que un CRITICAL");
+      t.cierto(primerAlto >= 0, "no hay ningún aviso alto y debía haberlo");
+      t.cierto(primerCrit < primerAlto, "un HIGH quedó antes que un CRITICAL");
     });
 
     t.caso("la cabecera dice cuántos exigen acción inmediata", () => {

@@ -404,5 +404,14 @@ module.exports = {
       t.igual(cont.fetch, 4, "1 intento inicial + 3 reintentos, pese a ser POST");
       t.igual(cont.gm, 4, "__idempotent:true habilita el reenvío por GM");
     });
+
+    await t.casoAsync("pageFetchJson delega en el transporte core y devuelve el JSON", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => respuesta({ salud: "ok" }),
+      });
+      const data = await c.api.pageFetchJson("/apiviva/salud");
+      t.igual(data.salud, "ok");
+    });
   }
 };

@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "metadata": {
+    "version": "14.1.9",
+    "git_commit": "claude/pym-agenda-blindaje-v12-4",
+    "userscript_sha256": "b7517b11db69bacf2a580fba074c37d995c8c0d6727474fb32133f2c9f5f0a72",
+    "total_lines": 16874,
+    "fecha_extraccion": "2026-08-15"
+  },
+  "whitelist_13_labs": [
+    {
+      "key": "COLESTEROL_TOTAL",
+      "names": ["COLESTEROL TOTAL"],
+      "codes": ["2009", "903818"],
+      "resultId": "resultadoColesterolTotal",
+      "dateId": "fechaResultColesterolTotal",
+      "linea": 1095,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "COLESTEROL_HDL",
+      "names": ["COLESTEROL HDL", "COLESTEROL DE ALTA DENSIDAD"],
+      "codes": ["2015", "903815"],
+      "resultId": "resultadoColesterolHDL",
+      "dateId": "fechaResultColesterolHDL",
+      "linea": 1096,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "COLESTEROL_LDL",
+      "names": ["COLESTEROL LDL", "COLESTEROL DE BAJA DENSIDAD"],
+      "codes": ["2014", "903817", "903816"],
+      "resultId": "resultadoColesterolLDL",
+      "dateId": "fechaResultColesterolLDL",
+      "linea": 1097,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "TRIGLICERIDOS",
+      "names": ["TRIGLICERIDOS", "TRIGLICÉRIDOS"],
+      "codes": ["2074", "903868"],
+      "resultId": "resultadoTrigliceridos",
+      "dateId": "fechaResultTrigliceridos",
+      "linea": 1109,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "UROANALISIS",
+      "names": ["UROANALISIS", "PARCIAL DE ORINA"],
+      "codes": ["2095", "907106"],
+      "resultId": "resultadoUroanalisis",
+      "dateId": "fechaResultUroanalisis",
+      "linea": 1126,
+      "superficie_afectada": "Lectura LIS Athenea → Radio SI/NO + Componentes DOM HC Crónicos"
+    },
+    {
+      "key": "GLUCOSA",
+      "names": ["GLUCOSA EN SUERO", "GLICEMIA", "GLICEMIA BASAL"],
+      "codes": ["2013", "903841"],
+      "resultId": "resultadoGlicemia",
+      "dateId": "fechaResultGlicemia",
+      "linea": 1127,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "RAC",
+      "names": ["RELACION MICROALBUMINURIA CREATININA", "RELACION ALBUMINA/CREATININA", "RELACIÓN ALBÚMINA/CREATININA"],
+      "codes": ["8779"],
+      "resultId": "resultadoRelacionAlbuminaCreatinina",
+      "altIds": ["resultadoRAC"],
+      "dateId": "fechaResultRelacionAlbuminaCreatinina",
+      "altDateIds": ["fechaResultRAC"],
+      "linea": 1138,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "CREATININA",
+      "names": ["CREATININA EN SUERO", "CREATININA"],
+      "excluye": ["ORINA", "CREATINURIA", "DEPURAC", "24 H"],
+      "codes": ["2028", "903895"],
+      "resultId": "resultadoCreatinina",
+      "dateId": "fechaResultCreatinina",
+      "linea": 1141,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos + Motor Renal"
+    },
+    {
+      "key": "HBA1C",
+      "names": ["HBA1C", "HEMOGLOBINA GLICOSILADA", "HEMOGLOBINA GLICADA"],
+      "codes": ["2035", "903843"],
+      "resultId": "resultadoHBA1C",
+      "dateId": "fechaResultHBA1C",
+      "linea": 1146,
+      "superficie_afectada": "Lectura LIS Athenea → Aviso de Diligenciamiento Manual (Sin campo en Crónicos)"
+    },
+    {
+      "key": "PTH",
+      "names": ["PTH", "HORMONA PARATIROIDEA", "PARATOHORMONA"],
+      "codes": ["2065", "904921"],
+      "resultId": "resultadoPTH",
+      "dateId": "fechaResultPTH",
+      "linea": 1147,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "FOSFORO",
+      "names": ["FOSFORO EN SUERO", "FÓSFORO EN SUERO", "FOSFORO INORGANICO"],
+      "codes": ["2031", "903837"],
+      "resultId": "resultadoFosforo",
+      "dateId": "fechaResultFosforo",
+      "linea": 1152,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "ALBUMINA",
+      "names": ["ALBUMINA EN SUERO", "ALBÚMINA EN SUERO"],
+      "codes": ["2002", "903801"],
+      "resultId": "resultadoAlbumina",
+      "dateId": "fechaResultAlbumina",
+      "linea": 1153,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    },
+    {
+      "key": "HEMOGLOBINA",
+      "names": ["HEMOGLOBINA"],
+      "codes": ["2034", "902207"],
+      "resultId": "resultadoHemoglobina",
+      "dateId": "fechaResultHemoglobina",
+      "linea": 1154,
+      "superficie_afectada": "Lectura LIS Athenea → Escritura DOM HC Crónicos"
+    }
+  ],
+  "cups_escritura_ordenamiento": {
+    "HBA1C": { "cups": "903426", "texto_li": "HEMOGLOBINA GLICOSILADA AUTOMATIZADA", "linea": 1188 },
+    "PTH": { "cups": "904921", "texto_li": "HORMONA PARATIROIDEA MOLECULA INTACTA", "linea": 1189 },
+    "FOSFORO": { "cups": "903837", "texto_li": "FOSFORO EN SUERO U OTROS FLUIDOS", "linea": 1190 },
+    "ALBUMINA": { "cups": "903801", "texto_li": "ALBUMINA EN SUERO U OTROS FLUIDOS", "linea": 1191 },
+    "HEMOGLOBINA": { "cups": "902213", "texto_li": "HEMOGLOBINA", "linea": 1192 }
+  },
+  "motor_renal": {
+    "cockcroft_gault": {
+      "formula": "((140 - edad) * peso) / (72 * creatinina) * (sexo === 'F' ? 0.85 : 1.0)",
+      "unidades": { "edad": "años [18-120]", "peso": "kg reales [20-300]", "creatinina": "mg/dL [0.1-20]" },
+      "magnitud": "Aclaramiento de Creatinina (CrCl) en mL/min",
+      "rol": "Estadio administrativo EPS / Vigencias",
+      "linea": 3188
+    },
+    "ckd_epi_2021": {
+      "formula": "142 * min(Scr/k, 1)^a * max(Scr/k, 1)^-1.2 * 0.9938^Age * (sexo === 'F' ? 1.012 : 1.0)",
+      "constantes": { "k_fem": 0.7, "k_masc": 0.9, "a_fem": -0.241, "a_masc": -0.302 },
+      "unidades": { "edad": "años [18-120]", "creatinina": "mg/dL [0.1-20]" },
+      "magnitud": "Tasa de Filtración Glomerular estimada (eGFR) en mL/min/1.73m²",
+      "rol": "Estadio clínico",
+      "linea": 3196
+    },
+    "kdigo_cortes": {
+      "G1": ">= 90",
+      "G2": "60 - 89.9",
+      "G3a": "45 - 59.9",
+      "G3b": "30 - 44.9",
+      "G4": "15 - 29.9",
+      "G5": "< 15"
+    },
+    "umbral_discordancia_alerta": "> 2 estadios KDIGO entre CG y CKD-EPI"
+  },
+  "vigencias_erc_estadio": {
+    "fuente_declarada": "Tabla 50 Nefroprotección Everest RCV",
+    "linea": 3268,
+    "matriz": {
+      "creatinina": { "G1": 180, "G2": 180, "G3a": [90, 121], "G3b": [90, 121], "G4": [60, 93] },
+      "glicemia": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 60 },
+      "parcial_orina": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 120 },
+      "hemoglobina": { "G1": 365, "G2": 365, "G3a": 365, "G3b": 365, "G4": 180 },
+      "pth": { "G1": "BLOQ", "G2": "BLOQ", "G3a": 365, "G3b": 365, "G4": 180 },
+      "albumina": { "G1": "BLOQ", "G2": "BLOQ", "G3a": "BLOQ", "G3b": 365, "G4": 365 },
+      "fosforo": { "G1": "BLOQ", "G2": "BLOQ", "G3a": "BLOQ", "G3b": 365, "G4": 365 },
+      "colesterol_total": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 120 },
+      "trigliceridos": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 120 },
+      "ldl": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 120 },
+      "hdl": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 180 },
+      "microalbuminuria": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 180 },
+      "hba1c": { "G1": 180, "G2": 180, "G3a": 180, "G3b": 180, "G4": 120 }
+    }
+  },
+  "festivos_colombia": {
+    "norma": "Ley 51 de 1983 (Ley Emiliani)",
+    "anios_cubiertos": ["2024", "2025", "2026", "2027"],
+    "fecha_vencimiento_declarada": "2027-12-31",
+    "linea": 9170
+  },
+  "reglas_exclusion_pym": {
+    "excluidas_por_meta_cumplida": ["VDRL", "SIFILIS", "SÍFILIS", "HEPATITIS B", "HEPATITIS C", "HBV", "VHB", "HVC", "VHC"],
+    "invariante_clinico_no_negociable": "VIH NUNCA SE OCULTA",
+    "linea": 3483
+  }
+}

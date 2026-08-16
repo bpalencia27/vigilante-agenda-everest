@@ -17,13 +17,13 @@ const path = require("path");
 module.exports = {
   nombre: "Corrección Clínica, Frontera DOM y Límites (M2)",
   cubre: [
-    "cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG",
+    "cockcroftGault", "ckdEpi2021", "estadioKDIGO",
     "estadioRenalDelPaciente", "calcularEstadioRenal", "_renderEstadioRenalHtml",
     "_creatininaDeLabs", "_esSexoFemenino", "_matchLabInWhitelist", "_esAnalitoDeOrina",
-    "_matchUroComponente", "_findHbA1cFields", "_findLabField", "_findUroInput",
-    "_marcarUroanalisisSi", "_conductaBuscarYAgregarExamen", "esFestivo",
-    "todayStamp", "horaBonita", "parseHoraMin", "elapsedMin", "apptKey",
-    "colorAndAlert", "diaNuevo", "pymCubiertoPorOrdenVigente",
+    "_matchUroComponente", "_findHbA1cFields",
+    "esFestivo",
+    "todayStamp", "horaBonita", "parseHoraMin", "apptKey",
+    "colorAndAlert", "pymCubiertoPorOrdenVigente",
     "_ordenesVigentesInvalidar", "_demograficosInvalidar", "_bannerPymInvalidar",
     "apiAccesoObtenerDemograficos", "exportAudit"
   ],

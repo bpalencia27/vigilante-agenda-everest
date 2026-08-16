@@ -189,6 +189,16 @@ module.exports = {
       t.igual(hoja.innerHTML, "", "closeSheet vacía la hoja");
     });
 
+    t.caso("renderResumen, renderSettings, wireClose y _casillasExamenFisico: invocaciones directas", () => {
+      cv.api.renderResumen();
+      t.cierto(hoja.innerHTML.includes("Resumen del turno"));
+      cv.api.wireClose();
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes("Ajustes"));
+      const cas = cv.api._casillasExamenFisico();
+      t.cierto(Array.isArray(cas));
+    });
+
     t.caso("toggleSheet: repetir el mismo tipo funciona como conmutador (cierra)", () => {
       cv.api.toggleSheet("resumen");
       t.igual(cv.api.__state.sheet, "resumen");

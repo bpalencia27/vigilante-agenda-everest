@@ -908,7 +908,11 @@
       // Athenea, y solo entonces fijar la nueva por GM_setValue.
       let athUser = "", athPass = "";
       try {
-        if (typeof GM_getValue !== "undefined") {
+        const c = (typeof atheneaCredsGet === "function") ? atheneaCredsGet() : null;
+        if (c && c.u && c.p) {
+          athUser = c.u;
+          athPass = c.p;
+        } else if (typeof GM_getValue !== "undefined") {
           athUser = GM_getValue("vgl_ath_user", "") || "";
           athPass = GM_getValue("vgl_ath_pass", "") || "";
         }
@@ -3541,7 +3545,7 @@
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
                     + _textoImplausibles(r.implausibles)
-                    + "\n\nRevise las fechas de toma antes de guardar la historia.");
+                    + "\n\n⚠ Conforme a la Res. 1995/1999, verifique la concordancia de unidades y resultados antes de guardar la historia clínica.");
               } else if (atheneaSesionViva === false) {
                   // v12.3.15 — La causa más común de "sin resultados" es que NO HAY SESIÓN
                   // en Athenea: su cookie es DE SESIÓN pura (muere al cerrar el navegador)
@@ -3573,7 +3577,7 @@
                                 + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
                                 + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
                                 + _textoImplausibles(r2.implausibles)
-                                + "\n\nRevise las fechas de toma antes de guardar la historia.");
+                                + "\n\n⚠ Conforme a la Res. 1995/1999, verifique la concordancia de unidades y resultados antes de guardar la historia clínica.");
                           } else {
                               alert("Sesión de Athenea iniciada, pero no se encontraron laboratorios para el paciente (cédula " + docId + ").");
                           }
@@ -3826,10 +3830,6 @@
               alert("No se encontraron casillas de Revisión por sistema / Examen físico en esta pantalla.");
               return;
           }
-          // LA CASILLA DEL MÉDICO ES SAGRADA: nunca se sobrescribe una casilla con contenido,
-          // y solo se recorre hasta el menor de los dos tamaños. A pedido del médico, este
-          // botón no pide confirmación — un solo clic — pero la regla de no-sobrescribir no
-          // se negocia.
           const porAplicar = [];
           const n = Math.min(candidatos.length, EXAMEN_FISICO_NORMALIDAD_FIJA.length);
           for (let i = 0; i < n; i++) {
@@ -3983,7 +3983,7 @@
     tema: "oscuro",           // oscuro | claro | auto (sigue a Windows)
     sonido: true,             // tonos por color
     volumen: 0.15,            // 0.02 – 0.60
-    insistir: true,           // el rojo repite el sonido hasta reconocer
+    insistir: false,          // v14.2.0 — falso por defecto: sonido de flanco único, sin repique
     popup: false,             // ventana emergente en la barra de tareas
     cartel: false,            // cartel grande dentro de Everest (apagado: solo Windows)
     parpadeo: false,          // pestaña + favicon parpadeando (apagado: solo Windows)
@@ -4151,19 +4151,6 @@
     }
   }
 
-  function invalidarApiSiCambioMedico(nuevoMedicoId) {
-    if (!nuevoMedicoId) return;
-    const previo = localStorage.getItem("vgl_api_medico");
-    if (previo && String(previo) !== String(nuevoMedicoId)) {
-      localStorage.removeItem("vgl_api_url");
-      if (state.apiCitas) state.apiCitas = null;
-      state.apiEn = 0;
-      state.lastSnapshot = null;
-      state.lastSignature = "";
-    }
-    localStorage.setItem("vgl_api_medico", String(nuevoMedicoId));
-  }
-
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
   // Migración desde v4.x: la ventana emergente se guardaba en una clave aparte.
   try { const viejo = localStorage.getItem("vgl_popup"); if (viejo !== null && !("popup" in (readJSON(SETTINGS_KEY, {}) || {}))) S.popup = viejo === "1"; } catch (e) {}
@@ -4173,6 +4160,12 @@
     if (localStorage.getItem("vgl_v73") !== "1") {
       localStorage.setItem("vgl_v73", "1");
       S.cartel = false; S.parpadeo = false; S.popup = false;
+      writeJSON(SETTINGS_KEY, S);
+    }
+    // Migración v14.2 MODO ERGONÓMICO LIMPIO: apaga por defecto popups, carteles, parpadeos y repique continuo
+    if (localStorage.getItem("vgl_v142_notif") !== "1") {
+      localStorage.setItem("vgl_v142_notif", "1");
+      S.cartel = false; S.parpadeo = false; S.popup = false; S.insistir = false;
       writeJSON(SETTINGS_KEY, S);
     }
   } catch (e) {}
@@ -5020,65 +5013,76 @@
     return { headers, map: indexer.map, todos: indexer.todos, abandono: indexer.abandono, sheetName: elegida.h.name, rowCount: nRow, sheets: hojas.map((x) => x.name) };
   }
 
-  // Wrapper Web Worker para Excel Parsing (CYPHER)
+  // Wrapper Web Worker para Excel Parsing (CYPHER) con fallback en hilo principal
   async function readPymWorkbookStream(arrayBuffer) {
+    if (typeof Worker === "undefined") {
+      return _readPymWorkbookStreamCore(arrayBuffer);
+    }
     return new Promise((resolve, reject) => {
-      const code = `
-        const XLSX_LIMITS = ${JSON.stringify(XLSX_LIMITS)};
-        const DOC_EXACT = ${JSON.stringify(DOC_EXACT)};
-        const FRIENDLY = ${JSON.stringify(FRIENDLY)};
-        const CONFIG = { EXCLUDE_PYM: ${JSON.stringify(CONFIG.EXCLUDE_PYM)} };
+      let worker;
+      let workerUrl;
+      try {
+        const code = `
+          const XLSX_LIMITS = ${JSON.stringify(XLSX_LIMITS)};
+          const DOC_EXACT = ${JSON.stringify(DOC_EXACT)};
+          const FRIENDLY = ${JSON.stringify(FRIENDLY)};
+          const CONFIG = { EXCLUDE_PYM: ${JSON.stringify(CONFIG.EXCLUDE_PYM)} };
 
-        function progreso(msg) { self.postMessage({ type: 'progress', msg }); }
+          function progreso(msg) { self.postMessage({ type: 'progress', msg }); }
 
-        function makeYielder(budgetMs) {
-          let last = performance.now();
-          return async function () {
-            if (performance.now() - last < (budgetMs || 50)) return false;
-            await new Promise(r => setTimeout(r, 0));
-            last = performance.now();
-            return true;
-          };
-        }
-
-        ${normalizeKey.toString()}
-        ${isPending.toString()}
-        ${esSi.toString()}
-        ${stripAccents.toString()}
-        ${friendly.toString()}
-        ${activityLabel.toString()}
-        ${isExcludedActivity.toString()}
-        ${detalleTipoCervix.toString()}
-        ${findDocIdx.toString()}
-        ${makeIndexer.toString()}
-
-        ${inflateRaw.toString()}
-        ${colToIdx.toString()}
-        ${unescXml.toString()}
-        ${zipEntryChunks.toString()}
-        ${parseSharedStringsStream.toString()}
-        ${parseRowBody.toString()}
-        ${scanSheetRows.toString()}
-        ${zipIndex.toString()}
-        ${zipRead.toString()}
-        ${sheetOrder.toString()}
-        ${scoreSheet.toString()}
-
-        ${_readPymWorkbookStreamCore.toString()}
-
-        self.onmessage = async (e) => {
-          try {
-            const result = await _readPymWorkbookStreamCore(e.data);
-            self.postMessage({ type: 'done', result });
-          } catch(err) {
-            self.postMessage({ type: 'error', error: err.message, stack: err.stack });
+          function makeYielder(budgetMs) {
+            let last = performance.now();
+            return async function () {
+              if (performance.now() - last < (budgetMs || 50)) return false;
+              await new Promise(r => setTimeout(r, 0));
+              last = performance.now();
+              return true;
+            };
           }
-        };
-      `;
 
-      const blob = new Blob([code], { type: 'application/javascript' });
-      const workerUrl = URL.createObjectURL(blob);
-      const worker = new Worker(workerUrl);
+          ${normalizeKey.toString()}
+          ${isPending.toString()}
+          ${esSi.toString()}
+          ${stripAccents.toString()}
+          ${friendly.toString()}
+          ${activityLabel.toString()}
+          ${isExcludedActivity.toString()}
+          ${detalleTipoCervix.toString()}
+          ${findDocIdx.toString()}
+          ${makeIndexer.toString()}
+
+          ${inflateRaw.toString()}
+          ${colToIdx.toString()}
+          ${unescXml.toString()}
+          ${zipEntryChunks.toString()}
+          ${parseSharedStringsStream.toString()}
+          ${parseRowBody.toString()}
+          ${scanSheetRows.toString()}
+          ${zipIndex.toString()}
+          ${zipRead.toString()}
+          ${sheetOrder.toString()}
+          ${scoreSheet.toString()}
+
+          ${_readPymWorkbookStreamCore.toString()}
+
+          self.onmessage = async (e) => {
+            try {
+              const result = await _readPymWorkbookStreamCore(e.data);
+              self.postMessage({ type: 'done', result });
+            } catch(err) {
+              self.postMessage({ type: 'error', error: err.message, stack: err.stack });
+            }
+          };
+        `;
+
+        const blob = new Blob([code], { type: 'application/javascript' });
+        workerUrl = URL.createObjectURL(blob);
+        worker = new Worker(workerUrl);
+      } catch (eInit) {
+        if (workerUrl) try { URL.revokeObjectURL(workerUrl); } catch (e) {}
+        console.warn("[Vigilante] Web Worker no disponible (CSP o entorno), ejecutando en hilo principal:", eInit);
+        return _readPymWorkbookStreamCore(arrayBuffer).then(resolve).catch(reject);
+      }
 
       // [BLINDADO v8.2.0 MEM-01] Declarar watchdog ANTES de los handlers para evitar TDZ con const.
       // Se asigna el setTimeout DESPUÉS de definir los handlers pero ANTES de postMessage.
@@ -5319,6 +5323,11 @@
           if (!t || Date.now() - t > 86400000) viejas.push(k);
           continue;
         }
+        if (k.indexOf("vgl_quarantine_") === 0 || k.indexOf("vgl_future_backup_") === 0) {
+          const t = +(k.split("_").pop() || 0);
+          if (!t || Date.now() - t > 172800000) viejas.push(k); // > 48 horas
+          continue;
+        }
         if (k.indexOf("vgl_ev_") !== 0) continue;
         const f = new Date(k.slice(7) + "T00:00:00");
         if (!isFinite(f) || f < lim) viejas.push(k);
@@ -5498,6 +5507,7 @@
   function _sanearMensajeError(msg) {
     return String(msg == null ? "" : msg)
       .replace(/https?:\/\/[^\s)]+/g, "<url>")
+      .replace(/\b\d{1,3}(?:\s+\d{3}){2,3}\b/g, "")
       .replace(/\d{6,}/g, "")
       .replace(/["'`]/g, " ")
       .replace(/\s+/g, " ")
@@ -6419,6 +6429,10 @@
     state.historical.clear(); state.notified.clear();
     try { localStorage.removeItem(SIEMBRA_KEY); } catch (e) {}   // v14.1.5 — día nuevo, siembra nueva
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
+    try { if (typeof _pacienteIdCache !== "undefined" && _pacienteIdCache && typeof _pacienteIdCache.clear === "function") _pacienteIdCache.clear(); } catch (e) {}
+    try { if (typeof _avisoCasillaYaEscrita !== "undefined" && _avisoCasillaYaEscrita && typeof _avisoCasillaYaEscrita.clear === "function") _avisoCasillaYaEscrita.clear(); } catch (e) {}
+    try { if (typeof _diagUroNombresVistos !== "undefined" && _diagUroNombresVistos && typeof _diagUroNombresVistos.clear === "function") _diagUroNombresVistos.clear(); } catch (e) {}
+    try { if (typeof _mtrMedsCache !== "undefined" && _mtrMedsCache) _mtrMedsCache = { pacienteId: null, lista: null, ts: 0 }; } catch (e) {}
     state.summarized = false; state.lastSignature = ""; statsSig = ""; frCache.dia = "";
     try { evFlush(); } catch (e) {}
     setSummary("Nuevo día: se reinició el seguimiento.");
@@ -6623,7 +6637,6 @@
   //     cuando el navegador está a la vista.
   // [COPY-UX] Cartel modal de confirmación fuera de secuencia
   function bigAlert(color, title, body) {
-    if (!S.cartel) return;
     try {
       let ov = document.getElementById("vgl-modal");
       if (ov) ov.remove();
@@ -6747,7 +6760,7 @@
           <div class="vgl-labsv-ic">🧪</div>
           <div class="vgl-labsv-t">Laboratorios RCV sin resultado vigente</div>
           <div class="vgl-labsv-n">${escapeHtml(nombre || "Paciente")}</div>
-          <div class="vgl-labsv-lead">Este paciente no tiene resultado en los <b>últimos 180 días</b> para:</div>
+          <div class="vgl-labsv-lead">Este paciente no tiene resultado vigente para:</div>
           <div class="vgl-labsv-list">${chips}</div>
           <div class="vgl-labsv-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-labsv-ok">Entendido</button>
@@ -6983,10 +6996,10 @@
     startFlash(p.flashText, p.color);
     return true;
   }
-  // El cartel dentro de la página. Este sí es de la vista, y es lo único que se encola.
+  // El cartel dentro de la página. Solo se dispara si el usuario activó la opción correspondiente.
   function _dispararAvisoCartel(p) {
-    if (p.color === "ROJO") bigAlert("ROJO", p.title, p.body);
-    popupAlert(p.color, p.title, p.body);
+    if (S.cartel && p.color === "ROJO") bigAlert("ROJO", p.title, p.body);
+    if (S.popup) popupAlert(p.color, p.title, p.body);
   }
   function _dispararAvisoReal(p) {
     if (!_dispararAvisoAudible(p)) return;   // otra pestaña se adelantó: tampoco el cartel
@@ -7164,14 +7177,15 @@
   // que nadie tenga que reinstalar ni tocar Ajustes.
   function invalidarApiSiCambioMedico(nuevoId) {
     if (!(nuevoId > 0)) return;
-    if (API.medicoId > 0 && API.medicoId !== nuevoId) {
-      purgarApiUrl("pertenecía al médico id " + API.medicoId + ", ahora en sesión id " + nuevoId);
-      state.apiCitas = null; state.apiEn = 0;
+    const previo = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
+    const medIdActual = API.medicoId || previo;
+    if (medIdActual > 0 && medIdActual !== nuevoId) {
+      purgarApiUrl("pertenecía al médico id " + medIdActual + ", ahora en sesión id " + nuevoId);
+      if (state.apiCitas) state.apiCitas = null;
+      state.apiEn = 0;
+      state.lastSnapshot = null;
+      state.lastSignature = "";
     }
-    // Se etiqueta (o re-etiqueta) siempre con el médico ya resuelto: cubre tanto el
-    // caso de arriba como el de una URL aprendida ANTES de que la identidad se
-    // resolviera (apiRecordar la marcó con medicoId=0 por no saberlo aún) — de aquí
-    // en adelante ya queda protegida frente al próximo cambio de médico.
     API.medicoId = nuevoId;
     try { localStorage.setItem("vgl_api_medico", String(nuevoId)); } catch (e) {}
   }
@@ -11162,7 +11176,7 @@
         const marc = encodeURIComponent(marcacion || "Consulta");
         const obs = encodeURIComponent(observacion || "");
 
-        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null` + (programaId ? `&ProgramaId=${encodeURIComponent(programaId)}` : "") + `&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
+        const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=127.0.0.1&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null` + (programaId ? `&ProgramaId=${encodeURIComponent(programaId)}` : "") + `&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;
         console.log("[Vigilante] AsignarTurno →", { Marcacion: marcacion || "NA", Consulta: false, swIsPyM: swPyM, SwProgramaEspecial: swProgEspecial });
         const res = await pageFetchJson(path, { method: "POST", body: "{}" });
 
@@ -11593,6 +11607,12 @@
     (async () => {
       try {
         const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
+        if (!vivo()) return;
+        try {
+          if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") {
+            await mtrRefrescarMedicamentos(pacienteIdLabs);
+          }
+        } catch (eMeds) { console.warn("[Vigilante] no se pudo refrescar medicamentos:", eMeds); }
         if (!vivo()) return;
         const sec = modal.querySelector("#vgl-labs-renal-sec");
         if (sec) {
@@ -12682,7 +12702,7 @@
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-agm-dinfo";
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
-          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${escapeHtml(fechaElegida.fmt)}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
         }
 
@@ -13404,7 +13424,6 @@
     cancelBtn = modal.querySelector("#vgl-ord-cancel");
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
-    _activarAccesibilidadModal(modal, closeMod);
 
     // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
     // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
@@ -13540,6 +13559,7 @@
 
     chks.forEach((c) => c.addEventListener("change", updateCount));
     updateCount();
+    _activarAccesibilidadModal(modal, closeMod);
 
     confirmBtn.addEventListener("click", async () => {
       const selectedBoxes = Array.from(chks).filter((c) => c.checked);
@@ -14561,6 +14581,7 @@
   }
   function tick() {
     try {
+      if (state.killed) return;
       const leader = heartbeat();
       diaNuevo();                                    // reinicio limpio si el turno cruzó la medianoche
       // v7.8.1: fuera de agenda del día / historia clínica, el panel no se repinta —
@@ -14844,8 +14865,6 @@
       if (!_racGuardia.activa) return;
       const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
       if (docId !== _racGuardia.docId) { _racGuardia.activa = false; return; }
-      // El reloj se mira ANTES de tocar el DOM: pasada la ventana, la guarda no tiene
-      // nada que hacer aquí aunque la casilla esté vacía.
       if ((Date.now() - (_racGuardia.ts || 0)) > RAC_GUARDIA_VENTANA_MS) {
           _racGuardia.activa = false;
           return;
@@ -14855,8 +14874,6 @@
       const val = String(el.value == null ? "" : el.value).trim();
       if (val === "") {
           if ((_racGuardia.restauraciones || 0) >= RAC_GUARDIA_MAX_RESTAURACIONES) {
-              // Ya se restauró el cupo entero y la casilla volvió a quedar vacía: eso ya
-              // no parece un re-render, parece una persona borrando. Se cede.
               _racGuardia.activa = false;
               console.warn("[Vigilante] RAC: la casilla se vació de nuevo tras " + RAC_GUARDIA_MAX_RESTAURACIONES + " restauraciones. Se deja como el médico la dejó y no se vuelve a tocar.");
               uxTrack("rac.guardia.cede");
@@ -15078,6 +15095,15 @@
               state.disabledFeatures = new Set(data.killSwitch.disabledFeatures);
             } else if (data.disabledFeatures && Array.isArray(data.disabledFeatures)) {
               state.disabledFeatures = new Set(data.disabledFeatures);
+            }
+
+            // 2b. Evaluación de integridad criptográfica SHA-256 si el servidor la exige
+            if (data.expectedSha256 && typeof verificarIntegridadArranque === "function") {
+              verificarIntegridadArranque().then((integ) => {
+                if (integ && integ.status === "ok" && integ.sha256 && integ.sha256 !== data.expectedSha256) {
+                  emergencyTeardown("Fallo de integridad criptográfica en userscript (SHA-256 mismatch)");
+                }
+              }).catch(() => {});
             }
 
             // 3. Evaluación de versión mínima requerida (con soporte canario)

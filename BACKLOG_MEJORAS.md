@@ -30,6 +30,27 @@ Este documento contiene las propuestas priorizadas para nuevas funcionalidades d
 
 ---
 
+## 4. Hallazgos Técnicos de Auditoría de Sombras (Triaje y Estado)
+
+### 4.1 Aserción Directa de `todayTokens` en `suite_03_excel_pym.js` [RESUELTO]
+- **Problema:** `todayTokens` estaba en `cubre` de `suite_03` pero no tenía aserción directa sobre los tokens retornados.
+- **Resolución:** Se agregó prueba directa en `suite_03_excel_pym.js` verificando los formatos numéricos y mes en letras.
+
+### 4.2 Blindaje de Guarda en `suite_41_motor_vista.js` (Línea 122) [RESUELTO]
+- **Problema:** `if (primerAlto >= 0) t.cierto(primerCrit < primerAlto)` saltaba la aserción de orden si no había avisos HIGH.
+- **Resolución:** Se endureció la prueba exigiendo explícitamente `t.cierto(primerAlto >= 0)` antes de comparar posiciones relativas.
+
+### 4.3 Poda de Declaraciones Redundantes en Arrays `cubre` [RESUELTO]
+- **Problema:** Existían 21 declaraciones en `cubre` nunca invocadas directamente vía `api.*` (huecos informativos en el runner).
+- **Resolución:** Se agregaron pruebas directas para `pageFetchJson` (suite 05), `escapeHtml`/`fraudesHoy`/`renderStats` (suite 06), `_valorCrudoLab` (suite 08), `_casillasExamenFisico`/`wireClose`/`renderResumen`/`renderSettings` (suite 15) y se podaron redundancias en suites 32, 33 y 34. El runner ahora reporta **0 funciones huérfanas en cubre**.
+
+### 4.4 Homologación de Festivos Oficiales Vigilante vs Copiloto [DOCUMENTADO / PENDIENTE DE FUENTE]
+- **Problema:** El Copiloto incluye `2026-07-13` y `2027-07-12` como festivos; el Vigilante no los incluye.
+- **Evidencia:** Suite 43 (divergencia declarada y vigilada). La ley Emiliani (Ley 51 de 1983) no traslada festivos a esas dos fechas.
+- **Triaje:** Mantener divergencia declarada en Suite 43 hasta que el Copiloto ajuste su tabla de festivos en Python.
+
+---
+
 ## 🚫 Mejoras Descartadas (Ideas plausibles pero sin evidencia o inaceptables)
 
 ### ❌ Asignación automática de citas (Auto-agendamiento por perfil)
