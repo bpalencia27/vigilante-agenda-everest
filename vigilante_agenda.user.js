@@ -11587,7 +11587,7 @@
       // esto NO reemplaza la fecha/hora ya extraídas — es solo un atajo para que el
       // médico vea el documento oficial sin navegar todo el portal a mano.
       const btnInforme = (lab.__vglHash && lab.__vglToken)
-        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea" aria-label="Abrir el informe (PDF) real de Athenea">📄</button>`
         : "";
 
       // v12.5.16 — Bloque agrupado: cada componente se escapa POR SEPARADO y se une con
