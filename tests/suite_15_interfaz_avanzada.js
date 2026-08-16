@@ -2741,7 +2741,7 @@ module.exports = {
       t.falso(c.api.avisoYaVisto(uid), "con el banner encendido, el aviso modal NO corre: si corriera, el médico vería la franja Y el modal a la vez");
     });
 
-    await t.casoAsync("tick (banner APAGADO por el interruptor): quita el banner y DEVUELVE el aviso modal — nunca se queda sin ninguno", async () => {
+    await t.casoAsync("tick (banner APAGADO, v15): quita el banner y NO cae al aviso modal — la molestia no se cambia por otra peor", async () => {
       const c = cargar({ silencioso: true, fetch: planBanner([]) });
       const uid = mockTickPymPendiente(c, "100000011");
       // Primero con el banner encendido, para que exista de verdad en el DOM.
@@ -2757,9 +2757,27 @@ module.exports = {
       c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : (id === "anamesis" ? { id: "anamesis" } : null));
 
       c.api.__S.bannerPym = false;
+      c.api.__S.avisoPymModal = false;   // el valor de fábrica en v15
       c.api.tick();
       t.cierto(removido, "al apagar el interruptor, el banner se quita en el acto");
-      t.cierto(c.api.avisoYaVisto(uid), "y el aviso modal de siempre VUELVE en el mismo tick — el médico no se queda sin alerta de PyM");
+      t.falso(c.api.avisoYaVisto(uid),
+        "y NO sale el aviso modal: cambiar la franja fija por una ventana que bloquea " +
+        "hasta reconocerla sería cambiar una molestia por otra peor. El canal pasa a ser " +
+        "el recuadro del modal de laboratorios más el chip del dock.");
+    });
+
+    await t.casoAsync("tick (banner apagado PERO el médico pidió el aviso modal): entonces sí sale", async () => {
+      // El aviso de v14 no se borra: se apaga de fábrica y queda a un interruptor
+      // de distancia para quien lo prefiera. Sin esta prueba, `avisoPymModal`
+      // sería una opción que no hace nada.
+      const c = cargar({ silencioso: true, fetch: planBanner([]) });
+      const uid = mockTickPymPendiente(c, "100000014");
+      c.api.__S.bannerPym = false;
+      c.api.__S.recordatorioPym = true;
+      c.api.__S.avisoPymModal = true;
+      await c.api._refrescarBannerPym("100000014");
+      c.api.tick();
+      t.cierto(c.api.avisoYaVisto(uid), "con el interruptor encendido, el aviso modal de v14 vuelve tal cual");
     });
 
     await t.casoAsync("tick (el banner LANZA): se atrapa y cae al aviso modal en el MISMO tick — la alerta clínica no se pierde en silencio", async () => {
@@ -2775,9 +2793,24 @@ module.exports = {
       t.cierto(c.api.avisoYaVisto(uid), "con el banner roto, el aviso modal cubre el hueco en el mismo tick");
     });
 
-    t.caso("S.bannerPym viene ENCENDIDO de fábrica, y solo un false explícito lo apaga (undefined = encendido)", () => {
+    t.caso("v15: el banner viene APAGADO de fábrica, y el aviso modal también", () => {
       const c = cargar({ silencioso: true });
-      t.igual(c.api.__S.bannerPym, true, "de fábrica el banner está encendido: el rediseño es el comportamiento por defecto");
+      t.igual(c.api.__S.bannerPym, false, "de fábrica ya no hay franja fija arriba de la historia");
+      t.igual(c.api.__S.avisoPymModal, false, "ni ventana que bloquee: el canal es el recuadro del modal");
+      t.igual(c.api.__S.recordatorioPym, true,
+        "el recordatorio en sí sigue encendido — lo que cambia es POR DÓNDE sale, no si sale");
+    });
+
+    t.caso("la migración de v15 apaga el banner en los equipos que YA lo tenían guardado en true", () => {
+      // Sin esta migración el cambio no llegaría a ningún consultorio:
+      // writeJSON guarda el objeto ENTERO de ajustes, así que los veinte equipos
+      // tienen `bannerPym: true` en disco y ese valor le gana al de fábrica.
+      const c = cargar({
+        silencioso: true,
+        localStorage: { vgl_cfg: JSON.stringify({ bannerPym: true, avisoPymModal: true }) },
+      });
+      t.igual(c.api.__S.bannerPym, false, "la migración lo apagó pese al valor guardado");
+      t.igual(c.env.win.localStorage.getItem("vgl_v15_banner"), "1", "y dejó su marca para no repetirse");
     });
 
     // La guarda de tick() es `S.bannerPym !== false`, no `!S.bannerPym`, y la diferencia
@@ -2785,13 +2818,16 @@ module.exports = {
     // esta clave, así que S.bannerPym llega `undefined`. Con `!S.bannerPym` esos médicos
     // se quedarían en el aviso modal y el rediseño no se estrenaría nunca; con
     // `!== false` estrenan el banner, y solo un apagado EXPLÍCITO desde Ajustes lo revierte.
-    await t.casoAsync("tick: ajustes viejos SIN la clave bannerPym (undefined) estrenan el banner, no se quedan en el aviso modal", async () => {
+    await t.casoAsync("tick: sin la clave bannerPym (undefined) el banner se pinta — la guarda `!== false` no se relaja", async () => {
       const c = cargar({ silencioso: true, fetch: planBanner([]) });
       const uid = mockTickPymPendiente(c, "100000013");
-      delete c.api.__S.bannerPym;   // exactamente lo que trae una instalación previa a v14
+      delete c.api.__S.bannerPym;   // ajustes sin la clave
       await c.api._refrescarBannerPym("100000013");
       c.api.tick();
-      t.cierto(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "sin la clave guardada, el banner igual se pinta");
+      t.cierto(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"),
+        "la guarda sigue siendo `!== false`: sin clave el banner se pinta. En v15 esto ya no " +
+        "le pasa a nadie porque la migración escribe el false explícito, pero la guarda no " +
+        "se relaja — que undefined encienda es la dirección segura si la migración fallara.");
       t.falso(c.api.avisoYaVisto(uid), "y no cae al aviso modal: undefined no es un apagado explícito");
     });
 

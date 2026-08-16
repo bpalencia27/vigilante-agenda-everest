@@ -3996,10 +3996,20 @@
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
     recordatorioPym: true,    // recordatorio (calmado) de PyM pendiente al abrir la historia
-    bannerPym: true,          // v14.0.0 (T7) — banner superior de PyM en vez del aviso modal.
-                              // INTERRUPTOR DE EMERGENCIA: en false se quita el banner y vuelve
-                              // el aviso modal de siempre (ver la red de seguridad en tick()).
-                              // Nunca deja al médico sin ninguna de las dos alertas.
+    avisoPymModal: false,     // v15.0.0 — el aviso MODAL de PyM (el que bloquea hasta
+                              // reconocerlo). Apagado: su trabajo lo hace ahora el recuadro
+                              // dentro del modal de laboratorios más el chip del dock.
+    bannerPym: false,         // v15.0.0 — APAGADO POR DEFECTO. Encargo del médico del
+                              // 16-08-2026: "el script debe ser amigable y no molesto".
+                              // El banner era una franja fija arriba de la Historia Clínica
+                              // que empujaba el contenido de Everest durante TODA la consulta
+                              // y no se podía cerrar mientras algo siguiera pendiente.
+                              // LO REEMPLAZA: el recuadro clínico completo dentro del modal
+                              // (clasificación, qué falta, fecha de toma y de control), que
+                              // aparece en el momento en que sirve; y el chip discreto del
+                              // dock, que mantiene el recuento visible para que la alerta no
+                              // pueda desaparecer en silencio (D4).
+                              // En true vuelve el banner de v14 tal cual, sin tocar nada más.
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
     labsVencidos: true,       // aviso ROJO de laboratorios RCV sin resultado en los últimos 180 días (v12.5.7)
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
@@ -4166,6 +4176,16 @@
     if (localStorage.getItem("vgl_v142_notif") !== "1") {
       localStorage.setItem("vgl_v142_notif", "1");
       S.cartel = false; S.parpadeo = false; S.popup = false; S.insistir = false;
+      writeJSON(SETTINGS_KEY, S);
+    }
+    // Migración v15.0 RETIRO DEL BANNER (una sola vez). Sin esto el cambio no llega
+    // a ningún equipo: `writeJSON(SETTINGS_KEY, S)` guarda el objeto ENTERO, así que
+    // los veinte consultorios ya tienen `bannerPym: true` en disco y ese valor
+    // guardado le gana al nuevo valor de fábrica. Es el mismo patrón que la
+    // migración de v7.3, y por la misma razón.
+    if (localStorage.getItem("vgl_v15_banner") !== "1") {
+      localStorage.setItem("vgl_v15_banner", "1");
+      S.bannerPym = false; S.avisoPymModal = false;
       writeJSON(SETTINGS_KEY, S);
     }
   } catch (e) {}
@@ -9184,6 +9204,7 @@
       #vgl-labs-modal .vgl-labs-renal-aviso{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
       #vgl-labs-modal .vgl-labs-renal-vacio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
       ${typeof MTR_CSS !== "undefined" ? MTR_CSS : ""}
+      ${typeof MTR_RCV_CSS !== "undefined" ? MTR_RCV_CSS : ""}
       #vgl-labs-modal .vgl-labs-src{
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:10.5px;font-weight:800;letter-spacing:.4px;
@@ -11627,7 +11648,15 @@
               tfgCockcroftGault: (r && r.tfg) || null,
             });
           } catch (e) { console.warn("[Vigilante] bloque farmacologico no disponible:", e); }
-          sec.innerHTML = _renderEstadioRenalHtml(r) + extra;
+          // v15.0.0 — RECUADRO CLÍNICO (reemplaza al banner superior de PyM).
+          // Va DEBAJO del renal y del farmacológico, y NO añade ni una consulta
+          // de red: reutiliza los laboratorios que este modal ya trajo y las
+          // entradas (edad, peso, sexo, creatinina) que el cálculo renal ya
+          // resolvió. Si algo falla, el recuadro no aparece y el modal sigue.
+          let clinico = "";
+          try { clinico = mtrRenderResumenClinicoHtml(mtrResumenDesdeModalLabs(r, todosLabs, apt)); }
+          catch (e) { console.warn("[Vigilante] recuadro clínico no disponible:", e); }
+          sec.innerHTML = _renderEstadioRenalHtml(r) + extra + clinico;
         }
       } catch (e) { console.warn("[Vigilante] recuadro renal no disponible:", e); }
     })();
@@ -14653,9 +14682,16 @@
         }
         if (!bannerPintado) checkRecordatorioPym();
       } else {
+        // v15.0.0 — Con el banner apagado NO se cae al aviso modal de siempre:
+        // eso sería cambiar una molestia (franja fija) por otra peor (una
+        // ventana que bloquea hasta que la reconoces, para algo que D5 clasifica
+        // como nivel 2 · persistente). El canal pasa a ser el chip del dock, que
+        // es nivel 2 de verdad: visible, permanente y sin interrumpir.
+        // D4 se sigue cumpliendo — la alerta no desaparece, cambia de sitio —
+        // y `S.recordatorioPym` sigue mandando para quien quiera el aviso viejo.
         const pbApagado = document.getElementById("vgl-pym-banner");
         if (pbApagado) pbApagado.remove();
-        checkRecordatorioPym();
+        if (S.recordatorioPym === true && S.avisoPymModal === true) checkRecordatorioPym();
       }
 
       // v12.5.14 — Cualquier pestaña (líder o no) que esté en el módulo clínico HCHealth
@@ -17410,7 +17446,24 @@
 
     const estadioAdmin = crcl === null ? null : mtrClasificarEstadioTfg(crcl);
     const estadioClinico = egfr === null ? null : mtrClasificarEstadioTfg(egfr);
-    const discordancia = (crcl !== null && egfr !== null) ? mtrEvaluarDiscrepanciaEstadios(crcl, egfr) : null;
+
+    // `mtrEvaluarDiscrepanciaEstadios` (portada del Copiloto) solo devuelve algo
+    // cuando la diferencia supera 2 estadios, y con claves en snake_case. Aquí se
+    // normaliza a una forma estable y se expone SIEMPRE la diferencia, aunque sea
+    // de un estadio: al médico le sirve verla antes de que llegue a ser alerta.
+    const alertaDisc = (crcl !== null && egfr !== null) ? mtrEvaluarDiscrepanciaEstadios(crcl, egfr) : null;
+    let discordancia = null;
+    if (crcl !== null && egfr !== null && estadioAdmin && estadioClinico) {
+      const dif = Math.abs(mtrPosEstadio(estadioAdmin) - mtrPosEstadio(estadioClinico));
+      discordancia = {
+        diferenciaEstadios: dif,
+        hayDiscrepancia: dif >= 1,
+        esAlerta: !!alertaDisc,
+        estadioCg: estadioAdmin,
+        estadioCkd: estadioClinico,
+        mensaje: alertaDisc ? alertaDisc.mensaje : null,
+      };
+    }
 
     const posAdmin = mtrPosEstadio(estadioAdmin);
     const posClinico = mtrPosEstadio(estadioClinico);
@@ -17986,6 +18039,261 @@
       control: control,
     };
   }
+
+
+
+  // =====================================================================
+  //  RECUADRO CLÍNICO — lo que reemplaza al banner superior de PyM
+  //  ------------------------------------------------------------------
+  //  POR QUÉ SE RETIRA EL BANNER: era nivel 2 · persistente pintado como una
+  //  franja fija arriba de la Historia Clínica, que empujaba el contenido de
+  //  Everest en TODA la consulta y no se podía cerrar mientras algo siguiera
+  //  pendiente. Cumplía D4 (no desaparecer en silencio) a costa de estar
+  //  siempre delante, dijera algo nuevo o no.
+  //
+  //  QUÉ LO REEMPLAZA, y por qué esto SÍ cumple D4:
+  //   · El contenido completo —clasificación, qué falta, cuándo se toma y
+  //     cuándo se controla— vive DENTRO del modal de órdenes, que es donde el
+  //     médico ya está cuando va a ordenar. Aparece en el momento en que sirve.
+  //   · Y para que la alerta no pueda desaparecer sin que nadie se entere, el
+  //     recuento sigue existiendo como un chip discreto en el dock que ya
+  //     estaba ahí. Un número, no una franja.
+  //
+  //  Esta función es PURA: recibe el resumen ya calculado y devuelve HTML.
+  //  No toca el DOM, no pide red y no decide nada clínico.
+  // =====================================================================
+
+  const MTR_ICONO_CATEGORIA = {
+    "muy alto": "🔴", "alto": "🟠", "moderado": "🟡", "bajo": "🟢",
+  };
+
+  function mtrClaseCategoria(cat) {
+    if (cat === "muy alto") return "vgl-rcv-crit";
+    if (cat === "alto") return "vgl-rcv-alto";
+    if (cat === "moderado") return "vgl-rcv-mod";
+    if (cat === "bajo") return "vgl-rcv-bajo";
+    return "vgl-rcv-nd";
+  }
+
+  // Fecha ISO -> "sáb 15 ago". Sin locale del sistema: los nombres van en la
+  // constante, porque en un PC con locale en inglés el modal saldría en inglés.
+  const MTR_DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+  const MTR_MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  function mtrFechaLegible(iso) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return "—";
+    return MTR_DIAS_CORTOS[f.getUTCDay()] + " " + f.getUTCDate() + " " + MTR_MESES_CORTOS[f.getUTCMonth()];
+  }
+
+  // ---------- EL RESUMEN COMPLETO (orquestador) ----------
+  // Junta las tres piezas —riesgo, función renal y plan de paraclínicos— en un
+  // solo objeto. Todo entra por parámetro: es la misma función que usan las
+  // pruebas y la que usa el modal.
+  function mtrResumenClinico(ctx) {
+    const c = ctx || {};
+    const erc = mtrEvaluarErc({
+      edad: c.edad, sexo: c.sexo, pesoKg: c.pesoKg, creatinina: c.creatinina,
+      rac: c.rac, egfrPrevio: c.egfrPrevio,
+    });
+
+    const factores = Object.assign({}, c.factores || {}, {
+      edad: c.edad, sexo: c.sexo, egfrCkdepi: erc.egfr, rac: c.rac,
+      ct: c.ct, hdl: c.hdl, ldl: c.ldl,
+      paSistolica: c.paSistolica, paDiastolica: c.paDiastolica,
+    });
+    const riesgo = mtrClasificarRiesgoCv(factores);
+    const meta = riesgo.categoria ? mtrEvaluarMetaLdl(riesgo.categoria, c.ldl, c.ldlBasal, c.ldlMetaPrevia) : null;
+
+    // El programa rector lo decide la norma: ERC > DM2 > HTA.
+    const tieneErc = !!erc.estadioAdministrativo && erc.estadioAdministrativo !== "G1" && erc.estadioAdministrativo !== "G2";
+    const programa = c.programa || mtrProgramaRector(
+      tieneErc || !!factores.enfermedadRenalDocumentada,
+      erc.estadioAdministrativo, !!factores.diabetes, !!factores.hta
+    );
+
+    const plan = mtrPlanParaclinicos({
+      hoyIso: c.hoyIso, programa: programa,
+      estadioAdministrativo: erc.estadioAdministrativo,
+      esDm2: !!factores.diabetes, edad: c.edad, rac: c.rac,
+      categoriaRiesgo: riesgo.categoria,
+      funcionRenalInestable: erc.sospechaIra,
+      ultimos: c.ultimos || {},
+      grupoSabado: c.grupoSabado || null,
+      preferirTarde: !!c.preferirTarde,
+    });
+
+    return { erc: erc, riesgo: riesgo, meta: meta, programa: programa, plan: plan, factores: factores };
+  }
+
+  // ---------- EL HTML ----------
+  function mtrRenderResumenClinicoHtml(r) {
+    if (!r) return "";
+    const esc = (v) => escapeHtml(String(v == null ? "" : v));
+    const erc = r.erc || {}, riesgo = r.riesgo || {}, plan = r.plan || {};
+
+    // --- 1. Cabecera: riesgo y meta ---
+    const cat = riesgo.categoria;
+    const icono = MTR_ICONO_CATEGORIA[cat] || "⚪";
+    const metaTxt = r.meta && r.meta.metas
+      ? ("meta LDL &lt;" + esc(r.meta.metas.ldl) + " · no-HDL &lt;" + esc(r.meta.metas.cnoHdl))
+      : "sin meta: falta clasificar";
+    const criterios = (riesgo.criterios || []).slice(0, 3).map((c) => "<li>" + esc(c) + "</li>").join("");
+
+    const cabecera = `
+      <div class="vgl-rcv-cab ${mtrClaseCategoria(cat)}">
+        <div class="vgl-rcv-cat">${icono} Riesgo cardiovascular: <b>${esc(cat ? cat.toUpperCase() : "SIN CLASIFICAR")}</b>${riesgo.paso ? ` <span class="vgl-rcv-paso">(paso ${esc(riesgo.paso)})</span>` : ""}</div>
+        <div class="vgl-rcv-meta">${metaTxt}</div>
+        ${criterios ? `<ul class="vgl-rcv-crits">${criterios}</ul>` : ""}
+        ${riesgo.motivo === "tfg_requerida" ? `<div class="vgl-rcv-falta">No se puede clasificar sin la TFG. Falta: ${esc((erc.faltan || []).join(", ") || "creatinina")}.</div>` : ""}
+        ${riesgo.motivo === "ascvd_requerido" ? `<div class="vgl-rcv-falta">Los pasos 1 a 3 no clasifican. Para el paso 4 hacen falta colesterol total, HDL y presión sistólica.</div>` : ""}
+      </div>`;
+
+    // --- 2. Función renal: los dos estadios, siempre por separado ---
+    const renal = `
+      <div class="vgl-rcv-renal">
+        <div class="vgl-rcv-tfg">
+          <span title="Rige vigencias, bloqueos y agenda — es la que audita la EPS">Administrativo (Cockcroft-Gault): <b>${esc(erc.estadioAdministrativo || "no evaluable")}</b>${erc.crcl != null ? " · " + esc(erc.crcl) + " mL/min" : ""}</span>
+          <span title="Rige la clasificación renal, el ajuste de dosis y la remisión">Clínico (CKD-EPI): <b>${esc(erc.estadioClinico || "no evaluable")}</b>${erc.egfr != null ? " · " + esc(erc.egfr) + " mL/min/1.73m²" : ""}</span>
+        </div>
+        ${erc.discordancia && erc.discordancia.hayDiscrepancia ? `<div class="vgl-rcv-aviso">⚠ Las dos fórmulas difieren en ${esc(erc.discordancia.diferenciaEstadios)} estadio(s). Suele pasar con peso muy alto o muy bajo: verifique el peso antes de decidir.</div>` : ""}
+        ${erc.remitirNefrologia ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Criterio de remisión a nefrología: ${esc((erc.motivosRemision || []).join(" · "))}</div>` : ""}
+        ${erc.sospechaIra ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Caída importante de la función renal frente a la creatinina anterior: evalúe antes de pedir la rutina.</div>` : ""}
+        ${!erc.datosCompletos && (erc.faltan || []).length ? `<div class="vgl-rcv-falta">Para calcular las dos fórmulas falta: <b>${esc(erc.faltan.join(", "))}</b>.</div>` : ""}
+      </div>`;
+
+    // --- 3. Qué exámenes faltan, con el motivo de cada uno ---
+    const fila = (a, clase) => `<li class="${clase}"><b>${esc(a.nombre)}</b> <span>${esc(a.motivo)}</span></li>`;
+    const faltan = (plan.faltantes || []).map((a) => fila(a, "vgl-rcv-falta-item")).join("");
+    const vencidos = (plan.vencidos || []).map((a) => fila(a, "vgl-rcv-vencido-item")).join("");
+    const bloqueados = (plan.bloqueados || []).map((a) => fila(a, "vgl-rcv-bloq-item")).join("");
+    const nPendientes = (plan.faltantes || []).length + (plan.vencidos || []).length;
+
+    const examenes = `
+      <div class="vgl-rcv-examenes">
+        <div class="vgl-rcv-subtit">${nPendientes ? "🧪 Faltan " + esc(nPendientes) + " examen(es)" : "🧪 No falta ningún examen"}</div>
+        ${vencidos ? `<ul class="vgl-rcv-lista">${vencidos}</ul>` : ""}
+        ${faltan ? `<ul class="vgl-rcv-lista">${faltan}</ul>` : ""}
+        ${bloqueados ? `<details class="vgl-rcv-det"><summary>${esc(plan.bloqueados.length)} bloqueado(s) por la norma en este estadio</summary><ul class="vgl-rcv-lista">${bloqueados}</ul></details>` : ""}
+      </div>`;
+
+    // --- 4. Las dos fechas ---
+    const ftl = plan.ftl;
+    const control = plan.control;
+    const fechas = ftl ? `
+      <div class="vgl-rcv-fechas">
+        <div class="vgl-rcv-fecha">
+          <div class="vgl-rcv-fecha-rot">Toma de laboratorios</div>
+          <div class="vgl-rcv-fecha-val">${esc(mtrFechaLegible(ftl))}</div>
+          <div class="vgl-rcv-fecha-iso">${esc(ftl)}</div>
+        </div>
+        <div class="vgl-rcv-fecha">
+          <div class="vgl-rcv-fecha-rot">Control sugerido</div>
+          <div class="vgl-rcv-fecha-val">${control ? esc(mtrFechaLegible(control.fecha)) : "—"}</div>
+          <div class="vgl-rcv-fecha-iso">${control ? esc(control.fecha) + (control.esSabado ? " · sábado del médico" : "") : "sin día válido"}</div>
+        </div>
+      </div>
+      <div class="vgl-rcv-porque">${esc(plan.motivoFtl)}${plan.seAdelantoPorDiaNoHabil ? " · adelantada al día hábil anterior para no pasarse del vencimiento" : ""}${control && control.fueraDeVentana ? " · " + esc(control.motivo) : ""}</div>
+      ${plan.anr ? `<div class="vgl-rcv-porque">Ventana renal de ${esc(plan.anr.ventanaDias)} días activa: todo se agrupa en la fecha de la creatinina.</div>` : ""}
+      ${(plan.diferidos || []).length ? `<div class="vgl-rcv-porque">Se dejan para después (todavía tienen vigencia de sobra): ${esc(plan.diferidos.map((a) => a.nombre).join(", "))}.</div>` : ""}
+    ` : `<div class="vgl-rcv-porque">No hay ningún examen que vigilar con el programa y el estadio actuales.</div>`;
+
+    // --- 5. Lo que se ordena para la próxima consulta ---
+    const ordenar = (plan.ordenar || []).map((a) => `<li>${esc(a.nombre)}</li>`).join("");
+    const orden = ordenar ? `
+      <div class="vgl-rcv-orden">
+        <div class="vgl-rcv-subtit">📄 Para la próxima consulta hay que enviarle</div>
+        <ul class="vgl-rcv-lista vgl-rcv-lista-orden">${ordenar}</ul>
+      </div>` : "";
+
+    return `<div class="vgl-rcv-bloque" role="region" aria-label="Resumen clínico del paciente">
+      ${cabecera}${renal}${examenes}${fechas}${orden}
+      <div class="vgl-rcv-pie">Calculado con lo que hay en la historia. No se ordena ni se agenda nada solo: la decisión es suya.</div>
+    </div>`;
+  }
+
+  // Texto corto para el chip del dock: la red de seguridad de D4 reducida a un
+  // número. Si esto desaparece, la alerta clínica desapareció.
+  function mtrChipResumenTexto(r) {
+    if (!r || !r.plan) return "";
+    const n = (r.plan.faltantes || []).length + (r.plan.vencidos || []).length;
+    if (!n) return "";
+    return n === 1 ? "1 examen pendiente" : n + " exámenes pendientes";
+  }
+
+
+  // Puente entre lo que el modal de laboratorios YA tiene en la mano y lo que
+  // el motor necesita. No pide nada por red: `r` viene de calcularEstadioRenal
+  // (que ya pagó sus dos consultas, cacheadas) y `labs` son los resultados que
+  // el modal acaba de pintar. Si falta un dato, se pasa null y el recuadro lo
+  // declara — nunca se rellena con un valor plausible.
+  function mtrResumenDesdeModalLabs(r, labs, apt) {
+    const ent = (r && r.entradas) || {};
+    const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labs) ? labs : [], { uroanalisisPorComponentes: true });
+    const ultimos = {};
+    candidatos.forEach((c, clave) => {
+      if (!c) return;
+      ultimos[clave] = { fecha: c.resultDate || null, valor: _labNumerico(c.resultVal) };
+    });
+    const val = (clave) => (ultimos[clave] && ultimos[clave].valor != null) ? ultimos[clave].valor : null;
+
+    // Los factores de riesgo se leen del DOM SOLO si la historia del mismo
+    // paciente sigue abierta; si no, se sigue sin ellos (el clasificador los
+    // trata como "no documentado", que es lo correcto, no como "no los tiene").
+    let factores = null;
+    try { factores = mtrLeerFactoresRcvDelDom(apt && apt.doc_id); } catch (e) { factores = null; }
+
+    return mtrResumenClinico({
+      hoyIso: todayStamp(),
+      edad: ent.edad, sexo: ent.sexo, pesoKg: ent.peso, creatinina: ent.creatinina,
+      rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
+      ldl: val("COLESTEROL_LDL"),
+      paSistolica: ent.pas, paDiastolica: ent.pad,
+      factores: factores || {},
+      ultimos: ultimos,
+      grupoSabado: (mtrSabadoGrupoDeMedico(state.activeDoctor && state.activeDoctor.id) || {}).grupo || null,
+    });
+  }
+
+  const MTR_RCV_CSS = `
+        #vgl-ordenar-modal .vgl-rcv-bloque,#vgl-labs-modal .vgl-rcv-bloque{
+          background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
+          padding:10px 12px;display:flex;flex-direction:column;gap:9px;margin-bottom:12px
+        }
+        #vgl-ordenar-modal .vgl-rcv-cab,#vgl-labs-modal .vgl-rcv-cab{border-radius:var(--r-chip);padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+        #vgl-ordenar-modal .vgl-rcv-crit,#vgl-labs-modal .vgl-rcv-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
+        #vgl-ordenar-modal .vgl-rcv-alto,#vgl-labs-modal .vgl-rcv-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
+        #vgl-ordenar-modal .vgl-rcv-mod,#vgl-labs-modal .vgl-rcv-mod{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
+        #vgl-ordenar-modal .vgl-rcv-bajo,#vgl-labs-modal .vgl-rcv-bajo{background:rgba(var(--rgb-verde),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-verde),.26)}
+        #vgl-ordenar-modal .vgl-rcv-nd,#vgl-labs-modal .vgl-rcv-nd{background:var(--bg3);box-shadow:inset 0 0 0 1px var(--edge)}
+        #vgl-ordenar-modal .vgl-rcv-cat,#vgl-labs-modal .vgl-rcv-cat{font-size:var(--t-body);color:var(--fg) !important;font-weight:700}
+        #vgl-ordenar-modal .vgl-rcv-paso,#vgl-labs-modal .vgl-rcv-paso{font-weight:400;color:var(--fg2) !important;font-size:var(--t-micro)}
+        #vgl-ordenar-modal .vgl-rcv-meta,#vgl-labs-modal .vgl-rcv-meta{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-ordenar-modal .vgl-rcv-crits,#vgl-labs-modal .vgl-rcv-crits{margin:2px 0 0 16px;padding:0;font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+        #vgl-ordenar-modal .vgl-rcv-falta,#vgl-labs-modal .vgl-rcv-falta{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
+        #vgl-ordenar-modal .vgl-rcv-renal,#vgl-labs-modal .vgl-rcv-renal{display:flex;flex-direction:column;gap:5px}
+        #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-aviso,#vgl-labs-modal .vgl-rcv-aviso{font-size:var(--t-micro);color:var(--c-azul) !important;line-height:1.45}
+        #vgl-ordenar-modal .vgl-rcv-aviso-alto,#vgl-labs-modal .vgl-rcv-aviso-alto{color:var(--c-ambar) !important;font-weight:700}
+        #vgl-ordenar-modal .vgl-rcv-subtit,#vgl-labs-modal .vgl-rcv-subtit{font-size:var(--t-micro);color:var(--fg) !important;font-weight:700}
+        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista{margin:4px 0 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
+        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.4}
+        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-vencido-item,#vgl-labs-modal .vgl-rcv-vencido-item b{color:var(--c-ambar) !important}
+        #vgl-ordenar-modal .vgl-rcv-bloq-item,#vgl-labs-modal .vgl-rcv-bloq-item{opacity:.75}
+        #vgl-ordenar-modal .vgl-rcv-lista-orden,#vgl-labs-modal .vgl-rcv-lista-orden li{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-det,#vgl-labs-modal .vgl-rcv-det summary{font-size:var(--t-micro);color:var(--fg3) !important;cursor:pointer}
+        #vgl-ordenar-modal .vgl-rcv-fechas,#vgl-labs-modal .vgl-rcv-fechas{display:flex;gap:10px;flex-wrap:wrap}
+        #vgl-ordenar-modal .vgl-rcv-fecha,#vgl-labs-modal .vgl-rcv-fecha{
+          flex:1 1 140px;background:var(--bg3);border-radius:var(--r-chip);padding:7px 9px;
+          box-shadow:inset 0 0 0 1px var(--edge)
+        }
+        #vgl-ordenar-modal .vgl-rcv-fecha-rot,#vgl-labs-modal .vgl-rcv-fecha-rot{font-size:var(--t-micro);color:var(--fg3) !important}
+        #vgl-ordenar-modal .vgl-rcv-fecha-val,#vgl-labs-modal .vgl-rcv-fecha-val{font-size:var(--t-body);color:var(--fg) !important;font-weight:800}
+        #vgl-ordenar-modal .vgl-rcv-fecha-iso,#vgl-labs-modal .vgl-rcv-fecha-iso{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-ordenar-modal .vgl-rcv-porque,#vgl-labs-modal .vgl-rcv-porque{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.45}
+        #vgl-ordenar-modal .vgl-rcv-pie,#vgl-labs-modal .vgl-rcv-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
+  `;
 
 
   // CSS del bloque. Mismas convenciones que el recuadro renal: todo cuelga de
