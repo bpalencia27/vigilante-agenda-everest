@@ -16864,6 +16864,1130 @@
       </div>`;
   }
 
+
+  // =====================================================================
+  //  MOTOR CLÍNICO UNIFICADO — el Copiloto RCV dentro del Vigilante
+  //  ------------------------------------------------------------------
+  //  Portado desde `motor_riesgo_cv.py` del repositorio everest-rcv-copiloto
+  //  (Consenso Colombia 2024 de dislipidemia + KDIGO). Mismo criterio que el
+  //  resto del bloque `mtr*`: funciones PURAS, sin DOM, sin red y sin reloj —
+  //  "hoy" siempre entra como parámetro para que la prueba lo pueda fijar.
+  //
+  //  POR QUÉ AQUÍ Y NO EN PYTHON: el Copiloto no está delante del médico en la
+  //  consulta; el userscript sí. Mientras no exista el puente, la clasificación
+  //  tiene que poder calcularse dentro de Everest o no se calcula nunca.
+  //
+  //  LO QUE NO HACE: no escribe nada en la historia, no ordena nada solo y no
+  //  sobrescribe una categoría que el médico ya haya puesto. Solo propone.
+  // =====================================================================
+
+  // Orden de severidad. Se usa para el trinquete: subir el riesgo es seguro,
+  // bajarlo automáticamente no lo es.
+  const MTR_SEVERIDAD_RIESGO = { "bajo": 0, "moderado": 1, "alto": 2, "muy alto": 3 };
+
+  // Rango etario en el que las Pooled Cohort Equations están validadas
+  // (Goff et al. 2013, ACC/AHA). Fuera de él el número se sigue calculando
+  // —no se cambia ninguna conducta sin decisión clínica— pero deja de viajar
+  // en silencio: se declara como extrapolación junto al criterio.
+  const MTR_PCE_EDAD_MIN = 40.0;
+  const MTR_PCE_EDAD_MAX = 79.0;
+
+  // Metas de la norma. cnoHdl = meta de colesterol no-HDL.
+  // `reduccion` es el porcentaje mínimo de reducción desde el LDL basal, y solo
+  // se exige en ALTO y MUY ALTO (en moderado/bajo la norma no lo pide).
+  const MTR_METAS_LIPIDICAS = {
+    "muy alto": { ldl: 55, cnoHdl: 85, reduccion: 50 },
+    "alto": { ldl: 70, cnoHdl: 100, reduccion: 50 },
+    "moderado": { ldl: 100, cnoHdl: 130, reduccion: null },
+    "bajo": { ldl: 116, cnoHdl: 150, reduccion: null },
+  };
+  const MTR_META_TRIGLICERIDOS = 150;
+
+  function mtrEsSexoFemenino(sexo) {
+    const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
+    if (!s) return false;
+    return s === "F" || s === "FEMENINO" || s === "MUJER" || s.indexOf("FEM") === 0 || s.indexOf("MUJ") === 0;
+  }
+
+  function mtrEsSexoMasculino(sexo) {
+    if (mtrEsSexoFemenino(sexo)) return false;
+    const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
+    if (!s) return false;
+    return s === "M" || s === "H" || s === "MASCULINO" || s === "HOMBRE" || s.indexOf("MAS") === 0 || s.indexOf("HOM") === 0;
+  }
+
+  // ¿La edad cae fuera del rango donde las PCE están validadas?
+  function mtrAscvdFueraDeRangoEtario(edad) {
+    const e = mtrFloat(edad);
+    if (e === null) return false;
+    return !(MTR_PCE_EDAD_MIN <= e && e <= MTR_PCE_EDAD_MAX);
+  }
+
+  // % CRUDO de evento ASCVD a 10 años (Pooled Cohort Equations, fila
+  // "white/other"). Devuelve null —nunca un valor aproximado— cuando falta
+  // edad, colesterol total, HDL o presión sistólica: la ecuación no admite
+  // imputación y un número inventado aquí se convierte en una categoría de
+  // riesgo inventada, y con ella en una meta de LDL inventada.
+  //
+  // El ajuste de calibración a Colombia NO se aplica aquí: lo hace el PASO 4.
+  // Aplicarlo en los dos sitios lo aplicaría dos veces.
+  function mtrAscvdPceCrudo(edad, sexo, ct, hdl, pas, fumador, diabetico, enAntihipertensivos) {
+    const e = mtrFloat(edad), c = mtrFloat(ct), h = mtrFloat(hdl), p = mtrFloat(pas);
+    if (e === null || c === null || h === null || p === null) return null;
+    if (e <= 0 || c <= 0 || h <= 0 || p <= 0) return null;
+    const lnEdad = Math.log(e), lnCt = Math.log(c), lnHdl = Math.log(h), lnPas = Math.log(p);
+    const trPas = enAntihipertensivos ? lnPas : 0.0;
+    const unPas = enAntihipertensivos ? 0.0 : lnPas;
+    const fuma = fumador ? 1.0 : 0.0;
+    const dm = diabetico ? 1.0 : 0.0;
+    let suma, supervBase, media;
+    if (mtrEsSexoFemenino(sexo)) {
+      suma = (-29.799 * lnEdad) + (4.884 * lnEdad * lnEdad) + (13.540 * lnCt)
+        - (3.114 * lnEdad * lnCt) - (13.578 * lnHdl) + (3.149 * lnEdad * lnHdl)
+        + (2.019 * trPas) + (1.957 * unPas) + (7.574 * fuma)
+        - (1.665 * lnEdad * fuma) + (0.661 * dm);
+      supervBase = 0.9665; media = -29.18;
+    } else {
+      suma = (12.344 * lnEdad) + (11.853 * lnCt) - (2.664 * lnEdad * lnCt)
+        - (7.990 * lnHdl) + (1.769 * lnEdad * lnHdl)
+        + (1.797 * trPas) + (1.764 * unPas) + (7.837 * fuma)
+        - (1.795 * lnEdad * fuma) + (0.658 * dm);
+      supervBase = 0.9144; media = 61.18;
+    }
+    const riesgo = 1 - Math.pow(supervBase, Math.exp(suma - media));
+    if (!Number.isFinite(riesgo)) return null;
+    return riesgo * 100;
+  }
+
+  // ---------- FACTORES DE RIESGO MAYORES (los 10 del consenso) ----------
+  // Convención de datos, igual que en el Copiloto: booleano ausente = "no
+  // documentado" = false; numérico ausente = null y NO dispara su criterio.
+  // La disfunción eréctil solo cuenta en hombre.
+  function mtrContarFrMayores(f) {
+    const x = f || {};
+    const fr = [];
+    const edad = mtrFloat(x.edad);
+    if (edad !== null && edad > 65) fr.push("edad>65");
+    if (x.hta) fr.push("HTA");
+    if (x.tabaquismo) fr.push("tabaquismo");
+    if (x.prediabetesSdMetabolico) fr.push("prediabetes/Sd. metabólico");
+    if (x.sedentarismo) fr.push("sedentarismo");
+    const imc = mtrFloat(x.imc);
+    if (x.obesidad || (imc !== null && imc >= 30) || x.circunferenciaAbdElevada) fr.push("obesidad");
+    if (x.masld) fr.push("MASLD (hígado graso)");
+    if (x.apneaSueno) fr.push("apnea del sueño");
+    if (x.hiperuricemia) fr.push("hiperuricemia");
+    if (x.disfuncionErectil && mtrEsSexoMasculino(x.sexo)) fr.push("disfunción eréctil");
+    return { conteo: fr.length, lista: fr };
+  }
+
+  // ---------- POTENCIADORES (PASO 3) ----------
+  function mtrContarPotenciadores(f, conteoFr) {
+    const x = f || {};
+    const pot = [];
+    if (x.inflamacionCronica) pot.push("inflamación crónica");
+    if (x.hxfamEcvPrematura) pot.push("HxFam de ECV prematura");
+    const itb = mtrFloat(x.itb);
+    if (itb !== null && itb < 0.9) pot.push("ITB<0.9");
+    const pcr = mtrFloat(x.pcrUs);
+    if (pcr !== null && pcr >= 2) pot.push("PCRus>=2");
+    const apob = mtrFloat(x.apob);
+    if (apob !== null && apob >= 130) pot.push("ApoB>=130");
+    const rac = mtrFloat(x.rac);
+    if (rac !== null && rac > 30) pot.push("RAC>30");
+    if (x.condicionesEspecificasMujer) pot.push("condiciones específicas de la mujer");
+    const dmAnios = mtrFloat(x.dmAnios);
+    if (x.diabetes && dmAnios !== null && dmAnios < 10 && conteoFr === 0) pot.push("diabetes <10 años sin FR");
+    if (x.pobrezaMultidimensional) pot.push("pobreza multidimensional");
+    return { conteo: pot.length, lista: pot };
+  }
+
+  // ---------- PASO 1: MUY ALTO ----------
+  function mtrCriteriosPaso1(f, conteoFr) {
+    const x = f || {};
+    const c = [];
+    if (x.ecvAterescleroticaEstablecida) c.push("ECV aterosclerótica clínica establecida");
+    if (x.ecvSubclinicaLesionMayor50) c.push("ECV subclínica con lesión >=50%");
+    if (x.hfHomocigota) c.push("HF homocigota");
+    if (x.hfHeterocigota && conteoFr >= 1) c.push("HF heterocigota + FR>=1");
+    const egfr = mtrFloat(x.egfrCkdepi);
+    if (egfr !== null && egfr >= 0 && egfr <= 30) c.push("ERC eGFR<=30 (G4-G5)");
+    const rac = mtrFloat(x.rac);
+    // Macroalbuminuria severa: daño de órgano blanco por sí sola, tenga o no
+    // diabetes el paciente.
+    if (rac !== null && rac >= 300) c.push("Macroalbuminuria severa (RAC>=300 mg/g)");
+    if (x.diabetes) {
+      const danoOrgano = (rac !== null && rac >= 30) || !!x.retinopatia || !!x.neuropatia;
+      if (danoOrgano || conteoFr >= 3 || x.dmLargaDuracion) {
+        c.push("Diabetes con daño de órgano blanco / FR>=3 / larga duración");
+      }
+    }
+    return c;
+  }
+
+  // ---------- PASO 2: ALTO ----------
+  function mtrCriteriosPaso2(f, conteoFr) {
+    const x = f || {};
+    const c = [];
+    if (conteoFr >= 3) c.push("CONTEO de FR mayores >=3");
+    if (x.ecvSubclinicaLesionMenor50) c.push("ECV subclínica con lesión <50%");
+    const cac = mtrFloat(x.calcioCoronarioAgatston);
+    if (cac !== null && cac >= 100) c.push("Calcio coronario >=100 Agatston");
+    const pas = mtrFloat(x.paSistolica), pad = mtrFloat(x.paDiastolica);
+    const ldl = mtrFloat(x.ldl), ct = mtrFloat(x.ct);
+    const factorMarcado = (pas !== null && pas >= 180) || (pad !== null && pad >= 110)
+      || (ldl !== null && ldl > 190) || (ct !== null && ct > 310);
+    if (factorMarcado) c.push("factor marcadamente elevado (PA>=180/110, LDL>190 o CT>310)");
+    const dmAnios = mtrFloat(x.dmAnios);
+    if (x.diabetes && conteoFr >= 1 && dmAnios !== null && dmAnios > 10) c.push("Diabetes + FR>=1 y >10 años");
+    if (x.hfHeterocigota && conteoFr === 0) c.push("HF heterocigota sin otros FR");
+    const egfr = mtrFloat(x.egfrCkdepi);
+    if (egfr !== null && egfr > 30 && egfr < 60) c.push("ERC eGFR 30-60 (G3a-G3b)");
+    return c;
+  }
+
+  // ---------- CLASIFICADOR: los 4 pasos, en orden, parando en el primero ----------
+  //
+  // DIVERGENCIA DECLARADA con el Copiloto (excepción (A) de la suite 43): donde
+  // `clasificar_riesgo_cv` LANZA por falta de TFG, esta versión devuelve un
+  // objeto con `categoria: null` y `motivo: "tfg_requerida"`. Es la misma regla
+  // que ya rige todo el bloque mtr*: una excepción a mitad de consulta es peor
+  // que un recuadro que dice qué falta. La conducta clínica es idéntica —sin
+  // TFG no hay categoría— pero aquí el médico ve POR QUÉ.
+  function mtrClasificarRiesgoCv(f) {
+    const x = f || {};
+    const egfr = mtrFloat(x.egfrCkdepi);
+    const base = {
+      categoria: null, paso: null, criterios: [], conteoFrMayores: 0, conteoPotenciadores: 0,
+      datosCompletos: true, requiereAscvd: false, ascvdAjustadoPct: null,
+      ascvdEdadFueraDeRango: false, motivo: null,
+      fuente: "Consenso Dislipidemia Colombia 2024 · 4 pasos (portado de motor_riesgo_cv.py)",
+    };
+    if (egfr === null) {
+      return Object.assign({}, base, {
+        datosCompletos: false, motivo: "tfg_requerida",
+        criterios: ["Falta la TFG (CKD-EPI): sin ella no se puede estratificar el riesgo"],
+      });
+    }
+
+    const fr = mtrContarFrMayores(x);
+    base.conteoFrMayores = fr.conteo;
+    base.frMayores = fr.lista;
+
+    const c1 = mtrCriteriosPaso1(x, fr.conteo);
+    if (c1.length) return Object.assign({}, base, { categoria: "muy alto", paso: 1, criterios: c1 });
+
+    const c2 = mtrCriteriosPaso2(x, fr.conteo);
+    if (c2.length) return Object.assign({}, base, { categoria: "alto", paso: 2, criterios: c2 });
+
+    const pot = mtrContarPotenciadores(x, fr.conteo);
+    base.conteoPotenciadores = pot.conteo;
+    if (pot.conteo >= 3) return Object.assign({}, base, { categoria: "alto", paso: 3, criterios: pot.lista });
+    if (pot.conteo >= 1) return Object.assign({}, base, { categoria: "moderado", paso: 3, criterios: pot.lista });
+
+    // PASO 4 — escala ASCVD ajustada a Colombia.
+    let crudo = mtrFloat(x.ascvd10yCrudo);
+    let calculadoAqui = false;
+    if (crudo === null) {
+      // El Copiloto se quedaba sin categoría cuando el ETL no traía el número.
+      // Aquí sí se calcula si están los cuatro insumos, porque sin categoría no
+      // hay meta de LDL y sin meta no se detecta falla terapéutica.
+      crudo = mtrAscvdPceCrudo(x.edad, x.sexo, x.ct, x.hdl, x.paSistolica,
+        !!x.tabaquismo, !!x.diabetes, !!x.enAntihipertensivos);
+      calculadoAqui = crudo !== null;
+    }
+    if (crudo === null) {
+      return Object.assign({}, base, {
+        paso: 4, datosCompletos: false, requiereAscvd: true, motivo: "ascvd_requerido",
+        criterios: ["Los pasos 1 a 3 no clasifican y falta la escala ASCVD (edad, colesterol total, HDL y presión sistólica)"],
+      });
+    }
+    const factor = mtrEsSexoMasculino(x.sexo) ? 0.28 : 0.54;
+    const ajustado = mtrRound(crudo * factor, 2);
+    let categoria;
+    if (ajustado > 20) categoria = "alto";
+    else if (ajustado >= 5) categoria = "moderado";
+    else categoria = "bajo";
+    const criterios = ["ASCVD ajustado a Colombia = " + mtrFmt1(ajustado) + "%"
+      + (calculadoAqui ? " (calculado aquí con las Pooled Cohort Equations)" : "")];
+    const fuera = mtrAscvdFueraDeRangoEtario(x.edad);
+    if (fuera) {
+      criterios.push("AVISO: la edad queda fuera del rango validado de las Pooled Cohort Equations ("
+        + MTR_PCE_EDAD_MIN + "-" + MTR_PCE_EDAD_MAX + " años); el porcentaje es una extrapolación, no un valor validado");
+    }
+    return Object.assign({}, base, {
+      categoria: categoria, paso: 4, criterios: criterios,
+      ascvdAjustadoPct: ajustado, ascvdEdadFueraDeRango: fuera,
+    });
+  }
+
+  // ---------- METAS ----------
+  // `ldlPrevia` (la meta que ya venía puesta) solo puede APRETAR la meta, nunca
+  // aflojarla: se devuelve la más baja de las dos. Es la regla "solo apretar"
+  // del motor, y evita que un dato viejo suba el umbral de un paciente.
+  function mtrMetasLipidicas(categoria, ldlMetaPrevia) {
+    const cat = mtrNormalizarRiesgoCv(categoria);
+    const base = cat && MTR_METAS_LIPIDICAS[cat] ? MTR_METAS_LIPIDICAS[cat] : null;
+    if (!base) return null;
+    const previa = mtrFloat(ldlMetaPrevia);
+    const ldl = (previa !== null && previa > 0) ? Math.min(base.ldl, previa) : base.ldl;
+    return { ldl: ldl, cnoHdl: base.cnoHdl, reduccion: base.reduccion, trigliceridos: MTR_META_TRIGLICERIDOS, categoria: cat };
+  }
+
+  // ¿Está en meta? Devuelve un objeto explícito en vez de un booleano, porque
+  // "no evaluable por falta de LDL basal" no es lo mismo que "no está en meta".
+  function mtrEvaluarMetaLdl(categoria, ldlActual, ldlBasal, ldlMetaPrevia) {
+    const metas = mtrMetasLipidicas(categoria, ldlMetaPrevia);
+    if (!metas) return null;
+    const actual = mtrFloat(ldlActual);
+    if (actual === null) return { metas: metas, estado: "sin_ldl", enMeta: null, reduccionPct: null };
+    const reduccion = mtrReduccionLdlPct(ldlBasal, actual);
+    const bajoMeta = actual < metas.ldl;
+    const exigeReduccion = metas.reduccion !== null;
+    const cumpleReduccion = exigeReduccion ? (reduccion !== null && reduccion >= metas.reduccion) : true;
+    let estado;
+    if (!exigeReduccion) estado = bajoMeta ? "en_meta" : "fuera_de_meta";
+    else if (bajoMeta && cumpleReduccion) estado = "en_meta";
+    else if (bajoMeta || cumpleReduccion) estado = "meta_parcial";
+    else estado = "fuera_de_meta";
+    // FALLA terapéutica según la norma: actual > meta + 15%.
+    const falla = actual > metas.ldl * 1.15;
+    const fallaGrave = actual > metas.ldl * 1.30;
+    return {
+      metas: metas, estado: estado, enMeta: estado === "en_meta",
+      reduccionPct: reduccion, falla: falla, fallaGrave: fallaGrave,
+      ldlActual: actual,
+    };
+  }
+
+
+  // =====================================================================
+  //  LECTOR DE FACTORES DE RIESGO DESDE EL DOM REAL DE EVEREST
+  //  ------------------------------------------------------------------
+  //  FUENTE (no es una suposición): `grounding/mapas/MAPA_EVEREST_*.json`,
+  //  capturados en consultorio el 14-08-2026. Cada nombre de campo de aquí
+  //  abajo aparece literalmente en esos mapas, con su pestaña y su sección.
+  //  El mapa guarda SOLO nombres de campo — ni un valor, ni una celda, ni un
+  //  dato de paciente.
+  //
+  //  CÓMO PINTA EVEREST ESTOS CAMPOS: pares de radios con el MISMO `name`,
+  //  el primero etiquetado "SI" y el segundo "NO". Si ninguno está marcado, el
+  //  antecedente NO está documentado — y eso NO es lo mismo que "no lo tiene".
+  //  Por eso este lector devuelve `null` (no `false`) cuando nadie ha marcado:
+  //  el clasificador ya trata el ausente como no documentado, pero el recuadro
+  //  puede decir cuántos faltan, que es lo que el médico necesita saber.
+  //
+  //  TRAMPA REAL DEL DOM: cuatro campos de "Hábitos" tienen un ESPACIO AL FINAL
+  //  del atributo `name` en el HTML de Everest —
+  //  "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador " entre ellos, que es
+  //  justo el del tabaquismo. Buscar sin el espacio no encuentra nada y el
+  //  paciente sale sin ese factor de riesgo. Se prueban las dos formas.
+  // =====================================================================
+
+  // Nombres tal y como están en el DOM (pestaña 2 "Antecedentes", pestaña 3
+  // "Hábitos" y pestaña 5 "Ingreso a programa" del mapa de Everest).
+  const MTR_CAMPOS_FACTORES = {
+    // --- Antecedentes patológicos ---
+    hta: "AntecedentePatologicos.Hipertension",
+    diabetes: "AntecedentePatologicos.Diabetes",
+    dislipidemia: "AntecedentePatologicos.Dislipidemia",
+    ecv: "AntecedentePatologicos.ecv",
+    enfermedadCerebroVascular: "AntecedentePatologicos.enfermedadCerebroVascular",
+    eventoVascular: "AntecedentePatologicos.eventoVascular",
+    enfermedadRenal: "AntecedentePatologicos.enfermedadRenal",
+    neuropatia: "AntecedentePatologicos.nuropatia",           // sic: así está en Everest
+    enfermedadVision: "AntecedentePatologicos.enfermedadVision",
+    artritisReumatoide: "AntecedentePatologicos.artritisReumatoide",
+    autoinmunes: "AntecedentePatologicos.Autoinmunes",
+    epoc: "AntecedentePatologicos.EPOC",
+    // --- Antecedentes familiares ---
+    hxfamCardiovascular: "AntecedenteFamiliar.Cardiovasculares",
+    // --- Hábitos y gestión de riesgo (¡ojo con el espacio final!) ---
+    tabaquismo: "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador",
+    sedentarismo: "hs.HabitosGestionRiesgo.sedentarismo",
+    alcohol: "hs.HabitosGestionRiesgo.alcohol",
+    ejercicioPermanente: "hs.HabitosGestionRiesgo.ejercicioPermanente",
+    pesoAdecuadoTalla: "hs.HabitosGestionRiesgo.pesoAdecuadoTalla",
+    enAntihipertensivos: "hs.HabitosGestionRiesgo.medicamentoAntiHipertensivos",
+    // --- Clínica del paciente (pestaña del programa) ---
+    disfuncionErectil: "clinicaPaciente.disfuncionErectil",
+    ronca: "clinicaPaciente.ronca",
+    somnolencia: "clinicaPaciente.somnoliencia",              // sic
+    cansancio: "clinicaPaciente.cansancio",
+    // --- Patologías relacionadas (renal) ---
+    transplanteRenal: "antecedentesRelacionados.EsTransplanteRenal",
+    hemodialisis: "antecedentesRelacionados.EsHemodialisisAntecedentes",
+  };
+
+  // Lee un par de radios SI/NO de Everest.
+  // Devuelve true (SI), false (NO) o null (nadie lo ha marcado / no está en pantalla).
+  function mtrLeerRadioSiNo(nombreCampo, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function") return null;
+    const nombre = String(nombreCampo == null ? "" : nombreCampo);
+    if (!nombre) return null;
+    // Las dos formas: sin espacio y con el espacio final que trae el HTML real.
+    let nodos = null;
+    for (const cand of [nombre, nombre + " "]) {
+      try {
+        const sel = 'input[name="' + cand.replace(/"/g, '\\"') + '"]';
+        const encontrados = d.querySelectorAll(sel);
+        if (encontrados && encontrados.length) { nodos = encontrados; break; }
+      } catch (e) { /* selector inválido: se prueba la otra forma */ }
+    }
+    if (!nodos || !nodos.length) return null;
+    const lista = Array.prototype.slice.call(nodos);
+    // Everest los pinta en orden SI, NO. Si algún día cambia el orden, la
+    // etiqueta manda sobre la posición: se mira el value y el texto del label.
+    let idxSi = -1, idxNo = -1;
+    lista.forEach((n, i) => {
+      const v = String((n && n.value) || "").trim().toLowerCase();
+      if (v === "true" || v === "si" || v === "sí" || v === "1") idxSi = i;
+      if (v === "false" || v === "no" || v === "0") idxNo = i;
+    });
+    if (idxSi < 0 && idxNo < 0) { idxSi = 0; idxNo = 1; }   // orden observado
+    const marcado = lista.findIndex((n) => !!(n && n.checked));
+    if (marcado < 0) return null;
+    if (marcado === idxSi) return true;
+    if (marcado === idxNo) return false;
+    return null;
+  }
+
+  // Lee un campo de texto/número por `name` (o por id, que Everest a veces usa).
+  function mtrLeerCampoNumerico(nombreCampo, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d) return null;
+    let nodo = null;
+    try {
+      if (typeof d.querySelector === "function") {
+        nodo = d.querySelector('input[name="' + String(nombreCampo).replace(/"/g, '\\"') + '"]')
+          || d.querySelector('#' + String(nombreCampo).replace(/[^\w-]/g, ""));
+      }
+    } catch (e) { return null; }
+    if (!nodo) return null;
+    return _labNumerico(nodo.value);
+  }
+
+  // ---------- EL LECTOR COMPLETO ----------
+  //
+  // `docIdEsperado` es la cédula que estaba abierta cuando se decidió leer. Si
+  // el médico cambió de historia entre medias, se devuelve null en vez de
+  // mezclar los factores de riesgo de un paciente con los laboratorios de otro
+  // — el mismo blindaje que ya protege la inyección de laboratorios.
+  //
+  // Sustituye a la versión que devolvía `null` siempre. Ver `docs/MOTOR_PORTADO.md`.
+  function mtrLeerFactoresRcvDelDom(docIdEsperado, doc) {
+    if (docIdEsperado && !_pacienteSigueAbierto(docIdEsperado)) return null;
+    const C = MTR_CAMPOS_FACTORES;
+    const r = (k) => mtrLeerRadioSiNo(C[k], doc);
+    const leidos = {};
+    let documentados = 0, total = 0;
+    for (const clave of Object.keys(C)) {
+      const v = r(clave);
+      leidos[clave] = v;
+      total++;
+      if (v !== null) documentados++;
+    }
+
+    // ECV aterosclerótica establecida: cualquiera de las tres casillas que
+    // Everest tiene para ello. Se toma la unión, no una sola, porque el médico
+    // que documenta un infarto puede haberlo marcado en cualquiera de ellas.
+    const ecvEstablecida = leidos.ecv === true
+      || leidos.enfermedadCerebroVascular === true
+      || leidos.eventoVascular === true;
+
+    // Apnea del sueño: Everest NO tiene una casilla de apnea. Tiene tres
+    // síntomas (ronca, somnolencia diurna, cansancio). Tener los tres es
+    // sugestivo, pero NO es un diagnóstico, así que NO se cuenta como factor
+    // de riesgo mayor: se devuelve aparte para que el recuadro pueda sugerir
+    // al médico que lo confirme. Contarlo solo sería inventar un diagnóstico.
+    const apneaSugerida = leidos.ronca === true && leidos.somnolencia === true && leidos.cansancio === true;
+
+    const imc = mtrLeerCampoNumerico("monitoreoProgramaPrenatalMadre.indiceMasaCorporal", doc);
+
+    return {
+      // --- lo que va directo al clasificador ---
+      hta: leidos.hta === true,
+      diabetes: leidos.diabetes === true,
+      tabaquismo: leidos.tabaquismo === true,
+      sedentarismo: leidos.sedentarismo === true,
+      obesidad: leidos.pesoAdecuadoTalla === false,   // "¿peso adecuado para la talla?" NO
+      imc: imc,
+      ecvAterescleroticaEstablecida: ecvEstablecida,
+      neuropatia: leidos.neuropatia === true,
+      retinopatia: leidos.enfermedadVision === true,
+      inflamacionCronica: leidos.artritisReumatoide === true || leidos.autoinmunes === true,
+      hxfamEcvPrematura: leidos.hxfamCardiovascular === true,
+      disfuncionErectil: leidos.disfuncionErectil === true,
+      enAntihipertensivos: leidos.enAntihipertensivos === true,
+      // --- contexto renal ---
+      transplanteRenal: leidos.transplanteRenal === true,
+      hemodialisis: leidos.hemodialisis === true,
+      enfermedadRenalDocumentada: leidos.enfermedadRenal === true,
+      dislipidemiaDocumentada: leidos.dislipidemia === true,
+      // --- lo que se sugiere pero NO se da por cierto ---
+      apneaSugerida: apneaSugerida,
+      apneaSueno: false,      // nunca se da por diagnosticada desde síntomas
+      // --- trazabilidad: qué se pudo leer y qué no ---
+      _leidos: leidos,
+      _documentados: documentados,
+      _total: total,
+      _sinDocumentar: Object.keys(leidos).filter((k) => leidos[k] === null),
+      _fuente: "DOM Everest (mapa del 2026-08-14)",
+    };
+  }
+
+  // =====================================================================
+  //  ERC: ESTADIO ADMINISTRATIVO (Cockcroft-Gault) vs CLÍNICO (CKD-EPI)
+  //  ------------------------------------------------------------------
+  //  No son intercambiables y la norma los usa para cosas distintas:
+  //   · ADMINISTRATIVO (C-G)  -> rige vigencias, bloqueos por estadio, ventana
+  //     del Agujero Negro Renal y la agenda. Es el que la EPS audita.
+  //   · CLÍNICO (CKD-EPI)     -> rige la clasificación renal, el ajuste de dosis
+  //     y la remisión a nefrología.
+  //  Cuando discrepan, la discrepancia se DECLARA (suele pasar con peso muy
+  //  alto o muy bajo, sarcopenia y amputados) y las dosis siguen al peor.
+  // =====================================================================
+
+  // Se reutiliza el mapa de orden que ya existe en el bloque de discrepancia
+  // renal (línea ~16141) en vez de declarar un segundo: dos escalas de estadios
+  // en el mismo archivo es justo la clase de duplicado que produce divergencias.
+  function mtrPosEstadio(estadio) {
+    const e = mtrNormEstadio(estadio);
+    if (e === null) return -1;
+    const pos = MTR_ORDEN_ESTADIOS[e];
+    return pos === undefined ? -1 : pos;
+  }
+
+  // Criterios de remisión a nefrología (KDIGO, sobre CKD-EPI):
+  // eGFR<30, RAC>=300, o caída >=25% con cambio de estadio entre dos creatininas.
+  function mtrRemisionNefrologia(egfrActual, racActual, egfrPrevio) {
+    const a = mtrFloat(egfrActual), rac = mtrFloat(racActual), p = mtrFloat(egfrPrevio);
+    const motivos = [];
+    if (a !== null && a > 0 && a < 30) motivos.push("eGFR (CKD-EPI) < 30 mL/min/1.73m²");
+    if (rac !== null && rac >= 300) motivos.push("RAC >= 300 mg/g (macroalbuminuria severa)");
+    if (a !== null && p !== null && p > 0 && a > 0) {
+      const caida = ((p - a) / p) * 100;
+      const cambioEstadio = mtrClasificarEstadioTfg(a) !== mtrClasificarEstadioTfg(p);
+      if (caida >= 25 && cambioEstadio) {
+        motivos.push("caída de la TFG del " + mtrFmt0(caida) + "% con cambio de estadio");
+      }
+    }
+    return { remitir: motivos.length > 0, motivos: motivos };
+  }
+
+  // Sospecha de lesión renal aguda: caída >=25% o salto de estadio entre dos
+  // creatininas. No es un diagnóstico: es un "evalúe antes de la rutina".
+  function mtrSospechaIra(egfrActual, egfrPrevio) {
+    const a = mtrFloat(egfrActual), p = mtrFloat(egfrPrevio);
+    if (a === null || p === null || p <= 0 || a <= 0) return false;
+    const caida = ((p - a) / p) * 100;
+    if (caida >= 25) return true;
+    return mtrClasificarEstadioTfg(a) !== mtrClasificarEstadioTfg(p);
+  }
+
+  // Evaluación renal completa. Todo entra por parámetro: sin DOM, sin reloj.
+  function mtrEvaluarErc(datos) {
+    const d = datos || {};
+    const edad = mtrFloat(d.edad), peso = mtrFloat(d.pesoKg), creat = mtrFloat(d.creatinina);
+    const esF = mtrEsSexoFemenino(d.sexo);
+
+    // Guardas de la norma. Fuera de rango -> 0 centinela, NUNCA un número inventado.
+    const guardaComun = (edad !== null && edad >= 18 && edad <= 120) && (creat !== null && creat >= 0.1 && creat <= 20);
+    const guardaCg = guardaComun && (peso !== null && peso >= 20 && peso <= 300);
+
+    let crcl = null, egfr = null;
+    if (guardaCg) {
+      crcl = ((140 - edad) * peso) / (72 * creat) * (esF ? 0.85 : 1.0);
+    }
+    if (guardaComun) {
+      const k = esF ? 0.7 : 0.9;
+      const a = esF ? -0.241 : -0.302;
+      const R = creat / k;
+      const F = R <= 1 ? Math.pow(R, a) : Math.pow(R, -1.200);
+      egfr = 142 * F * Math.pow(0.9938, edad) * (esF ? 1.012 : 1.0);
+    }
+
+    const estadioAdmin = crcl === null ? null : mtrClasificarEstadioTfg(crcl);
+    const estadioClinico = egfr === null ? null : mtrClasificarEstadioTfg(egfr);
+    const discordancia = (crcl !== null && egfr !== null) ? mtrEvaluarDiscrepanciaEstadios(crcl, egfr) : null;
+
+    const posAdmin = mtrPosEstadio(estadioAdmin);
+    const posClinico = mtrPosEstadio(estadioClinico);
+    // Cuando el clínico es PEOR, las dosis y la remisión lo siguen a él.
+    const estadioParaDosis = (posClinico > posAdmin && posClinico >= 0) ? estadioClinico : (estadioClinico || estadioAdmin);
+
+    const remision = mtrRemisionNefrologia(egfr, d.rac, d.egfrPrevio);
+    const ira = mtrSospechaIra(egfr, d.egfrPrevio);
+
+    return {
+      crcl: crcl === null ? null : mtrRound(crcl, 1),
+      egfr: egfr === null ? null : mtrRound(egfr, 1),
+      estadioAdministrativo: estadioAdmin,
+      estadioClinico: estadioClinico,
+      estadioParaDosis: estadioParaDosis,
+      discordancia: discordancia,
+      remitirNefrologia: remision.remitir,
+      motivosRemision: remision.motivos,
+      sospechaIra: ira,
+      datosCompletos: guardaCg && guardaComun,
+      faltan: [
+        edad === null ? "edad" : null,
+        peso === null ? "peso" : null,
+        creat === null ? "creatinina sérica" : null,
+        (d.sexo === null || d.sexo === undefined || d.sexo === "") ? "sexo" : null,
+      ].filter(Boolean),
+    };
+  }
+
+
+  // =====================================================================
+  //  SÁBADOS QUE TRABAJA CADA MÉDICO — 1º y 3º, o 2º y 4º del mes
+  //  ------------------------------------------------------------------
+  //  REGLA (la dio el médico del programa el 2026-08-16): el personal está
+  //  repartido en dos grupos. Un grupo atiende el PRIMER y el TERCER sábado
+  //  de cada mes; el otro, el SEGUNDO y el CUARTO. El quinto sábado, cuando
+  //  el mes lo tiene, no pertenece a ningún grupo.
+  //
+  //  QUÉ SUSTITUYE: hasta ahora el motor portado usaba una quincena fija
+  //  anclada al 2026-07-11 (`mtrDiaValidoParaControl`). Esa regla se queda
+  //  intacta —tiene 733 vectores dorados que la atan al Copiloto— y esta
+  //  nueva capa se pone ENCIMA: es la que usa la interfaz. La divergencia
+  //  está declarada, no escondida: "cada 14 días" y "1º y 3º del mes"
+  //  coinciden a veces y se separan en cuanto un mes tiene 5 sábados.
+  //
+  //  CÓMO SE AVERIGUA EL GRUPO: no se pregunta ni se hornea una tabla de
+  //  IDs que envejece cada vez que entra o sale un médico. Se OBSERVA: la
+  //  pantalla de agendamiento ya recibe, sin pedir nada extra, las agendas
+  //  con su fecha. Cada vez que aparece un sábado con agenda PROPIA se anota
+  //  su ordinal. Con dos observaciones coherentes el grupo queda deducido.
+  //  Hasta entonces el script NO propone sábados en firme: los marca como
+  //  "por confirmar", que es lo que ya hacía la interfaz.
+  // =====================================================================
+
+  const MTR_SAB_GRUPO_13 = "1-3";
+  const MTR_SAB_GRUPO_24 = "2-4";
+  const MTR_SAB_CLAVE_GM = "vgl_sab_grupo";
+  // Con una sola observación el grupo es una conjetura; con dos coherentes se
+  // da por deducido. Es el mismo umbral que pidió el médico ("junte varias
+  // líneas de días distintos") escrito como número en vez de como nota.
+  const MTR_SAB_OBSERVACIONES_PARA_DEDUCIR = 2;
+
+  // ¿Qué sábado del mes es esta fecha? 1..5, o null si no es sábado.
+  function mtrOrdinalSabadoDelMes(iso) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return null;
+    if (f.getUTCDay() !== 6) return null;      // 6 = sábado
+    return Math.floor((f.getUTCDate() - 1) / 7) + 1;
+  }
+
+  // El grupo al que pertenece un sábado concreto. El 5º no es de nadie.
+  function mtrGrupoDeEsteSabado(iso) {
+    const n = mtrOrdinalSabadoDelMes(iso);
+    if (n === 1 || n === 3) return MTR_SAB_GRUPO_13;
+    if (n === 2 || n === 4) return MTR_SAB_GRUPO_24;
+    return null;
+  }
+
+  // ¿Trabaja este médico ESE sábado?
+  //  true  -> sí, según su grupo
+  //  false -> no le toca
+  //  null  -> no se sabe (no hay grupo deducido, o es el 5º sábado del mes)
+  function mtrMedicoTrabajaSabado(iso, grupo) {
+    const g = String(grupo == null ? "" : grupo).trim();
+    if (g !== MTR_SAB_GRUPO_13 && g !== MTR_SAB_GRUPO_24) return null;
+    const delSabado = mtrGrupoDeEsteSabado(iso);
+    if (delSabado === null) return null;       // 5º sábado: de ningún grupo
+    return delSabado === g;
+  }
+
+  // Deduce el grupo a partir de sábados observados CON AGENDA PROPIA.
+  // Devuelve siempre un objeto; nunca lanza y nunca adivina con datos que se
+  // contradicen: si hay observaciones de los dos grupos, lo declara conflicto
+  // y deja el grupo en null (que la interfaz traduce a "por confirmar").
+  function mtrDeducirGrupoSabado(fechasIso) {
+    const lista = Array.isArray(fechasIso) ? fechasIso : [];
+    const ordinales = [];
+    for (const iso of lista) {
+      const n = mtrOrdinalSabadoDelMes(iso);
+      if (n !== null) ordinales.push({ iso: iso, ordinal: n });
+    }
+    // El 5º sábado no distingue grupos: se registra pero no vota.
+    const votantes = ordinales.filter((o) => o.ordinal >= 1 && o.ordinal <= 4);
+    const votos13 = votantes.filter((o) => o.ordinal === 1 || o.ordinal === 3);
+    const votos24 = votantes.filter((o) => o.ordinal === 2 || o.ordinal === 4);
+    const resultado = {
+      grupo: null, confianza: "sin_datos", conflicto: false,
+      observados: ordinales, votos13: votos13.length, votos24: votos24.length,
+    };
+    if (!votantes.length) return resultado;
+    if (votos13.length && votos24.length) {
+      resultado.conflicto = true;
+      resultado.confianza = "conflicto";
+      return resultado;
+    }
+    const gana = votos13.length ? MTR_SAB_GRUPO_13 : MTR_SAB_GRUPO_24;
+    const n = Math.max(votos13.length, votos24.length);
+    resultado.grupo = gana;
+    resultado.confianza = n >= MTR_SAB_OBSERVACIONES_PARA_DEDUCIR ? "deducido" : "conjetura";
+    return resultado;
+  }
+
+  // ---------- memoria por médico (GM_storage) ----------
+  // Estructura: { "<medicoId>": { grupo, origen, observados: ["ISO", …], visto } }
+  // `origen` = "observado" | "manual". El manual SIEMPRE gana: si el médico
+  // corrige su grupo en Ajustes, ninguna observación posterior lo sobrescribe.
+  function mtrSabadoMemoriaLeer() {
+    try {
+      if (typeof GM_getValue === "undefined") return {};
+      const v = GM_getValue(MTR_SAB_CLAVE_GM, null);
+      if (!v || typeof v !== "object") return {};
+      return v;
+    } catch (e) { return {}; }
+  }
+
+  function mtrSabadoMemoriaGuardar(mapa) {
+    try {
+      if (typeof GM_setValue === "undefined") return false;
+      GM_setValue(MTR_SAB_CLAVE_GM, mapa || {});
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function mtrSabadoGrupoDeMedico(medicoId) {
+    const id = String(medicoId == null ? "" : medicoId).trim();
+    if (!id) return { grupo: null, confianza: "sin_datos", origen: null, observados: [] };
+    const mem = mtrSabadoMemoriaLeer();
+    const reg = mem[id];
+    if (!reg) return { grupo: null, confianza: "sin_datos", origen: null, observados: [] };
+    if (reg.origen === "manual" && reg.grupo) {
+      return { grupo: reg.grupo, confianza: "manual", origen: "manual", observados: reg.observados || [] };
+    }
+    const ded = mtrDeducirGrupoSabado(reg.observados || []);
+    return {
+      grupo: ded.grupo, confianza: ded.confianza, origen: "observado",
+      observados: reg.observados || [], conflicto: ded.conflicto,
+    };
+  }
+
+  // Registra que ESTE médico tenía agenda propia ESE sábado. Idempotente: la
+  // misma fecha dos veces no cuenta dos veces (si contara, abrir el modal dos
+  // veces el mismo día "deduciría" el grupo con una sola observación real).
+  function mtrSabadoRegistrarObservacion(medicoId, isoSabado) {
+    const id = String(medicoId == null ? "" : medicoId).trim();
+    if (!id) return false;
+    if (mtrOrdinalSabadoDelMes(isoSabado) === null) return false;
+    const mem = mtrSabadoMemoriaLeer();
+    const reg = mem[id] || { grupo: null, origen: "observado", observados: [] };
+    const obs = Array.isArray(reg.observados) ? reg.observados.slice() : [];
+    if (obs.indexOf(isoSabado) >= 0) return false;
+    obs.push(isoSabado);
+    // Se guardan como mucho 12 observaciones: con eso sobra para deducir y la
+    // clave no crece sin límite en un equipo que lleva años abierto.
+    reg.observados = obs.slice(-12);
+    mem[id] = reg;
+    return mtrSabadoMemoriaGuardar(mem);
+  }
+
+  function mtrSabadoFijarGrupoManual(medicoId, grupo) {
+    const id = String(medicoId == null ? "" : medicoId).trim();
+    const g = String(grupo == null ? "" : grupo).trim();
+    if (!id) return false;
+    if (g !== MTR_SAB_GRUPO_13 && g !== MTR_SAB_GRUPO_24 && g !== "") return false;
+    const mem = mtrSabadoMemoriaLeer();
+    const reg = mem[id] || { observados: [] };
+    if (g === "") { reg.origen = "observado"; reg.grupo = null; }
+    else { reg.origen = "manual"; reg.grupo = g; }
+    mem[id] = reg;
+    return mtrSabadoMemoriaGuardar(mem);
+  }
+
+  // =====================================================================
+  //  FECHA DE CONTROL, con festivos y con el sábado del médico
+  // =====================================================================
+
+  // ¿Puede caer una CITA DE CONTROL este día?
+  // L-V sí (salvo festivo). Domingo nunca. Sábado solo si le toca a este médico.
+  // `grupoSabado` en null => los sábados quedan fuera (no se propone lo que no
+  // se sabe; la interfaz los ofrece aparte como "por confirmar").
+  function mtrDiaValidoParaControlConSabado(iso, grupoSabado) {
+    const f = mtrFechaDesdeIso(iso);
+    if (!f) return false;
+    if (mtrEsFestivoCO(iso)) return false;
+    const d = f.getUTCDay();          // 0=domingo … 6=sábado
+    if (d === 0) return false;
+    if (d === 6) return mtrMedicoTrabajaSabado(iso, grupoSabado) === true;
+    return true;
+  }
+
+  // Control tras la toma de laboratorios.
+  //  · `minDias` por defecto 4 (la norma pide >= 72 h tras la FTL; 4 días
+  //    calendario garantiza las 72 h aunque la toma sea a última hora).
+  //  · `preferirTarde` recorre la ventana al revés — Modo Estable.
+  //  · Devuelve también POR QUÉ se eligió, para poder mostrarlo.
+  function mtrFechaControlSugerida(isoFtl, opciones) {
+    const o = opciones || {};
+    if (!mtrFechaDesdeIso(isoFtl)) return null;
+    const minDias = Number.isFinite(Number(o.minDias)) ? Number(o.minDias) : MTR_DIAS_MIN_CONTROL;
+    const maxDias = Number.isFinite(Number(o.maxDias)) ? Number(o.maxDias) : MTR_DIAS_MAX_CONTROL;
+    const grupo = o.grupoSabado || null;
+    const rango = [];
+    for (let n = minDias; n <= maxDias; n++) rango.push(n);
+    if (o.preferirTarde) rango.reverse();
+
+    for (const n of rango) {
+      const cand = mtrSumarDias(isoFtl, n);
+      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+        return {
+          fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
+          motivo: "primer día hábil a >=" + minDias + " días de la toma",
+          grupoSabadoUsado: grupo,
+        };
+      }
+    }
+    // Sin día válido en la ventana: se amplía y se DECLARA que se amplió, en
+    // vez de devolver null y dejar al médico sin fecha.
+    for (let n = maxDias + 1; n <= maxDias + 14; n++) {
+      const cand = mtrSumarDias(isoFtl, n);
+      if (mtrDiaValidoParaControlConSabado(cand, grupo)) {
+        return {
+          fecha: cand, dias: n, esSabado: mtrFechaDesdeIso(cand).getUTCDay() === 6,
+          motivo: "no había día válido dentro de los " + maxDias + " días; se corrió a la semana siguiente",
+          fueraDeVentana: true, grupoSabadoUsado: grupo,
+        };
+      }
+    }
+    return null;
+  }
+
+
+  // =====================================================================
+  //  VIGENCIAS UNIFICADAS Y FECHA DE TOMA DE LABORATORIOS (FTL)
+  //  ------------------------------------------------------------------
+  //  ESTE BLOQUE ARREGLA UNA DIVERGENCIA CLÍNICA REAL entre los dos motores.
+  //
+  //  El Copiloto (`motor_vigencias.py`) declara ser "transcripción EXACTA" de
+  //  SYS_MOTOR_RCV S3. No lo es en tres celdas, y las tres van en la dirección
+  //  peligrosa (dan MÁS vigencia de la que la norma concede, o sea: dejan
+  //  vencer el examen):
+  //
+  //   1. LDL en ERC G4 -> el Python dice 180. La norma agrupa "CT/LDL/TG
+  //      180/180/180/180/120" y la Tabla 50 oficial que entregó el médico el
+  //      14-08-2026 dice 120. El Python aplicó el 120 al colesterol total y a
+  //      los triglicéridos, y se dejó el LDL de la misma fila en 180.
+  //      (Ya estaba corregido en RCV_VIGENCIA_ESTADIO_TABLA de este archivo,
+  //       pero NO en MTR_ERC, que se portó del Python con el error dentro:
+  //       dos tablas en el mismo archivo dando números distintos.)
+  //   2. RAC en ERC G4 -> el Python dice 180; la norma dice
+  //      "RAC 180/180/180/180/120". Aquí estaban MAL LAS DOS tablas.
+  //   3. HbA1c en G1/G2 -> el Python la pone BLOQ. La norma dice "HbA1c(DM2)
+  //      igual que RAC", y la compuerta de "solo diabéticos" ya la aplica el
+  //      parámetro esDm2. El BLOQ era una SEGUNDA compuerta que la fuente no
+  //      tiene, y dejaba sin HbA1c al diabético en estadio renal temprano:
+  //      justo el paciente en quien más se controla.
+  //
+  //  Y una cuarta, esta en dirección contraria (pedía de más):
+  //   4. Con RAC>=30 la norma manda un plazo PLANO de 90 días. Los dos motores
+  //      hacían "la mitad de la vigencia": coincide en 180->90, pero con la
+  //      corrección (1)/(2) en G4 daría 120->60, o sea 30 días de viaje al
+  //      laboratorio que la norma no pide. La misión del programa es no hacer
+  //      gastar desplazamientos de más. Se implementa el 90 plano, acotado a
+  //      no ser NUNCA mayor que la vigencia base.
+  //
+  //  `mtrVigenciaDias` NO se toca: tiene 822 vectores dorados que la atan al
+  //  Python y sirve de testigo. Lo que la interfaz usa es esta versión, y las
+  //  cuatro diferencias quedan declaradas en MTR_CORRECCIONES_NORMA para que
+  //  nadie las descubra por sorpresa dentro de seis meses.
+  // =====================================================================
+
+  const MTR_CORRECCIONES_NORMA = [
+    { programa: "ERC", analito: "ldl", estadio: "G4", copiloto: 180, norma: 120,
+      fuente: "Tabla 50 oficial (14-08-2026) + SYS_MOTOR_RCV S3 'CT/LDL/TG 180/180/180/180/120'" },
+    { programa: "ERC", analito: "rac", estadio: "G4", copiloto: 180, norma: 120,
+      fuente: "SYS_MOTOR_RCV S3 'RAC 180/180/180/180/120'" },
+    { programa: "ERC", analito: "hba1c", estadio: "G1", copiloto: "BLOQ", norma: 180,
+      fuente: "SYS_MOTOR_RCV S3 'HbA1c(DM2) igual que RAC'; la compuerta real es esDm2" },
+    { programa: "ERC", analito: "hba1c", estadio: "G2", copiloto: "BLOQ", norma: 180,
+      fuente: "SYS_MOTOR_RCV S3 'HbA1c(DM2) igual que RAC'; la compuerta real es esDm2" },
+    { programa: "*", analito: "rac", estadio: "*", copiloto: "vigencia/2", norma: 90,
+      fuente: "SYS_MOTOR_RCV S3 'OVERRIDE RAC>=30 -> 90d' (plazo plano, no la mitad)" },
+  ];
+
+  const MTR_RAC_OVERRIDE_DIAS = 90;
+
+  // Vigencia según la NORMA (la que usa la interfaz). Mismo contrato de retorno
+  // que mtrVigenciaDias: número | [min,max] | "BLOQ" | null.
+  function mtrVigenciaDiasNorma(programa, analito, estadio, esDm2, edad, rac) {
+    const prog = String(programa == null ? "" : programa).trim().toUpperCase();
+    const ana = String(analito == null ? "" : analito).trim().toLowerCase();
+
+    // Se parte de la tabla portada y se aplican las correcciones declaradas.
+    let v = mtrVigenciaDias(prog, ana, estadio, esDm2, edad, null);   // sin override de RAC todavía
+
+    if (prog === "ERC") {
+      const idx = mtrIdxEstadio(estadio || "");
+      if (idx === 4) {                                   // columna G4 (y G5, que hereda)
+        if (ana === "ldl") v = 120;
+        if (ana === "rac") v = 120;
+      }
+      if (ana === "hba1c" && (idx === 0 || idx === 1)) {
+        // La única compuerta legítima es esDm2, que mtrVigenciaDias ya aplicó
+        // devolviendo BLOQ; solo se levanta el BLOQ "extra" del diabético.
+        if (esDm2) v = 180;
+      }
+    }
+
+    // OVERRIDE de albuminuria: plazo plano de 90 días, nunca por encima de la base.
+    const r = mtrFloat(rac);
+    if (ana === "rac" && r !== null && r >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
+      if (typeof v === "number") v = Math.min(v, MTR_RAC_OVERRIDE_DIAS);
+      else if (Array.isArray(v)) v = [Math.min(v[0], MTR_RAC_OVERRIDE_DIAS), Math.min(v[1], MTR_RAC_OVERRIDE_DIAS)];
+    }
+    return v;
+  }
+
+  // Un rango [min,max] se colapsa a un número. Regla de la norma: se usa el
+  // SUPERIOR salvo que la función renal se esté moviendo (caída >=25% o cambio
+  // de estadio en 12 meses), en cuyo caso se usa el INFERIOR.
+  function mtrColapsarVigencia(v, funcionRenalInestable) {
+    if (Array.isArray(v)) return funcionRenalInestable ? v[0] : v[1];
+    return v;
+  }
+
+  // =====================================================================
+  //  QUÉ EXÁMENES LE FALTAN A ESTE PACIENTE
+  // =====================================================================
+  //
+  // DRIVERS: fijan la fecha de toma. PASAJEROS: no la fijan, se enganchan a
+  // ella (así el paciente no hace un viaje aparte por una hemoglobina).
+  const MTR_DRIVERS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
+    "GLUCOSA", "UROANALISIS", "CREATININA", "RAC", "HBA1C"];
+  const MTR_PASAJEROS = ["HEMOGLOBINA", "PTH", "FOSFORO", "ALBUMINA"];
+
+  // Clave del analito -> nombre de fila en la tabla de vigencias.
+  const MTR_CLAVE_A_ANALITO = {
+    COLESTEROL_TOTAL: "colesterol_total",
+    COLESTEROL_HDL: "hdl",
+    COLESTEROL_LDL: "ldl",
+    TRIGLICERIDOS: "trigliceridos",
+    GLUCOSA: "glicemia",
+    UROANALISIS: "parcial_orina",
+    CREATININA: "creatinina",
+    RAC: "rac",
+    HBA1C: "hba1c",
+    HEMOGLOBINA: "hemoglobina",
+    PTH: "pth",
+    FOSFORO: "fosforo",
+    ALBUMINA: "albumina",
+  };
+
+  const MTR_NOMBRE_ANALITO = {
+    COLESTEROL_TOTAL: "Colesterol total", COLESTEROL_HDL: "Colesterol HDL",
+    COLESTEROL_LDL: "Colesterol LDL", TRIGLICERIDOS: "Triglicéridos",
+    GLUCOSA: "Glicemia", UROANALISIS: "Uroanálisis (parcial de orina)",
+    CREATININA: "Creatinina sérica", RAC: "Relación albúmina/creatinina",
+    HBA1C: "Hemoglobina glicosilada", HEMOGLOBINA: "Hemoglobina",
+    PTH: "PTH intacta", FOSFORO: "Fósforo sérico", ALBUMINA: "Albúmina sérica",
+  };
+
+  // Piso de la norma para un examen que hay que pedir de cero: no se cita al
+  // paciente antes de HOY+14 días (le tiene que dar tiempo a ir).
+  const MTR_PISO_ESTADO_A = 14;
+  const MTR_TECHO_ESTADO_A = 22;
+
+  // Estado de UN analito.
+  //  A = sin historial o vencido -> hay que pedirlo
+  //  D = vigente
+  //  R = RAC con albuminuria (vigilancia estrecha)
+  //  BLOQ = bloqueado por estadio (no se pide: la norma no lo contempla ahí)
+  function mtrEstadoAnalito(clave, ultimo, ctx) {
+    const c = ctx || {};
+    const analito = MTR_CLAVE_A_ANALITO[clave];
+    const nombre = MTR_NOMBRE_ANALITO[clave] || clave;
+    if (!analito) return null;
+
+    const vigRaw = mtrVigenciaDiasNorma(c.programa, analito, c.estadioAdministrativo, !!c.esDm2, c.edad, c.rac);
+    if (vigRaw === null || vigRaw === undefined) {
+      return { clave: clave, nombre: nombre, estado: "NO_APLICA", vigenciaDias: null,
+        motivo: "la tabla del programa " + (c.programa || "—") + " no contempla este examen" };
+    }
+    if (vigRaw === MTR_BLOQ) {
+      return { clave: clave, nombre: nombre, estado: "BLOQ", vigenciaDias: null,
+        motivo: "bloqueado por la norma en estadio " + (c.estadioAdministrativo || "—") };
+    }
+    const vigencia = mtrColapsarVigencia(vigRaw, !!c.funcionRenalInestable);
+
+    const fecha = (ultimo && ultimo.fecha) ? mtrFechaIso(ultimo.fecha) : null;
+    const valor = ultimo ? mtrFloat(ultimo.valor) : null;
+    if (!fecha) {
+      return { clave: clave, nombre: nombre, estado: "A", subestado: "sin_historial",
+        vigenciaDias: vigencia, fecha: null, valor: null, vence: null,
+        motivo: "no hay ningún resultado registrado" };
+    }
+    const vence = mtrSumarDias(fecha, vigencia);
+    const hoy = c.hoyIso;
+    const diasParaVencer = (hoy && vence)
+      ? Math.round((mtrFechaDesdeIso(vence).getTime() - mtrFechaDesdeIso(hoy).getTime()) / 86400000)
+      : null;
+
+    let estado = "D";
+    let subestado = "vigente";
+    if (diasParaVencer !== null && diasParaVencer < 0) { estado = "A"; subestado = "vencido"; }
+    const racNum = mtrFloat(c.rac);
+    if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA && estado !== "A") {
+      estado = "R"; subestado = "albuminuria";
+    }
+    return {
+      clave: clave, nombre: nombre, estado: estado, subestado: subestado,
+      vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
+      diasParaVencer: diasParaVencer,
+      motivo: estado === "A"
+        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha)
+        : ("vigente hasta el " + vence),
+    };
+  }
+
+  // =====================================================================
+  //  EL PLAN COMPLETO: qué falta, cuándo se toma y cuándo se controla
+  // =====================================================================
+  //
+  // `ctx` = {
+  //   hoyIso, programa, estadioAdministrativo, estadioClinico, esDm2, edad, rac,
+  //   categoriaRiesgo, funcionRenalInestable, ultimos: { CLAVE: {fecha, valor} },
+  //   grupoSabado, preferirTarde
+  // }
+  //
+  // REGLA RECTORA — CERO VENCIDOS: la toma se pone en el vencimiento MÁS
+  // PRÓXIMO de todo lo que hay que vigilar, y si ese día cae en domingo o
+  // festivo se ADELANTA (mtrRetrocederADiaHabil), nunca se atrasa. Atrasarla
+  // un día la pondría DESPUÉS del vencimiento, que es exactamente el fallo que
+  // el Copiloto todavía tiene abierto en `ajustar_fecha_habil`.
+  function mtrPlanParaclinicos(ctx) {
+    const c = ctx || {};
+    const hoy = mtrFechaIso(c.hoyIso);
+    if (!hoy) return null;
+    const ultimos = c.ultimos || {};
+
+    const evaluar = (claves) => claves
+      .map((k) => mtrEstadoAnalito(k, ultimos[k], c))
+      .filter(Boolean);
+
+    const drivers = evaluar(MTR_DRIVERS);
+    const pasajeros = evaluar(MTR_PASAJEROS);
+    const todos = drivers.concat(pasajeros);
+
+    const faltantes = todos.filter((a) => a.estado === "A" && a.subestado === "sin_historial");
+    const vencidos = todos.filter((a) => a.estado === "A" && a.subestado === "vencido");
+    const bloqueados = todos.filter((a) => a.estado === "BLOQ");
+    const noAplican = todos.filter((a) => a.estado === "NO_APLICA");
+
+    // ---- FTL: el vencimiento más próximo entre los drivers que se vigilan ----
+    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence);
+    const hayEstadoA = drivers.some((a) => a.estado === "A");
+
+    let ftlCruda = null;
+    let motivoFtl = "";
+    const masProximo = conVencimiento
+      .slice()
+      .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0];
+
+    if (hayEstadoA) {
+      // Hay que pedir algo YA. Piso de 14 días para que al paciente le dé
+      // tiempo, techo de 22. Pero si un examen vigente vence ANTES del piso,
+      // manda él: el piso NUNCA puede retrasar una toma por encima de un
+      // vencimiento (eso rompería CERO VENCIDOS).
+      const piso = mtrSumarDias(hoy, MTR_PISO_ESTADO_A);
+      const techo = mtrSumarDias(hoy, MTR_TECHO_ESTADO_A);
+      if (masProximo && masProximo.vence < piso) {
+        ftlCruda = masProximo.vence;
+        motivoFtl = "adelantada al vencimiento de " + masProximo.nombre + " (" + masProximo.vence + "): el piso de 14 días la habría dejado vencer";
+      } else if (masProximo && masProximo.vence <= techo) {
+        ftlCruda = masProximo.vence;
+        motivoFtl = "en el vencimiento de " + masProximo.nombre + ", que cae dentro de la ventana — se aprovecha el mismo viaje";
+      } else {
+        ftlCruda = piso;
+        motivoFtl = "hay exámenes por pedir; se cita a 14 días para que dé tiempo de tomarlos";
+      }
+    } else if (masProximo) {
+      ftlCruda = masProximo.vence;
+      motivoFtl = "en el vencimiento más próximo (" + masProximo.nombre + ")";
+    } else {
+      return {
+        hoy: hoy, drivers: drivers, pasajeros: pasajeros,
+        faltantes: faltantes, vencidos: vencidos, bloqueados: bloqueados, noAplican: noAplican,
+        ftl: null, control: null, ordenar: [], cosechados: [], diferidos: [],
+        motivoFtl: "no hay ningún examen que vigilar con este programa y estadio",
+      };
+    }
+
+    // ---- Agujero Negro Renal: en G3a-G4 la creatinina puede mandar ----
+    let anr = null;
+    const creat = drivers.find((a) => a.clave === "CREATININA");
+    const ventanaAnr = mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false);
+    if (ventanaAnr && creat && creat.vence) {
+      const limite = mtrSumarDias(hoy, ventanaAnr);
+      if (creat.vence > hoy && creat.vence <= limite) {
+        anr = { ventanaDias: ventanaAnr, vence: creat.vence };
+        if (creat.vence < ftlCruda) {
+          ftlCruda = creat.vence;
+          motivoFtl = "la creatinina vence dentro de la ventana renal de " + ventanaAnr + " días: manda ella y todo lo demás se agrupa aquí";
+        }
+      }
+    }
+
+    // ---- Ajuste a día hábil: SE ADELANTA, nunca se atrasa ----
+    const ftl = mtrRetrocederADiaHabil(ftlCruda);
+    const seAdelanto = ftl !== ftlCruda;
+
+    // ---- COSECHA: qué examen vigente vale la pena adelantar a esta misma toma ----
+    // Solo si le queda menos del 25% de su vigencia por delante. Más que eso y
+    // se estaría tirando vigencia buena (= un viaje extra al laboratorio dentro
+    // de unos meses que no hacía falta).
+    const cosechados = [], diferidos = [];
+    for (const a of drivers) {
+      if (a.estado !== "D" && a.estado !== "R") continue;
+      if (!a.vence || !a.vigenciaDias) continue;
+      if (a.vence === ftl) { cosechados.push(a); continue; }
+      const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
+      if (margen <= 0) { cosechados.push(a); continue; }
+      if (margen <= a.vigenciaDias * 0.25) cosechados.push(a);
+      else diferidos.push(Object.assign({}, a, { margenDias: margen }));
+    }
+
+    // ---- QUÉ SE ORDENA ----
+    // Todo lo que falta o venció + lo cosechado + los pasajeros que no estén
+    // bloqueados (se enganchan a la FTL sin fijarla y sin piso de 14 días).
+    const ordenar = []
+      .concat(faltantes.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
+      .concat(vencidos.filter((a) => MTR_DRIVERS.indexOf(a.clave) >= 0))
+      .concat(cosechados)
+      .concat(pasajeros.filter((a) => a.estado === "A"));
+    // Sin repetidos, conservando el orden.
+    const vistos = new Set();
+    const ordenarUnico = ordenar.filter((a) => {
+      if (vistos.has(a.clave)) return false;
+      vistos.add(a.clave); return true;
+    });
+
+    // ---- FECHA DE CONTROL ----
+    const control = mtrFechaControlSugerida(ftl, {
+      grupoSabado: c.grupoSabado || null,
+      preferirTarde: !!c.preferirTarde,
+    });
+
+    return {
+      hoy: hoy,
+      drivers: drivers, pasajeros: pasajeros,
+      faltantes: faltantes, vencidos: vencidos, bloqueados: bloqueados, noAplican: noAplican,
+      ftl: ftl, ftlSinAjustar: ftlCruda, seAdelantoPorDiaNoHabil: seAdelanto,
+      motivoFtl: motivoFtl, anr: anr,
+      cosechados: cosechados, diferidos: diferidos,
+      ordenar: ordenarUnico,
+      control: control,
+    };
+  }
+
+
   // CSS del bloque. Mismas convenciones que el recuadro renal: todo cuelga de
   // #vgl-labs-modal y toda declaración de color lleva !important, porque el CSS de
   // Everest pisa lo que no lo lleve (Regla E de la suite 25).
