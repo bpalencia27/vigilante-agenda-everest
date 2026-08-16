@@ -14183,13 +14183,14 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+
+  let _fuzzyPrevRow = new Uint16Array(128);
+  let _fuzzyCurrRow = new Uint16Array(128);
+  let _fuzzyPrevPrevRow = new Uint16Array(128);
+
   function fuzzyMatch(q, text) {
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
-
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14206,41 +14207,45 @@
         const n = tToken.length;
 
         // Ensure buffers are large enough
-        if (n + 1 > prevRow.length) {
-            const size = Math.max(n + 1, prevRow.length * 2);
-            prevRow = new Uint16Array(size);
-            currRow = new Uint16Array(size);
-            prevPrevRow = new Uint16Array(size);
+        if (n + 1 > _fuzzyPrevRow.length) {
+            const size = Math.max(n + 1, _fuzzyPrevRow.length * 2);
+            _fuzzyPrevRow = new Uint16Array(size);
+            _fuzzyCurrRow = new Uint16Array(size);
+            _fuzzyPrevPrevRow = new Uint16Array(size);
         }
+
+        let r0 = _fuzzyPrevPrevRow;
+        let r1 = _fuzzyPrevRow;
+        let r2 = _fuzzyCurrRow;
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
-          prevRow[j] = j;
+          r1[j] = j;
         }
 
         for (let i = 1; i <= m; i++) {
-          currRow[0] = i;
+          r2[0] = i;
           for (let j = 1; j <= n; j++) {
             const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
-            currRow[j] = Math.min(
-              prevRow[j] + 1,
-              currRow[j - 1] + 1,
-              prevRow[j - 1] + cost
+            r2[j] = Math.min(
+              r1[j] + 1,
+              r2[j - 1] + 1,
+              r1[j - 1] + cost
             );
             if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
-              currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
+              r2[j] = Math.min(r2[j], r0[j - 2] + cost);
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          let temp = prevPrevRow;
-          prevPrevRow = prevRow;
-          prevRow = currRow;
-          currRow = temp;
+          // Swap rows: r0 <- r1, r1 <- r2, r2 <- r0
+          let temp = r0;
+          r0 = r1;
+          r1 = r2;
+          r2 = temp;
         }
 
         let minCost = Infinity;
         for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
-          if (prevRow[j] < minCost) minCost = prevRow[j];
+          if (r1[j] < minCost) minCost = r1[j];
         }
         if (minCost <= maxErrors) {
           tokenMatched = true;
