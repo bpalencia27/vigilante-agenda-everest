@@ -14183,13 +14183,23 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+  let _fuzzyPrevRow = new Uint16Array(64);
+  let _fuzzyCurrRow = new Uint16Array(64);
+  let _fuzzyPrevPrevRow = new Uint16Array(64);
+  let _lastQueryStr = null;
+  let _lastQueryTokens = [];
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    if (q !== _lastQueryStr) {
+      _lastQueryStr = q;
+      _lastQueryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    }
+    const queryTokens = _lastQueryTokens;
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+    let prevRow = _fuzzyPrevRow;
+    let currRow = _fuzzyCurrRow;
+    let prevPrevRow = _fuzzyPrevPrevRow;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14211,6 +14221,9 @@
             prevRow = new Uint16Array(size);
             currRow = new Uint16Array(size);
             prevPrevRow = new Uint16Array(size);
+            _fuzzyPrevRow = prevRow;
+            _fuzzyCurrRow = currRow;
+            _fuzzyPrevPrevRow = prevPrevRow;
         }
 
         // initialize 1st row
