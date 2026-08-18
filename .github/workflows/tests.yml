@@ -8,7 +8,7 @@ on:
 
 env:
   # Umbral de cobertura estricto (funciones cubiertas como mínimo) para evitar regresiones
-  MIN_COVERAGE: 266
+  MIN_COVERAGE: 351
 
 jobs:
   test:
