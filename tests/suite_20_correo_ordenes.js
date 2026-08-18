@@ -31,11 +31,13 @@ module.exports = {
       // pageFetchJson lo tomaba por caída de red y terminaba devolviendo null — la URL
       // buena se perdía y se abría la reconstruida a mano, que daba 404.
       const urlReal = "https://neps.everestintelligent.com/apiviva/APIImpresion/reportepdf/GenerarOrdenHC?Agrupador=1226083463&idPaciente=540174";
-      const c = cargar({ silencioso: true, fetch: async (url) => { vista = url; return { ok: true, status: 200, headers: { get: () => null }, json: async () => { throw new Error("no es JSON"); }, text: async () => urlReal, clone() { return this; } }; } });
+      let vistaOpts = null;
+      const c = cargar({ silencioso: true, fetch: async (url, opts) => { vista = url; vistaOpts = opts; return { ok: true, status: 200, headers: { get: () => null }, json: async () => { throw new Error("no es JSON"); }, text: async () => urlReal, clone() { return this; } }; } });
       const res = await c.api.apiOrdenamientoGenerarLinks(540174, "1226083463");
       t.cierto(vista.includes("/apiviva/APIHCHealth/api/Morbilidad/GenerarLinksImpresionOrdenamientos"));
       t.cierto(vista.includes("PacienteId=540174"));
       t.cierto(vista.includes("Agrupador=1226083463"));
+      t.cierto(!!vistaOpts && !!vistaOpts.headers && vistaOpts.headers["Accept"] === "application/json", "debe solicitar Accept: application/json");
       t.igual(res, urlReal, "la URL del servidor llega intacta a quien la llama (imprimirOrdenPyM)");
       t.igual(c.api._urlImpresionOrdenPyM(res), urlReal, "y es la que se abre, sin reconstruir nada");
 

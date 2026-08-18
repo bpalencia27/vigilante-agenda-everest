@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version      14.1.5
+// @version      14.1.9
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  // [COPY-UX] Asistente clínico para la gestión fluida de la agenda médica y actividades de PyM en Everest.
@@ -23,8 +23,6 @@
 // @connect      script.google.com
 // @connect      script.googleusercontent.com
 // @connect      googleusercontent.com
-// @connect      localhost
-// @connect      127.0.0.1
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -953,7 +951,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "14.1.9";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1026,7 +1024,7 @@
       a.click();
       a.remove();
       alert("✅ Bitácora de Telemetría descargada exitosamente. Envía este archivo para depurar con datos reales.");
-    } catch (e) { alert("❌ Error al exportar bitácora: " + e); }
+    } catch (e) { alert("❌ No se pudo exportar la bitácora de telemetría en este momento. Inténtelo nuevamente."); }
   }
 
   // Interceptores Globales de Errores y Excepciones
@@ -2424,16 +2422,101 @@
   // En un caso real eso es asentar la falla renal de uno en la historia del otro, y al
   // guardar queda en firme. Los reintentos diferidos (300/900 ms) vuelven a comprobarlo
   // por su cuenta: disparan MÁS TARDE todavía, así que están aún más expuestos.
-  function injectLabsIntoCronicos(labsArray, docIdEsperado) {
+  // v14.1.8 — ¿Se puede escribir este valor en la casilla, según la tabla OFICIAL de la
+  // IPS? Devuelve null cuando no hay nada que objetar (y entonces se escribe como
+  // siempre), o el veredicto cuando el valor es IMPLAUSIBLE y hay que negarse.
+  //
+  // El criterio de "negarse" y no "escribir y avisar" es el mismo que rige el resto del
+  // proyecto: no escribir es recuperable —el médico ve el analito marcado y lo escribe a
+  // mano sabiendo por qué—, escribir un número equivocado no lo es. El caso que esto
+  // ataca es concreto y ya mordió a este script: una creatinina reportada en µmol/L llega
+  // como 88 donde se espera 1,0 mg/dL. La guarda de v14.1.3 impidió que ese 88 se
+  // convirtiera en un estadio renal falso, pero Auto-Labs seguía escribiéndolo en la
+  // casilla tal cual, y de ahí se guarda en la historia.
+  //
+  // Sólo se juzga cuando hay las tres cosas: tabla oficial, regla aplicable a ESTE
+  // paciente y un número de verdad. Un "> 300" o un "PENDIENTE" no se juzgan (no hay
+  // número que comparar) y siguen su camino de siempre.
+  function _objecionOficialAlValor(labKey, resultValCrudo, opts) {
+      const o = opts || {};
+      // Basta con comprobar que sea un arreglo: si viene vacío, `_reglasParaLabKey`
+      // devuelve [] y la salida de dos líneas más abajo lo atrapa igual. Aquí había
+      // además un `|| !o.tablaOficial.length` que una mutación demostró REDUNDANTE
+      // —quitarlo no ponía roja ni una prueba, y no porque faltara una aserción, sino
+      // porque no cambiaba nada. Una guarda que aparenta sujetar algo y no sujeta nada
+      // es peor que no tenerla: la próxima persona la lee como load-bearing.
+      if (!Array.isArray(o.tablaOficial)) return null;
+      const n = _labNumerico(resultValCrudo);
+      if (n == null) return null;
+      const reglas = _reglasParaLabKey(o.tablaOficial, labKey, { edad: o.edad, sexo: o.sexo });
+      if (!reglas.length) return null;
+      const v = _plausibilidadOficial(n, reglas);
+      if (v.estado !== "bajo" && v.estado !== "alto") return null;
+      return { key: labKey, valor: String(resultValCrudo), estado: v.estado, unidad: v.unidad, min: v.min, max: v.max, mensaje: v.mensaje };
+  }
+
+  // v14.1.8 — El aviso al médico cuando un valor NO se escribió por implausible.
+  //
+  // Dice tres cosas y ninguna más: qué llegó, qué esperaba la IPS y en qué unidad. NO
+  // dice "está mal", NO propone un valor corregido y NO convierte unidades — sugerir la
+  // conversión sería justo lo que este proyecto prohíbe, porque la sospecha de unidad es
+  // una sospecha, no un hecho, y el número "corregido" acabaría escrito en una historia
+  // clínica sin que nadie lo hubiera comprobado en el laboratorio.
+  function _textoImplausibles(lista) {
+      if (!Array.isArray(lista) || !lista.length) return "";
+      const lineas = lista.map((o) => {
+          const rango = (o.min == null ? "?" : o.min) + "\u2013" + (o.max == null ? "?" : o.max) + (o.unidad ? " " + o.unidad : "");
+          return "   \u00b7 " + o.key + ": lleg\u00f3 \"" + o.valor + "\" y la IPS espera " + rango
+               + (o.mensaje ? " (" + o.mensaje + ")" : "");
+      });
+      return "\n\n\ud83d\udeab " + lista.length + " resultado(s) NO se escribieron porque est\u00e1n fuera del rango que la propia IPS"
+           + " tiene parametrizado para ese examen:\n" + lineas.join("\n")
+           + "\n\n   Suele ser una unidad distinta a la que espera la casilla, o un error de digitaci\u00f3n en el"
+           + " laboratorio. Verif\u00edquelo y escr\u00edbalo a mano si el valor es correcto.";
+  }
+
+  // v14.1.8 — Reúne lo que hace falta para juzgar un valor contra la tabla oficial: la
+  // tabla que Everest ya cargó en esta vista, y la edad/sexo del paciente.
+  //
+  // Nada de esto es obligatorio, y ese es el punto: si no hay tabla, o si no se pudo leer
+  // la demografía, se devuelve lo que haya y `_objecionOficialAlValor` no objeta nada.
+  // Auto-Labs se comporta EXACTAMENTE como antes de v14.1.8. Ninguna de estas dos
+  // consultas puede impedir que el médico llene su historia.
+  //
+  // Consecuencia que conviene tener presente en vez de esconderla: de las 28 reglas
+  // reales, la ÚNICA que acota por edad es HEMOGLOBINA (0–110 años). Si la demografía no
+  // se puede leer, la hemoglobina se queda sin rango oficial y no se juzga — que es lo
+  // correcto, pero significa que el analito del rango más llamativo es justo el que más
+  // depende de que esa consulta funcione.
+  async function _contextoOficialParaLabs(docId) {
+      const ctx = { tablaOficial: _tablaOficialVigente(), edad: null, sexo: "" };
+      try {
+          const pid = await apiAccesoBuscarPaciente(docId);
+          if (pid) {
+              const demo = await apiAccesoObtenerDemograficos(pid);
+              if (demo) { ctx.edad = demo.edad; ctx.sexo = demo.sexo; }
+          }
+      } catch (e) { /* sin demografía se juzga menos, nunca peor */ }
+      return ctx;
+  }
+
+  function injectLabsIntoCronicos(labsArray, docIdEsperado, opts) {
+      if (state.killed) {
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], abortadoPorKillSwitch: true };
+      }
+      if (state.disabledFeatures && state.disabledFeatures.has("autoLabs")) {
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], desactivadoRemoto: true };
+      }
       let count = 0;
       let pendientes = 0;
       let respetadas = 0;
       const sinCasilla = [];
+      const implausibles = [];
       const yaEscritas = new Set();
-      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false };
+      if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [] };
       if (!_pacienteSigueAbierto(docIdEsperado)) {
           console.warn("[Vigilante] Auto-Labs ABORTADO: el paciente abierto cambió mientras Athenea respondía. No se escribió ninguna casilla.");
-          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, abortadoPorPaciente: true };
+          return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false, implausibles: [], abortadoPorPaciente: true };
       }
       // v12.5.11 — se enciende en cuanto Athenea confirma AL MENOS un componente real
       // (no vacío, no PENDIENTE) del parcial de orina — la misma condición que ya decide
@@ -2621,6 +2704,17 @@
                   return;
               }
               if (valorActual === "") {
+                  // v14.1.8 — La tabla oficial de la IPS manda ANTES de escribir. Un valor
+                  // implausible no se escribe: se reporta para que el médico lo ponga a
+                  // mano sabiendo qué rango esperaba Everest y en qué unidad.
+                  const objecion = _objecionOficialAlValor(matched.key, resultVal, opts);
+                  if (objecion) {
+                      implausibles.push(objecion);
+                      console.warn("[Vigilante] Auto-Labs NO escribió " + matched.key + " = " + resultVal
+                        + ": fuera del rango que la IPS declara (" + objecion.min + "–" + objecion.max
+                        + (objecion.unidad ? " " + objecion.unidad : "") + ").");
+                      return;
+                  }
                   setNgValue(inputEl, resultVal);
                   count++;
                   if (matched.key === "RAC") {
@@ -2760,7 +2854,7 @@
           }, 300);
       }
 
-      return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado };
+      return { count, pendientes, sinCasilla, respetadas, uroanalisisMarcado, implausibles };
   }
 
   // =====================================================================
@@ -2812,6 +2906,192 @@
       const n = Number(limpio);
       return Number.isFinite(n) && n > 0 ? n : null;
   }
+  // =====================================================================
+  //  v14.1.8 — RANGOS Y UNIDADES OFICIALES, LEÍDOS DE EVEREST
+  //
+  //  Everest publica en `GetValidacionExamenCronicos?citaId=` una tabla de validación por
+  //  examen. Campos OBSERVADOS en la captura real del 12-08-2026 (28 filas):
+  //  `codigoExamen`, `sexo`, `edadMin`, `edadMax`, `valorMinimo`, `valorMaximo`,
+  //  `swRequerido` y `unidad`. `codigoExamen` NO es un CUPS: es el nombre interno del
+  //  campo ("HEMOGLOBINA", "HBA1C", "RELACION_ALBUMINURIA_CREATININA").
+  //
+  //  Cuidado con la forma: `sexo` llegó como null en una fila y AUSENTE en las otras 27, y
+  //  `edadMin`/`edadMax` solo venían en HEMOGLOBINA. Los dos casos —null y ausente— tienen
+  //  que dar el mismo resultado, y por eso nada aquí usa `Number()` a secas.
+  //  `mensajeMinimo`/`mensajeMaximo` NO aparecen en la captura: se leen por si la IPS los
+  //  activa, y mientras no estén el mensaje sale vacío. Eso es compatibilidad hacia
+  //  adelante, no un campo observado.
+  //
+  //  Por qué vale más que una tabla escrita a mano:
+  //
+  //  · Trae la UNIDAD declarada. Es el dato que se llevaba pidiendo desde que se vio que
+  //    la RAC puede venir en mg/g o en mg/mmol y que NINGUNA guarda de rango puede
+  //    distinguirlas: 15 mg/mmol y 15 mg/g son igual de plausibles y significan cosas
+  //    opuestas — nefropatía franca una, normalidad la otra.
+  //  · Los rangos son de la propia IPS y varían por SEXO y EDAD, cosa que una tabla fija
+  //    no hace: el límite bajo de hemoglobina de una mujer no es el de un hombre.
+  //  · No se desactualiza sola. Si la IPS cambia un criterio, el script obedece sin que
+  //    nadie tenga que acordarse de editar una constante.
+  //
+  //  LA REGLA QUE GOBIERNA TODO ESTO: ante la duda, la regla NO se aplica. Una fila cuyo
+  //  sexo no se reconozca, o que acote por edad cuando la del paciente no se pudo leer, se
+  //  descarta. Aplicar una regla que quizá no corresponde es peor que no aplicar ninguna:
+  //  convertiría un valor legítimo en una alarma falsa, y a la tercera alarma falsa el
+  //  médico deja de mirarlas.
+  // =====================================================================
+
+  // Número o null. NUNCA Number() a secas sobre datos de la API, y este es el motivo:
+  // `Number(null)`, `Number("")`, `Number(" ")`, `Number([])` y `Number(false)` valen 0, no
+  // NaN. Con `Number()` directo, una fila con `edadMin: null` —que es como Everest dice "no
+  // acoto por edad"— se leía como "acoto desde los 0 años", y entonces la fila se
+  // descartaba en todo paciente cuya edad no se hubiera podido leer. Peor todavía: una
+  // fila con `valorMinimo: null, valorMaximo: null` se convertía en el rango [0, 0], que
+  // declara ALTO cualquier valor positivo; y un resultado vacío ("" del LIS cuando el
+  // laboratorio aún no ha llegado) se volvía el número 0, marcado BAJO en vez de "no hay
+  // número que comparar". Tres alarmas falsas nacidas de la misma coerción.
+  function _numeroEstricto(v) {
+    if (v === null || v === undefined || typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v).trim();
+    if (!s) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ¿Esta fila de la tabla le corresponde a ESTE paciente? Conservadora a propósito.
+  function _reglaExamenAplicable(fila, opts) {
+    if (!fila || typeof fila !== "object") return false;
+    const { edad, sexo } = (opts || {});
+
+    // SEXO. Una fila sin sexo declarado vale para todos. Con sexo declarado tiene que
+    // coincidir — y si lo que trae no se reconoce como M o F, la fila se descarta: no se
+    // adivina a quién se refiere.
+    const sexoFila = String(fila.sexo == null ? "" : fila.sexo).trim().toUpperCase();
+    if (sexoFila && sexoFila !== "AMBOS" && sexoFila !== "A" && sexoFila !== "T") {
+      const inicial = sexoFila.charAt(0);
+      if (inicial !== "M" && inicial !== "F") return false;             // valor desconocido
+      if (!String(sexo == null ? "" : sexo).trim()) return false;       // sin sexo del paciente
+      if ((inicial === "F") !== _esSexoFemenino(sexo)) return false;
+    }
+
+    // EDAD. Solo se comprueba si la fila acota. Y si acota pero no sabemos la edad del
+    // paciente, la fila NO se aplica: es justo el caso en que podría no corresponderle.
+    const min = _numeroEstricto(fila.edadMin), max = _numeroEstricto(fila.edadMax);
+    if (min !== null || max !== null) {
+      const e = _numeroEstricto(edad);
+      if (e === null) return false;
+      if (min !== null && e < min) return false;
+      if (max !== null && e > max) return false;
+    }
+    return true;
+  }
+
+  // Filas aplicables a un examen concreto. `codigoExamen` se compara como texto exacto
+  // (sin espacios alrededor): un código clínico no se parece "un poco".
+  function _reglasDeExamen(tabla, codigoExamen, opts) {
+    if (!Array.isArray(tabla)) return [];
+    const buscado = String(codigoExamen == null ? "" : codigoExamen).trim();
+    if (!buscado) return [];
+    return tabla.filter((f) =>
+      f && String(f.codigoExamen == null ? "" : f.codigoExamen).trim() === buscado &&
+      _reglaExamenAplicable(f, opts)
+    );
+  }
+
+  // La unidad que Everest declara para ese examen. Si las filas aplicables NO coinciden
+  // entre sí se devuelve null: dos unidades distintas para el mismo paciente son una
+  // contradicción de la fuente, y elegir una sería exactamente adivinar.
+  function _unidadOficialDeExamen(reglas) {
+    if (!Array.isArray(reglas) || !reglas.length) return null;
+    const unidades = new Set();
+    for (const r of reglas) {
+      const u = String(r && r.unidad != null ? r.unidad : "").trim();
+      if (u) unidades.add(u);
+    }
+    return unidades.size === 1 ? [...unidades][0] : null;
+  }
+
+  // Veredicto de plausibilidad contra los rangos oficiales.
+  //
+  // Devuelve SIEMPRE un estado explícito, nunca null a secas, y esa es la diferencia que
+  // más importa: "no hay regla para este examen" y "el valor se sale del rango" son cosas
+  // distintas y el médico necesita distinguirlas. Fundirlas hace desaparecer el analito
+  // como si el laboratorio no hubiera llegado nunca.
+  function _plausibilidadOficial(valorNum, reglas) {
+    const v = _numeroEstricto(valorNum);
+    if (v === null) return { estado: "valor_no_numerico", unidad: null, min: null, max: null, mensaje: "" };
+    if (!Array.isArray(reglas) || !reglas.length) return { estado: "sin_regla", unidad: null, min: null, max: null, mensaje: "" };
+
+    const unidad = _unidadOficialDeExamen(reglas);
+    // Con varias filas aplicables se toma la ENVOLVENTE: el rango más permisivo de todos.
+    // Rechazar por el más estrecho marcaría como imposible un valor que alguna regla de la
+    // propia IPS considera válido.
+    let min = null, max = null, msgMin = "", msgMax = "";
+    for (const r of reglas) {
+      const a = _numeroEstricto(r.valorMinimo), b = _numeroEstricto(r.valorMaximo);
+      if (a !== null && (min === null || a < min)) { min = a; msgMin = String(r.mensajeMinimo || ""); }
+      if (b !== null && (max === null || b > max)) { max = b; msgMax = String(r.mensajeMaximo || ""); }
+    }
+    if (min === null && max === null) return { estado: "sin_regla", unidad, min: null, max: null, mensaje: "" };
+    if (min !== null && v < min) return { estado: "bajo", unidad, min, max, mensaje: msgMin };
+    if (max !== null && v > max) return { estado: "alto", unidad, min, max, mensaje: msgMax };
+    return { estado: "dentro", unidad, min, max, mensaje: "" };
+  }
+
+  // ---------------------------------------------------------------------
+  //  LO QUE LOS RANGOS DE EVEREST SON, Y LO QUE NO SON
+  //
+  //  Capturado en consultorio el 12-08-2026, la tabla real trae, entre otras:
+  //      HEMOGLOBINA   3.0 – 30.0  g/dL
+  //      CREATININA    0.2 – 20.0  mg/dL
+  //      HBA1C         3.0 – 25.0  %
+  //
+  //  Una hemoglobina de 3.2 g/dL cae DENTRO y es una urgencia transfusional. Estos son
+  //  rangos de PLAUSIBILIDAD —"¿este número puede ser un resultado de laboratorio de
+  //  verdad, o es un dedazo / una unidad equivocada?"— y NO rangos de normalidad clínica.
+  //  Por eso la función se llama `_plausibilidadOficial` y su estado bueno se llama
+  //  "dentro" y no "normal": quien pinte "dentro" como "normal" estará tranquilizando al
+  //  médico sobre un valor crítico. No se hace. Nunca.
+  //
+  //  Lo que sí resuelven, y era lo que se buscaba: la UNIDAD declarada por la IPS.
+  //  `RELACION_ALBUMINURIA_CREATININA` viene en mg/g — la pregunta de si la RAC de esta
+  //  IPS es mg/g o mg/mmol queda contestada por la fuente, no por una suposición.
+  // ---------------------------------------------------------------------
+
+  // Puente entre las claves de WHITELIST_13_LABS y los `codigoExamen` de Everest.
+  // Cada línea que no es una coincidencia literal lleva su evidencia al lado; ninguna
+  // sale de "me suena que es lo mismo".
+  const LAB_KEY_A_EXAMEN_EVEREST = {
+      COLESTEROL_TOTAL: "COLESTEROL_TOTAL",
+      COLESTEROL_HDL: "HDL",
+      COLESTEROL_LDL: "LDL",
+      TRIGLICERIDOS: "TRIGLICERIDOS",
+      GLUCOSA: "GLUCOSA_SUERO",          // la propia entrada se llama "GLUCOSA EN SUERO"
+      CREATININA: "CREATININA",
+      HBA1C: "HBA1C",
+      PTH: "PTH",
+      FOSFORO: "FOSFORO_SERICO",         // "FOSFORO EN SUERO" en la lista de nombres
+      ALBUMINA: "ALBUMINA_SERICA",       // "ALBUMINA EN SUERO" en la lista de nombres
+      HEMOGLOBINA: "HEMOGLOBINA",
+      // La casilla que usa el script es `resultadoRelacionAlbuminaCreatinina`, cuya
+      // etiqueta se leyó en consultorio (v12.0.5): "Relación albuminuria/Creatinina en
+      // orina (mg/g)". Everest declara RELACION_ALBUMINURIA_CREATININA en mg/g. Mismo
+      // nombre, misma unidad. NO es MICROALBUMINURIA_CREATINURIA, que también viene en
+      // mg/g pero corresponde a la OTRA casilla —`resultadoMicroAlbuminuriaCreatinuria`—
+      // que ese mismo comentario prohíbe expresamente usar: son dos exámenes distintos.
+      RAC: "RELACION_ALBUMINURIA_CREATININA",
+      // UROANALISIS no se mapea a propósito: no es un examen numérico (es el par SI/NO
+      // más siete componentes de texto) y Everest no lo parametriza. Inventarle una
+      // correspondencia sería juzgar con un rango algo que no tiene número.
+  };
+
+  // Reglas oficiales para una clave del catálogo del script (no para un `codigoExamen`).
+  function _reglasParaLabKey(tabla, labKey, opts) {
+      const codigo = LAB_KEY_A_EXAMEN_EVEREST[labKey];
+      if (!codigo) return [];
+      return _reglasDeExamen(tabla, codigo, opts);
+  }
+
   function _vigenciaDiasParaAnalito(key, resultValCrudo) {
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
@@ -2846,7 +3126,7 @@
   // administrativo) — nunca peso ideal ni ajustado. Centinela 0 = "no evaluable".
   function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
       const edad = Number(edadAnios), peso = Number(pesoKg), creat = Number(creatininaSerica);
-      if (!(edad > 0) || !(peso > 0) || !(creat > 0) || edad >= 140) return 0;
+      if (!(edad >= 18 && edad <= 120) || !(peso >= 20 && peso <= 300) || !(creat >= 0.1 && creat <= 20)) return 0;
       let v = ((140 - edad) * peso) / (72 * creat);
       if (_esSexoFemenino(sexo)) v *= 0.85;
       return Math.round(v * 10) / 10;
@@ -2854,7 +3134,7 @@
   // CKD-EPI 2021 (sin el término de raza, ya retirado). Centinela 0 = "no evaluable".
   function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
       const edad = Number(edadAnios), creat = Number(creatininaSerica);
-      if (!(edad > 0) || !(creat > 0)) return 0;
+      if (!(edad >= 18 && edad <= 120) || !(creat >= 0.1 && creat <= 20)) return 0;
       const femenino = _esSexoFemenino(sexo);
       const k = femenino ? 0.7 : 0.9;
       const a = femenino ? -0.241 : -0.302;
@@ -3180,7 +3460,7 @@
               // el robot no repita esta misma consulta 30 s después.
               if (labs) _labsPrefetch = { docId, labs, ts: Date.now() };
               if (labs && labs.length > 0) {
-                  const r = injectLabsIntoCronicos(labs, docId);
+                  const r = injectLabsIntoCronicos(labs, docId, await _contextoOficialParaLabs(docId));
                   // v14.1.5 — si el médico cambió de historia mientras Athenea respondía,
                   // no se escribió nada y hay que DECIRLO: callarlo dejaría creer que la
                   // historia quedó diligenciada.
@@ -3198,6 +3478,7 @@
                     + (r.respetadas ? "\n\n✋ " + r.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                     + (r.pendientes ? "\n\n⏳ " + r.pendientes + " analito(s) siguen PENDIENTES en el laboratorio: no se escribieron." : "")
                     + (r.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r.sinCasilla.join(", ") + "." : "")
+                    + _textoImplausibles(r.implausibles)
                     + "\n\nRevise las fechas de toma antes de guardar la historia.");
               } else if (atheneaSesionViva === false) {
                   // v12.3.15 — La causa más común de "sin resultados" es que NO HAY SESIÓN
@@ -3216,7 +3497,7 @@
                           btn.innerHTML = "⏳ Reintentando…";
                           const labs2 = await getAtheneaLabsAuto(docId);
                           if (labs2 && labs2.length > 0) {
-                              const r2 = injectLabsIntoCronicos(labs2, docId);
+                              const r2 = injectLabsIntoCronicos(labs2, docId, await _contextoOficialParaLabs(docId));
                               if (r2.abortadoPorPaciente) {
                                   uxTrack("labs.autollenado.abortado_cambio_paciente");
                                   alert("🛑 No se diligenció nada: la historia clínica abierta cambió mientras se iniciaba sesión en Athenea."
@@ -3229,6 +3510,7 @@
                                 + (r2.respetadas ? "\n\n✋ " + r2.respetadas + " casilla(s) ya tenían valor y se RESPETARON (no se sobrescribió nada)." : "")
                                 + (r2.pendientes ? "\n\n⏳ " + r2.pendientes + " analito(s) siguen PENDIENTES: no se escribieron." : "")
                                 + (r2.sinCasilla.length ? "\n\n⚠ Sin casilla en esta vista: " + r2.sinCasilla.join(", ") + "." : "")
+                                + _textoImplausibles(r2.implausibles)
                                 + "\n\nRevise las fechas de toma antes de guardar la historia.");
                           } else {
                               alert("Sesión de Athenea iniciada, pero no se encontraron laboratorios para el paciente (cédula " + docId + ").");
@@ -3251,7 +3533,7 @@
                     + "\n\nConsulte los resultados directamente en el portal. No se diligenció ninguna casilla.");
               }
           } catch (e) {
-              alert("❌ Error al consultar Athenea: " + e);
+              alert("❌ No se pudo conectar con el Portal de Athenea para consultar los paraclínicos. Por favor verifique su conexión o intente desde el portal.");
           }
           btn.innerHTML = "🧬 Auto-Labs (Athenea)";
       };
@@ -3551,9 +3833,31 @@
       };
   }
 
-  function sanitizePII(text) {
-      if (!text) return text;
-      return text.replace(/\b\d{6,11}\b/g, '[CENSURADO]');
+  // Saneamiento profundo y recursivo de PHI/PII (R1.4, R1.5)
+  function scrubPII(input) {
+    if (input == null || typeof input === "boolean") return input;
+    if (typeof input === "number") {
+      if (input >= 100000 && input <= 9999999999) return "[CENSURADO]";
+      return input;
+    }
+    if (Array.isArray(input)) return input.map(scrubPII);
+    if (typeof input === "object") {
+      const res = {};
+      for (const k of Object.keys(input)) {
+        res[k] = scrubPII(input[k]);
+      }
+      return res;
+    }
+    let str = String(input);
+    str = str.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[CORREO_CENSURADO]");
+    str = str.replace(/(?:Av(?:enida)?\s+El\s+Dorado|\b(?:Calle|Cra|Carrera|Cl|Diag|Diagonal|Transv|Transversal|Av|Avenida)(?:\s+[a-zA-Z0-9]+)?)\s*#\s*[\d-]+/gi, "[DIR_CENSURADA]");
+    str = str.replace(/(?:\+57\s*)?(?:\(?3\d{2}\)?[\s.-]*\d{3}[\s.-]*\d{4}|\b3\d{9}\b)/g, "[TEL_CENSURADO]");
+    str = str.replace(/\b\d{1,3}(?:[.-]\d{3}){1,3}\b/g, "[CENSURADO]");
+    str = str.replace(/(?<=\b|_)\d{6,10}(?=\b|_)/g, "[CENSURADO]");
+    return str;
+  }
+  function sanitizePII(input) {
+    return scrubPII(input);
   }
 
   // v11.0.1 — RETIRADA la telemetría remota a ".../AKfycby_TELEMETRY/exec". Ese
@@ -3625,7 +3929,7 @@
     recordatorio: "07:30",    // avisa si a esta hora aún no hay PyM cargado ("" = nunca)
     baseAuto: true,           // bajar la base PyM de la sede UNA vez al día (por identificador)
     respaldoId: "",           // opcional: otro archivo de base (enlace o identificador)
-    reporte: true,            // reporte MÍNIMO al tablero (resumen diario + fraudes; nada más)
+    reporte: false,           // reporte MÍNIMO al tablero (Default-off R1.8)
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
@@ -3639,37 +3943,162 @@
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
-    uxTelemetria: true,       // v12.5.0 — conteo ANÓNIMO de acciones del panel (sin datos de paciente) para mejora continua; 1 fila agregada cada 30 min
+    uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
     opcionesTecnicas: false,  // mostrar los ajustes avanzados en la hoja de Ajustes (v12.0.0)
     medicoNombre: "",          // opcional: nombre manual del médico (si difiere del auto-detectado)
     medicoId: 0,              // opcional: ID manual del médico
   };
-  function readJSON(k, def) { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
+  function safeReadJSON(k, def) {
+    try {
+      const r = localStorage.getItem(k);
+      if (r === null || r === undefined) return def;
+      return JSON.parse(r);
+    } catch (e) {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const qKey = `vgl_quarantine_${k}_${Date.now()}`;
+          localStorage.setItem(qKey, raw);
+        }
+      } catch (e2) {}
+      return def;
+    }
+  }
+  function readJSON(k, def) { return safeReadJSON(k, def); }
+
   // v12.3.13 — Purga de emergencia cuando setItem lanza por cuota llena: libera el
   // ~40% más viejo de las estadísticas y bitácoras DEL PROPIO script (deja 18 de los
   // 30 días), reutilizando purgeOld y purgeEventDays con ventana reducida. Jamás toca
-  // claves ajenas de Everest. Los literales "vgl_stats"/18 (en vez de STATS_KEY /
-  // KEEP_DAYS*0.6) son a propósito: permiten que la purga funcione incluso si la
-  // cuota se llena durante el arranque, antes de que esas constantes se declaren.
+  // claves ajenas de Everest.
   function purgaPorCuota() {
     try {
-      const dias = 18; // = KEEP_DAYS(30) * 0.6 — conserva solo lo más reciente
-      try { const a = readJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
+      const dias = 18;
+      try { const a = safeReadJSON("vgl_stats", {}) || {}; purgeOld(a, dias); localStorage.setItem("vgl_stats", JSON.stringify(a)); } catch (e) {}
       try { purgeEventDays(dias); } catch (e) {}
       if (!quotaAvisada) { quotaAvisada = true; console.warn("[Vigilante] Almacenamiento del navegador lleno (QuotaExceeded): se purgó lo más viejo de los registros propios (vgl_*) y se reintenta la escritura."); }
     } catch (e) {}
   }
-  function writeJSON(k, v) {
+
+  function safeWriteJSON(k, v) {
     try { localStorage.setItem(k, JSON.stringify(v)); return true; }
     catch (e) {
-      // QuotaExceededError (e.name), code 22, o cualquier otro fallo de setItem:
-      // una purga de emergencia y UN único reintento; si vuelve a fallar, false como
-      // siempre. En el banco de pruebas el localStorage simulado nunca lanza, así
-      // que esta ruta solo corre en el navegador real.
       purgaPorCuota();
       try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e2) { return false; }
     }
   }
+  function writeJSON(k, v) { return safeWriteJSON(k, v); }
+
+  const SCHEMA_TARGET_VERSION = 14;
+  function migrarEsquemaVgl() {
+    let schema = safeReadJSON("vgl_schema", null);
+    if (!schema || typeof schema !== "object") {
+      schema = { version: 0, migrationsApplied: [] };
+    }
+    if (schema.version > SCHEMA_TARGET_VERSION) {
+      try {
+        localStorage.setItem(`vgl_future_backup_${schema.version}_${Date.now()}`, JSON.stringify(schema));
+      } catch (e) {}
+      return schema;
+    }
+    const applied = Array.isArray(schema.migrationsApplied) ? [...schema.migrationsApplied] : [];
+    let v = schema.version || 0;
+    if (v < 4) {
+      applied.push("v0->v4: normalizar configuraciones");
+      v = 4;
+    }
+    if (v < 7) {
+      applied.push("v4->v7: purga de eventos legados");
+      try { localStorage.removeItem("vgl_events"); } catch (e) {}
+      try { localStorage.setItem("vgl_v73", "1"); } catch (e) {}
+      v = 7;
+    }
+    if (v < 12) {
+      applied.push("v7->v12: migracion de agenda y RCV");
+      v = 12;
+    }
+    if (v < 13) {
+      applied.push("v12->v13: modularizacion de storage");
+      v = 13;
+    }
+    if (v < 14) {
+      applied.push("v13->v14: esquema unificado v14");
+      v = 14;
+    }
+    const nuevo = Object.assign({}, schema, { version: 14, migrationsApplied: applied, updated: new Date().toISOString() });
+    safeWriteJSON("vgl_schema", nuevo);
+    return nuevo;
+  }
+
+  const _circuitBreakers = new Map();
+  function getCircuitBreaker(endpointKey) {
+    if (!_circuitBreakers.has(endpointKey)) {
+      _circuitBreakers.set(endpointKey, {
+        state: "CLOSED",
+        failures: 0,
+        threshold: 3,
+        resetTimeoutMs: 60000,
+        nextAttemptTs: 0
+      });
+    }
+    return _circuitBreakers.get(endpointKey);
+  }
+
+  async function circuitBreakerExec(endpointKey, fn, fallbackFn) {
+    const cb = getCircuitBreaker(endpointKey);
+    const now = Date.now();
+    if (cb.state === "OPEN") {
+      if (now >= (cb.nextAttemptTs || 0)) {
+        cb.state = "HALF-OPEN";
+      } else {
+        if (typeof fallbackFn === "function") return fallbackFn();
+        return null;
+      }
+    }
+    try {
+      const result = await fn();
+      if (cb.state === "HALF-OPEN") {
+        if (result === null || result === undefined) {
+          cb.state = "OPEN";
+          cb.resetTimeoutMs = Math.min(300000, (cb.resetTimeoutMs || 60000) * 2);
+          cb.nextAttemptTs = Date.now() + cb.resetTimeoutMs;
+          if (typeof fallbackFn === "function") return fallbackFn();
+          return null;
+        }
+        cb.state = "CLOSED";
+        cb.failures = 0;
+        cb.resetTimeoutMs = 60000;
+      } else if (cb.state === "CLOSED") {
+        cb.failures = 0;
+      }
+      return result;
+    } catch (err) {
+      cb.failures++;
+      if (cb.state === "HALF-OPEN") {
+        cb.state = "OPEN";
+        cb.resetTimeoutMs = Math.min(300000, (cb.resetTimeoutMs || 60000) * 2);
+        cb.nextAttemptTs = Date.now() + cb.resetTimeoutMs;
+      } else if (cb.failures >= cb.threshold) {
+        cb.state = "OPEN";
+        cb.nextAttemptTs = Date.now() + (cb.resetTimeoutMs || 60000);
+      }
+      if (typeof fallbackFn === "function") return fallbackFn(err);
+      return null;
+    }
+  }
+
+  function invalidarApiSiCambioMedico(nuevoMedicoId) {
+    if (!nuevoMedicoId) return;
+    const previo = localStorage.getItem("vgl_api_medico");
+    if (previo && String(previo) !== String(nuevoMedicoId)) {
+      localStorage.removeItem("vgl_api_url");
+      if (state.apiCitas) state.apiCitas = null;
+      state.apiEn = 0;
+      state.lastSnapshot = null;
+      state.lastSignature = "";
+    }
+    localStorage.setItem("vgl_api_medico", String(nuevoMedicoId));
+  }
+
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
   // Migración desde v4.x: la ventana emergente se guardaba en una clave aparte.
   try { const viejo = localStorage.getItem("vgl_popup"); if (viejo !== null && !("popup" in (readJSON(SETTINGS_KEY, {}) || {}))) S.popup = viejo === "1"; } catch (e) {}
@@ -3917,6 +4346,14 @@
     userWinState: "full",
     // v7.9.0: médico activo detectado dinámicamente desde la sesión / API
     activeDoctor: { id: 0, name: "" },
+    // Red de seguridad remota y Kill-Switch (R5.1, R5.3)
+    killed: false,
+    killReason: "",
+    disabledFeatures: new Set(),
+    timers: [],
+    // Detección de Instancia Duplicada (R5.8)
+    isDuplicateInstance: false,
+    duplicateVersion: "",
   };
 
   const state = new Proxy(rawState, {
@@ -3997,6 +4434,10 @@
   function _pestanaOculta() {
     try { return document.visibilityState === "hidden"; } catch (e) { return false; }
   }
+  const RELEVO_VISIBILIDAD_MIN_MS = 10000;
+  let _ultimoRelevoVisibilidad = 0;
+  function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
+  function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
   function heartbeat() {
     try {
       const ahora = Date.now();
@@ -4006,11 +4447,19 @@
       if (beat && beat.id && beat.id !== TABID && (ahora - beat.t) < LEADER_TTL_MS) {
         // Latido ajeno y fresco. Solo se le desafía si él está oculto —y por tanto
         // estrangulado por el navegador— y yo estoy a la vista.
-        const relevoPorVisibilidad = beat.oculta === true && !yoOculta;
+        // v14.1.5 — El enfriamiento NO es decorativo, y lo señaló una auditoría adversarial
+        // del propio arreglo: cada toma de mando hace `API.ultimo = 0`, o sea una lectura
+        // inmediata de la agenda. Con Alt+Tab rápido entre dos pestañas de Everest, cada
+        // conmutación robaba el mando y disparaba su consulta, así que el servidor recibía
+        // ráfagas de peticiones. Un relevo por visibilidad cada 10 s como mucho: quien de
+        // verdad se quedó mirando la pestaña se lleva el mando igual, solo que sin ráfaga.
+        const relevoPorVisibilidad = beat.oculta === true && !yoOculta &&
+          (ahora - _ultimoRelevoVisibilidad) > RELEVO_VISIBILIDAD_MIN_MS;
         if (!relevoPorVisibilidad) {
           state.leader = false;             // hay un líder ajeno y su latido está fresco
           return false;
         }
+        _ultimoRelevoVisibilidad = ahora;
         console.log("[Vigilante] Relevo de liderazgo: la pestaña líder está oculta y el navegador le estrangula el temporizador. Toma el mando esta, que está a la vista.");
       }
       // Latido propio, vencido, inexistente, o de un líder oculto al que se releva.
@@ -4093,8 +4542,6 @@
   // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS del panel, por pedido
   // del consultorio: saturaban la fila y no son órdenes que se generen desde ahí. SIGUEN
   // en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra como pendientes.
-  function isPanelHiddenActivity(label) { return /optometr|odontolog/i.test(stripAccents(String(label || ""))); }
-  function panelActivities(list) { return (list || []).filter((l) => !isPanelHiddenActivity(l)); }
   // v12.4.0 — Pendientes que QUEDAN para el aviso de la historia: todo lo del índice PyM
   // menos las actividades cuyas órdenes ya se generaron HOY desde el panel (el detalle
   // por actividad lo guarda markOrdenesCreadasHoy). Si el médico no ha ordenado nada,
@@ -5015,20 +5462,67 @@
   // Solo se enganchan los errores que salen del PROPIO script: el userscript comparte
   // ventana con Everest y con Athenea, y subir los errores ajenos llenaría el tablero de
   // ruido que no podemos arreglar (la consola del consultorio está llena de ellos).
+  // v14.1.6 — EL CAZADOR DE ERRORES LLEVABA UNA SEMANA SIN CAZAR NADA.
+  //
+  // Hallazgo del export real del tablero (14-ago-2026, 20 equipos, ~6 días): la hoja
+  // `error` NO EXISTE. El servidor la crea al recibir el primer evento de ese tipo, así
+  // que su ausencia prueba que no ha llegado ninguno. Y la segunda confirmación, esta
+  // independiente: en `uso_detalle` no hay ni una clave `error.js`, `error.promesa` ni
+  // `error.distintos` — y esas se emiten desde `reportarError` ANTES del tope diario y
+  // ANTES de `repOn()`, así que aparecerían aunque el envío estuviera capado o apagado.
+  // Conclusión: `reportarError` no se ha llamado nunca, en ninguna máquina.
+  //
+  // La causa es el filtro de aquí. Estaba escrito contra `ev.filename` esperando leer
+  // algo con "userscript" o "vigilante" dentro, pero el nombre de archivo que el gestor
+  // de userscripts pone en un error depende de CÓMO inyecte el script, y en varias
+  // configuraciones no contiene ninguna de las dos palabras: puede ser la URL de la
+  // página, un blob:, una URL de extensión, o venir vacío. El filtro que debía dejar
+  // fuera los errores de Everest estaba dejando fuera también los nuestros.
+  //
+  // El arreglo no vuelve a adivinar cómo nos vemos: lo AVERIGUA al arrancar. Se provoca
+  // un error controlado y se anota de qué archivo dice venir. Esa firma es la de nuestro
+  // propio código, sea cual sea el gestor y el navegador, y contra ella se comparan los
+  // errores que lleguen después. La heurística vieja se conserva como respaldo por si la
+  // firma no se pudiera capturar.
+  let _firmaPropia = "";
+  try {
+    throw new Error("firma");
+  } catch (e) {
+    try {
+      // La primera línea del stack es el `throw` de aquí arriba: justo nuestro archivo.
+      const linea = String((e && e.stack) || "").split("\n").find((l) => /:\d+:\d+/.test(l)) || "";
+      const m = linea.match(/\(?([^()\s]+):\d+:\d+\)?\s*$/);
+      if (m && m[1] && m[1].length > 4) _firmaPropia = m[1];
+    } catch (e2) {}
+  }
+  function _esErrorPropio(pila, archivo) {
+    const s = String(pila || "") + " " + String(archivo || "");
+    if (_firmaPropia && s.indexOf(_firmaPropia) !== -1) return true;
+    return /userscript|vigilante|tampermonkey|greasemonkey|violentmonkey/i.test(s);
+  }
+  function _getFirmaPropiaParaTest() { return _firmaPropia; }
+  function _setFirmaPropiaParaTest(v) { _firmaPropia = v; }
+
   function _instalarCazaErrores() {
     try {
       window.addEventListener("error", (ev) => {
         try {
           const archivo = String((ev && ev.filename) || "");
-          if (!/userscript|vigilante/i.test(archivo)) return;
-          reportarError("js", (ev && ev.message) || "", archivo.split("/").pop() + ":" + ((ev && ev.lineno) || 0));
+          // El stack del Error real es mucho más fiable que `filename`: lleva TODOS los
+          // marcos, así que basta con que uno solo sea nuestro para reconocerlo.
+          const pila = String((ev && ev.error && ev.error.stack) || "");
+          if (!_esErrorPropio(pila, archivo)) return;
+          reportarError("js", (ev && ev.message) || "", (archivo.split("/").pop() || "?") + ":" + ((ev && ev.lineno) || 0));
         } catch (e) {}
       });
       window.addEventListener("unhandledrejection", (ev) => {
         try {
           const r = ev && ev.reason;
           const pila = String((r && r.stack) || "");
-          if (pila && !/userscript|vigilante/i.test(pila)) return;
+          // Sin stack no se puede saber de quién es. Se sigue dejando pasar —como antes—
+          // porque una promesa nuestra rechazada con un valor suelto (no un Error) no
+          // trae stack, y perder eso es peor que un poco de ruido ajeno.
+          if (pila && !_esErrorPropio(pila, "")) return;
           reportarError("promesa", (r && r.message) || r || "", "");
         } catch (e) {}
       });
@@ -5077,7 +5571,31 @@
   // texto ajeno, incluso PII, al tablero).
   // Además del filtro de caracteres, toda tira de 6+ dígitos se elimina: una cédula
   // jamás puede sobrevivir en una clave, ni siquiera inyectada por un tercero.
-  function uxClaveLimpia(k) { return String(k == null ? "" : k).toLowerCase().replace(/\d{6,}/g, "").replace(/[^a-z0-9.:_-]/g, "").slice(0, 60); }
+  // v14.1.9 — LA BARRERA TENÍA LOS PASOS EN EL ORDEN EQUIVOCADO, y por eso no paraba
+  // ninguna cédula escrita como se escriben las cédulas.
+  //
+  // La versión anterior era: quitar los tramos de 6+ dígitos, y DESPUÉS quitar todo lo que
+  // no fuera `[a-z0-9.:_-]`. Con ese orden se colaban tres formas, todas cotidianas:
+  //
+  //   · "1.143.142.498"  — el punto está en la lista de caracteres PERMITIDOS, así que no
+  //     hay ningún tramo de 6 dígitos seguidos que quitar. La cédula salía entera.
+  //   · "300-123-4567"   — igual con el guion. El celular salía entero.
+  //   · "1 143 142 498"  — el espacio SÍ se quitaba… pero en el segundo paso, cuando el
+  //     primero ya había pasado. Los dígitos se pegaban DESPUÉS de la única comprobación
+  //     que los habría cazado, y salía "1143142498".
+  //
+  // Ahora se normaliza primero y se cuentan los dígitos IGNORANDO los separadores: si un
+  // tramo suma 6 o más, se va entero. Las 38 claves reales del script son literales y
+  // ninguna lleva dígitos (la más cargada es "panel.silenciar15", con dos), así que esto
+  // no puede tragarse telemetría legítima — hay prueba que lo fija.
+  function uxClaveLimpia(k) {
+    let s = String(k == null ? "" : k).toLowerCase().replace(/[^a-z0-9.:_-]/g, "");
+    s = s.replace(/\d[\d.:_-]*\d/g, (m) => (m.replace(/\D/g, "").length >= 6 ? "" : m));
+    // Al quitar un tramo quedan separadores pegados ("labs..fin"); se colapsan para que la
+    // clave saneada no dependa de dónde estaba el dato que se fue.
+    s = s.replace(/([.:_-])[.:_-]+/g, "$1").replace(/^[.:_-]+|[.:_-]+$/g, "");
+    return s.slice(0, 60);
+  }
   function uxTrack(accion, extra) {
     try {
       if (S.uxTelemetria === false) return;
@@ -5807,7 +6325,7 @@
   // Vuelve a escribirla como la muestra Everest, para que el panel se lea igual
   // venga del API o de la pantalla.
   function horaBonita(min) {
-    if (min == null) return "";
+    if (typeof min !== "number" || !Number.isFinite(min) || min < 0 || min >= 1440) return "";
     const h24 = Math.floor(min / 60) % 24, mi = min % 60, h12 = (h24 % 12) === 0 ? 12 : (h24 % 12);
     return h12 + ":" + String(mi).padStart(2, "0") + (h24 < 12 ? " a. m." : " p. m.");
   }
@@ -5960,6 +6478,80 @@
     } catch (e) {}
   }
 
+  // Universal Modal Accessibility Manager (R6.4)
+  function _activarAccesibilidadModal(modalEl, closeCallback) {
+    if (!modalEl || typeof modalEl.addEventListener !== "function") return () => {};
+    const previoFoco = typeof document !== "undefined" ? document.activeElement : null;
+    try {
+      if (typeof modalEl.getAttribute === "function" && typeof modalEl.setAttribute === "function") {
+        if (!modalEl.getAttribute("role")) modalEl.setAttribute("role", "dialog");
+        if (!modalEl.getAttribute("aria-modal")) modalEl.setAttribute("aria-modal", "true");
+      }
+    } catch (e) {}
+
+    const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+    function getFocusableElements() {
+      if (typeof modalEl.querySelectorAll !== "function") return [];
+      return Array.from(modalEl.querySelectorAll(FOCUSABLE_SELECTOR) || []).filter(
+        (el) => !el.getAttribute || el.getAttribute("aria-hidden") !== "true"
+      );
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        if (typeof e.stopPropagation === "function") e.stopPropagation();
+        if (typeof e.preventDefault === "function") e.preventDefault();
+        cleanup();
+        if (typeof closeCallback === "function") closeCallback();
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusables = getFocusableElements();
+        if (!focusables.length) {
+          if (typeof e.preventDefault === "function") e.preventDefault();
+          return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || (modalEl.contains && !modalEl.contains(document.activeElement))) {
+            if (typeof e.preventDefault === "function") e.preventDefault();
+            if (last && typeof last.focus === "function") last.focus();
+          }
+        } else {
+          if (document.activeElement === last || (modalEl.contains && !modalEl.contains(document.activeElement))) {
+            if (typeof e.preventDefault === "function") e.preventDefault();
+            if (first && typeof first.focus === "function") first.focus();
+          }
+        }
+      }
+    }
+
+    modalEl.addEventListener("keydown", onKeyDown);
+
+    setTimeout(() => {
+      try {
+        const focusables = getFocusableElements();
+        if (focusables.length > 0 && typeof focusables[0].focus === "function") focusables[0].focus();
+        else if (typeof modalEl.focus === "function") modalEl.focus();
+      } catch (e) {}
+    }, 0);
+
+    function cleanup() {
+      try {
+        if (typeof modalEl.removeEventListener === "function") {
+          modalEl.removeEventListener("keydown", onKeyDown);
+        }
+        if (previoFoco && typeof previoFoco.focus === "function") {
+          previoFoco.focus();
+        }
+      } catch (e) {}
+    }
+
+    return cleanup;
+  }
+
   // (4) CARTEL GRANDE dentro de Everest para el FRAUDE: imposible de ignorar
   //     cuando el navegador está a la vista.
   // [COPY-UX] Cartel modal de confirmación fuera de secuencia
@@ -5970,23 +6562,23 @@
       if (ov) ov.remove();
       const c = COLORS[color] || COLORS.AZUL;
       ov = document.createElement("div"); ov.id = "vgl-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // [v12.3.13] El CSS estático de este cartel vive al final de la hoja maestra de buildOverlay()
-      // (se inyecta UNA vez, no en cada alerta). El único valor dinámico —el color del estado— entra
-      // aquí como custom property inline (--ac / --ac-rgb) sobre la tarjeta; las reglas de la hoja
-      // maestra lo consumen con var(), de modo que el estilo computado es idéntico al de antes.
       ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
           <div class="vgl-modal-dot"></div>
-          <div class="vgl-modal-t"></div><div class="vgl-modal-b"></div>
+          <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
           <button class="vgl-modal-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-modal-t").textContent = title;
-      ov.querySelector(".vgl-modal-b").textContent = body;
-      const ok = ov.querySelector(".vgl-modal-ok");
-      ok.addEventListener("click", () => { ov.remove(); acknowledge(); });
+      const tEl = ov.querySelector ? ov.querySelector(".vgl-modal-t") : null;
+      if (tEl) tEl.textContent = title;
+      const bEl = ov.querySelector ? ov.querySelector(".vgl-modal-b") : null;
+      if (bEl) bEl.textContent = body;
+      const ok = ov.querySelector ? ov.querySelector(".vgl-modal-ok") : null;
+      const closeMod = () => { ov.remove(); acknowledge(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
     } catch (e) {}
   }
 
@@ -5999,35 +6591,32 @@
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pym-modal";
+      ov.setAttribute("role", "dialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // v12.4.0 — Abandono del programa de riesgo cardiovascular: el cuadro entero se
-      // repinta con el ROSA del panel (--c-pes). Basta con re-apuntar las dos variables
-      // de color que usa todo el CSS del recordatorio: hereda a chips, botón y borde.
       if (esPes) {
         ov.classList.add("pes");
         ov.style.setProperty("--rgb-recordatorio", "var(--rgb-pes)");
         ov.style.setProperty("--c-recordatorio", "var(--c-pes)");
       }
-      const chips = actividades.map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
-      // [v12.3.13] El CSS de este recordatorio vive al final de la hoja maestra de buildOverlay():
-      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
+      const chips = (actividades || []).map((a) => `<span class="vgl-pym-chip">${escapeHtml(a)}</span>`).join("");
       ov.innerHTML = `<div class="vgl-pym-card">
           <div class="vgl-pym-ic">🩺</div>
           <div class="vgl-pym-t">Actividades preventivas pendientes</div>
-          <div class="vgl-pym-n"></div>
+          <div class="vgl-pym-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-pym-lead">Se sugiere revisar y solicitar las siguientes actividades de prevención:</div>
           <div class="vgl-pym-list">${chips}</div>
           <div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pym-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-pym-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-pym-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pym.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.pym.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack(esPes ? "aviso.pym.mostrado.pes" : "aviso.pym.mostrado", { n: (actividades || []).length });
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
     } catch (e) {}
   }
 
@@ -6037,25 +6626,25 @@
       let ov = document.getElementById("vgl-pes-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-pes-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // [v12.3.13] El CSS de esta alerta vive al final de la hoja maestra de buildOverlay():
-      // se inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
       ov.innerHTML = `<div class="vgl-pes-card">
           <div class="vgl-pes-ic">🫀</div>
           <div class="vgl-pes-t">Abandono Programa RCV</div>
-          <div class="vgl-pes-n"></div>
+          <div class="vgl-pes-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-pes-lead">Este paciente tiene un <b>abandono registrado</b> en el Programa de Riesgo Cardiovascular. <b>Priorice el control de riesgo cardiovascular sobre cualquier otra actividad de esta consulta.</b></div>
           <div class="vgl-pes-foot">Este recordatorio no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-pes-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-pes-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-pes-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.pes.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-pes-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-pes-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.pes.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack("aviso.pes.mostrado");
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
       playTone("PES");
     } catch (e) {}
   }
@@ -6083,27 +6672,27 @@
       let ov = document.getElementById("vgl-labsv-modal");
       if (ov) ov.remove();
       ov = document.createElement("div"); ov.id = "vgl-labsv-modal";
+      ov.setAttribute("role", "alertdialog");
+      ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      // El CSS de esta alerta vive al final de la hoja maestra de buildOverlay() (mismo
-      // patrón que el resto de modales): se inyecta UNA vez, aquí solo queda HTML puro.
       const chips = (faltantes || []).map((f) => `<span class="vgl-labsv-chip">${escapeHtml(f.nombre)}</span>`).join("");
       ov.innerHTML = `<div class="vgl-labsv-card">
           <div class="vgl-labsv-ic">🧪</div>
           <div class="vgl-labsv-t">Laboratorios RCV sin resultado vigente</div>
-          <div class="vgl-labsv-n"></div>
+          <div class="vgl-labsv-n">${escapeHtml(nombre || "Paciente")}</div>
           <div class="vgl-labsv-lead">Este paciente no tiene resultado en los <b>últimos 180 días</b> para:</div>
           <div class="vgl-labsv-list">${chips}</div>
           <div class="vgl-labsv-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>
           <button class="vgl-labsv-ok">Entendido</button>
         </div>`;
-      ov.querySelector(".vgl-labsv-n").textContent = nombre || "Paciente";
-      const ok = ov.querySelector(".vgl-labsv-ok");
-      // v12.5.1 — El botón "Probar" de Ajustes no cuenta como aviso real en las métricas.
-      ok.addEventListener("click", () => { if (!esPrueba) uxTrack("aviso.labsv.entendido"); ov.remove(); });
+      const nEl = ov.querySelector ? ov.querySelector(".vgl-labsv-n") : null;
+      if (nEl) nEl.textContent = nombre || "Paciente";
+      const ok = ov.querySelector ? ov.querySelector(".vgl-labsv-ok") : null;
+      const closeMod = () => { if (!esPrueba) uxTrack("aviso.labsv.entendido"); ov.remove(); };
+      if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
       if (!esPrueba) uxTrack("aviso.labsv.mostrado", { n: (faltantes || []).length });
+      _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
-      try { ok.focus(); } catch (e2) {}
-      ov.addEventListener("keydown", (e2) => { if (e2.key === "Enter" || e2.key === "Escape") { e2.preventDefault(); ok.click(); } });
       playTone("ROJO");
     } catch (e) {}
   }
@@ -6281,21 +6870,60 @@
       writeJSON(AVISOS_PENDIENTES_KEY, cola.slice(-50));      // tope defensivo
     } catch (e) {}
   }
+  // v14.1.5 — La cola ya solo guarda CARTELES: el tono y la notificación del sistema
+  // salieron en su momento, cuando el hecho ocurrió. Aquí queda una segunda cautela:
+  // un cartel de hace media hora NO puede salir como si el paciente acabara de llegar.
+  // Pasados 10 minutos se descarta — el aviso ya se dio, y repetirlo tarde solo consigue
+  // que el médico atienda una llegada que ya pasó.
+  const AVISO_CARTEL_CADUCA_MS = 600000;
   function _flushAvisosPendientes() {
     if (!_enModuloHCHealth()) return;
     let cola;
     try { cola = readJSON(AVISOS_PENDIENTES_KEY, []) || []; } catch (e) { return; }
     if (!cola.length) return;
     try { writeJSON(AVISOS_PENDIENTES_KEY, []); } catch (e) {}
-    cola.forEach(_dispararAvisoReal);
+    const ahora = Date.now();
+    let caducados = 0;
+    cola.forEach((p) => {
+      if (!p) return;
+      if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
+      _dispararAvisoCartel(p);
+    });
+    if (caducados) console.log("[Vigilante] " + caducados + " cartel(es) en cola ya no se muestran: el aviso sonó en su momento y han pasado más de 10 minutos.");
   }
-  function _dispararAvisoReal(p) {
-    if (crossTabDup("full|" + p.uid)) return;   // dos pestañas en HCHealth a la vez: solo dispara la primera
+  // v14.1.5 — TERCERA CAUSA DE LOS AVISOS TARDÍOS, y la más torcida de las tres.
+  //
+  // Hasta aquí, un aviso generado con el médico FUERA de /viva/HCHealth no sonaba: se
+  // guardaba en una cola y esperaba a que entrara a una historia clínica. Entonces salían
+  // todos de golpe, minutos u horas después del hecho. Eso es literalmente lo que
+  // reportaron: "es como si estuvieran asincrónicas".
+  //
+  // Pero mírese lo que se estaba conteniendo: el TONO y la NOTIFICACIÓN DEL SISTEMA
+  // OPERATIVO, que existen precisamente para avisar cuando el médico NO está mirando esta
+  // pantalla. Condicionarlos a "que esté mirando esta pantalla" es justo al revés.
+  //
+  // Así que el aviso se parte en dos, según de qué dependa de verdad:
+  //   · LO QUE ALCANZA AL MÉDICO ESTÉ DONDE ESTÉ (tono, notificación del sistema, parpadeo
+  //     del título y del favicon): sale SIEMPRE, en el acto, sin mirar el módulo.
+  //   · EL CARTEL DENTRO DE LA PÁGINA (bigAlert/popupAlert): ese sí es de la vista, y es lo
+  //     único que tiene sentido encolar hasta que haya una pestaña donde pintarlo.
+  // Lo que alcanza al médico esté donde esté. No mira el módulo: no depende de la vista.
+  function _dispararAvisoAudible(p) {
+    if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     notify(p.color, p.title, p.body, p.persist, p.uid);
-    if (p.color === "ROJO") { startNag("ROJO"); bigAlert("ROJO", p.title, p.body); }
+    if (p.color === "ROJO") startNag("ROJO");
     else playTone(p.color);
     startFlash(p.flashText, p.color);
+    return true;
+  }
+  // El cartel dentro de la página. Este sí es de la vista, y es lo único que se encola.
+  function _dispararAvisoCartel(p) {
+    if (p.color === "ROJO") bigAlert("ROJO", p.title, p.body);
     popupAlert(p.color, p.title, p.body);
+  }
+  function _dispararAvisoReal(p) {
+    if (!_dispararAvisoAudible(p)) return;   // otra pestaña se adelantó: tampoco el cartel
+    _dispararAvisoCartel(p);
   }
   // v14.1.5 — SIEMBRA COMPARTIDA ENTRE PESTAÑAS. Guarda "qué se dio ya por visto hoy"
   // fuera de la memoria de una sola pestaña, para que un relevo de liderazgo no vuelva
@@ -6363,9 +6991,12 @@
     if (a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     const body = `${a.nombre}${a.doc_id ? " (" + a.doc_id + ")" : ""}\n${cfg.label}`;
-    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}` };
+    const payload = { color: a.color, title, body, persist: !!cfg.persist, uid: a.key + "|" + a.color, flashText: `${cfg.icon} ${a.estado} · ${a.hora_texto}`, ts: Date.now() };
+    // v14.1.5 — El aviso SIEMPRE suena y sale al sistema operativo, aquí y ahora, esté el
+    // médico en el módulo que esté. Lo único que puede quedar esperando es el cartel de
+    // dentro de la página, porque ese necesita una pestaña donde pintarse.
     if (_enModuloHCHealth()) _dispararAvisoReal(payload);
-    else _encolarAvisoPendiente(payload);
+    else if (_dispararAvisoAudible(payload)) _encolarAvisoPendiente(payload);
   }
   function updateBell() {
     const b = document.getElementById("vgl-bell"); if (!b) return;
@@ -6497,7 +7128,8 @@
   function apiObservar(win) {
     try {
       const w = win || window;
-      if (!w.PerformanceObserver || w.__vglPO) return;
+      if (!w.PerformanceObserver || w.__vglPO || w.__VGL_OBSERVADOR_ACTIVO__) return;
+      w.__VGL_OBSERVADOR_ACTIVO__ = true;
       const po = new w.PerformanceObserver((l) => {
         const es = l.getEntries();
         for (let i = 0; i < es.length; i++) {
@@ -6847,7 +7479,7 @@
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-instancia-duplicada{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -6933,8 +7565,8 @@
       }
 
       /* ---- Modo Claro — cerámica ---- */
-      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light{
+      #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-instancia-duplicada.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -7073,7 +7705,7 @@
       .vgl-op-half{opacity:0.5}
       .vgl-line-through{text-decoration:line-through}
       .vgl-border-err{border:1px solid var(--c-rojo, #e54d42)}
-      .vgl-bg-success{background:var(--c-verde, #10b981) !important}
+      .vgl-bg-success{background:var(--c-verde, #10b981) !important;color:var(--bg-solid, #0b0e15)}
       .vgl-btn-wait{opacity:0.5;cursor:wait}
 
       .vgl-sp-toast{position:fixed;bottom:24px;right:24px;z-index:2147483647;max-width:460px;background:linear-gradient(165deg,rgba(255,255,255,.06),rgba(255,255,255,0) 55%),#0d1119;color:#f7fafc;border:1px solid rgba(255,255,255,.16);border-left:5px solid #4ff0b8;border-radius:16px;padding:14px 38px 14px 16px;font-family:system-ui,'Segoe UI',sans-serif;font-size:13.5px;font-weight:600;line-height:1.5;letter-spacing:.1px;box-shadow:0 14px 36px rgba(0,0,0,.50),0 0 20px rgba(79,240,184,.15),inset 0 1px 0 rgba(255,255,255,.10);cursor:pointer;transition:opacity 0.3s cubic-bezier(.2,.9,.3,1),transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);opacity:0;transform:translateY(14px)}
@@ -7181,8 +7813,11 @@
 
       /* Foco de teclado — anillo neón */
       .vgl-btn:focus-visible,.vgl-fchip:focus-visible,.vgl-tl:focus-visible,
-      .vgl-btn-action:focus-visible{
-        outline:2px solid var(--c-azul);outline-offset:2px
+      .vgl-btn-action:focus-visible,.vgl-agm-btn:focus-visible,.vgl-agm-pbtn:focus-visible,
+      .vgl-agm-sbtn:focus-visible,.vgl-agm-input:focus-visible,.vgl-agm-close:focus-visible,
+      .vgl-sb-btn:focus-visible,.vgl-dock:focus-visible,#vgl-dock:focus-visible,
+      .vgl-pymb-toggle:focus-visible,.vgl-postcita-x:focus-visible{
+        outline:2px solid var(--c-azul);outline-offset:2px;box-shadow:0 0 0 4px rgba(var(--rgb-azul),.25)
       }
       .vgl-sw:focus-within i{outline:2px solid var(--c-azul);outline-offset:2px}
 
@@ -8987,7 +9622,7 @@
       <div id="vgl-body">
         <div id="vgl-sidebar">
           <div id="vgl-find">
-            <input id="vgl-q" type="text" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
+            <input id="vgl-q" type="text" aria-label="Buscar paciente por nombre o cédula" spellcheck="false" placeholder="🔍 Buscar paciente por nombre o cédula…">
           </div>
           <div class="vgl-sb-lbl">Filtros</div>
           <nav id="vgl-filters">
@@ -9016,6 +9651,7 @@
     `;
     document.body.appendChild(root);
     el = { root, sum: root.querySelector("#vgl-sum"), stats: root.querySelector("#vgl-stats"), list: root.querySelector("#vgl-list"), file: root.querySelector("#vgl-file"), dot: root.querySelector("#vgl-dot"), sheet: root.querySelector("#vgl-sheet"), q: root.querySelector("#vgl-q") };
+    if (el.sum) el.sum.setAttribute("aria-live", "polite");
     root.querySelector("#vgl-load").addEventListener("click", () => { uxTrack("panel.pym.abrir_archivo"); el.file.click(); });
     root.querySelector("#vgl-bell").addEventListener("click", () => { uxTrack("panel.notificaciones.activar"); enableOsNotifications(); });
     root.querySelector("#vgl-rep").addEventListener("click", () => { uxTrack("panel.hoja.resumen"); toggleSheet("resumen"); });
@@ -9051,13 +9687,29 @@
     root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     // [COPY-UX] Dock flotante del asistente clínico
     const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Asistente Clínico (Alt+V)";
+    dock.setAttribute("role", "button");
+    dock.setAttribute("tabindex", "0");
+    dock.setAttribute("aria-label", "Mostrar Asistente Clínico (Alt+V)");
     dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
     dock.addEventListener("click", () => setWinState("full"));
+    dock.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWinState("full"); } });
     document.body.appendChild(dock); el.dock = dock; el.dockB = dock.querySelector("#vgl-dock-b");
-    const toasts = document.createElement("div"); toasts.id = "vgl-toasts"; document.body.appendChild(toasts);
+    const toasts = document.createElement("div"); toasts.id = "vgl-toasts";
+    toasts.setAttribute("role", "status");
+    toasts.setAttribute("aria-live", "polite");
+    document.body.appendChild(toasts);
     makeDraggable(root, root.querySelector("#vgl-head"));
-    // Atajo de teclado: Alt+V muestra u oculta el panel sin tocar el mouse.
-    document.addEventListener("keydown", (e) => { if (e.altKey && !e.ctrlKey && (e.key === "v" || e.key === "V")) { e.preventDefault(); setWinState(winState === "dock" ? "full" : "dock"); } });
+    // Atajo de teclado: Alt+V muestra u oculta el panel sin tocar el mouse. Escape cierra sheet si está abierto.
+    document.addEventListener("keydown", (e) => {
+      if (e.altKey && !e.ctrlKey && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        setWinState(winState === "dock" ? "full" : "dock");
+      } else if (e.key === "Escape" && el && el.root && el.root.classList.contains("sheet")) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSheet();
+      }
+    });
     restorePos(); applyTheme(); paintMute(); updateBell();
     // El tema "auto" sigue al modo claro/oscuro de Windows en vivo.
     try { if (PAGEWIN.matchMedia) PAGEWIN.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.tema === "auto") applyTheme(); }); } catch (e) {}
@@ -9209,6 +9861,16 @@
   // sesión ya existe a document-start; el timeout evita depender del orden de las const).
   try { setTimeout(identidadDesdeCliente, 0); } catch (e) {}
   const FESTIVOS = new Set([
+    // 2024
+    "2024-01-01", "2024-01-08", "2024-03-25", "2024-03-28", "2024-03-29",
+    "2024-05-01", "2024-05-13", "2024-06-03", "2024-06-10", "2024-07-01",
+    "2024-07-20", "2024-08-07", "2024-08-19", "2024-10-14", "2024-11-04",
+    "2024-11-18", "2024-12-08", "2024-12-25",
+    // 2025
+    "2025-01-01", "2025-01-06", "2025-03-24", "2025-04-17", "2025-04-18",
+    "2025-05-01", "2025-06-02", "2025-06-23", "2025-06-30", "2025-07-20",
+    "2025-08-07", "2025-08-18", "2025-10-13", "2025-11-03", "2025-11-17",
+    "2025-12-08", "2025-12-25",
     // 2026
     "2026-01-01", "2026-01-12", "2026-03-23", "2026-04-02", "2026-04-03",
     "2026-05-01", "2026-05-18", "2026-06-08", "2026-06-15", "2026-06-29",
@@ -9442,10 +10104,34 @@
   }
 
   // Interfaz con APIAcceso: Buscar Paciente por Cédula (robusto con sesión nativa)
+  // v14.1.9 — CACHÉ POR CÉDULA. La búsqueda prueba rutas EN CASCADA, así que cada llamada
+  // cuesta hasta 4 peticiones secuenciales contra el servidor de la IPS. Hay 8 llamadores
+  // de producción, y desde v14.1.8 uno de ellos está en el camino del clic de Auto-Labs:
+  // el médico esperaba la cascada ENTERA, encima de los 2-4 s que ya había esperado a
+  // Athenea, antes de que se escribiera una sola casilla.
+  //
+  // La relación cédula → id interno de Everest no cambia, así que cachearla es seguro. El
+  // propio comentario de v12.0.3 tres líneas más abajo ya se quejaba de "un goteo constante
+  // de 404 contra el servidor" por repetir estas búsquedas: esto es lo que faltaba.
+  //
+  // Solo se cachea el ACIERTO. Un `null` significa "no se pudo" —red caída, sesión vencida,
+  // paciente que aún no existe en Everest— y eso sí cambia de un momento a otro: cachearlo
+  // dejaría al médico sin poder reintentar hasta que venciera el TTL.
+  //
+  // La clave lleva el id del médico porque va en la URL de la consulta.
+  // (No hay `_pacienteIdInvalidarTodo`: se escribió por costumbre y se borró antes de
+  // subirla. No hay ningún evento que deba invalidar esto — la relación cédula → id interno
+  // no cambia, la clave ya separa por médico y por cédula, y el TTL cubre el resto. Es la
+  // cuarta vez que este proyecto casi mete un invalidador sin llamador.)
+  const _pacienteIdCache = new Map();
   async function apiAccesoBuscarPaciente(docId) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
+
+    const clave = uId + "|" + cleanDoc;
+    const enCache = _pacienteIdCache.get(clave);
+    if (enCache && (Date.now() - enCache.ts) < ORDENES_VIGENTES_TTL_MS) return enCache.pid;
 
     const paths = [
       // v12.0.3 — RETIRADAS las dos rutas de APIPacienteV2: en la consola del consultorio
@@ -9466,7 +10152,7 @@
       try {
         const res = await pageFetchJson(path);
         const pid = extractPatientId(res);
-        if (pid) return pid;
+        if (pid) { _pacienteIdCache.set(clave, { pid, ts: Date.now() }); return pid; }
       } catch (e) {}
     }
     return null;
@@ -9918,6 +10604,116 @@
   // peso no cambia, y este endpoint se consulta desde un flujo que puede repetirse.
   let _signosVitalesCache = { pacienteId: "", data: null, ts: 0 };
   function _signosVitalesInvalidar() { _signosVitalesCache = { pacienteId: "", data: null, ts: 0 }; }
+  // v14.1.8 — Tabla de validación por examen de la propia IPS (rangos + UNIDAD), por cita.
+  // Cacheada por citaId con el mismo TTL que las demás: dentro de una consulta la
+  // parametrización no cambia, y son datos de configuración, no del paciente.
+  // No hay `_validacionExamenInvalidar`: se escribió por simetría con las otras cachés y
+  // se borró antes de subirla, porque no hay ni un evento que deba invalidarla. Es
+  // parametrización de la IPS, no dato del paciente; la caché va por citaId, así que otro
+  // paciente ya falla por clave, y el TTL cubre un cambio de configuración a media
+  // jornada. Una función que nadie llama es la deuda que este proyecto ya arrastró tres
+  // veces (`_bannerPymInvalidar` vivió versiones enteras sin un solo llamador).
+  function _base64SinRelleno(txt) {
+    const s = String(txt == null ? "" : txt);
+    if (!s) return "";
+    try { return btoa(s).replace(/=+$/, ""); } catch (e) { return ""; }
+  }
+  let _validacionExamenCache = { citaId: "", data: null, ts: 0 };
+  async function apiHcValidacionExamenCronicos(citaId) {
+    if (!citaId) return null;
+    const key = String(citaId);
+    const ahora = Date.now();
+    if (_validacionExamenCache.citaId === key && _validacionExamenCache.data &&
+        (ahora - _validacionExamenCache.ts) < ORDENES_VIGENTES_TTL_MS) {
+      return _validacionExamenCache.data;
+    }
+    // El parámetro NO es el id en claro: la captura real lo trae como
+    // `citaId=MTIyMTk3NA`, que es base64 de "1221974" con el relleno `=` quitado — el
+    // mismo formato que ya usa apiDigiturnoFinalizarTicket (`btoa(String(citaId))`).
+    // Mandar el número en claro era pedirle al servidor una cita que no existe. Se
+    // reproduce exactamente lo observado en el tráfico, relleno incluido (es decir,
+    // quitado), en vez de suponer que el servidor también aceptaría la otra forma.
+    const b64 = _base64SinRelleno(key);
+    if (!b64) return null;
+    const path = `/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=${encodeURIComponent(b64)}`;
+    try {
+      const data = await pageFetchJson(path);
+      // Misma prudencia que en los demás: SOLO un arreglo es una respuesta utilizable.
+      // Vacío incluido — una cita sin parametrización es un resultado real, y significa
+      // "no hay reglas oficiales", que es distinto de "no se pudo consultar".
+      if (!Array.isArray(data)) return null;
+      _validacionExamenCache = { citaId: key, data, ts: Date.now() };
+      return data;
+    } catch (e) {
+      console.warn("[Vigilante] apiHcValidacionExamenCronicos falló:", e);
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  //  v14.1.8 — OYENTE PASIVO: la tabla oficial se ESCUCHA, no se pide.
+  //
+  //  El `citaId` que necesita el endpoint NO está en la URL de la historia clínica
+  //  (`/viva/HCHealth/` a secas, comprobado en la captura) ni en ningún sitio que el
+  //  script pueda leer estando en esa vista: vive dentro del estado de Angular. Pedirla
+  //  desde aquí exigiría adivinar un identificador, que es justo lo que este proyecto
+  //  tiene prohibido.
+  //
+  //  Pero no hace falta pedirla: al abrir la Ruta Crónicos, **Everest la pide sola**. Se
+  //  observa esa respuesta y ya está. Sale gratis (ni una petición más contra el servidor
+  //  de la IPS) y no hay identificador que adivinar.
+  //
+  //  El oyente es de SOLO LECTURA y no puede romper Everest:
+  //   · `open` únicamente anota la URL en la propia instancia del XHR;
+  //   · la lectura va en un `addEventListener("load")`, no en `onload`, así que no pisa
+  //     el manejador de Everest (asignarlo lo habría reemplazado);
+  //   · una excepción dentro de un listener no impide que corran los demás ni altera el
+  //     XHR — y aun así todo va dentro de try/catch;
+  //   · nunca se toca `xhr.response` ni se modifica nada de la petición.
+  //  Se lee `xhr.response` y no `responseText` porque Angular pone
+  //  `responseType = "json"`, y ahí `responseText` LANZA (lección de v14.1.7 con el mapa).
+  // ---------------------------------------------------------------------
+  let _tablaOficialVista = { tabla: null, ts: 0 };
+  const TABLA_OFICIAL_TTL_MS = 1800000;   // 30 min: es configuración de la IPS, no del paciente
+  const _RE_VALIDACION_EXAMEN = /GetValidacionExamenCronicos/i;
+  function _guardarTablaOficialVista(data) {
+    if (!Array.isArray(data) || !data.length) return false;
+    _tablaOficialVista = { tabla: data, ts: Date.now() };
+    return true;
+  }
+  // La tabla que Everest cargó en esta vista, o null si no se ha visto (o ya caducó).
+  function _tablaOficialVigente() {
+    if (!_tablaOficialVista.tabla) return null;
+    if ((Date.now() - _tablaOficialVista.ts) > TABLA_OFICIAL_TTL_MS) return null;
+    return _tablaOficialVista.tabla;
+  }
+  function _instalarOyenteTablaOficial(win) {
+    const w = win || (typeof window !== "undefined" ? window : null);
+    if (!w || !w.XMLHttpRequest || w.__vglOyenteTablaOficial) return false;
+    const XHR = w.XMLHttpRequest.prototype;
+    const openOriginal = XHR.open;
+    if (typeof openOriginal !== "function") return false;
+    XHR.open = function (metodo, url) {
+      try { this.__vglUrl = String(url || ""); } catch (e) {}
+      try {
+        if (_RE_VALIDACION_EXAMEN.test(this.__vglUrl || "")) {
+          this.addEventListener("load", () => {
+            try {
+              const cuerpo = this.response;
+              const datos = typeof cuerpo === "string" ? JSON.parse(cuerpo) : cuerpo;
+              if (_guardarTablaOficialVista(datos)) {
+                console.log("[Vigilante] tabla oficial de exámenes capturada de Everest:", datos.length, "reglas");
+              }
+            } catch (e) { /* jamás se propaga nada hacia Everest */ }
+          });
+        }
+      } catch (e) {}
+      return openOriginal.apply(this, arguments);
+    };
+    w.__vglOyenteTablaOficial = true;
+    return true;
+  }
+
   async function apiHcObtenerSignosVitales(pacienteId) {
     if (!pacienteId) return null;
     const key = String(pacienteId);
@@ -10061,21 +10857,13 @@
     const { edad, peso, creatininaCruda, sexo, fechaCreatinina, fechaPeso, pas, pad, imc } = (opts || {});
     const faltan = [];
     const edadN = Number(edad);
-    if (!Number.isFinite(edadN) || edadN <= 0 || edadN >= 140) faltan.push("edad");
+    if (Number.isFinite(edadN) && edadN > 0 && edadN < 18) faltan.push("edad_pediatrica");
+    else if (!Number.isFinite(edadN) || edadN <= 0 || edadN > 120) faltan.push("edad");
     const pesoN = Number(peso);
     if (!Number.isFinite(pesoN) || pesoN <= 0) faltan.push("peso");
+    else if (pesoN < 20 || pesoN > 300) faltan.push("peso_fuera_de_rango");
     const creatN = _labNumerico(creatininaCruda);
     if (creatN == null) faltan.push("creatinina");
-    // v14.1.3 — GUARDA DE UNIDADES, por rango de plausibilidad. Las dos fórmulas asumen la
-    // creatinina en mg/dL, y el script descarta el campo `unidades` de Athenea desde
-    // v12.0.0. Si un laboratorio reportara en µmol/L —la otra unidad de uso corriente en el
-    // mundo— una creatinina normal de 1,0 mg/dL llegaría como 88, y Cockcroft-Gault
-    // devolvería una TFG ~88 veces menor: un paciente sano saldría en falla renal terminal,
-    // con todo lo que eso arrastra (remisión a nefrología, ajuste de dosis, suspensión de
-    // fármacos). No se convierte automáticamente —adivinar la unidad de un dato clínico es
-    // justo lo que este proyecto prohíbe—: se RECHAZA y se dice por qué.
-    // El rango 0,1–20 mg/dL cubre de sobra lo fisiológicamente posible en suero, incluida
-    // la falla renal terminal sin diálisis (rara vez pasa de 15).
     else if (creatN < 0.1 || creatN > 20) faltan.push("creatinina_fuera_de_rango");
     // El sexo NO bloquea: sin él la fórmula corre igual (el factor 0.85 solo se aplica a
     // mujeres), pero se anota, porque un sexo ausente sesga la TFG al alza en una mujer.
@@ -10155,21 +10943,15 @@
     });
   }
 
-  // v14.1.1 (R1b) — Cómo se le cuenta al médico. Dos reglas gobiernan este HTML:
-  //
-  //  1. Si falta una entrada, se dice CUÁL falta y no se muestra ningún número. Nunca un
-  //     estadio a medias, nunca un "aproximadamente". De este estadio cuelga qué exámenes
-  //     se le piden a una persona.
-  //  2. Se muestran SIEMPRE las entradas que se usaron y CUÁNDO se tomaron. Una TFG
-  //     calculada con un peso de hace dos años o una creatinina de hace ocho meses puede ser
-  //     engañosa, y el médico solo puede juzgarlo si ve las fechas. El script no decide por
-  //     él si el dato está demasiado viejo: se lo enseña.
   function _renderEstadioRenalHtml(r) {
     if (!r) return "";
-    const ETIQUETA = { edad: "la edad", peso: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    const ETIQUETA = { edad: "la edad", edad_pediatrica: "edad adulta", peso: "el peso", peso_fuera_de_rango: "el peso", creatinina: "la creatinina", tfg_no_evaluable: "una TFG evaluable" };
+    if ((r.faltan || []).indexOf("edad_pediatrica") !== -1) {
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular en pacientes menores de 18 años (paciente pediátrico). Las fórmulas Cockcroft-Gault y CKD-EPI solo aplican a adultos.</div>`;
+    }
     if ((r.faltan || []).indexOf("creatinina_fuera_de_rango") !== -1) {
       const v = r.entradas && r.entradas.creatininaCruda;
-      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se calcula — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
+      return `<div class="vgl-labs-renal-vacio">🫘 <b>Función renal:</b> no se puede calcular — la creatinina (<b>${escapeHtml(String(v))}</b>) queda fuera del rango posible en suero (0,1–20 mg/dL). Suele significar que el laboratorio la reportó en otras unidades (µmol/L). <b>Verifíquela antes de usarla:</b> con esas unidades la TFG saldría unas 88 veces menor de lo real.</div>`;
     }
     if (!r.estadio) {
       const faltan = (r.faltan || []).map((f) => ETIQUETA[f] || f);
@@ -10297,8 +11079,8 @@
   // confirmación: el médico debe poder ver a qué número salió). Vacío = no se envió.
   let ultimoSmsEnviado = "";
 
-  // Interfaz con APIAcceso: Asignar Turno / Crear Cita con Parámetros RCV
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
+    if (state.killed) return { error: true, mensaje: "Pausa de seguridad remota activa (Kill-Switch activo): el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios." };
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Antes se caía a 515, el identificador de UN médico concreto: si la
     // detección fallaba, TODAS las citas de TODOS los pacientes se creaban a nombre de
@@ -10389,6 +11171,9 @@
       const panel = document.createElement("div");
       panel.id = "vgl-postcita-panel";
       panel.className = isLight() ? "light" : "";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-modal", "true");
+      panel.setAttribute("aria-label", "Confirmación de Cita");
       panel.innerHTML = `
         <div class="vgl-postcita-card">
           <button class="vgl-postcita-x" id="vgl-postcita-x" title="Cerrar" aria-label="Cerrar">✕</button>
@@ -10400,6 +11185,9 @@
       document.body.appendChild(panel);
       const cerrar = () => { try { panel.innerHTML = ""; panel.remove(); } catch (e) {} };
       panel.querySelector("#vgl-postcita-x").addEventListener("click", cerrar);
+      panel.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrar(); }
+      });
       panel.querySelector("#vgl-postcita-print").addEventListener("click", () => {
         uxTrack("cita.imprimir");
         imprimirRecordatorioCita(citaId, epsNombre, nombreCompleto);
@@ -10634,24 +11422,18 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const modal = document.createElement("div");
     modal.id = "vgl-labs-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-labs-title");
     if (isLight()) modal.classList.add("light");
 
     const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
 
-    // [UI-CSS] HUD Espacial 2026 — placa de laboratorios. Desde v12.3.13 el CSS de este
-    // modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez en
-    // document.head: antes iba en un <style> inline aquí dentro del innerHTML y el motor
-    // lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
-    // CADA selector sigue anclado a #vgl-labs-modal, así que nada se fuga fuera del modal
-    // aunque la hoja sea global. Modo rendimiento: el modal cuelga de document.body
-    // (fuera de #vgl-root), así que los efectos pesados nuevos se apagan con el
-    // combinador de hermanos #vgl-root.perf ~ #vgl-labs-modal (#vgl-root se inserta en
-    // body ANTES que el modal).
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-labs-kicker">🧪 Exámenes de Laboratorio · Portal Athenea Soluciones</div>
+            <div class="vgl-agm-title vgl-labs-kicker" id="vgl-labs-title">🧪 Exámenes de Laboratorio · Portal Athenea Soluciones</div>
             <div class="vgl-labs-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Cédula: <b>${escapeHtml(apt.doc_id)}</b></div>
           </div>
@@ -10669,7 +11451,7 @@
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Resultados de Paraclínicos (Búsqueda Prioritaria en Athenea Soluciones):</label>
-          <div id="vgl-labs-content" class="vgl-agm-slots" style="max-height:420px;overflow-y:auto;display:block">
+          <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:420px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámen de laboratorios en Portal Athenea Soluciones...</div>
           </div>
         </div>
@@ -10682,17 +11464,13 @@
 
     document.body.appendChild(modal);
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
-    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
-    // la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
       cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
-      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
       modal.innerHTML = "";
       modal.remove();
     };
@@ -10703,6 +11481,7 @@
 
     const bgClick = (e) => { if (e.target === modal) closeMod(); };
     modal.addEventListener("click", bgClick);
+    _activarAccesibilidadModal(modal, closeMod);
 
 
     const contentEl = modal.querySelector("#vgl-labs-content");
@@ -10837,7 +11616,7 @@
       // esto NO reemplaza la fecha/hora ya extraídas — es solo un atajo para que el
       // médico vea el documento oficial sin navegar todo el portal a mano.
       const btnInforme = (lab.__vglHash && lab.__vglToken)
-        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea">📄</button>`
+        ? `<button class="vgl-labs-pdf" data-hash="${escapeHtml(lab.__vglHash)}" data-token="${escapeHtml(lab.__vglToken)}" data-modulo="${escapeHtml(lab.__vglModulo || "LAB")}" title="Abrir el informe (PDF) real de Athenea" aria-label="Abrir el informe (PDF) real de Athenea">📄</button>`
         : "";
 
       // v12.5.16 — Bloque agrupado: cada componente se escapa POR SEPARADO y se une con
@@ -10943,7 +11722,7 @@
           setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 120000);
         } catch (e) {
           if (pestana) pestana.close();
-          alert("No se pudo mostrar el informe: " + e);
+          alert("No se pudo visualizar el informe de resultados. Por favor intente consultarlo directamente en el portal.");
         }
       },
       onerror: () => { restaurar(); if (pestana) pestana.close(); alert("No se pudo conectar con Athenea para traer el informe."); },
@@ -10963,27 +11742,20 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
-    modal.id = "vgl-agendar-modal";   // v8.2.1 fix: was "vgl-ordenar-modal" (ID mismatch -> CSS position:fixed missing -> modal inlined in page)
+    modal.id = "vgl-agendar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-agm-title");
     modal.className = isLight() ? "light" : "";
 
     let selectedEspId = 12; // 12: Med General (Control) por defecto
     let selectedEspName = "Medicina General (Control)";
 
-    // [COPY-UX] Modal de agendamiento de cita de control y remisión a especialidades RCV
-    // [UI-CSS] HUD Espacial 2026 — placa bento del agendamiento. Desde v12.3.13 el CSS de
-    // este modal vive al FINAL de la hoja maestra que buildOverlay() inyecta UNA sola vez
-    // en document.head: antes iba en un <style> inline aquí dentro del innerHTML y el
-    // motor lo re-parseaba en CADA apertura del modal (thrashing de recálculo de estilos).
-    // CADA selector sigue anclado a #vgl-agendar-modal, así que nada se fuga fuera del
-    // modal aunque la hoja sea global. Modo rendimiento: los modales cuelgan de
-    // document.body (fuera de #vgl-root), así que los efectos pesados nuevos se apagan
-    // con el combinador de hermanos #vgl-root.perf ~ #vgl-agendar-modal (#vgl-root se
-    // inserta en body ANTES que el modal).
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:720px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📅 Programación de Cita · Remisión RCV</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-agm-title">📅 Programación de Cita · Remisión RCV</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -11129,24 +11901,22 @@
     const confirmBtn = modal.querySelector("#vgl-agm-confirm");
     const dateInfoEl = modal.querySelector("#vgl-agm-date-info");
     const slotsEl = modal.querySelector("#vgl-agm-slots");
+    if (slotsEl) slotsEl.setAttribute("aria-live", "polite");
     const dayChipsEl = modal.querySelector("#vgl-day-chips");
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // consultas viajan, no se pinta sobre nodos ya removidos. En el navegador real un
-    // modal removido tiene isConnected===false; en entornos sin isConnected (undefined)
-    // la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
       cerrado = true;
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
-      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod); // Añadido: remover listener del modal
+      modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
       modal.innerHTML = "";
       modal.remove();
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     // v14.0.1 — Extraída de cargarHoras (misma regla, ahora también la usa el sondeo en
     // segundo plano de renderDayChips): qué agendas de una lista pertenecen de verdad al
@@ -11389,7 +12159,7 @@
         }
       } catch (e) {}
 
-      slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${agendasFiltradas.length} agenda(s)...</div>`;
+      slotsEl.innerHTML = `<div class="vgl-agm-loading">Consultando turnos en ${escapeHtml(String(agendasFiltradas.length))} agenda(s)...</div>`;
 
       const turnosAcumulados = [];
       for (const ag of agendasFiltradas.slice(0, 8)) {
@@ -11834,7 +12604,7 @@
           const successMsg = document.createElement("div");
           successMsg.className = "vgl-agm-dinfo";
           successMsg.className = "vgl-msg-success"; // [UI-CSS]
-          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${fechaElegida.fmt}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
+          successMsg.innerHTML = `✅ <b>Cita asignada exitosamente</b><br>Fecha: <b>${escapeHtml(fechaElegida.fmt)}</b> · Hora: <b>${escapeHtml(horaTxt)}</b>`;
           modal.querySelector(".vgl-agm-card").appendChild(successMsg);
         }
 
@@ -11927,6 +12697,9 @@
     const patientName = apt.nombre || apt.name || "Paciente Everest";
     const modal = document.createElement("div");
     modal.id = "vgl-agendar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-labsolo-title");
     modal.className = isLight() ? "light" : "";
 
     const suggestedLab = calcBusinessDaysBefore(citaFechaIso, 5);
@@ -11939,7 +12712,7 @@
       <div class="vgl-agm-card" style="max-width:520px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">🧪 Toma de Muestras Pendiente</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-labsolo-title">🧪 Toma de Muestras Pendiente</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Cita de control ya agendada para el <b>${escapeHtml(citaFechaFmt)}</b></div>
           </div>
@@ -11982,6 +12755,7 @@
     };
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     let selectedLabDateInfo = null;
     let _tokenLabSolo = 0;
@@ -12328,6 +13102,10 @@
   // cuerpo distinto (camelCase, el objeto completo del paciente, citaId real y swHC:true).
   // Alinear esta función con aquel rompería lo que hoy funciona.
   async function apiOrdenamientoGuardar(pacienteId, dxId, cupsList) {
+    if (state.killed) {
+      alert("Pausa de seguridad remota activa: el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios.");
+      return null;
+    }
     const uId = state.activeDoctor.id || S.medicoId || 0;
     // v12.0.0 — Igual que en AsignarTurno: sin identificador de médico NO se crean
     // órdenes clínicas a nombre de otro profesional.
@@ -12508,13 +13286,11 @@
     const doctorName = state.activeDoctor.name || S.medicoNombre || "";
     const modal = document.createElement("div");
     modal.id = "vgl-ordenar-modal";
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal.setAttribute("aria-labelledby", "vgl-ord-title");
     modal.className = isLight() ? "light" : "";
 
-    // v12.3.14 — Guarda de promesa huérfana: si el médico cierra el modal mientras las
-    // órdenes viajan, no se pinta sobre nodos ya removidos. Las órdenes seleccionadas se
-    // siguen creando y registrando igual (el lote ya fue disparado); solo se salta la UI.
-    // En el navegador real un modal removido tiene isConnected===false; en entornos sin
-    // isConnected (undefined) la guarda pasa y solo manda el flag `cerrado`.
     let cerrado = false;
     const vivo = () => !cerrado && modal.isConnected !== false;
     let xBtn, cancelBtn;
@@ -12526,20 +13302,11 @@
       modal.remove();
     };
 
-    // v12.3.22 — Reportado en consultorio como "el botón no funciona": antes se
-    // esperaba (await, en cadena) a resolver el sexo real del paciente en el servidor
-    // ANTES de crear siquiera la ventana del modal, así que entre el clic y cualquier
-    // indicio visual podían pasar varios segundos en silencio total. El resto de los
-    // modales (agendar cita, laboratorios) ya seguían el patrón correcto: abrir YA, con
-    // un estado de carga, y llenar el contenido real después. Este se alinea ahora: se
-    // pinta una ventana de carga de inmediato y, cuando los datos estén listos, se
-    // reemplaza TODO el innerHTML de una sola vez (igual que hacía el código original)
-    // — nunca se parchean nodos hijos sueltos por querySelector.
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -12559,6 +13326,7 @@
     cancelBtn = modal.querySelector("#vgl-ord-cancel");
     xBtn.addEventListener("click", closeMod);
     cancelBtn.addEventListener("click", closeMod);
+    _activarAccesibilidadModal(modal, closeMod);
 
     // v12.0.1 — El sexo del paciente se CONSULTA antes de pintar las casillas. Sin esto,
     // `apt.sexo` nunca se rellenaba (los objetos de cita solo traen hora, documento,
@@ -12631,7 +13399,7 @@
       <div class="vgl-agm-card" style="max-width:680px">
         <div class="vgl-agm-head">
           <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker">📋 Órdenes de Prevención · PyM</div>
+            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-ord-title">📋 Órdenes de Prevención · PyM</div>
             <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
             <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b> · Médico: <b>${escapeHtml(doctorName)}</b></div>
           </div>
@@ -12818,7 +13586,7 @@
           const mailBox = document.createElement("div");
           mailBox.className = "vgl-ord-mailbox";
           mailBox.innerHTML = `
-            <label class="vgl-agm-lbl" style="margin-top:14px">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
+            <label class="vgl-agm-lbl" for="vgl-ord-mail-input" style="margin-top:14px;cursor:pointer">📧 Enviar la(s) orden(es) al correo del paciente (opcional)</label>
             <div class="vgl-agm-fieldrow">
               <input type="email" id="vgl-ord-mail-input" class="vgl-agm-input" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px">
               <button class="vgl-agm-btn pri" id="vgl-ord-mail-send">Enviar</button>
@@ -12968,12 +13736,15 @@
     if (esNuevo) {
       banner = document.createElement("div");
       banner.id = "vgl-pym-banner";
+      banner.setAttribute("role", "region");
+      banner.setAttribute("aria-label", "Alertas de Prevención y Mantenimiento");
       document.body.insertBefore(banner, document.body.firstChild);
     }
     const minimizado = esNuevo
       ? (typeof GM_getValue !== "undefined" ? GM_getValue("vgl_banner_pym_minimizado", "") === "1" : false)
       : banner.classList.contains("minimizado");
     banner.className = "vgl-pym-banner" + (isLight() ? " light" : "") + (minimizado ? " minimizado" : "");
+    banner.setAttribute("aria-expanded", String(!minimizado));
 
     while (banner.children.length) banner.removeChild(banner.children[0]);
 
@@ -12994,6 +13765,7 @@
       e.stopPropagation();
       const nuevoMinimizado = !banner.classList.contains("minimizado");
       banner.classList.toggle("minimizado", nuevoMinimizado);
+      banner.setAttribute("aria-expanded", String(!nuevoMinimizado));
       toggle.textContent = nuevoMinimizado ? "▼" : "▲";
       toggle.title = nuevoMinimizado ? "Expandir" : "Minimizar";
       toggle.setAttribute("aria-label", nuevoMinimizado ? "Expandir" : "Minimizar");
@@ -13444,9 +14216,9 @@
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = new Uint16Array(64);
+    let currRow = new Uint16Array(64);
+    let prevPrevRow = new Uint16Array(64);
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -13461,6 +14233,14 @@
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+
+        // Ensure buffers are large enough
+        if (n + 1 > prevRow.length) {
+            const size = Math.max(n + 1, prevRow.length * 2);
+            prevRow = new Uint16Array(size);
+            currRow = new Uint16Array(size);
+            prevPrevRow = new Uint16Array(size);
+        }
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -13481,10 +14261,10 @@
             }
           }
           // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
@@ -13609,8 +14389,7 @@
       // mismas funciones (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/
       // openLabSoloModal) y los mismos bloqueos antiduplicado (isCitaAgendadaHoy/
       // isLabAgendadaHoy/isOrdenesCreadasHoy) — por eso esas funciones NO se tocan aquí, solo
-      // dejan de tener llamador DENTRO de render(). panelActivities() tampoco se toca: T5 la
-      // reconecta para el propio widget.
+      // dejan de tener llamador DENTRO de render().
       // v14.0.2 — El botón "Atender" (registrar en Everest la hora de apertura sin navegar
       // a la historia) se retiró a pedido explícito del médico: usa directamente el botón
       // nativo "Historias Clínicas" de Everest para entrar a la historia, sin intermediarios.
@@ -13666,6 +14445,26 @@
   // [BLINDADO v8.2.0 DOM-01] escapeHtml reforzado: cubre & < > " ' ` — vectores completos de XSS en atributos HTML.
   // La versión anterior omitía comilla simple y backtick, riesgo latente si se usan en contextos de atributo con comilla simple.
   function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"'`]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;', '`': '&#x60;' }[c])); }
+
+
+  // Autocomprobación criptográfica de integridad SHA-256 (R1.9)
+  async function verificarIntegridadArranque(fuenteOpcional) {
+    try {
+      let src = fuenteOpcional;
+      if (!src && typeof GM_info !== "undefined" && GM_info && GM_info.scriptSource) {
+        src = GM_info.scriptSource;
+      }
+      if (!src) return { status: "skipped", reason: "no_source" };
+      const encoder = new TextEncoder();
+      const data = encoder.encode(src);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+      return { status: "ok", sha256: hashHex };
+    } catch (e) {
+      return { status: "error", error: e.message };
+    }
+  }
 
   // Saludo AZUL: UNA sola vez al día en todo el navegador (antes salía en cada pestaña/recarga).
   // v7.3.3: si el Vigilante arranca TARDE (turno ya empezado), NO se dispara ningún aviso
@@ -13875,6 +14674,37 @@
     } catch (e) { console.error("[Vigilante] tick:", e); }
   }
 
+  // v14.1.9 — La cabecera del informe descargable filtraba lo que todo el resto del
+  // informe se cuidaba de ocultar. `san()` sustituye cada nodo de texto por "···" y
+  // `mask()` recorta las cédulas a 3 dígitos… y dos líneas más arriba se escribían
+  // `location.href` y `document.title` en crudo.
+  //
+  // `document.title` es el peor de los dos: en un sistema de historia clínica suele llevar
+  // el NOMBRE del paciente. Y la URL lleva los identificadores en la consulta y en el
+  // fragmento — el propio script construye `...BusquedaPaciente#doc=<cédula>`.
+  //
+  // Se conserva lo que sirve para diagnosticar (qué vista es, cuántos parámetros había) y
+  // se tira lo que identifica. El título no se recorta ni se sanea: se omite. Recortarlo
+  // dejaría el principio del nombre, que es justo la parte que identifica.
+  function _urlDiagnostico() {
+    try {
+      const href = String((typeof location !== "undefined" && location.href) || "");
+      if (!href) return "(no disponible)";
+      const sinFrag = href.split("#")[0];
+      const partes = sinFrag.split("?");
+      const nParams = partes[1] ? partes[1].split("&").filter(Boolean).length : 0;
+      return partes[0]
+        + (nParams ? " · (" + nParams + " parámetro(s) omitido(s))" : "")
+        + (href.indexOf("#") !== -1 ? " · (fragmento omitido)" : "");
+    } catch (e) { return "(no se pudo leer la URL)"; }
+  }
+  function _tituloDiagnostico() {
+    try {
+      const t = String((typeof document !== "undefined" && document.title) || "");
+      return t ? "(omitido — " + t.length + " caracteres)" : "(vacío)";
+    } catch (e) { return "(no se pudo leer el título)"; }
+  }
+
   function downloadDiagnostic() {
     const ddoc = document; const KEEP = new Set(["class", "role", "routerlink", "type", "name"]); const out = [];
     const sels = [".labelHora", ".status-label", ".card", ".card-body", ".text-muted", ".text-uppercase", ".fw-bold.mb-0", ".fecha", ".text-uppercase.fw-bold"];
@@ -13883,7 +14713,7 @@
     const top = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 120);
     const san = (node) => { const c = node.cloneNode(true); const w = (x) => { if (x.nodeType === 3) { if (x.textContent && x.textContent.trim()) x.textContent = "···"; return; } if (x.nodeType !== 1) return; [...(x.attributes || [])].forEach((a) => { if (!KEEP.has(a.name) && !a.name.startsWith("data-")) x.removeAttribute(a.name); else if (a.name.startsWith("data-")) x.setAttribute(a.name, ""); }); [...x.childNodes].forEach(w); }; w(c); return c.outerHTML; };
     let card = ""; try { const h = ddoc.querySelector(".labelHora"); const c = h && containerOf(h); card = c ? san(c).slice(0, 15000) : "(no se encontró .labelHora)"; } catch (e) { card = "err: " + e; }
-    out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "URL: " + location.href, "Título: " + document.title,
+    out.push("===== DIAGNÓSTICO — VIGILANTE v" + VERSION + " =====", "Fecha: " + new Date().toISOString(), "URL: " + _urlDiagnostico(), "Título: " + _tituloDiagnostico(),
       "\n--- CONTEO DE SELECTORES ---", JSON.stringify(counts, null, 2),
       "\n--- CLASES MÁS FRECUENTES (top 120) ---", top.map(([c, n]) => n + "  ." + c).join("\n"),
       "\n--- PRIMERA TARJETA (HTML sanitizado) ---", card,
@@ -14021,10 +14851,128 @@
     } catch (e) {}
   }
 
+  // =====================================================================
+  //  RED DE SEGURIDAD REMOTA, KILL-SWITCH Y CANARIO (R5.1, R5.3)
+  // =====================================================================
+  function emergencyTeardown(reason) {
+    state.killed = true;
+    state.killReason = reason || "Apagado remoto de emergencia";
+    if (typeof GM_setValue !== "undefined") {
+      GM_setValue("vgl_kill_active", true);
+      GM_setValue("vgl_kill_reason", state.killReason);
+    }
+    if (Array.isArray(state.timers)) {
+      state.timers.forEach((t) => {
+        try { clearTimeout(t); } catch (e) {}
+        try { clearInterval(t); } catch (e) {}
+      });
+      state.timers.length = 0;
+    }
+    try {
+      const root = document.getElementById("vgl-root");
+      if (root) root.remove();
+      const dock = document.getElementById("vgl-dock");
+      if (dock) dock.remove();
+      const accDock = document.getElementById("vgl-acciones-dock");
+      if (accDock) accDock.remove();
+      const banner = document.getElementById("vgl-pym-banner");
+      if (banner) banner.remove();
+      if (document.querySelectorAll) {
+        const injected = document.querySelectorAll("[id^='vgl-']");
+        injected.forEach((el) => { try { el.remove(); } catch (e) {} });
+      }
+    } catch (e) {}
+    _mostrarAvisoPausaClinica(state.killReason);
+  }
+
+  function _mostrarAvisoPausaClinica(motivo) {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      let aviso = document.getElementById("vgl-pausa-clinica");
+      if (aviso) aviso.remove();
+      aviso = document.createElement("div");
+      aviso.id = "vgl-pausa-clinica";
+      aviso.style.cssText = "position:fixed;top:10px;right:10px;z-index:2147483647;background:#991b1b;color:#fff;padding:12px 18px;border-radius:12px;font-family:system-ui,sans-serif;font-size:14px;font-weight:600;box-shadow:0 10px 25px rgba(0,0,0,0.5);";
+      const texto = "🛡️ Pausa de seguridad remota activa: " + (motivo || "Asistente clínico desactivado remotamente para proteger la historia clínica.");
+      const span = document.createElement("span");
+      span.textContent = texto;
+      aviso.appendChild(span);
+      document.body.appendChild(aviso);
+    } catch (e) {}
+  }
+
+  // --- Detección de Instancia Duplicada de Tampermonkey (R5.8) ---
+  function _detectarInstanciaDuplicada() {
+    try {
+      if (typeof window === "undefined") return false;
+
+      // 1. Detección por variable global de ventana
+      const inst = window.__VGL_ACTIVE_INSTANCE__;
+      if (inst && inst.id && inst.id !== TABID) {
+        state.isDuplicateInstance = true;
+        state.duplicateVersion = inst.version || "desconocida";
+        console.warn("[Vigilante] Se detectó otra instancia activa de Vigilante de Agenda (v" + state.duplicateVersion + "). Esta instancia (v" + VERSION + ") aborta su inicio para evitar duplicidad.");
+        _mostrarAvisoInstanciaDuplicada(state.duplicateVersion, VERSION);
+        return true;
+      }
+
+      // 2. Detección por marcador en el DOM
+      if (typeof document !== "undefined" && document.documentElement) {
+        const domInst = document.documentElement.getAttribute("data-vgl-instance");
+        const domVer = document.documentElement.getAttribute("data-vgl-version") || "";
+        if (domInst && domInst !== TABID) {
+          state.isDuplicateInstance = true;
+          state.duplicateVersion = domVer || "desconocida";
+          console.warn("[Vigilante] Se detectó instancia duplicada por marcador en DOM (v" + state.duplicateVersion + "). Abortando inicio.");
+          _mostrarAvisoInstanciaDuplicada(state.duplicateVersion, VERSION);
+          return true;
+        }
+      }
+
+      // Registrar la instancia activa actual
+      window.__VGL_ACTIVE_INSTANCE__ = { version: VERSION, id: TABID, ts: Date.now() };
+      if (typeof document !== "undefined" && document.documentElement) {
+        document.documentElement.setAttribute("data-vgl-instance", TABID);
+        document.documentElement.setAttribute("data-vgl-version", VERSION);
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function _mostrarAvisoInstanciaDuplicada(verActiva, verDuplicada) {
+    try {
+      if (typeof document === "undefined" || !document.body) return;
+      if (document.getElementById("vgl-instancia-duplicada")) return;
+
+      const aviso = document.createElement("div");
+      aviso.id = "vgl-instancia-duplicada";
+      aviso.setAttribute("role", "alert");
+      aviso.setAttribute("aria-live", "assertive");
+      aviso.style.cssText = "position:fixed;top:15px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#78350f;color:#fef3c7 !important;border:2px solid #f59e0b;padding:14px 20px;border-radius:10px;font-family:system-ui,-apple-system,sans-serif;font-size:14px;font-weight:500;line-height:1.5;box-shadow:0 10px 25px rgba(0,0,0,0.6);max-width:650px;display:flex;align-items:center;gap:14px;";
+
+      const span = document.createElement("span");
+      span.style.cssText = "color:#fef3c7 !important;";
+      span.textContent = "⚠️ Atención: Se detectaron dos copias de Vigilante de Agenda activas en este navegador (v" + (verActiva || "previa") + " y v" + (verDuplicada || VERSION) + "). Para evitar alertas repetidas o lentitud, abra la extensión Tampermonkey y desactive la versión antigua.";
+      aviso.appendChild(span);
+
+      const btn = document.createElement("button");
+      btn.textContent = "Entendido";
+      btn.setAttribute("aria-label", "Cerrar advertencia de copia duplicada");
+      btn.style.cssText = "background:#f59e0b;color:#78350f !important;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;flex-shrink:0;";
+      btn.onclick = () => { try { aviso.remove(); } catch (e) {} };
+      aviso.appendChild(btn);
+
+      document.body.appendChild(aviso);
+    } catch (e) {}
+  }
+
   // v7.8.1: chequea versión mínima requerida contra Google Apps Script público
   // Si la versión actual es menor y NO hay historia clínica abierta, fuerza reload + limpia caché
   function checkVersionMinimum() {
     try {
+      if (state.killed) return;
       if (typeof GM_xmlhttpRequest === "undefined") return;
       if (Date.now() - (state.lastVersionCheck || 0) < 300000) return; // chequea max 1 vez cada 5 min
       state.lastVersionCheck = Date.now();
@@ -14038,17 +14986,53 @@
         onload: (res) => {
           try {
             const data = JSON.parse(res.responseText);
-            const minVer = String(data.minVersion || "").trim();
+            if (!data || typeof data !== "object") return;
+
+            // 1. Evaluación de Kill-Switch remoto
+            if (data.killSwitch && data.killSwitch.active) {
+              const scope = data.killSwitch.scope || "all";
+              const eqId = _equipoId();
+              const aplica = scope === "all" || (Array.isArray(scope) && (scope.includes(eqId) || scope.includes("all")));
+              if (aplica) {
+                emergencyTeardown(data.killSwitch.reason || "Apagado remoto de emergencia");
+                return;
+              }
+            }
+
+            // 2. Evaluación de características desactivadas (Feature flags)
+            if (data.killSwitch && Array.isArray(data.killSwitch.disabledFeatures)) {
+              state.disabledFeatures = new Set(data.killSwitch.disabledFeatures);
+            } else if (data.disabledFeatures && Array.isArray(data.disabledFeatures)) {
+              state.disabledFeatures = new Set(data.disabledFeatures);
+            }
+
+            // 3. Evaluación de versión mínima requerida (con soporte canario)
+            let minVer = String(data.minVersion || "").trim();
+            if (data.canary && data.canary.enabled) {
+              const eqId = _equipoId();
+              const pct = typeof data.canary.percentage === "number" ? data.canary.percentage : 0;
+              const allowed = Array.isArray(data.canary.allowedEquipos) && data.canary.allowedEquipos.includes(eqId);
+              let hash = 0;
+              for (let i = 0; i < eqId.length; i++) hash = ((hash << 5) - hash) + eqId.charCodeAt(i) | 0;
+              const eqPct = Math.abs(hash) % 100;
+              if (allowed || (pct > 0 && eqPct < pct)) {
+                if (data.canary.minVersion) minVer = String(data.canary.minVersion).trim();
+                if (Array.isArray(data.canary.enabledFeatures)) {
+                  data.canary.enabledFeatures.forEach((f) => state.disabledFeatures.delete(f));
+                }
+              }
+            }
+
             if (!minVer) return;
 
-            // Comparar versiones: "7.8.1" vs "7.8.0" — parsea como [major, minor, patch]
+            // Comparar versiones: "14.1.6" vs "14.1.5"
             const parse = (v) => String(v).split(".").map(x => parseInt(x, 10) || 0);
             const [maj, min, pat] = parse(VERSION);
             const [minMaj, minMin, minPat] = parse(minVer);
 
             const needsUpdate = (minMaj > maj) || (minMaj === maj && minMin > min) ||
                                 (minMaj === maj && minMin === min && minPat > pat);
-            const forceReload = data.force === true;
+            const forceReload = data.force === true || data.forceReload === true;
 
             if (needsUpdate || forceReload) {
               // v7.8.1: SOLO reload si NO hay historia clínica abierta (evita pérdida de datos)
@@ -14056,19 +15040,10 @@
                 setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
                 return;
               }
-              // v11.0.1 — DOS fallos graves corregidos aquí:
-              // 1) BUCLE INFINITO DE RECARGA. Recargar la página NO actualiza el script
-              //    (eso solo lo hace Tampermonkey desde el Gist), así que al volver a
-              //    cargar se cumplía otra vez la misma condición y se recargaba de nuevo
-              //    cada pocos segundos: el equipo quedaba inutilizable.
-              // 2) localStorage.clear() borraba la BITÁCORA DE AUDITORÍA de fraudes e
-              //    inasistencias (vgl_ev_*, 30 días), los contadores, los ajustes y el
-              //    registro anti-duplicados del día, cuya pérdida permite volver a crear
-              //    citas y órdenes ya creadas.
               const marca = "vgl_upd|" + minVer;
               try {
                 if (sessionStorage.getItem(marca)) {
-                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde Tampermonkey → «Check for userscript updates».`, "warn");
+                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».`, "warn");
                   return;
                 }
                 sessionStorage.setItem(marca, "1");
@@ -14079,38 +15054,61 @@
             }
           } catch (e) { console.error("[Vigilante] version check parse:", e); }
         },
-        onerror: () => { /* silencio si falla */ }
+        onerror: () => {},
+        ontimeout: () => {}
       });
     } catch (e) { console.error("[Vigilante] checkVersionMinimum:", e); }
   }
 
   function boot() {
+    try {
+      const killActivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_active", false)) === true;
+      const bypass = (typeof localStorage !== "undefined" && localStorage.getItem("vgl_override_kill") === "1") ||
+                     (typeof location !== "undefined" && String(location.search || "").includes("vgl_bypass=1"));
+      if (killActivo && !bypass) {
+        state.killed = true;
+        const motivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_reason", "")) || "Apagado remoto de emergencia";
+        state.killReason = motivo;
+        _mostrarAvisoPausaClinica(motivo);
+        console.warn("[Vigilante] Inicio cancelado: Pausa de seguridad activa (" + motivo + ").");
+        return;
+      }
+    } catch (e) {}
+
+    if (_detectarInstanciaDuplicada()) return;
     if (document.getElementById("vgl-root")) return;
     purgeEventDays();                 // limpia bitácoras de más de 30 días (una sola vez)
     buildOverlay();
     applySettings();   // aplica tus ajustes guardados (tolerancia, refresco, tema, sonido…) y arranca el reloj
     avisarSiActualizado();
-    setTimeout(chequearAutoUpdateLento, 6000);
+    const tAutoUpd = setTimeout(chequearAutoUpdateLento, 6000);
     heartbeat();
     tick();
     checkVersionMinimum();            // v7.8.1: chequea versión mínima cada 5 min
-    setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
-    setInterval(paintMute, 15000);
-    setInterval(pymReminderCheck, 60000);
+    const tVer = setInterval(checkVersionMinimum, 300000); // repite cada 5 minutos
+    const tPaint = setInterval(paintMute, 15000);
+    const tPymRem = setInterval(pymReminderCheck, 60000);
     // Reporte mínimo al tablero: el resumen de AYER (una vez) y el reintento de la
     // cola cada 10 min (sale de inmediato si no hay nada pendiente).
-    setTimeout(repDailySummary, 8000);
-    setInterval(repFlush, 600000);
+    const tRepSum = setTimeout(repDailySummary, 8000);
+    const tRepFlush = setInterval(repFlush, 600000);
     // v12.5.0 — telemetría de uso del panel: la ventana pendiente de otro día sale al
     // arrancar (45 s, tras estabilizarse el liderazgo) y luego una fila agregada cada
     // 30 minutos. Solo la pestaña líder envía; el toggle vive en Ajustes (uxTelemetria).
-    setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
-    setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
+    const tUxBoot = setTimeout(() => { try { uxBootCheck(); } catch (e) {} }, 45000);
+    const tUxFlush = setInterval(() => { try { uxFlush(); } catch (e) {} }, UX_FLUSH_MS);
     // v12.6.9 — Errores y entorno. La caza de errores se engancha YA (un fallo temprano
     // es justo el que más falta hace ver); la fila de entorno sale a los 12 s, cuando la
     // pestaña ya se estabilizó, y solo una vez al día.
     _instalarCazaErrores();
-    setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    // v14.1.8 — Oyente pasivo de la tabla oficial de exámenes. Se engancha temprano por la
+    // misma razón que la caza de errores: Everest pide esa tabla al ABRIR la Ruta
+    // Crónicos, y si el oyente llega después, esa carga ya pasó y nos la perdimos.
+    try { _instalarOyenteTablaOficial(); } catch (e) {}
+    const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
+    if (Array.isArray(state.timers)) {
+      state.timers.push(tAutoUpd, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+    }
     // PyM del día (v7.7): primero la caché de hoy. Si no hay, se intenta el PyM REAL
     // de hoy en SharePoint (primera opción); si aún no aparece, cae a la base piloto
     // mientras tanto (sus propios 3 reintentos espaciados). Pase lo que pase, sigue

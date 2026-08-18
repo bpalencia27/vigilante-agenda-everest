@@ -24,6 +24,8 @@ module.exports = {
 
     t.caso("Eje B (cupos adicionales) - solo hipertenso sin DM ni Nefro", () => {
       t.igual(api.perfilPaciente(["Hipertensión"]).adicionales, true);
+      t.igual(api.perfilPaciente(["HTA"]).adicionales, true);
+      t.igual(api.perfilPaciente(["hta"]).adicionales, true);
     });
 
     t.caso("Eje B (cupos adicionales) - Diabetes o Nefro excluyen adicionales", () => {

@@ -33,11 +33,72 @@ function crearT() {
     },
     cierto(v, nota) { if (!v) throw new Error((nota || "se esperaba verdadero") + " (obtuvo " + JSON.stringify(v) + ")"); },
     falso(v, nota) { if (v) throw new Error((nota || "se esperaba falso") + " (obtuvo " + JSON.stringify(v) + ")"); },
-    lanza(fn, nota) { let l = false; try { fn(); } catch (e) { l = true; } if (!l) throw new Error(nota || "se esperaba una excepción"); },
-    noLanza(fn, nota) { try { fn(); } catch (e) { throw new Error((nota || "no debía lanzar") + ": " + e.message); } },
+    // v14.1.7 — `lanza` y `noLanza` ENTIENDEN PROMESAS. Hasta aquí solo atrapaban lo que
+    // se lanzara de forma SÍNCRONA, así que al pasarles una función `async` no podían
+    // fallar jamás: una función async no lanza, devuelve una promesa rechazada, y el
+    // `catch` no llegaba a saltar nunca.
+    //
+    // En la base no había ni un solo uso async de los 49 que hay, así que el agujero
+    // estaba latente — pero ya atrapó a un PR real, que añadió
+    // `await t.noLanza(async () => await c.api.pageFetchJson("url"))`. Se comprobó
+    // haciendo que `pageFetchJson` lanzara siempre: cayeron 11 pruebas antiguas y ESA se
+    // quedó verde mientras la función fallaba en cada llamada.
+    //
+    // El arreglo tiene su propia trampa, y por eso NO se convierten en `async` a secas:
+    // eso haría que los 49 llamadores síncronos —que no esperan nada— recibieran una
+    // promesa suelta, y un fallo pasaría de excepción a rechazo no capturado. Silencioso
+    // otra vez, y en 49 sitios en vez de en uno.
+    //
+    // Así que se bifurca por lo que la función DEVUELVE: si no es un thenable, se
+    // comporta exactamente como antes y lanza en el acto; si lo es, se devuelve una
+    // promesa que el llamador tiene que esperar. Y para que nadie se olvide de ese
+    // `await`, hay un centinela en la suite 26 que lee el código de las suites y falla si
+    // encuentra una llamada async sin esperar — el mismo patrón que ya cazó los
+    // `t.casoAsync` sin await.
+    lanza(fn, nota) {
+      const fallo = () => new Error(nota || "se esperaba una excepción");
+      let r;
+      try { r = fn(); } catch (e) { return; }                    // lanzó síncrono: correcto
+      if (!r || typeof r.then !== "function") throw fallo();     // no lanzó y no hay promesa
+      return r.then(() => { throw fallo(); }, () => {});         // rechazó: correcto
+    },
+    noLanza(fn, nota) {
+      const fallo = (e) => new Error((nota || "no debía lanzar") + ": " + (e && e.message ? e.message : e));
+      let r;
+      try { r = fn(); } catch (e) { throw fallo(e); }
+      if (!r || typeof r.then !== "function") return;
+      return r.then(() => {}, (e) => { throw fallo(e); });
+    },
   };
   return { t, res };
 }
+
+// v14.1.9 — EL EJECUTOR NO PUEDE SALIR VERDE SIN HABER TERMINADO.
+//
+// Hermano del arreglo de 2026-08-11 (el `exit(0)` incondicional que hacía CONSULTIVO todo
+// el banco) y del mismo tipo: allí el código de salida mentía al final; aquí ni siquiera
+// se llegaba al final.
+//
+// Si una suite deja una promesa que NO resuelve —un `await` a algo que nunca se cumple—,
+// `main()` se queda esperando, el bucle de eventos de Node se vacía y el proceso **sale
+// solo, con código 0**. No se imprime el resumen, las suites siguientes no llegan a
+// correr, y el CI lo lee como verde. Se detectó en real: una prueba nueva colgaba el banco
+// desde la suite 31 y las siguientes no se ejecutaron nunca, con el CI en verde.
+//
+// El arreglo no depende de acordarse de nada: se declara ROJO de entrada, y solo el final
+// legítimo lo pone en verde. Cualquier camino que no llegue al final —cuelgue, salida
+// temprana, excepción sin capturar— sale distinto de cero.
+process.exitCode = 1;
+let _terminoDeVerdad = false;
+process.on("beforeExit", () => {
+  if (_terminoDeVerdad) return;
+  console.error("");
+  console.error(COL.mal + "  EL EJECUTOR NO LLEGÓ AL FINAL — el banco NO está verde." + COL.fin);
+  console.error(COL.dim + "  Alguna suite dejó una promesa sin resolver: Node se quedó sin trabajo y salió" + COL.fin);
+  console.error(COL.dim + "  antes de contar nada. Las suites posteriores NO se ejecutaron." + COL.fin);
+  console.error(COL.dim + "  Mira cuál fue la última suite que imprimió su línea: el cuelgue está en la siguiente." + COL.fin);
+  console.error("");
+});
 
 async function main() {
   const soloEste = process.argv[2];
@@ -137,6 +198,7 @@ async function main() {
   // Hallado en revisión adversarial (2026-08-11): con exit(0) incondicional, todo el
   // banco era CONSULTIVO — un runner con "N fallan" salía verde y el CI lo aceptaba.
   // El código de salida debe decir la verdad: distinto de cero si algo falló.
+  _terminoDeVerdad = true;
   process.exit(tf ? 1 : 0);
 }
 

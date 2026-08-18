@@ -40,10 +40,12 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic",
+    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia", "_urlDiagnostico", "_tituloDiagnostico",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
+    "_pestanaOculta", "_getUltimoRelevoParaTest", "_setUltimoRelevoParaTest",
+    "_dispararAvisoAudible", "_dispararAvisoCartel",
     "boot",
   ],
 
@@ -108,6 +110,43 @@ module.exports = {
       // Y entre dos ocultas manda la regla de siempre: el latido fresco gana.
       ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra-pestana", t: Date.now(), oculta: true }));
       t.igual(c.api.heartbeat(), false, "entre dos ocultas no se introduce forcejeo nuevo: gana el latido fresco");
+    });
+
+    // v14.1.5 — Una auditoría adversarial del propio arreglo planteó dos temores. Uno era
+    // infundado y el otro real; los dos quedan fijados aquí para que nadie los reintroduzca.
+    t.caso("heartbeat v14.1.5: si TODAS las pestañas están ocultas NO hay acefalía — el líder oculto conserva el mando", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      // El médico minimizó el navegador entero para mirar otra aplicación. Nadie está a la
+      // vista. Si la visibilidad fuera REQUISITO para mandar, el vigilante se quedaría sin
+      // líder y dejaría de avisar justo cuando el aviso más falta.
+      c.env.doc.visibilityState = "hidden";
+      t.igual(c.api.heartbeat(), true, "sin latido ajeno, una pestaña oculta toma el mando igual");
+      t.igual(c.api.heartbeat(), true, "y lo conserva latido tras latido");
+      t.igual(c.api.__state.leader, true, "la visibilidad es preferencia para RELEVAR, nunca requisito para MANDAR");
+      const beat = JSON.parse(ls.getItem("vgl_leader_beat"));
+      t.igual(beat.oculta, true, "deja constancia de que manda una oculta, para que una visible pueda relevarla luego");
+    });
+
+    t.caso("heartbeat v14.1.5: el relevo por visibilidad tiene enfriamiento — con Alt+Tab rápido no se dispara una ráfaga de consultas al servidor", () => {
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+      c.env.doc.visibilityState = "visible";
+      c.api._setUltimoRelevoParaTest(0);
+
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), true, "el primer relevo por visibilidad sí ocurre");
+
+      // Alt+Tab inmediato: otra pestaña se lo queda y esta vuelve a intentarlo enseguida.
+      // Cada toma de mando hace API.ultimo = 0, o sea una consulta inmediata de agenda;
+      // sin enfriamiento, alternar pestañas bombardearía el servidor de Everest.
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), false, "un segundo relevo dentro de los 10 s NO se concede");
+
+      // Pasado el enfriamiento, quien de verdad se quedó mirando sí se lleva el mando.
+      c.api._setUltimoRelevoParaTest(Date.now() - 11000);
+      ls.setItem("vgl_leader_beat", JSON.stringify({ id: "otra", t: Date.now(), oculta: true }));
+      t.igual(c.api.heartbeat(), true, "pasados los 10 s el relevo vuelve a estar disponible");
     });
 
     t.caso("heartbeat v14.1.5: un latido antiguo SIN el campo `oculta` no dispara relevos (compatibilidad con pestañas de la versión anterior)", () => {
@@ -376,19 +415,38 @@ module.exports = {
     // v12.5.14 — tick() dispara la cola de avisos pendientes (_flushAvisosPendientes) en
     // TODA pestaña que esté en HCHealth, aunque no tenga marcadores de agenda/historia en
     // el DOM (p. ej. una pantalla de Órdenes/RCV dentro del mismo módulo clínico).
-    t.caso("tick: en HCHealth (aunque la sección sea 'otra') dispara los avisos que quedaron en cola", () => {
+    // v14.1.5 — La cola ya solo guarda CARTELES: el tono y la notificación del sistema
+    // salieron cuando el hecho ocurrió, sin esperar a nada. Lo que sigue vigente de esta
+    // prueba es que el cartel pendiente SÍ se pinta en cuanto la pestaña está en HCHealth,
+    // aunque la sección no sea agenda ni historia.
+    t.caso("tick: en HCHealth (aunque la sección sea 'otra') pinta los carteles que quedaron en cola, sin volver a notificar", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";
+      c.api.__S.cartel = true;   // el cartel de pantalla (bigAlert) monta #vgl-modal
+      // Sin `ts`: es un aviso encolado por una versión anterior. No debe caducar por eso.
       c.api._encolarAvisoPendiente({ color: "ROJO", title: "t", body: "b", persist: true, uid: "queued|ROJO", flashText: "t" });
 
       c.api.tick();
       t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
-      t.igual(notifCount, 1, "el aviso en cola se dispara igual, porque la pestaña SÍ está en HCHealth");
+      t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "el cartel pendiente se pinta, porque la pestaña SÍ está en HCHealth");
+      t.igual(notifCount, 0, "y NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(cola.length, 0, "la cola quedó vacía");
+    });
+
+    t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";
+      c.api.__S.cartel = true;
+      c.api._encolarAvisoPendiente({ color: "ROJO", title: "viejo", body: "b", persist: true, uid: "rancio|ROJO", flashText: "t", ts: Date.now() - 660000 });
+
+      c.api._flushAvisosPendientes();
+
+      t.falso(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "un cartel de hace 11 minutos NO se pinta: haría atender una llegada que ya pasó");
+      t.igual(JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]").length, 0, "la cola queda vacía en cualquier caso");
     });
 
     // ---------- downloadDiagnostic ----------
@@ -438,6 +496,99 @@ module.exports = {
       // Esta aserción pasa vacuamente porque downloadDiagnostic no vuelca el campo nombre,
       // no cuenta como cobertura y la mutación no se comprueba contra ella.
       t.falso(texto.includes("PACIENTE FICTICIO"), "no debe filtrarse ningún nombre");
+    });
+
+    // v14.1.9 — El informe se cuidaba de ocultar PHI en TODO su cuerpo (`san()` sustituye
+    // cada nodo de texto por "···", `mask()` recorta las cédulas a 3 dígitos) y luego la
+    // filtraba en su propia CABECERA, escribiendo `location.href` y `document.title` en
+    // crudo. En un sistema de historia clínica el título de la pestaña suele llevar el
+    // NOMBRE del paciente, y la URL lleva identificadores en la consulta y el fragmento —
+    // el propio script construye `...BusquedaPaciente#doc=<cédula>`.
+    t.caso("downloadDiagnostic: la CABECERA tampoco filtra — ni el título de la pestaña ni la cédula de la URL", () => {
+      const c = cargar({ silencioso: true });
+      let blobCapturado = null;
+      c.env.win.URL.createObjectURL = (b) => { blobCapturado = b; return "blob:diag"; };
+
+      // Datos INVENTADOS, con la forma exacta que tienen los reales.
+      c.env.win.location.href = "https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente?idPaciente=778899&token=abcxyz#doc=1234567890";
+      c.env.doc.title = "Historia Clinica - PACIENTE FICTICIO TRES";
+
+      c.api.downloadDiagnostic();
+      const texto = String(blobCapturado.parts[0]);
+
+      t.falso(texto.includes("1234567890"), "la cédula del fragmento (#doc=) NO puede viajar en el informe");
+      t.falso(texto.includes("778899"), "tampoco el identificador de la consulta");
+      t.falso(texto.includes("PACIENTE FICTICIO TRES"), "ni el nombre que el sistema pone en el título de la pestaña");
+      t.falso(texto.includes("abcxyz"), "ni el token");
+
+      // Y lo que SÍ tiene que quedar, porque es para lo que sirve el informe: en qué vista
+      // estaba. Sin esto el arreglo se convierte en "borrarlo todo", que también es un fallo.
+      t.cierto(texto.includes("/Resultados/BusquedaPaciente"), "la ruta se conserva: es lo que dice en qué pantalla estaba");
+      t.cierto(texto.includes("2 parámetro(s) omitido(s)"), "se dice cuántos parámetros había, sin decir cuáles");
+      t.cierto(texto.includes("fragmento omitido"), "y que había un fragmento");
+      t.cierto(texto.includes("caracteres"), "del título solo se reporta su longitud");
+    });
+
+    // Hallazgo de una mutación: la prueba de arriba usa una URL con consulta Y fragmento, y
+    // ahí el fragmento se cae de rebote al partir por "?". Con una URL de SOLO fragmento la
+    // cédula se escapaba — y esa es justo la forma del enlace que el propio script
+    // construye: `...BusquedaPaciente#doc=<cédula>`, sin ningún parámetro. El caso real era
+    // el único que no estaba cubierto.
+    t.caso("downloadDiagnostic: una URL de SOLO fragmento (la que arma el script para Athenea) tampoco filtra", () => {
+      const c = cargar({ silencioso: true });
+      let blobCapturado = null;
+      c.env.win.URL.createObjectURL = (b) => { blobCapturado = b; return "blob:diag"; };
+      c.env.win.location.href = "https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=1234567890";
+      c.env.doc.title = "x";
+
+      c.api.downloadDiagnostic();
+      const texto = String(blobCapturado.parts[0]);
+
+      t.falso(texto.includes("1234567890"), "sin parámetros que la tapen, la cédula del fragmento tiene que caer igual");
+      t.cierto(texto.includes("/Resultados/BusquedaPaciente"), "y la ruta se conserva");
+      t.cierto(texto.includes("fragmento omitido"), "se dice que había fragmento");
+      t.falso(texto.includes("parámetro(s) omitido(s)"), "y no se inventan parámetros que no existían");
+    });
+
+    // ---------- uxClaveLimpia ----------
+    //
+    // La barrera que impide que un dato del paciente acabe siendo el NOMBRE de una métrica
+    // enviada al tablero. Tenía los dos pasos en el orden equivocado y no paraba ninguna
+    // cédula escrita como se escriben las cédulas de verdad.
+    t.caso("uxClaveLimpia: una cédula con puntos NO pasa — el punto es carácter permitido, y ahí estaba el agujero", () => {
+      const c = cargar({ silencioso: true });
+      // Documentos INVENTADOS, con el formato exacto en que se escriben en Colombia.
+      t.falso(c.api.uxClaveLimpia("labs.1.143.142.498.fin").includes("143"),
+        "escrita con puntos no hay ningún tramo de 6 dígitos seguidos que quitar: salía entera");
+      t.falso(c.api.uxClaveLimpia("300-123-4567").includes("123"), "lo mismo con el guion en un celular");
+      t.falso(c.api.uxClaveLimpia("1 143 142 498").includes("143"),
+        "y con espacios: se quitaban DESPUÉS de la única comprobación que los habría cazado, y los dígitos se pegaban");
+      t.igual(c.api.uxClaveLimpia("1234567890"), "", "el caso que sí paraba la versión vieja sigue parándose");
+      t.cierto(c.api.uxClaveLimpia("labs.1.143.142.498.fin").indexOf("labs") === 0,
+        "lo que no es el dato se conserva: la clave sigue diciendo de qué acción venía");
+    });
+
+    t.caso("uxClaveLimpia: las claves reales del script sobreviven intactas — si no, la barrera ciega el tablero", () => {
+      const c = cargar({ silencioso: true });
+      // Las 38 claves reales son literales y ninguna lleva 6 dígitos; la más cargada es
+      // "panel.silenciar15". Si el arreglo se pasa de celoso, el tablero se queda ciego —
+      // que es exactamente el fallo que costó una semana de errores sin detectar (v14.1.6).
+      for (const clave of ["labs.autollenado.click", "panel.silenciar15", "aviso.pym.mostrado.pes",
+                           "ajustes.bannerpym.on", "widget.agendar.sololab", "error.js", "lab.agendado"]) {
+        t.igual(c.api.uxClaveLimpia(clave), clave, "clave legítima alterada: " + clave);
+      }
+    });
+
+    t.caso("uxClaveLimpia: el umbral se cuenta en DÍGITOS, no en caracteres — 5 dígitos pasan, 6 no", () => {
+      // Otra mutación destapó que nada fijaba esto: contar los separadores como si fueran
+      // dígitos daba el mismo resultado en todos los casos probados y era más agresivo, así
+      // que se habría comido claves legítimas cortas sin que nadie lo notara. El contrato
+      // que el comentario del código promete es este, y aquí queda sujeto por los dos lados.
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.uxClaveLimpia("v.1.2.3.4.5"), "v.1.2.3.4.5", "5 dígitos repartidos entre puntos: por debajo del umbral, se conservan");
+      t.igual(c.api.uxClaveLimpia("v.1.2.3.4.5.6"), "v", "6 dígitos, aunque vayan de uno en uno entre puntos: se van");
+      t.igual(c.api.uxClaveLimpia("12345"), "12345", "cinco dígitos seguidos tampoco son un identificador");
+      t.igual(c.api.uxClaveLimpia("123456"), "", "seis sí");
     });
 
     // ---------- pymReminderCheck ----------

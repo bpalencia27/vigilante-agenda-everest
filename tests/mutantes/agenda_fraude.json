@@ -1,0 +1,608 @@
+{
+  "subsistema": "agenda_fraude",
+  "descripcion": "Catálogo de mutantes para Agendamiento de Citas, Detección de Fraude, Alertas y Perfil de Paciente",
+  "total_funciones": 12,
+  "total_mutantes": 60,
+  "mutantes": [
+    {
+      "id": "MUT-AGD-001",
+      "funcion": "apptKey",
+      "linea": 6118,
+      "original": "function apptKey(a) { return (a.doc_id ? a.doc_id : a.nombre + \"|\" + a.index) + \"@\" + (a.hora_texto || \"\"); }",
+      "mutacion": "function apptKey(a) { return (a.doc_id ? a.doc_id : a.nombre) + \"@\" + (a.hora_texto || \"\"); }",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Omite índice en clave perdiendo distinción de filas sin cédula"
+    },
+    {
+      "id": "MUT-AGD-002",
+      "funcion": "apptKey",
+      "linea": 6118,
+      "original": "(a.doc_id ? a.doc_id : a.nombre + \"|\" + a.index)",
+      "mutacion": "a.doc_id",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Falla cuando el paciente aún no tiene cédula en la fila"
+    },
+    {
+      "id": "MUT-AGD-003",
+      "funcion": "apptKey",
+      "linea": 6118,
+      "original": "+ \"@\" + (a.hora_texto || \"\")",
+      "mutacion": "",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Regresión crítica: omite hora provocando colisión de citas del mismo paciente"
+    },
+    {
+      "id": "MUT-AGD-004",
+      "funcion": "apptKey",
+      "linea": 6118,
+      "original": "a.hora_texto || \"\"",
+      "mutacion": "\"00:00\"",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Asigna 00:00 fija en hora_texto vacía"
+    },
+    {
+      "id": "MUT-AGD-005",
+      "funcion": "apptKey",
+      "linea": 6118,
+      "original": "a.nombre + \"|\" + a.index",
+      "mutacion": "a.nombre",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "No agrega índice a pacientes con nombre repetido"
+    },
+    {
+      "id": "MUT-AGD-006",
+      "funcion": "diaNuevo",
+      "linea": 6124,
+      "original": "if (!diaActual) { diaActual = d; state.sessionEpoch = Date.now(); return; }",
+      "mutacion": "if (!diaActual) return;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "No inicializa diaActual al arrancar el script"
+    },
+    {
+      "id": "MUT-AGD-007",
+      "funcion": "diaNuevo",
+      "linea": 6125,
+      "original": "if (diaActual === d) return;",
+      "mutacion": "if (diaActual !== d) return;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Invierte guarda de cambio de día reiniciando en cada tick"
+    },
+    {
+      "id": "MUT-AGD-008",
+      "funcion": "diaNuevo",
+      "linea": 6130,
+      "original": "state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();",
+      "mutacion": "// state.fraudWatch.clear();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Regresión: no limpia fraudWatch acusando de fraude a citas de hoy"
+    },
+    {
+      "id": "MUT-AGD-009",
+      "funcion": "diaNuevo",
+      "linea": 6128,
+      "original": "state.historical.clear(); state.notified.clear();",
+      "mutacion": "// state.historical.clear();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "No limpia histórico de estados"
+    },
+    {
+      "id": "MUT-AGD-010",
+      "funcion": "diaNuevo",
+      "linea": 6123,
+      "original": "const d = todayStamp();",
+      "mutacion": "const d = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_02_tiempo_fechas.js",
+      "descripcion": "Vacía timestamp de hoy"
+    },
+    {
+      "id": "MUT-AGD-011",
+      "funcion": "colorAndAlert",
+      "linea": 6145,
+      "original": "if (st.includes(\"en sala\")) {",
+      "mutacion": "if (st.includes(\"en atencion\")) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_04_agenda_alertas.js",
+      "descripcion": "Confunde estado En Sala con En Atención"
+    },
+    {
+      "id": "MUT-AGD-012",
+      "funcion": "colorAndAlert",
+      "linea": 6146,
+      "original": "if (state.fraudWatch.has(key)) { color = \"ROJO\"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); } }",
+      "mutacion": "if (false) {}",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_04_agenda_alertas.js",
+      "descripcion": "Anula detección de atención extemporánea en En Sala"
+    },
+    {
+      "id": "MUT-AGD-013",
+      "funcion": "colorAndAlert",
+      "linea": 6156,
+      "original": "else if (state.fraudWatch.has(key)) { color = \"ROJO\"; sound = true; state.alertedFraud.add(key); }",
+      "mutacion": "else if (false) {}",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_04_agenda_alertas.js",
+      "descripcion": "Regresión: salto directo a Atendido evade fraudWatch"
+    },
+    {
+      "id": "MUT-AGD-014",
+      "funcion": "colorAndAlert",
+      "linea": 6159,
+      "original": "else if (st.includes(\"sin presentarse\")) { if (elapsed >= grace) { color = \"AMBAR\"; state.fraudWatch.add(key); } else if (elapsed >= prealert) { color = \"MORADO\"; reason = \"tiempo\"; } else color = \"AZUL\"; }",
+      "mutacion": "else if (false) {}",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_04_agenda_alertas.js",
+      "descripcion": "No añade pacientes a fraudWatch tras superar tolerancia"
+    },
+    {
+      "id": "MUT-AGD-015",
+      "funcion": "colorAndAlert",
+      "linea": 6144,
+      "original": "const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0);",
+      "mutacion": "const grace = 60.0, prealert = 50.0;",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_04_agenda_alertas.js",
+      "descripcion": "Altera ventana de gracia a 60 minutos"
+    },
+    {
+      "id": "MUT-AGD-016",
+      "funcion": "apiAccesoBuscarPaciente",
+      "linea": 9752,
+      "original": "const cleanDoc = String(docId || \"\").replace(/\\D/g, \"\");",
+      "mutacion": "const cleanDoc = String(docId || \"\");",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "No limpia caracteres no numéricos de la cédula"
+    },
+    {
+      "id": "MUT-AGD-017",
+      "funcion": "apiAccesoBuscarPaciente",
+      "linea": 9753,
+      "original": "if (!cleanDoc) return null;",
+      "mutacion": "if (!cleanDoc) return \"0\";",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Devuelve ID '0' ante cédula vacía"
+    },
+    {
+      "id": "MUT-AGD-018",
+      "funcion": "apiAccesoBuscarPaciente",
+      "linea": 9773,
+      "original": "const pid = extractPatientId(res);",
+      "mutacion": "const pid = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Anula extracción de paciente ID de la respuesta"
+    },
+    {
+      "id": "MUT-AGD-019",
+      "funcion": "apiAccesoBuscarPaciente",
+      "linea": 9774,
+      "original": "if (pid) return pid;",
+      "mutacion": "if (!pid) return \"999\";",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Inventa paciente ID ante respuesta fallida"
+    },
+    {
+      "id": "MUT-AGD-020",
+      "funcion": "apiAccesoBuscarPaciente",
+      "linea": 9750,
+      "original": "async function apiAccesoBuscarPaciente(docId) {",
+      "mutacion": "function apiAccesoBuscarPaciente(docId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Remueve async rompiendo promesas"
+    },
+    {
+      "id": "MUT-AGD-021",
+      "funcion": "apiAccesoBuscarCitasDisponibles",
+      "linea": 9793,
+      "original": "const espId = especialidadId || 12;",
+      "mutacion": "const espId = 0;",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Usa especialidad 0 en lugar de Medicina General (12)"
+    },
+    {
+      "id": "MUT-AGD-022",
+      "funcion": "apiAccesoBuscarCitasDisponibles",
+      "linea": 9794,
+      "original": "const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}&EspecialidadId=${espId}&FechaDeseada=${fechaIso}&ProgramaId=0&PuntoAtencionId=12&PerfilCodigo=PROFESIONAL&swParticular=false&presupuestoId=0`;",
+      "mutacion": "const path1 = `/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles?PacienteId=${pacienteId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Mutila query params de la ruta principal"
+    },
+    {
+      "id": "MUT-AGD-023",
+      "funcion": "apiAccesoBuscarCitasDisponibles",
+      "linea": 9799,
+      "original": "const list = extractAgendasList(res);",
+      "mutacion": "const list = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Anula lista de agendas extraídas"
+    },
+    {
+      "id": "MUT-AGD-024",
+      "funcion": "apiAccesoBuscarCitasDisponibles",
+      "linea": 9800,
+      "original": "if (list && list.length) return res;",
+      "mutacion": "if (list && list.length) return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Retorna lista vacía en lugar de respuesta con agendas"
+    },
+    {
+      "id": "MUT-AGD-025",
+      "funcion": "apiAccesoBuscarCitasDisponibles",
+      "linea": 9805,
+      "original": "if (propagarError && res2 == null) throw new Error(\"apiAccesoBuscarCitasDisponibles: ninguna vía dio una respuesta real\");",
+      "mutacion": "// if (propagarError)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "No propaga error impidiendo distinguir fallo de red de día sin agendas"
+    },
+    {
+      "id": "MUT-AGD-026",
+      "funcion": "perfilPaciente",
+      "linea": 9886,
+      "original": "if (!etiquetas || !Array.isArray(etiquetas) || etiquetas.length === 0) {",
+      "mutacion": "if (false) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Falla en entrada vacía"
+    },
+    {
+      "id": "MUT-AGD-027",
+      "funcion": "perfilPaciente",
+      "linea": 9904,
+      "original": "if (e.includes(\"diabetes\") || e.includes(\"hta+dm\")) {",
+      "mutacion": "if (e.includes(\"diabetes\")) {",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Omite combinación hta+dm"
+    },
+    {
+      "id": "MUT-AGD-028",
+      "funcion": "perfilPaciente",
+      "linea": 9908,
+      "original": "if (e.includes(\"nefroproteccion\")) {",
+      "mutacion": "if (false && e.includes(\"nefroproteccion\")) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Ignora etiqueta de nefroprotección"
+    },
+    {
+      "id": "MUT-AGD-029",
+      "funcion": "perfilPaciente",
+      "linea": 9912,
+      "original": "if (e.includes(\"hipertension\") || e === \"hta\") {",
+      "mutacion": "if (e === \"hipertension\") {",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "No reconoce sigla HTA"
+    },
+    {
+      "id": "MUT-AGD-030",
+      "funcion": "perfilPaciente",
+      "linea": 9887,
+      "original": "return { franja: \"sin_preferencia\", adicionales: \"visibles\" };",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Devuelve null en vez del contrato por defecto"
+    },
+    {
+      "id": "MUT-AGD-031",
+      "funcion": "recomendacionHorario",
+      "linea": 9937,
+      "original": "if (!perfil || perfil.franja !== \"primera_mitad\" || !turnosDelDia || turnosDelDia.length === 0) {",
+      "mutacion": "if (false) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "No valida perfil ni turnos disponibles"
+    },
+    {
+      "id": "MUT-AGD-032",
+      "funcion": "recomendacionHorario",
+      "linea": 9952,
+      "original": "if (mins >= 360 && mins <= 540) horasAM.push({ original: hStr, mins });",
+      "mutacion": "if (mins >= 360 && mins <= 420) horasAM.push({ original: hStr, mins });",
+      "tipo": "BVR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Estrecha franja matutina a solo 6:00-7:00"
+    },
+    {
+      "id": "MUT-AGD-033",
+      "funcion": "recomendacionHorario",
+      "linea": 9953,
+      "original": "if (mins >= 780 && mins <= 960) horasPM.push({ original: hStr, mins });",
+      "mutacion": "if (mins >= 780 && mins <= 840) horasPM.push({ original: hStr, mins });",
+      "tipo": "BVR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Estrecha franja vespertina"
+    },
+    {
+      "id": "MUT-AGD-034",
+      "funcion": "recomendacionHorario",
+      "linea": 9960,
+      "original": "franjas.push(\"AM 06:00–09:00\");",
+      "mutacion": "franjas.push(\"AM 07:00–10:00\");",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Altera texto de la franja AM"
+    },
+    {
+      "id": "MUT-AGD-035",
+      "funcion": "recomendacionHorario",
+      "linea": 9938,
+      "original": "return { sugerida: null, rangoTexto: null, horasEnFranja: [] };",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_24_motor_perfil.js",
+      "descripcion": "Devuelve null rompiendo contrato de respuesta"
+    },
+    {
+      "id": "MUT-AGD-036",
+      "funcion": "apiLaboratorioAgendarAuto",
+      "linea": 10038,
+      "original": "const resAg = await gmPostJson(urlTurnos, {});",
+      "mutacion": "const resAg = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Anula consulta de turnos en AppCita"
+    },
+    {
+      "id": "MUT-AGD-037",
+      "funcion": "apiLaboratorioAgendarAuto",
+      "linea": 10039,
+      "original": "const turnos = extractAgendasList(resAg);",
+      "mutacion": "const turnos = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Vacía turnos disponibles"
+    },
+    {
+      "id": "MUT-AGD-038",
+      "funcion": "apiLaboratorioAgendarAuto",
+      "linea": 10054,
+      "original": "const buscada = normalizeHora(horaSeleccionada);",
+      "mutacion": "const buscada = horaSeleccionada;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Regresión: no normaliza hora fallando match"
+    },
+    {
+      "id": "MUT-AGD-039",
+      "funcion": "apiLaboratorioAgendarAuto",
+      "linea": 10098,
+      "original": "const agendaId = turnoElegido.AgendaId || turnoElegido.agendaId || turnoElegido.id;",
+      "mutacion": "const agendaId = turnoElegido.id;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Omite propiedad AgendaId nativa de AppCita"
+    },
+    {
+      "id": "MUT-AGD-040",
+      "funcion": "apiLaboratorioAgendarAuto",
+      "linea": 10119,
+      "original": "const creada = !!(resBook.ok && body && body.error === false);",
+      "mutacion": "const creada = true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Asume éxito aunque AppCita devuelva error"
+    },
+    {
+      "id": "MUT-AGD-041",
+      "funcion": "apiDigiturnoFinalizarTicket",
+      "linea": 10157,
+      "original": "if (!citaId) return;",
+      "mutacion": "if (citaId) return;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Bloquea cierre de digiturno para citaId válido"
+    },
+    {
+      "id": "MUT-AGD-042",
+      "funcion": "apiDigiturnoFinalizarTicket",
+      "linea": 10160,
+      "original": "const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?tipoIntegracion=IntegracionDigiturno&TicketId=0&UsuarioId=${uId}&EverestId=${encodeURIComponent(b64Cita)}`;",
+      "mutacion": "const path = `/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/Cerrar?UsuarioId=${uId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera ruta del endpoint de digiturno"
+    },
+    {
+      "id": "MUT-AGD-043",
+      "funcion": "apiDigiturnoFinalizarTicket",
+      "linea": 10159,
+      "original": "const b64Cita = btoa(String(citaId));",
+      "mutacion": "const b64Cita = String(citaId);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "No codifica citaId en base64"
+    },
+    {
+      "id": "MUT-AGD-044",
+      "funcion": "apiDigiturnoFinalizarTicket",
+      "linea": 10161,
+      "original": "try { await pageFetchJson(path); } catch (e) {}",
+      "mutacion": "try { await pageFetchJson(path); } catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Relanza error bloqueando flujo"
+    },
+    {
+      "id": "MUT-AGD-045",
+      "funcion": "apiDigiturnoFinalizarTicket",
+      "linea": 10158,
+      "original": "const uId = state.activeDoctor.id || S.medicoId || 0;",
+      "mutacion": "const uId = 0;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Pasa usuario médico 0"
+    },
+    {
+      "id": "MUT-AGD-046",
+      "funcion": "apiAccesoAgdValidarAgenda",
+      "linea": 10580,
+      "original": "const path = `/apiviva/APIAcceso/api/Acceso/AgdValidarAgenda?agendaId=${agendaId}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;",
+      "mutacion": "const path = `/apiviva/APIAcceso/api/Acceso/Validar?agendaId=${agendaId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera ruta de validación de agenda"
+    },
+    {
+      "id": "MUT-AGD-047",
+      "funcion": "apiAccesoAgdValidarAgenda",
+      "linea": 10584,
+      "original": "return await pageFetchJson(path);",
+      "mutacion": "return { isError: false };",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Devuelve éxito sin consultar backend"
+    },
+    {
+      "id": "MUT-AGD-048",
+      "funcion": "apiAccesoAgdValidarAgenda",
+      "linea": 10585,
+      "original": "catch (e) { console.warn(\"[Vigilante] AgdValidarAgenda falló:\", e); return null; }",
+      "mutacion": "catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Relanza excepción"
+    },
+    {
+      "id": "MUT-AGD-049",
+      "funcion": "apiAccesoAgdValidarAgenda",
+      "linea": 10580,
+      "original": "swParticular=false",
+      "mutacion": "swParticular=true",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Marca swParticular como true"
+    },
+    {
+      "id": "MUT-AGD-050",
+      "funcion": "apiAccesoAgdValidarAgenda",
+      "linea": 10579,
+      "original": "async function apiAccesoAgdValidarAgenda(agendaId, pacienteId) {",
+      "mutacion": "function apiAccesoAgdValidarAgenda(agendaId, pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Remueve async"
+    },
+    {
+      "id": "MUT-AGD-051",
+      "funcion": "apiAccesoObtenerTurnos",
+      "linea": 10590,
+      "original": "const path = `/apiviva/APIAcceso/api/Acceso/ObtenerTurnos?agendaid=${agendaId}&fecha=${encodeURIComponent(fechaFmt)}&pacienteId=${pacienteId}&ordenMongo=null&cup=null&swParticular=false`;",
+      "mutacion": "const path = `/apiviva/APIAcceso/api/Acceso/Turnos?agendaid=${agendaId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera path de consulta de turnos"
+    },
+    {
+      "id": "MUT-AGD-052",
+      "funcion": "apiAccesoObtenerTurnos",
+      "linea": 10591,
+      "original": "return pageFetchJson(path);",
+      "mutacion": "return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Devuelve lista vacía sin consultar turnos"
+    },
+    {
+      "id": "MUT-AGD-053",
+      "funcion": "apiAccesoObtenerTurnos",
+      "linea": 10590,
+      "original": "encodeURIComponent(fechaFmt)",
+      "mutacion": "fechaFmt",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "No codifica formato de fecha en URL"
+    },
+    {
+      "id": "MUT-AGD-054",
+      "funcion": "apiAccesoObtenerTurnos",
+      "linea": 10589,
+      "original": "async function apiAccesoObtenerTurnos(agendaId, fechaFmt, pacienteId) {",
+      "mutacion": "function apiAccesoObtenerTurnos(agendaId, fechaFmt, pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Remueve async"
+    },
+    {
+      "id": "MUT-AGD-055",
+      "funcion": "apiAccesoObtenerTurnos",
+      "linea": 10580,
+      "original": "swParticular=false",
+      "mutacion": "swParticular=true",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Cambia swParticular a true"
+    },
+    {
+      "id": "MUT-AGD-056",
+      "funcion": "apiAccesoAsignarTurno",
+      "linea": 10600,
+      "original": "if (state.killed) return { error: true, mensaje: \"Vigilante en pausa de seguridad (Kill-Switch activo). NO se creó la cita.\" };",
+      "mutacion": "// if (state.killed)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Bypasea Kill-Switch creando citas en emergencia"
+    },
+    {
+      "id": "MUT-AGD-057",
+      "funcion": "apiAccesoAsignarTurno",
+      "linea": 10607,
+      "original": "if (!uId) return { error: true, mensaje: \"No se pudo identificar al médico en Everest. NO se creó la cita. Indique su identificador en Ajustes.\" };",
+      "mutacion": "if (false && !uId)",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Asigna citas sin médico identificado"
+    },
+    {
+      "id": "MUT-AGD-058",
+      "funcion": "apiAccesoAsignarTurno",
+      "linea": 10618,
+      "original": "const path = `/apiviva/APIAcceso/api/Acceso/AsignarTurno?OrdenMongoId=null&TurnoId=${turnoId}&Marcacion=${marc}&PacienteId=${pacienteId}&FechaDeseada=${fechaIso}&TipoConsulta=PRESENCIAL&Ip=192&UsuarioId=${uId}&CodigoCups=null&SwProgramaEspecial=${swProgEspecial}&swIsPac=false&swIsPyM=${swPyM}&ObservacionCita=${obs}&FechaMinimaConsultaOrden=null` + (programaId ? `&ProgramaId=${encodeURIComponent(programaId)}` : \"\") + `&Tratamiento=false&Consulta=false&Emergencia=false&PresupuestoId=0`;",
+      "mutacion": "const path = `/apiviva/APIAcceso/api/Acceso/CrearCita`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Altera endpoint oficial de AsignarTurno"
+    },
+    {
+      "id": "MUT-AGD-059",
+      "funcion": "apiAccesoAsignarTurno",
+      "linea": 10620,
+      "original": "const res = await pageFetchJson(path, { method: \"POST\", body: \"{}\" });",
+      "mutacion": "const res = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Anula mutación real de cita en Everest"
+    },
+    {
+      "id": "MUT-AGD-060",
+      "funcion": "apiAccesoAsignarTurno",
+      "linea": 10613,
+      "original": "const swPyM = esMedicoRCV ? true : !!isPyM;",
+      "mutacion": "const swPyM = false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_05_api_everest.js",
+      "descripcion": "Desactiva swPyM en médicos de riesgo cardiovascular"
+    }
+  ]
+}

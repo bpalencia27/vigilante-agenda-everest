@@ -228,7 +228,15 @@ module.exports = {
     // del módulo clínico HCHealth: si ninguna pestaña está ahí en el instante
     // de la transición, queda en cola y se dispara en cuanto una lo esté.
     // =====================================================================
-    t.caso("maybeNotify: fuera de HCHealth (Acceso) NO muestra el aviso, pero SIEMPRE lo audita y lo deja en cola", () => {
+    // v14.1.5 — REGLA NUEVA, y es la corrección de un fallo reportado en consultorio.
+    // Antes, un aviso generado con el médico FUERA de /viva/HCHealth no sonaba: se guardaba
+    // y esperaba a que entrara a una historia clínica, y entonces salían todos de golpe
+    // ("es como si estuvieran asincrónicas", dijeron sus compañeros). Pero lo que se estaba
+    // conteniendo era el TONO y la NOTIFICACIÓN DEL SISTEMA, que existen justamente para
+    // avisar cuando el médico NO está mirando esta pantalla: la condición estaba al revés.
+    // Ahora eso sale siempre y en el acto; lo único que se encola es el cartel de la página,
+    // que sí necesita una vista donde pintarse.
+    t.caso("maybeNotify v14.1.5: fuera de HCHealth el aviso SÍ suena y sale al sistema operativo en el acto; solo el cartel queda en cola", () => {
       const c = cargar();
       c.env.win.location.pathname = "/viva/Acceso/";
       let notifCount = 0;
@@ -236,12 +244,13 @@ module.exports = {
       c.env.win.Notification.permission = "granted";
       const base = { hora_texto: "08:00 AM", doc_id: "789", key: "789@08:00 AM", nombre: "LUIS", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });      // siembra
-      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, pero fuera de HCHealth
+      c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });              // llegada en vivo, fuera de HCHealth
       t.igual(atiempoHoy(c), 1, "la auditoría (bumpStat) SIEMPRE se registra, con la hora real de la transición");
-      t.igual(notifCount, 0, "el aviso visible/audible NO se muestra mientras la pestaña líder está en Acceso");
+      t.igual(notifCount, 1, "el médico se entera AHORA, esté en el módulo que esté: ese es el arreglo");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
-      t.igual(cola.length, 1, "el aviso queda en cola, no se pierde");
+      t.igual(cola.length, 1, "el cartel de la página sí queda en cola, para cuando haya vista donde pintarlo");
       t.igual(cola[0].uid, "789@08:00 AM|VERDE");
+      t.cierto(cola[0].ts > 0, "y lleva la hora del hecho, para poder caducarlo si se vacía mucho después");
     });
 
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
@@ -252,12 +261,12 @@ module.exports = {
       c.env.win.Notification.permission = "granted";
       const a = { hora_texto: "09:00 AM", doc_id: "321", key: "321@09:00 AM", nombre: "ANA", elapsed: 1, reason: "" };
       c.api.maybeNotify({ ...a, estado: "Sin presentarse", color: "AZUL", arrival: false });
-      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // encolado: la pestaña líder está en Acceso
-      t.igual(notifCount, 0, "todavía no se muestra");
+      c.api.maybeNotify({ ...a, estado: "En sala", color: "VERDE", arrival: true });   // fuera de HCHealth
+      t.igual(notifCount, 1, "v14.1.5: el aviso al sistema operativo salió YA, no esperó a nada");
 
       c.env.win.location.pathname = "/viva/HCHealth/";
       c.api._flushAvisosPendientes();
-      t.igual(notifCount, 1, "en cuanto una pestaña está en HCHealth, el aviso pendiente se dispara");
+      t.igual(notifCount, 1, "al volver a HCHealth sale el cartel, pero NO se vuelve a notificar: ya se avisó una vez");
       const colaTrasFlush = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(colaTrasFlush.length, 0, "la cola queda vacía tras el flush");
 
@@ -419,26 +428,45 @@ module.exports = {
       t.falso(c.api.avisoYaVisto(uid), "los 8 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
     });
 
-    t.caso("labsVencidosAlert: no lanza con una lista real de faltantes, ni con la lista vacía (v12.5.7)", () => {
-      // v12.5.7 — Limitación conocida del banco (documentada también para abrirInformeAthenea
-      // en la suite 15): el DOM simulado NO parsea innerHTML en nodos reales y
-      // querySelector() siempre devuelve null en cualquier elemento recién creado, así que
-      // NINGÚN modal de esta familia (pymAlert/abandonoPESAlert/labsVencidosAlert) puede
-      // verificarse aquí por contenido real del DOM — el propio try/catch interno de la
-      // función es lo que evita que ese null.textContent reviente hacia afuera. Esta prueba
-      // confirma al menos que checkLabsVencidos/labsVencidosAlert nunca dejan escapar una
-      // excepción con datos realistas, incluida la lista vacía (que en producción nunca
-      // debería ocurrir, porque checkLabsVencidos ya filtra faltantes.length antes de
-      // llamar, pero labsVencidosAlert no debe asumirlo).
+    t.caso("labsVencidosAlert: comprueba que el modal queda en el DOM con los analitos (v12.5.7)", () => {
       const c = cargar({ silencioso: true });
+
+      let elModal = null;
+      c.env.doc.getElementById = (id) => id === "vgl-labsv-modal" ? elModal : null;
+      const baseCreate = c.env.doc.createElement;
+      c.env.doc.createElement = (tag) => {
+        const el = baseCreate(tag);
+        const baseSetAttr = el.setAttribute;
+        el.setAttribute = function(k, v) {
+          baseSetAttr.call(this, k, v);
+        };
+        // Capture inner logic from harness.js to hook ID assignment since it assigns directly `.id = ...`
+        Object.defineProperty(el, 'id', {
+            get: function() { return this._id || ""; },
+            set: function(val) {
+                this._id = val;
+                if (val === "vgl-labsv-modal") elModal = this;
+            }
+        });
+        return el;
+      }
+
       const faltantesReales = [
         { key: "COLESTEROL_TOTAL", nombre: "Colesterol Total" },
         { key: "GLUCOSA", nombre: "Glucosa en Suero" },
         { key: "RAC", nombre: "RAC (Relación Albúmina/Creatinina)" },
       ];
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true));
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", [], true));
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", null, true));
+
+      c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true);
+
+      t.cierto(!!elModal, "el modal de laboratorios vencidos debe quedar en el DOM");
+      t.cierto(elModal.innerHTML.includes("Colesterol Total"), "el modal nombra el analito Colesterol Total");
+      t.cierto(elModal.innerHTML.includes("Glucosa en Suero"), "el modal nombra el analito Glucosa en Suero");
+      t.cierto(elModal.innerHTML.includes("RAC (Relación Albúmina/Creatinina)"), "el modal nombra el analito RAC");
+
+      elModal = null;
+      c.api.labsVencidosAlert("Paciente de prueba", [], true);
+      t.cierto(!!elModal, "el modal se pinta sin fallar incluso con la lista vacía");
     });
 
     // =====================================================================

@@ -20,10 +20,53 @@ const respuesta404 = () => ({
 
 module.exports = {
   nombre: "Telemetría de uso del panel (v12.5)",
-  cubre: ["uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
+  cubre: [
+    "_esErrorPropio", "_getFirmaPropiaParaTest", "_setFirmaPropiaParaTest", "_instalarCazaErrores","uxTrack", "uxEnviarVentana", "uxFlush", "uxBootCheck", "uxVentanaNueva", "uxClaveLimpia", "reportar", "repQSave",
     "_equipoId", "_loteId", "_sanearMensajeError", "reportarError", "repEntornoDiario", "_instalarCazaErrores",
     "_rumEndpointLabel", "_rumTrack", "_migaPush"],
   async pruebas(t, api, env, cargar) {
+
+    // =====================================================================
+    // v14.1.6 — EL CAZADOR DE ERRORES QUE NO CAZABA NADA.
+    //
+    // El export real del tablero (20 equipos, ~6 días) no tenía hoja `error` — y el
+    // servidor la crea al recibir el primer evento, así que nunca llegó ninguno. Segunda
+    // confirmación independiente: en `uso_detalle` no hay ni una clave `error.*`, y esas
+    // se emiten ANTES del tope diario y ANTES de comprobar si el envío está encendido.
+    //
+    // La causa: el filtro exigía que el nombre de archivo del error contuviera
+    // "userscript" o "vigilante". Cómo se llama ese archivo depende de cómo inyecte el
+    // gestor de userscripts, y en varias configuraciones no contiene ninguna de las dos.
+    // El filtro que debía dejar fuera los errores de Everest dejaba fuera los nuestros.
+    // =====================================================================
+    t.caso("_esErrorPropio v14.1.6: reconoce nuestro código por la FIRMA capturada al arrancar, aunque el nombre de archivo no diga 'userscript' ni 'vigilante'", () => {
+      const c = cargar({ silencioso: true });
+      c.api._setFirmaPropiaParaTest("blob:https://neps.everestintelligent.com/a1b2c3");
+
+      const pilaNuestra = "Error: x\n    at estadioKDIGO (blob:https://neps.everestintelligent.com/a1b2c3:2801:9)";
+      t.cierto(c.api._esErrorPropio(pilaNuestra, ""), "el stack lleva nuestra firma: es nuestro");
+      t.cierto(c.api._esErrorPropio("", "blob:https://neps.everestintelligent.com/a1b2c3"), "también vale si la firma viene en el nombre de archivo");
+
+      const pilaAjena = "TypeError: y\n    at HttpClient (https://neps.everestintelligent.com/main.9f3.js:1:200)";
+      t.falso(c.api._esErrorPropio(pilaAjena, "https://neps.everestintelligent.com/main.9f3.js"),
+        "un error de Everest NO se reporta: llenaría el tablero de ruido que no podemos arreglar");
+    });
+
+    t.caso("_esErrorPropio v14.1.6: sin firma capturada sigue funcionando la heurística vieja (respaldo, no sustituto)", () => {
+      const c = cargar({ silencioso: true });
+      c.api._setFirmaPropiaParaTest("");
+      t.cierto(c.api._esErrorPropio("at f (chrome-extension://x/userscript.html?id=9:12:3)", ""), "el caso que la versión vieja SÍ cazaba sigue cazándose");
+      t.cierto(c.api._esErrorPropio("", "moz-extension://abc/vigilante_agenda.user.js"), "y el nombre del propio archivo también");
+      t.falso(c.api._esErrorPropio("at HttpClient (https://everest/main.js:1:2)", ""), "sin firma, un error ajeno se sigue descartando");
+    });
+
+    t.caso("_esErrorPropio v14.1.6: la firma se captura sola al cargar el script — si quedara vacía, el arreglo entero sería inútil", () => {
+      const c = cargar({ silencioso: true });
+      const firma = c.api._getFirmaPropiaParaTest();
+      t.cierto(typeof firma === "string", "la firma existe como cadena");
+      t.cierto(firma.length > 4, "y se capturó algo con forma de ruta: obtuvo " + JSON.stringify(firma));
+    });
+
 
     // gmxhr que siempre falla: reportar() encola pero repFlush no puede entregar, así
     // la fila queda VISIBLE en la cola persistente (vgl_repq) para asertarla.
