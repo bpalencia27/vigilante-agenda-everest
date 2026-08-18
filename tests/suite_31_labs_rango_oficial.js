@@ -20,9 +20,9 @@
 module.exports = {
   nombre: "Auto-Labs contra rangos oficiales (v14.1.8)",
   cubre: [
-    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos",
+    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
     "_guardarTablaOficialVista", "_tablaOficialVigente", "_instalarOyenteTablaOficial",
-    "_base64SinRelleno",
+    "_base64SinRelleno", "apiAccesoBuscarPaciente",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -280,6 +280,75 @@ module.exports = {
       t.igual(c.api._instalarOyenteTablaOficial(null), false);
       t.igual(c.api._instalarOyenteTablaOficial({ XMLHttpRequest: function () {} }), false,
         "sin open en el prototipo no hay nada que envolver");
+    });
+
+    // ---------- reunir el contexto no puede estorbar nunca ----------
+
+    await t.casoAsync("_contextoOficialParaLabs: si nada se puede consultar, devuelve un contexto vacío y NO lanza", async () => {
+      // Es la garantía de que v14.1.8 no puede empeorar nada. Este contexto se reúne justo
+      // antes de escribir en la historia: si una consulta caída pudiera lanzar, tumbaría el
+      // Auto-Labs entero y el médico se quedaría sin la función, no solo sin los rangos.
+      const c = cargar({ silencioso: true, fetch: async () => { throw new Error("red caída"); } });
+      let ctx = null;
+      await t.noLanza(async () => { ctx = await c.api._contextoOficialParaLabs("1234567890"); },
+        "reunir el contexto JAMÁS puede lanzar: se ejecuta en el camino de escritura");
+      t.igual(ctx.tablaOficial, null, "sin tabla vista, no hay tabla");
+      t.igual(ctx.edad, null);
+      t.igual(ctx.sexo, "");
+      // Y con eso, `_objecionOficialAlValor` no objeta nada: Auto-Labs escribe como siempre.
+      t.igual(api._objecionOficialAlValor("CREATININA", "88", ctx), null);
+    });
+
+    await t.casoAsync("_contextoOficialParaLabs: entrega la tabla que el oyente capturó de Everest", async () => {
+      const c = cargar({ silencioso: true, fetch: async () => { throw new Error("sin demografía"); } });
+      c.api._guardarTablaOficialVista(TABLA);
+      const ctx = await c.api._contextoOficialParaLabs("1234567890");
+      t.igual(ctx.tablaOficial.length, TABLA.length, "la tabla escuchada llega al camino de escritura");
+      // Aunque la demografía falle, la tabla sirve igual para los exámenes que no acotan
+      // por edad — que en la tabla real son 27 de 28.
+      t.cierto(!!c.api._objecionOficialAlValor("CREATININA", "88", ctx),
+        "sin demografía, la creatinina se sigue pudiendo juzgar: su regla no depende de la edad");
+    });
+
+    // ---------- la latencia del clic ----------
+
+    await t.casoAsync("apiAccesoBuscarPaciente se cachea por cédula — el clic de Auto-Labs no repite la cascada", async () => {
+      // v14.1.8 metió esta búsqueda en el camino del clic, y la búsqueda prueba rutas EN
+      // CASCADA: hasta 4 peticiones secuenciales antes de escribir la primera casilla,
+      // encima de los 2-4 s que el médico ya esperó a Athenea. La relación cédula → id
+      // interno no cambia, así que repetirla es puro coste.
+      let llamadas = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          llamadas++;
+          return { ok: true, status: 200, json: async () => ({ idPaciente: 4242 }), text: async () => "{}" };
+        },
+      });
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), 4242);
+      const tras1 = llamadas;
+      t.cierto(tras1 >= 1, "la primera vez sí consulta");
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), 4242, "y devuelve lo mismo");
+      t.igual(llamadas, tras1, "la segunda vez NO vuelve a salir a la red");
+      // Otra cédula es otro paciente: no puede heredar el id de la anterior.
+      await c.api.apiAccesoBuscarPaciente("9876543210");
+      t.cierto(llamadas > tras1, "una cédula DISTINTA sí dispara consulta nueva — jamás se mezclan pacientes");
+    });
+
+    await t.casoAsync("un fallo NO se cachea: el médico tiene que poder reintentar en el acto", async () => {
+      // Un `null` significa "no se pudo" —red caída, sesión de Everest vencida, paciente
+      // que aún no existe—, y eso cambia de un momento a otro. Cachearlo dejaría al médico
+      // sin poder reintentar hasta que venciera el TTL, que es justo cuando más urge.
+      let llamadas = 0;
+      const c = cargar({
+        silencioso: true,
+        gmxhr: (o) => { if (o && o.onerror) o.onerror(new Error("red")); },
+        fetch: async () => { llamadas++; return { ok: false, status: 500, json: async () => null, text: async () => "" }; },
+      });
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), null);
+      const tras1 = llamadas;
+      t.igual(await c.api.apiAccesoBuscarPaciente("1234567890"), null);
+      t.cierto(llamadas > tras1, "tras un fallo, el siguiente intento SÍ vuelve a consultar");
     });
 
     // ---------- el identificador de la cita va codificado ----------

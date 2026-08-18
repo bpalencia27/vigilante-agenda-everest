@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Everest - Conducta y Ordenamiento (Fixture Congelado)</title>
+</head>
+<body>
+  <div id="anamesis">
+    <div class="ordenamiento-container">
+      <input type="text" id="txtBuscarExamen" class="form-control" placeholder="Buscar examen...">
+      <ul class="lista-examenes-disponibles">
+        <li class="item-examen">HORMONA PARATIROIDEA MOLECULA INTACTA</li>
+        <li class="item-examen">ALBUMINA EN SUERO U OTROS FLUIDOS</li>
+        <li class="item-examen">FOSFORO EN SUERO U OTROS FLUIDOS</li>
+        <li class="item-examen">HEMOGLOBINA</li>
+        <li class="item-examen">HEMOGLOBINA GLICOSILADA AUTOMATIZADA</li>
+        <li class="item-examen">CREATININA EN SUERO U OTROS FLUIDOS</li>
+        <li class="item-examen">MICROALBUMINURIA EN ORINA PARCIAL</li>
+      </ul>
+      <div class="acciones-ordenamiento">
+        <button type="button" class="btn btn-primary btn-agregar">AGREGAR</button>
+        <button type="button" class="btn btn-success btn-guardar">GUARDAR ORDENAMIENTO</button>
+      </div>
+      <table class="table table-ordenes">
+        <thead>
+          <tr>
+            <th>CUPS</th>
+            <th>Descripción</th>
+            <th>Cantidad</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-ordenes-cuerpo">
+          <!-- Filas de órdenes agregadas dinámicamente por Everest -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

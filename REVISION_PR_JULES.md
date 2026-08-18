@@ -56,7 +56,7 @@ PASO 1 — Ir a la línea citada y leerla. Imposible: el archivo no existe.
 1. LAS RAMAS NO EXISTEN. `git ls-remote --heads origin` no devuelve nada para `pym`, `cobertura` ni `blindaje`. `git fetch origin claude/pym-agenda-blindaje-v12-4 test/cobe
 - **El resumen del runner miente: cuenta los fallos nuevos DESPUÉS de imprimir el total** — El hallazgo es una fabricación completa: ninguno de los artefactos que cita existe, ni ha existido nunca, en este repositorio.
 
-1. `tests/runner.js` NO EXISTE. `find . -name "runner.js"` no devuelve nada, y `git log --all --oneline -- tests/runner.js` sale vacío: el fichero no aparece en NINGUNA rama ni en ningún commit de la historia. No hay línea 94, ni líneas 108-124, ni bucle de "comprobación
+1. `tests/runner.js` NO EXISTE. `find . -name "runner.js"` no devuelve nada, y `git log --all --oneline -- tests/runner.js` sale vacío: el fichero no aparece en NINGUNA rama ni en ningún commit de la historia. No hay línea 94, ni líneas 108-124, ni bucle de "comprobación 
 - **Sube el umbral MIN_COVERAGE de 266 a 346 sin cubrir ni una función más** — El hallazgo es enteramente fabricado. Ni un solo elemento verificable de su evidencia existe.
 
 1) EL FICHERO CITADO NO EXISTE. No hay `.github/workflows/tests.yml`. El único workflow del repositorio es `.github/workflows/ci.yml` (112 líneas). Y no es que se haya renombrado: `git log --all --diff-filter=A -- ".github/workflows/tests.yml"` y `git log --all -- "**/tests.yml"` no devuelven NADA. Ese f
@@ -112,7 +112,7 @@ Este PR no se puede fusionar ni arreglar rebasando: hay que cerrarlo. Aunque su 
 
 ### Descartados al verificarlos
 
-- **Reintroduce la credencial de Athenea en claro, y ninguna prueba lo detecta** — El hallazgo está anclado a código que no existe en este repositorio; fallan todos sus anclajes verificables, no solo uno. (1) El archivo `vigilante_agenda.user.js` no existe en el árbol actual ni en ningún commit de toda la historia (`git log --all --name-only`); los únicos userscripts son macro_hc.user.js, everest-interceptor.user.js y everest_sync_userscript.user.js. No hay línea 299 ni 911 que
+- **Reintroduce la credencial de Athenea en claro, y ninguna prueba lo detecta** — El hallazgo está anclado a código que no existe en este repositorio; fallan todos sus anclajes verificables, no solo uno. (1) El archivo `vigilante_agenda.user.js` no existe en el árbol actual ni en ningún commit de toda la historia (`git log --all --name-only`); los únicos userscripts son macro_hc.user.js, everest-interceptor.user.js y everest_sync_userscript.user.js. No hay línea 299 ni 911 que 
 - **Elimina el motor renal completo y la guarda que impide diagnosticar insuficiencia terminal por un dato ilegible** — El hallazgo no se sostiene en NINGUNO de sus elementos verificables. No es un caso de cita desplazada ni de gravedad inflada: es un hallazgo cuyo objeto no existe en este repositorio.
 
 1) EL ARCHIVO NO EXISTE. `vigilante_agenda.user.js` no aparece en el árbol de trabajo, ni en ninguna rama, ni en ninguno de los 721 commits de la historia completa. Buscando `vigilante_agenda` en toda la historia so
@@ -155,7 +155,7 @@ Nota de procedimiento: este PR no está en el repositorio donde me pusiste a tra
 
 1. RAMAS INEXISTENTES. Ni la base ni la del PR existen. `git ls-remote --heads origin` devuelve 98 ramas y ninguna coincide con `claude/pym-agenda-blindaje-v12-4` ni con `chore/panel-activities-8151824262821374282` (grep -i por "pym|blindaje|panel|activities" sobre las 98: cero r
 - **Contradicción entre documentos de diseño: uno dice que borrar esto es motivo de rechazo** — El hallazgo es enteramente inverificable porque NINGUNO de los artefactos que cita existe en este repositorio. (1) El documento `JULES_TAREAS_DISENO_V14.md` no existe ni en el árbol de trabajo ni en ninguno de los 721 commits de todas las ramas; el único fichero similar en la historia es `JULES_TAREAS.md` (commit aa2920d), cuyas líneas 143-147 tratan de la TAREA 4 sobre `fillFromExtract()` y la co
-- **Confirmado a favor del PR: borra las pruebas, y el runner habría explotado si no lo hiciera** — Ninguno de los artefactos citados existe en el repositorio, ni en el checkout ni en el historial completo de git. (1) `tests/runner.js` no existe: el directorio `tests/` contiene 110 ficheros, todos `.py` (pytest, con `pytest.ini` y `conftest.py`); no hay ni un `.js` en `tests/`. `git log --all -- 'tests/*.js'` y `git log --all --diff-filter=A -- '*runner.js'` devuelven vacío. El banco de pruebas
+- **Confirmado a favor del PR: borra las pruebas, y el runner habría explotado si no lo hiciera** — Ninguno de los artefactos citados existe en el repositorio, ni en el checkout ni en el historial completo de git. (1) `tests/runner.js` no existe: el directorio `tests/` contiene 110 ficheros, todos `.py` (pytest, con `pytest.ini` y `conftest.py`); no hay ni un `.js` en `tests/`. `git log --all -- 'tests/*.js'` y `git log --all --diff-filter=A -- '*runner.js'` devuelven vacío. El banco de pruebas 
 
 ---
 
@@ -199,7 +199,7 @@ Comprobaciones realizadas (worktree /home/user/everest-rcv-copiloto/.claude/work
 
 1) Las ramas no existen. `git ls-remote --heads origin` (98 ramas) no devuelve ninguna coincidencia con `guardas-plausibilidad`, `pym-agenda` ni `blindaje`. Ni la rama base declarada (`claude/pym-agenda-blindaje-v12-4`) ni la del PR (`origin/feat/guardas-plausibilidad-labs-18251536352912900046`) son resolubles.
 
-2) El PR
+2) El PR 
 - **Un resultado de texto (muestra hemolizada, no procesado) en los 11 analitos vigilados ahora se descarta en silencio** — El hallazgo no se sostiene en ningún punto: es una alucinación completa, no una cita desplazada. (1) El fichero `vigilante_agenda.user.js` no existe en el árbol de trabajo ni en ningún commit de ninguna rama del repositorio; `git log --all --diff-filter=A -- '*vigilante_agenda*'` sólo devuelve `vigilante/vigilante_agenda.py`, un script Python de Playwright contra la agenda, sin relación con analit
 
 ---

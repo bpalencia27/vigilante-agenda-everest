@@ -90,6 +90,8 @@ module.exports = {
 
     t.caso("Regla A - Clases que conviven no dependen del orden", () => {
       let fallos = [];
+      t.cierto(combos.length > 0, "debe encontrar combos de clases para validar");
+      t.cierto(reglasCss.length > 0, "debe extraer reglas CSS");
       for (const combo of combos) {
         const comboSet = new Set(combo);
 
@@ -129,13 +131,12 @@ module.exports = {
       }
 
       const unicos = [...new Set(fallos)];
-      if (unicos.length > 0) {
-        throw new Error("Dependencia del orden detectada:\n" + unicos.join("\n"));
-      }
+      t.cierto(unicos.length === 0, "Dependencia del orden detectada:\n" + unicos.join("\n"));
     });
 
     t.caso("Regla B - !important contra estilo inline", () => {
       const classImportantProps = new Map();
+      t.cierto(reglasCss.length > 0, "debe extraer reglas CSS");
       for (const r of reglasCss) {
         if (r.importantProps.size > 0) {
           for (const c of r.targetClasses) {
@@ -144,6 +145,8 @@ module.exports = {
           }
         }
       }
+
+      t.cierto(classImportantProps.size > 0, "debe encontrar propiedades con !important");
 
       let fallos = [];
 
@@ -212,9 +215,7 @@ module.exports = {
       }
 
       const unicos = [...new Set(fallos)];
-      if (unicos.length > 0) {
-        throw new Error("Colisión !important vs inline detectada:\n" + unicos.join("\n"));
-      }
+      t.cierto(unicos.length === 0, "Colisión !important vs inline detectada:\n" + unicos.join("\n"));
     });
 
     // v12.10.9 — Regla C (dirigida, no genérica): la insignia SUGERIDO perdía sus tres

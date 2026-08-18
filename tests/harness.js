@@ -58,9 +58,14 @@ function crearDom() {
     body, head, documentElement: elem("html"),
     createElement: elem,
     createTextNode: (t) => ({ textContent: t }),
-    getElementById: () => null,
+    getElementById: (id) => nodos.find(n => n.id === id && n._parent) || null,
     querySelector: () => null,
-    querySelectorAll: () => [],
+    querySelectorAll: (sel) => {
+      if (typeof sel === "string" && sel.startsWith("[id^='vgl-']")) {
+        return nodos.filter(n => n.id && n.id.startsWith("vgl-") && n._parent);
+      }
+      return [];
+    },
     addEventListener() {}, removeEventListener() {},
     _nodos: nodos,
   };
@@ -68,7 +73,10 @@ function crearDom() {
 
 function crearEntorno(opciones) {
   const o = opciones || {};
-  const almacen = {};
+  const almacen = o.almacen || {};
+  if (!o.defaultOff && !("vgl_cfg" in almacen)) {
+    almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
+  }
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),
     setItem: (k, v) => { almacen[k] = String(v); },
@@ -108,6 +116,8 @@ function crearEntorno(opciones) {
     Blob: function (p) { this.parts = p; },
     btoa: (s) => Buffer.from(String(s), "binary").toString("base64"),
     atob: (s) => Buffer.from(String(s), "base64").toString("binary"),
+    TextEncoder: typeof TextEncoder !== "undefined" ? TextEncoder : require("util").TextEncoder,
+    crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }),
     console: o.silencioso ? { log() {}, warn() {}, error() {}, info() {} } : console,
     DecompressionStream: undefined,
     Worker: undefined,
@@ -117,9 +127,46 @@ function crearEntorno(opciones) {
   win.unsafeWindow = win;
   win.window = win;
   win.globalThis = win;
+  let version = o.version;
+  if (!version) {
+    try {
+      const cabecera = fs.readFileSync(RUTA, "utf8").slice(0, 2000);
+      const m = cabecera.match(/\/\/\s*@version\s+(\S+)/);
+      if (m) version = m[1];
+    } catch (e) {}
+  }
+  if (!version) version = "14.1.5";
+
+  win.GM_info = {
+    script: {
+      version: version,
+      name: "Vigilante de Agenda — Copiloto Everest PyM",
+    },
+    scriptHandler: "Tampermonkey",
+    version: "5.3.3",
+    scriptSource: o.scriptSource || undefined,
+  };
   win.GM_getValue = (k, d) => (k in gm ? gm[k] : d);
   win.GM_setValue = (k, v) => { gm[k] = v; };
-  win.GM_xmlhttpRequest = o.gmxhr || (() => {});
+  // v14.1.9 — El stub por defecto NO puede ser un agujero negro.
+  //
+  // Era `() => {}`. Parece inofensivo, pero `_pageFetchJsonCore` usa GM_xmlhttpRequest como
+  // segunda vía cuando `fetch` falla, y lo envuelve en `new Promise((resolve, reject) => …)`
+  // que SOLO se cierra desde `onload`, `onerror` u `ontimeout`. Con un stub que no llama a
+  // ninguno, esa promesa no se cierra jamás: la prueba se cuelga, `main()` se queda
+  // esperando, el bucle de eventos se vacía y Node salía con código 0 — banco en verde sin
+  // haber corrido las suites siguientes. Costó encontrarlo justamente porque era silencioso.
+  //
+  // Ahora el defecto simula lo que hace Tampermonkey de verdad ante un fallo de red: llamar
+  // a `onerror`. En el navegador real esa promesa SIEMPRE se cierra (la llamada lleva
+  // `timeout: 15000`), así que este defecto se parece más a la realidad que el anterior, no
+  // menos. Una prueba que quiera otro comportamiento sigue pasando su propio `gmxhr`.
+  win.GM_xmlhttpRequest = o.gmxhr || ((opts) => {
+    setTimeout(() => {
+      try { if (opts && typeof opts.onerror === "function") opts.onerror(new Error("gmxhr: sin mock en esta prueba")); }
+      catch (e) { /* el stub jamás propaga */ }
+    }, 0);
+  });
   return { win, storage, gm, doc, almacen };
 }
 

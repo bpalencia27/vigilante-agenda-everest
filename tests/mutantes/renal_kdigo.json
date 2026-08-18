@@ -1,0 +1,408 @@
+{
+  "subsistema": "renal_kdigo",
+  "descripcion": "Catálogo de mutantes para Función Renal, Fórmula Cockcroft-Gault, KDIGO, Signos Vitales y Demográficos",
+  "total_funciones": 8,
+  "total_mutantes": 40,
+  "mutantes": [
+    {
+      "id": "MUT-REN-001",
+      "funcion": "_esSexoFemenino",
+      "linea": 2843,
+      "original": "return String(sexo == null ? \"\" : sexo).trim().toUpperCase().charAt(0) === \"F\";",
+      "mutacion": "return String(sexo == null ? \"\" : sexo).trim().toUpperCase().charAt(0) === \"M\";",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Clasifica hombres como mujeres aplicando 0.85 erróneamente"
+    },
+    {
+      "id": "MUT-REN-002",
+      "funcion": "_esSexoFemenino",
+      "linea": 2843,
+      "original": "String(sexo == null ? \"\" : sexo).trim().toUpperCase()",
+      "mutacion": "String(sexo).trim()",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Sensible a minúsculas fallando en 'femenino'"
+    },
+    {
+      "id": "MUT-REN-003",
+      "funcion": "_esSexoFemenino",
+      "linea": 2843,
+      "original": "charAt(0) === \"F\"",
+      "mutacion": "charAt(0) !== \"F\"",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Invierte condición de primer carácter"
+    },
+    {
+      "id": "MUT-REN-004",
+      "funcion": "_esSexoFemenino",
+      "linea": 2842,
+      "original": "function _esSexoFemenino(sexo) {",
+      "mutacion": "function _esSexoFemenino(sexo) { return false; } function _old_esSexoFemenino(sexo) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "No reconoce sexo femenino sobrestimando función renal"
+    },
+    {
+      "id": "MUT-REN-005",
+      "funcion": "_esSexoFemenino",
+      "linea": 2843,
+      "original": "return String(sexo == null",
+      "mutacion": "return true; //",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Asume femenino para todos los pacientes"
+    },
+    {
+      "id": "MUT-REN-006",
+      "funcion": "cockcroftGault",
+      "linea": 2852,
+      "original": "if (_esSexoFemenino(sexo)) v *= 0.85;",
+      "mutacion": "if (_esSexoFemenino(sexo)) v *= 1.0;",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_27_funcion_renal.js",
+      "descripcion": "Omite factor 0.85 en mujeres"
+    },
+    {
+      "id": "MUT-REN-007",
+      "funcion": "cockcroftGault",
+      "linea": 2851,
+      "original": "let v = ((140 - edad) * peso) / (72 * creat);",
+      "mutacion": "let v = ((140 + edad) * peso) / (72 * creat);",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_27_funcion_renal.js",
+      "descripcion": "Suma edad en vez de restar (140 - edad)"
+    },
+    {
+      "id": "MUT-REN-008",
+      "funcion": "cockcroftGault",
+      "linea": 2851,
+      "original": "(72 * creat)",
+      "mutacion": "(85 * creat)",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_27_funcion_renal.js",
+      "descripcion": "Altera constante 72 del denominador"
+    },
+    {
+      "id": "MUT-REN-009",
+      "funcion": "cockcroftGault",
+      "linea": 2850,
+      "original": "if (!Number.isFinite(edad) || edad < 18 || edad > 120 || !Number.isFinite(peso) || peso < 20 || peso > 300 || !Number.isFinite(creat) || creat < 0.1 || creat > 20) return 0;",
+      "mutacion": "return ((140 - edad) * peso) / (72 * creat);",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_27_funcion_renal.js",
+      "descripcion": "Omite validaciones de rango clínico"
+    },
+    {
+      "id": "MUT-REN-010",
+      "funcion": "cockcroftGault",
+      "linea": 2853,
+      "original": "return Math.round(v * 10) / 10;",
+      "mutacion": "return Math.round(v);",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_27_funcion_renal.js",
+      "descripcion": "Trunca decimales en TFG"
+    },
+    {
+      "id": "MUT-REN-011",
+      "funcion": "apiHcObtenerSignosVitales",
+      "linea": 10234,
+      "original": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales?PacienteId=${encodeURIComponent(key)}`;",
+      "mutacion": "const path = `/apiviva/APIHCHealth/api/Historicos/SignosVitales?PacienteId=${encodeURIComponent(key)}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Altera endpoint de signos vitales"
+    },
+    {
+      "id": "MUT-REN-012",
+      "funcion": "apiHcObtenerSignosVitales",
+      "linea": 10230,
+      "original": "if (_signosVitalesCache.pacienteId === key && _signosVitalesCache.data &&",
+      "mutacion": "if (false && _signosVitalesCache.pacienteId === key",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Anula caché de signos vitales"
+    },
+    {
+      "id": "MUT-REN-013",
+      "funcion": "apiHcObtenerSignosVitales",
+      "linea": 10231,
+      "original": "(ahora - _signosVitalesCache.ts) < ORDENES_VIGENTES_TTL_MS",
+      "mutacion": "(ahora - _signosVitalesCache.ts) > ORDENES_VIGENTES_TTL_MS",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Sirve caché vencida"
+    },
+    {
+      "id": "MUT-REN-014",
+      "funcion": "apiHcObtenerSignosVitales",
+      "linea": 10199,
+      "original": "if (!Array.isArray(data)) return null;",
+      "mutacion": "if (!Array.isArray(data)) return data;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Acepta respuestas no arreglo como válidas"
+    },
+    {
+      "id": "MUT-REN-015",
+      "funcion": "apiHcObtenerSignosVitales",
+      "linea": 10226,
+      "original": "async function apiHcObtenerSignosVitales(pacienteId) {",
+      "mutacion": "function apiHcObtenerSignosVitales(pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Remueve async de signos vitales"
+    },
+    {
+      "id": "MUT-REN-016",
+      "funcion": "_pesoDeSignosVitales",
+      "linea": 10254,
+      "original": "if (!Array.isArray(arr) || !arr.length) return null;",
+      "mutacion": "if (!Array.isArray(arr)) return null;",
+      "tipo": "BVR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Falla en arreglo vacío retornando undefined"
+    },
+    {
+      "id": "MUT-REN-017",
+      "funcion": "_pesoDeSignosVitales",
+      "linea": 10262,
+      "original": "const peso = _labNumerico(r.peso);",
+      "mutacion": "const peso = _labNumerico(r.talla);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Extrae talla en vez de peso"
+    },
+    {
+      "id": "MUT-REN-018",
+      "funcion": "_pesoDeSignosVitales",
+      "linea": 10263,
+      "original": "if (peso == null) return null;",
+      "mutacion": "if (peso == null) return { peso: 70, fechaRegistro: \"\" };",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Invento clínico: asume 70 kg cuando no hay peso"
+    },
+    {
+      "id": "MUT-REN-019",
+      "funcion": "_pesoDeSignosVitales",
+      "linea": 10264,
+      "original": "return { peso, fechaRegistro: r.fechaRegistro || \"\" };",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Retorna null en peso válido"
+    },
+    {
+      "id": "MUT-REN-020",
+      "funcion": "_pesoDeSignosVitales",
+      "linea": 10255,
+      "original": "const r = arr[0];",
+      "mutacion": "const r = arr[arr.length - 1];",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Toma peso más antiguo en vez del más reciente"
+    },
+    {
+      "id": "MUT-REN-021",
+      "funcion": "apiAccesoObtenerDemograficos",
+      "linea": 10285,
+      "original": "const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${encodeURIComponent(key)}`);",
+      "mutacion": "const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/Buscar?id=${encodeURIComponent(key)}`);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Altera ruta de datos demográficos"
+    },
+    {
+      "id": "MUT-REN-022",
+      "funcion": "apiAccesoObtenerDemograficos",
+      "linea": 10184,
+      "original": "if (!pacienteId) return null;",
+      "mutacion": "if (!pacienteId) return {};",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Devuelve objeto vacío en vez de null"
+    },
+    {
+      "id": "MUT-REN-023",
+      "funcion": "apiAccesoObtenerDemograficos",
+      "linea": 10291,
+      "original": "const edadN = Number(d.edad != null ? d.edad : d.edadAnos);",
+      "mutacion": "const edadN = Number(d.edad);",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Ignora alias edadAnos del backend"
+    },
+    {
+      "id": "MUT-REN-024",
+      "funcion": "apiAccesoObtenerDemograficos",
+      "linea": 10294,
+      "original": "sexo: String(d.sexo == null ? \"\" : d.sexo).trim(),",
+      "mutacion": "sexo: \"M\",",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Fuerza sexo masculino en demográficos"
+    },
+    {
+      "id": "MUT-REN-025",
+      "funcion": "apiAccesoObtenerDemograficos",
+      "linea": 10276,
+      "original": "async function apiAccesoObtenerDemograficos(pacienteId) {",
+      "mutacion": "function apiAccesoObtenerDemograficos(pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Remueve async de demográficos"
+    },
+    {
+      "id": "MUT-REN-026",
+      "funcion": "_creatininaDeLabs",
+      "linea": 10311,
+      "original": "const { candidatos } = _ultimaFechaPorAnalito(labsArray);",
+      "mutacion": "const candidatos = new Map();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Anula extracción de analitos de labs"
+    },
+    {
+      "id": "MUT-REN-027",
+      "funcion": "_creatininaDeLabs",
+      "linea": 10312,
+      "original": "const c = candidatos && candidatos.get(\"CREATININA\");",
+      "mutacion": "const c = candidatos && candidatos.get(\"GLUCOSA\");",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Extrae glucosa en vez de creatinina"
+    },
+    {
+      "id": "MUT-REN-028",
+      "funcion": "_creatininaDeLabs",
+      "linea": 10313,
+      "original": "if (!c) return null;",
+      "mutacion": "if (!c) return { crudo: \"1.0\", fechaIso: \"\" };",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Invento clínico: asume creatinina 1.0 cuando no existe"
+    },
+    {
+      "id": "MUT-REN-029",
+      "funcion": "_creatininaDeLabs",
+      "linea": 10314,
+      "original": "return { crudo: c.resultVal, fechaIso: c.resultDate || \"\" };",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Retorna null en creatinina válida"
+    },
+    {
+      "id": "MUT-REN-030",
+      "funcion": "_creatininaDeLabs",
+      "linea": 10315,
+      "original": "catch (e) { return null; }",
+      "mutacion": "catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Relanza error en vez de null"
+    },
+    {
+      "id": "MUT-REN-031",
+      "funcion": "estadioRenalDelPaciente",
+      "linea": 10345,
+      "original": "if (!Number.isFinite(edadN) || edadN <= 0 || edadN >= 140) faltan.push(\"edad\");",
+      "mutacion": "// if (!Number.isFinite(edadN))",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Calcula sin edad válida"
+    },
+    {
+      "id": "MUT-REN-032",
+      "funcion": "estadioRenalDelPaciente",
+      "linea": 10349,
+      "original": "if (!Number.isFinite(pesoN) || pesoN <= 0) faltan.push(\"peso\");",
+      "mutacion": "// if (!Number.isFinite(pesoN))",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Calcula sin peso"
+    },
+    {
+      "id": "MUT-REN-033",
+      "funcion": "estadioRenalDelPaciente",
+      "linea": 10352,
+      "original": "if (creatN == null) faltan.push(\"creatinina\");",
+      "mutacion": "// if (creatN == null)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Calcula sin creatinina"
+    },
+    {
+      "id": "MUT-REN-034",
+      "funcion": "estadioRenalDelPaciente",
+      "linea": 10382,
+      "original": "const tfgCG = cockcroftGault(edadN, pesoN, creatN, sexoTxt);",
+      "mutacion": "const tfgCG = 0;",
+      "tipo": "AOR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Anula Cockcroft-Gault"
+    },
+    {
+      "id": "MUT-REN-035",
+      "funcion": "estadioRenalDelPaciente",
+      "linea": 10389,
+      "original": "estadio: estadioKDIGO(tfgCG),",
+      "mutacion": "estadio: \"G1\",",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Fuerza estadio G1 a todos los pacientes"
+    },
+    {
+      "id": "MUT-REN-036",
+      "funcion": "calcularEstadioRenal",
+      "linea": 10415,
+      "original": "const creat = _creatininaDeLabs(labsArray);",
+      "mutacion": "const creat = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Anula extracción de creatinina"
+    },
+    {
+      "id": "MUT-REN-037",
+      "funcion": "calcularEstadioRenal",
+      "linea": 10419,
+      "original": "[demo, sv] = await Promise.all([",
+      "mutacion": "[demo, sv] = [null, null]; //",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Anula llamadas de demográficos y signos"
+    },
+    {
+      "id": "MUT-REN-038",
+      "funcion": "calcularEstadioRenal",
+      "linea": 10425,
+      "original": "const p = _pesoDeSignosVitales(sv);",
+      "mutacion": "const p = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Anula peso de signos vitales"
+    },
+    {
+      "id": "MUT-REN-039",
+      "funcion": "calcularEstadioRenal",
+      "linea": 10426,
+      "original": "return estadioRenalDelPaciente({",
+      "mutacion": "return null; //",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Retorna null rompiendo contrato de objeto"
+    },
+    {
+      "id": "MUT-REN-040",
+      "funcion": "calcularEstadioRenal",
+      "linea": 10430,
+      "original": "sexo: demo && demo.sexo,",
+      "mutacion": "sexo: \"F\",",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_32_correccion_clinica_dom.js",
+      "descripcion": "Fuerza sexo femenino en cálculo"
+    }
+  ]
+}

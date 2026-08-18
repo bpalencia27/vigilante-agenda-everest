@@ -19,9 +19,9 @@
 // =====================================================================
 module.exports = {
   nombre: "Estadio renal (R1b, plomería)",
-  cubre: ["_labNumerico", "_pesoDeSignosVitales", "apiHcObtenerSignosVitales",
-          "_creatininaDeLabs", "apiAccesoObtenerDemograficos",
-          "calcularEstadioRenal", "_renderEstadioRenalHtml"],
+  cubre: ["_labNumerico", "_pesoDeSignosVitales", "_signosVitalesDelRegistro", "apiHcObtenerSignosVitales",
+          "_signosVitalesInvalidar", "estadioRenalDelPaciente", "_creatininaDeLabs",
+          "apiAccesoObtenerDemograficos", "calcularEstadioRenal", "_renderEstadioRenalHtml"],
 
   async pruebas(t, api, env, cargar) {
     const respuestaJson = (obj) => async () => ({ ok: true, status: 200, json: async () => obj });
@@ -210,6 +210,58 @@ module.exports = {
       t.igual(r.fechaRegistro, "2026-08-12T18:56:06.535-05:00");
     });
 
+    // ---------- _signosVitalesDelRegistro ----------
+    t.caso("_signosVitalesDelRegistro: lee peso, pas, pad, imc de arr[0] y rechaza imposibles pero acepta extremos reales", () => {
+      const arr = [{
+        fechaRegistro: "2026-08-12T18:56:06.535-05:00",
+        peso: 65.0, presionSistolica: 120, presionDiastolica: 80, imc: 28.1
+      }];
+      const r = api._signosVitalesDelRegistro(arr);
+      t.igual(r.peso, 65);
+      t.igual(r.pas, 120);
+      t.igual(r.pad, 80);
+      t.igual(r.imc, 28.1);
+      t.igual(r.fechaIso, "2026-08-12T18:56:06.535-05:00");
+
+      // Valores imposibles rechazados vs patológicos aceptados (PAS)
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 350 }]).pas, null, "PAS de 350 es imposible, se rechaza");
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 220 }]).pas, 220, "PAS de 220 en crisis hipertensiva SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 70 }]).pas, 70, "PAS de 70 en shock SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionSistolica: 50 }]).pas, null, "PAS de 50 es imposible en consultorio, se rechaza");
+
+      // Valores imposibles rechazados vs patológicos aceptados (PAD)
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 250 }]).pad, null, "PAD de 250 es imposible, se rechaza");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 180 }]).pad, 180, "PAD de 180 en crisis hipertensiva SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 40 }]).pad, 40, "PAD de 40 en shock SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 20 }]).pad, null, "PAD de 20 es imposible en consultorio, se rechaza");
+
+      // Valores imposibles rechazados vs patológicos aceptados (IMC)
+      t.igual(api._signosVitalesDelRegistro([{ imc: 150 }]).imc, null, "IMC de 150 es imposible, se rechaza");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 80 }]).imc, 80, "IMC de 80 en obesidad severa SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 12 }]).imc, 12, "IMC de 12 en anorexia SÍ pasa");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 5 }]).imc, null, "IMC de 5 es imposible, se rechaza");
+
+      // Valores imposibles rechazados vs patológicos aceptados (PAD)
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 10 }]).pad, null, "PAD de 10 es imposible, se rechaza");
+      t.igual(api._signosVitalesDelRegistro([{ presionDiastolica: 40 }]).pad, 40, "PAD de 40 en shock SÍ pasa");
+
+      // Valores imposibles rechazados vs patológicos aceptados (IMC)
+      t.igual(api._signosVitalesDelRegistro([{ imc: 150 }]).imc, null, "IMC de 150 es imposible, se rechaza");
+      t.igual(api._signosVitalesDelRegistro([{ imc: 12 }]).imc, 12, "IMC de 12 en anorexia severa SÍ pasa");
+    });
+
+    t.caso("_signosVitalesDelRegistro: no hereda de registros anteriores si falta en el más nuevo", () => {
+      const arr = [
+        { fechaRegistro: "2026-08-12", peso: 65.0 }, // falta PAS, PAD, IMC
+        { fechaRegistro: "2024-01-05", peso: 88.0, presionSistolica: 120, presionDiastolica: 80, imc: 28.1 },
+      ];
+      const r = api._signosVitalesDelRegistro(arr);
+      t.igual(r.peso, 65.0);
+      t.igual(r.pas, null, "NO hereda la PAS vieja");
+      t.igual(r.pad, null, "NO hereda la PAD vieja");
+      t.igual(r.imc, null, "NO hereda el IMC viejo");
+    });
+
     t.caso("_pesoDeSignosVitales: si el registro más nuevo no trae peso, es null — NO se cae al anterior", () => {
       // Un peso de hace dos años no describe al paciente de hoy, y la fórmula no tiene
       // forma de saber que es viejo: entraría como si fuera actual.
@@ -346,11 +398,14 @@ module.exports = {
 
     t.caso("estadioRenalDelPaciente: devuelve las entradas usadas y sus fechas, para que el médico pueda auditarlo", () => {
       const r = api.estadioRenalDelPaciente({
-        edad: 63, peso: 113, creatininaCruda: "0.55", sexo: "F",
+        edad: 63, peso: 113, pas: 120, pad: 80, imc: 30, creatininaCruda: "0.55", sexo: "F",
         fechaCreatinina: "2026-08-01", fechaPeso: "2026-08-12T18:56:06.535-05:00",
       });
       t.igual(r.entradas.edad, 63);
       t.igual(r.entradas.peso, 113);
+      t.igual(r.entradas.pas, 120);
+      t.igual(r.entradas.pad, 80);
+      t.igual(r.entradas.imc, 30);
       t.igual(r.entradas.creatinina, 0.55);
       t.igual(r.entradas.fechaCreatinina, "2026-08-01", "de cuándo es la creatinina que se usó");
       t.igual(r.entradas.fechaPeso, "2026-08-12T18:56:06.535-05:00", "y de cuándo el peso");
