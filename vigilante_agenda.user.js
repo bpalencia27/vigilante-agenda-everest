@@ -14322,7 +14322,7 @@
     const txt = (rest >= 0 ? "en " : "hace ") + cuanto;
     const cls = rest <= 0 ? " late" : rest <= 1 ? " warn" : "";
     const tip = rest >= 0 ? "Le quedan " + cuanto + " para confirmar" : "Lleva " + cuanto + " pasado de la tolerancia";
-    return `<span class="vgl-cd${cls}" title="${tip}">${txt}</span>`;
+    return `<span class="vgl-cd${cls}" title="${escapeHtml(tip)}">${escapeHtml(txt)}</span>`;
   }
 
   function render(list, source, at) {
