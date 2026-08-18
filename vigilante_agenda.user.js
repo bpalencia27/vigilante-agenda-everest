@@ -14212,13 +14212,29 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+  // [PERF] Hoist dynamic programming matrix rows to avoid allocating 3 arrays per item on every render tick
+  let _fuzzyPrevRow = new Uint16Array(64);
+  let _fuzzyCurrRow = new Uint16Array(64);
+  let _fuzzyPrevPrevRow = new Uint16Array(64);
+
+  // [PERF] Cache the last parsed query tokens to avoid splitting and stripping accents on every iteration
+  let _lastFuzzyQ = null;
+  let _lastFuzzyQTokens = null;
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    let queryTokens;
+    if (q === _lastFuzzyQ && _lastFuzzyQTokens !== null) {
+      queryTokens = _lastFuzzyQTokens;
+    } else {
+      queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _lastFuzzyQ = q;
+      _lastFuzzyQTokens = queryTokens;
+    }
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+    let prevRow = _fuzzyPrevRow;
+    let currRow = _fuzzyCurrRow;
+    let prevPrevRow = _fuzzyPrevPrevRow;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14237,9 +14253,9 @@
         // Ensure buffers are large enough
         if (n + 1 > prevRow.length) {
             const size = Math.max(n + 1, prevRow.length * 2);
-            prevRow = new Uint16Array(size);
-            currRow = new Uint16Array(size);
-            prevPrevRow = new Uint16Array(size);
+            prevRow = _fuzzyPrevRow = new Uint16Array(size);
+            currRow = _fuzzyCurrRow = new Uint16Array(size);
+            prevPrevRow = _fuzzyPrevPrevRow = new Uint16Array(size);
         }
 
         // initialize 1st row
