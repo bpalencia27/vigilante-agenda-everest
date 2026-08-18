@@ -73,13 +73,14 @@ module.exports = {
     });
 
     // ---------- repOn ----------
-    t.caso("repOn: encendido de fábrica; se apaga con S.reporte=false o sin GM_xmlhttpRequest", () => {
-      const c = cargar({ silencioso: true });
-      t.cierto(c.api.repOn(), "de fábrica S.reporte=true y GM existe");
-      c.api.__S.reporte = false;
-      t.falso(c.api.repOn(), "con el ajuste apagado no reporta");
+    t.caso("repOn: apagado de fábrica (Default-Off); se enciende con S.reporte=true y GM_xmlhttpRequest", () => {
+      const c = cargar({ silencioso: true, defaultOff: true });
+      t.falso(c.api.repOn(), "de fábrica S.reporte=false (Default-off R1.8)");
       c.api.__S.reporte = true;
-      t.cierto(c.api.repOn());
+      t.cierto(c.api.repOn(), "con el ajuste encendido reporta");
+      c.api.__S.reporte = false;
+      t.falso(c.api.repOn());
+      c.api.__S.reporte = true;
       c.ctx.GM_xmlhttpRequest = undefined; // sin el permiso de Tampermonkey no hay canal
       t.falso(c.api.repOn());
     });

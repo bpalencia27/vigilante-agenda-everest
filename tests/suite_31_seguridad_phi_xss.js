@@ -1,0 +1,192 @@
+// =====================================================================
+//  SUITE 31 — Seguridad, PHI/PII, XSS, Supply Chain e Integridad (M1)
+//
+//  Cubre:
+//    - Saneamiento profundo y recursivo de PHI/PII colombiana (cédulas,
+//      celulares 300-350, correos, direcciones físicas, objetos y arreglos).
+//    - Invariantes de escape HTML contra inyección XSS en DOM.
+//    - Telemetría por defecto apagada (Default-Off R1.8).
+//    - Ausencia de endpoints locales inseguros en cabecera (@connect localhost/127.0.0.1).
+//    - Autocomprobación criptográfica de integridad SHA-256 (R1.9).
+// =====================================================================
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+
+module.exports = {
+  nombre: "Seguridad, PHI, XSS e Integridad (M1)",
+  cubre: ["scrubPII", "sanitizePII", "escapeHtml", "verificarIntegridadArranque"],
+
+  async pruebas(t, api, env, cargar) {
+    const RUTA_USERSCRIPT = path.join(__dirname, "..", "vigilante_agenda.user.js");
+
+    // ===================================================================
+    //  1. SANEAMIENTO ADVERSARIAL DE PHI / PII (R1.4, R1.5)
+    // ===================================================================
+
+    t.caso("scrubPII: censura cédulas colombianas formateadas y sin formatear", () => {
+      const c = cargar({ silencioso: true });
+
+      // Formateadas con puntos y guiones
+      t.igual(c.api.scrubPII("Paciente con CC 43.040.508 en sala"), "Paciente con CC [CENSURADO] en sala");
+      t.igual(c.api.scrubPII("Cédula 1.020.304.506 atendida"), "Cédula [CENSURADO] atendida");
+      t.igual(c.api.scrubPII("Documento 43-040-508 registrado"), "Documento [CENSURADO] registrado");
+
+      // Cédulas planas de 6 a 10 dígitos
+      t.igual(c.api.scrubPII("Cédula 43040508"), "Cédula [CENSURADO]");
+      t.igual(c.api.scrubPII("Identificación 1020304506"), "Identificación [CENSURADO]");
+      t.igual(c.api.scrubPII("doc_43040508"), "doc_[CENSURADO]");
+      t.igual(c.api.scrubPII("paciente_1020304506"), "paciente_[CENSURADO]");
+
+      // Números cortos (< 6 dígitos) como horas o códigos se conservan
+      t.igual(c.api.scrubPII("Código 12345 y valor 99999"), "Código 12345 y valor 99999");
+    });
+
+    t.caso("scrubPII: censura celulares colombianos (300-350) con diversos formatos", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Llamar al +57 300 123 4567 urgente"), "Llamar al [TEL_CENSURADO] urgente");
+      t.igual(c.api.scrubPII("Móvil: 300-123-4567"), "Móvil: [TEL_CENSURADO]");
+      t.igual(c.api.scrubPII("Teléfono (310) 987 6543"), "Teléfono [TEL_CENSURADO]");
+      t.igual(c.api.scrubPII("Contacto 3022813246"), "Contacto [TEL_CENSURADO]");
+      t.igual(c.api.scrubPII("Celular 320 456 7890 registrado"), "Celular [TEL_CENSURADO] registrado");
+    });
+
+    t.caso("scrubPII: censura correos electrónicos", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Correo: paciente.ejemplo@gmail.com enviado"), "Correo: [CORREO_CENSURADO] enviado");
+      t.igual(c.api.scrubPII("Notificar a medico.viva1a@atheneasoluciones.com"), "Notificar a [CORREO_CENSURADO]");
+      t.igual(c.api.scrubPII("contacto@dominio.com.co"), "[CORREO_CENSURADO]");
+    });
+
+    t.caso("scrubPII: censura direcciones físicas colombianas", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Vive en Calle 45 # 12-34 apto 201"), "Vive en [DIR_CENSURADA] apto 201");
+      t.igual(c.api.scrubPII("Residencia Cra 15 # 80-20"), "Residencia [DIR_CENSURADA]");
+      t.igual(c.api.scrubPII("Ubicación: Diag 68 # 45-10 sur"), "Ubicación: [DIR_CENSURADA] sur");
+      t.igual(c.api.scrubPII("Transv 23 # 45-67 Bogotá"), "[DIR_CENSURADA] Bogotá");
+      t.igual(c.api.scrubPII("Av El Dorado # 68-90"), "[DIR_CENSURADA]");
+    });
+
+    t.caso("scrubPII: saneamiento profundo y recursivo en árboles de objetos y arreglos", () => {
+      const c = cargar({ silencioso: true });
+
+      const payload = {
+        paciente: {
+          nombre: "Juan Perez",
+          cedula: "43.040.508",
+          cedulaNum: 43040508,
+          contacto: {
+            email: "juan@example.com",
+            telefono: "+57 300 123 4567",
+            direccion: "Calle 10 # 20-30"
+          }
+        },
+        citas: [
+          { id: 1020304, nota: "Paciente doc_98765432 atendido" },
+          { id: 555, nota: "Sin documento adjunto" }
+        ],
+        activo: true,
+        nulo: null,
+        indefinido: undefined
+      };
+
+      const limpio = c.api.scrubPII(payload);
+
+      t.igual(limpio.paciente.nombre, "Juan Perez");
+      t.igual(limpio.paciente.cedula, "[CENSURADO]");
+      t.igual(limpio.paciente.cedulaNum, "[CENSURADO]");
+      t.igual(limpio.paciente.contacto.email, "[CORREO_CENSURADO]");
+      t.igual(limpio.paciente.contacto.telefono, "[TEL_CENSURADO]");
+      t.igual(limpio.paciente.contacto.direccion, "[DIR_CENSURADA]");
+      t.igual(limpio.citas[0].id, "[CENSURADO]");
+      t.igual(limpio.citas[0].nota, "Paciente doc_[CENSURADO] atendido");
+      t.igual(limpio.citas[1].id, 555); // < 6 dígitos se conserva
+      t.igual(limpio.citas[1].nota, "Sin documento adjunto");
+      t.igual(limpio.activo, true);
+      t.igual(limpio.nulo, null);
+    });
+
+    t.caso("sanitizePII: actúa como alias idéntico y seguro de scrubPII", () => {
+      const c = cargar({ silencioso: true });
+
+      const texto = "Cédula 43.040.508, celular 3001234567, correo paciente@test.co";
+      t.igual(c.api.sanitizePII(texto), c.api.scrubPII(texto));
+    });
+
+    // ===================================================================
+    //  2. AUDITORÍA DOM Y PREVENCIÓN DE XSS (R1.2)
+    // ===================================================================
+
+    t.caso("escapeHtml: neutraliza todos los caracteres peligrosos de inyección HTML/XSS", () => {
+      const c = cargar({ silencioso: true });
+
+      const input = '<script>alert("XSS & \'attack`")</script>';
+      const escapado = c.api.escapeHtml(input);
+
+      t.falso(escapado.includes("<"));
+      t.falso(escapado.includes(">"));
+      t.falso(escapado.includes('"'));
+      t.falso(escapado.includes("'"));
+      t.falso(escapado.includes("`"));
+      t.igual(escapado, "&lt;script&gt;alert(&quot;XSS &amp; &#039;attack&#x60;&quot;)&lt;/script&gt;");
+    });
+
+    // ===================================================================
+    //  3. GOBERNANZA DE TELEMETRÍA: DEFAULT-OFF (R1.8)
+    // ===================================================================
+
+    t.caso("Telemetría: invariante Default-Off garantizado sin configuración previa", () => {
+      const c = cargar({ silencioso: true, defaultOff: true });
+
+      t.falso(c.api.__S.reporte, "DEFAULTS.reporte debe ser false de fábrica");
+      t.falso(c.api.__S.uxTelemetria, "DEFAULTS.uxTelemetria debe ser false de fábrica");
+      t.falso(c.api.repOn(), "repOn() debe resolver false por defecto");
+
+      // uxTrack con Default-Off no debe escribir en localStorage
+      c.api.uxTrack("accion.prueba");
+      t.igual(c.env.storage.getItem("vgl_ux"), null, "No debe registrar métricas con telemetría apagada");
+    });
+
+    // ===================================================================
+    //  4. CADENA DE SUMINISTRO: CABECERAS Y PERMISOS @connect (R1.3)
+    // ===================================================================
+
+    t.caso("Supply Chain: Userscript no incluye directivas @connect a localhost o 127.0.0.1", () => {
+      const codigo = fs.readFileSync(RUTA_USERSCRIPT, "utf8");
+      const cabecera = codigo.slice(0, 3000);
+
+      t.falso(/\/\/\s*@connect\s+localhost\b/i.test(cabecera), "Prohibido @connect localhost");
+      t.falso(/\/\/\s*@connect\s+127\.0\.0\.1\b/i.test(cabecera), "Prohibido @connect 127.0.0.1");
+
+      // Verificar dominios autorizados de producción
+      t.cierto(/\/\/\s*@connect\s+script\.google\.com\b/.test(cabecera));
+      t.cierto(/\/\/\s*@connect\s+medicosviva1a\.atheneasoluciones\.com\b/.test(cabecera));
+      t.cierto(/\/\/\s*@connect\s+sharepoint\.com\b/.test(cabecera));
+    });
+
+    // ===================================================================
+    //  5. AUTOCOMPROBACIÓN CRIPTOGRÁFICA DE INTEGRIDAD SHA-256 (R1.9)
+    // ===================================================================
+
+    await t.casoAsync("verificarIntegridadArranque: omite gracefully si scriptSource no está disponible", async () => {
+      const c = cargar({ silencioso: true });
+      const res = await c.api.verificarIntegridadArranque();
+      t.igual(res.status, "skipped");
+      t.igual(res.reason, "no_source");
+    });
+
+    await t.casoAsync("verificarIntegridadArranque: calcula SHA-256 correctamente cuando se suministra fuente", async () => {
+      const fakeSource = "// ==UserScript==\n// @name Test\n// ==/UserScript==\nconsole.log('hola');";
+      const c = cargar({ silencioso: true, scriptSource: fakeSource });
+
+      const res = await c.api.verificarIntegridadArranque();
+      const expectedHash = crypto.createHash("sha256").update(fakeSource, "utf8").digest("hex");
+
+      t.igual(res.status, "ok");
+      t.igual(res.sha256, expectedHash);
+    });
+  }
+};

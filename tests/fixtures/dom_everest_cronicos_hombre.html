@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Everest - Ruta Crónicos Hombre (Fixture Congelado - 111 Campos)</title>
+</head>
+<body>
+  <div id="anamesis" class="tab-pane active" data-sexo="M" data-programa="HTA_DM2_ERC">
+    <div class="patient-header">
+      <span class="text-muted">1.098.765.432, CC</span>
+      <span class="patient-name text-uppercase fw-bold">PACIENTE CRONICO MASCULINO</span>
+      <span class="badge bg-primary" id="lblSexo">M</span>
+      <span class="badge bg-info" id="lblEdad">58 Años</span>
+    </div>
+    <form id="form-cronicos-hombre">
+      <!-- 13 Laboratorios Canónicos -->
+      <div class="form-group input-group">
+        <label for="resultadoColesterolTotal">Colesterol Total</label>
+        <input type="text" id="resultadoColesterolTotal" name="resultadoColesterolTotal" class="form-control" value="">
+        <input type="date" id="fechaResultColesterolTotal" name="fechaResultColesterolTotal" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoColesterolHDL">Colesterol HDL</label>
+        <input type="text" id="resultadoColesterolHDL" name="resultadoColesterolHDL" class="form-control" value="">
+        <input type="date" id="fechaResultColesterolHDL" name="fechaResultColesterolHDL" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoColesterolLDL">Colesterol LDL</label>
+        <input type="text" id="resultadoColesterolLDL" name="resultadoColesterolLDL" class="form-control" value="">
+        <input type="date" id="fechaResultColesterolLDL" name="fechaResultColesterolLDL" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoTrigliceridos">Triglicéridos</label>
+        <input type="text" id="resultadoTrigliceridos" name="resultadoTrigliceridos" class="form-control" value="">
+        <input type="date" id="fechaResultTrigliceridos" name="fechaResultTrigliceridos" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoGlicemia">Glicemia Basal</label>
+        <input type="text" id="resultadoGlicemia" name="resultadoGlicemia" class="form-control" value="">
+        <input type="date" id="fechaResultGlicemia" name="fechaResultGlicemia" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoRelacionAlbuminaCreatinina">Relación albuminuria/Creatinina en orina (mg/g)</label>
+        <input type="text" id="resultadoRelacionAlbuminaCreatinina" name="resultadoRelacionAlbuminaCreatinina" class="form-control" value="">
+        <input type="date" id="fechaResultRelacionAlbuminaCreatinina" name="fechaResultRelacionAlbuminaCreatinina" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoCreatinina">Creatinina en suero</label>
+        <input type="text" id="resultadoCreatinina" name="resultadoCreatinina" class="form-control" value="">
+        <input type="date" id="fechaResultCreatinina" name="fechaResultCreatinina" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoPTH">PTH</label>
+        <input type="text" id="resultadoPTH" name="resultadoPTH" class="form-control" value="">
+        <input type="date" id="fechaResultPTH" name="fechaResultPTH" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoFosforo">Fósforo en suero</label>
+        <input type="text" id="resultadoFosforo" name="resultadoFosforo" class="form-control" value="">
+        <input type="date" id="fechaResultFosforo" name="fechaResultFosforo" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoAlbumina">Albúmina en suero</label>
+        <input type="text" id="resultadoAlbumina" name="resultadoAlbumina" class="form-control" value="">
+        <input type="date" id="fechaResultAlbumina" name="fechaResultAlbumina" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label for="resultadoHemoglobina">Hemoglobina</label>
+        <input type="text" id="resultadoHemoglobina" name="resultadoHemoglobina" class="form-control" value="">
+        <input type="date" id="fechaResultHemoglobina" name="fechaResultHemoglobina" class="form-control" value="">
+      </div>
+      <div class="form-group input-group">
+        <label>Hemoglobina glicosilada %</label>
+        <input type="number" max="30" id="resultadoHemoglobina" name="resultadoHemoglobina" class="form-control" value="">
+        <input type="date" class="form-control" value="">
+      </div>
+      <div class="form-group radio-group">
+        <label><input type="radio" name="resultadoPrograma.swUroanalisis" value="1"> SI</label>
+        <label><input type="radio" name="resultadoPrograma.swUroanalisis" value="0"> NO</label>
+      </div>
+      <div class="form-group input-group">
+        <input type="text" id="resultadoUroanalisis" name="resultadoUroanalisis" class="form-control" value="">
+        <input type="date" id="fechaResultUroanalisis" name="fechaResultUroanalisis" class="form-control" value="">
+      </div>
+      <div class="uro-components">
+        <input type="text" placeholder="Resultado Color" class="form-control">
+        <input type="text" placeholder="Resultado Glucosa" class="form-control">
+        <input type="text" placeholder="Resultado Nitritos" class="form-control">
+        <input type="text" placeholder="Resultado Sangre" class="form-control">
+        <input type="text" placeholder="Resultado Leucocitos" class="form-control">
+        <input type="text" placeholder="Resultado Hematies" class="form-control">
+        <input type="text" placeholder="Resultado Cilindros" class="form-control">
+      </div>
+
+      <!-- Antecedentes Patológicos (Por defecto 'NO' en Everest) -->
+      <fieldset class="antecedentes-patologicos">
+        <legend>Antecedentes Patológicos</legend>
+        <input type="checkbox" name="AntecedentePatologicos.HTA" value="0"> HTA
+        <input type="checkbox" name="AntecedentePatologicos.DM2" value="0"> DM2
+        <input type="checkbox" name="AntecedentePatologicos.ERC" value="0"> ERC
+        <input type="checkbox" name="AntecedentePatologicos.Dislipidemia" value="0"> Dislipidemia
+        <input type="checkbox" name="AntecedentePatologicos.Tabaquismo" value="0"> Tabaquismo
+      </fieldset>
+
+      <!-- Campos de Examen Físico y Antropometría HTA/DM2 -->
+      <fieldset class="examen-fisico">
+        <legend>Examen Físico y Signos Vitales</legend>
+        <input type="number" id="peso" name="signosVitales.peso" class="form-control" placeholder="Peso (kg)">
+        <input type="number" id="talla" name="signosVitales.talla" class="form-control" placeholder="Talla (cm)">
+        <input type="text" id="imc" name="signosVitales.imc" class="form-control" placeholder="IMC" readonly>
+        <input type="number" id="tas" name="signosVitales.tas" class="form-control" placeholder="TAS (mmHg)">
+        <input type="number" id="tad" name="signosVitales.tad" class="form-control" placeholder="TAD (mmHg)">
+        <input type="number" id="fc" name="signosVitales.fc" class="form-control" placeholder="FC (lpm)">
+        <input type="number" id="perimetroAbdominal" name="signosVitales.perimetroAbdominal" class="form-control" placeholder="Perímetro Abdominal (cm)">
+      </fieldset>
+    </form>
+  </div>
+</body>
+</html>

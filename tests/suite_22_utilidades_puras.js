@@ -48,9 +48,9 @@ module.exports = {
       t.igual(rango[0].iso, "2024-12-27", "Inicia el 27 de diciembre");
       t.igual(rango[2].iso, "2024-12-31", "Centro es fin de año");
 
-      // +1 = 1 (mie), +2 = 2 (jue)
-      t.igual(rango[3].iso, "2025-01-01", "Día siguiente es año nuevo");
-      t.igual(rango[4].iso, "2025-01-02", "Último día es 2 de enero");
+      // +1 = 2 (jue, salta Año Nuevo 1-ene), +2 = 3 (vie)
+      t.igual(rango[3].iso, "2025-01-02", "Día hábil siguiente salta Año Nuevo y es 2 de enero");
+      t.igual(rango[4].iso, "2025-01-03", "Segundo día hábil es 3 de enero");
     });
 
     await t.casoAsync("mapConLimite: nunca mantiene más de `limite` promesas en vuelo (18 tareas, límite 5)", async () => {

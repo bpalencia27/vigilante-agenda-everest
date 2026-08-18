@@ -1,0 +1,1158 @@
+{
+  "subsistema": "clinica_labs",
+  "descripcion": "Catálogo de mutantes para Laboratorios Crónicos, Uroanálisis, Puente Athenea, Extracción y Guardas Anti-Cruce",
+  "total_funciones": 23,
+  "total_mutantes": 115,
+  "mutantes": [
+    {
+      "id": "MUT-CLIN-001",
+      "funcion": "_conductaBuscarYAgregarExamen",
+      "linea": 1235,
+      "original": "const claveObjetivo = _canonTexto(nombreLiExacto);",
+      "mutacion": "const claveObjetivo = String(nombreLiExacto);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite canonización perdiendo tolerancia a mayúsculas/tildes"
+    },
+    {
+      "id": "MUT-CLIN-002",
+      "funcion": "_conductaBuscarYAgregarExamen",
+      "linea": 1241,
+      "original": "if (!li) return false;",
+      "mutacion": "if (!li) return true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Informa éxito cuando no se encontró el elemento <li> del examen"
+    },
+    {
+      "id": "MUT-CLIN-003",
+      "funcion": "_conductaBuscarYAgregarExamen",
+      "linea": 1242,
+      "original": "li.click();",
+      "mutacion": "// li.click();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite clic en el elemento <li> del examen"
+    },
+    {
+      "id": "MUT-CLIN-004",
+      "funcion": "_conductaBuscarYAgregarExamen",
+      "linea": 1251,
+      "original": "if (_canonTexto(b.textContent) === \"AGREGAR\" && !b.disabled)",
+      "mutacion": "if (_canonTexto(b.textContent) === \"AGREGAR\")",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Intenta clickear botón AGREGAR aunque esté deshabilitado"
+    },
+    {
+      "id": "MUT-CLIN-005",
+      "funcion": "_conductaBuscarYAgregarExamen",
+      "linea": 1255,
+      "original": "return true;",
+      "mutacion": "return false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Informa falso en inserción exitosa de conducta médica"
+    },
+    {
+      "id": "MUT-CLIN-006",
+      "funcion": "_esAnalitoDeOrina",
+      "linea": 1305,
+      "original": "if (/ORINA|URINAR|UROAN/.test(padre)) return true;",
+      "mutacion": "if (/ORINA|UROAN/.test(padre)) return true;",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite URINAR permitiendo que sedimento urinario se cuele a suero"
+    },
+    {
+      "id": "MUT-CLIN-007",
+      "funcion": "_esAnalitoDeOrina",
+      "linea": 1307,
+      "original": "return /\\bORINA\\b/.test(nombre) || /GLUCOSURIA|PROTEINURIA|NITRITO|CILINDRO|ESTERASA LEUCOCITARIA/.test(nombre);",
+      "mutacion": "return /\\bORINA\\b/.test(nombre);",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Descarta analitos de orina nombrados por componente individual"
+    },
+    {
+      "id": "MUT-CLIN-008",
+      "funcion": "_esAnalitoDeOrina",
+      "linea": 1302,
+      "original": "const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));",
+      "mutacion": "const padre = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Ignora el nombre del parámetro padre en Athenea"
+    },
+    {
+      "id": "MUT-CLIN-009",
+      "funcion": "_esAnalitoDeOrina",
+      "linea": 1306,
+      "original": "const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));",
+      "mutacion": "const nombre = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Ignora nombre del analito en Athenea"
+    },
+    {
+      "id": "MUT-CLIN-010",
+      "funcion": "_esAnalitoDeOrina",
+      "linea": 1301,
+      "original": "function _esAnalitoDeOrina(lab) {",
+      "mutacion": "function _esAnalitoDeOrina(lab) { return false; } function _old_esAnalitoDeOrina(lab) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Fuerza falso tratando todo analito de orina como sangre"
+    },
+    {
+      "id": "MUT-CLIN-011",
+      "funcion": "_hayComponenteUroReal",
+      "linea": 1318,
+      "original": "if (!Array.isArray(labsArray)) return false;",
+      "mutacion": "if (!Array.isArray(labsArray)) return true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Acepta entrada inválida como componentes de orina reales"
+    },
+    {
+      "id": "MUT-CLIN-012",
+      "funcion": "_hayComponenteUroReal",
+      "linea": 1320,
+      "original": "if (!lab || !_esAnalitoDeOrina(lab) || !_matchUroComponente(lab)) return false;",
+      "mutacion": "if (!lab || !_esAnalitoDeOrina(lab)) return false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite verificar si el componente casa con la lista oficial"
+    },
+    {
+      "id": "MUT-CLIN-013",
+      "funcion": "_hayComponenteUroReal",
+      "linea": 1321,
+      "original": "const v = lab.Resultado || lab.resultado || lab.valor;",
+      "mutacion": "const v = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula lectura de resultado de componente"
+    },
+    {
+      "id": "MUT-CLIN-014",
+      "funcion": "_hayComponenteUroReal",
+      "linea": 1322,
+      "original": "if (!v) return false;",
+      "mutacion": "if (!v) return true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Acepta componente con valor vacío como dato real"
+    },
+    {
+      "id": "MUT-CLIN-015",
+      "funcion": "_hayComponenteUroReal",
+      "linea": 1323,
+      "original": "return !(Number(lab.idEstado) === 1 || String(v).trim().toUpperCase() === \"PENDIENTE\");",
+      "mutacion": "return true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Acepta estado PENDIENTE como si fuera resultado real"
+    },
+    {
+      "id": "MUT-CLIN-016",
+      "funcion": "_matchUroComponente",
+      "linea": 1306,
+      "original": "const nombre = _canonTexto(lab && (lab.NombreParametro || lab.nombre || lab.examen));",
+      "mutacion": "const nombre = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula nombre de componente de orina"
+    },
+    {
+      "id": "MUT-CLIN-017",
+      "funcion": "_matchUroComponente",
+      "linea": 1329,
+      "original": "if (!nombre) return null;",
+      "mutacion": "if (!nombre) return UROANALISIS_COMPONENTES[0];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Asigna primer componente a nombres vacíos"
+    },
+    {
+      "id": "MUT-CLIN-018",
+      "funcion": "_matchUroComponente",
+      "linea": 1331,
+      "original": "if (comp.excluye && comp.excluye.some((x) => nombre.includes(x))) continue;",
+      "mutacion": "// if (comp.excluye",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite exclusiones (24H/DEPURAC) mezclando orina de 24h con parcial"
+    },
+    {
+      "id": "MUT-CLIN-019",
+      "funcion": "_matchUroComponente",
+      "linea": 1332,
+      "original": "if (comp.names.some((n) => nombre.includes(n))) return comp;",
+      "mutacion": "if (comp.names.some((n) => nombre === n)) return comp;",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Exige coincidencia exacta perdiendo nombres con prefijos/sufijos"
+    },
+    {
+      "id": "MUT-CLIN-020",
+      "funcion": "_matchUroComponente",
+      "linea": 1329,
+      "original": "return null;",
+      "mutacion": "return UROANALISIS_COMPONENTES[0];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Retorna componente por defecto ante fallo de match"
+    },
+    {
+      "id": "MUT-CLIN-021",
+      "funcion": "_agruparUroanalisisParaTabla",
+      "linea": 1351,
+      "original": "if (!Array.isArray(todosLabs)) return [];",
+      "mutacion": "if (!Array.isArray(todosLabs)) return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_15_interfaz_avanzada.js",
+      "descripcion": "Retorna null rompiendo iterador UI"
+    },
+    {
+      "id": "MUT-CLIN-022",
+      "funcion": "_agruparUroanalisisParaTabla",
+      "linea": 1352,
+      "original": "const componentes = todosLabs.filter((lab) => _esAnalitoDeOrina(lab));",
+      "mutacion": "const componentes = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_15_interfaz_avanzada.js",
+      "descripcion": "No extrae componentes de orina para la tabla"
+    },
+    {
+      "id": "MUT-CLIN-023",
+      "funcion": "_agruparUroanalisisParaTabla",
+      "linea": 1353,
+      "original": "if (!componentes.length) return todosLabs.slice();",
+      "mutacion": "if (!componentes.length) return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_15_interfaz_avanzada.js",
+      "descripcion": "Borra lista de laboratorios si no hay componentes de orina"
+    },
+    {
+      "id": "MUT-CLIN-024",
+      "funcion": "_agruparUroanalisisParaTabla",
+      "linea": 1383,
+      "original": "NombreParametro: \"Uroanálisis\",",
+      "mutacion": "NombreParametro: \"Parcial Desconocido\",",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_15_interfaz_avanzada.js",
+      "descripcion": "Altera nombre de la fila agrupada en la tabla"
+    },
+    {
+      "id": "MUT-CLIN-025",
+      "funcion": "_agruparUroanalisisParaTabla",
+      "linea": 1384,
+      "original": "__vglGrupoUroComponentes: items,",
+      "mutacion": "// __vglGrupoUroComponentes: items,",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_15_interfaz_avanzada.js",
+      "descripcion": "Omite adjuntar los componentes al grupo de Uroanálisis"
+    },
+    {
+      "id": "MUT-CLIN-026",
+      "funcion": "_findUroInput",
+      "linea": 1402,
+      "original": "const inputs = document.querySelectorAll(\"input[placeholder]\");",
+      "mutacion": "const inputs = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula búsqueda de inputs por placeholder"
+    },
+    {
+      "id": "MUT-CLIN-027",
+      "funcion": "_findUroInput",
+      "linea": 1404,
+      "original": "if (_canonTexto(el.placeholder) === placeholderCanon) return el;",
+      "mutacion": "if (el.placeholder === placeholderCanon) return el;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite canonización fallando ante espacios o tildes"
+    },
+    {
+      "id": "MUT-CLIN-028",
+      "funcion": "_findUroInput",
+      "linea": 1406,
+      "original": "} catch (e) {}",
+      "mutacion": "} catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Relanza excepción en vez de fail-safe null"
+    },
+    {
+      "id": "MUT-CLIN-029",
+      "funcion": "_findUroInput",
+      "linea": 1404,
+      "original": "return el;",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Ignora elemento encontrado"
+    },
+    {
+      "id": "MUT-CLIN-030",
+      "funcion": "_findUroInput",
+      "linea": 1400,
+      "original": "function _findUroInput(placeholderCanon) {",
+      "mutacion": "function _findUroInput(placeholderCanon) { return null; } function _old_findUroInput(placeholderCanon) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Fuerza fallo devolviendo null siempre"
+    },
+    {
+      "id": "MUT-CLIN-031",
+      "funcion": "_marcarUroanalisisSi",
+      "linea": 1420,
+      "original": "const radios = document.querySelectorAll('input[name=\"resultadoPrograma.swUroanalisis\"]');",
+      "mutacion": "const radios = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula selección de radios de Uroanálisis"
+    },
+    {
+      "id": "MUT-CLIN-032",
+      "funcion": "_marcarUroanalisisSi",
+      "linea": 1423,
+      "original": "if (el.checked) yaElegido = true;",
+      "mutacion": "// if (el.checked) yaElegido = true;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Sobrescribe decisión del médico cuando ya había marcado"
+    },
+    {
+      "id": "MUT-CLIN-033",
+      "funcion": "_marcarUroanalisisSi",
+      "linea": 1424,
+      "original": "if (_canonTexto(el.parentElement && el.parentElement.textContent) === \"SI\") radioSi = el;",
+      "mutacion": "if (_canonTexto(el.parentElement && el.parentElement.textContent) === \"NO\") radioSi = el;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Marca NO en lugar de SI"
+    },
+    {
+      "id": "MUT-CLIN-034",
+      "funcion": "_marcarUroanalisisSi",
+      "linea": 1426,
+      "original": "if (yaElegido || !radioSi) return false;",
+      "mutacion": "if (!radioSi) return false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Ignora si el médico ya había seleccionado"
+    },
+    {
+      "id": "MUT-CLIN-035",
+      "funcion": "_marcarUroanalisisSi",
+      "linea": 1427,
+      "original": "radioSi.click();",
+      "mutacion": "// radioSi.click();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite clic en el radio SI"
+    },
+    {
+      "id": "MUT-CLIN-036",
+      "funcion": "_atheneaCedulaCoincide",
+      "linea": 1583,
+      "original": "if (!docLimpio) return false;",
+      "mutacion": "if (!docLimpio) return true;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Guarda mortal: valida coincidencia en documento vacío"
+    },
+    {
+      "id": "MUT-CLIN-037",
+      "funcion": "_atheneaCedulaCoincide",
+      "linea": 1584,
+      "original": "const m = /\\b(?:CC|TI|CE|RC|PA|CD|MS|AS|CN)\\b[^0-9]{0,10}(\\d{5,12})/i.exec(html);",
+      "mutacion": "const m = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Omite extracción regex de tipos de documento"
+    },
+    {
+      "id": "MUT-CLIN-038",
+      "funcion": "_atheneaCedulaCoincide",
+      "linea": 1585,
+      "original": "if (m) return m[1].replace(/\\D/g, \"\") === docLimpio;",
+      "mutacion": "if (m) return m[1].replace(/\\D/g, \"\") !== docLimpio;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Invierte verificación de cédula en HTML"
+    },
+    {
+      "id": "MUT-CLIN-039",
+      "funcion": "_atheneaCedulaCoincide",
+      "linea": 1586,
+      "original": "try { return new RegExp(\"(?<!\\\\d)\" + docLimpio + \"(?!\\\\d)\").test(html); } catch (e) { return html.includes(docLimpio); }",
+      "mutacion": "return false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Anula fallback de búsqueda de documento"
+    },
+    {
+      "id": "MUT-CLIN-040",
+      "funcion": "_atheneaCedulaCoincide",
+      "linea": 1585,
+      "original": "m[1].replace(/\\D/g, \"\") === docLimpio",
+      "mutacion": "m[1].startsWith(docLimpio)",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Relaja igualdad estricta por prefijo"
+    },
+    {
+      "id": "MUT-CLIN-041",
+      "funcion": "_fechaDesdeNumeroSolicitud",
+      "linea": 1655,
+      "original": "const re = /\\bNumero\\s*:\\s*(\\d{2})(\\d{2})(\\d{2})\\d+\\b/gi;",
+      "mutacion": "const re = /\\bNumero\\s*:\\s*(\\d{2})\\d+\\b/gi;",
+      "tipo": "ROR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Corrompe regex de número de solicitud"
+    },
+    {
+      "id": "MUT-CLIN-042",
+      "funcion": "_fechaDesdeNumeroSolicitud",
+      "linea": 1659,
+      "original": "const mesN = Number(m[2]), diaN = Number(m[3]), anio = 2000 + Number(m[1]);",
+      "mutacion": "const mesN = Number(m[1]), diaN = Number(m[2]), anio = 2000 + Number(m[3]);",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Intercambia año, mes y día en formato aaMMdd"
+    },
+    {
+      "id": "MUT-CLIN-043",
+      "funcion": "_fechaDesdeNumeroSolicitud",
+      "linea": 1660,
+      "original": "if (mesN < 1 || mesN > 12 || diaN < 1 || diaN > 31) continue;",
+      "mutacion": "if (mesN < 1 || mesN > 12) continue;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Omite validación de rango de días"
+    },
+    {
+      "id": "MUT-CLIN-044",
+      "funcion": "_fechaDesdeNumeroSolicitud",
+      "linea": 1665,
+      "original": "return isos.size === 1 ? [...isos][0] : null;",
+      "mutacion": "return isos.size >= 1 ? [...isos][0] : null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "Acepta ambigüedad cuando hay múltiples fechas distintas"
+    },
+    {
+      "id": "MUT-CLIN-045",
+      "funcion": "_fechaDesdeNumeroSolicitud",
+      "linea": 1656,
+      "original": "const isos = new Set();",
+      "mutacion": "const isos = [];",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_18_athenea_bridge.js",
+      "descripcion": "No deduplica fechas idénticas provocando falso nulo"
+    },
+    {
+      "id": "MUT-CLIN-046",
+      "funcion": "_matchLabInWhitelist",
+      "linea": 2118,
+      "original": "if (code && item.codes.includes(code)) return item;",
+      "mutacion": "// if (code && item.codes.includes(code))",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite prioridad absoluta de código CUPS exacto"
+    },
+    {
+      "id": "MUT-CLIN-047",
+      "funcion": "_matchLabInWhitelist",
+      "linea": 2129,
+      "original": "if (deOrina && item.key !== \"RAC\" && item.key !== \"UROANALISIS\") continue;",
+      "mutacion": "// if (deOrina",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite guarda de orina dejando que hemoglobina en orina caiga en hemograma"
+    },
+    {
+      "id": "MUT-CLIN-048",
+      "funcion": "_matchLabInWhitelist",
+      "linea": 2133,
+      "original": "if (deOrina && item.key === \"UROANALISIS\" && _matchUroComponente(lab)) continue;",
+      "mutacion": "// if (deOrina && item.key === \"UROANALISIS\"",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Bloquea componentes de orina para casilla individual"
+    },
+    {
+      "id": "MUT-CLIN-049",
+      "funcion": "_matchLabInWhitelist",
+      "linea": 2134,
+      "original": "if (item.excluye && item.excluye.some((x) => name.includes(_canonNombreLab(x)))) continue;",
+      "mutacion": "// if (item.excluye",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite exclusiones de analitos mezclando creatinina en orina con sérica"
+    },
+    {
+      "id": "MUT-CLIN-050",
+      "funcion": "_matchLabInWhitelist",
+      "linea": 2011,
+      "original": "return null;",
+      "mutacion": "return WHITELIST_13_LABS[0];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Retorna primer analito por defecto corrompiendo asignación de casillas"
+    },
+    {
+      "id": "MUT-CLIN-051",
+      "funcion": "_findLabField",
+      "linea": 2144,
+      "original": "for (const id of [primaryId].concat(altIds || []))",
+      "mutacion": "for (const id of [primaryId])",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite búsqueda por lista de ids alternativos"
+    },
+    {
+      "id": "MUT-CLIN-052",
+      "funcion": "_findLabField",
+      "linea": 2146,
+      "original": "const el = document.getElementById(id) || document.querySelector(`[name=\"${id}\"]`);",
+      "mutacion": "const el = document.getElementById(id);",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "No busca por atributo name en inputs de Everest"
+    },
+    {
+      "id": "MUT-CLIN-053",
+      "funcion": "_findLabField",
+      "linea": 2147,
+      "original": "if (el) return el;",
+      "mutacion": "if (!el) return el;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Invierte retorno de elemento"
+    },
+    {
+      "id": "MUT-CLIN-054",
+      "funcion": "_findLabField",
+      "linea": 2145,
+      "original": "if (!id) continue;",
+      "mutacion": "// if (!id) continue;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "No salta ids vacíos o nulos"
+    },
+    {
+      "id": "MUT-CLIN-055",
+      "funcion": "_findLabField",
+      "linea": 2149,
+      "original": "return null;",
+      "mutacion": "return document.querySelector(\"input\");",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Devuelve input arbitrario ante id no encontrado"
+    },
+    {
+      "id": "MUT-CLIN-056",
+      "funcion": "_findHbA1cFields",
+      "linea": 2169,
+      "original": "if (el.type === \"number\" && el.getAttribute(\"max\") === \"30\")",
+      "mutacion": "if (el.type === \"number\")",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite validación de max=30 perdiendo especificidad"
+    },
+    {
+      "id": "MUT-CLIN-057",
+      "funcion": "_findHbA1cFields",
+      "linea": 2171,
+      "original": "const fechaEl = grupo ? grupo.querySelector('input[type=\"date\"]') : null;",
+      "mutacion": "const fechaEl = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula búsqueda de fecha hermana en input-group"
+    },
+    {
+      "id": "MUT-CLIN-058",
+      "funcion": "_findHbA1cFields",
+      "linea": 2172,
+      "original": "return { resultEl: el, dateEl: fechaEl };",
+      "mutacion": "return { resultEl: fechaEl, dateEl: el };",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Intercambia casilla de resultado por la de fecha en HbA1c"
+    },
+    {
+      "id": "MUT-CLIN-059",
+      "funcion": "_findHbA1cFields",
+      "linea": 2167,
+      "original": "const candidatos = document.querySelectorAll('input[name=\"resultadoHemoglobina\"], input#resultadoHemoglobina');",
+      "mutacion": "const candidatos = [];",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula lista de candidatos para HbA1c"
+    },
+    {
+      "id": "MUT-CLIN-060",
+      "funcion": "_findHbA1cFields",
+      "linea": 2175,
+      "original": "return { resultEl: null, dateEl: null };",
+      "mutacion": "return { resultEl: candidatos[0] || null, dateEl: null };",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Devuelve casilla de hemoglobina normal en choque de IDs"
+    },
+    {
+      "id": "MUT-CLIN-061",
+      "funcion": "_extractFechaSolicitudTopLevel",
+      "linea": 2295,
+      "original": "if (!res || typeof res !== \"object\") return null;",
+      "mutacion": "if (!res) return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Permite tipos primitivos provocando excepciones"
+    },
+    {
+      "id": "MUT-CLIN-062",
+      "funcion": "_extractFechaSolicitudTopLevel",
+      "linea": 2297,
+      "original": "if (!/^fecha[_ ]?(solicitud|toma|muestra|orden)/i.test(k)) continue;",
+      "mutacion": "// if (!/^fecha",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Acepta cualquier fecha del envoltorio falsificando fecha de toma"
+    },
+    {
+      "id": "MUT-CLIN-063",
+      "funcion": "_extractFechaSolicitudTopLevel",
+      "linea": 2298,
+      "original": "const fh = _parseFechaHoraLike(res[k]);",
+      "mutacion": "const fh = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula parseo de fecha"
+    },
+    {
+      "id": "MUT-CLIN-064",
+      "funcion": "_extractFechaSolicitudTopLevel",
+      "linea": 2299,
+      "original": "if (fh) return { iso: fh.iso, hora: fh.hora, key: k };",
+      "mutacion": "if (fh) return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Retorna null en fecha válida"
+    },
+    {
+      "id": "MUT-CLIN-065",
+      "funcion": "_extractFechaSolicitudTopLevel",
+      "linea": 2224,
+      "original": "return null;",
+      "mutacion": "return { iso: \"2026-01-01\", hora: null, key: \"dummy\" };",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Inventa fecha fija cuando no hay fecha top-level"
+    },
+    {
+      "id": "MUT-CLIN-066",
+      "funcion": "_extractAtheneaFecha",
+      "linea": 2309,
+      "original": "if (!lab || typeof lab !== \"object\") return null;",
+      "mutacion": "if (!lab) return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "No valida tipo objeto"
+    },
+    {
+      "id": "MUT-CLIN-067",
+      "funcion": "_extractAtheneaFecha",
+      "linea": 2310,
+      "original": "for (const k of _CAMPOS_FECHA_CONOCIDOS)",
+      "mutacion": "// for (const k of _CAMPOS_FECHA_CONOCIDOS)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite prioridad de campos de fecha conocidos"
+    },
+    {
+      "id": "MUT-CLIN-068",
+      "funcion": "_extractAtheneaFecha",
+      "linea": 2325,
+      "original": "if (/fecha/i.test(k)) return { iso: fh.iso, hora: fh.hora, key: k };",
+      "mutacion": "// if (/fecha/i.test(k))",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite preferencia por campos que contengan fecha en el nombre"
+    },
+    {
+      "id": "MUT-CLIN-069",
+      "funcion": "_extractAtheneaFecha",
+      "linea": 2329,
+      "original": "const fhSol = _parseFechaHoraLike(lab.__vglFechaSolicitud);",
+      "mutacion": "const fhSol = null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula respaldo de fecha de solicitud"
+    },
+    {
+      "id": "MUT-CLIN-070",
+      "funcion": "_extractAtheneaFecha",
+      "linea": 2334,
+      "original": "return { iso: fhSol.iso, hora: horaSol, key: \"__vglFechaSolicitud\" };",
+      "mutacion": "return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Descarta fecha de solicitud de respaldo"
+    },
+    {
+      "id": "MUT-CLIN-071",
+      "funcion": "_valorCrudoLab",
+      "linea": 2351,
+      "original": "const _valorCrudoLab = (v) => (v === null || v === undefined || String(v).trim() === \"\") ? undefined : v;",
+      "mutacion": "const _valorCrudoLab = (v) => v || undefined;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Regresión: trata 0 numérico legítimo como ausente"
+    },
+    {
+      "id": "MUT-CLIN-072",
+      "funcion": "_valorCrudoLab",
+      "linea": 2351,
+      "original": "String(v).trim() === \"\"",
+      "mutacion": "false",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Acepta cadenas de espacios en blanco como valores válidos"
+    },
+    {
+      "id": "MUT-CLIN-073",
+      "funcion": "_valorCrudoLab",
+      "linea": 2351,
+      "original": "v === null || v === undefined",
+      "mutacion": "false",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "No filtra null o undefined"
+    },
+    {
+      "id": "MUT-CLIN-074",
+      "funcion": "_valorCrudoLab",
+      "linea": 2351,
+      "original": "? undefined : v",
+      "mutacion": "? null : v",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Retorna null en vez de undefined rompiendo el operador ??"
+    },
+    {
+      "id": "MUT-CLIN-075",
+      "funcion": "_valorCrudoLab",
+      "linea": 2351,
+      "original": "const _valorCrudoLab = (v) =>",
+      "mutacion": "const _valorCrudoLab = (v) => undefined; const _old_valorCrudoLab = (v) =>",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Fuerza valor indefinido siempre"
+    },
+    {
+      "id": "MUT-CLIN-076",
+      "funcion": "_pacienteSigueAbierto",
+      "linea": 2403,
+      "original": "if (!docIdEsperado) return true;",
+      "mutacion": "if (!docIdEsperado) return false;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Aborta inyección en docIdEsperado vacío"
+    },
+    {
+      "id": "MUT-CLIN-077",
+      "funcion": "_pacienteSigueAbierto",
+      "linea": 2404,
+      "original": "const actual = (typeof extractPacienteAbierto === \"function\") ? extractPacienteAbierto() : \"\";",
+      "mutacion": "const actual = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Simula fallo en extracción de paciente actual"
+    },
+    {
+      "id": "MUT-CLIN-078",
+      "funcion": "_pacienteSigueAbierto",
+      "linea": 2407,
+      "original": "return !!actual && String(actual) === String(docIdEsperado);",
+      "mutacion": "return String(actual) === String(docIdEsperado);",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Asume paciente igual cuando actual es cadena vacía"
+    },
+    {
+      "id": "MUT-CLIN-079",
+      "funcion": "_pacienteSigueAbierto",
+      "linea": 2407,
+      "original": "return !!actual && String(actual) === String(docIdEsperado);",
+      "mutacion": "return !!actual && String(actual) !== String(docIdEsperado);",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Guarda mortal: permite inyectar datos en paciente ajeno"
+    },
+    {
+      "id": "MUT-CLIN-080",
+      "funcion": "_pacienteSigueAbierto",
+      "linea": 2402,
+      "original": "function _pacienteSigueAbierto(docIdEsperado) {",
+      "mutacion": "function _pacienteSigueAbierto(docIdEsperado) { return true; } function _old_pacienteSigueAbierto(docIdEsperado) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Desactiva por completo la guarda anti-cruce"
+    },
+    {
+      "id": "MUT-CLIN-081",
+      "funcion": "injectLabsIntoCronicos",
+      "linea": 2426,
+      "original": "if (state.killed)",
+      "mutacion": "if (false && state.killed)",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Bypasea Kill-Switch inyectando laboratorios en emergencia"
+    },
+    {
+      "id": "MUT-CLIN-082",
+      "funcion": "injectLabsIntoCronicos",
+      "linea": 2434,
+      "original": "if (!_pacienteSigueAbierto(docIdEsperado))",
+      "mutacion": "if (false && !_pacienteSigueAbierto(docIdEsperado))",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula verificación de paciente abierto durante inyección"
+    },
+    {
+      "id": "MUT-CLIN-083",
+      "funcion": "injectLabsIntoCronicos",
+      "linea": 2430,
+      "original": "if (state.disabledFeatures && state.disabledFeatures.has(\"autoLabs\"))",
+      "mutacion": "if (false)",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Ignora feature flag remoto de autoLabs"
+    },
+    {
+      "id": "MUT-CLIN-084",
+      "funcion": "injectLabsIntoCronicos",
+      "linea": 2425,
+      "original": "if (!Array.isArray(labsArray)) return { count: 0, pendientes: 0, sinCasilla: [], respetadas: 0, uroanalisisMarcado: false };",
+      "mutacion": "if (!Array.isArray(labsArray)) return null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Retorna null rompiendo contrato de respuesta"
+    },
+    {
+      "id": "MUT-CLIN-085",
+      "funcion": "injectLabsIntoCronicos",
+      "linea": 2443,
+      "original": "let uroanalisisConfirmadoReal = false;",
+      "mutacion": "let uroanalisisConfirmadoReal = true;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Marca Uroanálisis SÍ en todos los pacientes sin evidencia"
+    },
+    {
+      "id": "MUT-CLIN-086",
+      "funcion": "_labNumerico",
+      "linea": 2809,
+      "original": "if (/-\\s*\\d/.test(txt)) return null;",
+      "mutacion": "// if (/-\\s*\\d/.test(txt))",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Regresión: pierde signo negativo convirtiendo -1.2 en 1.2"
+    },
+    {
+      "id": "MUT-CLIN-087",
+      "funcion": "_labNumerico",
+      "linea": 2810,
+      "original": "const limpio = txt.replace(/[^\\d.,]/g, \"\").replace(\",\", \".\");",
+      "mutacion": "const limpio = txt.replace(/[^\\d.,]/g, \"\");",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "No convierte comas produciendo NaN"
+    },
+    {
+      "id": "MUT-CLIN-088",
+      "funcion": "_labNumerico",
+      "linea": 2811,
+      "original": "if (!limpio) return null;",
+      "mutacion": "if (!limpio) return 0;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Devuelve 0 en texto sin dígitos"
+    },
+    {
+      "id": "MUT-CLIN-089",
+      "funcion": "_labNumerico",
+      "linea": 2813,
+      "original": "return Number.isFinite(n) && n > 0 ? n : null;",
+      "mutacion": "return Number.isFinite(n) ? n : null;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Acepta 0 como número válido para analitos séricos"
+    },
+    {
+      "id": "MUT-CLIN-090",
+      "funcion": "_labNumerico",
+      "linea": 2804,
+      "original": "function _labNumerico(crudo) {",
+      "mutacion": "function _labNumerico(crudo) { return null; } function _old_labNumerico(crudo) {",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_29_estadio_renal_r1b.js",
+      "descripcion": "Devuelve null siempre"
+    },
+    {
+      "id": "MUT-CLIN-091",
+      "funcion": "_analitosRcvVencidos",
+      "linea": 3060,
+      "original": "const hoyMs = new Date(hoy.iso + \"T00:00:00\").getTime();",
+      "mutacion": "const hoyMs = 0;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Usa época 1970 marcando todos los labs como vencidos"
+    },
+    {
+      "id": "MUT-CLIN-092",
+      "funcion": "_analitosRcvVencidos",
+      "linea": 3069,
+      "original": "if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });",
+      "mutacion": "if (dias < vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Invierte chequeo marcando vigentes como vencidos"
+    },
+    {
+      "id": "MUT-CLIN-093",
+      "funcion": "_analitosRcvVencidos",
+      "linea": 3065,
+      "original": "if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }",
+      "mutacion": "// if (!c || !c.resultDate)",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite analitos nunca realizados"
+    },
+    {
+      "id": "MUT-CLIN-094",
+      "funcion": "_analitosRcvVencidos",
+      "linea": 3061,
+      "original": "const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });",
+      "mutacion": "const candidatos = new Map();",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Anula candidatos marcando todos los 13 labs como vencidos"
+    },
+    {
+      "id": "MUT-CLIN-095",
+      "funcion": "_analitosRcvVencidos",
+      "linea": 3071,
+      "original": "return faltantes;",
+      "mutacion": "return [];",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Oculta laboratorios vencidos al médico"
+    },
+    {
+      "id": "MUT-CLIN-096",
+      "funcion": "apiAccesoObtenerLaboratoriosAnnar",
+      "linea": 10166,
+      "original": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerResultadosLaboratorioAnnar?pacienteId=${pacienteId}`;",
+      "mutacion": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerAnnar?pacienteId=${pacienteId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera path del endpoint de Annar"
+    },
+    {
+      "id": "MUT-CLIN-097",
+      "funcion": "apiAccesoObtenerLaboratoriosAnnar",
+      "linea": 10167,
+      "original": "try { return await pageFetchJson(path); } catch (e) { return null; }",
+      "mutacion": "try { return await pageFetchJson(path); } catch (e) { throw e; }",
+      "tipo": "ERR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Relanza error en vez de devolver null"
+    },
+    {
+      "id": "MUT-CLIN-098",
+      "funcion": "apiAccesoObtenerLaboratoriosAnnar",
+      "linea": 10165,
+      "original": "async function apiAccesoObtenerLaboratoriosAnnar(pacienteId) {",
+      "mutacion": "function apiAccesoObtenerLaboratoriosAnnar(pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Remueve async rompiendo promesas"
+    },
+    {
+      "id": "MUT-CLIN-099",
+      "funcion": "apiAccesoObtenerLaboratoriosAnnar",
+      "linea": 10167,
+      "original": "return await pageFetchJson(path);",
+      "mutacion": "return null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Anula petición Annar"
+    },
+    {
+      "id": "MUT-CLIN-100",
+      "funcion": "apiAccesoObtenerLaboratoriosAnnar",
+      "linea": 10166,
+      "original": "pacienteId=${pacienteId}",
+      "mutacion": "id=${pacienteId}",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera nombre de query param"
+    },
+    {
+      "id": "MUT-CLIN-101",
+      "funcion": "apiAccesoObtenerLaboratoriosCiti",
+      "linea": 10170,
+      "original": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerResultadosLaboratorioCiti?pacienteId=${pacienteId}`;",
+      "mutacion": "const path = `/apiviva/APIHCHealth/api/Historicos/ObtenerCiti?pacienteId=${pacienteId}`;",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera path del endpoint de Citi"
+    },
+    {
+      "id": "MUT-CLIN-102",
+      "funcion": "apiAccesoObtenerLaboratoriosCiti",
+      "linea": 10167,
+      "original": "try { return await pageFetchJson(path); } catch (e) { return null; }",
+      "mutacion": "try { return await pageFetchJson(path); } catch (e) { return []; }",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Retorna lista vacía en error enmascarando fallo"
+    },
+    {
+      "id": "MUT-CLIN-103",
+      "funcion": "apiAccesoObtenerLaboratoriosCiti",
+      "linea": 10169,
+      "original": "async function apiAccesoObtenerLaboratoriosCiti(pacienteId) {",
+      "mutacion": "function apiAccesoObtenerLaboratoriosCiti(pacienteId) {",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Remueve async rompiendo promesas"
+    },
+    {
+      "id": "MUT-CLIN-104",
+      "funcion": "apiAccesoObtenerLaboratoriosCiti",
+      "linea": 10167,
+      "original": "return await pageFetchJson(path);",
+      "mutacion": "return null;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Anula petición Citi"
+    },
+    {
+      "id": "MUT-CLIN-105",
+      "funcion": "apiAccesoObtenerLaboratoriosCiti",
+      "linea": 10166,
+      "original": "pacienteId=${pacienteId}",
+      "mutacion": "id=${pacienteId}",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_13_api_agenda.js",
+      "descripcion": "Altera nombre de query param en Citi"
+    },
+    {
+      "id": "MUT-CLIN-106",
+      "funcion": "checkRacGuardia",
+      "linea": 14242,
+      "original": "if (!_racGuardia.activa) return;",
+      "mutacion": "if (_racGuardia.activa) return;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Invierte activación de guardia RAC"
+    },
+    {
+      "id": "MUT-CLIN-107",
+      "funcion": "checkRacGuardia",
+      "linea": 14244,
+      "original": "if (docId !== _racGuardia.docId) { _racGuardia.activa = false; return; }",
+      "mutacion": "if (docId === _racGuardia.docId) { _racGuardia.activa = false; return; }",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Restaura RAC en paciente equivocado"
+    },
+    {
+      "id": "MUT-CLIN-108",
+      "funcion": "checkRacGuardia",
+      "linea": 14247,
+      "original": "if ((Date.now() - (_racGuardia.ts || 0)) > RAC_GUARDIA_VENTANA_MS)",
+      "mutacion": "if ((Date.now() - (_racGuardia.ts || 0)) < RAC_GUARDIA_VENTANA_MS)",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Expira ventana RAC inmediatamente"
+    },
+    {
+      "id": "MUT-CLIN-109",
+      "funcion": "checkRacGuardia",
+      "linea": 14255,
+      "original": "if ((_racGuardia.restauraciones || 0) >= RAC_GUARDIA_MAX_RESTAURACIONES)",
+      "mutacion": "if ((_racGuardia.restauraciones || 0) > 100)",
+      "tipo": "BVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "No cede nunca al borrado del médico"
+    },
+    {
+      "id": "MUT-CLIN-110",
+      "funcion": "checkRacGuardia",
+      "linea": 14264,
+      "original": "setNgValue(el, _racGuardia.valor);",
+      "mutacion": "// setNgValue(el, _racGuardia.valor);",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_08_labs_cronicos.js",
+      "descripcion": "Omite restaurar valor en casilla RAC"
+    },
+    {
+      "id": "MUT-CLIN-111",
+      "funcion": "extractPacienteAbierto",
+      "linea": 6034,
+      "original": "if (!document.getElementById(\"anamesis\")) return \"\";",
+      "mutacion": "if (document.getElementById(\"anamesis\")) return \"\";",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_14_extraccion_dom.js",
+      "descripcion": "Invierte detección de módulo HC"
+    },
+    {
+      "id": "MUT-CLIN-112",
+      "funcion": "extractPacienteAbierto",
+      "linea": 6037,
+      "original": "if (el.closest(\"#vgl-root\")) continue;",
+      "mutacion": "// if (el.closest(\"#vgl-root\")) continue;",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_14_extraccion_dom.js",
+      "descripcion": "Lee texto del propio panel Vigilante"
+    },
+    {
+      "id": "MUT-CLIN-113",
+      "funcion": "extractPacienteAbierto",
+      "linea": 6038,
+      "original": "const doc = extractDoc(limpio(el.textContent));",
+      "mutacion": "const doc = \"\";",
+      "tipo": "SVR",
+      "suite_objetivo": "tests/suite_14_extraccion_dom.js",
+      "descripcion": "Anula extracción de documento"
+    },
+    {
+      "id": "MUT-CLIN-114",
+      "funcion": "extractPacienteAbierto",
+      "linea": 6039,
+      "original": "if (doc) return doc;",
+      "mutacion": "if (!doc) return doc;",
+      "tipo": "COR",
+      "suite_objetivo": "tests/suite_14_extraccion_dom.js",
+      "descripcion": "Retorna vacío cuando se encuentra documento"
+    },
+    {
+      "id": "MUT-CLIN-115",
+      "funcion": "extractPacienteAbierto",
+      "linea": 6042,
+      "original": "catch (e) { return \"\"; }",
+      "mutacion": "catch (e) { return \"ERROR\"; }",
+      "tipo": "DTR",
+      "suite_objetivo": "tests/suite_14_extraccion_dom.js",
+      "descripcion": "Devuelve string ERROR ante excepción"
+    }
+  ]
+}

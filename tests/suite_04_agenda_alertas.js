@@ -428,26 +428,45 @@ module.exports = {
       t.falso(c.api.avisoYaVisto(uid), "los 8 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
     });
 
-    t.caso("labsVencidosAlert: no lanza con una lista real de faltantes, ni con la lista vacía (v12.5.7)", () => {
-      // v12.5.7 — Limitación conocida del banco (documentada también para abrirInformeAthenea
-      // en la suite 15): el DOM simulado NO parsea innerHTML en nodos reales y
-      // querySelector() siempre devuelve null en cualquier elemento recién creado, así que
-      // NINGÚN modal de esta familia (pymAlert/abandonoPESAlert/labsVencidosAlert) puede
-      // verificarse aquí por contenido real del DOM — el propio try/catch interno de la
-      // función es lo que evita que ese null.textContent reviente hacia afuera. Esta prueba
-      // confirma al menos que checkLabsVencidos/labsVencidosAlert nunca dejan escapar una
-      // excepción con datos realistas, incluida la lista vacía (que en producción nunca
-      // debería ocurrir, porque checkLabsVencidos ya filtra faltantes.length antes de
-      // llamar, pero labsVencidosAlert no debe asumirlo).
+    t.caso("labsVencidosAlert: comprueba que el modal queda en el DOM con los analitos (v12.5.7)", () => {
       const c = cargar({ silencioso: true });
+
+      let elModal = null;
+      c.env.doc.getElementById = (id) => id === "vgl-labsv-modal" ? elModal : null;
+      const baseCreate = c.env.doc.createElement;
+      c.env.doc.createElement = (tag) => {
+        const el = baseCreate(tag);
+        const baseSetAttr = el.setAttribute;
+        el.setAttribute = function(k, v) {
+          baseSetAttr.call(this, k, v);
+        };
+        // Capture inner logic from harness.js to hook ID assignment since it assigns directly `.id = ...`
+        Object.defineProperty(el, 'id', {
+            get: function() { return this._id || ""; },
+            set: function(val) {
+                this._id = val;
+                if (val === "vgl-labsv-modal") elModal = this;
+            }
+        });
+        return el;
+      }
+
       const faltantesReales = [
         { key: "COLESTEROL_TOTAL", nombre: "Colesterol Total" },
         { key: "GLUCOSA", nombre: "Glucosa en Suero" },
         { key: "RAC", nombre: "RAC (Relación Albúmina/Creatinina)" },
       ];
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true));
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", [], true));
-      t.noLanza(() => c.api.labsVencidosAlert("Paciente de prueba", null, true));
+
+      c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true);
+
+      t.cierto(!!elModal, "el modal de laboratorios vencidos debe quedar en el DOM");
+      t.cierto(elModal.innerHTML.includes("Colesterol Total"), "el modal nombra el analito Colesterol Total");
+      t.cierto(elModal.innerHTML.includes("Glucosa en Suero"), "el modal nombra el analito Glucosa en Suero");
+      t.cierto(elModal.innerHTML.includes("RAC (Relación Albúmina/Creatinina)"), "el modal nombra el analito RAC");
+
+      elModal = null;
+      c.api.labsVencidosAlert("Paciente de prueba", [], true);
+      t.cierto(!!elModal, "el modal se pinta sin fallar incluso con la lista vacía");
     });
 
     // =====================================================================
