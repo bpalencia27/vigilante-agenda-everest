@@ -14212,13 +14212,26 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+  // [PERFORMANCE] Re-using buffers and cache for fuzzyMatch across calls.
+  // Because fuzzyMatch is called iteratively on every list item during rendering,
+  // allocating memory inside it heavily increases GC pressure.
+  let _fuzzyQueryCache = { q: null, tokens: [], digits: "" };
+  let _fuzzyBufPrev = new Uint16Array(64);
+  let _fuzzyBufCurr = new Uint16Array(64);
+  let _fuzzyBufPrevPrev = new Uint16Array(64);
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    if (_fuzzyQueryCache.q !== q) {
+      _fuzzyQueryCache.q = q;
+      _fuzzyQueryCache.tokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _fuzzyQueryCache.digits = q.replace(/\D/g, "");
+    }
+    const queryTokens = _fuzzyQueryCache.tokens;
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+    let prevRow = _fuzzyBufPrev;
+    let currRow = _fuzzyBufCurr;
+    let prevPrevRow = _fuzzyBufPrevPrev;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14237,9 +14250,9 @@
         // Ensure buffers are large enough
         if (n + 1 > prevRow.length) {
             const size = Math.max(n + 1, prevRow.length * 2);
-            prevRow = new Uint16Array(size);
-            currRow = new Uint16Array(size);
-            prevPrevRow = new Uint16Array(size);
+            _fuzzyBufPrev = prevRow = new Uint16Array(size);
+            _fuzzyBufCurr = currRow = new Uint16Array(size);
+            _fuzzyBufPrevPrev = prevPrevRow = new Uint16Array(size);
         }
 
         // initialize 1st row
@@ -14284,7 +14297,7 @@
   function matchesSearch(a) {
     const q = state.busqueda; if (!q) return true;
     if (fuzzyMatch(q, a.nombre || "")) return true;
-    const digitos = q.replace(/\D/g, "");
+    const digitos = _fuzzyQueryCache.digits;
     return !!digitos && String(a.doc_id || "").includes(digitos);
   }
   function matchesFilter(a) {
