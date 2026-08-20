@@ -14959,7 +14959,7 @@
 
       const btn = document.createElement("button");
       btn.textContent = "Entendido";
-      btn.setAttribute("aria-label", "Cerrar advertencia de copia duplicada");
+      btn.setAttribute("aria-label", "Entendido, cerrar advertencia de copia duplicada");
       btn.style.cssText = "background:#f59e0b;color:#78350f !important;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;flex-shrink:0;";
       btn.onclick = () => { try { aviso.remove(); } catch (e) {} };
       aviso.appendChild(btn);
