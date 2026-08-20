@@ -14212,13 +14212,24 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
+  // ⚡ Bolt: Memoria reutilizable para fuzzyMatch (evita presión de GC en loops).
+  let _fuzzPrevRow = new Uint16Array(64);
+  let _fuzzCurrRow = new Uint16Array(64);
+  let _fuzzPrevPrevRow = new Uint16Array(64);
+  let _fuzzLastQ = null;
+  let _fuzzLastQTokens = null;
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    if (q !== _fuzzLastQ) {
+      _fuzzLastQTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _fuzzLastQ = q;
+    }
+    const queryTokens = _fuzzLastQTokens;
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+    let prevRow = _fuzzPrevRow;
+    let currRow = _fuzzCurrRow;
+    let prevPrevRow = _fuzzPrevPrevRow;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14237,9 +14248,9 @@
         // Ensure buffers are large enough
         if (n + 1 > prevRow.length) {
             const size = Math.max(n + 1, prevRow.length * 2);
-            prevRow = new Uint16Array(size);
-            currRow = new Uint16Array(size);
-            prevPrevRow = new Uint16Array(size);
+            prevRow = _fuzzPrevRow = new Uint16Array(size);
+            currRow = _fuzzCurrRow = new Uint16Array(size);
+            prevPrevRow = _fuzzPrevPrevRow = new Uint16Array(size);
         }
 
         // initialize 1st row
