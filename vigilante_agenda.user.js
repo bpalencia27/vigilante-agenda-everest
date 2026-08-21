@@ -6565,7 +6565,7 @@
       ov.setAttribute("role", "alertdialog");
       ov.setAttribute("aria-modal", "true");
       if (isLight()) ov.classList.add("light");
-      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
+      ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${escapeHtml(c)});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
           <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
           <button class="vgl-modal-ok">Entendido</button>
@@ -6789,7 +6789,7 @@
       // valor dinámico —el color del estado— entra como custom property inline (--tk) y como
       // var(--c-*) directo en cada pieza; las reglas de la hoja maestra lo consumen con var(),
       // de modo que el estilo computado es idéntico al de antes.
-      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${col})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
+      t.innerHTML = `<i class="vgl-toast-rail" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);background:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${escapeHtml(col)})"></i><div class="vgl-toast-ic" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${escapeHtml(col)})"></div><div class="vgl-toast-main"><div class="vgl-toast-title" style="--tk:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255);color:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${escapeHtml(col)})"></div><div class="vgl-toast-b"></div></div><span class="vgl-toast-x">×</span>`;
       t.querySelector(".vgl-toast-ic").textContent = icon;
       t.querySelector(".vgl-toast-title").textContent = title;
       t.querySelector(".vgl-toast-b").textContent = body;
@@ -11427,7 +11427,7 @@
     modal.setAttribute("aria-labelledby", "vgl-labs-title");
     if (isLight()) modal.classList.add("light");
 
-    const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
+    const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${encodeURIComponent(apt.doc_id)}`;
 
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
