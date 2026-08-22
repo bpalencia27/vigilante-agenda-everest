@@ -29444,7 +29444,15 @@ _vglOfrecerDeshacer(btn);
     "",
     "# REGLAS CLÍNICAS Y DE ESTILO",
     "- TODO EN MAYÚSCULAS; cifras arábigas; aquí SÍ se permiten siglas (MMHG, MG/DL, ML/MIN, KDIGO, CIE-10, HTA, DM2, RAC, LDL, CT, HDL, TG, ASCVD, CKD-EPI). Prosa de internista, frases fluidas; valores históricos entre paréntesis.",
-    "- Solo texto plano: sin markdown (asteriscos, negrillas, viñetas, bloques de código), sin enlaces, sin notas al pie, sin tokens técnicos, sin referencias a otros pacientes.",
+    // v17.6.3 — IA CORRUPTA (reporte del médico): la nota llegaba con basura markdown del
+    // modelo («====** COCKCROFT-») pese a que esta línea ya decía "sin markdown". La regla
+    // vaga no bastaba: la ESTRUCTURA de abajo usa '===== SECCIÓN: … =====' y '::', y el
+    // modelo generalizaba de más (negritas ** alrededor de las etiquetas, '=' sueltos,
+    // cabeceras malformadas). Se declara con nombre cuál es la ÚNICA decoración permitida
+    // y se prohíbe lo demás explícitamente — el mismo patrón positivo+negativo que ya
+    // corrigió labs/riesgo (v17.3.0) y la PA alucinada (v17.6.3). En paralelo, el borrador
+    // pasa por mtrLimpiarNotaIA (defensa en profundidad) antes de mostrarse.
+    "- Solo texto plano: sin markdown (asteriscos, negrillas, viñetas, bloques de código), sin enlaces, sin notas al pie, sin tokens técnicos, sin referencias a otros pacientes. La ÚNICA decoración permitida es la cabecera exacta '===== SECCIÓN: NOMBRE =====' y los '::' de ítem de la ESTRUCTURA: no pongas '**' ni '#' ni backticks alrededor de ninguna palabra, no subrayes títulos con '=' sueltos, y no inventes otras líneas de separación.",
     "- No incluyas potasio, sodio, ácido úrico ni hematocrito aislado en el plan de laboratorios salvo que el médico lo pida. Uroanálisis alterado: añade UROCULTIVO y evaluación de infección urinaria, sin antibiótico a ciegas. Metformina contraindicada: explica la suspensión y orienta a una alternativa segura; 'ajustar': explica el ajuste por TFG con vigilancia renal. Cada ajuste de dosis renal (alertas_dosis) se explica con su motivo y la TFG usada (DOAC y gabapentinoides por Cockcroft-Gault; el resto por CKD-EPI). Eventos mayores (Infarto, ACV) van en diagnósticos y justifican el riesgo. RAC alterado = daño de órgano blanco renal. Menciona cNoHDL junto al LDL indicando si está en meta.",
     "",
     "# ESTRUCTURA DE SALIDA (genera la nota completa de una vez, exactamente en este orden, en texto plano y mayúsculas)",
@@ -29768,6 +29776,36 @@ _vglOfrecerDeshacer(btn);
     return { enfermedadActual: "", analisis: t.trim() };
   }
 
+  // v17.6.3 — IA CORRUPTA (reporte del médico): la nota de «Análisis y plan» llegaba con
+  // basura markdown del modelo («====** COCKCROFT-»): negritas **, '=' sueltos y cabeceras
+  // malformadas, pese a la regla de texto plano del prompt. PURA: solo reordena el
+  // BORRADOR del modelo — normaliza la cabecera sancionada ('===== SECCIÓN: X ====='),
+  // elimina la decoración markdown (negritas, cursivas, backticks, enlaces, corridas de
+  // '=' basura) y colapsa líneas vacías. Nunca inventa ni borra contenido clínico: un
+  // texto ya plano sale idéntico, y el marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]
+  // (subrayados simples) sobrevive intacto para que el equipo del médico lo reemplace.
+  function mtrLimpiarNotaIA(texto) {
+    if (!texto) return "";
+    let s = String(texto);
+    // 1. Markdown inline: pares primero (**negrita**, __subrayado__, *cursiva*), luego
+    //    backticks, enlaces [x](url) y las sobras (asteriscos sueltos, '__' dobles).
+    s = s.replace(/\*\*([^*]*)\*\*/g, "$1").replace(/__([^_]*)__/g, "$1").replace(/\*([^*\n]*)\*/g, "$1");
+    s = s.replace(/`+/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*+/g, "").replace(/_{2,}/g, "");
+    // 2. Cabeceras: cualquier variante '=+ SECCIÓN:' (4, 5 o más '=') se normaliza a la
+    //    forma sancionada. Se hace ANTES de la limpieza de '=' de abajo para no comerse
+    //    la propia cabecera.
+    const lineas = s.split("\n").map((line) => {
+      const l = line;
+      if (/^=+\s*SECCI[ÓO]N\s*:/.test(l)) {
+        return "===== SECCIÓN: " + l.replace(/^=+\s*SECCI[ÓO]N\s*:/i, "").replace(/=+\s*$/, "").trim() + " =====";
+      }
+      // 3. Cualquier otra corrida de '=' es decoración basura del modelo, no contenido
+      //    clínico (un '=' suelto tipo 'PA = 128' se conserva: solo caen 2 o más juntos).
+      return l.replace(/={2,}/g, "");
+    });
+    return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   // ---------- CONECTOR (la única función que toca la red hacia Gemini) ----------
   // Clave por cabecera x-goog-api-key (no en la URL). Sin PHI en logs: solo estado y
   // longitud. Fallo seguro: cualquier problema devuelve { ok:false, motivo } y el
@@ -29903,6 +29941,13 @@ _vglOfrecerDeshacer(btn);
               else if (!r.ok && mtrEsModeloSobrecargado(status, cuerpoResp)) r.motivo = "todos los modelos están temporalmente saturados (alta demanda); intente de nuevo en un momento";
               else if (!r.ok && mtrEsModeloNoDisponible(status, cuerpoResp)) r.motivo = "ningún modelo configurado respondió correctamente (puede ser temporal; si persiste, revise Ajustes → Redacción IA)";
               if (r.ok) {
+                // v17.6.3 — IA CORRUPTA: el borrador de la nota clínica pasa por el
+                // saneador de markdown AQUÍ, en el conector, para que TODOS los caminos
+                // (Generar y Generar todo) entreguen texto limpio a la casilla de
+                // Análisis y plan. Solo decora; nunca toca el contenido clínico.
+                if (modo === "analisis_plan") {
+                  try { r.texto = mtrLimpiarNotaIA(r.texto); } catch (e) {}
+                }
                 _tel("ia.ok");
                 const sMod = uxClaveLimpia(modelo).toLowerCase();
                 _tel("ia.ok.model." + modelo);

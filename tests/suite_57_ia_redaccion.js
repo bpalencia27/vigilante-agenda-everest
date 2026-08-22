@@ -27,7 +27,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrPartirNota",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrPartirNota", "mtrLimpiarNotaIA",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -110,6 +110,38 @@ module.exports = {
       const hojaCon = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 128, paDiastolica: 80 } }, { hoyIso: "2026-08-17" });
       t.cierto(/Signos vitales: PA 128\/80 mmHg/.test(api.mtrHojaDeHechosTexto(hojaCon)),
         "con PA en el resumen, la hoja sí la muestra (el dato real no se pierde)");
+    });
+
+    // v17.6.3 — IA CORRUPTA (reporte del médico): la nota de «Análisis y plan» llegaba con
+    // basura markdown del modelo (p. ej. «====** COCKCROFT-»): negritas **, '=' sueltos y
+    // cabeceras malformadas pese a la regla de texto plano. Dos capas: (1) el prompt de la
+    // nota declara cuál es la ÚNICA decoración permitida (la cabecera '===== SECCIÓN: X
+    // =====' y los '::' de ítem) y prohíbe asteriscos/negritas/backticks por su nombre;
+    // (2) defensa en profundidad: mtrLimpiarNotaIA normaliza el borrador del modelo antes
+    // de que el médico lo vea o lo inserte — nunca inventa ni borra contenido clínico.
+    t.caso("mtrLimpiarNotaIA: el borrador de la nota sale limpio de markdown (el reporte «====** COCKCROFT-» no puede volver a pasar)", () => {
+      const sucio = "====** COCKCROFT-GAULT: 48.1 ML/MIN**\n:: FUNCIÓN RENAL: **EGFR (CKD-EPI 2021) 52 ML/MIN**\n===== SECCIÓN: REVISIÓN PARACLÍNICA =====";
+      const limpio = api.mtrLimpiarNotaIA(sucio);
+      t.cierto(limpio.indexOf("**") < 0, "sin asteriscos (las negritas del modelo fuera)");
+      t.cierto(limpio.split("\n").filter((l) => /={2,}/.test(l) && !/^===== SECCIÓN:/.test(l)).length === 0,
+        "sin '=' de decoración fuera de las cabeceras sancionadas");
+      t.cierto(/===== SECCIÓN: REVISIÓN PARACLÍNICA =====/.test(limpio), "la cabecera sancionada se conserva exacta");
+      t.cierto(/COCKCROFT-GAULT: 48.1 ML\/MIN/.test(limpio) && /EGFR \(CKD-EPI 2021\) 52 ML\/MIN/.test(limpio),
+        "y el contenido clínico queda íntegro (no se pierde dato)");
+    });
+
+    t.caso("mtrLimpiarNotaIA: no toca el marcador [ID]/[AÑO_MES] ni los '::' ni el texto plano", () => {
+      const bien = "#PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]\n===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA =====\n:: PATOLOGÍAS ACTIVAS: HTA\n:: META TERAPÉUTICA DE LDL: MENOR A 70";
+      const limpio = api.mtrLimpiarNotaIA(bien);
+      t.cierto(/^#PACIENTE_\[ID\]_#RCV_CONTROL_\[AÑO_MES\]$/m.test(limpio), "el marcador [ID]/[AÑO_MES] sobrevive (lo reemplaza el equipo del médico)");
+      t.cierto(/===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA =====/.test(limpio), "cabecera intacta");
+      t.cierto(/:: PATOLOGÍAS ACTIVAS: HTA/.test(limpio) && /:: META TERAPÉUTICA DE LDL: MENOR A 70/.test(limpio), "ítems '::' intactos");
+    });
+
+    t.caso("el prompt de la nota clínica declara la ÚNICA decoración permitida y prohíbe el markdown por su nombre", () => {
+      const nc = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { jsonV68: { version: "68" } });
+      t.cierto(/ÚNICA decoración permitida|'===== SECCIÓN: NOMBRE ====='|'::' de ítem/.test(nc.system), "la nota declara cuál es la ÚNICA decoración permitida (cabecera y '::')");
+      t.cierto(/no pongas '\*\*'|no subrayes títulos con '='|backticks/.test(nc.system), "y prohíbe asteriscos/negritas/subrayados/backticks explícitamente (positivo y negativo)");
     });
 
     t.caso("el prompt NUNCA lleva identificadores (solo la hoja desidentificada)", () => {

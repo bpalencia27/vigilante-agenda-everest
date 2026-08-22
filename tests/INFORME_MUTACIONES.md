@@ -501,3 +501,28 @@ negativo que la corrección de labs/riesgo de v17.3.0). Una mutación verificada
 | **PA alucinada** | `MTR_EA_SYS` regla 6: se elimina la cláusula «Si una cifra no está en NINGÚN bloque (p. ej. la presión arterial), NO la escribas — el texto queda sin esa cifra» (la cifra ausente vuelve a quedar sin condición) | `suite_57` | *Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa* (esperaba la condición «si la cifra no está…», obtuvo `false`) |
 
 Restaurada; el banco completo volvió a 2.298/2.298 tras la restauración.
+
+## v17.6.3 — 22-ago-2026 (la nota de «Análisis y plan» sale limpia de markdown basura)
+
+Banco antes (tras la PA alucinada): 2.298 comprobaciones · después: **2.301** (3 pruebas
+nuevas), cobertura **100 % (850/850)**.
+
+Reporte del médico: la nota de «Análisis y plan» llegaba con basura markdown del modelo
+(p. ej. «====** COCKCROFT-»): negritas `**`, `=` sueltos y cabeceras malformadas, pese a
+la regla de texto plano del prompt. Raíz: `MTR_NOTA_SYS` autoriza las cabeceras
+`===== SECCIÓN: X =====` y los `::` de ítem, y los modelos flash-lite generalizan de más
+(negritas alrededor de las etiquetas, decoración `=` suelta, cabeceras truncadas); el
+texto de la respuesta entraba SIN saneamiento a la casilla de la historia clínica. Se
+corrige en dos capas: (1) el prompt ahora declara por nombre cuál es la ÚNICA decoración
+permitida y prohíbe asteriscos/negritas/backticks (positivo + negativo); (2) defensa en
+profundidad: nueva función pura `mtrLimpiarNotaIA` (normaliza cabeceras a la forma
+sancionada, elimina `**`/`__`/backticks/enlaces y corridas de `=` basura; nunca inventa ni
+borra contenido clínico; el marcador `#PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]` sobrevive),
+aplicada en el conector `mtrGeminiRedactar` para `analisis_plan` (todos los caminos:
+Generar y Generar todo). Una mutación verificada:
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **markdown sucio** | `mtrLimpiarNotaIA`: la limpieza de corridas de `=` (`return l.replace(/={2,}/g, "")`) pasa a `return l` (la decoración `=` vuelve a pasar) | `suite_57` | *mtrLimpiarNotaIA: el borrador de la nota sale limpio de markdown (el reporte «====** COCKCROFT-» no puede volver a pasar)* (esperaba sin `=` fuera de cabeceras, obtuvo la línea sucia) |
+
+Restaurada; el banco completo volvió a 2.301/2.301 tras la restauración.
