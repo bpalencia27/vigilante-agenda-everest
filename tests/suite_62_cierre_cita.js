@@ -21,6 +21,7 @@ module.exports = {
   cubre: [
     "citaDetalleHoy", "abrirRecordatorioCita", "_cancelarCitaConPregunta",
     "mtrAvisoVencimiento", "mtrLabsPrimeroVencimientoInevitable", "_recordatorioLabHtml", "imprimirRecordatorioLab",
+    "mtrNotaTomaQuedoHtml", "mtrPegarNotaTomaQuedo",
     "_urlCorreoCita", "_correoValido", "enviarRecordatorioCitaPorCorreo",
     "mostrarPanelPostCita", "_celularValido", "reenviarSmsRecordatorio",
   ],
@@ -510,6 +511,31 @@ module.exports = {
       const c = cargar({ silencioso: true });
       const r = await c.api._cancelarCitaConPregunta({ doc_id: "555" });
       t.falso(r, "devuelve false: sin radicado no hay anulación que confirmar");
+    });
+
+    // v17.6.3 — BUG 3 (reporte del médico): la lista «toma quedó» del banner de
+    // agendamiento salía DUPLICADA o EN DESORDEN. Cada clic en un chip de día de toma
+    // hacía `innerHTML +=` sin quitar la nota anterior: el segundo clic apilaba otra
+    // nota (y el tercero, otra), en orden de clic, no de fecha. La nota vive ahora bajo
+    // un id FIJO y mtrPegarNotaTomaQuedo la REEMPLAZA a nivel de cadena: una sola nota,
+    // siempre con la fecha del último clic.
+    t.caso("v17.6.3 — la nota «toma quedó» se reemplaza, nunca se acumula (un clic por chip = una sola nota)", () => {
+      const isoA = "2026-08-24", ctrlA = "2026-08-31";
+      const isoB = "2026-08-26", ctrlB = "2026-09-02";
+      const primero = a.mtrPegarNotaTomaQuedo("", isoA, ctrlA);
+      t.cierto(primero.indexOf("La toma quedó el <b>" + isoA + "</b>") >= 0, "la primera nota trae la fecha del primer clic");
+      const segundo = a.mtrPegarNotaTomaQuedo(primero, isoB, ctrlB);
+      const apariciones = segundo.split("La toma quedó el").length - 1;
+      t.igual(apariciones, 1, "segundo clic: UNA sola nota — la anterior se reemplazó, no se sumó (era el duplicado)");
+      t.cierto(segundo.indexOf("La toma quedó el <b>" + isoB + "</b>") >= 0 && segundo.indexOf(isoA) < 0,
+        "y muestra la fecha del ÚLTIMO clic, no la acumulación en orden de clic (era el desorden)");
+      t.cierto(segundo.indexOf("vgl-agm-toma-nota") >= 0, "la nota conserva su id fijo (el contrato del reemplazo)");
+    });
+
+    t.caso("v17.6.3 — la nota «toma quedó» escapa el HTML y conserva el botón de mover control", () => {
+      const html = a.mtrNotaTomaQuedoHtml('2026-08-24"><script>', "2026-08-31");
+      t.cierto(html.indexOf("<script>") < 0, "sin inyección (la fecha se escapa)");
+      t.cierto(html.indexOf("vgl-agm-mover-ctrl") >= 0 && html.indexOf("Mover control a esa fecha") >= 0, "el botón de mover control sigue en la nota");
     });
 
   },

@@ -526,3 +526,25 @@ Generar y Generar todo). Una mutación verificada:
 | **markdown sucio** | `mtrLimpiarNotaIA`: la limpieza de corridas de `=` (`return l.replace(/={2,}/g, "")`) pasa a `return l` (la decoración `=` vuelve a pasar) | `suite_57` | *mtrLimpiarNotaIA: el borrador de la nota sale limpio de markdown (el reporte «====** COCKCROFT-» no puede volver a pasar)* (esperaba sin `=` fuera de cabeceras, obtuvo la línea sucia) |
 
 Restaurada; el banco completo volvió a 2.301/2.301 tras la restauración.
+
+## v17.6.3 — 22-ago-2026 (la lista «toma quedó» del agendamiento deja de duplicarse y desordenarse)
+
+Banco antes (tras el markdown sucio): 2.301 comprobaciones · después: **2.303** (2 pruebas
+nuevas), cobertura **100 % (852/852)**.
+
+Reporte del médico: en el agendamiento, la lista «toma quedó» del banner aparecía
+duplicada o en desorden. Raíz: el clic en un chip de día de toma hacía
+`_bannerSug.innerHTML += …` (línea 19470) SIN quitar la nota anterior — el segundo clic
+apilaba otra nota (y el tercero, otra), y las notas quedaban en orden de clic, no de
+fecha; el banner sí se repintaba fresco en el otro camino (`_pintarBannerSugerida`), pero
+esta rama (control ya elegido a mano) solo acumulaba. Se corrige con la nota bajo un id
+FIJO y una función pura `mtrPegarNotaTomaQuedo` que REEMPLAZA la nota anterior a nivel de
+cadena (una sola «toma quedó», siempre la del último clic); el handler del chip pasa de
+`+=` a esa función. El arnés no simula el DOM del modal, así que el contrato (id estable
++ reemplazo) se prueba en las funciones puras. Una mutación verificada:
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **toma quedó duplicada** | `mtrPegarNotaTomaQuedo`: el reemplazo por id (`bannerHtml.replace(re, "") + nota`) pasa a `bannerHtml + nota` (vuelve a acumular como el `innerHTML +=` viejo) | `suite_62` | *v17.6.3 — la nota «toma quedó» se reemplaza, nunca se acumula (un clic por chip = una sola nota)* (esperaba 1 aparición, obtuvo 2 — el duplicado) |
+
+Restaurada; el banco completo volvió a 2.303/2.303 tras la restauración.

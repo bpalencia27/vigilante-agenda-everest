@@ -19467,7 +19467,11 @@ _vglOfrecerDeshacer(btn);
                   _pintarBannerSugerida();
                   renderDayChips(0, 0, nuevoControl);
                 } else if (_bannerSug) {
-                  _bannerSug.innerHTML += `<div class="vgl-agm-sug-nota">🔗 La toma quedó el <b>${escapeHtml(item.iso)}</b>: el control ligado sería el <b>${escapeHtml(nuevoControl)}</b>. <button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-agm-mover-ctrl">Mover control a esa fecha</button></div>`;
+                  // v17.6.3 — BUG 3 (reporte del médico): antes era `innerHTML += …` y cada
+                  // clic en un chip de día apilaba OTRA nota «toma quedó» (duplicada y en
+                  // orden de clic, no de fecha). Ahora la nota se REEMPLAZA por id fijo:
+                  // una sola, siempre con la fecha del último clic (ver mtrPegarNotaTomaQuedo).
+                  _bannerSug.innerHTML = mtrPegarNotaTomaQuedo(_bannerSug.innerHTML, item.iso, nuevoControl);
                   const mv = _bannerSug.querySelector("#vgl-agm-mover-ctrl");
                   if (mv) mv.addEventListener("click", () => { _controlElegidoManual = false; _sugeridaControl.iso = nuevoControl; _pintarBannerSugerida(); renderDayChips(0, 0, nuevoControl); });
                 }
@@ -25224,6 +25228,29 @@ _vglOfrecerDeshacer(btn);
     } catch (e) {
       try { return mtrAjustarFechaHabil(mtrSumarDias(labIso, 7)); } catch (e2) { return null; }
     }
+  }
+
+  // v17.6.3 — BUG 3 (reporte del médico): la lista «toma quedó» del banner de
+  // agendamiento salía DUPLICADA o EN DESORDEN. El clic en un chip de día de toma hacía
+  // `_bannerSug.innerHTML += …` sin quitar la nota anterior: el segundo clic apilaba
+  // otra nota (y el tercero, otra), y las notas quedaban en orden de clic, no de fecha.
+  // La nota pasa a vivir bajo un id FIJO y el llamador la REEMPLAZA, nunca la acumula.
+  // PURAS (el arnés no simula el DOM del modal): el id estable y el HTML escapado son
+  // el contrato; mtrPegarNotaTomaQuedo hace el reemplazo a nivel de cadena.
+  const MTR_TOMA_QUEDO_ID = "vgl-agm-toma-nota";
+  function mtrNotaTomaQuedoHtml(iso, nuevoControl) {
+    const e = (typeof escapeHtml === "function") ? escapeHtml : (s) => String(s);
+    return '<div class="vgl-agm-sug-nota" id="' + MTR_TOMA_QUEDO_ID + '">🔗 La toma quedó el <b>' + e(iso)
+      + '</b>: el control ligado sería el <b>' + e(nuevoControl)
+      + '</b>. <button type="button" class="vgl-agm-btn sec vgl-sm" id="vgl-agm-mover-ctrl">Mover control a esa fecha</button></div>';
+  }
+  // Pega la nota en el banner REEMPLAZANDO la anterior (una sola «toma quedó» a la vez,
+  // siempre la del último clic). Sin nota previa, la pega al final del banner actual.
+  function mtrPegarNotaTomaQuedo(bannerHtml, iso, nuevoControl) {
+    const nota = mtrNotaTomaQuedoHtml(iso, nuevoControl);
+    if (typeof bannerHtml !== "string" || !bannerHtml) return nota;
+    const re = new RegExp('<div class="vgl-agm-sug-nota" id="' + MTR_TOMA_QUEDO_ID + '">[\\s\\S]*?</div>');
+    return bannerHtml.replace(re, "") + nota;
   }
 
   function mtrAjustarFechaHabil(iso) {
