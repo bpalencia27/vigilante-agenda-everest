@@ -14212,13 +14212,29 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
-  function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
-    const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
+  // Hoist array allocations and memoize tokenization for fuzzyMatch to avoid heavy GC churn during frequent search filtering
+  let _fuzzyPrevRow = new Uint16Array(64);
+  let _fuzzyCurrRow = new Uint16Array(64);
+  let _fuzzyPrevPrevRow = new Uint16Array(64);
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+  const _memoTokens = new Map();
+  function _getTokens(str) {
+    let t = _memoTokens.get(str);
+    if (!t) {
+      t = stripAccents(str || "").toLowerCase().split(/\s+/).filter(Boolean);
+      if (_memoTokens.size > 2000) _memoTokens.clear(); // simple eviction to prevent unbounded memory growth
+      _memoTokens.set(str, t);
+    }
+    return t;
+  }
+
+  function fuzzyMatch(q, text) {
+    const queryTokens = _getTokens(q);
+    const textTokens = _getTokens(text);
+
+    let prevRow = _fuzzyPrevRow;
+    let currRow = _fuzzyCurrRow;
+    let prevPrevRow = _fuzzyPrevPrevRow;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14240,6 +14256,9 @@
             prevRow = new Uint16Array(size);
             currRow = new Uint16Array(size);
             prevPrevRow = new Uint16Array(size);
+            _fuzzyPrevRow = prevRow;
+            _fuzzyCurrRow = currRow;
+            _fuzzyPrevPrevRow = prevPrevRow;
         }
 
         // initialize 1st row
