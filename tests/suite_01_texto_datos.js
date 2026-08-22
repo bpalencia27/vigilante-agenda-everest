@@ -6,7 +6,7 @@ module.exports = {
   cubre: ["limpio", "normalizeKey", "extractDoc", "isPending", "esSi", "stripAccents",
     "friendly", "activityLabel", "isExcludedActivity", "detalleTipoCervix", "escapeHtml",
     "csvCell", "clampNum", "unescXml", "colToIdx", "normName", "nameHasToken",
-    "sanitizePII", "debounceVgl", "fuzzyMatch"],
+    "sanitizePII", "debounceVgl", "fuzzyMatch", "_getTokens"],
 
   pruebas(t, api) {
     // ---------- limpio ----------
