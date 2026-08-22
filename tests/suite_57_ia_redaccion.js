@@ -83,6 +83,35 @@ module.exports = {
       t.cierto(/JSON DEL MOTOR RCV/.test(an.user), "Análisis y Plan sigue recibiendo el JSON del motor (labs/riesgo no desaparecieron del sistema, solo de Enfermedad Actual)");
     });
 
+    // v17.6.3 — IA ALUCINA (reporte del médico en consultorio): la Enfermedad Actual venía
+    // inventando la presión arterial (p. ej. «PA 110/70»). Raíz: las reglas 5 y 6 de
+    // MTR_EA_SYS pedían la PA como contenido OBLIGATORIO incondicional; cuando la TA no
+    // está documentada (o no se leyó del DOM), el modelo «rellenaba» con una cifra típica
+    // en vez de omitirla — exactamente lo que prohíbe la regla del proyecto (casilla vacía
+    // antes que dato inventado). La regla 6 ahora condiciona las cifras objetivas a que
+    // ESTÉN en los bloques entregados, la regla 5 condiciona el automonitoreo de PA, y
+    // PROHIBIDO nombra explícitamente que inventar cifras de signos vitales no se hace.
+    t.caso("Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa", () => {
+      const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
+      // Regla 6: las cifras objetivas se escriben SOLO si están en los bloques entregados.
+      t.cierto(/si (?:esa|la|una) cifra no est[áa]|no la escribas|om[íi]tela/i.test(ea.system),
+        "regla 6 condiciona las cifras objetivas a que estén en los hechos — la PA ausente se omite, no se inventa");
+      // Regla 5: el automonitoreo de PA solo se menciona si consta en los datos.
+      t.cierto(/automonitoreo de presión arterial[^\n]*SOLO si|si no consta[^\n]*no se menciona/i.test(ea.system),
+        "regla 5 condiciona el automonitoreo de PA a que el paciente lo reporte");
+      // PROHIBIDO: inventar la PA está prohibido por su nombre (patrón positivo+negativo).
+      t.cierto(/inventar[^\n]*presi[óo]n arterial|presi[óo]n arterial[^\n]*no est[áa]/i.test(ea.system),
+        "PROHIBIDO nombra explícitamente no inventar cifras de presión arterial");
+      // La hoja SIN PA no fabrica la línea de signos vitales (ya era así; queda anclado).
+      const hojaSin = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
+      t.cierto(api.mtrHojaDeHechosTexto(hojaSin).indexOf("Signos vitales") < 0,
+        "sin PA en el resumen, la hoja no muestra signos vitales (casilla vacía, no dato inventado)");
+      // Y con PA presente, la hoja SÍ la lleva (la omisión no se convierte en censura).
+      const hojaCon = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F", paSistolica: 128, paDiastolica: 80 } }, { hoyIso: "2026-08-17" });
+      t.cierto(/Signos vitales: PA 128\/80 mmHg/.test(api.mtrHojaDeHechosTexto(hojaCon)),
+        "con PA en el resumen, la hoja sí la muestra (el dato real no se pierde)");
+    });
+
     t.caso("el prompt NUNCA lleva identificadores (solo la hoja desidentificada)", () => {
       const r = {
         programa: "HTA",

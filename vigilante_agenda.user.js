@@ -29351,11 +29351,19 @@ _vglOfrecerDeshacer(btn);
     "2. Cronología: desde el último control o el inicio del cuadro actual, en orden temporal lógico.",
     "3. Semiotecnia de cada síntoma relevante: presencia O ausencia explícita (positivos Y negativos pertinentes); tiempo de evolución, intensidad (escala cuando aplique), localización, irradiación, carácter, factores modificadores. Cardinales según contexto: dolor torácico, disnea, palpitaciones, edema, síncope, cefalea, visión borrosa, poliuria, polidipsia, claudicación.",
     "4. Adherencia farmacológica objetiva. La compra de medicamentos por cuenta propia se registra como 'adquisición particular', SIN mencionar causas administrativas.",
-    "5. Estilos de vida CUANTIFICADOS: actividad física (modalidad, días/semana, min/sesión); dieta y restricciones (sodio/azúcares si aplica); tabaquismo (paquetes/año, o nunca fumador, o exfumador desde cuándo); alcohol (unidades/semana o abstinencia); automonitoreo de presión arterial (frecuencia y cifras).",
-    "6. Cifras objetivas con unidades DE HOY: signos vitales tomados en esta consulta o cifras de automonitoreo que el paciente refiere (presión arterial, glucometría capilar, peso, frecuencia cardíaca…). Nunca resultados de laboratorio ni paraclínicos de controles anteriores — esos van en Análisis y Plan, no en Enfermedad Actual.",
+    // v17.6.3 — IA ALUCINA (reporte del médico): la Enfermedad Actual inventaba la presión
+    // arterial (p. ej. «PA 110/70») cuando la TA no estaba documentada ni en los hechos.
+    // Raíz: esta regla y la 6 pedían la PA como contenido OBLIGATORIO incondicional y el
+    // modelo «rellenaba» el vacío con una cifra típica. Regla del proyecto: casilla vacía
+    // antes que dato inventado. El automonitoreo de PA ahora se condiciona a que conste en
+    // los bloques entregados; la regla 6 y PROHIBIDO refuerzan lo mismo en positivo y
+    // negativo (mismo patrón que la corrección de labs/riesgo de v17.3.0).
+    "5. Estilos de vida CUANTIFICADOS: actividad física (modalidad, días/semana, min/sesión); dieta y restricciones (sodio/azúcares si aplica); tabaquismo (paquetes/año, o nunca fumador, o exfumador desde cuándo); alcohol (unidades/semana o abstinencia); automonitoreo de presión arterial (frecuencia y cifras) SOLO si el paciente lo reporta en los bloques entregados — si no consta, no se menciona.",
+    "6. Cifras objetivas con unidades DE HOY: SOLO las que aparecen en los bloques entregados (HECHOS DEL PACIENTE, TEXTO YA REGISTRADO o DATOS APORTADOS): presión arterial, glucometría capilar, peso, frecuencia cardíaca… Si una cifra no está en NINGÚN bloque (p. ej. la presión arterial), NO la escribas — el texto queda sin esa cifra. Nunca resultados de laboratorio ni paraclínicos de controles anteriores — esos van en Análisis y Plan, no en Enfermedad Actual.",
     "",
     "# PROHIBIDO",
     "- Problemas administrativos: quejas de EPS, dispensación, autorizaciones, demoras.",
+    "- Inventar cifras de signos vitales: si la presión arterial u otra medida no aparece en los bloques entregados, jamás escribas un valor (ni 'se evidencia PA …', ni cifras de automonitoreo) — el texto simplemente no la menciona.",
     "- Siglas de diagnósticos o términos clínicos: escribe SIEMPRE en extenso (Hipertensión Arterial, Diabetes Mellitus Tipo 2, Enfermedad Renal Crónica, Infarto Agudo de Miocardio, Presión Arterial, Riesgo Cardiovascular, Frecuencia Cardíaca) — nunca HTA, DM2, ERC, IAM, TA, RCV, FC, FR.",
     "- Frases de relleno: 'paciente estable', 'asiste a control rutinario', 'sin cambios', 'evolución satisfactoria', 'en buen estado general'.",
     "- Viñetas, subtítulos, markdown, saludos, preámbulos, explicaciones o notas al pie.",

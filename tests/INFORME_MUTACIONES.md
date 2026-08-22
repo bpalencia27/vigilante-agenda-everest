@@ -479,3 +479,25 @@ La corrección del banner de "Labs primero" (nota que ahora explica el piso rela
 verificó con el motor real (hoy sábado 22-ago → toma lunes 24 → control lunes 31) y no
 tiene mutación propia: el texto exacto no está anclado por ninguna prueba existente y la
 nueva rama se cubre con la misma prueba de `pisoRelajado` de `suite_24`/`suite_62`.
+
+## v17.6.3 — 22-ago-2026 (la IA dejó de inventar la presión arterial en «Enfermedad actual»)
+
+Banco antes (cierre de v17.6.2): 2.297 comprobaciones · después: **2.298** (1 prueba
+nueva), cobertura **100 % (849/849)**.
+
+Reporte del médico en consultorio: la Enfermedad Actual venía con una PA inventada
+(p. ej. «PA 110/70»). Raíz: las reglas 5 y 6 de `MTR_EA_SYS` (el system prompt del modo
+`enfermedad_actual`) pedían la presión arterial como contenido OBLIGATORIO
+incondicional; cuando la TA no está documentada o no se leyó del DOM (`#taSistolicaAcostado`
+/ `#taDiastolicaAcostado` vacíos), la hoja de hechos queda sin PA (`mtrHojaDeHechosTexto`
+omite la línea) pero el modelo «rellenaba» el vacío con una cifra típica — violando la
+regla del proyecto (casilla vacía antes que dato inventado). Se condicionan las reglas 5
+y 6 a que el dato ESTÉ en los bloques entregados y PROHIBIDO gana una línea que nombra
+explícitamente que inventar cifras de signos vitales no se hace (mismo patrón positivo +
+negativo que la corrección de labs/riesgo de v17.3.0). Una mutación verificada:
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **PA alucinada** | `MTR_EA_SYS` regla 6: se elimina la cláusula «Si una cifra no está en NINGÚN bloque (p. ej. la presión arterial), NO la escribas — el texto queda sin esa cifra» (la cifra ausente vuelve a quedar sin condición) | `suite_57` | *Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa* (esperaba la condición «si la cifra no está…», obtuvo `false`) |
+
+Restaurada; el banco completo volvió a 2.298/2.298 tras la restauración.
