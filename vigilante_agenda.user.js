@@ -11427,7 +11427,7 @@
     modal.setAttribute("aria-labelledby", "vgl-labs-title");
     if (isLight()) modal.classList.add("light");
 
-    const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${apt.doc_id}`;
+    const atheneaUrl = `https://medicosviva1a.atheneasoluciones.com/Resultados/BusquedaPaciente#doc=${encodeURIComponent(apt.doc_id)}`;
 
     modal.innerHTML = `
       <div class="vgl-agm-card" style="max-width:760px">
@@ -13917,9 +13917,9 @@
     // inyecta UNA vez en vez de re-parsearse en cada apertura. Aquí solo queda HTML puro.
     el.sheet.innerHTML = sheetHeader("Resumen del turno") + `
       <div class="vgl-kpis">
-        <div class="vgl-kpi vgl-kpi-rojo"><div class="vgl-n">${hoy.fraude || 0}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
-        <div class="vgl-kpi vgl-kpi-ambar"><div class="vgl-n">${hoy.inasistencia || 0}</div><div class="vgl-l">INASISTENCIAS</div></div>
-        <div class="vgl-kpi vgl-kpi-verde"><div class="vgl-n">${hoy.atiempo || 0}</div><div class="vgl-l">A TIEMPO</div></div>
+        <div class="vgl-kpi vgl-kpi-rojo"><div class="vgl-n">${escapeHtml(hoy.fraude || 0)}</div><div class="vgl-l">EXTEMPORÁNEAS</div></div> <!-- [COPY-UX] -->
+        <div class="vgl-kpi vgl-kpi-ambar"><div class="vgl-n">${escapeHtml(hoy.inasistencia || 0)}</div><div class="vgl-l">INASISTENCIAS</div></div>
+        <div class="vgl-kpi vgl-kpi-verde"><div class="vgl-n">${escapeHtml(hoy.atiempo || 0)}</div><div class="vgl-l">A TIEMPO</div></div>
       </div>
       <div class="vgl-grp vgl-tile-chart">
         <div class="vgl-chart-cap"><span>ÚLTIMOS 7 DÍAS</span><span class="vgl-leg"><span class="vgl-leg-i"><i class="vgl-lg-verde"></i>A tiempo</span><span class="vgl-leg-i"><i class="vgl-lg-ambar"></i>Inasistencia</span><span class="vgl-leg-i"><i class="vgl-lg-rojo"></i>Extemporánea</span></span></div> <!-- [UI-CSS] -->
