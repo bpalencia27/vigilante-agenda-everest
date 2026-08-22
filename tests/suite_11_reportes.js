@@ -3,7 +3,7 @@
 //
 //  Cubre el circuito completo: repUrl/repOn (interruptores), repPost
 //  (el POST real vía GM_xmlhttpRequest con validación anti-login de
-//  Google), repQLoad/repQSave (la cola persistida en GM, máx. 30),
+//  Google), repQLoad/repQSave (la cola persistida en GM, máx. 80 desde v17.1.0),
 //  repFlush (entrega en orden, tope 10 por tanda, conserva ante fallo),
 //  reportar (arma la fila), repDailySummary (candado diario) y
 //  reportarFraude (tope 20/día con reinicio por fecha).
@@ -158,15 +158,17 @@ module.exports = {
       t.igual(JSON.parse(c.env.gm["vgl_repq"]), [{ evento: "primero" }, { evento: "segundo" }]);
     });
 
-    t.caso("repQSave: recorta la cola a las últimas 30 entradas", () => {
+    // v17.1.0 (#148) — el tope pasó de 30 a 80: con el reporte de errores por huella ya no
+    // son 5 filas al día sino hasta 40, y una cola de 30 las expulsaba antes de salir.
+    t.caso("repQSave: recorta la cola a las últimas 80 entradas", () => {
       const c = cargar({ silencioso: true });
-      const treintaYCinco = Array.from({ length: 35 }, (_, i) => ({ evento: "e" + i }));
-      c.env.gm["vgl_repq"] = JSON.stringify(treintaYCinco);
+      const ochentaYCinco = Array.from({ length: 85 }, (_, i) => ({ evento: "e" + i }));
+      c.env.gm["vgl_repq"] = JSON.stringify(ochentaYCinco);
       c.api.repQLoad(); c.api.repQSave();
       const guardada = JSON.parse(c.env.gm["vgl_repq"]);
-      t.igual(guardada.length, 30, "la cola persistida no pasa de 30");
+      t.igual(guardada.length, 80, "la cola persistida no pasa de 80");
       t.igual(guardada[0].evento, "e5", "se descartan las MÁS VIEJAS");
-      t.igual(guardada[29].evento, "e34");
+      t.igual(guardada[79].evento, "e84");
     });
 
     // ---------- repFlush ----------

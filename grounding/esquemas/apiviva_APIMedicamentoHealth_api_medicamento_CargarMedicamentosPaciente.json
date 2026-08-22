@@ -1,0 +1,120 @@
+{
+  "metodo": "POST",
+  "ruta": "/apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente",
+  "parametros": [],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaPeticion": {
+    "pacienteId": {
+      "tipo": "number",
+      "ejemplo": 636997
+    },
+    "fechaInicial": "string(15 car)",
+    "fechaFinal": "string(15 car)",
+    "estado": "string(0 car)"
+  },
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 3,
+    "de": {
+      "id": "null",
+      "tipo": "string(11 car)",
+      "agrupador": "string(25 dígitos)",
+      "usuario": {
+        "id": {
+          "tipo": "number",
+          "ejemplo": 0
+        },
+        "consulta_ID": "number",
+        "tipoIdentificacion": "string(11 car)",
+        "identificacion": "string(11 car) [OCULTO]",
+        "finalidad": "null",
+        "dx": "null",
+        "especialidad": {
+          "tipo": "string(16 car)",
+          "ejemplo": "MEDICINA GENERAL"
+        },
+        "paciente": "null"
+      },
+      "remisor": {
+        "id": {
+          "tipo": "number",
+          "ejemplo": 0
+        },
+        "numero": {
+          "tipo": "number",
+          "ejemplo": 0
+        },
+        "descripcion": {
+          "tipo": "string(33 car)",
+          "ejemplo": "RICMAR CHIQUINQUIRA PARRA QUEVEDO"
+        },
+        "codigo": {
+          "tipo": "string(3 dígitos)",
+          "ejemplo": "900"
+        }
+      },
+      "estado": {
+        "tipo": "string(9 car)",
+        "ejemplo": "PENDIENTE"
+      },
+      "fechaCreacion": "string(fecha)",
+      "fechaVencimiento": "null",
+      "detalles": {
+        "tipo": "array",
+        "elementos": 6,
+        "de": {
+          "id": {
+            "tipo": "number",
+            "ejemplo": 2209
+          },
+          "codigo": {
+            "tipo": "string(6 dígitos)",
+            "ejemplo": "603423"
+          },
+          "descripcion": "string(75 car)",
+          "cantidadMedicamento": {
+            "tipo": "string(2 dígitos)",
+            "ejemplo": "30"
+          },
+          "cantidadDias": {
+            "tipo": "string(2 dígitos)",
+            "ejemplo": "30"
+          },
+          "dosificacion": {
+            "tipo": "string(1 dígitos)",
+            "ejemplo": "1"
+          },
+          "presentacion": "string(20 car)",
+          "pf": {
+            "tipo": "boolean",
+            "ejemplo": true
+          },
+          "posfechadoInicial": "string(fecha)",
+          "posfechadoFinal": "string(fecha)",
+          "url": "string(0 car)"
+        }
+      },
+      "cantMeses": {
+        "tipo": "number",
+        "ejemplo": 3
+      },
+      "urls": {
+        "tipo": "array",
+        "elementos": 3,
+        "de": {
+          "url": "string(96 car)",
+          "mes": {
+            "tipo": "number",
+            "ejemplo": 1
+          },
+          "grupo": "string(25 dígitos)"
+        }
+      }
+    }
+  }
+}

@@ -22,6 +22,7 @@ module.exports = {
     "_numeroEstricto", "_reglaExamenAplicable", "_reglasDeExamen",
     "_unidadOficialDeExamen", "_plausibilidadOficial",
     "apiHcValidacionExamenCronicos", "_reglasParaLabKey",
+    "_labKeyDesdeCodigoExamen", "_casillasObligatoriasVacias",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -404,5 +405,80 @@ module.exports = {
       t.igual(llamadas, 2, "otra cita SÍ dispara consulta nueva");
       t.igual(b[0].codigoExamen, "222", "y devuelve lo suyo, no lo de la cita anterior");
     });
+
+    // =====================================================================
+    //  T4 — Casillas obligatorias vacías (swRequerido)
+    // =====================================================================
+    t.caso("_labKeyDesdeCodigoExamen: mapeo inverso fiel a LAB_KEY_A_EXAMEN_EVEREST", () => {
+      t.igual(api._labKeyDesdeCodigoExamen("CREATININA"), "CREATININA");
+      t.igual(api._labKeyDesdeCodigoExamen("HEMOGLOBINA"), "HEMOGLOBINA");
+      t.igual(api._labKeyDesdeCodigoExamen("HBA1C"), "HBA1C");
+      t.igual(api._labKeyDesdeCodigoExamen("FOSFORO_SERICO"), "FOSFORO");
+      t.igual(api._labKeyDesdeCodigoExamen("ALBUMINA_SERICA"), "ALBUMINA");
+      t.igual(api._labKeyDesdeCodigoExamen("GLUCOSA_SUERO"), "GLUCOSA");
+      t.igual(api._labKeyDesdeCodigoExamen("RELACION_ALBUMINURIA_CREATININA"), "RAC");
+      t.igual(api._labKeyDesdeCodigoExamen("HDL"), "COLESTEROL_HDL");
+      t.igual(api._labKeyDesdeCodigoExamen("LDL"), "COLESTEROL_LDL");
+      t.igual(api._labKeyDesdeCodigoExamen("COLESTEROL_TOTAL"), "COLESTEROL_TOTAL");
+      t.igual(api._labKeyDesdeCodigoExamen("TRIGLICERIDOS"), "TRIGLICERIDOS");
+
+      // No mapeados (los 4 que swRequerido tiene en la tabla pero no tienen casilla en el script):
+      t.igual(api._labKeyDesdeCodigoExamen("CREATINURIA"), null, "CREATINURIA no mapeada -> null");
+      t.igual(api._labKeyDesdeCodigoExamen("ACIDO_URICO"), null, "ACIDO_URICO no mapeado -> null");
+      t.igual(api._labKeyDesdeCodigoExamen("CALCIO_SERICO"), null, "CALCIO_SERICO no mapeado -> null");
+      t.igual(api._labKeyDesdeCodigoExamen("POTASIO_SERICO"), null, "POTASIO_SERICO no mapeado -> null");
+      t.igual(api._labKeyDesdeCodigoExamen("DESCONOCIDO"), null);
+      t.igual(api._labKeyDesdeCodigoExamen(""), null);
+      t.igual(api._labKeyDesdeCodigoExamen(null), null);
+    });
+
+    t.caso("_casillasObligatoriasVacias: detecta solo obligatorias que existen en DOM y están vacías", () => {
+      const c = cargar({ silencioso: true });
+      const doc = c.env.win.document;
+
+      // Crear casillas en DOM simulado:
+      // resultadoCreatinina vacía y requerida (debe reportarse)
+      const inputCreat = doc.createElement("input");
+      inputCreat.id = "resultadoCreatinina";
+      inputCreat.value = "";
+      doc.body.appendChild(inputCreat);
+
+      // resultadoHemoglobina con valor y requerida (NO debe reportarse)
+      const inputHb = doc.createElement("input");
+      inputHb.id = "resultadoHemoglobina";
+      inputHb.value = "13.2";
+      doc.body.appendChild(inputHb);
+
+      // resultadoGlicemia vacía pero NO requerida (swRequerido: false -> NO debe reportarse)
+      const inputGlu = doc.createElement("input");
+      inputGlu.id = "resultadoGlicemia";
+      inputGlu.value = "";
+      doc.body.appendChild(inputGlu);
+
+      // resultadoHBA1C NO se agrega al DOM (no existe en DOM -> NO debe reportarse)
+
+      // Tabla de validación con 9 requeridos
+      const tabla = [
+        { codigoExamen: "CREATININA", swRequerido: true },
+        { codigoExamen: "HEMOGLOBINA", swRequerido: true },
+        { codigoExamen: "HBA1C", swRequerido: true },
+        { codigoExamen: "CREATINURIA", swRequerido: true },      // no mapeado
+        { codigoExamen: "ACIDO_URICO", swRequerido: true },       // no mapeado
+        { codigoExamen: "GLUCOSA_SUERO", swRequerido: false },   // no requerido
+      ];
+
+      const vacias = c.api._casillasObligatoriasVacias(tabla, {});
+      t.igual(vacias.length, 1, "solo debe reportar la creatinina");
+      t.igual(vacias[0].codigoExamen, "CREATININA");
+      t.igual(vacias[0].key, "CREATININA");
+      t.igual(vacias[0].resultId, "resultadoCreatinina");
+    });
+
+    t.caso("_casillasObligatoriasVacias: ante tabla vacía o inválida devuelve []", () => {
+      t.igual(api._casillasObligatoriasVacias(null), []);
+      t.igual(api._casillasObligatoriasVacias([]), []);
+      t.igual(api._casillasObligatoriasVacias("no es arreglo"), []);
+    });
   },
 };
+

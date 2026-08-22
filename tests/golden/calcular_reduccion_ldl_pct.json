@@ -1,0 +1,351 @@
+{
+ "funcion": "calcular_reduccion_ldl_pct",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "lipidos",
+ "vectores": [
+  {
+   "entrada": [
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    55
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    70
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    100
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    130
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    190
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    55
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    70
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    100
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    130
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    190
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    70,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    70,
+    0
+   ],
+   "salida": 100.0
+  },
+  {
+   "entrada": [
+    70,
+    55
+   ],
+   "salida": 21.4
+  },
+  {
+   "entrada": [
+    70,
+    70
+   ],
+   "salida": 0.0
+  },
+  {
+   "entrada": [
+    70,
+    100
+   ],
+   "salida": -42.9
+  },
+  {
+   "entrada": [
+    70,
+    130
+   ],
+   "salida": -85.7
+  },
+  {
+   "entrada": [
+    70,
+    190
+   ],
+   "salida": -171.4
+  },
+  {
+   "entrada": [
+    100,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    100,
+    0
+   ],
+   "salida": 100.0
+  },
+  {
+   "entrada": [
+    100,
+    55
+   ],
+   "salida": 45.0
+  },
+  {
+   "entrada": [
+    100,
+    70
+   ],
+   "salida": 30.0
+  },
+  {
+   "entrada": [
+    100,
+    100
+   ],
+   "salida": 0.0
+  },
+  {
+   "entrada": [
+    100,
+    130
+   ],
+   "salida": -30.0
+  },
+  {
+   "entrada": [
+    100,
+    190
+   ],
+   "salida": -90.0
+  },
+  {
+   "entrada": [
+    130,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    130,
+    0
+   ],
+   "salida": 100.0
+  },
+  {
+   "entrada": [
+    130,
+    55
+   ],
+   "salida": 57.7
+  },
+  {
+   "entrada": [
+    130,
+    70
+   ],
+   "salida": 46.2
+  },
+  {
+   "entrada": [
+    130,
+    100
+   ],
+   "salida": 23.1
+  },
+  {
+   "entrada": [
+    130,
+    130
+   ],
+   "salida": 0.0
+  },
+  {
+   "entrada": [
+    130,
+    190
+   ],
+   "salida": -46.2
+  },
+  {
+   "entrada": [
+    160,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    160,
+    0
+   ],
+   "salida": 100.0
+  },
+  {
+   "entrada": [
+    160,
+    55
+   ],
+   "salida": 65.6
+  },
+  {
+   "entrada": [
+    160,
+    70
+   ],
+   "salida": 56.2
+  },
+  {
+   "entrada": [
+    160,
+    100
+   ],
+   "salida": 37.5
+  },
+  {
+   "entrada": [
+    160,
+    130
+   ],
+   "salida": 18.8
+  },
+  {
+   "entrada": [
+    160,
+    190
+   ],
+   "salida": -18.8
+  },
+  {
+   "entrada": [
+    190,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    190,
+    0
+   ],
+   "salida": 100.0
+  },
+  {
+   "entrada": [
+    190,
+    55
+   ],
+   "salida": 71.1
+  },
+  {
+   "entrada": [
+    190,
+    70
+   ],
+   "salida": 63.2
+  },
+  {
+   "entrada": [
+    190,
+    100
+   ],
+   "salida": 47.4
+  },
+  {
+   "entrada": [
+    190,
+    130
+   ],
+   "salida": 31.6
+  },
+  {
+   "entrada": [
+    190,
+    190
+   ],
+   "salida": 0.0
+  }
+ ]
+}

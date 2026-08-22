@@ -14,7 +14,7 @@
 //   · perfilPaciente: Reconocimiento de sigla HTA pura
 //   · injectLabsIntoCronicos & _matchUroComponente: Blindaje de Uroanálisis
 //   · _atheneaCedulaCoincide & _fechaDesdeNumeroSolicitud: Extracción y límites
-//   · _findLabField, _findHbA1cFields & _conductaBuscarYAgregarExamen: DOM bounds
+//   · _findLabField & _findHbA1cFields: DOM bounds
 //   · apiAccesoObtenerLaboratoriosAnnar & apiAccesoObtenerLaboratoriosCiti
 // =====================================================================
 
@@ -24,7 +24,6 @@ const path = require("path");
 module.exports = {
   nombre: "Cobertura de Riesgo ALTO y Resistencia a Mutantes (M4)",
   cubre: [
-    "_pymYaOrdenadoHoyDesdeElScript",
     "_valorCrudoLab",
     "_esSexoFemenino",
     "apiAccesoObtenerDemograficos",
@@ -47,7 +46,6 @@ module.exports = {
     "_matchUroComponente",
     "_agruparUroanalisisParaTabla",
     "_findUroInput",
-    "_marcarUroanalisisSi",
     "_atheneaCedulaCoincide",
     "_fechaDesdeNumeroSolicitud",
     "_findLabField",
@@ -55,7 +53,6 @@ module.exports = {
     "_extractFechaSolicitudTopLevel",
     "_extractAtheneaFecha",
     "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen",
     "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti",
     "extractPacienteAbierto"
@@ -63,61 +60,12 @@ module.exports = {
 
   async pruebas(t, api, env, cargar) {
 
-    // -----------------------------------------------------------------
-    // 1. _pymYaOrdenadoHoyDesdeElScript (Deduplicación de Órdenes PyM)
-    // -----------------------------------------------------------------
-    t.caso("M4-PYM-1: _pymYaOrdenadoHoyDesdeElScript retorna array vacío con entradas nulas o vacías", () => {
-      t.igual(api._pymYaOrdenadoHoyDesdeElScript(null), []);
-      t.igual(api._pymYaOrdenadoHoyDesdeElScript(undefined), []);
-      t.igual(api._pymYaOrdenadoHoyDesdeElScript(""), []);
-      t.igual(api._pymYaOrdenadoHoyDesdeElScript("paciente_inexistente_9999"), []);
-      t.cierto(Array.isArray(api._pymYaOrdenadoHoyDesdeElScript("12345")));
-    });
-
-    t.caso("M4-PYM-2: _pymYaOrdenadoHoyDesdeElScript extrae lista real de actividades ordenadas hoy (MUT-ORD-039, MUT-ORD-040)", () => {
-      const c = cargar({ silencioso: true });
-      const hoy = c.api.todayStamp();
-
-      c.env.storage.setItem("vgl_proc_today", JSON.stringify({
-        dia: hoy,
-        citas: [],
-        ordenes: [],
-        ordenesDetalle: {
-          "10102020": { actividades: ["CITOLOGIA", "MAMOGRAFIA"], ts: Date.now() },
-          "30304040": { actividades: "NO_ES_UN_ARRAY", ts: Date.now() },
-          "40405050": { actividades: { "0": "CITOLOGIA" }, ts: Date.now() }, // MUT-ORD-039: objeto no array
-          "50506060": { actividades: [], ts: Date.now() },
-          "70708080": { actividades: ["VIH"], items: ["OTRO"], ts: Date.now() } // MUT-ORD-040: .actividades vs .items
-        }
-      }));
-
-      // Paciente con actividades válidas
-      const act1 = c.api._pymYaOrdenadoHoyDesdeElScript("10102020");
-      t.igual(act1, ["CITOLOGIA", "MAMOGRAFIA"]);
-      t.cierto(act1.includes("CITOLOGIA"));
-      t.cierto(act1.includes("MAMOGRAFIA"));
-
-      // Paciente con llave numérica (coerción de tipo a string)
-      const actNum = c.api._pymYaOrdenadoHoyDesdeElScript(10102020);
-      t.igual(actNum, ["CITOLOGIA", "MAMOGRAFIA"]);
-
-      // Paciente con formato legado no-array string -> protección clínica: retorna []
-      const actLeg = c.api._pymYaOrdenadoHoyDesdeElScript("30304040");
-      t.igual(actLeg, [], "si actividades no es array debe retornar [] sin descontar nada");
-
-      // Paciente con formato objeto plano no-array (MUT-ORD-039) -> retorna []
-      const actObj = c.api._pymYaOrdenadoHoyDesdeElScript("40405050");
-      t.igual(actObj, [], "objeto no-array debe retornar []");
-      t.cierto(Array.isArray(actObj));
-
-      // Paciente con array vacío
-      const actVac = c.api._pymYaOrdenadoHoyDesdeElScript("50506060");
-      t.igual(actVac, []);
-
-      // Paciente con propiedad .actividades y .items simultáneamente (MUT-ORD-040)
-      const actSingle = c.api._pymYaOrdenadoHoyDesdeElScript("70708080");
-      t.igual(actSingle, ["VIH"], "debe leer estrictamente .actividades y no .items");
-    });
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró la sección "1.
+    // _pymYaOrdenadoHoyDesdeElScript" — esa función se borró junto al resto del bloque T7
+    // (código muerto, ver CHANGELOG). La misma lógica de blindaje (actividades no-array,
+    // objeto plano, .actividades vs .items) sigue viva y cubierta en la función hermana
+    // `pymPendientesRestantes` (que SÍ tiene llamador real, en checkAvisoUniversal), con sus
+    // propias pruebas en tests/suite_21_v12_4_pym_horas.js.
 
     // -----------------------------------------------------------------
     // 2. _valorCrudoLab (Preservación de Valores Crudos y Cero Legítimo)
@@ -784,31 +732,7 @@ module.exports = {
       t.igual(resHb.resultEl.getAttribute("max"), "30", "debe seleccionar estrictamente el campo con max='30'");
     });
 
-    await t.casoAsync("M4-DOM-2: _conductaBuscarYAgregarExamen con canonización de texto (MUT-CLIN-001)", async () => {
-      const c = cargar({ silencioso: true });
-      let liClicked = false;
-      let btnClicked = false;
-      const liElem = {
-        textContent: "  HEMOGLOBINA GLICOSILADA  ",
-        click: () => { liClicked = true; }
-      };
-      const btnElem = {
-        textContent: " AGREGAR ",
-        disabled: false,
-        click: () => { btnClicked = true; }
-      };
-
-      c.env.doc.querySelectorAll = (sel) => {
-        if (sel === "li") return [liElem];
-        if (sel === "button") return [btnElem];
-        return [];
-      };
-
-      const agregado = await c.api._conductaBuscarYAgregarExamen("hemoglobina glicosilada");
-      t.cierto(agregado, "debe casar texto canonicalizado y agregar examen");
-      t.cierto(liClicked, "debe clickear el <li> del examen");
-      t.cierto(btnClicked, "debe clickear el botón AGREGAR");
-    });
+    // v15.7.0 — M4-DOM-2 se retiró con la maquinaria de clic-en-Conducta (MUT-CLIN-001 ya no aplica).
 
     // -----------------------------------------------------------------
     // 15. Tolerancia a Fallos en APIs Annar y Citi (MUT-CLIN-097, MUT-CLIN-102)

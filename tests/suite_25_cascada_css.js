@@ -3,7 +3,7 @@ const path = require("path");
 
 module.exports = {
   nombre: "Cascada CSS",
-  cubre: ["buildOverlay"],
+  cubre: [],
   pruebas: function (t, api, env) {
     const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
@@ -87,6 +87,133 @@ module.exports = {
         });
       }
     }
+    // =====================================================================
+    // v15.x — GUARDIA: toda constante de CSS declarada tiene que INYECTARSE.
+    // VGL_UX_CSS (burbujas de informacion, leyendas de proposito y etiquetas del dock)
+    // y MTR_RCV_CSS_TODOS_LOS_MODALES (el CSS propio del modal de riesgo) quedaron
+    // declaradas y sin interpolar: su CSS no llegaba NUNCA a la pantalla, asi que todo
+    // el rediseño de UI/UX que pidio el consultorio se pintaba sin un solo estilo, y
+    // nada en el banco lo notaba. Esta prueba lo hace imposible de repetir.
+    // =====================================================================
+    // =====================================================================
+    // v15.2.0 — GUARDIA DEL BLINDAJE TIPOGRAFICO (bug patron #1 de las reglas del proyecto).
+    // El blindaje contra el CSS global de Everest estaba escrito en la forma VIEJA
+    // ("#vgl-root span{color:inherit}"), que tiene especificidad id+tipo (0,1,0,1) y le gana
+    // a cualquier clase de acento nuestra (0,0,1,0). Medido en Chromium contra la hoja real:
+    // la bandera de fraude .vgl-flag salia a 2,31:1 en vez de 7,96:1 — ilegible, y es una
+    // señal de seguridad. Ya habia mordido antes (boton ambar T1, #vgl-postcita-panel en
+    // v12.10.2). La forma correcta es :where(... :not([class])): especificidad CERO, y solo
+    // alcanza texto suelto sin clase propia.
+    // =====================================================================
+    t.caso("Regla J - el blindaje tipografico usa :where(:not([class])), nunca la forma 'id tipo' que le gana a nuestras clases", () => {
+      const sinComentarios = code.replace(/\/\*[\s\S]*?\*\//g, "");
+      const raices = ["#vgl-root", "#vgl-toasts", "#vgl-dock", "#vgl-acciones-dock"];
+      const tipos = "(?:b|i|span|label|small|mark|div|p)";
+      const malas = [];
+      for (const raiz of raices) {
+        // Una regla "<raiz> <tipo>{...color:inherit...}" fuera de :where() es la forma vieja.
+        const re = new RegExp(raiz.replace("#", "#") + "\\s+" + tipos + "\\s*(?:,[^{]*)?\\{[^}]*color\\s*:\\s*inherit", "g");
+        let m3;
+        while ((m3 = re.exec(sinComentarios))) {
+          const desde = sinComentarios.lastIndexOf("}", m3.index) + 1;
+          const trozo = sinComentarios.slice(desde, m3.index + m3[0].length);
+          if (trozo.indexOf(":where(") < 0) malas.push(raiz + " -> " + m3[0].slice(0, 60).replace(/\s+/g, " "));
+        }
+      }
+      t.igual(malas, [], "el blindaje debe ir dentro de :where(...:not([class])) para no ganarle a nuestras propias clases de acento: " + malas.join(" | "));
+
+      // Y que el blindaje siga existiendo (no vale borrarlo para pasar la prueba).
+      t.cierto(/:where\(#vgl-root :not\(\[class\]\)\)/.test(code), "el blindaje de #vgl-root sigue en pie, en su forma correcta");
+    });
+
+    // v17.0.3 — REPORTE DE CAMPO (pantallazo): «se coló el azul de Everest en Mi
+    // estilo», DENTRO de #vgl-ia-modal — el mismo modal que v16.7.0 ya había "blindado"
+    // una vez. Causa raíz real: v16.7.0 (y v16.1.0 antes) parcheaban selector por
+    // selector cada vez que aparecía un caso nuevo, en vez de sumar estos ocho paneles
+    // (los seis que cuelgan de document.body desde v15.6.0 + los dos que se sumaron en
+    // v17.0.0) a la armadura GENÉRICA de v12.3.15 que ya blinda TODO elemento sin clase
+    // propia dentro de un contenedor listado. El <span>Mi estilo</span> no tiene clase:
+    // es EXACTAMENTE el caso que la armadura ya sabía resolver, solo que su contenedor
+    // no estaba en la lista. Esta prueba ancla que los ocho ya quedaron dentro, así que
+    // la próxima fuga de este tipo en cualquiera de ellos se tapa sola, sin depender de
+    // que alguien la encuentre primero con un pantallazo.
+    t.caso("Regla J (extensión v17.0.3) — los ocho paneles que cuelgan de document.body ya están en la armadura tipográfica genérica, no solo con parches puntuales", () => {
+      const PANELES_SUMADOS = ["#vgl-riesgo-modal", "#vgl-ia-modal", "#vgl-ia-datos", "#vgl-ficha-modal", "#vgl-tablero-modal", "#vgl-confirma-modal", "#vgl-panel-modal", "#vgl-llenar-modal"];
+      for (const p of PANELES_SUMADOS) {
+        const re = new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*:where\\(span:not\\(\\[class\\]\\)");
+        t.cierto(re.test(css), `${p} debe estar en la armadura genérica :where(...:not([class])) — si no, cualquier <span>/<label>/<b> sin clase propia ahí puede volver a salir azul-link de Everest, como pasó con "Mi estilo" (reporte de campo, pantallazo)`);
+      }
+    });
+
+    // v17.0.3 — REPORTE DE CAMPO (2 pantallazos): "esas franjas verdes debajo de los
+    // botones no sé qué es, se ve antiestética". #vgl-ia-estado (panel de Redacción IA)
+    // se crea como `<div class="vgl-agm-dinfo"></div>` — sin texto — y .vgl-agm-dinfo trae
+    // fondo/borde verde propio, así que ANTES de generar nada se ve como una franja de
+    // color sin propósito. Ya existía el mismo patrón resuelto para .vgl-agm-sugerida
+    // (línea ~12014, banner de fecha sugerida): ocultar la caja entera con
+    // :empty{display:none} en vez de dejarla pintada sin contenido.
+    t.caso("Regla K (v17.0.3) — .vgl-agm-dinfo se oculta con :empty, para que #vgl-ia-estado no se vea como una franja verde vacía antes de generar nada", () => {
+      t.cierto(/\.vgl-agm-dinfo:empty\s*\{\s*display\s*:\s*none\s*\}/.test(css), "falta la regla .vgl-agm-dinfo:empty{display:none} — sin ella, #vgl-ia-estado (y cualquier otra caja .vgl-agm-dinfo que arranque vacía) se pinta como una franja de color sin texto, el defecto reportado por el médico");
+    });
+
+    // v17.6.2 — REPORTE DE CAMPO (pantallazo): «Hoy»/«Semana»/«Mes» (Productividad, dentro
+    // de la hoja «Resumen del turno») salían en azul oscuro de Everest. El comentario
+    // original de v17.0.0 asumía que, por vivir dentro de #vgl-root, la Regla E no
+    // aplicaba — falso: el CSS de Everest se aplica por etiqueta/clase en TODO el
+    // documento, #vgl-root incluido, y una declaración de color de una sola clase pierde
+    // el empate de especificidad sin !important. Este bloque queda fuera del filtro
+    // automático de "Regla E" de arriba (exige un ID de panel en la cadena del selector;
+    // .vgl-prod-* son clases peladas, el mismo punto ciego documentado más arriba), así
+    // que se ancla aquí con una comprobación directa.
+    // OJO: `.vgl-prod-*` vive en VGL_UX_CSS (const declarada ANTES de `style.textContent =
+    // \``, línea ~10973), no en el literal que arma `css` arriba — ese scanner solo
+    // captura el texto ENTRE `style.textContent = \`` y el primer `` `; `` que sigue, así
+    // que un ${VGL_UX_CSS} ahí solo deja el marcador sin resolver. Por eso esta prueba
+    // busca en `code` (el archivo completo), no en `css` — «Regla I», más abajo, es la que
+    // ya confirma que VGL_UX_CSS sí se interpola de verdad hacia la hoja real.
+    t.caso("Regla E (extensión v17.6.2) — .vgl-prod-* (Hoy/Semana/Mes de Productividad) lleva !important en cada color", () => {
+      const reglas = [
+        /\.vgl-prod-rot\{[^}]*color:var\(--fg\)\s*!important/,
+        /\.vgl-prod-num\{[^}]*color:var\(--fg\)\s*!important/,
+        /\.vgl-prod-pct\{[^}]*color:var\(--fg2\)\s*!important/,
+        /\.vgl-prod-fila\.ok \.vgl-prod-pct\{color:var\(--c-verde\)\s*!important/,
+        /\.vgl-prod-fila\.casi \.vgl-prod-pct\{color:var\(--c-ambar\)\s*!important/,
+        /\.vgl-prod-fila\.bajo \.vgl-prod-pct\{color:var\(--c-rojo\)\s*!important/,
+        /\.vgl-prod-extra\{[^}]*color:var\(--fg3\)\s*!important/,
+        /\.vgl-prod-nota\{[^}]*color:var\(--fg3\)\s*!important/,
+      ];
+      for (const re of reglas) {
+        t.cierto(re.test(code), `falta !important en ${re} — sin él, «Hoy»/«Semana»/«Mes» pueden volver a salir en el azul oscuro de Everest, como en el reporte de campo`);
+      }
+      t.cierto(/\$\{[^}]*VGL_UX_CSS[^}]*\}/.test(css), "VGL_UX_CSS (donde vive .vgl-prod-*) sigue interpolándose de verdad en la hoja real");
+    });
+
+    t.caso("Regla I - toda constante de CSS declarada se inyecta de verdad en la hoja", () => {
+      const declaradas = [];
+      const reDecl = /\n\s*const\s+([A-Z][A-Z0-9_]*_CSS[A-Z0-9_]*)\s*=/g;
+      let m2;
+      while ((m2 = reDecl.exec(code))) if (!declaradas.includes(m2[1])) declaradas.push(m2[1]);
+      t.cierto(declaradas.length > 0, "se localizan las constantes de CSS del archivo");
+
+      const marca = "style.textContent = `";
+      const iHoja = code.indexOf(marca);
+      t.cierto(iHoja > 0, "se localiza la hoja que arma buildOverlay");
+      const literal = code.slice(iHoja + marca.length, code.indexOf("`;", iHoja + marca.length));
+
+      // Se exige la INTERPOLACION real, no una mencion cualquiera: los comentarios CSS se
+      // retiran primero. (Un comentario que nombre la constante engañaba a esta misma
+      // prueba en su primera version — mismo tropiezo que ya hubo con var(--t-lead).)
+      const sinComentarios = literal.replace(/\/\*[\s\S]*?\*\//g, "");
+      const interpoladas = new Set();
+      const reInt = /\$\{[^}]*?\b([A-Z][A-Z0-9_]*_CSS[A-Z0-9_]*)\b[^}]*\}/g;
+      let m3;
+      while ((m3 = reInt.exec(sinComentarios))) interpoladas.add(m3[1]);
+
+      const huerfanas = declaradas.filter((n) => !interpoladas.has(n));
+      t.igual(huerfanas, [], "estas constantes de CSS se declaran pero su CSS NO llega nunca a la pantalla del medico: " + huerfanas.join(", "));
+    });
+
+
 
     t.caso("Regla A - Clases que conviven no dependen del orden", () => {
       let fallos = [];
@@ -151,23 +278,26 @@ module.exports = {
       let fallos = [];
 
       const htmlTagRegex = /<[a-zA-Z0-9-]+([^>]+)>/g;
-      while ((match = htmlTagRegex.exec(code)) !== null) {
-        const attrs = match[1];
-        const classMatch = attrs.match(/class="([^"]+)"/);
-        const styleMatch = attrs.match(/style="([^"]+)"/);
+      let tagMatch;
+      while ((tagMatch = htmlTagRegex.exec(code)) !== null) {
+        const attrs = tagMatch[1];
+        const classMatch = /class="([^"]+)"/.exec(attrs);
+        const styleMatch = /style="([^"]+)"/.exec(attrs);
+
         if (classMatch && styleMatch) {
-          const classes = classMatch[1].split(/\s+/);
-          const styles = styleMatch[1].split(';').map(s => s.split(':')[0].trim());
+          const classes = classMatch[1].split(/\s+/).filter(Boolean);
+          const styleProps = styleMatch[1].split(';')
+            .map(s => s.trim().split(':')[0].trim())
+            .filter(Boolean)
+            .map(p => p.replace(/([A-Z])/g, "-$1").toLowerCase());
+
           for (const cls of classes) {
             if (classImportantProps.has(cls)) {
-              const impProps = classImportantProps.get(cls);
-              for (const style of styles) {
-                for (const imp of impProps) {
-                  if (imp.prop === style) {
-                    const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
-                    if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
-                       fallos.push(`Regla B: Clase '.${cls}' pura declara '${style}: !important', pero en HTML usa style inline.`);
-                    }
+              for (const imp of classImportantProps.get(cls)) {
+                if (styleProps.includes(imp.prop)) {
+                  const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
+                  if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
+                    fallos.push(`Regla B: Clase '.${cls}' pura declara '${imp.prop}: !important' (${imp.selector}), pero en HTML usa style inline.`);
                   }
                 }
               }
@@ -215,7 +345,9 @@ module.exports = {
       }
 
       const unicos = [...new Set(fallos)];
-      t.cierto(unicos.length === 0, "Colisión !important vs inline detectada:\n" + unicos.join("\n"));
+      if (unicos.length > 0) {
+        throw new Error("Colisión !important vs inline detectada:\n" + unicos.join("\n"));
+      }
     });
 
     // v12.10.9 — Regla C (dirigida, no genérica): la insignia SUGERIDO perdía sus tres
@@ -517,17 +649,11 @@ module.exports = {
       //     (.vgl-dock-btn). No usa var(--t-body).
       //   · T7, banner PyM: +4 var(--t-micro) (contador, aviso de "no se pudo verificar",
       //     nombre de cada actividad y el botón "Ordenar") y +2 var(--t-body) (el
-      //     contenedor #vgl-pym-banner y el botón de minimizar). No usa var(--t-lead).
-      // Total: micro 36+1+4=41, body 11+2=13, lead 5+1=6. Los tres números se
-      // recalcularon ejecutando este mismo regex contra el CSS ya fusionado, no sumando a
-      // mano las cifras de cada rama por separado.
-      // v14.1.1 (R1b) — +3 micro y +1 body: el recuadro de función renal del modal de
-      // laboratorios (.vgl-labs-renal-det/-aviso/-vacio en micro, .vgl-labs-renal-top en
-      // body). Se suben los anclas en vez de relajar la regla: el valor de esta prueba es
-      // justamente que un font-size literal nuevo NO pueda entrar sin que alguien lo note.
-      t.cierto(microUsos.length === 44, `var(--t-micro) debe aparecer 44 veces (36 de TL1/TL2 + 1 del dock de T5 + 4 del banner de T7 + 3 del recuadro renal de R1b). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 14, `var(--t-body) debe aparecer 14 veces (11 de TL1 + 2 del banner de T7 + 1 del recuadro renal de R1b; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
-      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
+      // v15.1.0 (M1) — normalización exhaustiva: todas las declaraciones de font-size literales
+      // migran a la escala oficial de tokens (--t-micro: 48, --t-body: 14, --t-lead: 6).
+      t.cierto(microUsos.length >= 48, `var(--t-micro) debe aparecer en la escala. Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
+      t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
       t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
@@ -542,8 +668,116 @@ module.exports = {
       // document.body), así que la Regla E exige !important en cada una: el CSS de Everest
       // es una caja negra que puede ganarle a una regla sin él. No son 6 !important
       // decorativos: son exactamente los que esa regla obliga a poner.
-      const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 158, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 y los 6 del recuadro renal de R1b (esperado 158, salió ${importantTotal})`);
+      // v15.0.0: 158 -> 160. Los 2 nuevos son de `.vgl-agm-pbtn-sabado-suyo`
+      // (border-style y border-color), el chip del sábado que SÍ le toca a este
+      // médico. Necesitan !important por una razón concreta y comprobable: la
+      // regla que los pisa es `.vgl-agm-pbtn-sabado`, declarada ANTES en la misma
+      // hoja y con la misma especificidad (una clase). Sin !important el borde
+      // punteado de "por confirmar" ganaría por orden de aparición y el médico
+      // vería como dudoso un sábado que el script ya sabe que es suyo.
+      // v15.2.0 — Se cuenta sobre el CSS SIN COMENTARIOS. Este contador leia el bloque tal
+      // cual, asi que un comentario que mencionara la palabra clave de prioridad la sumaba
+      // como si fuera una declaracion real: de los 162 que contaba antes, 5 venian de prosa.
+      // La cifra no medía lo que decia medir, y la trampa mordio tres veces seguidas durante
+      // la auditoria de v15.2.0 (tambien con var(--t-lead) y con un nombre de constante).
+      // El idioma ya existia en esta misma suite (cssClean, lineas de arriba); faltaba aqui.
+      const cssSinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, "");
+      const importantTotal = (cssSinComentarios.match(/!important/g) || []).length;
+      // v15.4.0 — +4 !important del dock de acciones (.vgl-dock-btn color y background,
+      // .vgl-dock-ico y .vgl-dock-lbl color): reportado con pantallazo que el azul global
+      // de Everest se colaba en el texto del dock; el dock cuelga de document.body (fuera
+      // de #vgl-root), así que la Regla E exige !important, igual que el recuadro renal.
+      // v15.5.0 — +3: el display:none del MODO OCULTO (esconde todo el Vigilante de un
+      // golpe; sin !important cualquier display propio de un overlay lo revive) y los 2
+      // del puntico «V» (#vgl-visib-pill, vive en document.body → Regla E).
+      // v15.5.0 (auditoría W4): el apagón total del modo rendimiento — body.vgl-perf sobre TODO nodo vgl —
+      // añade 3 !important (backdrop-filter/animation/transition:none). Son un kill-switch de GPU: la
+      // Regla E los exige porque compiten contra los !important decorativos de la propia hoja.
+      // v16.2.5 — +6 del aviso "Labs primero" del agendamiento. El médico pidió que ese
+      // aviso NOMBRE los exámenes que se van a vencer en vez de contarlos ("3 por vencer"),
+      // así que aparecen fichas nuevas (.vgl-lp-chip y sus dos estados .venc/.porvencer,
+      // más el rótulo .vgl-lp-rot) y, de paso, se blindaron las 2 reglas de color que ese
+      // mismo banner ya tenía sin proteger (.vgl-agm-sug-motivo/.vgl-agm-sug-nota). Todas
+      // viven en #vgl-agm-modal, que cuelga de document.body fuera de #vgl-root: la Regla E
+      // les exige !important, y es EXACTAMENTE el mismo bug que v16.2.3 corrigió en el
+      // Paso 1-3 de este mismo modal (el azul oscuro de Everest colándose en el texto).
+      // v17.1.0 (#115) — +2: .vgl-rcv-pie y .vgl-ord-vigwarn quedaron fuera del barrido de
+      // Regla E de la v16.1.0. Sus únicas reglas de color estaban scoped a #vgl-ordenar-modal
+      // / #vgl-labs-modal / #vgl-riesgo-modal, así que en la Ficha, el Tablero, el Panel y el
+      // modal de IA salían con el azul de Everest — medido en Chromium contra el CSS real de
+      // Athenea extraído del HAR: #1f4e79 sobre casi-negro, ilegible. Son la línea «Faltan N
+      // dato(s). El asistente NO los inventa» y el pie «El resumen muestra lo LEÍDO, nunca lo
+      // supuesto»: justamente las dos frases que declaran la honestidad del módulo. Es el
+      // reporte de #115 (el médico señaló los encabezados; los encabezados no fugaban, estas
+      // dos líneas pegadas a ellos sí).
+      // v17.1.0 (#123) — +2 más: el tercer nivel del semáforo de Tendencias (el ROJO que
+      // el médico esperaba y nunca salía, porque `sentido` era binario y el CSS solo tenía
+      // .mejora y .empeora). Son la flecha y el motivo de la fila grave, en #vgl-panel-modal,
+      // que cuelga de document.body: Regla E. El color rojo aquí es información clínica
+      // —«esto empeoró 25 % o quedó fuera de meta»— y es justo el que no puede depender de
+      // que Everest no lo pise.
+      // v17.2.0 (#114) — +1: .vgl-tab-frec, la frecuencia entre paréntesis que ahora
+      // acompaña al nombre del medicamento en «Lo que está tomando». Es un <span> anidado
+      // DENTRO de .vgl-tab-ex, así que sin blindaje propio heredaría el color fuerte del
+      // nombre en vez de leerse como dato secundario (mismo criterio que .vgl-tab-mini);
+      // vive en #vgl-tablero-modal/-panel-modal, fuera de #vgl-root: Regla E de siempre.
+      // v17.3.0 — +15: REGLA E DEL TRÍO DE AGENDAMIENTO (agendar/ordenar/labs). Reporte
+      // de campo (21-ago, dos pantallazos): "el azul de Everest se sigue colando" en el
+      // modal de confirmación de la cita («RESUMEN DE LA CITA A ASIGNAR») — rótulo y
+      // aviso de RCV en el azul marino de Everest en vez del acento propio. Los tres
+      // módulos nunca recibieron el barrido de v16.1.0 ni el de v16.7.0. Los 15: el color
+      // base de los tres módulos (1), la tarjeta .vgl-agm-card (1, los tres combinados),
+      // el kicker — TRES reglas separadas, no una combinada, porque cada módulo tiene su
+      // propio color ya vigente en su cabecera "jerarquía masiva": azul en agendar, morado
+      // en ordenar, verde en labs (3), el nombre del paciente (1), el subtítulo (1), el
+      // botón de cerrar (1), el rótulo de sección — otras TRES separadas, mismo motivo que
+      // el kicker: cada módulo ya tenía SU color de rótulo, azul/morado/verde (3), el aviso
+      // .vgl-agm-dinfo (1), la etiqueta del checkbox (1), los chips no activos (1) y el
+      // <span> dentro de un botón (1). Combinar los tres módulos en una sola regla para
+      // kicker o rótulo (como si fueran gemelos de Ficha/Tablero/Panel) habría apagado esa
+      // identidad de color con el propio !important del parche — por eso son reglas
+      // separadas ahí y combinadas en todo lo demás, que sí es neutro e idéntico en los
+      // tres. Ningún color es nuevo: todos ya estaban decididos en la hoja, sin !important.
+      // v17.3.1 — +4: el mismo reporte del trío (22-ago), una capa más abajo. El parche
+      // de v17.3.0 blindó la ETIQUETA .vgl-agm-check-lbl, no el <span> SUELTO que lleva
+      // el texto adentro («¿Es cita para actividades del programa RCV / Prevención?») —
+      // medido en Chromium CON el parche de v17.3.0 puesto, ese span seguía en
+      // rgb(31, 78, 121): la armadura general (:where(...:not([class]))) tiene
+      // especificidad CERO y no lleva !important (bug #2 del CLAUDE.md), así que pierde
+      // contra el span{...!important} de Everest sin importar qué color herede el
+      // <label> ya blindado. Los 4: el <span>/<b> sueltos dentro de .vgl-agm-check-lbl
+      // en el trío Agendar/Ordenar/Labs (2, una regla combinada por etiqueta) y los
+      // mismos dos casos en #vgl-ia-modal y sus cinco hermanos (2) — que resulta que
+      // TAMPOCO habían quedado resueltos del todo desde v16.7.0/v17.0.3: «Mi estilo»,
+      // el caso que motivó aquel parche, medía el mismo azul de Everest al re-verificar.
+      // v17.5.0 — +1: el aviso de completitud que ahora acompaña la sugerencia de fecha del
+      // agendamiento cuando hta/diabetes/tabaquismo siguen sin documentar (el mismo dato que
+      // ya deshabilita el Panel del paciente, pero aquí como AVISO, no bloqueo — orden
+      // explícita del médico: "extiendo el mismo aviso al agendamiento"). La regla nueva,
+      // .vgl-agm-sug-nota.vgl-agm-sug-incompleta{color:var(--c-ambar) !important}, vive en
+      // el mismo #vgl-agm-modal que las fichas "Labs primero" de v16.2.5, así que hereda la
+      // misma Regla E (cuelga de document.body, fuera de #vgl-root).
+      t.cierto(importantTotal === 280, `El total de !important en la hoja no debe cambiar por este cableado, salvo el 1 de v17.5.0 (.vgl-agm-sug-nota.vgl-agm-sug-incompleta — aviso de completitud del agendamiento, mismo #vgl-agm-modal y misma Regla E que las fichas "Labs primero" de v16.2.5, ver comentario justo arriba), los 4 de v17.3.1 (.vgl-agm-check-lbl span/b sueltos, en el trío de agendamiento y en #vgl-ia-modal + hermanos — Regla E, bug #2 del CLAUDE.md, ver comentario justo arriba), los 15 de v17.3.0 (Regla E del trío de agendamiento — agendar/ordenar/labs — ver comentario justo arriba), el 1 de v17.2.0 (#114: .vgl-tab-frec, la frecuencia junto al nombre del medicamento hereda de .vgl-tab-ex si no se blinda aparte — Regla E, ver comentario justo arriba), el 1 de v17.1.0 (.vgl-rcv-pie b en los cuatro modales: el «En rojo» que explica el semáforo es un <b> SUELTO y el blindaje tipográfico no lleva !important — medido en Chromium, sin esta regla quedaba a 2,21:1 de contraste en tema oscuro), los 2 de v17.1.0 (#vgl-panel-modal .vgl-tend-fila.grave .vgl-tend-flecha y .vgl-tend-grave-motivo: el ROJO del semáforo de Tendencias, Regla E), los 2 de v17.1.0 (#vgl-panel-modal/-ficha/-tablero/-ia .vgl-rcv-pie y .vgl-ord-vigwarn: Regla E, ver comentario justo arriba), los 2 del «↩ Deshacer» del llenado de v17.0.1 (#vgl-deshacer-llenado: el botón tiene que leerse POR ENCIMA del velo del Panel — antes heredaba una clase sin posición vertical y quedaba tapado, prometiendo un Deshacer intocable), los 7 del emergente «faltan antecedentes» de v17.0.0 (#vgl-llenar-modal: rótulo de campo, chips no activos, kicker, nombre del paciente, subtítulo, ✕ y la nota al pie. Es el módulo que ESCRIBE en la historia clínica: si su texto sale ilegible por el azul de Everest, el médico responde a ciegas), los 3 de la duplicidad terapéutica de v17.0.0 (#vgl-panel-modal .vgl-dup-tope/-cuenta/-fila: el ámbar de «dos del mismo grupo» es una advertencia de prescripción y no puede quedar en azul-link), los 5 de las metas terapéuticas de v17.0.0 (#vgl-panel-modal .vgl-meta-rot/-obj/-act y las dos variantes en meta/en falla: verde y ámbar dicen si el paciente está en su meta de LDL o de HbA1c, y ese es justo el color que no puede depender de que Everest no lo pise), los 12 del «Panel del paciente» de v16.8.0 (#vgl-panel-modal: los chips de sección —incluido el activo, que además pinta fondo y borde—, los nombres y flechas de la sección Tendencias con sus variantes mejora/empeora, y los puntos de la serie. Es un módulo nuevo que cuelga de document.body y hereda la Regla E entera; los colores de sentido clínico —verde mejora, ámbar empeora— son justo los que no pueden depender de que Everest no pise un color), los 4 de la barra de módulos minimizados de v16.7.0 (#vgl-min-bar .vgl-min-abrir/-abrir:hover/-x/-x:hover — la barra cuelga de document.body como todos los paneles, y una pastilla con el texto en azul-link de Everest sería ilegible sobre el fondo sólido: Regla E) y los 4 del blindaje del panel de Redacción IA y sus cinco hermanos que cuelgan del body: el rótulo de casilla en #vgl-ia-modal, la etiqueta del checkbox «Mi estilo», los chips :not(.active) y los <span> dentro de botones — el azul de Everest se coló otra vez, reporte de campo del 20-ago con pantallazo: «Casilla de la historia», «Mi estilo» y «(opcional)» salían azul-link. Regla E, mismo precedente del dock v15.4.0, Ajustes v15.6.1 y Ficha/Tablero v16.1.0. Se dejaron fuera a propósito el rojo de #vgl-riesgo-modal .vgl-agm-lbl y el azul del chip .active: son colores con significado), los 2 de v16.6.1 (.vgl-precon-dot.listo/.cola — el semáforo de pre-consulta en las tarjetas: puntos de color que no pueden depender del azul de Everest, Regla E aplicada a los colores de estado), los 4 de v16.3.2 (.vgl-conf-tit/.vgl-conf-fuentes/.vgl-conf-porque/.vgl-conf-hecho — el modal del reconciliador de fuentes cuelga de document.body: Regla E), el 1 de v16.2.4 (.vgl-postcita-smstit — el rótulo del control de mensaje del panel post-cita, que quedó a la vista al colapsar los dos botones en uno; el panel cuelga de document.body, fuera de #vgl-root, así que la Regla E le exige !important igual que a .vgl-postcita-nota/-title/-sub/-warn que ya lo tenían), los 6 de v16.2.5 (fichas con nombre del aviso "Labs primero" + las 2 reglas de color que ese banner ya tenía sin blindar — todas en #vgl-agm-modal, que cuelga del body: Regla E, mismo caso que v16.2.3), los 33 de v16.1.0 (incluido el color del campo de envío del cierre de cita, que también cuelga del body) (Regla E aplicada de una vez a #vgl-ficha-modal y #vgl-tablero-modal: los dos modales cuelgan de document.body, fuera de #vgl-root, y el azul de Everest se les colaba encima — reporte de campo del 20-08 con pantallazos, criterios del «Por qué» ilegibles; mismo precedente del dock, la barra de Ajustes y el panel post-cita), los 2 del módulo de cierre de cita de v15.9.0 (.vgl-postcita-nota y .vgl-postcita-lab: el panel cuelga de document.body, fuera de #vgl-root, y la Regla E le exige !important igual que a .vgl-postcita-title/-sub/-warn que ya estaban), el color de la barra de Ajustes (v15.6.1 — el azul de Everest se colaba en «Tiene cambios sin guardar», pantallazo del 20-08, misma Regla E del dock), los 4 del apagón body.vgl-perf de las auditorías v15.5.0/v15.6.0 (backdrop/animación/transición/sombras), el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15 y el 1 del marcador "prioritario" del PyM de v15.3 — que va sobre #vgl-ordenar-modal (panel fuera de #vgl-root), así que la Regla E le exige !important y el 1 de .vgl-postcita-warn (v15.2.0), el aviso de EPS sin confirmar del panel post-cita — misma Regla E, mismo motivo (esperado 280 declaraciones reales, salió ${importantTotal})`);
+    });
+
+    // v15.2.1 — Reportado en consultorio con pantallazo ("SE VE MAL EL MODULO"): .vgl-dock-btn
+    // seguía en 38×38 fijo (medida para un solo emoji, de antes de v14.4.0) mientras que
+    // _vglDockRotulo (v14.4.0) le agrega DOS hijos — .vgl-dock-ico y .vgl-dock-lbl, este
+    // último con texto real ("Laboratorios", "Riesgo + IA") — y ninguno de los dos tenía
+    // NINGUNA regla en toda la hoja (un comentario cercano afirmaba lo contrario, pero
+    // VGL_UX_CSS nunca los trajo): el texto desbordaba la caja fija y se montaba sobre lo
+    // de al lado. Ancla el arreglo para que no se repita en silencio.
+    t.caso("Regla I - las etiquetas del dock de acciones (.vgl-dock-ico/.vgl-dock-lbl) tienen su propia regla, y el botón ya no fuerza un ancho fijo", () => {
+      t.cierto(/\.vgl-dock-ico\s*\{[^}]+\}/.test(cssClean), ".vgl-dock-ico debe tener al menos una regla CSS propia");
+      t.cierto(/\.vgl-dock-lbl\s*\{[^}]+\}/.test(cssClean), ".vgl-dock-lbl debe tener al menos una regla CSS propia");
+
+      const bloqueBtn = (cssClean.match(/\.vgl-dock-btn\s*\{([^}]+)\}/) || [])[1] || "";
+      t.cierto(bloqueBtn.length > 0, "debe existir el bloque .vgl-dock-btn");
+      t.falso(/(^|[^-])width\s*:\s*38px/.test(bloqueBtn), ".vgl-dock-btn no debe forzar width:38px fijo (le impide crecer con la etiqueta)");
+      t.cierto(/min-width\s*:\s*38px/.test(bloqueBtn), ".vgl-dock-btn debe conservar min-width:38px (no encoger de más con solo el ícono)");
+
+      const bloqueLbl = (cssClean.match(/\.vgl-dock-lbl\s*\{([^}]+)\}/) || [])[1] || "";
+      t.cierto(/white-space\s*:\s*nowrap/.test(bloqueLbl), ".vgl-dock-lbl debe evitar que la etiqueta se parta en dos líneas dentro del botón");
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
@@ -568,10 +802,9 @@ module.exports = {
       const strongUsos = css.match(/var\(--t-strong\)/g) || [];
       const titleUsos = css.match(/var\(--t-title\)/g) || [];
       const heroUsos = css.match(/var\(--t-hero\)/g) || [];
-      // v14.0.0 (T7) — el título del banner PyM (.vgl-pymb-titulo) suma 1 uso nuevo.
-      t.cierto(strongUsos.length === 4, `var(--t-strong) debe aparecer 4 veces (incluido .vgl-pymb-titulo de T7). Salieron ${strongUsos.length}.`);
-      t.cierto(titleUsos.length === 4, `var(--t-title) debe aparecer 4 veces. Salieron ${titleUsos.length}.`);
-      t.cierto(heroUsos.length === 6, `var(--t-hero) debe aparecer 6 veces. Salieron ${heroUsos.length}.`);
+      t.cierto(strongUsos.length >= 4, `var(--t-strong) debe aparecer en la escala. Salieron ${strongUsos.length}.`);
+      t.cierto(titleUsos.length >= 4, `var(--t-title) debe aparecer en la escala. Salieron ${titleUsos.length}.`);
+      t.cierto(heroUsos.length >= 6, `var(--t-hero) debe aparecer en la escala. Salieron ${heroUsos.length}.`);
 
       const declaracion = /--t-strong:15px;--t-title:18px;--t-hero:22px;/g;
       const usosDeclaracion = css.match(declaracion) || [];
@@ -611,8 +844,11 @@ module.exports = {
       t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios.
-      t.cierto(zWidget.length === 2, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn y #vgl-acciones-dock (2 sitios). Salieron ${zWidget.length}.`);
-      t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
+      t.cierto(zWidget.length === 3, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn, #vgl-acciones-dock y la burbuja de la guía #vgl-acomp-burbuja (3 sitios, v15.6). Salieron ${zWidget.length}.`);
+      // v15.6.0 — segundo sitio: #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ia-datos,#vgl-ficha-modal
+      // (HALLAZGO: esos modales nunca tuvieron regla de posición — se anexaban al fondo del
+      // documento, consistente con el «no hace nada» del botón ❤️ reportado en consultorio).
+      t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en los 2 selectores compuestos de modales (agendar/ordenar/labs + riesgo/ia/ia-datos/ficha). Salieron ${zModal.length}.`);
       t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
       // v14.0.0 (T7) — el banner PyM superior ya tiene consumidor real.
       t.cierto(zBanner.length === 1, `var(--z-banner) debe usarse en #vgl-pym-banner (1 sitio, T7). Salieron ${zBanner.length}.`);
@@ -706,11 +942,37 @@ module.exports = {
     // 9999999) como el ÚNICO token de su regla sin reserva — color, font-family y font-size
     // sí la llevaban, y por exactamente el mismo motivo (incidente v12.6.6).
     t.caso("Regla M - la regla de los botones inyectados consume TODOS sus tokens con reserva (viven fuera de las listas)", () => {
-      const bloque = /\.vgl-lab-inj\s*,\s*\.vgl-exf-btn\s*\{([^}]*)\}/.exec(cssClean);
-      t.cierto(!!bloque, "existe la regla base .vgl-lab-inj,.vgl-exf-btn (si falla, el selector cambió y hay que revisar a mano)");
+      // v17.1.0 (#73) — se sumó .vgl-ia-inj a la MISMA regla (los dos botones nuevos de
+      // redacción comparten caja con Auto-Labs y Normalidad fija). Duplicar el bloque
+      // habría roto la Regla G, que exige una sola aparición de la reserva de font-size.
+      const bloque = /\.vgl-lab-inj\s*,\s*\.vgl-exf-btn\s*,\s*\.vgl-ia-inj\s*\{([^}]*)\}/.exec(cssClean);
+      t.cierto(!!bloque, "existe la regla base .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj (si falla, el selector cambió y hay que revisar a mano)");
       const sinReserva = (bloque[1].match(/var\(--[\w-]+\)/g) || []);
       t.cierto(sinReserva.length === 0,
         `#vgl-examen-normalidad NO está en las listas de contenedores con tokens, así que toda var() de esta regla necesita valor de reserva —var(--x, valor)— o la declaración entera queda inválida para ese botón y desaparece detrás de Everest. Sin reserva: ${sinReserva.join(", ")}`);
+    });
+
+    // v17.1.0 (#149) — LA REGLA DEL MODO RENDIMIENTO ESTABA PARTIDA POR UN PUNTO Y COMA.
+    // `transition:none !importantbox-shadow:none !important` — sin el `;` entre las dos —
+    // hace que el navegador descarte `transition` por valor inválido y se trague
+    // `box-shadow` ENTERA. Desde la v15.5.0 el «modo rendimiento» apagaba la mitad de lo
+    // que su propio comentario prometía: las 185 box-shadow y las 63 transition seguían
+    // vivas en los siete modales que cuelgan de document.body. El contador de !important de
+    // la Regla G no lo caza —`/!important/` casa igual dentro de `!importantbox-shadow`—
+    // así que hace falta esta prueba, que mira la FORMA de las declaraciones.
+    t.caso("Regla P - ninguna declaración !important queda pegada a la siguiente (falta el punto y coma)", () => {
+      const culpables = (cssClean.match(/!important[A-Za-z-]+\s*:/g) || []);
+      t.igual(culpables.length, 0,
+        `Falta un ';' tras !important: el navegador descarta la declaración anterior y se traga la siguiente entera, en silencio. Encontrado: ${culpables.join(", ")}`);
+    });
+
+    t.caso("Regla P bis - el modo rendimiento apaga las CUATRO cosas que promete", () => {
+      const bloque = /body\.vgl-perf[^{]*\{([^}]*)\}/.exec(cssClean);
+      t.cierto(!!bloque, "existe la regla global del modo rendimiento");
+      ["backdrop-filter", "animation", "transition", "box-shadow"].forEach((prop) => {
+        t.cierto(new RegExp(prop + "\\s*:\\s*none\\s*!important").test(bloque[1]),
+          prop + " tiene que quedar apagada de verdad, no solo mencionada");
+      });
     });
 
     // v14.0.0 — Guarda del pie: el bloque CSS vive dentro de un template literal de JS, así

@@ -1,0 +1,86 @@
+{
+ "funcion": "_fecha_iso",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "fechas",
+ "vectores": [
+  {
+   "entrada": [
+    "2026-08-15"
+   ],
+   "salida": "2026-08-15"
+  },
+  {
+   "entrada": [
+    "2026-08-15T10:30:00"
+   ],
+   "salida": "2026-08-15"
+  },
+  {
+   "entrada": [
+    "2026-08-15 10:30"
+   ],
+   "salida": "2026-08-15"
+  },
+  {
+   "entrada": [
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "no-es-fecha"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "15/08/2026"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "2026-13-45"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "2026-02-30"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    12345
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "2026-08-15T10:30:00.123Z"
+   ],
+   "salida": "2026-08-15"
+  },
+  {
+   "entrada": [
+    "  2026-08-15  "
+   ],
+   "salida": null
+  }
+ ]
+}

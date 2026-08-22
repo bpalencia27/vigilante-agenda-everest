@@ -163,10 +163,26 @@ module.exports = {
     });
 
     // ---------- apptKey ----------
-    t.caso("apptKey: arma la clave de la cita", () => {
-      t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@07:00 AM");
-      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN|5@08:30");
-      t.igual(api.apptKey({ doc_id: "456" }), "456@");
+    // v17.1.0 (#72/#146) — La hora entra CANONIZADA a minutos ("m420"), no como texto.
+    // Motivo: la misma cita llega con dos textos distintos según de dónde salga el tick —
+    // "7:00 a. m." por el API y "07:00 AM" por el raspado del DOM — y con dos claves para
+    // una sola cita se rompen a la vez las cuatro guardas que dependen de ella (notified,
+    // fraudWatch, alertedFraud, contadas): el aviso suena dos veces y el contador suma dos
+    // veces. Medido en la auditoría del médico del 21-ago.
+    t.caso("apptKey: arma la clave de la cita, con la hora canonizada a minutos", () => {
+      t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@m420");
+      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN|5@m510");
+      t.igual(api.apptKey({ doc_id: "456" }), "456@", "sin hora legible se cae al texto crudo: perder la cita del mapa sería peor");
+    });
+
+    t.caso("apptKey: la MISMA cita leída por el API y por el DOM produce UNA sola clave", () => {
+      // Este es el defecto que producía el doble conteo y el doble aviso: horaBonita()
+      // escribe "7:00 a. m." y el raspado del DOM devuelve lo que pinte Everest.
+      const porApi = api.apptKey({ doc_id: "123", hora_texto: "7:00 a. m." });
+      const porDom = api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" });
+      t.igual(porApi, porDom, "una cita, una clave, venga de donde venga la lectura");
+      t.cierto(api.apptKey({ doc_id: "123", hora_texto: "7:00 p. m." }) !== porApi,
+        "pero la mañana y la tarde siguen siendo citas distintas");
     });
 
     // ---------- diaNuevo ----------
@@ -194,6 +210,9 @@ module.exports = {
       c.api.__state.fraudWatch.add("123");
       c.api.__state.notified.set("456", "val");
       c.api.__state.historical.set("x", "y");
+      // [v14.2.0 — backlog §3] candidatura a cupos Adicional calculada AYER: no debe
+      // sobrevivir al cambio de día (el perfil de hoy puede ser otro).
+      c.api.__state.perfilAdicionalCache.set("789", { adicionales: true, motivo: "" });
 
       // Inject day 2
       mockIsoStr = "2026-08-11T12:00:00";
@@ -204,6 +223,7 @@ module.exports = {
       t.igual(c.api.__state.fraudWatch.size, 0);
       t.igual(c.api.__state.notified.size, 0);
       t.igual(c.api.__state.historical.size, 0);
+      t.igual(c.api.__state.perfilAdicionalCache.size, 0, "la candidatura de ayer no debe sobrevivir al día nuevo");
     });
 
     // ---------- calcBusinessDaysBefore ----------

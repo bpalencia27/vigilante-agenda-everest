@@ -225,7 +225,7 @@ module.exports = {
     });
     t.caso("fuzzyMatch tolera erratas en palabras largas", () => {
       t.cierto(api.fuzzyMatch("uribbe", "MARIA LUZ DARY URIBE TORRES"), "una letra de más");
-      t.cierto(api.fuzzyMatch("palencai", "BRANDON JESUS PALENCIA MARTINEZ"), "transposición");
+      t.cierto(api.fuzzyMatch("moreon", "JUAN CARLOS MORENO RUIZ"), "transposición");
     });
     t.caso("fuzzyMatch no tolera erratas en palabras muy cortas", () => {
       t.falso(api.fuzzyMatch("xyz", "MARIA LUZ DARY URIBE TORRES"));

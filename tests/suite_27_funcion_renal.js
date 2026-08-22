@@ -13,15 +13,21 @@
 // =====================================================================
 module.exports = {
   nombre: "Función renal (R1)",
-  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG", "_esSexoFemenino"],
+  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG", "_esSexoFemenino", "mtrEvaluarDiscrepanciaEstadios"],
 
   pruebas(t, api) {
-    t.caso("_esSexoFemenino - comprueba F, M, null, espacios", () => {
+    // ---------- _esSexoFemenino ----------
+    t.caso("_esSexoFemenino - reconoce 'F', 'FEMENINO' ignorando mayúsculas y espacios", () => {
       t.cierto(api._esSexoFemenino("F"));
       t.cierto(api._esSexoFemenino("f"));
-      t.cierto(api._esSexoFemenino(" F "));
+      t.cierto(api._esSexoFemenino("FEMENINO"));
+      t.cierto(api._esSexoFemenino("femenino"));
+      t.cierto(api._esSexoFemenino("  f  "));
+      t.cierto(api._esSexoFemenino("  FEMENINO  "));
       t.falso(api._esSexoFemenino("M"));
       t.falso(api._esSexoFemenino("m"));
+      t.falso(api._esSexoFemenino("MASCULINO"));
+      t.falso(api._esSexoFemenino("masculino"));
       t.falso(api._esSexoFemenino(null));
       t.falso(api._esSexoFemenino(undefined));
       t.falso(api._esSexoFemenino(""));
@@ -89,17 +95,43 @@ module.exports = {
       t.igual(api.estadioKDIGO(0.1), "G5", "por encima de cero, por bajo que sea, es una TFG medida");
     });
 
-    t.caso("evaluarDiscordanciaTFG - diferencia de 2 estadios no es alerta", () => {
-      t.igual(api.evaluarDiscordanciaTFG(95, 50), null);
+    // v16.9.0 — DECISIÓN DEL MÉDICO: la alerta empieza en DOS estadios. El umbral viejo
+    // (solo ≥3) dejaba pasar callado el caso más frecuente y más peligroso — G1/G2 por
+    // Cockcroft-Gault contra G3a/G3b por CKD-EPI en bajo peso muscular—, con las dosis
+    // renales saliendo de la fórmula equivocada y ninguna advertencia.
+    t.caso("evaluarDiscordanciaTFG - dos estadios YA es alerta (v16.9.0), pero no sospecha de dato corrupto", () => {
+      const d = api.evaluarDiscordanciaTFG(95, 50);
+      t.cierto(!!(d && d.alerta === true), "dos estadios se avisan: antes se callaban");
+      t.igual(d.diferenciaEstadios, 2);
+      t.igual(d.estadioCG, "G1");
+      t.igual(d.estadioCKD, "G3a");
+      t.falso(d.sospechaDatoCorrupto, "con dos estadios la diferencia todavía es plausible (peso muy alto o muy bajo)");
+      t.falso(/REVISE EL DATO/.test(d.mensaje), "así que no se manda a revisar el dato, se manda a verificar el peso");
     });
 
-    t.caso("evaluarDiscordanciaTFG - diferencia de 3 estadios SÍ es alerta", () => {
+    t.caso("evaluarDiscordanciaTFG - un solo estadio de diferencia sigue sin ser alerta", () => {
+      t.igual(api.evaluarDiscordanciaTFG(95, 75), null, "G1 vs G2 es lo normal entre las dos fórmulas");
+    });
+
+    t.caso("evaluarDiscordanciaTFG - tres estadios ya no es una diferencia de fórmula: es sospecha de dato corrupto", () => {
       const d = api.evaluarDiscordanciaTFG(95, 35);
       t.cierto(d && d.alerta === true, "se esperaba alerta:true");
       t.igual(d.estadioCG, "G1");
       t.igual(d.estadioCKD, "G3b");
       t.igual(d.diferenciaEstadios, 3);
-      t.cierto(typeof d.mensaje === "string" && d.mensaje.length > 0, "se esperaba un mensaje no vacío");
+      t.cierto(d.sospechaDatoCorrupto === true, "tres estadios rara vez son reales");
+      t.cierto(/REVISE EL DATO/.test(d.mensaje), "y el mensaje manda a mirar el dato antes que al paciente");
+      t.cierto(/peso y la creatinina/.test(d.mensaje), "diciendo cuáles: peso y creatinina");
+    });
+
+    t.caso("mtrEvaluarDiscrepanciaEstadios: el otro evaluador comparte el MISMO umbral (dos umbrales distintos sería peor que ninguno)", () => {
+      const dos = api.mtrEvaluarDiscrepanciaEstadios(95, 50);
+      t.cierto(!!(dos && dos.alerta === true), "dos estadios: alerta");
+      t.falso(dos.sospecha_dato_corrupto, "pero todavía plausible");
+      const tres = api.mtrEvaluarDiscrepanciaEstadios(95, 35);
+      t.cierto(tres.sospecha_dato_corrupto === true, "tres: sospecha de dato corrupto");
+      t.cierto(/REVISE EL DATO/.test(tres.mensaje), "y lo dice desde la primera palabra");
+      t.igual(api.mtrEvaluarDiscrepanciaEstadios(95, 75), null, "un estadio no alerta, igual que el otro evaluador");
     });
 
     t.caso("evaluarDiscordanciaTFG - cualquier TFG en 0/centinela no es evaluable", () => {

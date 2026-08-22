@@ -5,10 +5,13 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "pymRcvCubiertoPorAthenea", "_valorCrudoLab", "_marcarUroanalisisSi",
+    // v17.6.2 — cruce antiduplicado por paquete (VIH/SOMF cuando el Excel de PyM está desactualizado)
+    "pymPaqueteCubiertoPorAthenea",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen"
+    // v14.2.8/v14.2.10 — reincorporadas: el codigo estaba en el fuente y sus pruebas no.
+    "_nuevoReemplazaCandidato", "_esLdlDirecto", "_resolverLdlPorTrigliceridos"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -38,6 +41,14 @@ module.exports = {
     };
 
     const testApi = c.api;
+
+    t.caso("_valorCrudoLab: conserva valores legitimos y descarta vacios", () => {
+      t.igual(testApi._valorCrudoLab(0), 0);
+      t.igual(testApi._valorCrudoLab("120"), "120");
+      t.igual(testApi._valorCrudoLab(""), undefined);
+      t.igual(testApi._valorCrudoLab(null), undefined);
+      t.igual(testApi._valorCrudoLab(undefined), undefined);
+    });
 
     t.caso("_matchLabInWhitelist: El código manda sobre el nombre (Incidente v11.0.1)", () => {
       const labHbA1c = { CodigoParametro: "903843", nombre: "GLUCOSA EN SUERO (TRUCO)" };
@@ -665,98 +676,8 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
     });
 
-    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (Conducta nativa) =================
-    // Reproduce el clic <li>→espera→"Agregar" capturado en consultorio el 12-08-2026
-    // (captura_ordenamiento_paquete_HTA_20260812.json) para PTH/Fósforo/Albúmina/Hemoglobina/
-    // HbA1c. Nunca llama a la red — solo dispara los mismos clics que el médico ya hace a mano.
-    function crearLi(texto) {
-      return { textContent: texto, clicked: false, click() { this.clicked = true; } };
-    }
-    function crearBotonAgregar({ texto = "Agregar", disabled = false } = {}) {
-      return { textContent: texto, disabled, clicked: false, click() { this.clicked = true; } };
-    }
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: <li> exacto encontrado + botón Agregar habilitado -> clickea ambos y devuelve true", async () => {
-      const li = crearLi("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      const otroLi = crearLi("ALBUMINA EN SUERO U OTROS FLUIDOS");
-      const btnAgregar = crearBotonAgregar();
-      const btnCancelar = crearBotonAgregar({ texto: "Cancelar" });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [otroLi, li] : sel === "button" ? [btnCancelar, btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r, "reporta éxito");
-      t.cierto(li.clicked, "el <li> del examen correcto recibe el clic");
-      t.falso(otroLi.clicked, "el otro <li> del listado no se toca");
-      t.cierto(btnAgregar.clicked, "el botón Agregar recibe el clic");
-      t.falso(btnCancelar.clicked, "Cancelar no se toca");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: coincidencia EXACTA de texto, nunca por substring — un examen parecido no debe clickearse", async () => {
-      // 'FOSFORO EN SUERO U OTROS FLUIDOS' es substring de un <li> más largo hipotético —
-      // si la búsqueda no fuera exacta, esto clickearía el examen EQUIVOCADO en un catálogo
-      // clínico real. La coincidencia parcial debe fallar limpio, no acertar por casualidad.
-      const liParecido = crearLi("FOSFORO EN SUERO U OTROS FLUIDOS (PANEL AMPLIADO)");
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [liParecido] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-      t.falso(liParecido.clicked, "sin coincidencia exacta, no se clickea el parecido");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: tildes/mayúsculas no importan (mismo _canonTexto que el resto del script)", async () => {
-      const li = crearLi("Fósforo en Suero u Otros Fluidos");
-      const btnAgregar = crearBotonAgregar();
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r);
-      t.cierto(li.clicked);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el examen no está en esta pantalla -> no clickea nada, devuelve false (fallo seguro)", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => [];
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el <li> aparece pero Angular nunca habilita Agregar -> devuelve false, no lanza", async () => {
-      const li = crearLi("HEMOGLOBINA");
-      const btnDeshabilitado = crearBotonAgregar({ disabled: true });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnDeshabilitado] : []);
-      // La propia llamada no debe lanzar (no se envuelve en try/catch aquí a propósito: si
-      // _conductaBuscarYAgregarExamen lanzara, casoAsync lo reportaría como fallo solo).
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(li.clicked, "el <li> sí se clickeó — el fallo es solo en el paso del botón");
-      t.falso(r);
-      t.falso(btnDeshabilitado.clicked, "un botón deshabilitado nunca se clickea");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: DOM roto (querySelectorAll lanza) -> no propaga la excepción, devuelve false", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => { throw new Error("DOM no disponible"); };
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    t.caso("CONDUCTA_LI_TEXTO_POR_ANALITO: los 5 textos son los capturados LITERALMENTE en consultorio (no una paráfrasis del catálogo del Copiloto)", () => {
-      const tabla = testApi.__CONDUCTA_LI_TEXTO_POR_ANALITO;
-      t.igual(tabla.PTH, "HORMONA PARATIROIDEA MOLECULA INTACTA");
-      t.igual(tabla.ALBUMINA, "ALBUMINA EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.FOSFORO, "FOSFORO EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.HEMOGLOBINA, "HEMOGLOBINA");
-      // El catálogo del Copiloto dice solo "HEMOGLOBINA GLICOSILADA" — el <li> real de
-      // Everest capturado en consultorio trae además "AUTOMATIZADA", y es ese texto exacto
-      // el que hace falta para que el clic case.
-      t.igual(tabla.HBA1C, "HEMOGLOBINA GLICOSILADA AUTOMATIZADA");
-    });
+    // v15.7.0 — Las pruebas de _conductaBuscarYAgregarExamen y del catálogo de <li>
+    // se retiraron con la maquinaria (ver suite_53: pines de permanencia del retiro).
 
     t.caso("injectLabsIntoCronicos v12.5.11: un componente REAL del parcial de orina marca \"SI\" en ¿Uroanálisis? y lo reporta en uroanalisisMarcado", () => {
       mockDOM = {};
@@ -859,7 +780,52 @@ module.exports = {
       t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10", "y también la fecha, porque estaba vacía");
     });
 
-    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si el interruptor SI YA estaba elegido antes (no se marcó en esta corrida), NO se programa reintento", async () => {
+    // v17.1.0 (#71) — EL CORAZÓN DEL DEFECTO: fecha y resultado estaban ACOPLADOS.
+    // Son dos casillas independientes, con dos ids distintos. Cuando la de resultado no
+    // existía en la vista, un `return` seco se llevaba por delante la escritura de la
+    // fecha — que ni siquiera se buscaba por su propio id. Y es exactamente el caso del
+    // uroanálisis, cuyo resultado NO se escribe nunca a propósito (es cualitativo y va por
+    // componentes) aunque sí haya una fecha válida que poner.
+    await t.casoAsync("injectLabsIntoCronicos (#71): sin casilla de RESULTADO, la FECHA se escribe igual", async () => {
+      mockDOM = {};
+      // Existe la casilla de fecha de la creatinina, pero NO la de su resultado.
+      mockDOM.fechaResultCreatinina = { value: "" };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      const res = testApi.injectLabsIntoCronicos([{
+        NombreParametro: "CREATININA", Resultado: "1.1", idEstado: 3,
+        __vglFechaSolicitud: "2026-08-10",
+      }]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.fechaResultCreatinina.value, "2026-08-10",
+        "la fecha llega aunque la casilla de resultado no exista: son dos casillas distintas");
+      t.falso(res.sinCasilla.includes("CREATININA"),
+        "y el analito sale de «sin casilla»: SÍ se pudo escribir algo de él");
+    });
+
+    await t.casoAsync("injectLabsIntoCronicos (#71): una fecha que el médico ya escribió NO se pisa", async () => {
+      // La regla del proyecto no se relaja con el desacople: solo casillas VACÍAS.
+      mockDOM = {};
+      mockDOM.fechaResultCreatinina = { value: "2026-01-01" };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      testApi.injectLabsIntoCronicos([{
+        NombreParametro: "CREATININA", Resultado: "1.1", idEstado: 3,
+        __vglFechaSolicitud: "2026-08-10",
+      }]);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.fechaResultCreatinina.value, "2026-01-01", "la casilla del médico es sagrada");
+    });
+
+    // v17.1.0 (#71) — COMPORTAMIENTO INVERTIDO A PROPÓSITO.
+    // Esta prueba fijaba que, si el interruptor SI/NO del uroanálisis ya estaba elegido, el
+    // reintento NO corría. Y esa era justamente la razón de que el médico reportara una y
+    // otra vez «la fecha del uroanálisis no se llena»: al SEGUNDO clic de Auto-Labs sobre
+    // el mismo paciente —y siempre que él hubiera marcado el bloque a mano— el reintento
+    // se cancelaba solo. La bandera `uroanalisisMarcado` responde «¿lo marqué YO en esta
+    // corrida?», que no es la pregunta: la pregunta es si el bloque está montado, y eso lo
+    // comprueba el propio reintento al buscar las casillas.
+    await t.casoAsync("injectLabsIntoCronicos (#71): con el interruptor SI ya elegido de antes, el reintento SÍ corre", async () => {
       mockDOM = {};
       const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
       const { lista: radios } = crearRadiosUro({ siChecked: true }); // el médico ya lo había puesto en SI antes
@@ -872,10 +838,14 @@ module.exports = {
       const res = testApi.injectLabsIntoCronicos(labsUroConResultado("NORMAL", "2026-08-10"));
       t.falso(res.uroanalisisMarcado, "ya estaba en SI: esta corrida no lo marcó");
       t.cierto(res.sinCasilla.includes("UROANALISIS"));
-      mockDOM.resultadoUroanalisis = { value: "" }; // aparece igual, por otra razón cualquiera
+      mockDOM.resultadoUroanalisis = { value: "" };
+      mockDOM.fechaResultUroanalisis = { value: "" };
       await new Promise((r) => setTimeout(r, 15));
       c.env.doc.querySelectorAll = prevQSA;
-      t.igual(mockDOM.resultadoUroanalisis.value, "", "sin reintento programado, la casilla queda vacía hasta el próximo click de Auto-Labs");
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL",
+        "el reintento corre igual: que el interruptor ya estuviera puesto no dice nada sobre si la casilla existe");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10",
+        "y con él llega la fecha, que es lo que el médico llevaba versiones reportando");
     });
 
     await t.casoAsync("injectLabsIntoCronicos v12.5.12: si entre el click y el reintento el médico YA escribió algo, se respeta (no se pisa)", async () => {
@@ -970,6 +940,138 @@ module.exports = {
       testApi.injectLabsIntoCronicos([{ NombreParametro: "LEUCOCITOS (PARCIAL DE ORINA)", Resultado: "15 X CAMPO" }]);
       c.env.doc.querySelectorAll = prevQSA;
       t.igual(inputLeucocitos.value, "15 X CAMPO");
+    });
+
+
+    // =====================================================================
+    // v14.2.7 — Reportado en consultorio con un PDF real de laboratorio: con triglicéridos
+    // muy altos (>400), el LDL CALCULADO (fórmula de Friedewald) deja de ser válido y el
+    // laboratorio manda una fila sin número usable (a veces con una nota de texto en el
+    // campo de resultado, p. ej. "TRI MAYOR A 400 mg/dL", en vez de dejarlo vacío) — junto
+    // con OTRA fila del LDL INMUNOLÓGICO/DIRECTO, medido de verdad, con su número real. El
+    // desempate antes era solo por fecha: si la fila sin número tenía fecha igual o más
+    // reciente, ganaba ELLA, y el número real disponible se quedaba sin usar. Ahora un
+    // candidato numérico siempre le gana a uno que no lo es. Datos de ejemplo, no un caso
+    // real de ningún paciente.
+    // =====================================================================
+    t.caso("_nuevoReemplazaCandidato: un resultado numérico siempre le gana a uno sin número usable, sin importar la fecha", () => {
+      const num = (resultVal, resultDate) => ({ resultVal, resultDate, viaComponente: false });
+      t.falso(testApi._nuevoReemplazaCandidato(num("71.0", "2026-08-09"), num("TRI MAYOR A 400 mg/dL", "2026-08-09")), "un texto sin número no reemplaza un número real, ni en fecha igual");
+      t.falso(testApi._nuevoReemplazaCandidato(num("71.0", "2026-08-01"), num("TRI MAYOR A 400 mg/dL", "2026-08-09")), "tampoco si el texto sin número trae una fecha MÁS reciente");
+      t.cierto(testApi._nuevoReemplazaCandidato(num("TRI MAYOR A 400 mg/dL", "2026-08-09"), num("71.0", "2026-08-01")), "un número real SÍ reemplaza a un texto sin número, aunque su fecha sea más vieja");
+      t.cierto(testApi._nuevoReemplazaCandidato(num("71.0", "2026-08-01"), num("96.0", "2026-08-09")), "entre dos números, sigue ganando el más reciente (comportamiento de siempre)");
+      t.falso(testApi._nuevoReemplazaCandidato(num("71.0", "2026-08-09"), num("96.0", "2026-08-01")), "entre dos números, uno más viejo no reemplaza al vigente");
+    });
+
+    t.caso("injectLabsIntoCronicos: con LDL calculado (sin número, triglicéridos > 400) e inmunológico (número real) del mismo panel, se escribe el número real", () => {
+      mockDOM = { "resultadoColesterolLDL": { value: "" } };
+      const labs = [
+        // orden real: la fila calculada (sin número usable) suele llegar en la misma
+        // tanda que la inmunológica — el orden de llegada no debe decidir cuál se usa.
+        { CodigoParametro: "903816", NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]", Resultado: "TRI MAYOR A 400 mg/dL", Fecha: "2026-08-09" },
+        { CodigoParametro: "903817", NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO", Resultado: "71.0", Fecha: "2026-08-09" },
+      ];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoColesterolLDL"].value, "71.0", "se escribe el número real del inmunológico, no el texto sin número del calculado");
+      t.igual(res.count, 1);
+    });
+
+    // =====================================================================
+    // v14.2.10 — REGLA DEL MÉDICO para el LDL (2026-08-18): con triglicéridos > 400 el
+    // laboratorio reporta el LDL como INMUNOLÓGICO/DIRECTO y ese es el que se usa; de lo
+    // contrario, el LDL normal (calculado) de siempre. Datos de ejemplo, no de ningún
+    // paciente real.
+    // =====================================================================
+    t.caso("v14.2.10 — _matchLabInWhitelist: la fila del LDL inmunológico/directo cae en COLESTEROL_LDL con cualquiera de sus nombres reales, y el VLDL jamás", () => {
+      const clave = (nombre, codigo) => { const m = testApi._matchLabInWhitelist({ NombreParametro: nombre, CodigoParametro: codigo || "" }); return m ? m.key : null; };
+      t.igual(clave("COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO"), "COLESTEROL_LDL", "nombre largo con corchetes");
+      t.igual(clave("COLESTEROL LDL INMUNOLOGICO DIRECTO"), "COLESTEROL_LDL", "nombre corto");
+      t.igual(clave("LDL INMUNOLOGICO"), "COLESTEROL_LDL", "sin la palabra COLESTEROL delante");
+      t.igual(clave("LDL DIRECTO"), "COLESTEROL_LDL", "variante DIRECTO a secas");
+      t.igual(clave("COLESTEROL-LDL DIRECTO"), "COLESTEROL_LDL", "con guion (la canonización lo vuelve espacio)");
+      t.igual(clave("COLESTEROL DE BAJA DENSIDAD [LDL]"), "COLESTEROL_LDL", "y el LDL normal sigue cayendo donde siempre");
+      t.igual(clave("COLESTEROL VLDL"), null, "el VLDL no es LDL");
+      t.igual(clave("VLDL DIRECTO"), null, "ni siquiera 'VLDL DIRECTO', que contiene 'LDL DIRECTO' como subcadena");
+      t.igual(clave("COLESTEROL DE MUY BAJA DENSIDAD [VLDL]"), null, "ni el VLDL con nombre largo");
+      t.igual(clave("COLESTEROL DE ALTA DENSIDAD [HDL] DIRECTO"), "COLESTEROL_HDL", "un HDL directo sigue siendo HDL, no LDL");
+    });
+
+    t.caso("v14.2.10 — _esLdlDirecto distingue la fila inmunológica/directa de la normal por el nombre", () => {
+      t.cierto(testApi._esLdlDirecto({ NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO" }));
+      t.cierto(testApi._esLdlDirecto({ NombreParametro: "colesterol ldl directo" }), "sin importar mayúsculas");
+      t.falso(testApi._esLdlDirecto({ NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]" }));
+      t.falso(testApi._esLdlDirecto({}), "sin nombre no lanza y no es directo");
+    });
+
+    t.caso("v14.2.10 — _resolverLdlPorTrigliceridos: la regla del médico, caso por caso", () => {
+      const fila = (nombre, resultVal, resultDate) => ({ lab: { NombreParametro: nombre }, resultVal, resultDate, viaComponente: false });
+      const directo = (v, f) => fila("COLESTEROL LDL INMUNOLOGICO DIRECTO", v, f);
+      const normal = (v, f) => fila("COLESTEROL DE BAJA DENSIDAD [LDL]", v, f);
+      const tg = (v, f) => fila("TRIGLICERIDOS", v, f);
+      // Triglicéridos > 400: manda la directa, aunque la calculada también traiga número.
+      let d = directo("71.0", "2026-08-09"), n = normal("130", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("869", "2026-08-09")), d, "TG 869: la directa, aunque la calculada traiga número");
+      d = directo("71.0", "2026-08-09"); n = normal("TRI MAYOR A 400 mg/dL", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("869", "2026-08-09")), d, "TG 869: la directa (la calculada ni siquiera trae número)");
+      // Triglicéridos <= 400: manda la normal, la de siempre.
+      d = directo("120", "2026-08-09"); n = normal("128.5", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("163", "2026-08-09")), n, "TG 163: la normal, aunque exista una directa con número");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, null), n, "sin triglicéridos conocidos: la normal, la de siempre");
+      // Pero jamás un texto sin número por encima de un número real, mande lo que mande la regla.
+      d = directo("120", "2026-08-09"); n = normal("HEMOLIZADO", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("163", "2026-08-09")), d, "TG 163 pero la normal sin número: se usa la directa, que sí lo trae");
+      d = directo("NO PROCESADO", "2026-08-09"); n = normal("130", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("869", "2026-08-09")), n, "TG 869 pero la directa sin número: se usa la normal, que sí lo trae");
+      // Paneles distintos (fechas distintas): esta regla no opina; decide la general.
+      d = directo("90", "2026-05-01"); n = normal("128.5", "2026-08-09");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, n, tg("869", "2026-08-09")), null, "fechas distintas: no decide aquí");
+      // Con una sola fila, es esa.
+      t.igual(testApi._resolverLdlPorTrigliceridos(null, n, null), n, "solo normal");
+      t.igual(testApi._resolverLdlPorTrigliceridos(d, null, null), d, "solo directa");
+      t.igual(testApi._resolverLdlPorTrigliceridos(null, null, null), null, "ninguna");
+    });
+
+    t.caso("v14.2.10 — _ultimaFechaPorAnalito aplica la regla del médico de punta a punta: TG > 400 → LDL inmunológico; TG normal → LDL calculado", () => {
+      // Panel real típico con triglicéridos altos: la calculada llega PRIMERO en la lista y
+      // con número (hay laboratorios que igual la calculan) — sin la regla ganaría por ser
+      // la primera vista en empate de fecha.
+      let labs = [
+        { NombreParametro: "TRIGLICERIDOS", CodigoParametro: "903868", Resultado: "869", Fecha: "2026-08-09" },
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]", Resultado: "130", Fecha: "2026-08-09" },
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO", Resultado: "71.0", Fecha: "2026-08-09" },
+      ];
+      let ldl = testApi._ultimaFechaPorAnalito(labs).candidatos.get("COLESTEROL_LDL");
+      t.igual(ldl.resultVal, "71.0", "TG 869: gana la inmunológica");
+      // El mismo panel con triglicéridos normales y las dos filas con número: la normal.
+      labs = [
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO", Resultado: "120", Fecha: "2026-08-09" },
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]", Resultado: "128.5", Fecha: "2026-08-09" },
+        { NombreParametro: "TRIGLICERIDOS", CodigoParametro: "903868", Resultado: "163", Fecha: "2026-08-09" },
+      ];
+      ldl = testApi._ultimaFechaPorAnalito(labs).candidatos.get("COLESTEROL_LDL");
+      t.igual(ldl.resultVal, "128.5", "TG 163: gana la normal aunque la directa haya llegado primero");
+      // Solo la fila normal (el caso de todos los días): igual que siempre.
+      labs = [
+        { NombreParametro: "TRIGLICERIDOS", CodigoParametro: "903868", Resultado: "163", Fecha: "2026-08-09" },
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]", Resultado: "128.5", Fecha: "2026-08-09" },
+      ];
+      ldl = testApi._ultimaFechaPorAnalito(labs).candidatos.get("COLESTEROL_LDL");
+      t.igual(ldl.resultVal, "128.5", "sin fila directa, la normal como siempre");
+      // Los triglicéridos NO se ven afectados por nada de esto.
+      t.igual(testApi._ultimaFechaPorAnalito(labs).candidatos.get("TRIGLICERIDOS").resultVal, "163");
+    });
+
+    t.caso("v14.2.10 — injectLabsIntoCronicos escribe el LDL inmunológico en la casilla cuando los triglicéridos del panel superan 400, aunque el calculado traiga número", () => {
+      mockDOM = { "resultadoColesterolLDL": { value: "" }, "resultadoTrigliceridos": { value: "" } };
+      const labs = [
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL]", Resultado: "130", Fecha: "2026-08-09" },
+        { NombreParametro: "TRIGLICERIDOS", CodigoParametro: "903868", Resultado: "869", Fecha: "2026-08-09" },
+        { NombreParametro: "COLESTEROL DE BAJA DENSIDAD [LDL] INMUNOLOGICO DIRECTO", Resultado: "71.0", Fecha: "2026-08-09" },
+      ];
+      const res = testApi.injectLabsIntoCronicos(labs);
+      t.igual(mockDOM["resultadoColesterolLDL"].value, "71.0", "en la casilla queda el inmunológico");
+      t.igual(mockDOM["resultadoTrigliceridos"].value, "869", "y los triglicéridos, los suyos");
+      t.igual(res.count, 2);
     });
 
     t.caso("v12.3.37: dos analitos DISTINTOS compitiendo por la misma casilla (tira vs. sedimento) — manda el más reciente y se AVISA, nunca omisión muda", () => {
@@ -1154,6 +1256,101 @@ module.exports = {
     t.caso("_analitosRcvVencidos: los 8 analitos con resultado reciente -> ningún faltante", () => {
       // 2026-08-11 - 2026-06-01 = 71 días, bien dentro de la vigencia de 180.
       t.igual(testApi._analitosRcvVencidos(LABS_RCV_AL_DIA, "2026-08-11"), []);
+    });
+
+    // =====================================================================
+    // v16.2.5 — CRUCE ANTIDUPLICADO CONTRA ATHENEA en el módulo de Ordenamiento de PyM.
+    // Pedido del médico (20-ago-2026): "con la misma lógica que se revisan los exámenes de
+    // riesgo cardiovascular y sus vencimientos... el script debe consultar Athenea para
+    // revisar si alguno de esos exámenes ya fue realizado y si ese es el caso se debe
+    // deshabilitar la opción de volver a ordenarlo porque sería un duplicado".
+    // Decisión de UX confirmada por él frente a la alternativa: NO bloquea la casilla, la
+    // desmarca y avisa — igual que el choque de sexo y la orden vigente de Everest.
+    // El sesgo de la función es deliberado y va en una sola dirección: ante CUALQUIER duda
+    // dice "no está cubierto" y el paquete se ofrece. Un falso "ya está hecho" le quita al
+    // paciente un examen que necesita; un falso "hágalo" solo cuesta un clic.
+    // =====================================================================
+    t.caso("pymRcvCubiertoPorAthenea: con los 8 analitos RCV vigentes en Athenea, el paquete YA está cubierto", () => {
+      t.igual(testApi.pymRcvCubiertoPorAthenea(LABS_RCV_AL_DIA, "2026-08-11"), true,
+        "el paciente ya se los hizo: volver a ordenarlos sería el duplicado que el médico quiere evitar");
+    });
+
+    t.caso("pymRcvCubiertoPorAthenea: si UN solo analito falta o está vencido, el paquete NO se da por cubierto", () => {
+      const sinCreatinina = LABS_RCV_AL_DIA.filter((l) => l.nombre !== "CREATININA");
+      t.igual(testApi.pymRcvCubiertoPorAthenea(sinCreatinina, "2026-08-11"), false,
+        "el paquete es todo o nada: falta la creatinina, así que sigue habiendo algo real que ordenar");
+      const conVencido = LABS_RCV_AL_DIA.map((l) => l.nombre === "CREATININA" ? Object.assign({}, l, { Fecha: "2026-01-01" }) : l);
+      t.igual(testApi.pymRcvCubiertoPorAthenea(conVencido, "2026-08-11"), false,
+        "una creatinina de hace más de 180 días cuenta como no hecha, no como hecha");
+    });
+
+    t.caso("pymRcvCubiertoPorAthenea: ante la duda NUNCA da por cubierto — red caída, sesión vencida o paciente sin nada", () => {
+      t.igual(testApi.pymRcvCubiertoPorAthenea(null, "2026-08-11"), false, "fallo de consulta (null): se ofrece el paquete, como siempre");
+      t.igual(testApi.pymRcvCubiertoPorAthenea(undefined, "2026-08-11"), false, "sin respuesta: igual");
+      t.igual(testApi.pymRcvCubiertoPorAthenea([], "2026-08-11"), false,
+        "lista VACÍA es el caso de más riesgo: un paciente sin NADA en Athenea es justo al que le faltan los 8, no al que los tiene todos");
+      t.igual(testApi.pymRcvCubiertoPorAthenea("no es una lista", "2026-08-11"), false, "basura de entrada tampoco bloquea");
+    });
+
+    t.caso("pymRcvCubiertoPorAthenea: no lanza nunca, aunque la fecha de hoy sea inválida", () => {
+      let r;
+      t.noLanza(() => { r = testApi.pymRcvCubiertoPorAthenea(LABS_RCV_AL_DIA, "no-es-fecha"); });
+      t.igual(r, false, "sin poder fechar el hoy, se cae del lado seguro: ofrecer el paquete");
+    });
+
+    // =====================================================================
+    // v17.6.2 — CRUCE ANTIDUPLICADO POR PAQUETE (pymPaqueteCubiertoPorAthenea).
+    // Pedido del médico (22-ago): los Excel de PyM (base piloto y xlsx de SharePoint)
+    // a veces NO están actualizados — puede aparecer un paciente "sin el examen hecho"
+    // cuando en realidad ya se lo realizó (p. ej. VIH o SOMF hace 15 días). El script
+    // debe consultar Athenea y, si el examen ya está hecho dentro de su vigencia,
+    // desmarcar la opción y avisar para no duplicar. Mismo sesgo de la hermana RCV:
+    // ante la duda NUNCA dice "ya está hecho" — un falso positivo le quitaría al
+    // paciente un examen que necesita; un falso negativo solo cuesta un clic.
+    // =====================================================================
+    const PKG_VIH = testApi.__PYM_CATALOG.find((p) => p.cie10 === "Z113");
+    const PKG_SOMF = testApi.__PYM_CATALOG.find((p) => p.cie10 === "Z121");
+    t.caso("v17.6.2 — VIH y SOMF tienen vigencia clínica confirmada en PYM_CATALOG", () => {
+      t.cierto(!!PKG_VIH, "el paquete VIH (Z113) existe");
+      t.cierto(!!PKG_SOMF, "el paquete SOMF (Z121) existe");
+      t.igual(PKG_VIH.vigenciaDias, 365, "VIH: 1 año (decisión del médico, 22-ago)");
+      t.igual(PKG_SOMF.vigenciaDias, 730, "SOMF: 2 años desde los 50 (RPMS, Res. 3280/2018)");
+    });
+
+    t.caso("v17.6.2 — VIH hecho hace 15 días en Athenea: el paquete NO se vuelve a ordenar (el Excel desactualizado decía pendiente)", () => {
+      const labs = [{ codigo: "906249", nombre: "VIRUS DE INMUNODEFICIENCIA HUMANA 1 Y 2 ANTICUERPOS", Resultado: "NO REACTIVO", Fecha: "2026-08-06" }];
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, labs, "2026-08-21"), true,
+        "resultado de VIH dentro del año: Athenea manda sobre el Excel, no se duplica");
+    });
+
+    t.caso("v17.6.2 — VIH hecho hace 2 años: YA no cubre, se ofrece otra vez", () => {
+      const labs = [{ codigo: "906249", nombre: "VIRUS DE INMUNODEFICIENCIA HUMANA 1 Y 2 ANTICUERPOS", Resultado: "NO REACTIVO", Fecha: "2024-06-01" }];
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, labs, "2026-08-21"), false,
+        "más de 1 año: la tamización vuelve a corresponder");
+    });
+
+    t.caso("v17.6.2 — SOMF hecha hace 2 años exactos: sigue cubierta (el límite no cuenta como vencido)", () => {
+      const labs = [{ codigo: "907009", nombre: "SANGRE OCULTA EN MATERIA FECAL", Resultado: "NEGATIVO", Fecha: "2024-08-21" }];
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_SOMF, labs, "2026-08-21"), true,
+        "730 días exactos: el límite es inclusivo, igual que en las vigencias RCV");
+    });
+
+    t.caso("v17.6.2 — SOMF hecha hace 3 años: se vuelve a ordenar", () => {
+      const labs = [{ codigo: "907009", nombre: "SANGRE OCULTA EN MATERIA FECAL", Resultado: "NEGATIVO", Fecha: "2023-01-01" }];
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_SOMF, labs, "2026-08-21"), false,
+        "más de 2 años: corresponde repetir la tamización de colon");
+    });
+
+    t.caso("v17.6.2 — ante la duda el paquete NO se da por cubierto (mismo sesgo que el RCV)", () => {
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, null, "2026-08-21"), false, "fallo de Athenea (null): se ofrece, como siempre");
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, [], "2026-08-21"), false, "lista vacía: no se puede afirmar que está hecho");
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, [{ codigo: "906249", nombre: "VIH", Resultado: "X", Fecha: "basura" }], "2026-08-21"), false, "fecha ilegible: no hay con qué comparar la vigencia");
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-08-01" }], "2026-08-21"), false, "otro examen en Athenea no cubre el VIH");
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, [{ codigo: "906249", nombre: "VIH", Fecha: "2026-08-06" }], "2026-08-21"), false, "sin resultado (PENDIENTE) no cuenta como hecho");
+      t.igual(testApi.pymPaqueteCubiertoPorAthenea({ cie10: "ZZ", vigenciaDias: 365, cups: [] }, [{ codigo: "906249", nombre: "VIH", Resultado: "X", Fecha: "2026-08-06" }], "2026-08-21"), false, "paquete sin CUPS no casa con nada");
+      let r;
+      t.noLanza(() => { r = testApi.pymPaqueteCubiertoPorAthenea(PKG_VIH, [], "no-es-fecha"); });
+      t.igual(r, false, "hoy ilegible también cae del lado seguro");
     });
 
     t.caso("_analitosRcvVencidos: un analito completamente ausente de Athenea aparece como faltante", () => {
@@ -1348,7 +1545,21 @@ module.exports = {
       // (no hay fila real del panel completo) — no cuenta como "casilla no encontrada"
       // (eso sería para un candidato real sin destino en el DOM), simplemente no hay
       // candidato que buscar casilla para él.
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-01", "v14.2.7 (bug reportado en consultorio): la FECHA general del uroanálisis SÍ se completa desde el componente más reciente — es la misma para todo el panel, no el texto de un componente");
       t.falso(res.sinCasilla.includes("UROANALISIS"), "sin fila real del panel, UROANALISIS ni siquiera se considera candidato aquí");
+    });
+
+    t.caso("injectLabsIntoCronicos: si SÍ llega una fila real 'UROANALISIS', su resultado y fecha ganan siempre sobre cualquier componente suelto", () => {
+      mockDOM = { resultadoUroanalisis: { value: "" }, fechaResultUroanalisis: { value: "" } };
+      const prevQSA = c.env.doc.querySelectorAll;
+      c.env.doc.querySelectorAll = () => [];
+      // La fila real trae una fecha más VIEJA que los componentes — y aun así debe ganar
+      // ella: una fila real nunca la desplaza un componente suelto, sin importar fechas.
+      const labs = [...LABS_URO_POR_COMPONENTES("2026-08-10"), { NombreParametro: "UROANALISIS", CodigoParametro: "907106", Resultado: "NORMAL", Fecha: "2026-08-01" }];
+      testApi.injectLabsIntoCronicos(labs);
+      c.env.doc.querySelectorAll = prevQSA;
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL", "con fila real disponible, su resultado SÍ se escribe");
+      t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-01", "y su fecha, aunque sea más vieja que la de los componentes");
     });
 
     t.caso("RAC Guardia: restaura la casilla cuando Everest la vacía y se apaga en edición real", () => {
@@ -1618,6 +1829,41 @@ module.exports = {
 
       t.igual(campos.resultEl, null, "debe ser null si ninguno tiene type=number y max=30");
       t.igual(campos.dateEl, null);
+    });
+
+    // v17.6.2 — REPORTE EN VIVO (22-ago): el botón Auto-Labs llenaba el valor de la HbA1c
+    // pero la FECHA quedaba en blanco, mientras los demás analitos sí la llenaban. La ruta
+    // HBA1C solo usaba `campos.dateEl` (la fecha HERMANA dentro del .input-group) y, cuando
+    // Everest la monta separada, se quedaba en null sin el respaldo por id-por-convención
+    // (`fechaResultHBA1C`) que los demás analitos usan (v12.3.31). Ahora lo usa igual.
+    t.caso("v17.6.2 — HbA1c: con la fecha NO hermana en el .input-group pero SÍ el id-por-convención, la fecha se escribe igual", () => {
+      const prevQSA = c.env.doc.querySelectorAll;
+      const prevG = c.env.doc.getElementById;
+      const domFecha = { value: "" };
+      // El input de resultado de HbA1c existe (type=number, max=30) pero su .input-group NO
+      // contiene la fecha hermana — el escenario real que dejaba la fecha en blanco.
+      const fakeHbA1c = {
+        tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina",
+        type: "number", getAttribute: (k) => (k === "max" ? "30" : null),
+        closest: () => ({ querySelector: () => null }),
+        _val: "", set value(v) { this._val = v; }, get value() { return this._val; },
+        dispatchEvent() { return true; },
+      };
+      c.env.doc.querySelectorAll = (sel) => {
+        if (sel === 'input[name="resultadoHemoglobina"], input#resultadoHemoglobina') return [fakeHbA1c];
+        return [];
+      };
+      c.env.doc.getElementById = (id) => (id === "fechaResultHBA1C" ? domFecha : null);
+
+      const res = testApi.injectLabsIntoCronicos([
+        { CodigoParametro: "903843", nombre: "HEMOGLOBINA GLICOSILADA", Resultado: "7.1", Fecha: "2026-08-01" },
+      ]);
+
+      c.env.doc.querySelectorAll = prevQSA;
+      c.env.doc.getElementById = prevG;
+
+      t.cierto(res.count >= 1, "el valor se escribió (" + res.count + ")");
+      t.igual(domFecha.value, "2026-08-01", "y la FECHA también — ESTE era el hueco: la ruta HBA1C no usaba el id-por-convención de la fecha");
     });
 
     t.caso("el aviso 'no se reconoció ninguna fecha' sale UNA sola vez por sesión", () => {

@@ -32,9 +32,58 @@ module.exports = {
     "allStats", "statsToday", "bumpStat", "purgeOld", "lastDays",
     "evKey", "logEvent", "evFlush", "eventsOf", "purgeEventDays",
     "downloadBlob", "exportAudit",
+    // v16.5.1 — espejo de doble almacén del resumen
+    "_vglEspejoGuardar", "_vglRestaurarDeEspejo",
   ],
 
-  pruebas(t, api, env, cargar) {
+  async pruebas(t, api, env, cargar) {
+    // =================================================================
+    //  v16.5.1 — ESPEJO DE DOBLE ALMACÉN (el Resumen en ceros del 20-ago)
+    //  localStorage muere por limpiezas del sitio; el almacén del script
+    //  (GM) muere solo si se elimina el script. Juntos: el resumen vuelve.
+    // =================================================================
+    t.caso("espejo: lo que se escribe en las claves del resumen queda copiado al almacén del script", () => {
+      const c = cargar({ silencioso: true });
+      c.api.bumpStat("atiempo");
+      c.api._vglEspejoGuardar("vgl_stats", c.api.allStats());   // llamada directa: misma puerta que usa safeWriteJSON
+      const espejo = c.env.gm["espejo_vgl_stats"];
+      t.cierto(!!espejo, "vgl_stats tiene espejo en GM");
+      const hoy = espejo[Object.keys(espejo)[0]];
+      t.igual(hoy.atiempo, 1, "y el espejo trae el conteo real");
+    });
+
+    t.caso("espejo: una clave operativa del día NO se espeja (la siembra no es del resumen)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.safeWriteJSON("vgl_siembra_dia", { dia: "x", mapa: {} });
+      t.falso("espejo_vgl_siembra_dia" in c.env.gm, "solo stats/ux/bitácora del día tienen espejo");
+    });
+
+    await t.casoAsync("espejo: si el navegador pierde el resumen, al arrancar se restaura desde el script — y si el original vive, NO se toca", async () => {
+      const c = cargar({ silencioso: true });
+      c.api.bumpStat("fraude");
+      c.api.bumpStat("fraude");                       // cae en la ventana del freno…
+      await new Promise((r) => setTimeout(r, 2300));  // …y la COLA lo vuelca al cerrar la ventana
+      const clave = "vgl_stats";
+      const antes = c.env.storage.getItem(clave);
+      t.cierto(!!antes, "el original existe tras contar");
+
+      // Limpieza del sitio (política de IPS): localStorage muere, el GM sobrevive.
+      c.env.storage.removeItem(clave);
+      t.igual(c.env.storage.getItem(clave), null, "el navegador quedó limpio");
+      const restauradas = c.api._vglRestaurarDeEspejo();
+      t.cierto(restauradas.indexOf(clave) >= 0, "la restauración reporta la clave vuelta a la vida");
+      const devuelta = JSON.parse(c.env.storage.getItem(clave));
+      t.igual(devuelta[Object.keys(devuelta)[0]].fraude, 2, "y los números del médico volvieron intactos");
+
+      // Con el original vivo, restaurar es un no-op: lo fresco jamás se pisa con lo viejo.
+      c.api.bumpStat("fraude");   // ahora el original va en 3
+      const otraVez = c.api._vglRestaurarDeEspejo();
+      t.igual(otraVez.length, 0, "no restaura nada si el original está");
+      const final = JSON.parse(c.env.storage.getItem(clave));
+      t.igual(final[Object.keys(final)[0]].fraude, 3, "el conteo fresco queda intacto");
+    });
+
+
 
     // ---------- vglLog: caja negra en localStorage ----------
     t.caso("vglLog: guarda la entrada con categoría, acción y detalles", () => {
@@ -119,7 +168,9 @@ module.exports = {
       t.cierto(!!ancla, "debe añadir un ancla al body");
       t.cierto(ancla.download.indexOf("BITACORA_VIGILANTE_REAL_") === 0, "nombre del archivo");
       t.igual(ancla.href, "blob:reporte");
-      t.cierto(alertas.length === 1 && alertas[0].indexOf("✅") === 0, "debe avisar éxito, no error");
+      // v15.6.0 — cero ventanas del navegador: el éxito viaja por el toast propio; la
+      // descarga misma (blob + ancla, asertadas arriba) es la prueba de que funcionó.
+      t.igual(alertas.length, 0, "sin alert() nativo");
     });
 
     // ---------- allStats / statsToday ----------
@@ -411,6 +462,44 @@ module.exports = {
       const csv = blobs[0].parts[0];
       t.cierto(csv.indexOf("Confirmaciones extemporáneas;0") >= 0);
       t.cierto(csv.indexOf("Eventos registrados;0") >= 0);
+    });
+
+    // =====================================================================
+    // v17.1.0 (#72/#146) — LA PRUEBA DE CONCILIACIÓN QUE FALTABA.
+    //
+    // El defecto que reportó el médico se podía ver ENTERO dentro de su propio CSV: la
+    // cabecera decía «Ingresos a tiempo;38» y el cuerpo traía 18 filas INGRESO_A_TIEMPO.
+    // Dos números del mismo hecho, en el mismo archivo, y ninguna prueba los comparaba.
+    // Esta lo hace, y es la que habría cazado el bug desde el primer día.
+    // =====================================================================
+    t.caso("exportAudit: el número de la CABECERA cuadra con las filas del CUERPO — la conciliación que faltaba", () => {
+      const c = cargar({ silencioso: true });
+      const base = { hora_texto: "08:00 AM", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const key = c.api.apptKey(base);
+      const ev = (estado, color, arrival) => ({ ...base, key, estado, color, arrival: !!arrival });
+      // La secuencia real: llega, la fila se lee rara un tick, se vuelve a leer "En sala".
+      c.api.maybeNotify(ev("Sin presentarse", "AZUL", false));
+      c.api.maybeNotify(ev("En sala", "VERDE", true));
+      c.api.maybeNotify(ev("Pendiente", "AZUL", false));
+      c.api.maybeNotify(ev("En sala", "VERDE", true));
+      // Un segundo paciente, para que el número no sea trivialmente 1.
+      const b = { hora_texto: "09:00 AM", doc_id: "456", nombre: "ANA", elapsed: 1, reason: "" };
+      const kb = c.api.apptKey(b);
+      c.api.maybeNotify({ ...b, key: kb, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      c.api.maybeNotify({ ...b, key: kb, estado: "En sala", color: "VERDE", arrival: true });
+      c.api.evFlush();
+
+      const blobs = [];
+      c.ctx.Blob = function (parts, opts) { this.parts = parts; this.opts = opts; blobs.push(this); };
+      c.ctx.URL = { createObjectURL: () => "blob:csv", revokeObjectURL() {} };
+      c.api.exportAudit(c.api.todayStamp());
+      const csv = blobs[0].parts[0];
+
+      const cabecera = Number((/Ingresos a tiempo;(\d+)/.exec(csv) || [])[1]);
+      const filas = (csv.match(/;INGRESO_A_TIEMPO;/g) || []).length;
+      t.igual(cabecera, 2, "dos pacientes llegaron a tiempo, no cuatro");
+      t.igual(filas, cabecera,
+        "cabecera y cuerpo tienen que decir lo mismo: si divergen, uno de los dos miente y no se sabe cuál");
     });
   },
 };

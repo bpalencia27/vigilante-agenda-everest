@@ -1,0 +1,37 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/ApiOrdenamientoHealth/api/Combo/ObtenerPaqueteProgramasCupsByCitaId",
+  "parametros": [
+    "citaID",
+    "paqueteProgramaId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_paquete_HTA_20260812.json"
+  ],
+  "esquemaRespuesta": {
+    "tipo": "array",
+    "elementos": 10,
+    "de": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 19349
+      },
+      "codigo": {
+        "tipo": "string(6 dígitos)",
+        "ejemplo": "902210"
+      },
+      "descripcion": "string(190 car)",
+      "swCirugia": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "nota_Tecnica": {
+        "tipo": "string(11 car)",
+        "ejemplo": "LABORATORIO"
+      }
+    }
+  }
+}

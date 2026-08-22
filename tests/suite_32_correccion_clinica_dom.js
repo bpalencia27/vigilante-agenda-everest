@@ -17,14 +17,14 @@ const path = require("path");
 module.exports = {
   nombre: "Corrección Clínica, Frontera DOM y Límites (M2)",
   cubre: [
-    "cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG",
+    "cockcroftGault", "ckdEpi2021", "estadioKDIGO",
     "estadioRenalDelPaciente", "calcularEstadioRenal", "_renderEstadioRenalHtml",
     "_creatininaDeLabs", "_esSexoFemenino", "_matchLabInWhitelist", "_esAnalitoDeOrina",
-    "_matchUroComponente", "_findHbA1cFields", "_findLabField", "_findUroInput",
-    "_marcarUroanalisisSi", "_conductaBuscarYAgregarExamen", "esFestivo",
-    "todayStamp", "horaBonita", "parseHoraMin", "elapsedMin", "apptKey",
-    "colorAndAlert", "diaNuevo", "pymCubiertoPorOrdenVigente",
-    "_ordenesVigentesInvalidar", "_demograficosInvalidar", "_bannerPymInvalidar",
+    "_matchUroComponente", "_findHbA1cFields",
+    "esFestivo",
+    "todayStamp", "horaBonita", "parseHoraMin", "apptKey",
+    "colorAndAlert", "pymCubiertoPorOrdenVigente",
+    "_ordenesVigentesInvalidar", "_demograficosInvalidar",
     "apiAccesoObtenerDemograficos", "exportAudit"
   ],
 
@@ -381,24 +381,29 @@ module.exports = {
 
       const res = c.api.colorAndAlert(appt, refDate.getTime());
       t.igual(res.color, "AMBAR");
-      t.cierto(c.api.__state.fraudWatch.has("1098765432@07:00 AM"), "debe entrar a fraudWatch");
+      t.cierto(c.api.__state.fraudWatch.has(c.api.apptKey(appt)), "debe entrar a fraudWatch");
       t.falso(res.sound, "AMBAR no emite sonido");
     });
 
-    t.caso("R2.5: Transición Sin presentarse -> Atendido (salto de sala) dispara ROJO con sonido de flanco", () => {
+    t.caso("R2.5: Sin presentarse -> Atendido queda en ROJO y registrado, pero SIN sonido (v16.2.8)", () => {
       const c = cargar();
       c.api.__state.leader = true;
-      const key = "1098765432@07:00 AM";
-      c.api.__state.fraudWatch.add(key);
-
       const appt = { doc_id: "1098765432", hora_texto: "07:00 AM", estado: "Atendido", index: 0 };
+      // v17.1.0 — la clave se pide al propio script en vez de escribirla a mano: su forma
+      // interna cambió (la hora va canonizada) y una prueba no debe fijar ese detalle.
+      const key = c.api.apptKey(appt);
+      c.api.__state.fraudWatch.add(key);
       const now = Date.now();
 
-      // Primer tick: salta sonido
+      // v16.2.8 — Decisión del médico: cuando la agenda ya dice "Atendido", el paciente
+      // lleva rato dentro del consultorio y el aviso solo interrumpe. Se conserva TODO lo
+      // que sirve como evidencia (color rojo, alertedFraud, registro de auditoría) y se
+      // quita únicamente el canal que interrumpe. El aviso que sí quiere es el paso a
+      // "En Sala" fuera de gracia, cubierto por su propia prueba en la suite 04.
       const res1 = c.api.colorAndAlert(appt, now);
       t.igual(res1.color, "ROJO");
-      t.cierto(res1.sound, "primer aviso de fraude debe sonar");
-      t.cierto(c.api.__state.alertedFraud.has(key), "debe quedar en alertedFraud");
+      t.falso(res1.sound, "ya no interrumpe: el paciente ya está siendo atendido");
+      t.cierto(c.api.__state.alertedFraud.has(key), "pero sí queda en alertedFraud");
 
       // Segundo tick: ya en alertedFraud, NO repite sonido
       const res2 = c.api.colorAndAlert(appt, now);
@@ -413,8 +418,8 @@ module.exports = {
 
       const k1 = c.api.apptKey(a1);
       const k2 = c.api.apptKey(a2);
-      t.igual(k1, "12345@07:00 AM");
-      t.igual(k2, "12345@09:00 AM");
+      t.igual(k1, "12345@m420");
+      t.igual(k2, "12345@m540");
       t.cierto(k1 !== k2, "citas a diferente hora deben tener claves distintas");
 
       // Si falta a la de las 7, no afecta a la de las 9
@@ -503,7 +508,8 @@ module.exports = {
     t.caso("R2.9: Invalidadores de caché reinician el estado de memoria", () => {
       t.noLanza(() => api._ordenesVigentesInvalidar());
       t.noLanza(() => api._demograficosInvalidar());
-      t.noLanza(() => api._bannerPymInvalidar());
+      // [v14.2.0 — auditoría pre-producción 2026-08-18] _bannerPymInvalidar se retiró con
+      // el resto del bloque T7 (código muerto, ver CHANGELOG).
     });
 
     t.caso("R2.9: exportAudit genera CSV válido con UTF-8 BOM", () => {

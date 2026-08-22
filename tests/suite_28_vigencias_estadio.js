@@ -212,5 +212,74 @@ module.exports = {
       t.igual(api.analitoTablaDesdeClaveRcv(""), null);
       t.igual(api.analitoTablaDesdeClaveRcv(null), null);
     });
+
+    // =====================================================================
+    //  T3 — Enganche de vigencias por estadio en _analitosRcvVencidos
+    // =====================================================================
+    t.caso("_analitosRcvVencidos: compatibilidad hacia atrás — sin opts aplica 180 días planos", () => {
+      const labs = [
+        { codigo: "903895", nombre: "CREATININA", Resultado: "0.9", Fecha: "2026-03-14" }, // 150 días a 2026-08-11
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: "2026-07-01" },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-07-01" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-07-01" },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "140", Fecha: "2026-07-01" },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "50", Fecha: "2026-07-01" },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "95", Fecha: "2026-07-01" },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-07-01" },
+      ];
+      // Sin opts: 150 días <= 180 -> ningún faltante
+      const sinOpts = api._analitosRcvVencidos(labs, "2026-08-11");
+      t.igual(sinOpts, []);
+    });
+
+    t.caso("_analitosRcvVencidos: dos pacientes con la MISMA fecha de creatinina (100 días), en G4 vence y en G1 NO", () => {
+      const labs = [
+        { codigo: "903895", nombre: "CREATININA", Resultado: "1.4", Fecha: "2026-05-03" }, // 100 días a 2026-08-11
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: "2026-07-01" },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-07-01" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-07-01" },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "140", Fecha: "2026-07-01" },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "50", Fecha: "2026-07-01" },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "95", Fecha: "2026-07-01" },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-07-01" },
+      ];
+
+      // Paciente en G1: vigencia es 180 días -> 100 días NO está vencida
+      const resG1 = api._analitosRcvVencidos(labs, "2026-08-11", { estadio: "G1" });
+      const creatG1 = resG1.find((f) => f.key === "CREATININA");
+      t.igual(creatG1, undefined, "en G1 creatinina de 100 días sigue vigente");
+
+      // Paciente en G4: vigencia es 60-93 días -> 100 días SÍ está vencida
+      const resG4 = api._analitosRcvVencidos(labs, "2026-08-11", { estadio: "G4" });
+      const creatG4 = resG4.find((f) => f.key === "CREATININA");
+      t.cierto(!!creatG4, "en G4 creatinina de 100 días está vencida (tope 93 días)");
+      t.igual(creatG4.dias, 100);
+      t.igual(creatG4.resultDate, "2026-05-03");
+    });
+
+    t.caso("_analitosRcvVencidos: Glicemia en G4 vence a los 60 días (Tabla 50)", () => {
+      const labs = [
+        { codigo: "903895", nombre: "CREATININA", Resultado: "1.4", Fecha: "2026-07-01" },
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "95", Fecha: "2026-05-13" }, // 90 días a 2026-08-11
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: "2026-07-01" },
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: "2026-07-01" },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "140", Fecha: "2026-07-01" },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "50", Fecha: "2026-07-01" },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "95", Fecha: "2026-07-01" },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: "2026-07-01" },
+      ];
+
+      // G1: glicemia 90 días <= 180 -> vigente
+      const resG1 = api._analitosRcvVencidos(labs, "2026-08-11", { estadio: "G1" });
+      t.igual(resG1.find((f) => f.key === "GLUCOSA"), undefined);
+
+      // G4: glicemia 90 días > 60 -> vencida
+      const resG4 = api._analitosRcvVencidos(labs, "2026-08-11", { estadio: "G4" });
+      const gluG4 = resG4.find((f) => f.key === "GLUCOSA");
+      t.cierto(!!gluG4, "en G4 glicemia de 90 días está vencida");
+      t.igual(gluG4.dias, 90);
+    });
   },
 };
+
+

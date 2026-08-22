@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "beep", "muted", "muteFor", "unmute", "playTone", "startNag", "stopNag", "faviconUrl", "setFavicon", "startFlash", "stopFlash", "popupAlert", "bigAlert", "acknowledge", "pymAlert", "abandonoPESAlert", "checkAbandonoPES", "colorDot", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "osNotify", "_renderToast", "showToast", "notify", "nkey", "maybeNotify", "updateBell", "testNotifications", "enableOsNotifications", "checkRecordatorioPym", "labsVencidosAlert", "checkLabsVencidos", "otroAvisoDePacienteAbierto", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -35,7 +35,14 @@ module.exports = {
       t.falso(r2.sound, "no debe sonar por segunda vez");
     });
 
-    t.caso("colorAndAlert: si pasa directo de Sin presentarse a Atendido, lo pesca (Fraude extemporáneo)", () => {
+    t.caso("colorAndAlert: el salto directo a Atendido SIGUE quedando registrado en rojo, pero YA NO suena (v16.2.8)", () => {
+      // Decisión del médico (20-ago, con pantallazo de una notificación recibida a las
+      // 12:09 por una cita de las 11:20): "solamente necesito el aviso cuando la leyenda
+      // pasa de 'sin presentarse' a 'en sala' fuera del tiempo de confirmación; pero para
+      // 'sin presentarse' a 'atendido' no es necesario generar ninguna notificación".
+      // Cuando la agenda ya dice "Atendido" el paciente lleva rato dentro: avisar entonces
+      // solo interrumpe. Lo que NO se pierde es la evidencia: el color rojo y el registro
+      // de auditoría son los que sustentan las reclamaciones.
       const c = cargar();
       const refDate = new Date("2026-08-10T08:20:00").getTime();
       const a = { hora_texto: "08:00 AM", estado: "Atendido", nombre: "JUAN", index: 1, doc_id: "123" };
@@ -44,8 +51,21 @@ module.exports = {
       c.api.__state.fraudWatch.add(k); // estaba en ambar
 
       const r = c.api.colorAndAlert(a, refDate);
+      t.igual(r.color, "ROJO", "se sigue pescando: el panel lo pinta y la auditoría lo guarda");
+      t.falso(r.sound, "pero no dispara tono, ni notificación de Windows, ni cartel");
+      t.cierto(c.api.__state.alertedFraud.has(k), "queda marcado para no reevaluarlo");
+    });
+
+    t.caso("colorAndAlert: el paso a EN SALA fuera de gracia SÍ suena — es el aviso que el médico sí quiere", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__state.fraudWatch.add(c.api.apptKey(a));
+
+      const r = c.api.colorAndAlert(a, refDate);
       t.igual(r.color, "ROJO");
-      t.cierto(r.sound, "deberia pescar el salto directo a atendido");
+      t.cierto(r.sound, "este es el único caso que debe interrumpir al médico");
     });
 
     t.caso("colorAndAlert: prealerta MORADO por tiempo", () => {
@@ -139,6 +159,96 @@ module.exports = {
       } catch (e) { return 0; }
     };
 
+    // =====================================================================
+    // v17.1.0 (#72/#146) — LOS INDICADORES CUENTAN CITAS, NO TRANSICIONES.
+    //
+    // Reporte del médico del 21-ago, con pantallazo: «me salen 38 A TIEMPO y no entiendo
+    // por qué, porque el máximo de pacientes por día son 21». Su propia auditoría lo
+    // probó: la cabecera del CSV decía «Ingresos a tiempo;38» y el cuerpo traía 18 filas
+    // INGRESO_A_TIEMPO para 14 citas distintas. Cuatro pacientes contados dos veces, a
+    // 13 s, 6 min, 15 min y 16 min de distancia.
+    // La clave era `state.notified`, un mapa de «último color visto» que se re-arma en
+    // cuanto la fila se lee un tick con otro estado — Angular repintando, la API cayendo
+    // al raspado, un relevo de pestaña. Productividad, que sí cuenta por conjunto de
+    // citas, daba el número correcto (15/18) en la misma pantalla.
+    // =====================================================================
+    t.caso("#146: una cita que oscila de estado se cuenta UNA vez — no una por transición", () => {
+      const c = cargar();
+      const base = { hora_texto: "08:00 AM", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const key = c.api.apptKey(base);
+      const a = (estado, color, arrival) => ({ ...base, key, estado, color, arrival: !!arrival });
+      c.api.maybeNotify(a("Sin presentarse", "AZUL", false));   // siembra
+      c.api.maybeNotify(a("En sala", "VERDE", true));           // llegó: cuenta 1
+      c.api.maybeNotify(a("Pendiente", "AZUL", false));         // Angular repinta: la fila se lee rara
+      c.api.maybeNotify(a("En sala", "VERDE", true));           // vuelve a leerse "En sala"
+      t.igual(atiempoHoy(c), 1, "el mismo paciente no puede llegar a tiempo dos veces");
+    });
+
+    t.caso("#146: la misma cita leída por el API y por el DOM se cuenta UNA vez", () => {
+      // horaBonita() escribe "7:00 a. m." y el raspado del DOM devuelve "07:00 AM": con
+      // dos claves para una cita se rompían a la vez las cuatro guardas.
+      const c = cargar();
+      const porApi = { hora_texto: "7:00 a. m.", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const porDom = { hora_texto: "07:00 AM", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const k1 = c.api.apptKey(porApi), k2 = c.api.apptKey(porDom);
+      t.igual(k1, k2, "una cita, una clave");
+      c.api.maybeNotify({ ...porApi, key: k1, estado: "Sin presentarse", color: "AZUL", arrival: false });
+      c.api.maybeNotify({ ...porApi, key: k1, estado: "En sala", color: "VERDE", arrival: true });
+      c.api.maybeNotify({ ...porDom, key: k2, estado: "En sala", color: "VERDE", arrival: true });
+      t.igual(atiempoHoy(c), 1, "cambiar de fuente a mitad de jornada no puede duplicar el indicador");
+    });
+
+    t.caso("#146: dos pestañas compartiendo almacén cuentan la cita UNA vez", () => {
+      // El duplicado de 13 s del CSV del médico: crossTabDup solo dura 12 segundos, y
+      // además solo frena el AVISO, nunca frenó el conteo.
+      const A = cargar();
+      const B = cargar({ almacen: A.env.almacen, storage: A.env.storage });
+      const base = { hora_texto: "08:00 AM", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const key = A.api.apptKey(base);
+      const ev = (estado, color, arrival) => ({ ...base, key, estado, color, arrival: !!arrival });
+      A.api.maybeNotify(ev("Sin presentarse", "AZUL", false));
+      A.api.maybeNotify(ev("En sala", "VERDE", true));
+      B.api._fraudeCompartidoFusionar();
+      B.api.maybeNotify(ev("Sin presentarse", "AZUL", false));
+      B.api.maybeNotify(ev("En sala", "VERDE", true));
+      t.igual(atiempoHoy(A), 1, "la segunda pestaña ve la marca que dejó la primera y no vuelve a sumar");
+    });
+
+    t.caso("#146: cada color tiene su propio conteo — llegar tarde y luego llegar no se pisan", () => {
+      const c = cargar();
+      const base = { hora_texto: "08:00 AM", doc_id: "123", nombre: "JUAN", elapsed: 1, reason: "" };
+      const key = c.api.apptKey(base);
+      const ev = (estado, color, arrival) => ({ ...base, key, estado, color, arrival: !!arrival });
+      c.api.maybeNotify(ev("Pendiente", "AZUL", false));
+      // El MORADO solo avisa cuando el motivo es el tiempo (el de "3+ actividades de PyM"
+      // es otra cosa y no cuenta como última llamada).
+      c.api.maybeNotify({ ...ev("Sin presentarse", "MORADO", false), reason: "tiempo" });
+      c.api.maybeNotify(ev("En sala", "VERDE", true));             // y llegó
+      const st = JSON.parse(c.env.storage.getItem("vgl_stats") || "{}")[c.api.todayStamp()] || {};
+      t.igual(st.ultima || 0, 1, "la última llamada pasó de verdad");
+      t.igual(st.atiempo || 0, 1, "y la llegada también: son dos hechos distintos de la misma cita");
+    });
+
+    t.caso("bumpStatCita: devuelve true la primera vez y false en las repeticiones", () => {
+      // Prueba directa: `cubre` no se llena con nombres que solo se tocan de rebote. El
+      // valor de retorno es lo que decide si se escribe la fila de auditoría, así que la
+      // conciliación cabecera-cuerpo del CSV depende de que sea exacto.
+      const c = cargar();
+      t.cierto(c.api.bumpStatCita("atiempo", "123@m480"), "la primera vez cuenta");
+      t.falso(c.api.bumpStatCita("atiempo", "123@m480"), "la segunda no");
+      t.cierto(c.api.bumpStatCita("ultima", "123@m480"), "pero otro color de la MISMA cita sí: son hechos distintos");
+      t.cierto(c.api.bumpStatCita("atiempo", "456@m480"), "y otra cita también");
+      t.falso(c.api.bumpStatCita("", "123@m480"), "sin tipo no cuenta nada");
+      t.igual(atiempoHoy(c), 2, "dos citas a tiempo, ni una más");
+    });
+
+    t.caso("#146: sin identidad de cita se cuenta igual — perder el dato sería peor que duplicarlo", () => {
+      const c = cargar();
+      c.api.maybeNotify({ hora_texto: "08:00 AM", doc_id: "", nombre: "", key: "", estado: "Sin presentarse", color: "AZUL", arrival: false, elapsed: 1, reason: "" });
+      c.api.maybeNotify({ hora_texto: "08:00 AM", doc_id: "", nombre: "", key: "", estado: "En sala", color: "VERDE", arrival: true, elapsed: 1, reason: "" });
+      t.igual(atiempoHoy(c), 1, "se cuenta");
+    });
+
     t.caso("maybeNotify v12.4: SIEMBRA SILENCIOSA — el primer VERDE visto al arrancar NO notifica", () => {
       const c = cargar();
       const a = { hora_texto: "08:00 AM", doc_id: "123", estado: "En sala", color: "VERDE", reason: "", arrival: true, key: "123@08:00 AM", nombre: "JUAN", elapsed: 1 };
@@ -216,7 +326,7 @@ module.exports = {
 
     t.caso("siembra compartida v14.1.5: una siembra de OTRO DÍA se ignora — el día nuevo vuelve a sembrar de cero, como debe", () => {
       const c = cargar();
-      c.env.win.localStorage.setItem("vgl_siembra_dia", JSON.stringify({ dia: "1999-01-01", mapa: { "123@08:00 AM": "x" } }));
+      c.env.win.localStorage.setItem("vgl_siembra_dia2", JSON.stringify({ dia: "1999-01-01", mapa: { "123@08:00 AM": "x" } }));
       t.igual(c.api._siembraCompartidaLeer(), null, "un sello viejo no contamina la jornada de hoy");
     });
 
@@ -238,6 +348,10 @@ module.exports = {
     // que sí necesita una vista donde pintarse.
     t.caso("maybeNotify v14.1.5: fuera de HCHealth el aviso SÍ suena y sale al sistema operativo en el acto; solo el cartel queda en cola", () => {
       const c = cargar();
+      // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
+      // pestaña oculta (visible, el canal es el toast). La intención original de esta
+      // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      c.env.doc.visibilityState = "hidden";
       c.env.win.location.pathname = "/viva/Acceso/";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
@@ -255,6 +369,10 @@ module.exports = {
 
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
       const c = cargar();
+      // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
+      // pestaña oculta (visible, el canal es el toast). La intención original de esta
+      // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      c.env.doc.visibilityState = "hidden";
       c.env.win.location.pathname = "/viva/Acceso/";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
@@ -291,10 +409,13 @@ module.exports = {
     });
 
     // =====================================================================
-    // v12.5.7 — checkLabsVencidos: aviso ROJO de laboratorios RCV sin resultado en 180
-    // días. Lee SOLO lo que el robot de Athenea ya pre-cargó (_labsPrefetch) — nunca
-    // dispara su propia consulta. Mismo patrón "una vez por paciente por día" que
-    // checkAbandonoPES/checkRecordatorioPym (avisoYaVisto/avisoMarcarVisto).
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Las pruebas directas de
+    // checkLabsVencidos, labsVencidosAlert, otroAvisoDePacienteAbierto y checkAbandonoPES
+    // se retiraron: las cuatro funciones se borraron del script por código muerto (sin
+    // llamador desde que avisoUniversal/checkAvisoUniversal las reemplazó — ver
+    // CHANGELOG). Los helpers de red de abajo (mockPacienteAbierto, planLabsVencidos,
+    // planLabsAlDia, planLabsCero) SIGUEN vivos: los usan las pruebas de
+    // checkAvisoUniversal, más abajo.
     // =====================================================================
     const DOC_LABSV = "111222333";
     const elTexto = (txt) => ({ textContent: txt, closest: () => null });
@@ -348,32 +469,6 @@ module.exports = {
       };
     }
 
-    t.caso("checkLabsVencidos: interruptor apagado -> no revisa nada, nunca marca el aviso como visto", () => {
-      const c = cargar({ silencioso: true });
-      mockPacienteAbierto(c, DOC_LABSV);
-      c.api.__S.labsVencidos = false;
-      t.noLanza(() => c.api.checkLabsVencidos());
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-      t.falso(c.api.avisoYaVisto(uid));
-    });
-
-    t.caso("checkLabsVencidos: sin paciente abierto -> no revisa nada, nunca lanza", () => {
-      const c = cargar({ silencioso: true });
-      c.env.doc.getElementById = () => null; // sin #anamesis: no es historia clínica
-      t.noLanza(() => c.api.checkLabsVencidos());
-    });
-
-    t.caso("checkLabsVencidos: paciente abierto pero SIN pre-carga de Athenea todavía (_labsPrefetch vacío) -> no revisa nada, no lanza", () => {
-      // El robot de Athenea (autoFetchAtheneaLabsForActivePatient) puede tardar unos
-      // ticks en resolver; checkLabsVencidos NUNCA debe disparar su propia consulta ni
-      // bloquear esperando una — solo lee lo que ya esté cacheado.
-      const c = cargar({ silencioso: true });
-      mockPacienteAbierto(c, DOC_LABSV);
-      t.noLanza(() => c.api.checkLabsVencidos());
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-      t.falso(c.api.avisoYaVisto(uid));
-    });
-
     // Plan de red que resuelve el paciente pero SIN NINGÚN formulario de solicitud (0
     // laboratorios reales en Athenea) — reproduce el caso de mayor riesgo real: el
     // paciente al que le faltan los 7 analitos RCV.
@@ -387,150 +482,369 @@ module.exports = {
       };
     }
 
-    // v12.10.15 — Bug real de auditoría nocturna: antes, un paciente con CERO
-    // laboratorios en Athenea nunca actualizaba _labsPrefetch (solo se cacheaba cuando
-    // labs.length > 0), así que checkLabsVencidos (que exige _labsPrefetch.docId === doc)
-    // se abortaba en silencio para siempre — la alerta ROJA de "laboratorios RCV sin
-    // resultado vigente" quedaba muda justo para el paciente que más la necesita.
-    await t.casoAsync("checkLabsVencidos: paciente CON pre-carga real pero SIN ningún laboratorio en Athenea -> SÍ dispara el aviso con los 7 analitos faltantes (bug real de auditoría)", async () => {
-      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
-      mockPacienteAbierto(c, DOC_LABSV);
-      await c.api.autoFetchAtheneaLabsForActivePatient();
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-      t.falso(c.api.avisoYaVisto(uid), "todavía no se ha revisado");
-      c.api.checkLabsVencidos();
-      t.cierto(c.api.avisoYaVisto(uid), "cero laboratorios en Athenea también cuenta como pre-carga resuelta: debe revisar y avisar");
+    // =====================================================================
+    // v14.2.0 — AVISO ÚNICO (avisoUniversal / checkAvisoUniversal)
+    // Encargo del médico: en vez de hasta TRES modales en fila por paciente
+    // (PyM → abandono RCV → labs vencidos), UN solo aviso con secciones,
+    // siempre activo. Los tres checks viejos (checkRecordatorioPym, checkAbandonoPES,
+    // checkLabsVencidos) se retiraron del script en la auditoría 2026-08-18 por código
+    // muerto (ver CHANGELOG); esto es lo único que el tick llama ahora.
+    // =====================================================================
+
+    t.caso("avisoUniversal: junta abandono + PyM + labs en UN solo modal accesible", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", {
+        abandono: true,
+        pym: ["Tamización VIH", "Citología"],
+        labs: [{ nombre: "Creatinina en Suero" }, { nombre: "Colesterol Total" }],
+      }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!m, "insertó el modal único");
+      t.igual(m.getAttribute("role"), "alertdialog", "role='alertdialog' (puede llevar abandono/labs urgentes)");
+      t.igual(m.getAttribute("aria-modal"), "true", "aria-modal='true'");
+      t.cierto(m.innerHTML.indexOf("Abandono Programa RCV") >= 0, "sección de abandono presente");
+      t.cierto(m.innerHTML.indexOf("Tamización VIH") >= 0, "chips de PyM presentes");
+      t.cierto(m.innerHTML.indexOf("Creatinina en Suero") >= 0, "chips de labs presentes");
+      t.cierto(m.innerHTML.indexOf("Entendido") >= 0, "un único botón de reconocimiento");
     });
 
-    await t.casoAsync("checkLabsVencidos: analito RCV vencido de verdad (>180 días, vía autoFetch real) -> dispara el aviso una vez y queda marcado", async () => {
+    t.caso("avisoUniversal: cada sección es opcional y sin datos NO pinta nada", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", { pym: ["Tamización VIH"] }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!m && m.innerHTML.indexOf("Abandono") < 0, "solo PyM: sin sección de abandono");
+      t.cierto(m.innerHTML.indexOf("Laboratorios RCV") < 0, "solo PyM: sin sección de labs");
+      const c2 = cargar({ silencioso: true });
+      c2.api.avisoUniversal("Paciente Prueba", { abandono: false, pym: [], labs: [] }, true);
+      t.falso(!!c2.env.doc.getElementById("vgl-pym-modal"), "sin nada que mostrar, no hay aviso");
+    });
+
+    t.caso("checkAvisoUniversal: sin paciente abierto -> no lanza y no revisa nada", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.getElementById = () => null; // sin #anamesis: no es historia clínica
+      t.noLanza(() => c.api.checkAvisoUniversal());
+    });
+
+    await t.casoAsync("checkAvisoUniversal: labs resueltos + PyM + abandono -> dispara UNA vez con todo y queda marcado", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-      t.falso(c.api.avisoYaVisto(uid), "todavía no se ha revisado");
-      c.api.checkLabsVencidos();
-      t.cierto(c.api.avisoYaVisto(uid), "el analito vencido (2025-01-01, muy pasados los 180 días) disparó el aviso");
-      // Un segundo llamado el mismo día no debe reventar ni des-marcar el aviso.
-      t.noLanza(() => c.api.checkLabsVencidos());
-      t.cierto(c.api.avisoYaVisto(uid));
+      const key = c.api.normalizeKey(DOC_LABSV);
+      c.api.__state.pym = new Map([[key, ["Tamización de VIH"]]]);
+      c.api.__state.pymAbandono = new Set([key]);
+      const uid = "avisouniv|" + key;
+      t.falso(c.api.avisoYaVisto(uid), "aún no revisado");
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "con los labs ya resueltos dispara de una y queda marcado");
+      t.noLanza(() => c.api.checkAvisoUniversal(), "reentrar el mismo día no revienta ni duplica");
     });
 
-    await t.casoAsync("checkLabsVencidos: analito RCV al día (dentro de 180 días, vía autoFetch real) -> no dispara ningún aviso", async () => {
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] La gracia pasó de "vueltas de tick" a
+    // tiempo real fijo (MTR_AVISO_GRACIA_MS, por paciente — ver CHANGELOG). Estas pruebas ya
+    // no simulan "2 ticks" llamando dos veces seguido: avanzan el reloj simulado (FakeDate,
+    // mismo patrón que suite_02/suite_10/suite_11/suite_19) más allá de la gracia.
+    t.caso("checkAvisoUniversal: sin pre-carga de Athenea espera la gracia (tiempo real) y luego avisa sin labs — el aviso no se pierde", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "555666777";
+      mockPacienteAbierto(c, doc);
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, ["Tamización de VIH"]]]);
+      const uid = "avisouniv|" + key;
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-11T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto(uid), "recién detectado: dentro de la gracia, aún espera los labs de Athenea");
+      mockIso = "2026-08-11T12:00:05.100"; // +5.1s reales: supera MTR_AVISO_GRACIA_MS (5000)
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "pasada la gracia real, avisa con lo síncrono (PyM/abandono)");
+    });
+
+    t.caso("checkAvisoUniversal: la gracia es por paciente — revisar a B no reinicia ni adelanta la gracia ya acumulada por A", () => {
+      const c = cargar({ silencioso: true });
+      const docA = "555666777", docB = "222333444";
+      const keyA = c.api.normalizeKey(docA), keyB = c.api.normalizeKey(docB);
+      c.api.__state.pym = new Map([[keyA, ["Tamización de VIH"]], [keyB, ["Citología"]]]);
+      const uidA = "avisouniv|" + keyA, uidB = "avisouniv|" + keyB;
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-11T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+
+      mockPacienteAbierto(c, docA);
+      c.api.checkAvisoUniversal(); // arranca la gracia de A en t=0
+      t.falso(c.api.avisoYaVisto(uidA), "A recién detectado: dentro de su propia gracia");
+
+      mockIso = "2026-08-11T12:00:02.000"; // +2s: el médico revisa a B mientras A sigue esperando
+      mockPacienteAbierto(c, docB);
+      c.api.checkAvisoUniversal(); // arranca la gracia de B en t=2s, sin tocar la de A
+      t.falso(c.api.avisoYaVisto(uidB), "B recién detectado: dentro de su propia gracia");
+
+      // +5.5s desde t=0: la gracia de A (5s, contados desde que se le vio) ya se cumplió; la de
+      // B, con solo 3.5s desde que se le vio, todavía no.
+      mockIso = "2026-08-11T12:00:05.500";
+      mockPacienteAbierto(c, docA);
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uidA), "A dispara: su gracia, contada desde que se le vio, ya se cumplió");
+
+      mockPacienteAbierto(c, docB);
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto(uidB), "B NO dispara todavía: revisar a A mientras tanto no le robó ni adelantó su gracia");
+    });
+
+    await t.casoAsync("checkAvisoUniversal: si el aviso salió SIN labs y luego llegan labs con vencidos, sale UN único aviso de labs (no se pierde en silencio)", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
+      mockPacienteAbierto(c, DOC_LABSV);
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-11T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+      const key = c.api.normalizeKey(DOC_LABSV);
+      c.api.__state.pym = new Map([[key, ["Tamización de VIH"]]]);
+      const uid = "avisouniv|" + key, uidLab = "avisounivlab|" + key;
+      // Athenea aún NO responde: gracia (tiempo real) y aviso parcial sin labs.
+      c.api.checkAvisoUniversal();
+      mockIso = "2026-08-11T12:00:05.100"; // +5.1s: supera MTR_AVISO_GRACIA_MS (5000); mismo día,
+                                            // no afecta el cálculo de vigencia del analito.
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "aviso principal salió sin labs (Athenea lenta)");
+      t.falso(c.api.avisoYaVisto(uidLab), "el de labs aún no");
+      // Ahora Athenea resuelve con un analito VENCIDO -> un único aviso de labs.
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uidLab), "los labs tardíos con vencidos disparan su único aviso");
+      // Y no se repite jamás:
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uidLab) && c.api.avisoYaVisto(uid), "ambos marcados, sin bucles");
+    });
+
+    await t.casoAsync("checkAvisoUniversal: paciente al día (sin PyM, sin abandono, labs vigentes) -> ningún aviso, jamás", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsAlDia("2026-08-01") });
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-      c.api.checkLabsVencidos();
-      t.falso(c.api.avisoYaVisto(uid), "los 8 analitos de la regla llegaron con fecha reciente (10 días) -> ninguno vencido");
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto("avisouniv|" + c.api.normalizeKey(DOC_LABSV)), "nada pendiente -> ningún aviso");
     });
 
-    t.caso("labsVencidosAlert: comprueba que el modal queda en el DOM con los analitos (v12.5.7)", () => {
-      const c = cargar({ silencioso: true });
-
-      let elModal = null;
-      c.env.doc.getElementById = (id) => id === "vgl-labsv-modal" ? elModal : null;
-      const baseCreate = c.env.doc.createElement;
-      c.env.doc.createElement = (tag) => {
-        const el = baseCreate(tag);
-        const baseSetAttr = el.setAttribute;
-        el.setAttribute = function(k, v) {
-          baseSetAttr.call(this, k, v);
-        };
-        // Capture inner logic from harness.js to hook ID assignment since it assigns directly `.id = ...`
-        Object.defineProperty(el, 'id', {
-            get: function() { return this._id || ""; },
-            set: function(val) {
-                this._id = val;
-                if (val === "vgl-labsv-modal") elModal = this;
-            }
-        });
-        return el;
-      }
-
-      const faltantesReales = [
-        { key: "COLESTEROL_TOTAL", nombre: "Colesterol Total" },
-        { key: "GLUCOSA", nombre: "Glucosa en Suero" },
-        { key: "RAC", nombre: "RAC (Relación Albúmina/Creatinina)" },
-      ];
-
-      c.api.labsVencidosAlert("Paciente de prueba", faltantesReales, true);
-
-      t.cierto(!!elModal, "el modal de laboratorios vencidos debe quedar en el DOM");
-      t.cierto(elModal.innerHTML.includes("Colesterol Total"), "el modal nombra el analito Colesterol Total");
-      t.cierto(elModal.innerHTML.includes("Glucosa en Suero"), "el modal nombra el analito Glucosa en Suero");
-      t.cierto(elModal.innerHTML.includes("RAC (Relación Albúmina/Creatinina)"), "el modal nombra el analito RAC");
-
-      elModal = null;
-      c.api.labsVencidosAlert("Paciente de prueba", [], true);
-      t.cierto(!!elModal, "el modal se pinta sin fallar incluso con la lista vacía");
-    });
-
-    // =====================================================================
-    // v12.5.10 — Reportado desde consultorio con pantallazo: un paciente con PyM
-    // pendiente Y labs RCV vencidos a la vez recibía DOS modales de pantalla completa
-    // superpuestos e ilegibles, porque checkRecordatorioPym/checkAbandonoPES/
-    // checkLabsVencidos corren uno tras otro en el mismo tick sin mirarse entre sí.
-    // otroAvisoDePacienteAbierto() es el guard que evita la superposición.
-    // =====================================================================
-    t.caso("otroAvisoDePacienteAbierto: detecta cualquiera de los tres modales grandes de paciente, y solo esos", () => {
-      const c = cargar({ silencioso: true });
-      t.falso(c.api.otroAvisoDePacienteAbierto(), "sin ningún modal en el DOM, no hay colisión");
-      for (const id of ["vgl-pym-modal", "vgl-pes-modal", "vgl-labsv-modal"]) {
-        c.env.doc.getElementById = (elId) => (elId === id ? {} : null);
-        t.cierto(c.api.otroAvisoDePacienteAbierto(), `debe detectar #${id} abierto`);
-      }
-      c.env.doc.getElementById = (elId) => (elId === "vgl-modal" ? {} : null); // el cartel de fraude no cuenta
-      t.falso(c.api.otroAvisoDePacienteAbierto(), "el cartel de fraude (#vgl-modal) es otra familia, no debe bloquear");
-    });
-
-    t.caso("checkAbandonoPES: si el aviso de labs vencidos ya está en pantalla, se pospone en vez de superponerse", () => {
-      const c = cargar({ silencioso: true });
-      const doc = "999888777";
-      const key = c.api.normalizeKey(doc);
-      c.api.__state.pymAbandono = new Set([key]);
-      // Paciente abierto + #vgl-labsv-modal ya en el DOM: simula que checkLabsVencidos
-      // disparó primero en este mismo tick, tal como ocurrió en el pantallazo real.
-      c.env.doc.getElementById = (id) => {
-        if (id === "anamesis") return elTexto("");
-        if (id === "vgl-labsv-modal") return {};
-        return null;
-      };
-      c.env.doc.querySelector = () => null;
-      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
-      const uid = "pes|" + key;
-
-      c.api.checkAbandonoPES();
-      t.falso(c.api.avisoYaVisto(uid), "con otro modal ya abierto, el aviso de PES NO se marca como visto todavía");
-
-      // El médico cierra el aviso de labs vencidos con "Entendido": el siguiente tick
-      // ya no encuentra colisión y el aviso de PES sale por su cuenta, sin perderse.
-      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : null);
-      c.api.checkAbandonoPES();
-      t.cierto(c.api.avisoYaVisto(uid), "sin colisión, el aviso de PES se muestra y queda marcado como visto");
-    });
-
-    await t.casoAsync("checkLabsVencidos: si el aviso de PyM ya está en pantalla para el mismo paciente, se pospone (reproduce el pantallazo real)", async () => {
+    await t.casoAsync("checkAvisoUniversal: si ya hay un aviso en pantalla, se pospone y sale al siguiente tick", async () => {
       const c = cargar({ silencioso: true, gmxhr: planLabsVencidos("2025-01-01") });
       mockPacienteAbierto(c, DOC_LABSV);
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-11T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-11T12:00:00"); else super(...args); } };
       c.ctx.Date = c.env.win.Date;
       await c.api.autoFetchAtheneaLabsForActivePatient();
-      const uid = "labsv|" + c.api.normalizeKey(DOC_LABSV);
-
-      // #vgl-pym-modal ya en el DOM: el recordatorio de PyM disparó primero en este tick.
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
       const getIdOriginal = c.env.doc.getElementById;
       c.env.doc.getElementById = (id) => (id === "vgl-pym-modal" ? {} : getIdOriginal(id));
-      c.api.checkLabsVencidos();
-      t.falso(c.api.avisoYaVisto(uid), "con el aviso de PyM ya abierto, labs vencidos NO se superpone");
-
-      // El médico cierra el aviso de PyM: el siguiente tick ya puede mostrar labs vencidos.
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto(uid), "con otro aviso abierto no se superpone ni se pierde");
       c.env.doc.getElementById = getIdOriginal;
-      c.api.checkLabsVencidos();
-      t.cierto(c.api.avisoYaVisto(uid), "sin colisión, labs vencidos se muestra y queda marcado como visto");
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "cerrado el anterior, sale y queda marcado");
+    });
+
+    t.caso("_avisoUnivReset: el reinicio de medianoche reinicia la gracia (tiempo real) sin lanzar", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "444555666";
+      mockPacienteAbierto(c, doc);
+      const key = c.api.normalizeKey(doc);
+      c.api.__state.pym = new Map([[key, ["Tamización de VIH"]]]);
+      const uid = "avisouniv|" + key;
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-11T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+
+      c.api.checkAvisoUniversal();               // arranca la gracia ("desde" = t0)
+      t.noLanza(() => c.api._avisoUnivReset());  // medianoche: debe olvidar ese "desde"
+      // +10s reales: si el reinicio NO hubiera limpiado el estado, esto ya superaría la
+      // gracia (5s) y dispararía de una — la prueba es justamente que no lo hace.
+      mockIso = "2026-08-11T12:00:10.000";
+      c.api.checkAvisoUniversal();               // tras el reinicio, la gracia arranca de cero (desde = ahora)
+      t.falso(c.api.avisoYaVisto(uid), "tras el reinicio la gracia arranca de cero, no acumula el tiempo previo");
+      mockIso = "2026-08-11T12:00:15.100";       // +5.1s más desde el reinicio: ahora sí la supera
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "pasada la gracia tras el reinicio, dispara con lo síncrono");
+    });
+
+    // =====================================================================
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró la sección de pruebas
+    // directas de checkRecordatorioPym: la función se borró del script junto con el resto
+    // del bloque T7 (código muerto — la "RED DE SEGURIDAD D4" que documentaba dependía del
+    // banner de PyM, retirado con ella). El aviso único de abajo (avisoUniversal /
+    // checkAvisoUniversal) es ahora el único camino para el recordatorio de PyM. Ver
+    // CHANGELOG.
+    // =====================================================================
+    // v14.2.0 — AVISO ÚNICO: un solo modal por paciente reúne PyM + abandono RCV + labs
+    // vencidos, en vez de tres avisos seguidos.
+    // =====================================================================
+
+    t.caso("avisoUniversal: UN solo modal reúne abandono + PyM + labs, con role alertdialog", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", { abandono: true, pym: ["Tamización VIH"], labs: [{ nombre: "Creatinina" }] }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!m, "quedó UN modal en el DOM (reusa el id vgl-pym-modal)");
+      t.igual(m.getAttribute("role"), "alertdialog", "es alertdialog (lleva prioridad clínica)");
+      const html = m.innerHTML || "";
+      t.cierto(/Abandono Programa RCV/.test(html), "trae la sección de abandono RCV");
+      t.cierto(/Tamización VIH/.test(html), "trae la actividad de PyM pendiente");
+      t.cierto(/Creatinina/.test(html), "trae el laboratorio RCV vencido");
+      t.cierto(/Entendido/.test(html), "trae el botón de reconocimiento");
+    });
+
+    t.caso("avisoUniversal: sin nada pendiente NO crea ningún modal", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("X", { abandono: false, pym: [], labs: [] }, true);
+      t.igual(c.env.doc.getElementById("vgl-pym-modal"), null, "nada que mostrar -> sin modal (no molesta en vano)");
+    });
+
+    await t.casoAsync("checkAvisoUniversal: con labs RCV vencidos (Athenea resuelto) dispara UN aviso y lo marca; no repite", async () => {
+      const c = cargar({ silencioso: true, gmxhr: planLabsCero() });
+      mockPacienteAbierto(c, DOC_LABSV);
+      await c.api.autoFetchAtheneaLabsForActivePatient();   // _labsPrefetch resuelto (7 faltantes)
+      const uid = "avisouniv|" + c.api.normalizeKey(DOC_LABSV);
+      t.falso(c.api.avisoYaVisto(uid), "todavía no se ha revisado");
+      c.api.checkAvisoUniversal();
+      t.cierto(c.api.avisoYaVisto(uid), "labs vencidos -> aviso único, marcado una vez por paciente");
+      t.noLanza(() => c.api.checkAvisoUniversal(), "un segundo tick no repite ni revienta");
+    });
+
+    // Variante de planLabsVencidos que ECHA DE VUELTA la cédula que de verdad se buscó (en
+    // vez de la constante fija DOC_LABSV): necesaria aquí porque getAtheneaSolicitudesAuto
+    // descarta por seguridad cualquier respuesta cuya cédula no coincida con la buscada
+    // ("la cédula de la respuesta no coincide con la buscada") — con dos docId distintos en
+    // la misma prueba, el mock tiene que responder cada uno con SU propia cédula.
+    function planLabsParaDoc(getDocActual, fechaAnalito) {
+      return (o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${getDocActual()} <form id="5552026" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (url.includes("consultaDetalleSolicitud")) o.onload({
+          status: 200,
+          responseText: JSON.stringify({ dataObject: JSON.stringify([{ CodigoParametro: "903818", NombreParametro: "COLESTEROL TOTAL", Resultado: "220", Fecha: fechaAnalito }]) }),
+        });
+        else o.onload({ status: 200, responseText: "" });
+      };
+    }
+
+    // v17.0.3 — REPORTE REAL (21-ago, 2 capturas idénticas): el aviso "🧪 Paraclínicos de
+    // Athenea encontrados" salió DOS VECES para el mismo paciente. Causa raíz ya
+    // documentada desde v12.3.27: extractPacienteAbierto() no siempre lee la MISMA cadena
+    // para el MISMO paciente entre relecturas del DOM, así que cualquier guarda basada en
+    // "¿es el mismo docId?" puede fallar justo cuando más se necesita. La prueba simula
+    // exactamente eso: dos lecturas con docId DISTINTO (mockPacienteAbierto con cédulas
+    // diferentes) a pocos segundos de distancia — como si Angular hubiera mostrado un nodo
+    // .text-muted distinto la segunda vez.
+    await t.casoAsync("autoFetchAtheneaLabsForActivePatient: un docId leído distinto (inestabilidad del DOM) no duplica el aviso dentro del piso de 30 s", async () => {
+      let docActual = "111222333";
+      const c = cargar({ silencioso: true, gmxhr: planLabsParaDoc(() => docActual, "2025-01-01") });
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-21T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+      c.env.doc.visibilityState = "hidden";           // fuerza el canal GM_notification (más fácil de espiar que el toast en pantalla)
+      const avisos = [];
+      c.env.win.GM_notification = (opts) => avisos.push(opts);
+
+      mockPacienteAbierto(c, docActual);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(avisos.length, 1, "primera lectura: un aviso de paraclínicos encontrados");
+      t.cierto(/Paraclínicos de Athenea/.test(avisos[0].title), "es el aviso correcto");
+
+      mockIso = "2026-08-21T12:00:02.000";             // +2 s: el médico sigue con el MISMO paciente
+      docActual = "999888777";                          // pero el DOM se leyó con OTRA cédula esta vez
+      mockPacienteAbierto(c, docActual);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(avisos.length, 1, "docId leído distinto 2 s después: NO se repite (antes sí — bug real reproducido)");
+    });
+
+    await t.casoAsync("autoFetchAtheneaLabsForActivePatient: pasado el piso de 30 s, un paciente genuinamente distinto SÍ avisa de nuevo", async () => {
+      let docActual = "111222333";
+      const c = cargar({ silencioso: true, gmxhr: planLabsParaDoc(() => docActual, "2025-01-01") });
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-21T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+      c.env.doc.visibilityState = "hidden";
+      const avisos = [];
+      c.env.win.GM_notification = (opts) => avisos.push(opts);
+
+      mockPacienteAbierto(c, docActual);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(avisos.length, 1, "paciente A: avisa");
+
+      mockIso = "2026-08-21T12:00:35.000";              // +35 s: superó el piso de 30 s
+      docActual = "444555666";                           // y de verdad es OTRO paciente (el médico avanzó su agenda)
+      mockPacienteAbierto(c, docActual);
+      await c.api.autoFetchAtheneaLabsForActivePatient();
+      t.igual(avisos.length, 2, "paciente B, ya pasado el piso: SÍ avisa (el arreglo no lo deja mudo para siempre)");
+    });
+
+    t.caso("checkAvisoUniversal: si ya hay un aviso en pantalla, NO se superpone", () => {
+      const c = cargar({ silencioso: true });
+      const doc = "999888777", key = c.api.normalizeKey(doc);
+      c.api.__state.pymAbandono = new Set([key]);
+      c.api.__state.pym = new Map([[key, ["Remisión a Optometría"]]]);
+      c.env.doc.getElementById = (id) => (id === "anamesis" ? elTexto("") : (id === "vgl-pym-modal" ? {} : null));
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
+      c.api.checkAvisoUniversal();
+      t.falso(c.api.avisoYaVisto("avisouniv|" + key), "con un modal ya abierto se pospone, no se marca");
+    });
+
+    t.caso("checkAvisoUniversal: sin labs de Athenea todavía, espera la gracia (tiempo real) y luego avisa con lo síncrono", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, "111000111");
+      const key = c.api.normalizeKey("111000111");
+      c.api.__state.pym = new Map([[key, ["Remisión a Optometría"]]]);   // PyM pendiente (síncrono)
+      const uid = "avisouniv|" + key;
+      const OriginalDate = c.ctx.Date || Date;
+      let mockIso = "2026-08-11T12:00:00.000";
+      const FakeDate = class extends OriginalDate {
+        constructor(...args) { if (args.length === 0) super(mockIso); else super(...args); }
+      };
+      FakeDate.now = () => new OriginalDate(mockIso).getTime();
+      c.env.win.Date = FakeDate;
+      c.ctx.Date = FakeDate;
+      c.api.checkAvisoUniversal();   // recién detectado: dentro de la gracia, espera a Athenea
+      t.falso(c.api.avisoYaVisto(uid), "recién detectado: da margen a que lleguen los labs, no avisa aún");
+      mockIso = "2026-08-11T12:00:05.100"; // +5.1s: supera MTR_AVISO_GRACIA_MS (5000)
+      c.api.checkAvisoUniversal();   // cumplida la gracia
+      t.cierto(c.api.avisoYaVisto(uid), "cumplida la gracia, avisa con el PyM aunque Athenea no respondió");
+    });
+
+    t.caso("_avisoUnivReset: no lanza (limpia el estado del aviso para el día nuevo)", () => {
+      const c = cargar({ silencioso: true });
+      t.noLanza(() => c.api._avisoUnivReset());
     });
 
   }

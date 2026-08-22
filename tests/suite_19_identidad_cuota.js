@@ -82,15 +82,15 @@ module.exports = {
 
     await t.casoAsync("identidadDesdeCliente: 'user' con username + userIdIdentity == sub del jwt -> resuelve por GetUsuarioPerfil", async () => {
       const { c, fetches, setFetch } = entorno();
-      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. B Palencia", perfilCodigo: "PROFESIONAL" } }), text: async () => "{}" }));
-      c.env.almacen["user"] = JSON.stringify({ username: "bpalencia", userIdIdentity: "515" });
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. J Moreno", perfilCodigo: "PROFESIONAL" } }), text: async () => "{}" }));
+      c.env.almacen["user"] = JSON.stringify({ username: "jmoreno", userIdIdentity: "515" });
       c.env.almacen["jwt"] = fakeJwt("515");
       c.api.identidadDesdeCliente();
       await espera(30);
       t.igual(fetches.length, 1);
-      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/bpalencia"), "consulta la puerta autoritativa con el login del cliente");
+      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/jmoreno"), "consulta la puerta autoritativa con el login del cliente");
       t.igual(c.api.__state.activeDoctor.id, 515);
-      t.igual(c.api.__state.activeDoctor.name, "Dr. B Palencia");
+      t.igual(c.api.__state.activeDoctor.name, "Dr. J Moreno");
     });
 
     await t.casoAsync("identidadDesdeCliente: sin jwt en absoluto, se acepta 'user'.username directamente (coherencia solo aplica si hay jwt)", async () => {
@@ -119,11 +119,11 @@ module.exports = {
     await t.casoAsync("identidadDesdeCliente: sin 'user' pero con cookie UsuarioMedico, usa el login de la cookie", async () => {
       const { c, fetches, setFetch } = entorno();
       setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 77, nombreCompleto: "Dra. Cookie" } }), text: async () => "{}" }));
-      c.env.doc.cookie = "UsuarioMedico=bpalencia2; otraCookie=1";
+      c.env.doc.cookie = "UsuarioMedico=jmoreno2; otraCookie=1";
       c.api.identidadDesdeCliente();
       await espera(30);
       t.igual(fetches.length, 1);
-      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/bpalencia2"));
+      t.cierto(fetches[0].url.includes("GetUsuarioPerfil/jmoreno2"));
       t.igual(c.api.__state.activeDoctor.id, 77);
     });
 

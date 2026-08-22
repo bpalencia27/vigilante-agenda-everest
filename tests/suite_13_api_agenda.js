@@ -368,19 +368,19 @@ module.exports = {
       const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
       const st = c.api.__state;
       st.lastSnapshot = null;
-      t.igual(c.api.apiCadencia(), 90000, "sin agenda: reposo de 90 s");
+      t.igual(c.api.apiCadencia(), 30000, "sin agenda: reposo de 30 s (v14.2.11)");
       st.lastSnapshot = { list: [{ estado: "Atendido", elapsed: 0 }, { estado: "En Sala", elapsed: 99 }] };
-      t.igual(c.api.apiCadencia(), 90000, "todas resueltas: nada que vigilar de cerca");
+      t.igual(c.api.apiCadencia(), 30000, "todas resueltas: nada que vigilar de cerca");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
       t.igual(c.api.apiCadencia(), 5000, "en el cruce exacto (ventana crítica): 5 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 8 }] };
-      t.igual(c.api.apiCadencia(), 15000, "8 min ANTES del cruce: 15 s (bisagra de aproximación)");
+      t.igual(c.api.apiCadencia(), 10000, "8 min ANTES del cruce: 10 s (bisagra de aproximación)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 8 }] };
       t.igual(c.api.apiCadencia(), 8000, "8 min DESPUÉS del cruce: 8 s — MÁS agresivo que antes, por diseño (asimetría v12.3.8)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 30 }] };
-      t.igual(c.api.apiCadencia(), 45000, "lejos de la tolerancia, antes del cruce: 45 s");
+      t.igual(c.api.apiCadencia(), 20000, "lejos de la tolerancia, antes del cruce: 20 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
-      t.igual(c.api.apiCadencia(), 15000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 15 s");
+      t.igual(c.api.apiCadencia(), 10000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 10 s");
     });
 
     // ---------- tickApi ----------
@@ -454,10 +454,15 @@ module.exports = {
       t.cierto(e.reg.fetches[1].url.includes("PuntoAtencionId=0"));
     });
 
-    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si nada responde, devuelve null sin lanzar", async () => {
+    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si nada responde lo DICE, en vez de parecer un día sin cupos", async () => {
       const e = entornoApi();
       e.setFetch(respuestaError(404));
-      t.igual(await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-16"), null);
+      // v16.7.0, auditoría #11: antes devolvía null/{} y el modal traducía eso a «No hay
+      // agendas abiertas ese día. Pruebe con otro» — un hecho que nadie comprobó. Con
+      // Everest caído el médico descartaba día tras día y el paciente se iba sin cita.
+      const r = await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-16");
+      t.cierto(!!(r && r.__sinRespuesta), "la respuesta viene marcada como «no se pudo preguntar»");
+      t.igual(e.c.api.extractAgendasList(r).length, 0, "y para los demás llamadores sigue siendo una lista vacía, como antes");
       t.igual(e.reg.fetches.length, 2, "un 4xx no se reintenta: una llamada por ruta");
     });
 
@@ -495,6 +500,32 @@ module.exports = {
       t.cierto(urlBook.includes("NombrePaciente=%20"), "espacio CODIFICADO, igual que la captura real del front (Incidente v12.3.31)");
       t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
       t.cierto(hayTexto(e.c, "NO recibe SMS"), "sin celular conocido, el aviso sigue diciéndolo");
+    });
+
+    // ===== v16.7.0, auditoría #11: una caída de red NO es un hecho sobre la agenda =====
+    await t.casoAsync("apiLaboratorioAgendarAuto: si AppCita no contesta, NO dice «ya no quedan horarios»", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onerror();      // se cayó la red
+        else o.onload({ status: 200, responseText: "{}" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
+      t.falso(ok, "no agenda nada, claro");
+      t.igual(e.reg.gm.length, 1, "y jamás llama a AgendarCita a ciegas");
+      t.falso(hayTexto(e.c, "ya no quedan horarios"), "ESTE era el bug: se anunciaba un día lleno que nadie comprobó");
+      t.cierto(hayTexto(e.c, "No se pudo consultar"), "dice lo único que se sabe: que no se pudo preguntar");
+      t.cierto(hayTexto(e.c, "NO se agendó"), "y que la toma quedó sin agendar");
+    });
+
+    await t.casoAsync("apiLaboratorioAgendarAuto: si AppCita SÍ contesta y el día está lleno, eso sí se afirma", async () => {
+      const e = entornoApi();
+      e.setGm((o) => {
+        if (o.url.includes("ObtenerTurnosPorFecha")) o.onload({ status: 200, responseText: '{"turnos":[]}' });
+        else o.onload({ status: 200, responseText: "{}" });
+      });
+      const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00");
+      t.falso(ok);
+      t.cierto(hayTexto(e.c, "ya no quedan horarios"), "con respuesta real del servidor, el hecho es hecho");
     });
 
     t.caso("normalizeHora: iguala '6:40:00', '06:40:00' y '06:40' al mismo turno (Incidente v12.3.32 — captura real: la hora rechazada aparecía como libre)", () => {

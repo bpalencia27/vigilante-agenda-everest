@@ -73,7 +73,7 @@ module.exports = {
         silencioso: true,
         fetch: async () => { fetchCount++; return respuesta({ id: "ok" }); }
       });
-      c.api.__state.activeDoctor = { id: 777, name: "BRANDON PALENCIA" };
+      c.api.__state.activeDoctor = { id: 777, name: "JUAN MORENO" };
       c.api.__state.killed = true;
 
       const res = await c.api.apiAccesoAsignarTurno("turno", "pac123", "2026-08-10", "obs");
@@ -98,7 +98,7 @@ module.exports = {
         silencioso: true,
         fetch: async (url) => { fetchUrl = url; return respuesta({ id: "ok" }); },
       });
-      c.api.__state.activeDoctor = { id: 777, name: "BRANDON PALENCIA" }; // médico de RCV
+      c.api.__state.activeDoctor = { id: 777, name: "CARLOS PALENCIA" }; // médico de RCV
 
       await c.api.apiAccesoAsignarTurno("turnoId", "pac123", "2026-08-10", "obs");
       t.cierto(!!fetchUrl, "la cita sí sale a la red cuando hay médico identificado");
@@ -403,6 +403,15 @@ module.exports = {
       t.igual(r, null, "devuelve null tras agotar reintentos");
       t.igual(cont.fetch, 4, "1 intento inicial + 3 reintentos, pese a ser POST");
       t.igual(cont.gm, 4, "__idempotent:true habilita el reenvío por GM");
+    });
+
+    await t.casoAsync("pageFetchJson delega en el transporte core y devuelve el JSON", async () => {
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => respuesta({ salud: "ok" }),
+      });
+      const data = await c.api.pageFetchJson("/apiviva/salud");
+      t.igual(data.salud, "ok");
     });
   }
 };

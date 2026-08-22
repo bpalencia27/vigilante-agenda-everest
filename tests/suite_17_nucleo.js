@@ -40,12 +40,11 @@ module.exports = {
   nombre: "Núcleo: bucles, latidos y utilidades GM",
   cubre: [
     "gmPostJson", "gmPostJsonEx", "yieldNow", "makeYielder", "idleRun",
-    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia", "_urlDiagnostico", "_tituloDiagnostico",
+    "heartbeat", "share", "helloOncePerDay", "tick", "downloadDiagnostic", "uxClaveLimpia",
     "pymReminderCheck", "avisarSiActualizado", "chequearAutoUpdateLento",
     "checkVersionMinimum", "resolverMedicoPorPerfil",
     "autoFetchAtheneaLabsForActivePatient",
-    "_pestanaOculta", "_getUltimoRelevoParaTest", "_setUltimoRelevoParaTest",
-    "_dispararAvisoAudible", "_dispararAvisoCartel",
+    "_setUltimoRelevoParaTest",
     "boot",
   ],
 
@@ -323,6 +322,10 @@ module.exports = {
     // ---------- helloOncePerDay ----------
     t.caso("helloOncePerDay: resume la jornada UNA sola vez al día", () => {
       const c = cargar({ silencioso: true });
+      // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
+      // pestaña oculta (visible, el canal es el toast). La intención original de esta
+      // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      c.env.doc.visibilityState = "hidden";
       const capturas = [];
       instalarNotificacion(c, capturas);
       const lista = [
@@ -346,6 +349,84 @@ module.exports = {
       t.noLanza(() => c.api.tick());
       t.igual(c.api.__state.lastSeccion, "otra");
       t.igual(c.api.__state.lastSnapshot, null, "no debe leer ni guardar nada fuera de las vistas permitidas");
+    });
+
+    // =====================================================================
+    // v16.2.2 — Instrucción directa del médico (su compañera abre varias pestañas de
+    // Everest a la vez): el Vigilante NO debe APARECER fuera de HCHealth — ni en Acceso
+    // ni en Ordenamiento - Everest — para priorizar rendimiento y el seguimiento en
+    // tiempo real de llegadas/vencimientos de confirmación. Se confirmó primero, leyendo
+    // el propio código (v12.3.11/v14.1.5/v12.5.14), que el sondeo del API y las alertas
+    // de verdad (sonido, notificación de Windows, cartel encolado) YA corren en TODA
+    // pestaña sin importar el módulo — así que ocultar el panel aquí es un cambio
+    // puramente visual, nunca de seguridad. Estas pruebas cubren las tres ramas nuevas
+    // de tick() (oculto total / pastilla dentro de HCHealth / restaurar) sin repetir la
+    // cobertura ya real de que las alertas no dependen de esto (ver Suite 04:
+    // "maybeNotify v14.1.5: fuera de HCHealth el aviso SÍ suena...").
+    // =====================================================================
+    t.caso("tick: en Acceso (con agenda real en pantalla) el panel queda oculto por completo — ni panel ni pastilla (v16.2.2)", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.buildOverlay();
+      const contenedor = {
+        querySelector: (sel) => ({
+          ".status-label": { textContent: "Atendido" },
+          ".text-muted": { textContent: "12345678" },
+          ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
+          ".fw-bold.mb-0": { textContent: "Presencial" },
+        }[sel] || null),
+      };
+      const nodoHora = {
+        textContent: "07:00 AM",
+        closest: () => contenedor,
+        parentElement: null,
+        ownerDocument: { body: c.env.doc.body },
+      };
+      c.env.doc.querySelector = (sel) => (sel === ".labelHora" || sel === ".status-label") ? {} : null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".labelHora" ? [nodoHora] : []);
+
+      c.api.tick();
+      const raiz = c.env.doc._nodos.find((n) => n.id === "vgl-root");
+      const dock = c.env.doc._nodos.find((n) => n.id === "vgl-dock");
+      t.igual(c.api.__state.lastSeccion, "agenda", "Everest SÍ muestra Citas del día aquí — pero Acceso no es HCHealth");
+      t.cierto(!!raiz && !!dock, "buildOverlay() sí montó el panel y la pastilla");
+      t.igual(raiz.style.display, "none", "pedido del médico: el panel no se muestra en Acceso");
+      t.igual(dock.style.display, "none", "tampoco la pastilla mínima — cero rastro, no solo minimizado");
+      t.igual(c.api.__state.notified.size, 1, "por dentro, la agenda se sigue leyendo y sembrando con normalidad: el sondeo no se apaga");
+    });
+
+    t.caso("tick: dentro de HCHealth pero sin marcadores de agenda/historia sigue colapsando a la pastilla — v16.2.2 no rompe el comportamiento previo", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento"; // dentro de HCHealth, sin #anamesis ni tabla de agenda
+      c.api.buildOverlay();
+      c.api.tick();
+      const raiz = c.env.doc._nodos.find((n) => n.id === "vgl-root");
+      const dock = c.env.doc._nodos.find((n) => n.id === "vgl-dock");
+      t.igual(c.api.__state.lastSeccion, "otra", "sin marcadores de agenda/historia, la sección sigue siendo 'otra'");
+      t.igual(raiz.style.display, "none", "el panel completo se recoge, como siempre");
+      t.igual(dock.style.display, "flex", "pero la pastilla SÍ se ve: seguimos dentro de HCHealth, a diferencia de Acceso/Ordenamiento-Everest");
+    });
+
+    t.caso("tick: al volver a HCHealth (historia) tras estar oculto en Acceso, se restaura la preferencia real del médico", () => {
+      const c = cargar({ silencioso: true });
+      enriquecerDom(c);
+      c.api.buildOverlay();
+      c.api.setWinState("min"); // preferencia real del médico, ANTES de salir de HCHealth
+
+      c.env.win.location.pathname = "/viva/Acceso/";
+      c.api.tick();
+      const raiz = c.env.doc._nodos.find((n) => n.id === "vgl-root");
+      t.igual(raiz.style.display, "none", "se oculta por completo al salir a Acceso");
+      t.igual(c.api.__state.autoDocked, true);
+
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      c.env.doc.createElement("div").id = "anamesis"; // marcador real de "historia"
+      c.api.tick();
+      t.igual(c.api.__state.autoDocked, false, "se limpia el auto-ocultado al volver a HCHealth");
+      t.igual(raiz.style.display, "flex", "el panel reaparece");
+      t.cierto(raiz.classList.contains("min"), "y respeta la preferencia real del médico (min), no siempre 'full'");
     });
 
     t.caso("tick: con la agenda visible SIEMBRA sin notificar (no-inferencia) y guarda la instantánea", () => {
@@ -372,7 +453,7 @@ module.exports = {
       t.igual(c.api.__state.lastSeccion, "agenda");
       t.igual(c.api.__state.summarized, true, "el arranque tardío queda resumido, no alertado");
       t.igual(c.api.__state.notified.size, 1, "la cita se SIEMBRA en notified sin avisar");
-      t.igual(c.api.__state.notified.get("12345678@07:00 AM"), "VERDE", "sembrada con su clave y color reales");
+      t.igual(c.api.__state.notified.get(c.api.apptKey({ doc_id: "12345678", hora_texto: "07:00 AM" })), "VERDE", "sembrada con su clave y color reales");
       t.cierto(c.api.__state.lastSnapshot && c.api.__state.lastSnapshot.source === "pagina", "la fuente fue la página (el API aún no está sano)");
       t.igual(c.api.__state.lastSnapshot.list.length, 1);
       t.igual(c.env.almacen["vgl_hello"], hoyReal(), "el saludo diario salió porque esta pestaña es líder");
@@ -380,6 +461,132 @@ module.exports = {
       // segundo tick: mismo estado => maybeNotify calla y no se duplica nada
       c.api.tick();
       t.igual(c.api.__state.notified.size, 1, "sin cambios de estado no aparecen entradas nuevas");
+    });
+
+    // =====================================================================
+    // v16.2.4 — Reportado por el médico (20-ago-2026): "las notificaciones de llegada
+    // no se deben repetir en otras ventanas de Everest... cuando me voy a la página de
+    // Ordenamiento o de Acceso vuelve y me salen todas". Rastreado hasta: una pestaña
+    // NO líder nunca vuelve a tocar su `state.notified` (maybeNotify solo corre dentro
+    // del bloque `leader`), así que se queda CONGELADO desde el último tick en que esta
+    // pestaña sí mandaba. Al recuperar el mando (relevo por visibilidad, ver heartbeat),
+    // ese mapa viejo se comparaba tal cual contra el estado fresco de hoy: todo paciente
+    // que cambió mientras esta pestaña dormía se leía como "nuevo" — la ráfaga de avisos
+    // repetidos. El arreglo sincroniza primero con la siembra compartida (la que sí se
+    // mantiene al día pase lo que pase, la lleve quien la lleve — ver
+    // _siembraCompartidaGuardar dentro de maybeNotify) antes de evaluar nada.
+    // =====================================================================
+    t.caso("tick: al RECUPERAR el liderazgo (no el primer tick del día) se sincroniza con la siembra compartida ANTES de avisar — v16.2.4 corta la ráfaga de avisos repetidos al volver a Ordenamiento/Acceso", () => {
+      const c = cargar({ silencioso: true });
+      // Un paciente "Atendido" ya marcado como fraude confirmado (alertedFraud):
+      // colorAndAlert lo computa ROJO de forma determinista, sin depender de la hora
+      // real transcurrida — a diferencia de AMBAR, que sí necesita la gracia vencida.
+      const contenedor = {
+        querySelector: (sel) => ({
+          ".status-label": { textContent: "Atendido" },
+          ".text-muted": { textContent: "12345678" },
+          ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
+          ".fw-bold.mb-0": { textContent: "Presencial" },
+        }[sel] || null),
+      };
+      const nodoHora = {
+        textContent: "07:00 AM",
+        closest: () => contenedor,
+        parentElement: null,
+        ownerDocument: { body: c.env.doc.body },
+      };
+      c.env.doc.querySelector = (sel) => (sel === ".labelHora" || sel === ".status-label") ? {} : null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".labelHora" ? [nodoHora] : []);
+
+      // v17.1.0 — la clave se le pide al script: su forma interna (hora canonizada a
+      // minutos) es un detalle que la prueba no debe fijar a mano.
+      const key = c.api.apptKey({ doc_id: "12345678", hora_texto: "07:00 AM" });
+      c.api.__state.alertedFraud.add(key); // ya se avisó ROJO antes, por la pestaña que sí era líder
+
+      // Esta pestaña ya vivió su primer tick del día hace rato (sembrada), y en ese
+      // entonces el paciente todavía estaba AZUL. Desde entonces se quedó sin mando
+      // (otra pestaña era líder) y nunca volvió a tocar su propio `notified`.
+      c.api.__state.summarized = true;
+      c.api.__state.notified.set(key, "AZUL");
+
+      // Mientras tanto, la pestaña que SÍ tenía el mando vio y avisó el ROJO — quedó
+      // en la siembra compartida (lo que _siembraCompartidaGuardar deja tras CUALQUIER
+      // aviso real, no solo tras la siembra inicial del día).
+      c.env.win.localStorage.setItem("vgl_siembra_dia2", JSON.stringify({ dia: c.api.todayStamp(), mapa: { [key]: "ROJO" } }));
+
+      // Y AHORA esta pestaña recupera el mando (releva por visibilidad, o el latido
+      // ajeno venció): sin latido ajeno en localStorage, heartbeat() se lo concede.
+      c.api.__state.leader = false;
+
+      c.api.tick();
+
+      t.igual(c.api.__state.notified.get(key), "ROJO", "se sincronizó con la siembra compartida ANTES de que maybeNotify comparara nada");
+      const stats = JSON.parse(c.env.almacen["vgl_stats"] || "{}");
+      const hoy = stats[c.api.todayStamp()] || { fraude: 0 };
+      t.igual(hoy.fraude || 0, 0, "cero avisos nuevos: el ROJO ya lo había avisado la otra pestaña, esto NO es una transición en vivo");
+    });
+
+    t.caso("tick: mientras SIGUE siendo líder (no hubo relevo) una transición real avisa igual que siempre — v16.2.4 solo sincroniza en el tick en que se RECUPERA el mando", () => {
+      const c = cargar({ silencioso: true });
+      const contenedor = {
+        querySelector: (sel) => ({
+          ".status-label": { textContent: "Atendido" },
+          ".text-muted": { textContent: "12345678" },
+          ".text-uppercase.fw-bold": { textContent: "PACIENTE PRUEBA" },
+          ".fw-bold.mb-0": { textContent: "Presencial" },
+        }[sel] || null),
+      };
+      const nodoHora = {
+        textContent: "07:00 AM",
+        closest: () => contenedor,
+        parentElement: null,
+        ownerDocument: { body: c.env.doc.body },
+      };
+      c.env.doc.querySelector = (sel) => (sel === ".labelHora" || sel === ".status-label") ? {} : null;
+      c.env.doc.querySelectorAll = (sel) => (sel === ".labelHora" ? [nodoHora] : []);
+
+      const key = c.api.apptKey({ doc_id: "12345678", hora_texto: "07:00 AM" });
+      c.api.__state.alertedFraud.add(key);
+      c.api.__state.summarized = true;
+      c.api.__state.notified.set(key, "AZUL"); // última vez que ESTA MISMA pestaña, ya líder, vio a este paciente
+      c.api.__state.leader = true; // seguía siendo líder en el tick anterior: esto NO es un relevo
+
+      c.api.tick();
+
+      t.igual(c.api.__state.notified.get(key), "ROJO");
+      const stats = JSON.parse(c.env.almacen["vgl_stats"] || "{}");
+      const hoy = stats[c.api.todayStamp()] || { fraude: 0 };
+      t.igual(hoy.fraude || 0, 1, "sigue avisando con normalidad: la sincronización nueva solo entra en juego al RECUPERAR el mando, nunca de por medio");
+    });
+
+    // v17.1.0 (#126) — EL RELEVO SE SINCRONIZA AUNQUE ESTE TICK NO TRAIGA AGENDA.
+    // Reporte del médico + 2 capturas: el aviso verde «Paciente confirmó a tiempo» le salía
+    // en pestañas que no son la de citas del día —una es un visor de impresión— y
+    // «pareciera que se duplicara». La v16.2.4 puso la sincronización DENTRO del bloque
+    // que solo corre cuando el tick trae datos, y en una pestaña sin agenda a la vista ese
+    // bloque no se ejecuta: `eraLider` se consumía sin sincronizar y el tick siguiente ya
+    // valía true, así que la sincronización no ocurría NUNCA para ese relevo.
+    // La prueba de la v16.2.4 no lo cazaba porque montaba la agenda antes del relevo.
+    t.caso("tick (#126): al RECUPERAR el mando se sincroniza aunque este tick no traiga ni una cita — es lo que pasa fuera de «Citas del día»", () => {
+      const c = cargar({ silencioso: true });
+      // Sin agenda a la vista: exactamente Historia Clínica, Órdenes o un visor de impresión.
+      c.env.doc.querySelector = () => null;
+      c.env.doc.querySelectorAll = () => [];
+
+      const key = c.api.apptKey({ doc_id: "12345678", hora_texto: "07:00 AM" });
+      c.api.__state.summarized = true;              // esta pestaña ya tuvo su turno hoy…
+      c.api.__state.notified.set(key, "AZUL");      // …y su mapa quedó congelado ahí
+      c.env.win.localStorage.setItem("vgl_siembra_dia2",
+        JSON.stringify({ dia: c.api.todayStamp(), mapa: { [key]: "ROJO" } }));
+      c.api.__state.leader = false;                 // AHORA recupera el mando
+
+      c.api.tick();
+
+      t.igual(c.api.__state.notified.get(key), "ROJO",
+        "el mando se toma UNA vez: si esa vez no se sincroniza, no se sincroniza nunca");
+      const stats = JSON.parse(c.env.almacen["vgl_stats"] || "{}");
+      t.igual((stats[c.api.todayStamp()] || {}).atiempo || 0, 0,
+        "y no se vuelve a avisar lo que la otra pestaña ya avisó");
     });
 
     // v12.5.14 — Reportado en consultorio: el saludo diario (y los avisos en general)
@@ -558,13 +765,13 @@ module.exports = {
     t.caso("uxClaveLimpia: una cédula con puntos NO pasa — el punto es carácter permitido, y ahí estaba el agujero", () => {
       const c = cargar({ silencioso: true });
       // Documentos INVENTADOS, con el formato exacto en que se escriben en Colombia.
-      t.falso(c.api.uxClaveLimpia("labs.1.143.142.498.fin").includes("143"),
+      t.falso(c.api.uxClaveLimpia("labs.1.111.111.111.fin").includes("143"),
         "escrita con puntos no hay ningún tramo de 6 dígitos seguidos que quitar: salía entera");
       t.falso(c.api.uxClaveLimpia("300-123-4567").includes("123"), "lo mismo con el guion en un celular");
-      t.falso(c.api.uxClaveLimpia("1 143 142 498").includes("143"),
+      t.falso(c.api.uxClaveLimpia("1 111 111 111").includes("143"),
         "y con espacios: se quitaban DESPUÉS de la única comprobación que los habría cazado, y los dígitos se pegaban");
       t.igual(c.api.uxClaveLimpia("1234567890"), "", "el caso que sí paraba la versión vieja sigue parándose");
-      t.cierto(c.api.uxClaveLimpia("labs.1.143.142.498.fin").indexOf("labs") === 0,
+      t.cierto(c.api.uxClaveLimpia("labs.1.111.111.111.fin").indexOf("labs") === 0,
         "lo que no es el dato se conserva: la clave sigue diciendo de qué acción venía");
     });
 
@@ -594,6 +801,10 @@ module.exports = {
     // ---------- pymReminderCheck ----------
     t.caso("pymReminderCheck: avisa una sola vez al día y solo pasada la hora configurada", () => {
       const c = cargar({ silencioso: true });
+      // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
+      // pestaña oculta (visible, el canal es el toast). La intención original de esta
+      // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      c.env.doc.visibilityState = "hidden";
       // v12.3.36 — el liderazgo ya no es automático al arrancar (se gana con el primer
       // latido); esta prueba es del recordatorio, no del liderazgo, así que lo fija.
       c.api.__state.leader = true;
@@ -632,6 +843,10 @@ module.exports = {
     // ---------- avisarSiActualizado ----------
     t.caso("avisarSiActualizado: calla en la primera instalación y celebra la actualización real", () => {
       const c = cargar({ silencioso: true });
+      // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
+      // pestaña oculta (visible, el canal es el toast). La intención original de esta
+      // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      c.env.doc.visibilityState = "hidden";
       const capturas = [];
       instalarNotificacion(c, capturas);
       // primera instalación: guarda la versión pero NO avisa

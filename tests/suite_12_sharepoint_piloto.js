@@ -293,6 +293,7 @@ module.exports = {
       t.igual(st.pymFallback, true);
       t.igual(st.pymFile, "BASE PILOTO.xlsx (base piloto — aún no llega la de hoy)");
       // v12.10.12 — visibilidad: caer a la base piloto (desde caché, sin red) queda contado.
+      c.api._uxVolcarBuffer();
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.igual(w.acciones["pym.fallback.cache"], 1);
     });
@@ -414,6 +415,7 @@ module.exports = {
       await esperar(() => c.env.gm["vgl_pym_esfallback"] === "1", 2000, "la caché del día marca esfallback");
       // v12.10.12 — visibilidad: caer a la base piloto bajada por red también queda contado
       // (con una etiqueta distinta a la del arranque desde caché, son situaciones distintas).
+      c.api._uxVolcarBuffer();
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.igual(w.acciones["pym.fallback.red"], 1);
     });

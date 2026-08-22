@@ -1,0 +1,212 @@
+{
+ "_nota": "Cuestionario de riesgo de diabetes OFICIAL de Everest (PreguntasRiesgoDiabetes) con sus respuestas y puntajes. Parametrización de la IPS, sin datos de paciente. Extraído del HAR neps (jul-2026).",
+ "preguntas": [
+  {
+   "id": 1,
+   "descripcion": "¿La circunferencia de su cintura, colocando el metro entre el borde infereior de las costillas y el borde superior de la pelvis mida?",
+   "ngModel": "circunferencia",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 1,
+     "descripcion": "Menos de 90 cm",
+     "idPregunta": 1,
+     "puntaje": 0,
+     "sexo": "M",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    },
+    {
+     "id": 2,
+     "descripcion": "90-98 cm",
+     "idPregunta": 1,
+     "puntaje": 3,
+     "sexo": "M",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    },
+    {
+     "id": 3,
+     "descripcion": "Más de 98 cm",
+     "idPregunta": 1,
+     "puntaje": 4,
+     "sexo": "M",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    },
+    {
+     "id": 4,
+     "descripcion": "Menos de 80 cm",
+     "idPregunta": 1,
+     "puntaje": 0,
+     "sexo": "F",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    },
+    {
+     "id": 5,
+     "descripcion": "80-88 cm",
+     "idPregunta": 1,
+     "puntaje": 3,
+     "sexo": "F",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    },
+    {
+     "id": 6,
+     "descripcion": "Más de 88 cm",
+     "idPregunta": 1,
+     "puntaje": 4,
+     "sexo": "F",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:22:23.29"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "descripcion": "¿Generalmente hace 30 minutos diarios de actividad física en el trabajo y/o durante su tiempo libre?",
+   "ngModel": "actividadFisica",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 7,
+     "descripcion": "Si",
+     "idPregunta": 2,
+     "puntaje": 0,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:24:01.583"
+    },
+    {
+     "id": 8,
+     "descripcion": "No",
+     "idPregunta": 2,
+     "puntaje": 2,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:24:01.583"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "descripcion": "¿Cuántas veces come vegetales o frutas?",
+   "ngModel": "comeVegetales",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 9,
+     "descripcion": "Todos los días",
+     "idPregunta": 3,
+     "puntaje": 0,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:24:43.423"
+    },
+    {
+     "id": 10,
+     "descripcion": "No todos los días",
+     "idPregunta": 3,
+     "puntaje": 1,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:24:43.423"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "descripcion": "¿Toma medicamentos anti-hipertensivos regularmente?",
+   "ngModel": "antihipertensivos",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 11,
+     "descripcion": "No",
+     "idPregunta": 4,
+     "puntaje": 0,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:31:41.49"
+    },
+    {
+     "id": 12,
+     "descripcion": "Si",
+     "idPregunta": 4,
+     "puntaje": 2,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:31:41.49"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "descripcion": "¿Le han encontrado alta glucosa en la sangre (Hiperglucemia)?",
+   "ngModel": "glucosaSangre",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 13,
+     "descripcion": "No",
+     "idPregunta": 5,
+     "puntaje": 0,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:32:01.263"
+    },
+    {
+     "id": 14,
+     "descripcion": "Si",
+     "idPregunta": 5,
+     "puntaje": 5,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:32:01.263"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "descripcion": "¿Tiene miembros de su núcleo familiar o parientes, diagnosticados con diabetes (Tipo 1 o Tipo 2)?",
+   "ngModel": "FamiliarDiabetico",
+   "estado": "ACT",
+   "fechaCreacion": "2020-04-20T00:00:00",
+   "respuestas": [
+    {
+     "id": 15,
+     "descripcion": "No",
+     "idPregunta": 6,
+     "puntaje": 0,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:45:20.08"
+    },
+    {
+     "id": 16,
+     "descripcion": "Si: Abuelos, tíos, primos en primer grado (Pero ningún padre, hermanos o hijos)",
+     "idPregunta": 6,
+     "puntaje": 3,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:45:20.08"
+    },
+    {
+     "id": 17,
+     "descripcion": "Si: Padres, hermanos o hijos",
+     "idPregunta": 6,
+     "puntaje": 5,
+     "sexo": "",
+     "estado": "ACT",
+     "fechaCreacion": "2020-04-20T10:45:20.08"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,53 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIOrdenamientoHealth/api/Paciente/BuscarPaciente",
+  "parametros": [
+    "Identificacion",
+    "TipoDocumento",
+    "epsId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_ordenamiento_nativo_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "id": {
+      "tipo": "number",
+      "ejemplo": 636997
+    },
+    "tipo_Identificacion": "string(11 car)",
+    "identificacion": "string(11 car) [OCULTO]",
+    "primer_Apellido": "string(11 car) [OCULTO]",
+    "segundo_Apellido": "string(11 car) [OCULTO]",
+    "nombre": "string(11 car) [OCULTO]",
+    "genero": "null",
+    "eps": {
+      "tipo": "string(10 car)",
+      "ejemplo": "NUEVA EPS "
+    },
+    "epsId": {
+      "tipo": "number",
+      "ejemplo": 2
+    },
+    "regimen": "string(12 car)",
+    "direccion": "string(11 car) [OCULTO]",
+    "fecha_Nacimiento": "string(11 car) [OCULTO]",
+    "tipoPlan": {
+      "tipo": "string(12 car)",
+      "ejemplo": "BENEFICIARIO"
+    },
+    "edad": {
+      "tipo": "number",
+      "ejemplo": 61
+    },
+    "estado": {
+      "tipo": "string(6 car)",
+      "ejemplo": "ACTIVO"
+    },
+    "correo": "string(11 car) [OCULTO]",
+    "telefono": "string(11 car) [OCULTO]",
+    "programaCompensar": "string(0 car)"
+  }
+}

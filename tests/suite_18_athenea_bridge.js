@@ -28,13 +28,73 @@ module.exports = {
     "_atheneaToken", "_atheneaIdPaciente", "_atheneaCedulaCoincide",
     "_atheneaExtraerSolicitudes", "_parseFechaEspanolLike", "_fechaDesdeNumeroSolicitud",
     "_atheneaMultipart", "_atheneaPareceLogin",
-    "_gmReq", "getAtheneaSolicitudesAuto", "getAtheneaLabsAuto",
+    "_gmReq", "getAtheneaSolicitudesAuto", "getAtheneaLabsAuto", "atheneaLecturaIncompleta",
+    // v16.6.0 — pre-consulta (N1 escalonado + N2 prioridad + hidratación)
+    "_preconLeerTodo", "_preconGuardar", "_preconDe", "_preconPriorizar", "_preconHidratar", "_preconTick", "_preconEstadoDe",
     "atheneaKeepAlive", "atheneaAutoLogin",
     "atheneaCredsGet", "atheneaCredsSet", "atheneaCredsClear",
     "_vglXor", "_vglOfusca", "_vglDesofusca",
   ],
 
   async pruebas(t, api, env, cargar) {
+    // =================================================================
+    //  v16.6.0 — PRE-CONSULTA (aprobada por el médico el 20-ago). El
+    //  traedor de labs se INYECTA (costura explícita de _preconTick):
+    //  aquí se prueba el planificador, no el puente Athenea — ese ya
+    //  tiene sus propias pruebas abajo.
+    // =================================================================
+    await t.casoAsync("pre-consulta: trae UN citado por vez, lo guarda por día y respeta el espaciado de 15 s", async () => {
+      const c = cargar({ silencioso: true });
+      let llamadas = 0;
+      const traer = async (doc) => { llamadas++; return [{ analito: "CREATININA", resultado: "1.1" }]; };
+      const agenda = [{ doc_id: "111" }, { doc_id: "222" }];
+
+      await c.api._preconTick(agenda, traer);
+      t.igual(llamadas, 1, "primera pasada: exactamente UNA consulta");
+      t.cierto(!!c.api._preconDe("111"), "el primero quedó guardado para todo el día");
+
+      await c.api._preconTick(agenda, traer);
+      t.igual(llamadas, 1, "inmediatamente después NO dispara otra: 15 s entre citados");
+    });
+
+    await t.casoAsync("pre-consulta: 'En Sala' salta al frente de la cola (N2)", async () => {
+      const c = cargar({ silencioso: true });
+      const orden = [];
+      const traer = async (doc) => { orden.push(doc); return []; };
+      c.api._preconPriorizar("999");
+      await c.api._preconTick([{ doc_id: "111" }, { doc_id: "999" }], traer);
+      t.igual(orden[0], "999", "el que llegó a sala se consulta primero, no el primero de la lista");
+    });
+
+    await t.casoAsync("pre-consulta: un fallo de Athenea (null) NO se guarda — regla v16.2.8, aquí también", async () => {
+      const c = cargar({ silencioso: true });
+      await c.api._preconTick([{ doc_id: "333" }], async () => null);
+      t.igual(c.api._preconDe("333"), null, "el fallo no se cachea como 'sin laboratorios': se reintentará");
+    });
+
+    t.caso("semáforo: 'listo' con precarga fresca, 'cola' sin ella, y nada con el módulo apagado (v16.6.1)", () => {
+      const c = cargar({ silencioso: true });
+      c.api._preconGuardar("777", [{ analito: "CREATININA", resultado: "1.0" }]);
+      t.igual(c.api._preconEstadoDe("777"), "listo", "precargado y fresco: punto verde");
+      t.igual(c.api._preconEstadoDe("888"), "cola", "citado sin precargar: punto ámbar");
+      t.igual(c.api._preconEstadoDe(""), null, "sin documento no hay punto");
+      c.api.__S.preconsulta = false;
+      t.igual(c.api._preconEstadoDe("777"), null, "con el módulo apagado en Ajustes, el semáforo desaparece");
+      c.api.__S.preconsulta = true;
+    });
+
+    t.caso("pre-consulta: la hidratación llena la caché en memoria solo si hay precarga del día", () => {
+      const c = cargar({ silencioso: true });
+      const todo = c.api._preconLeerTodo();
+      t.igual(todo.dia, undefined === undefined ? todo.dia : "", "el almacén del día abre con su sello");
+      t.cierto(todo && typeof todo.porDoc === "object", "y el mapa por documento listo");
+      c.api._preconGuardar("444", [{ analito: "GLICEMIA", resultado: "95" }]);
+      t.cierto(c.api._preconHidratar("444"), "con precarga, hidrata al instante");
+      t.falso(c.api._preconHidratar("444"), "no pisa una caché que ya tiene a ese paciente");
+      t.falso(c.api._preconHidratar("989898"), "sin precarga no inventa nada");
+    });
+
+
     // Entorno con GM_xmlhttpRequest intercambiable + registro de llamadas.
     function entornoAthenea() {
       const llamadas = [];
@@ -1012,12 +1072,57 @@ module.exports = {
       t.igual(glucosa.__vglToken, "TOK-DOS");
     });
 
-    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> [] sin llegar nunca a pedir detalle", async () => {
+    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> null («no pude leer»), NUNCA [] («no tiene nada»)", async () => {
+      // v16.2.8 — Esta prueba EXIGÍA `[]` y con ello consagraba el defecto que tumbó el
+      // módulo en consultorio el 20-ago: con la sesión caída, el asistente afirmaba que
+      // la paciente no tenía ningún laboratorio, le ponía «Nunca se le ha tomado» a los
+      // nueve exámenes y listaba los 8 analitos RCV como vencidos. Un fallo de lectura
+      // presentado como un hecho clínico. `null` es ahora la única respuesta honesta.
       const e = entornoAthenea();
       e.setPlan((o) => o.onload({ status: 200, responseText: `<input type="password" /> Iniciar sesión` }));
       const labs = await e.c.api.getAtheneaLabsAuto(DOC);
-      t.igual(labs, []);
+      t.igual(labs, null, "sesión caída no es lo mismo que paciente sin laboratorios");
+      t.cierto(e.c.api.atheneaLecturaIncompleta(labs), "y se declara como lectura incompleta");
       t.falso(e.llamadas.some((o) => String(o.url).includes("consultaDetalleSolicitud")));
+    });
+
+    await t.casoAsync("atheneaLecturaIncompleta: distingue «no pude leer» de «leí y no hay nada» (v16.2.8)", () => {
+      const a = entornoAthenea().c.api;
+      t.cierto(a.atheneaLecturaIncompleta(null), "null = no se pudo leer");
+      t.cierto(a.atheneaLecturaIncompleta(undefined), "undefined también");
+      t.falso(a.atheneaLecturaIncompleta([]), "una lista vacía SÍ es un hecho: el paciente no tiene laboratorios");
+      t.falso(a.atheneaLecturaIncompleta([{ x: 1 }]), "y una lista con datos, obviamente");
+      const parcial = [{ x: 1 }];
+      Object.defineProperty(parcial, "__vglIncompleto", { value: 2, enumerable: false });
+      t.cierto(a.atheneaLecturaIncompleta(parcial), "lectura parcial (faltaron solicitudes) también cuenta como incompleta");
+    });
+
+    await t.casoAsync("getAtheneaLabsAuto: si TODAS las solicitudes de laboratorio fallan -> null, no una lista vacía", async () => {
+      // Es el caso exacto del 20-ago en consultorio: Athenea encontró 8 solicitudes y
+      // luego se cayó por tiempo al pedir el detalle de cada una. Antes salía [] y el
+      // asistente afirmaba que la paciente no tenía ningún laboratorio.
+      const e = entornoAthenea();
+      e.setPlan((o) => {
+        const url = String(o.url || "");
+        if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<input name="__RequestVerificationToken" value="T1" />` });
+        else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="777" /><input name="__RequestVerificationToken" value="T2" />` });
+        else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: `CC: ${DOC} <form id="1112025" data-modulo="LAB" action="/Resultados/Reporte"></form>` });
+        else if (o.ontimeout) o.ontimeout({});           // el detalle se cae por tiempo
+        else if (o.onerror) o.onerror(new Error("timeout"));
+      });
+      const labs = await e.c.api.getAtheneaLabsAuto(DOC);
+      t.igual(labs, null, "ninguna solicitud legible no es «paciente sin laboratorios»");
+      t.cierto(e.c.api.atheneaLecturaIncompleta(labs), "y se declara incompleta");
+    });
+
+    await t.casoAsync("verificación de cédula: tolera los puntos de miles con que se escriben en Colombia (v16.2.8)", () => {
+      const a = entornoAthenea().c.api;
+      // El patrón viejo se paraba en el primer punto y capturaba solo "12": la cédula no
+      // coincidía y TODA la lectura de Athenea se descartaba en silencio.
+      t.cierto(a._atheneaCedulaCoincide("Paciente CC: 12.345.678 — resultados", "12345678"), "con puntos");
+      t.cierto(a._atheneaCedulaCoincide("Paciente CC 12345678 — resultados", "12345678"), "sin puntos");
+      t.cierto(a._atheneaCedulaCoincide("CC: 12 345 678", "12345678"), "con espacios");
+      t.falso(a._atheneaCedulaCoincide("Paciente CC: 99.999.999", "12345678"), "y sigue rechazando una cédula DISTINTA");
     });
 
     await t.casoAsync("getAtheneaLabsAuto: solicitudes existen pero ninguna es del módulo LAB -> [] sin consultar detalle", async () => {

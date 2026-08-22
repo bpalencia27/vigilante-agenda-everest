@@ -1,0 +1,54 @@
+{
+  "_nota": "FIXTURE SINTETICO. Reproduce la FORMA de la respuesta real de CargarMedicamentosPaciente (capturada el 10-ago-2026), con datos inventados carácter a carácter. CERO datos de pacientes: la cédula es 00000000, el id es 1, y los fármacos son moléculas del vademécum público.",
+  "_origen_de_la_forma": "POST /apiviva/APIMedicamentoHealth/api/medicamento/CargarMedicamentosPaciente",
+  "respuesta": [
+    {
+      "id": null,
+      "tipo": "Medicamento",
+      "agrupador": "AGRUPADOR-SINTETICO-0001",
+      "usuario": {
+        "id": 1, "consulta_ID": 1, "tipoIdentificacion": "CC",
+        "identificacion": "00000000", "finalidad": null, "dx": null,
+        "especialidad": "MEDICINA GENERAL", "paciente": null
+      },
+      "remisor": { "id": 1, "numero": 1, "descripcion": "SEDE DE PRUEBA SINTETICA", "codigo": "001" },
+      "estado": "PENDIENTE",
+      "fechaCreacion": "2026-08-10T14:28:00.000-05:00",
+      "fechaVencimiento": null,
+      "detalles": [
+        { "id": 1, "codigo": "M0001", "descripcion": "METFORMINA CLORHIDRATO 850 MG TABLETA RECUBIERTA", "cantidadMedicamento": "60", "cantidadDias": "30", "dosificacion": "2", "presentacion": "TABLETA RECUBIERTA", "pf": false, "posfechadoInicial": "2026-08-10T00:00:00.000-05:00", "posfechadoFinal": "2026-09-09T00:00:00.000-05:00", "url": "" },
+        { "id": 2, "codigo": "M00021", "descripcion": "LOSARTAN POTASICO 50 MG TABLETA", "cantidadMedicamento": "30", "cantidadDias": "30", "dosificacion": "1", "presentacion": "TABLETA", "pf": false, "posfechadoInicial": "2026-08-10T00:00:00.000-05:00", "posfechadoFinal": "2026-09-09T00:00:00.000-05:00", "url": "" },
+        { "id": 3, "codigo": "M0003", "descripcion": "IBUPROFENO 400 MG TABLETA RECUBIERTA", "cantidadMedicamento": "30", "cantidadDias": "10", "dosificacion": "3", "presentacion": "TABLETA RECUBIERTA", "pf": false, "posfechadoInicial": "2026-08-10T00:00:00.000-05:00", "posfechadoFinal": "2026-08-20T00:00:00.000-05:00", "url": "" }
+      ],
+      "cantMeses": 1,
+      "urls": [ { "url": "https://ejemplo.invalido/orden/1", "mes": 1, "grupo": "AGRUPADOR-SINTETICO-0001" } ]
+    },
+    {
+      "id": null,
+      "tipo": "Medicamento",
+      "agrupador": "AGRUPADOR-SINTETICO-0002",
+      "usuario": { "id": 1, "consulta_ID": 2, "tipoIdentificacion": "CC", "identificacion": "00000000", "finalidad": null, "dx": null, "especialidad": "MEDICINA GENERAL", "paciente": null },
+      "remisor": { "id": 1, "numero": 1, "descripcion": "SEDE DE PRUEBA SINTETICA", "codigo": "001" },
+      "estado": "ANULADA",
+      "fechaCreacion": "2026-05-02T09:10:00.000-05:00",
+      "fechaVencimiento": null,
+      "detalles": [
+        { "id": 4, "codigo": "M0004", "descripcion": "ESPIRONOLACTONA 25 MG TABLETA", "cantidadMedicamento": "30", "cantidadDias": "30", "dosificacion": "1", "presentacion": "TABLETA", "pf": false, "posfechadoInicial": "2026-05-02T00:00:00.000-05:00", "posfechadoFinal": "2026-06-01T00:00:00.000-05:00", "url": "" }
+      ],
+      "cantMeses": 1,
+      "urls": []
+    },
+    {
+      "id": null, "tipo": "Medicamento", "agrupador": "AGRUPADOR-SINTETICO-0003",
+      "usuario": { "id": 1, "consulta_ID": 3, "tipoIdentificacion": "CC", "identificacion": "00000000", "finalidad": null, "dx": null, "especialidad": "MEDICINA GENERAL", "paciente": null },
+      "remisor": { "id": 1, "numero": 1, "descripcion": "SEDE DE PRUEBA SINTETICA", "codigo": "001" },
+      "estado": "PENDIENTE", "fechaCreacion": "2026-08-10T14:30:00.000-05:00", "fechaVencimiento": null,
+      "detalles": [
+        { "id": 5, "codigo": "M0005", "descripcion": "   ", "cantidadMedicamento": "1", "cantidadDias": "1", "dosificacion": "1", "presentacion": "", "pf": false, "posfechadoInicial": null, "posfechadoFinal": null, "url": "" },
+        { "id": 6, "codigo": "M0006", "descripcion": null, "cantidadMedicamento": null, "cantidadDias": null, "dosificacion": null, "presentacion": null, "pf": false, "posfechadoInicial": null, "posfechadoFinal": null, "url": "" },
+        { "id": 7, "codigo": "M0007", "descripcion": "ENOXAPARINA SODICA 40 MG/0.4 ML SOLUCION INYECTABLE", "cantidadMedicamento": "10", "cantidadDias": "10", "dosificacion": "1", "presentacion": "JERINGA PRELLENADA", "pf": true, "posfechadoInicial": "2026-08-10T00:00:00.000-05:00", "posfechadoFinal": "2026-08-20T00:00:00.000-05:00", "url": "" }
+      ],
+      "cantMeses": 1, "urls": []
+    }
+  ]
+}
