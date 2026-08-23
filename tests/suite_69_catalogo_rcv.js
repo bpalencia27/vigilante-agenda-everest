@@ -11,6 +11,9 @@
 
 const tipo = (alertas, t) => (alertas || []).find((x) => x.tipo_interaccion === t) || null;
 
+// Vademécum REAL de Everest capturado el 23-ago-2026 y sanitizado (cero PHI).
+const fixtureVademecum = require("./fixtures/captura_vademecum_everest_20260823.json");
+
 module.exports = {
   nombre: "Catálogo farmacológico RCV (interacciones y renales con fuente citada)",
   cubre: ["mtrGruposCatalogoRcv", "mtrEvaluarConCatalogoRcv"],
@@ -231,6 +234,52 @@ module.exports = {
       t.cierto(!!tipo(r.interacciones, "CLOPIDOGREL_IBP"), "la interacción del catálogo llega al médico");
       t.cierto(r.todo.some((x) => x.principio_activo === "aspirina"), "la renal del catálogo llega al médico");
       t.igual(r.todo.length, r.avisos.length + r.interacciones.length, "la identidad de la vista se conserva");
+    });
+
+    // ============ VADEMÉCUM REAL DE EVEREST (captura 23-ago, sanitizada) ============
+
+    t.caso("vademécum REAL sanitizado: cada descripción del fixture cae en su grupo", () => {
+      const nombres = fixtureVademecum.respuesta.map((m) => m.descripcion);
+      const g = api.mtrGruposCatalogoRcv(nombres);
+      t.cierto(!!g.ccb_dhp, "levoamlodipino → CCB DHP");
+      t.cierto(!!g.ibp, "levopantoprazol → IBP");
+      t.cierto(!!g.levotiroxina, "levotiroxina → hormona tiroidea");
+      t.cierto(!!g.fluoroquinolona_qt, "levofloxacino → FQ con QT");
+      t.cierto(g.isrs === undefined && g.tramadol === undefined, "sin grupos ajenos");
+      t.igual(cat(nombres).length, 0, "los 10 nombres solos no forman ningún par de interacción");
+    });
+
+    t.caso("levotiroxina real + warfarina = LEVOTIROXINA_ANTICOAGULANTE HIGH", () => {
+      const a = tipo(cat(["LEVOTIROXINA SODICA 50 mcg (TABLETA)", "WARFARINA SODICA 5 MG (TABLETA)"]), "LEVOTIROXINA_ANTICOAGULANTE");
+      t.cierto(!!a && a.severidad === "HIGH", "INR a vigilar");
+      t.cierto(!!tipo(cat(["LEVOTIROXINA SODICA 100 mcg (TABLETA)", "RIVAROXABAN 20MG (TABLETA)"]), "LEVOTIROXINA_ANTICOAGULANTE"), "con DOAC también");
+      t.falso(!!tipo(cat(["LEVOTIROXINA SODICA 50 mcg (TABLETA)"]), "LEVOTIROXINA_ANTICOAGULANTE"), "levotiroxina sola no");
+    });
+
+    t.caso("levopantoprazol real + clopidogrel dispara CLOPIDOGREL_IBP", () => {
+      t.cierto(!!tipo(cat(["LEVOPANTOPRAZOL 20MG (TABLETAS DE LIBERACIÓN RETARDADA)", "CLOPIDOGREL 75 MG (TABLETA)"]), "CLOPIDOGREL_IBP"),
+        "levopantoprazol es un IBP que inhibe CYP2C19");
+    });
+
+    t.caso("levofloxacino real: el inyectable dispara QT con amiodarona, el oftálmico NO", () => {
+      t.cierto(!!tipo(cat(["LEVOFLOXACINO 500 MG/100ML (SOLUCION INYECTABLE) - (H)", "AMIODARONA 200 MG (TABLETA)"]), "AMIODARONA_FQ_QT"),
+        "sistémico: sí");
+      t.falso(!!tipo(cat(["LEVOFLOXACINO 5MG/ML (SOLUCION OFTALMICA FRASCO GOTERO*5ML)", "AMIODARONA 200 MG (TABLETA)"]), "AMIODARONA_FQ_QT"),
+        "oftálmico: filtro de vía (texto real de la base)");
+    });
+
+    t.caso("levoamlodipino real entra al lado antihipertensivo del corticoide", () => {
+      const a = tipo(cat(["PREDNISOLONA 5 MG (TABLETA)", "LEVOAMLODIPINO 2,5 MG (TABLETA)"]), "CORTICOIDE_ANTIHIPERTENSIVO");
+      t.cierto(!!a && a.severidad === "INFO", "CCB DHP antagonizado por el corticoide");
+    });
+
+    t.caso("amlodipino (sin 'levo') también es CCB DHP — aserción faltante cazada por mutación", () => {
+      t.cierto(!!api.mtrGruposCatalogoRcv(["AMLODIPINO 5 MG (TABLETA)"]).ccb_dhp, "la aguja corta no se pierde");
+      t.falso(!!api.mtrGruposCatalogoRcv(["AMLODIPINO 5 MG (TABLETA)"]).isrs, "y no inventa grupos ajenos");
+    });
+
+    t.caso("levocetirizina (no RCV) no dispara ninguna regla del catálogo", () => {
+      t.igual(cat(["LEVOCETIRIZINA 5 MG (CAPSULA)"]).length, 0, "ruido limpio");
     });
   },
 };

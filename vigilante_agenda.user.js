@@ -27473,7 +27473,7 @@ _vglOfrecerDeshacer(btn);
     "url": null
    }
   ],
-  "comparacion_repos": "En los repos solo existe tests/fixtures/everest_medicamentos.json (sintetico, 5 farmacos: metformina, losartan, ibuprofeno, espironolactona, enoxaparina) y everest_historico_medicamentos.json. No hay vademecum completo. Los 5 farmacos del fixture ya caen en grupos del motor base (metformina, ara2, aines, espironolactona, lmwh): cobertura 100%. La seccion presentaciones_everest queda lista para recibir el vademecum real de Everest (captura), pendiente.",
+  "comparacion_repos": "Captura REAL del vademecum obtenida el 23-ago-2026 (POST /apiviva/APIMedicamentoHealth/api/medicamento/ConsultarMedicamentos, body {consulta:...}): formato literal de Everest es 'PRINCIPIO DOSIS (PRESENTACION)'. Hallazgos: swNefrotoxico=false en TODAS las presentaciones (la IPS nunca la parametrizo); levoamlodipino/levopantoprazol/levotiroxina son las grafias reales. La captura original con cedula quedo FUERA del repo (fixture sanitizado: tests/fixtures/captura_vademecum_everest_20260823.json).",
   "semantica": "Cada interaccion tiene 'lados': un array de arrays. Dispara si CADA lado tiene al menos un grupo presente (las alternativas dentro de un lado son OR). Ej: DIGOXINA_DIURETICO = [[digoxina],[diuretico_tiazida,diuretico_asa]] exige digoxina Y (tiazida O asa)."
  },
  "grupos": {
@@ -27483,6 +27483,7 @@ _vglOfrecerDeshacer(btn);
     "omeprazol",
     "esomeprazol",
     "lansoprazol",
+    "levopantoprazol",
     "pantoprazol",
     "rabeprazol"
    ],
@@ -27594,6 +27595,26 @@ _vglOfrecerDeshacer(btn);
    "rotulo": "verapamilo",
    "sinonimos": [
     "verapamilo"
+   ],
+   "fuente": "BNF"
+  },
+  "ccb_dhp": {
+   "rotulo": "calcioantagonistas dihidropiridinicos (CCB DHP)",
+   "sinonimos": [
+    "amlodipino",
+    "levoamlodipino",
+    "nifedipino",
+    "felodipino",
+    "lercanidipino",
+    "nitrendipino"
+   ],
+   "fuente": "BNF"
+  },
+  "levotiroxina": {
+   "rotulo": "levotiroxina (hormona tiroidea)",
+   "sinonimos": [
+    "levotiroxina",
+    "levotiroxina sodica"
    ],
    "fuente": "BNF"
   }
@@ -27787,6 +27808,7 @@ _vglOfrecerDeshacer(btn);
      "ara2",
      "betabloqueador",
      "ccb_no_dhp",
+     "ccb_dhp",
      "diuretico_tiazida",
      "diuretico_asa"
     ]
@@ -27883,6 +27905,24 @@ _vglOfrecerDeshacer(btn);
    "mensaje": "PANCITOPENIA: Metotrexato + trimetoprim/sulfametoxazol. Ambos son antifolatos: falla medular aguda documentada, a veces fatal. Evitar la combinacion; si es imprescindible, suspender el metotrexato durante el ciclo y vigilar hemograma.",
    "mecanismo": "Bloqueo aditivo del metabolismo del folato",
    "fuente": "BNF"
+  },
+  {
+   "codigo": "LEVOTIROXINA_ANTICOAGULANTE",
+   "titulo": "Levotiroxina + anticoagulante",
+   "lados": [
+    [
+     "levotiroxina"
+    ],
+    [
+     "warfarina",
+     "doac"
+    ]
+   ],
+   "conducta": "MONITORIZAR",
+   "severidad": "HIGH",
+   "mensaje": "AUMENTO DEL EFECTO ANTICOAGULANTE: Levotiroxina + warfarina/DOAC. La hormona tiroidea acelera el catabolismo de los factores de coagulacion vitamina K-dependientes; al iniciar o ajustar levotiroxina el INR puede elevarse (y caer si se suspende). Controlar INR en 4-6 semanas tras todo cambio de dosis de levotiroxina y ajustar el anticoagulante.",
+   "mecanismo": "Aceleracion del catabolismo de los factores de coagulacion por hormona tiroidea",
+   "fuente": "BNF"
   }
  ],
  "ajuste_renal": [
@@ -27915,13 +27955,18 @@ _vglOfrecerDeshacer(btn);
   }
  ],
  "presentaciones_everest": {
-  "_pendiente": "Rellenar con el vademecum real de Everest (captura/exportacion). Regla del repo: casilla vacia antes que dato inventado; no se inventa un nombre comercial.",
+  "_pendiente": "La captura del 23-ago cubrio la busqueda 'LEVO' (50 resultados). Para el vademecum RCV completo faltan busquedas dirigidas: LOSARTAN, METFORMINA, ATORVA, ENALAPRIL, FUROSEMIDA, ESPIRONOLACTONA, SITAGLIPTINA, EMPAGLIFLOZINA, CARVEDILOL, BISOPROLOL, WARFARINA, RIVAROXABAN, AMIODARONA, DIGOXINA, CLOPIDOGREL, ASPIRINA.",
   "conocidas": [
-   "METFORMINA CLORHIDRATO 850 MG TABLETA RECUBIERTA",
-   "LOSARTAN POTASICO 50 MG TABLETA",
-   "IBUPROFENO 400 MG TABLETA RECUBIERTA",
-   "ESPIRONOLACTONA 25 MG TABLETA",
-   "ENOXAPARINA SODICA 40 MG/0.4 ML SOLUCION INYECTABLE"
+   "LEVOCETIRIZINA 5 MG (CAPSULA)",
+   "LEVOAMLODIPINO 2,5 MG (TABLETA)",
+   "LEVOAMLODIPINO + IRBESARTAN 2.5/300 MG (TABLETA)",
+   "LEVOAMLODIPINO + VALSARTAN 2.5/160 MG (TABLETA)",
+   "LEVOPANTOPRAZOL 20MG (TABLETAS DE LIBERACIÓN RETARDADA)",
+   "LEVOPANTOPRAZOL 10MG (TABLETAS DE LIBERACIÓN RETARDADA)",
+   "LEVOFLOXACINO 500 MG/100ML (SOLUCION INYECTABLE) - (H)",
+   "LEVOFLOXACINO 500 MG (TABLETA RECUBIERTA) (H)",
+   "LEVOTIROXINA SODICA 50 mcg (TABLETA)",
+   "LEVOTIROXINA SODICA 100 mcg (TABLETA)"
   ]
  }
 };

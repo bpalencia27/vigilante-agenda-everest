@@ -1,0 +1,19 @@
+{
+  "_nota": "Captura REAL del vademecum de Everest (2026-08-23), SANITIZADA (cero PHI: pacienteId e identificacion redactados; la cedula de la captura original NO viaja a este repo). Endpoint y contrato verificados con la captura del usuario.",
+  "_origen": "F12 console capture del usuario (capturar_vademecum_everest.js) buscando 'LEVO' en el formulario de ordenes",
+  "endpoint": "POST https://neps.everestintelligent.com/apiviva/APIMedicamentoHealth/api/medicamento/ConsultarMedicamentos",
+  "reqBody": { "pacienteId": null, "epsId": 2, "consulta": "LEVO", "tipoIdentificacion": "CC", "identificacion": "", "programa": "" },
+  "hallazgo": "swNefrotoxico es false en TODAS las presentaciones (0 de N): la IPS nunca parametrizo su bandera de nefrotoxicidad, confirmado con captura real (v14.2.0 ya lo habia documentado).",
+  "respuesta": [
+    { "id": 2855, "codigo": "603645", "descripcion": "LEVOCETIRIZINA 5 MG (CAPSULA)", "presenta_med": "CAPSULA", "swNefrotoxico": false },
+    { "id": 2850, "codigo": "60726", "descripcion": "LEVOAMLODIPINO 2,5 MG (TABLETA)", "presenta_med": "TABLETA", "swNefrotoxico": false },
+    { "id": 2847, "codigo": "601785", "descripcion": "LEVOAMLODIPINO + IRBESARTAN 2.5/300 MG (TABLETA)", "presenta_med": "TABLETA", "swNefrotoxico": false },
+    { "id": 2848, "codigo": "603714", "descripcion": "LEVOAMLODIPINO + VALSARTAN 2.5/160 MG (TABLETA)", "presenta_med": "TABLETA", "swNefrotoxico": false },
+    { "id": 2888, "codigo": "1603076", "descripcion": "LEVOPANTOPRAZOL 20MG (TABLETAS DE LIBERACIÓN RETARDADA)", "presenta_med": "TABLETAS DE LIBERACIÓN RETARDADA", "swNefrotoxico": false },
+    { "id": 2887, "codigo": "1603078", "descripcion": "LEVOPANTOPRAZOL 10MG (TABLETAS DE LIBERACIÓN RETARDADA)", "presenta_med": "TABLETAS DE LIBERACIÓN RETARDADA", "swNefrotoxico": false },
+    { "id": 2869, "codigo": "1601953", "descripcion": "LEVOFLOXACINO 500 MG/100ML (SOLUCION INYECTABLE) - (H)", "presenta_med": "SOLUCION INYECTABLE", "swNefrotoxico": false },
+    { "id": 2870, "codigo": "601632", "descripcion": "LEVOFLOXACINO 500 MG (TABLETA RECUBIERTA) (H)", "presenta_med": "TABLETA RECUBIERTA", "swNefrotoxico": false },
+    { "id": 2899, "codigo": "23201", "descripcion": "LEVOTIROXINA SODICA 50 mcg (TABLETA)", "presenta_med": "TABLETA", "swNefrotoxico": false },
+    { "id": 2892, "codigo": "23202", "descripcion": "LEVOTIROXINA SODICA 100 mcg (TABLETA)", "presenta_med": "TABLETA", "swNefrotoxico": false }
+  ]
+}

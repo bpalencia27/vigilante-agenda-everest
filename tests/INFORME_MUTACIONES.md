@@ -634,3 +634,25 @@ arrays; dispara si cada lado tiene al menos un grupo (OR dentro del lado).
 
 Restauradas una a una; el banco completo volvió a verde (2.348/2.348) tras cada
 restauración.
+
+### Ampliación 23-ago-2026 — vademécum REAL de Everest (captura F12)
+
+Banco antes: 2.348 · después: **2.355** (7 casos nuevos en `suite_69` + fixture
+`tests/fixtures/captura_vademecum_everest_20260823.json`, sanitizado: la cédula de la
+captura original NO viaja al repo).
+
+Endpoint real confirmado con la captura: `POST …/api/medicamento/ConsultarMedicamentos`
+con body `{consulta: "LEVO", epsId, …}`; respuesta = presentaciones (`id, codigo,
+descripcion`). Grafías reales que destaparon agujas nuevas: levoamlodipino (CCB DHP),
+levopantoprazol (IBP), levotiroxina (hormona tiroidea). Nueva interacción
+`LEVOTIROXINA_ANTICOAGULANTE` (warfarina/DOAC, HIGH, BNF) y el lado antihipertensivo
+del corticoide ahora incluye CCB DHP. `swNefrotoxico=false` en TODAS las presentaciones
+capturadas (la IPS nunca parametrizó su bandera).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **aguja corta** | literal `ccb_dhp`: `"amlodipino"` → `"amlodipiino"` (con `levoamlodipino` intacta) | `suite_69` | SOBREVIVIÓ → aserción faltante: *amlodipino (sin 'levo') también es CCB DHP* (agregada) |
+| **agujas CCB rotas** | literal `ccb_dhp`: `"amlodipiino"` y `levoamlodipino` borrada | `suite_69` | *vademécum REAL sanitizado: levoamlodipino → CCB DHP* y *levoamlodipino real entra al lado antihipertensivo del corticoide* |
+| **severidad degradada** | literal: `LEVOTIROXINA_ANTICOAGULANTE` pasa de `"HIGH"` a `"INFO"` | `suite_69` | *levotiroxina real + warfarina = LEVOTIROXINA_ANTICOAGULANTE HIGH* (esperaba HIGH y obtuvo INFO) |
+
+Restauradas una a una; el banco completo volvió a verde (2.355/2.355).
