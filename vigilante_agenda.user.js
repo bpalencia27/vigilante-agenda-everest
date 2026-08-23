@@ -27436,6 +27436,553 @@ _vglOfrecerDeshacer(btn);
     return alertas;
   }
 
+  // =====================================================================
+  //  v17.6.4 — CATÁLOGO FARMACOLÓGICO RCV (catálogo externo con fuente citada)
+  //  ------------------------------------------------------------------
+  //  Copia EMBEBIDA de `catalogo_farmacologico_rcv.json` (raíz del repo): el
+  //  userscript es un solo archivo sin red; el JSON queda como fuente de verdad
+  //  auditable y editable. Regla del repo: fuente citada antes que dato inventado
+  //  — cada regla lleva `fuente` (BNF / Stockley's / ficha técnica).
+  //  ADITIVO a propósito: no toca las 8 del Copiloto ni la capa ampliada v14.2.0.
+  // =====================================================================
+  const MTR_CATALOGO_RCV = {
+ "meta": {
+  "version": "1.0.0",
+  "generado": "2026-08-22",
+  "objeto": "Base de interacciones y seguridad farmacologica para medicamentos de riesgo cardiovascular (RCV). El userscript embebe una copia de este catalogo (MTR_CATALOGO_RCV): el JSON queda como fuente de verdad auditable y editable.",
+  "regla_del_repo": "Fuente citada antes que dato inventado. Cada regla lleva su fuente; nada de lo que esta aqui se agrego 'de memoria'.",
+  "fuentes": [
+   {
+    "id": "BNF",
+    "nombre": "British National Formulary (NICE)",
+    "url": "https://bnf.nice.org.uk"
+   },
+   {
+    "id": "STOCKLEY",
+    "nombre": "Stockley's Drug Interactions (MedicinesComplete)",
+    "url": "https://www.medicinescomplete.com"
+   },
+   {
+    "id": "LEXICOMP",
+    "nombre": "Lexicomp Drug Interactions (Wolters Kluwer)",
+    "url": "https://www.wolterskluwer.com"
+   },
+   {
+    "id": "FICHA",
+    "nombre": "Ficha tecnica / Summary of Product Characteristics (SmPC)",
+    "url": null
+   }
+  ],
+  "comparacion_repos": "En los repos solo existe tests/fixtures/everest_medicamentos.json (sintetico, 5 farmacos: metformina, losartan, ibuprofeno, espironolactona, enoxaparina) y everest_historico_medicamentos.json. No hay vademecum completo. Los 5 farmacos del fixture ya caen en grupos del motor base (metformina, ara2, aines, espironolactona, lmwh): cobertura 100%. La seccion presentaciones_everest queda lista para recibir el vademecum real de Everest (captura), pendiente.",
+  "semantica": "Cada interaccion tiene 'lados': un array de arrays. Dispara si CADA lado tiene al menos un grupo presente (las alternativas dentro de un lado son OR). Ej: DIGOXINA_DIURETICO = [[digoxina],[diuretico_tiazida,diuretico_asa]] exige digoxina Y (tiazida O asa)."
+ },
+ "grupos": {
+  "ibp": {
+   "rotulo": "inhibidores de la bomba de protones (IBP)",
+   "sinonimos": [
+    "omeprazol",
+    "esomeprazol",
+    "lansoprazol",
+    "pantoprazol",
+    "rabeprazol"
+   ],
+   "fuente": "BNF"
+  },
+  "isrs": {
+   "rotulo": "inhibidores selectivos de la recaptacion de serotonina (ISRS)",
+   "sinonimos": [
+    "fluoxetina",
+    "paroxetina",
+    "sertralina",
+    "citalopram",
+    "escitalopram",
+    "fluvoxamina"
+   ],
+   "fuente": "BNF"
+  },
+  "isrn": {
+   "rotulo": "inhibidores de la recaptacion de serotonina-norepinefrina (ISRN)",
+   "sinonimos": [
+    "venlafaxina",
+    "desvenlafaxina",
+    "duloxetina",
+    "milnacipran"
+   ],
+   "fuente": "BNF"
+  },
+  "corticoide_sistemico": {
+   "rotulo": "corticoides sistemicos",
+   "sinonimos": [
+    "prednisolona",
+    "prednisona",
+    "metilprednisolona",
+    "hidrocortisona",
+    "dexametasona",
+    "betametasona"
+   ],
+   "fuente": "BNF"
+  },
+  "fluoroquinolona_qt": {
+   "rotulo": "fluoroquinolonas con riesgo de QT",
+   "sinonimos": [
+    "moxifloxacino",
+    "levofloxacino",
+    "ciprofloxacino"
+   ],
+   "fuente": "BNF"
+  },
+  "tramadol": {
+   "rotulo": "tramadol",
+   "sinonimos": [
+    "tramadol"
+   ],
+   "fuente": "BNF"
+  },
+  "azatioprina": {
+   "rotulo": "azatioprina",
+   "sinonimos": [
+    "azatioprina"
+   ],
+   "fuente": "BNF"
+  },
+  "mercaptopurina": {
+   "rotulo": "mercaptopurina",
+   "sinonimos": [
+    "mercaptopurina"
+   ],
+   "fuente": "BNF"
+  },
+  "metotrexato": {
+   "rotulo": "metotrexato",
+   "sinonimos": [
+    "metotrexato"
+   ],
+   "fuente": "BNF"
+  },
+  "ezetimiba": {
+   "rotulo": "ezetimiba",
+   "sinonimos": [
+    "ezetimiba"
+   ],
+   "fuente": "FICHA"
+  },
+  "antiagregante_p2y12": {
+   "rotulo": "antiagregantes P2Y12 (clopidogrel/prasugrel/ticagrelor)",
+   "sinonimos": [
+    "clopidogrel",
+    "prasugrel",
+    "ticagrelor"
+   ],
+   "fuente": "BNF"
+  },
+  "aspirina": {
+   "rotulo": "aspirina / acido acetilsalicilico",
+   "sinonimos": [
+    "aspirina",
+    "acido acetilsalicilico"
+   ],
+   "fuente": "BNF"
+  },
+  "warfarina": {
+   "rotulo": "warfarina",
+   "sinonimos": [
+    "warfarina"
+   ],
+   "fuente": "BNF"
+  },
+  "verapamilo": {
+   "rotulo": "verapamilo",
+   "sinonimos": [
+    "verapamilo"
+   ],
+   "fuente": "BNF"
+  }
+ },
+ "interacciones": [
+  {
+   "codigo": "AINE_RAAS",
+   "titulo": "AINE + IECA/ARA-II (doble whammy sin diuretico)",
+   "lados": [
+    [
+     "aines"
+    ],
+    [
+     "ieca",
+     "ara2"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE LESIÓN RENAL: AINE + IECA/ARA-II. El AINE cierra la arteriola aferente y el bloqueo del SRAA dilata la eferente: la combinación reduce el filtrado, sobre todo con TFG baja, hipovolemia o insuficiencia cardiaca. Evitar el AINE (preferir paracetamol); si es imprescindible, controlar creatinina y potasio en 7-14 días.",
+   "mecanismo": "Vasoconstriccion de la arteriola aferente (AINE) + vasodilatacion de la eferente (IECA/ARA-II)",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "CLOPIDOGREL_IBP",
+   "titulo": "Clopidogrel + omeprazol/esomeprazol",
+   "lados": [
+    [
+     "antiagregante_p2y12"
+    ],
+    [
+     "ibp"
+    ]
+   ],
+   "conducta": "AJUSTAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE FALLO ANTIPLAQUETARIO: Clopidogrel + omeprazol/esomeprazol. Ambos IBP inhiben CYP2C19 y reducen la activacion del clopidogrel, con mas eventos tromboticos documentados. Preferir pantoprazol o rabeprazol, o un antagonista H2; si no hay alternativa, valorar prasugrel/ticagrelor.",
+   "mecanismo": "Inhibicion de CYP2C19 (prodroga del clopidogrel)",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "ISRS_ISRN_SANGRADO",
+   "titulo": "ISRS/ISRN + antiagregante o anticoagulante",
+   "lados": [
+    [
+     "isrs",
+     "isrn"
+    ],
+    [
+     "antiagregante_p2y12",
+     "doac",
+     "warfarina"
+    ]
+   ],
+   "conducta": "MONITORIZAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE SANGRADO AUMENTADO: ISRS/ISRN + antiagregante o anticoagulante. Los antidepresivos serotoninergicos reducen la serotonina plaquetaria y se suman al efecto del antiagregante/anticoagulante; el sangrado digestivo mayor casi se duplica. Vigilar signos de sangrado; considerar gastroproteccion.",
+   "mecanismo": "Deplecion de serotonina plaquetaria + efecto aditivo sobre la hemostasia",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "ISRS_ISRN_AINE",
+   "titulo": "ISRS/ISRN + AINE",
+   "lados": [
+    [
+     "isrs",
+     "isrn"
+    ],
+    [
+     "aines"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE HEMORRAGIA DIGESTIVA: ISRS/ISRN + AINE. La combinacion multiplica el riesgo de ulcera y sangrado gastrointestinal alto (el AINE gastrolesivo + la serotonina plaquetaria deprimida). Preferir paracetamol; si el AINE es imprescindible, anadir IBP y vigilar.",
+   "mecanismo": "Gastrolesividad del AINE + deplecion de serotonina plaquetaria",
+   "fuente": "STOCKLEY"
+  },
+  {
+   "codigo": "DIGOXINA_DIURETICO",
+   "titulo": "Digoxina + diuretico (tiazida o asa)",
+   "lados": [
+    [
+     "digoxina"
+    ],
+    [
+     "diuretico_tiazida",
+     "diuretico_asa"
+    ]
+   ],
+   "conducta": "MONITORIZAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE TOXICIDAD DIGITALICA: Digoxina + diuretico tiazida/asa. La hipokalemia inducida por el diuretico aumenta la toxicidad de la digoxina a niveles plasmaticos normales (arritmias). Controlar potasio y considerar suplemento; vigilar signos de toxicidad (nauseas, vision, arritmias).",
+   "mecanismo": "Hipokalemia por diuretico que sensibiliza al miocardio a la digoxina",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "BETA_DIGOXINA",
+   "titulo": "Betabloqueador + digoxina",
+   "lados": [
+    [
+     "betabloqueador"
+    ],
+    [
+     "digoxina"
+    ]
+   ],
+   "conducta": "MONITORIZAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE BRADICARDIA/BLOQUEO AV: Betabloqueador + digoxina. Ambos deprimen la conduccion AV y el automatismo sinusal: bradicardia sintomatica o bloqueo. Vigilar frecuencia cardiaca y considerar ECG ante sintomas; ajustar la dosis del betabloqueador.",
+   "mecanismo": "Efecto cronotropico y dromotropico negativo aditivo",
+   "fuente": "STOCKLEY"
+  },
+  {
+   "codigo": "SGLT2_DIURETICO",
+   "titulo": "iSGLT2 + diuretico de asa",
+   "lados": [
+    [
+     "sglt2"
+    ],
+    [
+     "diuretico_asa"
+    ]
+   ],
+   "conducta": "AJUSTAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE DEPLECION DE VOLUMEN: iSGLT2 + diuretico de asa. Ambas clases natriureticas: hipotension, deshidratacion y deterioro de la funcion renal (sobre todo al iniciar o subir dosis). Revisar volumen, tension y funcion renal; considerar reducir la dosis del diuretico.",
+   "mecanismo": "Natriuresis aditiva (proximal por SGLT2, asa por furosemida)",
+   "fuente": "FICHA"
+  },
+  {
+   "codigo": "SGLT2_INSULINA",
+   "titulo": "iSGLT2 + insulina",
+   "lados": [
+    [
+     "sglt2"
+    ],
+    [
+     "insulina"
+    ]
+   ],
+   "conducta": "AJUSTAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE HIPOGLUCEMIA: iSGLT2 + insulina. La glucosuria del SGLT2 se suma a la insulina: hipoglucemias, sobre todo al iniciar. Reducir la dosis de insulina 10-20% al comenzar el iSGLT2 y educar en sintomas.",
+   "mecanismo": "Sinergia hipoglucemiante (eliminacion de glucosa + insulina)",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "CCB_NODHP_ESTATINA",
+   "titulo": "Verapamilo/diltiazem + simvastatina/lovastatina",
+   "lados": [
+    [
+     "ccb_no_dhp"
+    ],
+    [
+     "estatina_cyp_alta"
+    ]
+   ],
+   "conducta": "AJUSTAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE MIOPATIA: Verapamilo/Diltiazem + simvastatina/lovastatina. El calcioantagonista inhibe CYP3A4 y multiplica los niveles de la estatina. Con verapamilo o diltiazem, la simvastatina no debe superar 10 mg/dia; preferir rosuvastatina o pravastatina.",
+   "mecanismo": "Inhibicion de CYP3A4 por verapamilo/diltiazem",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "CORTICOIDE_AINE",
+   "titulo": "Corticoide sistemico + AINE",
+   "lados": [
+    [
+     "corticoide_sistemico"
+    ],
+    [
+     "aines"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE HEMORRAGIA DIGESTIVA: Corticoide sistemico + AINE. Ambas clases gastrolesivas; la combinacion aumenta el riesgo de ulcera perforada o sangrada (especialmente en mayores). Preferir paracetamol; si no hay alternativa, gastroproteccion con IBP.",
+   "mecanismo": "Gastrolesividad aditiva (inhibicion de prostaglandinas + efecto corticoide)",
+   "fuente": "STOCKLEY"
+  },
+  {
+   "codigo": "CORTICOIDE_ANTIHIPERTENSIVO",
+   "titulo": "Corticoide sistemico + antihipertensivo",
+   "lados": [
+    [
+     "corticoide_sistemico"
+    ],
+    [
+     "ieca",
+     "ara2",
+     "betabloqueador",
+     "ccb_no_dhp",
+     "diuretico_tiazida",
+     "diuretico_asa"
+    ]
+   ],
+   "conducta": "MONITORIZAR",
+   "severidad": "INFO",
+   "mensaje": "ANTAGONISMO: Corticoide sistemico + antihipertensivo. El corticoide retiene sodio y agua y puede elevar la presion, atenuando el efecto del antihipertensivo. Controlar la presion durante el ciclo de corticoides; ajustar el antihipertensivo si sube.",
+   "mecanismo": "Retencion hidrosalina y aumento de la resistencia vascular por corticoide",
+   "fuente": "STOCKLEY"
+  },
+  {
+   "codigo": "AMIODARONA_FQ_QT",
+   "titulo": "Amiodarona + fluoroquinolona QT",
+   "lados": [
+    [
+     "amiodarona"
+    ],
+    [
+     "fluoroquinolona_qt"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE ARRITMIA (QT): Amiodarona + moxifloxacino/levofloxacino/ciprofloxacino. Prolongacion aditiva del intervalo QT con riesgo de torsades de pointes. Preferir otro antibiotico; si no hay alternativa, ECG basal y control de electrolitos (K, Mg).",
+   "mecanismo": "Prolongacion aditiva del intervalo QT",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "TRAMADOL_ISRS_ISRN",
+   "titulo": "Tramadol + ISRS/ISRN",
+   "lados": [
+    [
+     "tramadol"
+    ],
+    [
+     "isrs",
+     "isrn"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE SINDROME SEROTONINERGICO: Tramadol + ISRS/ISRN. Ambos aumentan serotonina: agitacion, hipertermia, clonus, rigidez; ademas el tramadol baja el umbral convulsivo. Preferir otro analgesico; si se usan juntos, dosis minima y vigilar 24-72 h.",
+   "mecanismo": "Aumento serotoninergico por doble via",
+   "fuente": "STOCKLEY"
+  },
+  {
+   "codigo": "ALOPURINOL_AZATIOPRINA",
+   "titulo": "Alopurinol + azatioprina/mercaptopurina",
+   "lados": [
+    [
+     "alopurinol"
+    ],
+    [
+     "azatioprina",
+     "mercaptopurina"
+    ]
+   ],
+   "conducta": "CONTRAINDICADA",
+   "severidad": "CRITICAL",
+   "mensaje": "MIELOSUPRESION GRAVE: Alopurinol + azatioprina/mercaptopurina. El alopurinol inhibe la xantina oxidasa y puede multiplicar por 4 la exposicion al inmunosupresor: pancitopenia fatal descrita. Si la combinacion es imprescindible, reducir la azatioprina 75% y vigilar hemograma (ideal: coordinar con reumatologia/trasplante).",
+   "mecanismo": "Inhibicion de la xantina oxidasa (metaboliza la azatioprina)",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "METOTREXATO_AINE",
+   "titulo": "Metotrexato + AINE",
+   "lados": [
+    [
+     "metotrexato"
+    ],
+    [
+     "aines"
+    ]
+   ],
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "RIESGO DE MIELOSUPRESION: Metotrexato + AINE. El AINE reduce la depuracion renal del metotrexato y desplaza su union a proteinas: toxicidad hematologica y mucosa, sobre todo con funcion renal reducida. Preferir paracetamol; si el AINE es inevitable, hemograma y funcion renal seriados.",
+   "mecanismo": "Reduccion de la depuracion renal del metotrexato + desplazamiento proteico",
+   "fuente": "BNF"
+  },
+  {
+   "codigo": "METOTREXATO_TMP_SMX",
+   "titulo": "Metotrexato + trimetoprim/sulfametoxazol",
+   "lados": [
+    [
+     "metotrexato"
+    ],
+    [
+     "tmp_smx"
+    ]
+   ],
+   "conducta": "CONTRAINDICADA",
+   "severidad": "CRITICAL",
+   "mensaje": "PANCITOPENIA: Metotrexato + trimetoprim/sulfametoxazol. Ambos son antifolatos: falla medular aguda documentada, a veces fatal. Evitar la combinacion; si es imprescindible, suspender el metotrexato durante el ciclo y vigilar hemograma.",
+   "mecanismo": "Bloqueo aditivo del metabolismo del folato",
+   "fuente": "BNF"
+  }
+ ],
+ "ajuste_renal": [
+  {
+   "grupo": "aspirina",
+   "rotulo": "Aspirina (antiagregante)",
+   "umbral_crcl": 30,
+   "conducta": "EVITAR",
+   "severidad": "HIGH",
+   "mensaje": "Aspirina: evitar con CrCl < 30 mL/min por riesgo de sangrado y deterioro renal; valorar suspender si no hay indicacion de proteccion coronaria reciente.",
+   "fuente": "FICHA"
+  },
+  {
+   "grupo": "warfarina",
+   "rotulo": "Warfarina",
+   "umbral_crcl": 30,
+   "conducta": "MONITORIZAR",
+   "severidad": "INFO",
+   "mensaje": "Warfarina: con CrCl < 30 mL/min iniciar con precaucion y controlar INR de cerca (la funcion renal baja modifica la respuesta anticoagulante).",
+   "fuente": "FICHA"
+  },
+  {
+   "grupo": "verapamilo",
+   "rotulo": "Verapamilo (CCB no DHP)",
+   "umbral_crcl": 30,
+   "conducta": "REDUCIR",
+   "severidad": "HIGH",
+   "mensaje": "Verapamilo: con CrCl < 30 mL/min usar dosis inicial reducida y titular despacio (eliminacion renal parcial; riesgo de bradicardia y bloqueo AV).",
+   "fuente": "FICHA"
+  }
+ ],
+ "presentaciones_everest": {
+  "_pendiente": "Rellenar con el vademecum real de Everest (captura/exportacion). Regla del repo: casilla vacia antes que dato inventado; no se inventa un nombre comercial.",
+  "conocidas": [
+   "METFORMINA CLORHIDRATO 850 MG TABLETA RECUBIERTA",
+   "LOSARTAN POTASICO 50 MG TABLETA",
+   "IBUPROFENO 400 MG TABLETA RECUBIERTA",
+   "ESPIRONOLACTONA 25 MG TABLETA",
+   "ENOXAPARINA SODICA 40 MG/0.4 ML SOLUCION INYECTABLE"
+  ]
+ }
+};
+
+  // Detecta los grupos del catálogo (los de MTR_SINONIMOS y MTR_SINONIMOS_AMP
+  // los resuelven las funciones de siempre; aquí solo los nuevos). El filtro de
+  // vía (MTR_VIA_NO_SISTEMICA) aplica igual: un corticoide en crema no produce
+  // la interacción sistémica.
+  function mtrGruposCatalogoRcv(medicamentos) {
+    const g = {};
+    if (!medicamentos || !medicamentos.length) return g;
+    for (const med of medicamentos) {
+      if (!med || !String(med).trim()) continue;
+      const norm = mtrNormalizarTexto(String(med));
+      if (MTR_VIA_NO_SISTEMICA.test(norm)) continue;
+      for (const grupo of Object.keys(MTR_CATALOGO_RCV.grupos)) {
+        if (MTR_CATALOGO_RCV.grupos[grupo].sinonimos.some((a) => norm.indexOf(a) >= 0)) {
+          if (!g[grupo]) g[grupo] = [];
+          g[grupo].push(String(med));
+        }
+      }
+    }
+    return g;
+  }
+
+  // Interacciones y seguridad renal del catálogo. Semántica de `lados`: array de
+  // arrays; dispara si CADA lado tiene al menos un grupo presente (dentro de un
+  // lado las alternativas son OR). Cada alerta lleva su `fuente` declarada.
+  function mtrEvaluarConCatalogoRcv(medicamentos, egfr, potasio, crcl) {
+    const alertas = [];
+    if (!medicamentos || !medicamentos.length) return alertas;
+    const g = mtrGruposCatalogoRcv(medicamentos);
+    const gBase = mtrDetectarGruposFarmacologicos(medicamentos);
+    const gAmp = mtrDetectarGruposAmp(medicamentos);
+    for (const k of Object.keys(gBase)) if (gBase[k] && gBase[k].length) g[k] = gBase[k];
+    for (const k of Object.keys(gAmp)) if (gAmp[k] && gAmp[k].length) g[k] = gAmp[k];
+    const tiene = (gr) => !!(g[gr] && g[gr].length);
+
+    for (const r of MTR_CATALOGO_RCV.interacciones) {
+      const completo = (r.lados || []).every((lado) => lado.some(tiene));
+      if (!completo) continue;
+      const pares = [];
+      for (const lado of r.lados) for (const gr of lado) if (tiene(gr)) pares.push(g[gr]);
+      const a = mtrAlertaInteraccion(mtrUnirFarmacos.apply(null, pares),
+        r.codigo, r.conducta, r.mensaje, r.severidad, r.mecanismo);
+      a.fuente = r.fuente;
+      alertas.push(a);
+    }
+
+    if (crcl === null || crcl === undefined || !(crcl > 0)) return alertas;
+    for (const r of MTR_CATALOGO_RCV.ajuste_renal) {
+      if (!tiene(r.grupo)) continue;
+      if (crcl >= r.umbral_crcl) continue;
+      const a = mtrAlerta(r.grupo, g[r.grupo][0], r.conducta, r.mensaje,
+        MTR_FORMULA_CG, crcl, r.severidad);
+      a.fuente = r.fuente;
+      alertas.push(a);
+    }
+    return alertas;
+  }
+
   // Todo lo que el médico tiene que ver de este paciente, en un solo sitio y con
   // el motivo del silencio cuando lo hay. Ordenado por gravedad: lo CRITICAL
   // primero, porque en consulta nadie lee la tercera línea.
@@ -27451,10 +27998,20 @@ _vglOfrecerDeshacer(btn);
     const inter = mtrEvaluarInteraccionesAmpliadas(
       meds || [], mtrFloat(c.tfgCkdEpi),
       (c.potasio === undefined ? null : mtrFloat(c.potasio)));
+    // v17.6.4 — el catálogo RCV se suma a la capa que ve el médico (aditivo).
+    let interCatalogo = mtrEvaluarConCatalogoRcv(
+      meds || [], mtrFloat(c.tfgCkdEpi),
+      (c.potasio === undefined ? null : mtrFloat(c.potasio)),
+      mtrFloat(c.tfgCockcroftGault));
+    // AINE_RAAS (catálogo) y TRIPLE_WHAMMY (base) son el MISMO eje fisiológico
+    // (AINE + SRAA ± diurético): con el Triple presente no se duplica la alerta.
+    if (inter.some((x) => x.tipo_interaccion === "TRIPLE_WHAMMY")) {
+      interCatalogo = interCatalogo.filter((x) => x.tipo_interaccion !== "AINE_RAAS");
+    }
     const avisosRenales = base.avisos.concat(
       mtrReglasRenalesAmpliadas(meds || [], mtrFloat(c.tfgCockcroftGault)));
 
-    const todo = avisosRenales.concat(inter).slice().sort((a, b) =>
+    const todo = avisosRenales.concat(inter, interCatalogo).slice().sort((a, b) =>
       (MTR_SEV_ORDEN[a.severidad] === undefined ? 9 : MTR_SEV_ORDEN[a.severidad]) -
       (MTR_SEV_ORDEN[b.severidad] === undefined ? 9 : MTR_SEV_ORDEN[b.severidad]));
 
@@ -27465,7 +28022,7 @@ _vglOfrecerDeshacer(btn);
     const n = todo.length;
     return {
       avisos: avisosRenales,
-      interacciones: inter,
+      interacciones: inter.concat(interCatalogo),
       todo: todo,
       motivo: n ? "OK" : (base.motivo === "SIN_MEDICAMENTOS_ACTIVOS" ? base.motivo : "SIN_HALLAZGOS"),
       legible: n ? (n + " aviso(s) de seguridad farmacológica") : base.legible,

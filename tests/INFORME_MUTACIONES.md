@@ -611,3 +611,26 @@ deliberada a 6 h).
 | **meta en días sin trabajo** | `mtrProductividadCsvSemana`: `if (at > 0)` pasa a `if (true)` (el día sin atendidas mete meta en contra) | `suite_68` | *mtrProductividadCsvSemana: una fila por día + total…* (el martes sin trabajo salía con meta 18) |
 
 Restauradas una a una; el banco completo volvió a verde tras cada restauración.
+
+## v17.6.4 — 22-ago-2026 (catálogo farmacológico RCV: `catalogo_farmacologico_rcv.json`)
+
+Banco antes (cierre de v17.6.3): 2.318 comprobaciones · después: **2.348** (30 pruebas
+nuevas en `suite_69`), cobertura intacta en lo demás.
+
+Base externa de interacciones y seguridad farmacológica RCV con fuente citada (BNF /
+Stockley's / ficha técnica), pedida por el médico: se compararon los JSON de los repos
+(solo existe el fixture sintético de 5 fármacos, todos ya detectados por el motor base) y
+se construyó el catálogo aparte, que el userscript embebe como `MTR_CATALOGO_RCV`
+(aditivo: no toca las 8 del Copiloto ni la capa ampliada v14.2.0). 16 interacciones
+nuevas + 3 ajustes renales (aspirina, warfarina, verapamilo por CrCl), con la sección
+`presentaciones_everest` lista para el vademécum real. Semántica `lados`: array de
+arrays; dispara si cada lado tiene al menos un grupo (OR dentro del lado).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **sinónimo roto** | `mtrGruposCatalogoRcv`: `norm.indexOf(a) >= 0` pasa a `> 0` (todo principio que abre el nombre deja de detectarse) | `suite_69` | *clopidogrel + omeprazol dispara CLOPIDOGREL_IBP HIGH* y 14 más (los sinónimos en posición 0 dejaron de casar) |
+| **severidad degradada** | Catálogo embebido: `CLOPIDOGREL_IBP` pasa de `"severidad": "HIGH"` a `"INFO"` | `suite_69` | *clopidogrel + omeprazol dispara CLOPIDOGREL_IBP HIGH* (esperaba HIGH y obtuvo INFO) |
+| **duplicado sin filtro** | `mtrAvisosFarmacologicos`: la condición `x.tipo_interaccion === "TRIPLE_WHAMMY"` pasa a una clave que nunca existe (el AINE_RAAS del catálogo ya no se retira) | `suite_69` | *el orquestador no duplica: con diurético manda el TRIPLE_WHAMMY y el AINE_RAAS calla* (el AINE_RAAS apareció junto al Triple) |
+
+Restauradas una a una; el banco completo volvió a verde (2.348/2.348) tras cada
+restauración.
