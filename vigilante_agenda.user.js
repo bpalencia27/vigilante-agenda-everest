@@ -14212,13 +14212,24 @@
   // Solo "Si" cuenta (esSi() en el indexador) — un "No" nunca llega a este conjunto.
   function tieneAbandonoPES(a) { return S.abandonoPES && state.pymAbandono && state.pymAbandono.has(normalizeKey(a.doc_id)); }
   // ---- Buscador y filtros rápidos ----
-  function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
-    const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
+  // ⚡ Bolt: Hoist buffer allocations out of fuzzyMatch. Instead of creating and garbage-collecting
+  // 3 arrays per search iteration, we reuse these typed arrays, expanding them only when necessary.
+  let _fzPrev = new Uint16Array(64);
+  let _fzCurr = new Uint16Array(64);
+  let _fzPrevPrev = new Uint16Array(64);
+  // ⚡ Bolt: Memoize the search query tokenization (stripAccents, toLowerCase, split) so we don't
+  // repeatedly parse the exact same query in a loop (e.g. while filtering all agenda items).
+  let _fzLastQ = null;
+  let _fzLastQTokens = null;
 
-    let prevRow = new Uint16Array(64);
-    let currRow = new Uint16Array(64);
-    let prevPrevRow = new Uint16Array(64);
+  function fuzzyMatch(q, text) {
+    if (q !== _fzLastQ) {
+      _fzLastQ = q;
+      _fzLastQTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    }
+    const queryTokens = _fzLastQTokens;
+    if (!queryTokens.length) return true;
+    const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -14235,41 +14246,41 @@
         const n = tToken.length;
 
         // Ensure buffers are large enough
-        if (n + 1 > prevRow.length) {
-            const size = Math.max(n + 1, prevRow.length * 2);
-            prevRow = new Uint16Array(size);
-            currRow = new Uint16Array(size);
-            prevPrevRow = new Uint16Array(size);
+        if (n + 1 > _fzPrev.length) {
+            const size = Math.max(n + 1, _fzPrev.length * 2);
+            _fzPrev = new Uint16Array(size);
+            _fzCurr = new Uint16Array(size);
+            _fzPrevPrev = new Uint16Array(size);
         }
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
-          prevRow[j] = j;
+          _fzPrev[j] = j;
         }
 
         for (let i = 1; i <= m; i++) {
-          currRow[0] = i;
+          _fzCurr[0] = i;
           for (let j = 1; j <= n; j++) {
             const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
-            currRow[j] = Math.min(
-              prevRow[j] + 1,
-              currRow[j - 1] + 1,
-              prevRow[j - 1] + cost
+            _fzCurr[j] = Math.min(
+              _fzPrev[j] + 1,
+              _fzCurr[j - 1] + 1,
+              _fzPrev[j - 1] + cost
             );
             if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
-              currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
+              _fzCurr[j] = Math.min(_fzCurr[j], _fzPrevPrev[j - 2] + cost);
             }
           }
           // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          let temp = prevPrevRow;
-          prevPrevRow = prevRow;
-          prevRow = currRow;
-          currRow = temp;
+          let temp = _fzPrevPrev;
+          _fzPrevPrev = _fzPrev;
+          _fzPrev = _fzCurr;
+          _fzCurr = temp;
         }
 
         let minCost = Infinity;
         for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
-          if (prevRow[j] < minCost) minCost = prevRow[j];
+          if (_fzPrev[j] < minCost) minCost = _fzPrev[j];
         }
         if (minCost <= maxErrors) {
           tokenMatched = true;
