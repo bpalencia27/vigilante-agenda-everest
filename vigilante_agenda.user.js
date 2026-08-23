@@ -4181,6 +4181,12 @@
   let _labsAvisoTs = 0;
   const LABS_PREFETCH_TTL_MS = 10 * 60000;
 
+  // v17.6.3 — A1 (decisión del médico, 22-ago): la sede del laboratorio (378) estaba
+  // escrita a mano en 5 URLs de AppCita. Si otro colega de otra sede instala el script,
+  // sus pacientes quedarían agendados en el laboratorio de ESTA sede. Una sola fuente de
+  // verdad, con 378 de fábrica: se cambia aquí (o en Ajustes, si algún día se configura).
+  function mtrSedeIdLab() { return 378; }
+
   // v12.6.9 - Guarda para evitar borrado espontáneo de la RAC al editar Creatinina.
   let _racGuardia = { activa: false, docId: "", valor: "", ts: 0, restauraciones: 0 };
   function _getRacGuardiaParaTest() { return _racGuardia; }
@@ -8514,6 +8520,61 @@ _vglOfrecerDeshacer(btn);
       if (!_uxBufTimer) _uxBufTimer = setTimeout(_uxVolcarBuffer, 2000);
     } catch (e) {}
   }
+
+  // v17.6.3 — D1 (decisión del médico, 22-ago): TABLERO LOCAL DE TELEMETRÍA.
+  // Lee la ventana UX local (UX_KEY) y arma dos cosas: (1) el conteo por acción, y
+  // (2) la métrica estrella — el ABANDONO DEL EMBUDO DE AGENDAMIENTO: agendamientos
+  // abiertos (fn.agendar.open) que no terminaron en cita creada (cita.creada.*). PURA:
+  // recibe la ventana cruda y devuelve datos; el HTML lo pinta mtrTableroTelemetriaHtml.
+  function mtrTableroTelemetria(ventana) {
+    try {
+      const acc = (ventana && ventana.acciones && typeof ventana.acciones === "object") ? ventana.acciones : {};
+      const filas = [];
+      for (const k of Object.keys(acc)) {
+        if (k.endsWith(".total")) continue;
+        const v = Number(acc[k]);
+        if (isFinite(v) && v > 0) filas.push({ clave: k, n: v });
+      }
+      filas.sort((a, b) => b.n - a.n);
+      let abiertos = 0, creadas = 0, rechazadas = 0, cupoPerdido = 0, iaGen = 0;
+      for (const f of filas) {
+        if (f.clave === "fn.agendar.open") abiertos += f.n;
+        if (f.clave.indexOf("cita.creada") === 0) creadas += f.n;
+        if (f.clave === "cita.rechazada") rechazadas += f.n;
+        if (f.clave === "cita.cupo_perdido") cupoPerdido += f.n;
+        if (f.clave.indexOf("fn.ia.gen") === 0) iaGen += f.n;
+      }
+      const abandono = abiertos > 0 ? Math.round(((abiertos - creadas) / abiertos) * 1000) / 10 : null;
+      return {
+        total: filas.reduce((s, f) => s + f.n, 0),
+        filas: filas.slice(0, 12),
+        embudo: { abiertos: abiertos, creadas: creadas, rechazadas: rechazadas, cupoPerdido: cupoPerdido, iaGen: iaGen, abandono: abandono },
+      };
+    } catch (e) { return { total: 0, filas: [], embudo: { abiertos: 0, creadas: 0, rechazadas: 0, cupoPerdido: 0, iaGen: 0, abandono: null } }; }
+  }
+
+  // Pinta el bloque del tablero para la hoja «Resumen del turno». Puro: recibe los datos.
+  function mtrTableroTelemetriaHtml(t) {
+    try {
+      if (t === null || t === undefined) return "";
+      if (!t.filas.length) {
+        return '<div class="vgl-grp"><div class="vgl-chart-cap"><span>TELEMETRÍA LOCAL</span></div>'
+          + '<div class="vgl-prod-nota">Sin eventos en la ventana actual. Los conteos se acumulan por ventana de 30 minutos y no salen del computador.</div></div>';
+      }
+      const e = t.embudo;
+      const pct = (x) => (x === null || x === undefined) ? "—" : x + " %";
+      const filas = t.filas.map((f) => '<div class="vgl-prod-fila"><span class="vgl-prod-rot">' + escapeHtml(f.clave) + '</span><span class="vgl-prod-num">' + f.n + '</span></div>').join("");
+      return '<div class="vgl-grp">'
+        + '<div class="vgl-chart-cap"><span>TELEMETRÍA LOCAL</span><span class="vgl-prod-cap">' + t.total + ' acciones en la ventana</span></div>'
+        + '<div class="vgl-prod-fila' + (e.abandono !== null && e.abandono >= 30 ? " bajo" : "") + '">'
+        + '<span class="vgl-prod-rot">Embudo de agendamiento</span>'
+        + '<span class="vgl-prod-num">' + e.abiertos + ' abiertos · ' + e.creadas + ' creadas</span>'
+        + '<span class="vgl-prod-pct">abandono ' + pct(e.abandono) + '</span></div>'
+        + filas
+        + '<div class="vgl-prod-nota">Abandono = agendamientos abiertos que no terminaron en cita creada. Conteos locales: la telemetría no sale de este equipo.</div>'
+        + '</div>';
+    } catch (e) { return ""; }
+  }
   // Empaqueta una ventana con conteos en UNA fila "ux" hacia la cola del tablero.
   // true = la fila quedó ENCOLADA (la entrega real la garantiza repFlush con reintentos).
   function uxEnviarVentana(w) {
@@ -9833,10 +9894,30 @@ _vglOfrecerDeshacer(btn);
   const _avisoUnivParcial = new Set();
   const MTR_AVISO_GRACIA_MS = 5000;
   function _avisoUnivReset() { _avisoUnivEspera = new Map(); _avisoUnivParcial.clear(); }
+
+  // v17.6.3 — B2 (decisión del médico, 22-ago): AVISO ÚNICO CON CHIPS ACCIONABLES.
+  // Un clic en un chip de laboratorio (o PyM) abre el panel de órdenes; «Agendar
+  // control» abre el agendamiento. Sube hasta 3 niveles del árbol de eventos (el chip
+  // va dentro de un contenedor dentro del modal). PURA: devuelve la acción o null.
+  function mtrAvisoAccionDe(target) {
+    try {
+      let n = target;
+      for (let i = 0; i < 3 && n; i++) {
+        const a = n.getAttribute && n.getAttribute("data-aviso-accion");
+        if (a === "ordenar" || a === "agendar") return a;
+        n = n._parent || null;
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function avisoUniversal(nombre, datos, esPrueba) {
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
+      // v17.6.3 — B2: el aviso necesita saber QUIÉN es el paciente para que sus acciones
+      // abran el panel de órdenes o el agendamiento con él. Lo manda checkAvisoUniversal.
+      const apt = datos.apt || null;
       if (!abandono && !pym.length && !labs.length) return; // nada que mostrar
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
@@ -9851,19 +9932,38 @@ _vglOfrecerDeshacer(btn);
         secciones.push('<div class="vgl-au-prio" style="background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.45);color:var(--fg);font-weight:800;font-size:var(--t-micro);padding:9px 12px;border-radius:11px;margin-bottom:12px;line-height:1.45;text-align:left">🫀 <b>Abandono Programa RCV.</b> Priorice el control de riesgo cardiovascular en esta consulta.</div>');
       }
       if (pym.length) {
-        const chips = pym.map((a) => '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>").join("");
+        // v17.6.3 — B2: cada chip es un BOTÓN que abre el panel de órdenes (es donde se
+        // solicitan las actividades preventivas). Antes eran etiquetas inertes. Sin apt
+        // (no se sabe quién es el paciente) vuelven a ser etiquetas: un botón que no
+        // puede abrir nada sería ruido.
+        const chipPym = (a) => apt
+          ? '<button type="button" class="vgl-pym-chip vgl-chip-btn" data-aviso-accion="ordenar" title="Abrir el panel de órdenes para solicitar esta actividad">' + escapeHtml(a) + "</button>"
+          : '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>";
+        const chips = pym.map(chipPym).join("");
         secciones.push('<div class="vgl-pym-lead">Actividades preventivas por solicitar:</div><div class="vgl-pym-list">' + chips + "</div>");
       }
       if (labs.length) {
-        const chips = labs.map((f) => '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>").join("");
+        const chipLab = (f) => apt
+          ? '<button type="button" class="vgl-labsv-chip vgl-chip-btn" data-aviso-accion="ordenar" title="Abrir el panel de órdenes para agendar este examen">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</button>"
+          : '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
+        const chips = labs.map(chipLab).join("");
         secciones.push('<div style="font-size:var(--t-micro);color:var(--c-rojo);font-weight:600;margin-bottom:10px;text-align:center">Laboratorios RCV sin resultado vigente:</div><div class="vgl-pym-list">' + chips + "</div>");
       }
+      // v17.6.3 — B2: acciones del aviso. Solo si se sabe quién es el paciente (apt):
+      // sin eso, un botón que no puede abrir nada sería ruido.
+      const acciones = apt
+        ? '<div class="vgl-pym-acciones">'
+          + '<button type="button" class="vgl-pym-btn" data-aviso-accion="ordenar">📋 Ordenar paraclínicos</button>'
+          + '<button type="button" class="vgl-pym-btn pri" data-aviso-accion="agendar">📅 Agendar control</button>'
+          + '</div>'
+        : "";
       ov.innerHTML = '<div class="vgl-pym-card">' +
         '<div class="vgl-pym-ic">' + ico + "</div>" +
         '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
         '<div class="vgl-pym-n"></div>' +
         secciones.join("") +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
+        acciones +
         '<button class="vgl-pym-ok">Entendido</button>' +
         "</div>";
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
@@ -9871,6 +9971,20 @@ _vglOfrecerDeshacer(btn);
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
+      // v17.6.3 — B2: delegación de clics sobre los chips/acciones. El chip abre el
+      // panel de órdenes; «Agendar control» abre el agendamiento. El aviso se cierra
+      // antes para no tapar el modal que viene.
+      ov.addEventListener("click", (e) => {
+        try {
+          const accion = mtrAvisoAccionDe(e.target);
+          if (!accion) return;
+          if (e.stopPropagation) e.stopPropagation();
+          ov.remove();
+          try { uxTrack("aviso.universal.accion", { a: accion }); } catch (e2) {}
+          if (accion === "ordenar" && typeof openOrdenamientoModal === "function") openOrdenamientoModal(apt);
+          else if (accion === "agendar" && typeof openAgendamientoModal === "function") openAgendamientoModal(apt);
+        } catch (e2) {}
+      });
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
@@ -9907,6 +10021,9 @@ _vglOfrecerDeshacer(btn);
       } : undefined;
       const faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
+      // v17.6.3 — B2: el aviso lleva la identidad mínima del paciente (id + nombre) para
+      // que sus acciones (ordenar/agendar) abran el modal correcto con él.
+      const _aptAviso = { doc_id: doc, nombre: nombreDe() };
       const uid = "avisouniv|" + key;
 
       if (avisoYaVisto(uid)) {
@@ -9915,7 +10032,7 @@ _vglOfrecerDeshacer(btn);
         if (labsListos && faltantes.length && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes });
+          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, apt: _aptAviso });
         }
         return;
       }
@@ -9931,7 +10048,7 @@ _vglOfrecerDeshacer(btn);
         _avisoUnivEspera.delete(key);
         _avisoUnivParcial.add(key);
         avisoMarcarVisto(uid);
-        avisoUniversal(nombreDe(), { abandono, pym, labs: [] });
+        avisoUniversal(nombreDe(), { abandono, pym, labs: [], apt: _aptAviso });
         return;
       }
       _avisoUnivEspera.delete(key); // labs ya resueltos: ya no hay nada que esperar para esta key
@@ -9939,7 +10056,7 @@ _vglOfrecerDeshacer(btn);
       // Labs resueltos: aviso completo si hay algo.
       if (!abandono && !pym.length && !faltantes.length) return;
       avisoMarcarVisto(uid);
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes });
+      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, apt: _aptAviso });
     } catch (e) {}
   }
 
@@ -14960,7 +15077,7 @@ _vglOfrecerDeshacer(btn);
   // confirmación cuando quien llama SÍ tiene el número a mano.
   async function apiLaboratorioAgendarAuto(docId, fechaIso, horaSeleccionada, celular) {
     try {
-      const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${fechaIso}`;
+      const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${fechaIso}`;
       // v16.7.0 — AUDITORÍA #11. Esto usaba gmPostJson, que devuelve null tanto si
       // AppCita contesta "no hay turnos" como si NO CONTESTA (timeout, sin red, 500).
       // extractAgendasList(null) da [], y con la lista vacía el flujo anunciaba
@@ -15042,7 +15159,7 @@ _vglOfrecerDeshacer(btn);
       // v12.3.31 — NombrePaciente=%20 (espacio CODIFICADO): la captura real del front
       // manda el espacio como %20; el literal " " sin codificar que había antes quedaba
       // como URL mal formada, aunque el servidor lo tolerara.
-      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=378&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente=%20&Telefono=${telParam}&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
+      const urlBook = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/AgendarCita?sedeId=${mtrSedeIdLab()}&Identificacion=${encodeURIComponent(docId)}&AgendaId=${agendaId}&NombrePaciente=%20&Telefono=${telParam}&Correo=&Hora=${encodeURIComponent(horaFinal)}&FechaCita=${fechaIso}&generaImpresion=false&LugarCreacion=Vigilante`;
       const resBook = await gmPostJsonEx(urlBook, {});
       // [v14.2.0 — auditoría pre-producción 2026-08-18] Se cambia el cuerpo crudo de la
       // respuesta (podía traer nombre/teléfono del paciente que AppCita hace eco) por los
@@ -17400,13 +17517,13 @@ _vglOfrecerDeshacer(btn);
     // `mtrTableroClinico` nunca lo exponía hacia aquí.
     const h = d && d.esDm2 && d.hba1c;
     if (h && h.actual !== null && h.actual !== undefined) {
-      const metaH = (h.meta !== null && h.meta !== undefined) ? h.meta : MTR_HBA1C_META_DM2;
+      const metaH = (h.meta !== null && h.meta !== undefined) ? h.meta : mtrMetaHba1cGeneral();
       metas.push({
         rotulo: "HbA1c", meta: "< " + metaH + " %",
         actual: h.actual + " %",
         estado: h.actual < metaH ? "ok" : "falla",
-        extra: (h.meta !== null && h.meta !== undefined && h.meta !== MTR_HBA1C_META_DM2)
-          ? "meta individual de este paciente, no la general de " + MTR_HBA1C_META_DM2 + " %"
+        extra: (h.meta !== null && h.meta !== undefined && h.meta !== mtrMetaHba1cGeneral())
+          ? "meta individual de este paciente, no la general de " + mtrMetaHba1cGeneral() + " %"
           : "",
         // v17.6.0 — la tubería para una meta de HbA1c individual quedó lista desde
         // v16.4.0 ("meta individual de este paciente" ya sabía mostrarse), pero nunca
@@ -18078,6 +18195,7 @@ _vglOfrecerDeshacer(btn);
         + dentro
         + '<div class="vgl-agm-foot" style="margin-top:14px">'
         + '<span class="vgl-agm-dinfo" style="margin:0">Datos ' + escapeHtml(frescura) + ' · se revisa solo mientras el panel esté abierto</span>'
+        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente (B5, decisión del 22-ago)">🖨 Hoja educativa</button>' : "")
         + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">🔄 Buscar laboratorios nuevos</button>'
         + '<button type="button" class="vgl-agm-btn pri" id="vgl-panel-cerrar">Cerrar</button>'
         + '</div>';
@@ -18106,6 +18224,14 @@ _vglOfrecerDeshacer(btn);
       const bc = cuerpo.querySelector("#vgl-panel-cerrar");
       if (bc) bc.addEventListener("click", closeMod);
 
+      // v17.6.3 — B5 (decisión del médico, 22-ago): hoja educativa imprimible. El botón
+      // solo existe cuando hay resumen (el pie no lo pinta si la lectura falló).
+      const bHoja = cuerpo.querySelector("#vgl-panel-hoja");
+      if (bHoja) bHoja.addEventListener("click", () => {
+        try { uxTrack("fn.panel.hojaEducativa"); } catch (e) {}
+        imprimirHojaEducativa(_resumen, { nombre: apt.nombre || apt.name || "" });
+      });
+
       // v17.6.0 — Meta de HbA1c individual: el botón ✏️ solo existe cuando
       // mtrPanelMetasHtml pintó la fila (sección Riesgo y función renal, paciente con
       // HbA1c); en cualquier otra sección el selector no encuentra nada y no hace nada,
@@ -18116,12 +18242,12 @@ _vglOfrecerDeshacer(btn);
         // todo lo demás de este módulo (#vgl-panel-labs, #vgl-panel-cerrar…).
         const fila = cuerpo.querySelector("#vgl-meta-fila-hba1c");
         if (!fila) return;
-        const actual = (_resumen && _resumen.hba1c && typeof _resumen.hba1c.meta === "number") ? _resumen.hba1c.meta : MTR_HBA1C_META_DM2;
+        const actual = (_resumen && _resumen.hba1c && typeof _resumen.hba1c.meta === "number") ? _resumen.hba1c.meta : mtrMetaHba1cGeneral();
         fila.innerHTML = '<span class="vgl-meta-rot">HbA1c</span>'
           + '<input type="number" step="0.1" min="5" max="12" class="vgl-meta-input" id="vgl-meta-hba1c-input" value="' + escapeHtml(String(actual)) + '" style="width:64px">'
           + '<button type="button" class="vgl-agm-btn sec" id="vgl-meta-hba1c-guardar">Guardar</button>'
           + '<button type="button" class="vgl-agm-btn sec" id="vgl-meta-hba1c-cancelar">Cancelar</button>'
-          + '<span class="vgl-tab-mini">Vuelva a poner ' + escapeHtml(String(MTR_HBA1C_META_DM2)) + ' para volver a la meta general.</span>'
+          + '<span class="vgl-tab-mini">Vuelva a poner ' + escapeHtml(String(mtrMetaHba1cGeneral())) + ' para volver a la meta general.</span>'
           // v17.6.0 — CORREGIDO EN LA MISMA VERSIÓN: la primera versión de este error
           // llamaba a setSummary(), que escribe en `el.sum` — la barra de estado de la
           // AGENDA, no de este modal. El médico habría visto el modal sin reaccionar y
@@ -19401,7 +19527,7 @@ _vglOfrecerDeshacer(btn);
       if (labChk) { labChk.checked = false; labChk.disabled = true; }
       if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
       try {
-        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${selectedLabDateInfo.iso}`;
+        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${selectedLabDateInfo.iso}`;
         const resAg = await gmPostJson(urlTurnos, {});
         if (!vivo()) return;
         if (labToken !== _cargarHorasLabToken) return;
@@ -20128,7 +20254,7 @@ _vglOfrecerDeshacer(btn);
           if (!mtrEsDiaNoHabil(iso)) {
             let turnos = null;
             try {
-              const r = await gmPostJson(`https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${iso}`, {});
+              const r = await gmPostJson(`https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${iso}`, {});
               turnos = (r && (r.turnos || r.data || r)) || null;
             } catch (e) { turnos = null; }
             if (Array.isArray(turnos) && turnos.length) break;   // primer día con cupo
@@ -20516,7 +20642,7 @@ _vglOfrecerDeshacer(btn);
       confirmBtn.textContent = "Seleccione un horario";
       if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
       try {
-        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=378&fechaBuscar=${selectedLabDateInfo.iso}`;
+        const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${selectedLabDateInfo.iso}`;
         const resAg = await gmPostJson(urlTurnos, {});
         if (!vivo() || token !== _tokenLabSolo || isSubmitting) return;
         const turnos = extractAgendasList(resAg);
@@ -21910,7 +22036,53 @@ _vglOfrecerDeshacer(btn);
       + ' el sábado, con ' + MTR_PROD_SOBREAGENDA + ' de sobreagenda encima (' + (MTR_PROD_META_LABORAL + MTR_PROD_SOBREAGENDA)
       + ' y ' + (MTR_PROD_META_SABADO + MTR_PROD_SOBREAGENDA) + ' citados). Cada cita se cuenta UNA vez aunque el asistente la vea muchas: '
       + 'los días sin ninguna cita atendida no suman meta en contra.</div>'
+      + '<button class="vgl-btn" id="vgl-prod-exp" style="margin-top:8px">⬇ Exportar semana (CSV)</button>'
       + '</div>';
+  }
+
+  // v17.6.3 — D2 (decisión del médico, 22-ago): EXPORT SEMANAL DE PRODUCTIVIDAD.
+  // Un .csv de la semana EN CURSO (de lunes a hoy), una fila por día, más el total.
+  // Misma regla que la vista semanal: un día sin ninguna atendida no cuenta meta en
+  // contra (vacaciones/incapacidad) — la columna Cumplimiento sale «—». PURA: recibe
+  // el registro crudo (mtrProdLeer) y devuelve el texto CSV (con cabecera y total).
+  function mtrProductividadCsvSemana(todo, hoyIso) {
+    try {
+      const f = mtrFechaDesdeIso(hoyIso);
+      if (!f) return "";
+      const lunes = mtrSumarDias(hoyIso, -(((f.getUTCDay() + 6) % 7)));
+      const filas = [["Fecha", "Atendidas", "Meta", "Cumplimiento %", "Citados en agenda"]];
+      let totalAt = 0, totalMeta = 0, totalCit = 0;
+      let cur = lunes, guarda = 0;
+      while (cur <= hoyIso && guarda++ < 400) {
+        const m = mtrProductividadMeta(cur) || {};
+        const at = mtrProdAtendidasDe(todo, cur);
+        const cit = (todo && todo[cur] && todo[cur].citados) || 0;
+        let meta = "", pct = "";
+        if (!m.esDomingo) {
+          if (at > 0) { meta = String(m.meta || 0); pct = String(Math.round((at / (m.meta || 1)) * 1000) / 10); totalMeta += (m.meta || 0); }
+          // at === 0: día sin trabajo — la meta no se cuenta (misma regla de la vista).
+        }
+        filas.push([cur, String(at), meta, pct, String(cit)]);
+        totalAt += at; totalCit += cit;
+        cur = mtrSumarDias(cur, 1);
+      }
+      filas.push(["TOTAL SEMANA", String(totalAt), String(totalMeta),
+        totalMeta > 0 ? String(Math.round((totalAt / totalMeta) * 1000) / 10) : "", String(totalCit)]);
+      return filas.map((r) => r.map(csvCell).join(",")).join("\r\n");
+    } catch (e) { return ""; }
+  }
+
+  // Descarga el .csv de la semana en curso. Cero PHI: solo fechas y conteos.
+  function exportarProductividadSemana() {
+    try {
+      const hoyIso = todayStamp();
+      const csv = mtrProductividadCsvSemana(mtrProdLeer(), hoyIso);
+      if (!csv) { try { showToast("AMBAR", "Productividad", "No hay datos de esta semana para exportar.", false); } catch (e) {} return false; }
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      downloadBlob(blob, "productividad_semana_" + hoyIso + ".csv");
+      try { uxTrack("prod.export.semana"); } catch (e) {}
+      return true;
+    } catch (e) { return false; }
   }
 
   // ===================================================================
@@ -22313,6 +22485,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-bars">${bars}</div>
       </div>
       ${(function () { try { return mtrProductividadHtml(mtrProductividadVistas(mtrProdLeer(), todayStamp())); } catch (e) { return ""; } })()}
+      ${(function () { try { return mtrTableroTelemetriaHtml(mtrTableroTelemetria(readJSON(UX_KEY, null))); } catch (e) { return ""; } })()}
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Eventos registrados hoy<span class="vgl-hint">Cambios de estado y alertas, con hora exacta.</span></label><b class="vgl-count">${evs.length}</b></div>
         <div class="vgl-fld"><label>Reporte de auditoría<span class="vgl-hint">Archivo .csv que se abre en Excel. No sale del computador.</span></label><button class="vgl-btn primary" id="vgl-exp">Descargar</button></div>
@@ -22325,6 +22498,7 @@ _vglOfrecerDeshacer(btn);
     wireClose();
     el.sheet.querySelector("#vgl-exp").addEventListener("click", () => exportAudit());
     { const dBtn = el.sheet.querySelector("#vgl-diag"); if (dBtn) dBtn.addEventListener("click", downloadDiagnostic); }
+    { const pBtn = el.sheet.querySelector("#vgl-prod-exp"); if (pBtn) pBtn.addEventListener("click", () => exportarProductividadSemana()); }
     el.sheet.querySelector("#vgl-copy").addEventListener("click", copySummary);
   }
   function copySummary() {
@@ -22471,6 +22645,10 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Agendamiento directo de citas<span class="vgl-hint">Permite crear la cita de control desde el botón 📅 Agendar de cada paciente, sin salir de la historia.</span></label>${sw("c-agend", S.agendamientoRapido !== false)}</div>
         <div class="vgl-fld"><label>Enviar SMS de recordatorio al paciente<span class="vgl-hint">Al crear una cita, el paciente recibe en su celular el recordatorio de Everest. Solo se envía si la cita quedó creada.</span></label>${sw("c-sms", S.smsRecordatorio !== false)}</div>
         <div class="vgl-fld"><label>Guía paso a paso<span class="vgl-hint">Le muestra, con una burbuja a la vez, el siguiente paso con cada paciente. Ideal si está empezando; cuando ya no le haga falta, se retira sola.</span></label>${sw("c-acomp", (typeof _acompActivo === "function") ? _acompActivo() : false)}</div>
+        <!-- v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta
+             GENERAL de los diabéticos se configura aquí (7,0 de fábrica); la meta
+             INDIVIDUAL de un paciente (botón ✏️ en su Panel) gana sobre este valor. -->
+        <div class="vgl-fld"><label>Meta general de HbA1c<span class="vgl-hint">La meta de hemoglobina glicosilada para TODOS los diabéticos (7,0 % de fábrica). La meta individual de un paciente, fijada con el ✏️ en su Panel, gana sobre este valor.</span></label><input type="number" id="c-hba1c-meta" min="5" max="12" step="0.1" value="${escapeHtml(String((typeof mtrMetaHba1cGeneral === "function") ? mtrMetaHba1cGeneral() : 7.0))}"></div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-verde"><i></i>Privacidad y mejora del servicio</div>
@@ -22627,6 +22805,13 @@ _vglOfrecerDeshacer(btn);
     if (volSlider) volSlider.addEventListener("change", () => { const v = clampNum(volSlider.value, 2, 60, 15) / 100; _ajustesPonBorrador("volumen", v); const prev = S.volumen; try { S.volumen = v; playTone("AZUL"); } catch (e) {} S.volumen = prev; });
     const motorBtn = q("#c-motor");
     if (motorBtn) motorBtn.addEventListener("change", () => _ajustesPonBorrador("motorPortado", motorBtn.checked));
+    // v17.6.3 — Meta general de HbA1c (Ajustes). Fuera de rango o vacío → 7,0: el mismo
+    // contrato de mtrMetaHba1cGeneral; la meta individual del paciente gana siempre.
+    const hba1cMetaEl = q("#c-hba1c-meta");
+    if (hba1cMetaEl) hba1cMetaEl.addEventListener("change", () => {
+      const v = (typeof mtrFloat === "function") ? mtrFloat(hba1cMetaEl.value) : null;
+      _ajustesPonBorrador("metaHba1cGeneral", (v !== null && v >= 5 && v <= 12) ? v : 7.0);
+    });
     // v14.2.0 — Redacción IA: interruptor + clave + modelo.
     const iaBtn = q("#c-ia");
     if (iaBtn) iaBtn.addEventListener("change", () => {
@@ -28667,7 +28852,7 @@ _vglOfrecerDeshacer(btn);
       // Solo tiene sentido en diabéticos: en un hipertenso sin diabetes la HbA1c
       // no se mide contra 7,0.
       if (!c.esDm2) return null;
-      const meta = (c.metaHba1c !== null && c.metaHba1c !== undefined) ? mtrFloat(c.metaHba1c) : MTR_HBA1C_META_DM2;
+      const meta = (c.metaHba1c !== null && c.metaHba1c !== undefined) ? mtrFloat(c.metaHba1c) : mtrMetaHba1cGeneral();
       if (meta === null) return null;
       return v > meta * margen;
     }
@@ -29833,6 +30018,64 @@ _vglOfrecerDeshacer(btn);
     return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE COHERENCIA DE CIFRAS.
+  // Anti-alucinación de números: toda cifra de medida que el borrador de la IA contenga
+  // debe existir en los hechos que se le entregaron (la hoja). Si una cifra no está en
+  // NINGÚN lado, el modelo la inventó o la calculó — se marca en rojo y el médico decide.
+  // Regla del proyecto: casilla vacía antes que dato inventado. PURA: solo lee y compara.
+  // Devuelve [{ numero, contexto }] (contexto = ~44 caracteres alrededor de la cifra).
+  // No marca: años (1900–2999 sin unidad), conteos/órdenes (sin unidad de medida) ni las
+  // cifras dentro del marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES].
+  function mtrVerificarCifrasIA(borrador, hoja) {
+    const out = [];
+    try {
+      const b = String(borrador || "");
+      if (!b) return out;
+      // 1. Cifras CONOCIDAS: todo lo que la IA pudo ver — el texto de la hoja y los
+      //    valores crudos del objeto (por si un valor no llegara formateado al texto).
+      const conocidas = new Set();
+      const sumar = (t) => {
+        String(t || "").replace(/\d+(?:[.,]\d+)?/g, (n) => {
+          const v = mtrFloat(n);
+          if (v !== null && isFinite(v)) conocidas.add(Math.round(v * 100) / 100);
+          return n;
+        });
+      };
+      sumar((typeof mtrHojaDeHechosTexto === "function") ? mtrHojaDeHechosTexto(hoja) : "");
+      const h = hoja || {};
+      sumar(h.demografia && h.demografia.edad);
+      const an = h.antropometria || {};
+      sumar([an.imc, an.paSistolica, an.paDiastolica]);
+      const rn = h.renal || {};
+      sumar([rn.tfgCkdepi, rn.crcl, rn.framinghamPuntos, h.metaLdl]);
+      if (Array.isArray(h.labs)) for (const x of h.labs) sumar(x && x.valor);
+      if (Array.isArray(h.medicamentos)) for (const m of h.medicamentos) sumar(m);
+      // 2. Cifras de MEDIDA en el borrador: unidad de medida pegada al número, fracción
+      //    de presión arterial (NNN/NNN) o número con etiqueta de medida delante.
+      const unidades = "(?:mm\\s*hg|mg\\/dL|mg\\/dl|mL\\/min|ml\\/min|mEq|meq|g\\/dL|g\\/dl|mcg|mg|gr|g\\b|%|kgs?|cms?|unidades|años|meses|semanas)";
+      const re1 = new RegExp("(\\d+(?:[.,]\\d+)?)\\s*" + unidades, "gi");
+      const re2 = /(\d{1,3})\s*\/\s*(\d{1,3})(?:\s*(?:mm\s*hg|mmHg))?/gi;
+      const re3 = /(?:PA|T[AÁ]|IMC|peso|talla|HbA1c|glicemia|glucemia|colesterol|LDL|HDL|creatinina|TFG|Framingham)\s*[:\s]+(?:de\s+)?(\d+(?:[.,]\d+)?)/gi;
+      const vistos = new Set();
+      const marcar = (numero, inicio) => {
+        const v = mtrFloat(numero);
+        if (v === null || !isFinite(v)) return;
+        const r = Math.round(v * 100) / 100;
+        if (conocidas.has(r)) return;
+        const ctx = b.slice(Math.max(0, inicio - 24), inicio + 20).replace(/\s+/g, " ").trim();
+        const llave = r + "|" + ctx;
+        if (vistos.has(llave)) return;
+        vistos.add(llave);
+        out.push({ numero: numero, contexto: ctx });
+      };
+      let m;
+      while ((m = re1.exec(b)) !== null) marcar(m[1], m.index);
+      while ((m = re2.exec(b)) !== null) { marcar(m[1], m.index); marcar(m[2], m.index + m[0].indexOf(m[2])); }
+      while ((m = re3.exec(b)) !== null) marcar(m[1], m.index + m[0].indexOf(m[1]));
+    } catch (e) {}
+    return out;
+  }
+
   // ---------- CONECTOR (la única función que toca la red hacia Gemini) ----------
   // Clave por cabecera x-goog-api-key (no en la URL). Sin PHI en logs: solo estado y
   // longitud. Fallo seguro: cualquier problema devuelve { ok:false, motivo } y el
@@ -30288,8 +30531,11 @@ _vglOfrecerDeshacer(btn);
     if (!d) return out;
     try {
       // 1. Pestaña Anamnesis
-      const motivoEl = (typeof mtrCasillaPorNombre === "function") ? mtrCasillaPorNombre("MotivoConsulta", d) : null;
-      if (motivoEl && motivoEl.value) out.motivo = limpiar(motivoEl.value).slice(0, 600);
+      // v17.6.3 — C2 (decisión del médico, 22-ago): el motivo de consulta que ve la IA es
+      // SIEMPRE «CONTROL DE RIESGO CARDIOVASCULAR», no lo que traiga la casilla de Everest
+      // (puede estar vacía, traer otra cosa, o hasta PHI). Es el CONTEXTO del redactor, no
+      // una escritura: la casilla del médico en Everest jamás se toca.
+      out.motivo = "CONTROL DE RIESGO CARDIOVASCULAR";
 
       // 2. Pestaña Revisión por sistemas y Examen físico
       let casillas = [];
@@ -30847,6 +31093,7 @@ _vglOfrecerDeshacer(btn);
         + '<button id="vgl-ia-estilo-guardar" class="vgl-agm-btn sec" disabled title="Guarda este texto (desidentificado) como ejemplo para que futuras redacciones suenen a usted">💾 Guardar mi estilo</button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo"></div>'
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite."></textarea>'
+        + '<div id="vgl-ia-cifras"></div>'
         + '<div class="vgl-rcv-pie" style="margin-top:6px">A Gemini se envían datos clínicos y FECHAS de atención (necesarias para la cronología — decisión suya del 20-ago), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
         + '</div>';
       document.body.appendChild(modal);
@@ -30914,6 +31161,7 @@ _vglOfrecerDeshacer(btn);
         salida.value = _bor.texto; textoGeneradoOriginal = _bor.original;
         estado.textContent = _bor.insertado ? "✓ Ya insertado en la historia. Puede regenerar o pasar a otra casilla." : (_bor.estado || "");
         habilitarPost(salida.value);
+        _pintarCifras();
         pintarRotuloInsertar();
         _pintarChipsHechos();
       }));
@@ -30966,6 +31214,25 @@ _vglOfrecerDeshacer(btn);
           caja.remove();
           btnGen.click();   // reintenta: ahora los críticos están cubiertos
         });
+      };
+
+      // v17.6.3 — A2 (decisión del médico, 22-ago): pinta la caja ROJA con las cifras del
+      // borrador sin respaldo en los hechos (mtrVerificarCifrasIA). Se re-evalúa con cada
+      // cambio del texto: la caja aparece/desaparece sola, nunca bloquea la edición.
+      const _pintarCifras = () => {
+        try {
+          let caja = modal.querySelector("#vgl-ia-cifras");
+          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja);
+          if (!hallazgos.length) { if (caja) caja.remove(); return; }
+          if (!caja) {
+            caja = document.createElement("div");
+            caja.id = "vgl-ia-cifras";
+            caja.style.cssText = "margin:0 0 8px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
+            salida.parentNode.insertBefore(caja, salida.nextSibling);
+          }
+          caja.innerHTML = '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
+            + hallazgos.map((x) => '<div style="margin:4px 0"><b style="color:#c00">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");
+        } catch (e) {}
       };
 
       // v16.6.1 — NÚCLEO DE GENERACIÓN por casilla, compartido por «Generar» y
@@ -31060,12 +31327,12 @@ _vglOfrecerDeshacer(btn);
           } else {
             _borradores[m] = { texto: "", original: "", estado: "No se generó (" + (r.motivo || "desconocido") + ")." };
           }
-          if (m === modo) { salida.value = _borradores[m].texto; textoGeneradoOriginal = _borradores[m].original; habilitarPost(salida.value); }
+          if (m === modo) { salida.value = _borradores[m].texto; textoGeneradoOriginal = _borradores[m].original; habilitarPost(salida.value); _pintarCifras(); }
         }
         btnTodo.disabled = false; btnGen.disabled = false;
         estado.textContent = "✓ " + hechas + " borrador(es) listos" + (saltadas ? " · 1 saltado (Análisis y plan: complete los datos críticos)" : "") + ". Revise casilla por casilla e inserte — cada chip guarda el suyo.";
         const b = _borradores[modo];
-        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/4 listas."; }
+        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); _pintarCifras(); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/4 listas."; }
       });
 
       btnGen.addEventListener("click", async () => {
@@ -31092,7 +31359,7 @@ _vglOfrecerDeshacer(btn);
           salida.value = mtrHojaDeHechosTexto(hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
-          habilitarPost(salida.value); btnIns.disabled = true; return;
+          habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
         btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modo) + "…"; salida.value = "";
         try { uxTrack("fn.ia.gen"); } catch (e) {}
@@ -31115,6 +31382,7 @@ _vglOfrecerDeshacer(btn);
           textoGeneradoOriginal = textoFinal;
           estado.textContent = "Borrador listo. Revíselo y edítelo antes de usarlo.";
           habilitarPost(textoFinal);
+          _pintarCifras();
           // v17.3.0 — Reporte real de consola (21-ago): "Uncaught (in promise) ReferenceError:
           // _frenoMarcaOk is not defined" en cada generación exitosa, en los tres modos. La
           // función nunca existió en este archivo (ni en el CHANGELOG ni en ninguna suite) —
@@ -31125,9 +31393,10 @@ _vglOfrecerDeshacer(btn);
           salida.value = mtrHojaDeHechosTexto(hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "La IA no redactó (" + (r.motivo || "desconocido") + "). Le dejo los hechos para copiar a mano.";
-          habilitarPost(salida.value); btnIns.disabled = true;
+          habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true;
         }
       });
+      salida.addEventListener("input", _pintarCifras);
 
       btnCop.addEventListener("click", () => {
         try {
@@ -31447,7 +31716,7 @@ _vglOfrecerDeshacer(btn);
     }
     if (clave === "TRIGLICERIDOS") return { tope: MTR_META_TRIGLICERIDOS * factor, meta: MTR_META_TRIGLICERIDOS, comoSuben: true };
     if (clave === "HBA1C") {
-      const meta = (typeof c.metaHba1c === "number" && isFinite(c.metaHba1c)) ? c.metaHba1c : MTR_HBA1C_META_DM2;
+      const meta = (typeof c.metaHba1c === "number" && isFinite(c.metaHba1c)) ? c.metaHba1c : mtrMetaHba1cGeneral();
       return { tope: meta * factor, meta: meta, comoSuben: true };
     }
     // RAC ≥300 mg/g es macroalbuminuria: el mismo número que ya dispara la remisión a
@@ -32009,6 +32278,94 @@ _vglOfrecerDeshacer(btn);
     } catch (err) { return []; }
   }
 
+  // v17.6.3 — B5 (decisión del médico, 22-ago): HOJA EDUCATIVA IMPRIMIBLE para entregar
+  // al paciente al cerrar la consulta. Texto estándar de la casa (sin datos inventados):
+  // los únicos datos que viajan son los del RESUMEN real del paciente — categoría de
+  // riesgo, exámenes pendientes/vencidos, meta de HbA1c y el nombre para el encabezado.
+  // PURA: devuelve el documento; quien lo abre es imprimirHojaEducativa.
+  function mtrHojaEducativaHtml(resumen, opts) {
+    try {
+      const r = resumen || {}, o = opts || {};
+      const flags = mtrEducationFlags(resumen);
+      const riesgo = r.riesgo || {}, plan = r.plan || {};
+      const nombre = o.nombre || "";
+      const fecha = (typeof mtrFechaLegible === "function") ? mtrFechaLegible(o.hoyIso || todayStamp()) : (o.hoyIso || "");
+      const pendientes = [].concat(plan.vencidos || [], plan.faltantes || [])
+        .map((x) => (x && (x.clave || x.nombre)) ? (x.clave || x.nombre) : (typeof x === "string" ? x : "")).filter(Boolean);
+      const secciones = [];
+      if (flags.alarmas) {
+        secciones.push('<div class="sec"><h2>🚨 Signos de alarma — vaya de inmediato a urgencias o llame al 123 si presenta:</h2>'
+          + '<ul><li>Dolor en el pecho que no cede con el reposo o que se extiende a brazo, cuello o mandíbula.</li>'
+          + '<li>Falta de aire intensa o que empeora al acostarse.</li>'
+          + '<li>Sudoración fría, mareo intenso o desmayo.</li>'
+          + '<li>Hinchazón brusca de cara, boca o lengua.</li></ul></div>');
+      }
+      if (flags.dieta) {
+        secciones.push('<div class="sec"><h2>🥗 Alimentación</h2>'
+          + '<ul><li>Poca sal: no agregue sal a la comida y evite embutidos, enlatados, sopas de sobre y fritos de paquete.</li>'
+          + '<li>Prefiera frutas, verduras, legumbres, granos integrales y pescado.</li>'
+          + '<li>Evite bebidas azucaradas y reduzca el azúcar y los dulces.</li></ul></div>');
+      }
+      if (flags.actividad) {
+        secciones.push('<div class="sec"><h2>🚶 Actividad física</h2>'
+          + '<ul><li>Camine o haga ejercicio moderado la mayoría de los días de la semana (al menos 150 minutos semanales en total).</li>'
+          + '<li>Consulte a su médico antes de empezar si no ha hecho ejercicio durante mucho tiempo.</li></ul></div>');
+      }
+      if (pendientes.length) {
+        secciones.push('<div class="sec"><h2>🧪 Exámenes pendientes o por renovar</h2>'
+          + '<ul>' + pendientes.slice(0, 12).map((p) => '<li>' + escapeHtml(p) + '</li>').join("") + '</ul>'
+          + '<p>Agéndelos pronto: son los que su médico necesita para el siguiente control.</p></div>');
+      }
+      const metaH = (r.hba1c && typeof r.hba1c.meta === "number") ? r.hba1c.meta : null;
+      if (metaH !== null) {
+        secciones.push('<div class="sec"><h2>🎯 Su meta de hemoglobina glicosilada (HbA1c)</h2>'
+          + '<p class="meta">' + escapeHtml(String(metaH)) + ' %</p>'
+          + '<p>Es la meta que fijó su médico para este control. Entre más cerca de ella, mejor va su diabetes.</p></div>');
+      }
+      if (riesgo.categoria) {
+        secciones.push('<div class="sec"><h2>❤️ Su riesgo cardiovascular</h2>'
+          + '<p>Según su historia y sus exámenes, su riesgo se clasifica como <b>' + escapeHtml(String(riesgo.categoria).toUpperCase()) + '</b>. Eso guía las metas de tratamiento de este programa.</p></div>');
+      }
+      secciones.push('<div class="sec"><h2>💊 Medicamentos</h2>'
+        + '<ul><li>Tome sus medicamentos todos los días, a las horas indicadas.</li>'
+        + '<li>No los suspenda ni cambie las dosis sin consultar a su médico.</li></ul></div>');
+      return '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        + '<title>Hoja educativa</title><style>'
+        + 'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:14px;line-height:1.45}'
+        + 'h1{font-size:19px;margin:0 0 2px}h2{font-size:14px;margin:18px 0 6px}'
+        + '.cabeza{color:#444;font-size:12.5px;margin-bottom:6px}'
+        + 'ul{margin:4px 0 8px;padding-left:20px}li{margin:3px 0}'
+        + '.sec{border-top:1px solid #ddd;padding-top:4px;page-break-inside:avoid}'
+        + '.meta{font-size:22px;font-weight:700;margin:4px 0}'
+        + '.pie{margin-top:22px;color:#666;font-size:11px;border-top:1px solid #bbb;padding-top:10px}'
+        + '@media print{body{margin:12mm}}'
+        + '</style></head><body>'
+        + '<h1>Hoja educativa — Programa de riesgo cardiovascular</h1>'
+        + '<div class="cabeza">' + escapeHtml(nombre ? nombre + " · " : "") + escapeHtml(fecha || "") + '</div>'
+        + secciones.join("")
+        + '<div class="pie">Documento educativo complementario: no reemplaza la consulta médica. Llévelo a su próximo control y consulte sus dudas con su médico.</div>'
+        + '</body></html>';
+    } catch (e) { return null; }
+  }
+
+  // Abre la hoja educativa en una pestaña y lanza la impresión del navegador.
+  // La pestaña se abre en el CLIC (patrón anti-bloqueador de la casa, v12.6.2).
+  function imprimirHojaEducativa(resumen, opts) {
+    try {
+      const html = mtrHojaEducativaHtml(resumen, opts);
+      if (!html) return false;
+      const w = window.open("", "_blank");
+      if (!w) return false;
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      try { w.focus(); } catch (e) {}
+      setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
+      return true;
+    } catch (e) { return false; }
+  }
+
+
   // ---------- TRIGLICÉRIDOS: meta y alerta de pancreatitis ----------
   //   TG < 150 es la meta. TG >= 500 es riesgo de pancreatitis (alerta roja).
   const MTR_TG_META = 150;
@@ -32059,6 +32416,18 @@ _vglOfrecerDeshacer(btn);
   // `ctx.hba1cMeta`). No se inventa una meta de glicemia en ayunas: la norma
   // ata el recontrol de glicemia a la HbA1c, no a un número de corte propio.
   const MTR_HBA1C_META_DM2 = 7.0;
+
+  // v17.6.3 — FLUJO COMPLETO DE LA META DE HbA1c (decisión del médico, 22-ago):
+  // la meta GENERAL ahora se configura en Ajustes (S.metaHba1cGeneral, 5–12 %);
+  // la meta INDIVIDUAL del paciente (botón ✏️ del Panel, `metaHba1cManual`) gana
+  // sobre ella. Ausente o fuera de rango → 7,0 (la regla de siempre). PURA.
+  function mtrMetaHba1cGeneral() {
+    try {
+      const v = (typeof mtrFloat === "function") ? mtrFloat(S && S.metaHba1cGeneral) : null;
+      if (v !== null && v >= 5 && v <= 12) return v;
+    } catch (e) {}
+    return MTR_HBA1C_META_DM2;
+  }
 
   const MTR_FALLA_UMBRAL = 0.15;   // meta+15% -> falla
   const MTR_FALLA_GRAVE_UMBRAL = 0.30;   // meta+30% -> grave
@@ -32209,7 +32578,7 @@ _vglOfrecerDeshacer(btn);
     }
     // HbA1c (solo DM2)
     if (c.esDm2 && c.hba1c && c.hba1c.actual != null) {
-      const meta = c.hba1c.meta != null ? c.hba1c.meta : MTR_HBA1C_META_DM2;
+      const meta = c.hba1c.meta != null ? c.hba1c.meta : mtrMetaHba1cGeneral();
       const f = mtrEvaluarFalla("HbA1c", c.hba1c.actual, meta, c);
       if (f.falla) {
         fallas.push(f);

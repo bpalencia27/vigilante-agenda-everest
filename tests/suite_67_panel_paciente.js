@@ -50,6 +50,7 @@ module.exports = {
     "mtrPanelSeccionValida", "mtrPanelNavHtml", "mtrPanelResumenHtml", "mtrPanelRiesgoRenalHtml",
     "mtrPanelExamenesHtml", "mtrPanelTendenciasHtml", "mtrPanelMedicamentosHtml",
     "openPanelPacienteModal", "mtrSeriesPorAnalito", "mtrTendenciaDe", "_mtrTendUmbralGrave",
+    "mtrMetaHba1cGeneral", "mtrHojaEducativaHtml",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -310,6 +311,46 @@ module.exports = {
       t.igual(api.mtrTendenciaDe(serie, "HBA1C").gravedad, "grave", "9,2 con meta 7,0 (grave desde 9,1)");
       t.igual(api.mtrTendenciaDe(serie, "HBA1C", { metaHba1c: 8.0 }).gravedad, null,
         "con meta individualizada de 8,0 el corte sube a 10,4: 9,2 no llega");
+    });
+
+    // v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta GENERAL
+    // se configura en Ajustes (S.metaHba1cGeneral, 5–12 %); la meta INDIVIDUAL del
+    // paciente gana sobre ella. Fuera de rango o ausente → 7,0 (la regla de siempre).
+    t.caso("v17.6.3 — mtrMetaHba1cGeneral: 7,0 de fábrica; la de Ajustes (5–12) la reemplaza; fuera de rango vuelve a 7,0", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrMetaHba1cGeneral(), 7.0, "sin configurar: 7,0 (la regla de siempre)");
+      c.env.almacen["vgl_cfg"] = JSON.stringify(Object.assign({}, JSON.parse(c.env.almacen["vgl_cfg"] || "{}"), { metaHba1cGeneral: 7.5 }));
+      // El CONFIG se lee al cargar; recargamos el entorno con el almacén ya modificado.
+      const c2 = cargar({ silencioso: true, almacen: c.env.almacen });
+      t.igual(c2.api.mtrMetaHba1cGeneral(), 7.5, "configurada en 7,5: la general pasa a 7,5");
+      const c3 = cargar({ silencioso: true, almacen: Object.assign({}, c.env.almacen, { vgl_cfg: JSON.stringify(Object.assign({}, JSON.parse(c.env.almacen["vgl_cfg"] || "{}"), { metaHba1cGeneral: 13 })) }) });
+      t.igual(c3.api.mtrMetaHba1cGeneral(), 7.0, "13 % está fuera de rango (5–12): cae a 7,0, no se acepta un valor absurdo");
+    });
+
+    // v17.6.3 — B5 (decisión del médico, 22-ago): hoja educativa imprimible para el
+    // paciente. Texto estándar de la casa; los únicos datos del paciente que viajan son
+    // los del resumen real (riesgo, pendientes, meta de HbA1c, nombre).
+    t.caso("v17.6.3 — mtrHojaEducativaHtml: secciones según el resumen (alarmas, dieta, actividad, pendientes, meta, riesgo)", () => {
+      const hoja = api.mtrHojaEducativaHtml({
+        programa: "DM2",
+        riesgo: { categoria: "muy alto" },
+        plan: { vencidos: [{ clave: "LDL" }], faltantes: [{ clave: "RAC" }] },
+        hba1c: { meta: 7.0, actual: 8.2 },
+      }, { nombre: "PACIENTE DE PRUEBA", hoyIso: "2026-08-17" });
+      t.cierto(/Signos de alarma/.test(hoja), "riesgo muy alto → sección de signos de alarma");
+      t.cierto(/Alimentación/.test(hoja) && /Actividad física/.test(hoja), "programa RCV (DM2) → dieta y actividad");
+      t.cierto(/LDL/.test(hoja) && /RAC/.test(hoja), "los exámenes vencidos y faltantes se listan");
+      t.cierto(/Su meta de hemoglobina glicosilada/.test(hoja) && /7\s*%/.test(hoja), "la meta de HbA1c del paciente aparece con su valor");
+      t.cierto(/MUY ALTO/.test(hoja), "la categoría de riesgo viaja en mayúsculas");
+      t.cierto(/PACIENTE DE PRUEBA/.test(hoja), "el nombre va en el encabezado (impresión local, no PHI en el código)");
+    });
+
+    t.caso("v17.6.3 — mtrHojaEducativaHtml: sin riesgo ni pendientes sigue siendo un documento imprimible (no inventa secciones)", () => {
+      const hoja = api.mtrHojaEducativaHtml({ programa: "HTA" }, { nombre: "", hoyIso: "2026-08-17" });
+      t.cierto(/<!doctype html>/i.test(hoja) && /Hoja educativa/.test(hoja), "es un documento HTML con título");
+      t.falso(/Signos de alarma/.test(hoja), "sin riesgo muy alto ni falla: no se inventa la sección de alarmas");
+      t.falso(/Su meta de hemoglobina/.test(hoja), "sin hba1c.meta: no se inventa una meta");
+      t.cierto(/Medicamentos/.test(hoja), "la sección de medicamentos (adherencia) siempre está");
     });
 
     t.caso("#123: los analitos SIN meta propia se juzgan con el rango del PROPIO laboratorio", () => {

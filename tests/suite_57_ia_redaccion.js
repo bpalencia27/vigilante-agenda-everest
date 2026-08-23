@@ -27,7 +27,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrPartirNota", "mtrLimpiarNotaIA",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrPartirNota", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -136,6 +136,39 @@ module.exports = {
       t.cierto(/^#PACIENTE_\[ID\]_#RCV_CONTROL_\[AÑO_MES\]$/m.test(limpio), "el marcador [ID]/[AÑO_MES] sobrevive (lo reemplaza el equipo del médico)");
       t.cierto(/===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA =====/.test(limpio), "cabecera intacta");
       t.cierto(/:: PATOLOGÍAS ACTIVAS: HTA/.test(limpio) && /:: META TERAPÉUTICA DE LDL: MENOR A 70/.test(limpio), "ítems '::' intactos");
+    });
+
+    // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE CIFRAS anti-alucinación.
+    // Todo número de medida del borrador debe existir en los hechos que se le dieron a la
+    // IA; si no está, el modelo lo inventó o lo calculó y se marca. El caso que motivó
+    // esto: «PA 110/70» cuando la hoja no traía presión arterial.
+    t.caso("mtrVerificarCifrasIA: una PA inventada (sin PA en los hechos) se marca; con PA real no", () => {
+      const hojaSinPa = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", imc: 27 }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const marcadas = api.mtrVerificarCifrasIA("Signos vitales: PA 110/70 mmHg.", hojaSinPa);
+      t.cierto(marcadas.some((x) => x.numero === "110"), "la sistólica inventada 110 se marca");
+      t.cierto(marcadas.some((x) => x.numero === "70"), "y la diastólica inventada 70 también");
+      const hojaConPa = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F", imc: 27, paSistolica: 120, paDiastolica: 80 }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const limpias = api.mtrVerificarCifrasIA("Signos vitales: PA 120/80 mmHg.", hojaConPa);
+      t.igual(limpias.length, 0, "PA 120/80 con hechos de 120/80: nada que marcar");
+    });
+
+    t.caso("mtrVerificarCifrasIA: un lab que la IA cambió se marca; el que copió bien no", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17", ultimos: { LDL: { valor: 118, fecha: "2026-06-10" } }, medicamentos: ["LOSARTAN 50 MG"] });
+      t.igual(api.mtrVerificarCifrasIA("Colesterol LDL 118 mg/dL. Losartán 50 mg.", hoja).length, 0,
+        "118 y 50 están en los hechos: ni el lab ni la dosis se marcan");
+      const marcadas = api.mtrVerificarCifrasIA("Colesterol LDL 130 mg/dL.", hoja);
+      t.cierto(marcadas.some((x) => x.numero === "130"), "LDL 130 cuando el hechos trae 118: se marca (dato inventado o de otra fecha)");
+      const dosis = api.mtrVerificarCifrasIA("Losartán 100 mg.", hoja);
+      t.cierto(dosis.some((x) => x.numero === "100"), "dosis 100 mg cuando el hechos trae 50: se marca");
+    });
+
+    t.caso("mtrVerificarCifrasIA: no marca el marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES] ni texto vacío ni conteos sin unidad", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      t.igual(api.mtrVerificarCifrasIA("#PACIENTE_1010101010_#RCV_CONTROL_2026_08", hoja).length, 0,
+        "el marcador con el ID y el año-mes no se marca (no es una medida clínica)");
+      t.igual(api.mtrVerificarCifrasIA("", hoja).length, 0, "texto vacío: nada que verificar");
+      t.igual(api.mtrVerificarCifrasIA("Se recomienda caminar 30 minutos al día y tomar losartán cada 12 horas.", hoja).length, 0,
+        "30 (minutos) y 12 (horas) no son medidas clínicas de la hoja: no se marcan (cero ruido)");
     });
 
     t.caso("el prompt de la nota clínica declara la ÚNICA decoración permitida y prohíbe el markdown por su nombre", () => {
@@ -820,15 +853,21 @@ module.exports = {
       t.falso(j2.education_flags.actividad, "sin educationFlags, actividad queda false (no inventa)");
     });
 
-    t.caso("mtrLeerTextoLibreHistoria lee motivo y revisión, desidentificado, y no lanza sin DOM", () => {
+    // v17.6.3 — C2 (decisión del médico, 22-ago): el motivo de consulta que ve la IA es
+    // SIEMPRE «CONTROL DE RIESGO CARDIOVASCULAR», sin importar lo que traiga la casilla de
+    // Everest (vacía, otra cosa, o hasta PHI). Es el contexto del redactor, no una
+    // escritura: la casilla del médico jamás se toca.
+    t.caso("mtrLeerTextoLibreHistoria: el motivo es SIEMPRE 'CONTROL DE RIESGO CARDIOVASCULAR' (decisión C2); la revisión se lee desidentificada y no lanza sin DOM", () => {
       const doc = {
         querySelector: (sel) => /MotivoConsulta/.test(sel) ? { value: "control de rutina, cel 3151234567" } : null,
         querySelectorAll: () => [{ value: "refiere cefalea", offsetParent: {} }, { value: "niega disnea", offsetParent: {} }],
       };
       const r = api.mtrLeerTextoLibreHistoria(doc);
-      t.cierto(/control de rutina/.test(r.motivo), "toma el motivo");
-      t.cierto(r.motivo.indexOf("3151234567") < 0, "desidentifica el motivo");
+      t.igual(r.motivo, "CONTROL DE RIESGO CARDIOVASCULAR", "el motivo es SIEMPRE el fijo, aunque Everest traiga otra cosa");
+      t.falso(r.motivo.indexOf("3151234567") >= 0, "ni rastro del texto de Everest (ni de su PHI)");
+      t.falso(/control de rutina/.test(r.motivo), "el valor de la casilla de Everest NO se usa");
       t.cierto(/cefalea/.test(r.sintomas) && /disnea/.test(r.sintomas), "junta la revisión por sistemas");
+      t.cierto(/CONTROL DE RIESGO CARDIOVASCULAR/.test(r.combinado), "y el motivo fijo llega al contexto combinado que ve la IA");
       t.noLanza(() => api.mtrLeerTextoLibreHistoria(null), "sin DOM no lanza");
     });
 

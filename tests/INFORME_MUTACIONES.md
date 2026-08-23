@@ -548,3 +548,66 @@ cadena (una sola «toma quedó», siempre la del último clic); el handler del c
 | **toma quedó duplicada** | `mtrPegarNotaTomaQuedo`: el reemplazo por id (`bannerHtml.replace(re, "") + nota`) pasa a `bannerHtml + nota` (vuelve a acumular como el `innerHTML +=` viejo) | `suite_62` | *v17.6.3 — la nota «toma quedó» se reemplaza, nunca se acumula (un clic por chip = una sola nota)* (esperaba 1 aparición, obtuvo 2 — el duplicado) |
 
 Restaurada; el banco completo volvió a 2.303/2.303 tras la restauración.
+
+## v17.6.3 — 22-ago-2026 (lote aprobado por el médico: A1 sede única, C2 motivo fijo, meta general de HbA1c)
+
+Banco antes (tras «toma quedó»): 2.303 comprobaciones · después: **2.306** (3 pruebas
+nuevas: 1 en `suite_62`, 1 en `suite_57`, 1 en `suite_67`).
+
+Tres decisiones del médico del 22-ago, implementadas con su fuente única y su
+mutación verificada:
+
+1. **A1 — sede del laboratorio**: la sede 378 vivía escrita a mano en 5 URLs de AppCita.
+   Ahora `mtrSedeIdLab()` es la única fuente (378 de fábrica) y las 5 URLs la usan.
+2. **C2 — motivo de consulta**: lo que ve la IA es SIEMPRE «CONTROL DE RIESGO
+   CARDIOVASCULAR», aunque la casilla de Everest traiga otra cosa (o PHI). Solo contexto
+   del redactor; la casilla del médico jamás se toca.
+3. **Meta general de HbA1c (flujo Ajustes → Ficha)**: nueva `mtrMetaHba1cGeneral()`
+   lee `S.metaHba1cGeneral` (campo nuevo en Ajustes, 5–12 %); ausente o fuera de rango
+   cae a 7,0 (la regla de siempre). La meta individual del paciente (✏️ del Panel,
+   `metaHba1cManual`) gana sobre la general.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **sede equivocada** | `mtrSedeIdLab()` pasa de `return 378` a `return 379` (el número deja de ser el de instalación) | `suite_62` | *v17.6.3 — la sede del laboratorio tiene UNA sola fuente (mtrSedeIdLab, 378 de fábrica)* (esperaba 378 y obtuvo 379) |
+| **motivo de Everest** | `mtrLeerTextoLibreHistoria`: la asignación `out.motivo = "CONTROL DE RIESGO CARDIOVASCULAR"` se sustituye por la lectura de la casilla `alert_message` de Everest (vuelve el motivo variable/PHI) | `suite_57` | *mtrLeerTextoLibreHistoria: el motivo es SIEMPRE «CONTROL DE RIESGO CARDIOVASCULAR» (decisión C2)…* (esperaba «CONTROL DE RIESGO CARDIOVASCULAR» y obtuvo «») |
+| **meta ignorada** | `mtrMetaHba1cGeneral()` pierde la lectura de `S.metaHba1cGeneral` y devuelve fijo `MTR_HBA1C_META_DM2` (la config de Ajustes deja de mandar) | `suite_67` | *v17.6.3 — mtrMetaHba1cGeneral: 7,0 de fábrica; la de Ajustes (5–12) la reemplaza; fuera de rango vuelve a 7,0* (esperaba 7.5 y obtuvo 7) |
+
+Restauradas una a una; `suite_57` (70), `suite_62` (43) y `suite_67` (30) en verde tras
+cada restauración.
+
+## v17.6.3 — 22-ago-2026 (lote aprobado 2/2: A2 anti-alucinación, B2 chips, B5 hoja educativa, D1 telemetría, D2 export)
+
+Banco antes (tras el lote 1/2): 2.305 comprobaciones · después: **2.318** (13 pruebas
+nuevas: 3 en `suite_57`, 3 en `suite_04`, 2 en `suite_67`, 2 en `suite_68`, 3 en `suite_23`).
+
+Cinco decisiones del médico del 22-ago, cada una con su mutación verificada:
+
+- **A2 — verificador de cifras de la IA**: `mtrVerificarCifrasIA` marca en rojo toda cifra
+  de medida del borrador sin respaldo en los hechos entregados (el «PA 110/70» inventado ya
+  no pasa callado). Caja roja en el modal, re-evaluada al editar.
+- **B2 — aviso único con chips accionables**: cada chip de lab/PyM y el botón «Agendar
+  control» abren el panel de órdenes / el agendamiento (`mtrAvisoAccionDe`); sin paciente
+  identificado el aviso informa pero no inventa botones muertos.
+- **B5 — hoja educativa imprimible**: `mtrHojaEducativaHtml` arma el documento con las
+  secciones que el resumen real justifica (alarmas, dieta, actividad, pendientes, meta
+  HbA1c, riesgo) y cero datos inventados.
+- **D1 — tablero local de telemetría**: `mtrTableroTelemetria` lee la ventana UX local y
+  calcula el ABANDONO DEL EMBUDO DE AGENDAMIENTO (abiertos `fn.agendar.open` vs creadas
+  `cita.creada.*`); se pinta en el Resumen del turno.
+- **D2 — export semanal de productividad**: `mtrProductividadCsvSemana` baja la semana en
+  curso a CSV con la misma regla de la vista (un día sin atendidas no cuenta meta en contra).
+
+Verificado como YA implementado (sin cambio de código): A3 (cosecha ya en 33 %,
+`MTR_COSECHA_MARGEN_PROP = 0.33`) y A4 (relojes ya unificados a 10 min con la pre-consulta
+deliberada a 6 h).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **verificador ciego** | `mtrVerificarCifrasIA`: se retira `if (conocidas.has(r)) return;` (toda cifra de medida se marca, aun las que SÍ estaban en los hechos) | `suite_57` | *mtrVerificarCifrasIA: una PA inventada…* y *…un lab que la IA cambió se marca; el que copió bien no* (esperaba 0 y obtuvo 2 — PA 120/80 y LDL 118 marcadas) |
+| **chips muertos** | `mtrAvisoAccionDe()` devuelve fijo `null` (ningún clic dispara acción) | `suite_04` | *mtrAvisoAccionDe: encuentra la acción en el chip y en sus contenedores, y nada fuera* (esperaba «ordenar» y obtuvo null) |
+| **alarmas a todos** | `mtrHojaEducativaHtml`: `if (flags.alarmas)` pasa a `if (true)` (la sección de alarmas sale para cualquier paciente) | `suite_67` | *v17.6.3 — mtrHojaEducativaHtml: sin riesgo ni pendientes sigue siendo un documento imprimible (no inventa secciones)* (la sección de alarmas no debía salir) |
+| **embudo roto** | `mtrTableroTelemetria`: `cita.creada.*` pasa a la clave exacta `cita.creada` (las creadas dejan de contarse) | `suite_23` | *mtrTableroTelemetria: embudo de agendamiento…* (esperaba 7 creadas y obtuvo 0; abandono 100) |
+| **meta en días sin trabajo** | `mtrProductividadCsvSemana`: `if (at > 0)` pasa a `if (true)` (el día sin atendidas mete meta en contra) | `suite_68` | *mtrProductividadCsvSemana: una fila por día + total…* (el martes sin trabajo salía con meta 18) |
+
+Restauradas una a una; el banco completo volvió a verde tras cada restauración.

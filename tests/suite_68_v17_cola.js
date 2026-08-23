@@ -69,7 +69,7 @@ module.exports = {
     "mtrPenultimaCreatinina", "mtrEgfrPrevioDeSerie", "mtrPanelMetasHtml",
     "mtrDuplicidadesTerapeuticas", "mtrMedicamentosUnicos", "_mtrClaveDedupMedicamento", "mtrRenderDuplicidadesHtml", "_mtrClaveMedicamento",
     "mtrProductividadMeta", "mtrProdClaveCita", "mtrProdRegistrar", "mtrProdLeer", "mtrProdNombreHora",
-    "mtrProdAtendidasDe", "mtrProductividadVistas", "mtrProductividadHtml",
+    "mtrProdAtendidasDe", "mtrProductividadVistas", "mtrProductividadHtml", "mtrProductividadCsvSemana",
     "mtrInstantaneaDeResumen", "mtrHistorialAgregar", "mtrNombreArchivoPaciente",
     "vglCarpetaGuardarInstantanea", "vglCarpetaLeerHistorial", "vglCarpetaDisponible",
     "vglCarpetaElegida", "vglCarpetaElegir", "_vglCarpetaFsReal",
@@ -683,6 +683,33 @@ module.exports = {
       const dom = api.mtrProductividadHtml(api.mtrProductividadVistas({}, "2026-08-23"));
       t.cierto(dom.indexOf("Domingo: sin meta") >= 0, "el domingo se dice y no se reprocha");
       t.igual(api.mtrProductividadHtml(null), "", "sin datos no se pinta");
+    });
+
+    // v17.6.3 — D2 (decisión del médico, 22-ago): export semanal de productividad en CSV.
+    // De lunes a hoy, una fila por día y un total; el día sin ninguna atendida no cuenta
+    // meta en contra (misma regla que la vista semanal).
+    t.caso("mtrProductividadCsvSemana: una fila por día + total, y los días no trabajados no meten meta", () => {
+      const todo = {
+        "2026-08-17": { atendidas: { a: 1, b: 1, c: 1 }, citados: 20 },   // lunes: 3/18
+        "2026-08-18": { atendidas: {}, citados: 21 },                     // martes: nadie atendió
+        "2026-08-19": { atendidas: { d: 1, e: 1 }, citados: 19 },         // miércoles: 2/18
+      };
+      const csv = api.mtrProductividadCsvSemana(todo, "2026-08-19");
+      const lineas = csv.split("\r\n");
+      t.cierto(lineas.length === 5, "cabecera + lunes + martes + miércoles + total = 5 líneas");
+      t.cierto(/^Fecha,Atendidas,Meta,Cumplimiento %,Citados en agenda$/.test(lineas[0]), "cabecera exacta");
+      t.cierto(/^2026-08-17,3,18,16.7,20$/.test(lineas[1]), "lunes: 3 de 18, cumplimiento 16,7 %");
+      t.cierto(/^2026-08-18,0,,,21$/.test(lineas[2]), "martes: 0 atendidas, meta vacía (no trabajó — no cuenta en contra)");
+      t.cierto(/^2026-08-19,2,18,11.1,19$/.test(lineas[3]), "miércoles: 2 de 18, 11,1 %");
+      t.cierto(/^TOTAL SEMANA,5,36,13.9,60$/.test(lineas[4]), "totales: 5 atendidas sobre 36 de meta (13,9 %), 60 citados");
+    });
+
+    t.caso("mtrProductividadCsvSemana: fecha inválida o registro vacío no lanza y no inventa", () => {
+      t.igual(api.mtrProductividadCsvSemana({}, "no es fecha"), "", "fecha inválida: CSV vacío");
+      const csv = api.mtrProductividadCsvSemana({}, "2026-08-19");
+      t.cierto(/^Fecha,Atendidas,Meta,Cumplimiento %,Citados en agenda\r\n/.test(csv), "con registro vacío sale la cabecera");
+      const ultima = csv.split("\r\n").pop();
+      t.cierto(/^TOTAL SEMANA,0,0,,0$/.test(ultima), "total sin meta: el cumplimiento del total queda vacío (no inventa un 0 %)");
     });
 
     // v17.6.2 — REPORTE EN VIVO (22-ago): «atendí a 10 y el Resumen dice 20». La misma cita

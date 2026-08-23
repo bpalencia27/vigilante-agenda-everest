@@ -48,3 +48,33 @@ Todos los secretos activos fueron catalogados para su rotación obligatoria e in
 ### 3.4 Manejo Seguro del Historial de Git (Higiene de Repositorio)
 - **Decisión de Ingeniería:** Para evitar divergencias masivas y rotura de referencias en ramas de trabajo paralelas (`claude/pym-agenda-blindaje-v12-4`), se prioriza la **invalidación en origen** de los secretos expuestos en lugar de una reescritura destructiva (`git filter-branch` / `BFG Repo-Cleaner`).
 - Una vez finalizado el ciclo de release y fusionadas todas las ramas a `main`, se podrá programar una purga histórica del árbol si la dirección de seguridad de la IPS lo requiere.
+
+### 3.5 Rotación RECURRENTE de la credencial de Athenea (procedimiento operativo, v17.6.3)
+> Verificación A5 (22-ago-2026): el repositorio `bpalencia27/vigilante-agenda-everest` es **PRIVADO**
+> en GitHub (`private: true`). Buena postura para un copiloto de EHR: aunque el código no
+> contiene PHI, mantenerlo privado limita el radio de exposición de cualquier hallazgo futuro.
+
+La credencial de Athenea es **UNA por sede** (la cuenta institucional de VIVA 1A IPS BELLO; confirmado
+con el equipo el 11-08-2026) y se guarda **una vez por computador** en el almacén de Tampermonkey
+(`GM_setValue("vgl_ath_creds")`), ofuscada con XOR+base64 — anti-vistazo, **NO cifrado**. La
+credencial **nunca vive en el código ni se commitea**; por eso rotarla NO exige tocar ni
+re-publicar el userscript.
+
+**Procedimiento cuando la contraseña institucional cambie:**
+
+1. **Administración central (Athenea):** el administrador cambia la contraseña de la cuenta
+   institucional de consulta médica en el módulo de usuarios de Athenea Soluciones.
+2. **En cada estación (los N computadores de la sede):** Panel del Vigilante → **Ajustes** →
+   **Opciones técnicas** → **Credenciales de Athenea** → guardar la contraseña nueva. El script
+   la escribe ofuscada en `GM_setValue` y limpia la marca de bloqueo (`atheneaLoginBloqueado`).
+3. **Qué hace el script si la credencial fue rechazada:** NO reintenta solo — los intentos
+   repetidos pueden bloquear la cuenta institucional para TODA la sede. Se marca
+   (`atheneaLoginBloqueado`) y se avisa UNA vez para volver a guardarlas.
+4. **Verificación:** al abrir la historia de un paciente, el auto-login de Athenea entra solo y
+   los laboratorios automáticos llegan sin login manual. Si el aviso de credencial rechazada
+   persiste, repetir el paso 2 (p. ej. un equipo que quedó con la contraseña vieja).
+
+**Regla de oro (igual desde v12.5.2):** cualquier persona con acceso técnico al equipo puede
+recuperar la credencial del almacén de Tampermonkey. La rotación periódica de la contraseña en
+Athenea (misma frecuencia que la política de la IPS) es la compensación real — el script solo
+garantiza que el cambio se propague en minutos y sin tocar código.

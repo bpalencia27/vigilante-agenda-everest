@@ -21,7 +21,7 @@ module.exports = {
   cubre: [
     "citaDetalleHoy", "abrirRecordatorioCita", "_cancelarCitaConPregunta",
     "mtrAvisoVencimiento", "mtrLabsPrimeroVencimientoInevitable", "_recordatorioLabHtml", "imprimirRecordatorioLab",
-    "mtrNotaTomaQuedoHtml", "mtrPegarNotaTomaQuedo",
+    "mtrNotaTomaQuedoHtml", "mtrPegarNotaTomaQuedo", "mtrSedeIdLab",
     "_urlCorreoCita", "_correoValido", "enviarRecordatorioCitaPorCorreo",
     "mostrarPanelPostCita", "_celularValido", "reenviarSmsRecordatorio",
   ],
@@ -536,6 +536,13 @@ module.exports = {
       const html = a.mtrNotaTomaQuedoHtml('2026-08-24"><script>', "2026-08-31");
       t.cierto(html.indexOf("<script>") < 0, "sin inyección (la fecha se escapa)");
       t.cierto(html.indexOf("vgl-agm-mover-ctrl") >= 0 && html.indexOf("Mover control a esa fecha") >= 0, "el botón de mover control sigue en la nota");
+    });
+
+    // v17.6.3 — A1 (decisión del médico, 22-ago): la sede del laboratorio (378) vivía
+    // escrita a mano en 5 URLs de AppCita. Una sola fuente de verdad, con 378 de fábrica.
+    t.caso("v17.6.3 — la sede del laboratorio tiene UNA sola fuente (mtrSedeIdLab, 378 de fábrica)", () => {
+      t.igual(a.mtrSedeIdLab(), 378, "la sede de instalación es 378");
+      t.igual(typeof a.mtrSedeIdLab(), "number", "y es un número usable en las URLs de AppCita");
     });
 
   },

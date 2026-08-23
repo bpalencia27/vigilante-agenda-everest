@@ -31,7 +31,8 @@ module.exports = {
     "_vaciarTelemetriaAlSalir", "repBeacon",
     // v15.2.0 — lista blanca de etiquetas de friccion
     "_rageEtiqueta", "_detectarRageClick", "_instalarRageTracker", "_iniciarRumObserver",
-    "_gmNotify", "_instalarDescargaResiliente"],
+    "_gmNotify", "_instalarDescargaResiliente",
+    "mtrTableroTelemetria", "mtrTableroTelemetriaHtml"],
   async pruebas(t, api, env, cargar) {
 
     // =====================================================================
@@ -1150,6 +1151,49 @@ module.exports = {
       const modal = c.env.doc.body.children.filter((n) => n.id === "vgl-labs-modal").pop();
       modal.querySelector("#vgl-labs-x")._listeners.click[0]({});
       t.falso(!!ventana(c).acciones["fn.labs.abandon"], "cerrar despues de que cumplio NO es abandonar");
+    });
+
+    // v17.6.3 — D1 (decisión del médico, 22-ago): tablero local de telemetría y la
+    // métrica de ABANDONO DEL EMBUDO DE AGENDAMIENTO (abiertos vs creadas).
+    t.caso("mtrTableroTelemetria: embudo de agendamiento — abiertos sin creadas = abandono", () => {
+      const c = cargar({ silencioso: true });
+      const tab = c.api.mtrTableroTelemetria({ acciones: {
+        "fn.agendar.open": 10,
+        "cita.creada.consulta": 5,
+        "cita.creada.laboratorio": 2,
+        "cita.rechazada": 1,
+        "cita.cupo_perdido": 1,
+        "fn.ia.gen": 4,
+        "fn.ia.gen.total": 4,   // la clave .total no es una acción: se ignora
+      } });
+      t.igual(tab.embudo.abiertos, 10, "10 agendamientos abiertos");
+      t.igual(tab.embudo.creadas, 7, "7 citas creadas (suma de cita.creada.*)");
+      t.igual(tab.embudo.abandono, 30, "abandono = (10-7)/10 = 30 %");
+      t.igual(tab.embudo.rechazadas, 1, "y se cuentan las rechazadas");
+      t.igual(tab.embudo.cupoPerdido, 1, "y los cupos perdidos");
+      t.igual(tab.embudo.iaGen, 4, "y las generaciones de IA");
+      t.igual(tab.total, 23, "el total NO incluye la clave .total (10+5+2+1+1+4 = 23)");
+      t.cierto(tab.filas.every((f) => f.clave !== "fn.ia.gen.total"), "ninguna clave .total en las filas");
+      t.cierto(tab.filas[0].clave === "fn.agendar.open", "las filas van de mayor a menor");
+    });
+
+    t.caso("mtrTableroTelemetria: sin abiertos no hay abandono (no se inventa), y sin ventana no lanza", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api.mtrTableroTelemetria({ acciones: { "fn.ia.gen": 2 } }).embudo.abandono, null, "sin agendar abierto, abandono vacío (no inventa 0)");
+      const v = c.api.mtrTableroTelemetria(null);
+      t.igual(v.total, 0, "ventana nula: total 0");
+      t.igual(v.embudo.abandono, null, "y sin abandono");
+    });
+
+    t.caso("mtrTableroTelemetriaHtml: pinta el embudo y las acciones; sin datos dice que no hay", () => {
+      const c = cargar({ silencioso: true });
+      const html = c.api.mtrTableroTelemetriaHtml(c.api.mtrTableroTelemetria({ acciones: { "fn.agendar.open": 10, "cita.creada.consulta": 7 } }));
+      t.cierto(/TELEMETRÍA LOCAL/.test(html), "el bloque se rotula");
+      t.cierto(/abandono 30 %/.test(html), "el abandono se lee de un vistazo");
+      t.cierto(/10 abiertos · 7 creadas/.test(html), "y el detalle abiertos·creadas");
+      const vacio = c.api.mtrTableroTelemetriaHtml(c.api.mtrTableroTelemetria(null));
+      t.cierto(/Sin eventos/.test(vacio), "sin datos se dice, no se pinta un tablero vacío");
+      t.igual(c.api.mtrTableroTelemetriaHtml(null), "", "null no pinta nada");
     });
   }
 };

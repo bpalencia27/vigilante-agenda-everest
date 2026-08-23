@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "mtrAvisoAccionDe", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -517,6 +517,44 @@ module.exports = {
       const c2 = cargar({ silencioso: true });
       c2.api.avisoUniversal("Paciente Prueba", { abandono: false, pym: [], labs: [] }, true);
       t.falso(!!c2.env.doc.getElementById("vgl-pym-modal"), "sin nada que mostrar, no hay aviso");
+    });
+
+    // v17.6.3 — B2 (decisión del médico, 22-ago): el aviso único pasa de informar a
+    // ACTUAR. Cada chip (lab o PyM) y los botones de acción abren el panel de órdenes o
+    // el agendamiento; el aviso solo lleva acciones cuando se sabe quién es el paciente.
+    t.caso("avisoUniversal: con apt, los chips y las acciones llevan data-aviso-accion (B2)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", {
+        pym: ["Tamización VIH"],
+        labs: [{ nombre: "Creatinina en Suero" }],
+        apt: { doc_id: "111", nombre: "Paciente Prueba" },
+      }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(m.innerHTML.indexOf('data-aviso-accion="ordenar"') >= 0, "el chip de labs lleva la acción ordenar");
+      t.cierto(m.innerHTML.indexOf('data-aviso-accion="agendar"') >= 0, "el botón «Agendar control» lleva la acción agendar");
+      t.cierto(m.innerHTML.indexOf("📅 Agendar control") >= 0, "el botón «Agendar control» está a la vista");
+      t.cierto(m.innerHTML.indexOf("📋 Ordenar paraclínicos") >= 0, "el botón «Ordenar paraclínicos» está a la vista");
+      t.cierto(m.innerHTML.indexOf("Entendido") >= 0, "y sigue existiendo el «Entendido» para cerrar sin hacer nada");
+    });
+
+    t.caso("avisoUniversal: SIN apt no inventa acciones (un botón que no abre nada sería ruido)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.avisoUniversal("Paciente Prueba", { labs: [{ nombre: "Creatinina" }] }, true);
+      const m = c.env.doc.getElementById("vgl-pym-modal");
+      t.cierto(!!m, "el aviso igual sale (informa aunque no se sepa quién es)");
+      t.falso(m.innerHTML.indexOf("data-aviso-accion") >= 0, "sin apt no hay chips ni botones accionables");
+    });
+
+    t.caso("mtrAvisoAccionDe: encuentra la acción en el chip y en sus contenedores, y nada fuera", () => {
+      const c = cargar({ silencioso: true });
+      const chip = { getAttribute: () => "ordenar" };
+      const contenedor = { getAttribute: () => null, _parent: chip };
+      const lista = { getAttribute: () => null, _parent: contenedor };
+      t.igual(c.api.mtrAvisoAccionDe(chip), "ordenar", "el chip mismo la lleva");
+      t.igual(c.api.mtrAvisoAccionDe(contenedor), "ordenar", "sube un nivel al contenedor");
+      t.igual(c.api.mtrAvisoAccionDe(lista), "ordenar", "sube dos niveles a la lista");
+      t.igual(c.api.mtrAvisoAccionDe({ getAttribute: () => "otra" }), null, "una acción desconocida no abre nada");
+      t.igual(c.api.mtrAvisoAccionDe(null), null, "sin target no lanza");
     });
 
     t.caso("checkAvisoUniversal: sin paciente abierto -> no lanza y no revisa nada", () => {
