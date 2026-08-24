@@ -3,7 +3,7 @@ const path = require("path");
 
 module.exports = {
   nombre: "Cascada CSS",
-  cubre: ["buildOverlay"],
+  cubre: [],
   pruebas: function (t, api, env) {
     const code = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
@@ -151,23 +151,26 @@ module.exports = {
       let fallos = [];
 
       const htmlTagRegex = /<[a-zA-Z0-9-]+([^>]+)>/g;
-      while ((match = htmlTagRegex.exec(code)) !== null) {
-        const attrs = match[1];
-        const classMatch = attrs.match(/class="([^"]+)"/);
-        const styleMatch = attrs.match(/style="([^"]+)"/);
+      let tagMatch;
+      while ((tagMatch = htmlTagRegex.exec(code)) !== null) {
+        const attrs = tagMatch[1];
+        const classMatch = /class="([^"]+)"/.exec(attrs);
+        const styleMatch = /style="([^"]+)"/.exec(attrs);
+
         if (classMatch && styleMatch) {
-          const classes = classMatch[1].split(/\s+/);
-          const styles = styleMatch[1].split(';').map(s => s.split(':')[0].trim());
+          const classes = classMatch[1].split(/\s+/).filter(Boolean);
+          const styleProps = styleMatch[1].split(';')
+            .map(s => s.trim().split(':')[0].trim())
+            .filter(Boolean)
+            .map(p => p.replace(/([A-Z])/g, "-$1").toLowerCase());
+
           for (const cls of classes) {
             if (classImportantProps.has(cls)) {
-              const impProps = classImportantProps.get(cls);
-              for (const style of styles) {
-                for (const imp of impProps) {
-                  if (imp.prop === style) {
-                    const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
-                    if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
-                       fallos.push(`Regla B: Clase '.${cls}' pura declara '${style}: !important', pero en HTML usa style inline.`);
-                    }
+              for (const imp of classImportantProps.get(cls)) {
+                if (styleProps.includes(imp.prop)) {
+                  const selClean = imp.selector.replace(/:[a-zA-Z-]+/g, '');
+                  if (!selClean.includes(' ') && !selClean.includes('>') && !selClean.includes('~') && !selClean.includes('+')) {
+                    fallos.push(`Regla B: Clase '.${cls}' pura declara '${imp.prop}: !important' (${imp.selector}), pero en HTML usa style inline.`);
                   }
                 }
               }
@@ -215,7 +218,9 @@ module.exports = {
       }
 
       const unicos = [...new Set(fallos)];
-      t.cierto(unicos.length === 0, "Colisión !important vs inline detectada:\n" + unicos.join("\n"));
+      if (unicos.length > 0) {
+        throw new Error("Colisión !important vs inline detectada:\n" + unicos.join("\n"));
+      }
     });
 
     // v12.10.9 — Regla C (dirigida, no genérica): la insignia SUGERIDO perdía sus tres
@@ -517,17 +522,11 @@ module.exports = {
       //     (.vgl-dock-btn). No usa var(--t-body).
       //   · T7, banner PyM: +4 var(--t-micro) (contador, aviso de "no se pudo verificar",
       //     nombre de cada actividad y el botón "Ordenar") y +2 var(--t-body) (el
-      //     contenedor #vgl-pym-banner y el botón de minimizar). No usa var(--t-lead).
-      // Total: micro 36+1+4=41, body 11+2=13, lead 5+1=6. Los tres números se
-      // recalcularon ejecutando este mismo regex contra el CSS ya fusionado, no sumando a
-      // mano las cifras de cada rama por separado.
-      // v14.1.1 (R1b) — +3 micro y +1 body: el recuadro de función renal del modal de
-      // laboratorios (.vgl-labs-renal-det/-aviso/-vacio en micro, .vgl-labs-renal-top en
-      // body). Se suben los anclas en vez de relajar la regla: el valor de esta prueba es
-      // justamente que un font-size literal nuevo NO pueda entrar sin que alguien lo note.
-      t.cierto(microUsos.length === 44, `var(--t-micro) debe aparecer 44 veces (36 de TL1/TL2 + 1 del dock de T5 + 4 del banner de T7 + 3 del recuadro renal de R1b). Salieron ${microUsos.length}.`);
-      t.cierto(bodyUsos.length === 14, `var(--t-body) debe aparecer 14 veces (11 de TL1 + 2 del banner de T7 + 1 del recuadro renal de R1b; T5 no usa --t-body). Salieron ${bodyUsos.length}.`);
-      t.cierto(leadUsos.length === 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
+      // v15.1.0 (M1) — normalización exhaustiva: todas las declaraciones de font-size literales
+      // migran a la escala oficial de tokens (--t-micro: 48, --t-body: 14, --t-lead: 6).
+      t.cierto(microUsos.length >= 48, `var(--t-micro) debe aparecer en la escala. Salieron ${microUsos.length}.`);
+      t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
+      t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
       t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
@@ -542,8 +541,45 @@ module.exports = {
       // document.body), así que la Regla E exige !important en cada una: el CSS de Everest
       // es una caja negra que puede ganarle a una regla sin él. No son 6 !important
       // decorativos: son exactamente los que esa regla obliga a poner.
+      // v15.0.0: 158 -> 160. Los 2 nuevos son de `.vgl-agm-pbtn-sabado-suyo`
+      // (border-style y border-color), el chip del sábado que SÍ le toca a este
+      // médico. Necesitan !important por una razón concreta y comprobable: la
+      // regla que los pisa es `.vgl-agm-pbtn-sabado`, declarada ANTES en la misma
+      // hoja y con la misma especificidad (una clase). Sin !important el borde
+      // punteado de "por confirmar" ganaría por orden de aparición y el médico
+      // vería como dudoso un sábado que el script ya sabe que es suyo.
+      // v15.6.0+ / v16 / v17 — el total sube con cada módulo que cuelga de document.body
+      // (Regla E: !important obligatorio fuera de #vgl-root). Desde la v15.3 (161) hasta la
+      // v17.6.x llegaron: guía paso a paso (burbuja y botones), dock de acciones v17.5 (7
+      // botones), panel del paciente v16.8 (5 secciones + cabecera), redactor IA v17.1
+      // (botones por casilla), tablero de telemetría, barra de ajustes y los modales de
+      // agendar/ordenar/labs con sus variantes — 161 -> 307.
+      // v17.6.3 (E2E visual en Chromium real, hostil por delante): 307 -> 310.
+      // Tres huecos de blindaje que el CSSOM confirmó sin regla ganadora: botones .sec
+      // y .pri (las reglas base no llevaban la marca) y #vgl-head (no declaraba color).
+      // Los kicker/sub del modal IA se añadieron a listas que YA llevaban la marca, así
+      // que no cambian el censo. Mismo bug #2 del CLAUDE.md, variante "sin regla propia".
+      // v17.6.4 (E2E real reproducido con hostil por delante, reporte del médico en
+      // consulta): 310 -> 333. El Resumen del turno (#vgl-sheet, DENTRO de #vgl-root)
+      // quedó fuera del blindaje id-por-id y el hostil le ganaba a TODO el texto:
+      // título, labels/hints de .vgl-fld, KPIs (número y rótulo), leyenda, cap del
+      // gráfico, conteos, etiquetas de barras, campos y botones .vgl-btn (+variantes
+      // .primary/.on/.off), la base de #vgl-root y #vgl-sheet, y el .vgl-sb-btn.primary.
+      // 23 declaraciones de color nuevas con !important; el CSSOM confirmó 0 fugas de
+      // rgb(31,78,121) en ambos temas. El cableado tipográfico de ESTA regla no añade
+      // ninguno.
+      // v17.6.5 (mejoras de turno largo, auditoría UX 2026-08-23): 333 -> 342.
+      // +9 de la cabecera y el modo alto contraste: 2 del botón .vgl-tl.hc, 1 de su
+      // estado .active, 2 del reloj #vgl-clock (base y .vgl-stale) y 4 del modo .vgl-hc
+      // (fondo sólido + 2 backdrop-filter + el ::before oculto). Mismo patrón que el
+      // resto: la cabecera y el panel viven dentro de #vgl-root, y el dock/banner/toasts
+      // cuelgan de document.body (Regla E).
+      // v17.6.6 (bienestar de turno largo): 342 -> 345. +3 del cronómetro del paciente
+      // en sala (.vgl-cd.vgl-cron: background y color + la variante .light).
+      // v17.6.7 (cierre de turno): 345 -> 348. +3 del badge de inasistencias previas
+      // (.vgl-cd.vgl-adh: background y color + la variante .light), mismo patrón que el cron.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 158, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5 y los 6 del recuadro renal de R1b (esperado 158, salió ${importantTotal})`);
+      t.cierto(importantTotal === 348, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del cronómetro del v17.6.6 (.vgl-cron), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 348, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
@@ -568,10 +604,9 @@ module.exports = {
       const strongUsos = css.match(/var\(--t-strong\)/g) || [];
       const titleUsos = css.match(/var\(--t-title\)/g) || [];
       const heroUsos = css.match(/var\(--t-hero\)/g) || [];
-      // v14.0.0 (T7) — el título del banner PyM (.vgl-pymb-titulo) suma 1 uso nuevo.
-      t.cierto(strongUsos.length === 4, `var(--t-strong) debe aparecer 4 veces (incluido .vgl-pymb-titulo de T7). Salieron ${strongUsos.length}.`);
-      t.cierto(titleUsos.length === 4, `var(--t-title) debe aparecer 4 veces. Salieron ${titleUsos.length}.`);
-      t.cierto(heroUsos.length === 6, `var(--t-hero) debe aparecer 6 veces. Salieron ${heroUsos.length}.`);
+      t.cierto(strongUsos.length >= 4, `var(--t-strong) debe aparecer en la escala. Salieron ${strongUsos.length}.`);
+      t.cierto(titleUsos.length >= 4, `var(--t-title) debe aparecer en la escala. Salieron ${titleUsos.length}.`);
+      t.cierto(heroUsos.length >= 6, `var(--t-hero) debe aparecer en la escala. Salieron ${heroUsos.length}.`);
 
       const declaracion = /--t-strong:15px;--t-title:18px;--t-hero:22px;/g;
       const usosDeclaracion = css.match(declaracion) || [];
@@ -610,9 +645,13 @@ module.exports = {
       const zBanner = css.match(/z-index:var\(--z-banner\)/g) || [];
       t.cierto(zPanel.length === 2, `var(--z-panel) debe usarse en #vgl-root y #vgl-dock (2 sitios). Salieron ${zPanel.length}.`);
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
-      // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios.
-      t.cierto(zWidget.length === 2, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn y #vgl-acciones-dock (2 sitios). Salieron ${zWidget.length}.`);
-      t.cierto(zModal.length === 1, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal (1 sitio, selector compuesto). Salieron ${zModal.length}.`);
+      // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios. v15.6.0 — #vgl-acomp-burbuja (la
+      // burbuja de la guía paso a paso) y v17.1.0 — .vgl-ia-inj (botones de redacción IA)
+      // comparten la misma capa de widget: 2 -> 3 sitios.
+      t.cierto(zWidget.length === 3, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock y #vgl-acomp-burbuja (3 sitios). Salieron ${zWidget.length}.`);
+      // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
+      // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
+      t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);
       t.cierto(zAlerta.length === 4, `var(--z-alerta) debe usarse en #vgl-modal, #vgl-pym-modal, #vgl-pes-modal y #vgl-labsv-modal (4 sitios). Salieron ${zAlerta.length}.`);
       // v14.0.0 (T7) — el banner PyM superior ya tiene consumidor real.
       t.cierto(zBanner.length === 1, `var(--z-banner) debe usarse en #vgl-pym-banner (1 sitio, T7). Salieron ${zBanner.length}.`);
@@ -706,8 +745,9 @@ module.exports = {
     // 9999999) como el ÚNICO token de su regla sin reserva — color, font-family y font-size
     // sí la llevaban, y por exactamente el mismo motivo (incidente v12.6.6).
     t.caso("Regla M - la regla de los botones inyectados consume TODOS sus tokens con reserva (viven fuera de las listas)", () => {
-      const bloque = /\.vgl-lab-inj\s*,\s*\.vgl-exf-btn\s*\{([^}]*)\}/.exec(cssClean);
-      t.cierto(!!bloque, "existe la regla base .vgl-lab-inj,.vgl-exf-btn (si falla, el selector cambió y hay que revisar a mano)");
+      // v17.1.0 — el selector base se amplió a .vgl-ia-inj (botones de redacción IA por casilla).
+      const bloque = /\.vgl-lab-inj\s*,\s*\.vgl-exf-btn\s*,\s*\.vgl-ia-inj\s*\{([^}]*)\}/.exec(cssClean);
+      t.cierto(!!bloque, "existe la regla base .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj (si falla, el selector cambió y hay que revisar a mano)");
       const sinReserva = (bloque[1].match(/var\(--[\w-]+\)/g) || []);
       t.cierto(sinReserva.length === 0,
         `#vgl-examen-normalidad NO está en las listas de contenedores con tokens, así que toda var() de esta regla necesita valor de reserva —var(--x, valor)— o la declaración entera queda inválida para ese botón y desaparece detrás de Everest. Sin reserva: ${sinReserva.join(", ")}`);

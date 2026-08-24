@@ -20,7 +20,7 @@
 module.exports = {
   nombre: "Auto-Labs contra rangos oficiales (v14.1.8)",
   cubre: [
-    "_objecionOficialAlValor", "_textoImplausibles", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
+    "_objecionOficialAlValor", "injectLabsIntoCronicos", "_contextoOficialParaLabs",
     "_guardarTablaOficialVista", "_tablaOficialVigente", "_instalarOyenteTablaOficial",
     "_base64SinRelleno", "apiAccesoBuscarPaciente",
   ],
@@ -183,28 +183,12 @@ module.exports = {
     });
 
     // ---------- lo que se le dice al médico ----------
-
-    t.caso("el aviso dice qué llegó y qué se esperaba, y NUNCA propone el valor convertido", () => {
-      const txt = api._textoImplausibles([
-        { key: "CREATININA", valor: "88", estado: "alto", unidad: "mg/dL", min: 0.2, max: 20, mensaje: "" },
-      ]);
-      t.cierto(txt.indexOf("CREATININA") !== -1, "nombra el analito");
-      t.cierto(txt.indexOf("88") !== -1, "dice qué llegó");
-      t.cierto(txt.indexOf("mg/dL") !== -1, "dice en qué unidad esperaba la casilla");
-      t.cierto(txt.indexOf("0.2") !== -1 && txt.indexOf("20") !== -1, "dice el rango que la IPS espera");
-      // La prohibición, fijada como prueba: 88 µmol/L equivalen a ~1,0 mg/dL. Ese número
-      // NO puede aparecer, porque sugerirlo es convertir unidades a espaldas del
-      // laboratorio y acabaría escrito en una historia clínica sin comprobarse.
-      t.igual(/\b1[.,]0\b/.test(txt), false, "no se propone el valor convertido: la sospecha de unidad es una sospecha, no un hecho");
-      t.igual(api._textoImplausibles([]), "", "sin objeciones, el aviso no dice nada");
-      t.igual(api._textoImplausibles(null), "");
-      t.igual(api._textoImplausibles("no es lista"), "");
-    });
-
-    t.caso("un rango abierto por un lado se muestra como abierto, no como un cero inventado", () => {
-      const txt = api._textoImplausibles([{ key: "PTH", valor: "0.1", estado: "bajo", unidad: "pg/ml", min: 1, max: null, mensaje: "" }]);
-      t.cierto(txt.indexOf("?") !== -1, "sin máximo declarado se muestra '?', no un número que la IPS nunca dijo");
-    });
+    // v17.6.10 — El texto del aviso por implausibles se construye EN LÍNEA en el
+    // manejador del botón Auto-Labs (showToast "NO se escribieron...", con la regla de
+    // "nunca proponer el valor convertido" preservada allá); la vieja función
+    // _textoImplausibles se retiró por no tener llamador. La prohibición de conversión
+    // sigue viva: el aviso muestra clave, valor y rango oficial, nunca el número
+    // "corregido".
 
     // ---------- la tabla vista, y su caducidad ----------
 

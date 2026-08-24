@@ -113,7 +113,6 @@ module.exports = {
       t.igual(api._atheneaExtraerSolicitudes(conNum)[0].horaTxt, "19:35");
     });
 
-
     // ---------- pendientes restantes tras ordenar desde el panel ----------
     t.caso("pymPendientesRestantes: sin órdenes de hoy devuelve todo lo pendiente", () => {
       const c = cargar();

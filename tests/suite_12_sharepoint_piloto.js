@@ -293,6 +293,7 @@ module.exports = {
       t.igual(st.pymFallback, true);
       t.igual(st.pymFile, "BASE PILOTO.xlsx (base piloto — aún no llega la de hoy)");
       // v12.10.12 — visibilidad: caer a la base piloto (desde caché, sin red) queda contado.
+      c.api._uxVolcarBuffer(); // v15.6.0: uxTrack acumula en memoria y vuelca en tandas de 2 s
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.igual(w.acciones["pym.fallback.cache"], 1);
     });

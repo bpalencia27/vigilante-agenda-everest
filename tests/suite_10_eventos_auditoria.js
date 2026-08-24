@@ -101,7 +101,10 @@ module.exports = {
       const crearOriginal = c.env.doc.createElement;
       c.env.doc.createElement = (tag) => {
         const el = crearOriginal(tag);
-        if (String(tag).toLowerCase() === "a") ancla = el;
+        if (String(tag).toLowerCase() === "a") {
+          ancla = el;
+          el.click = () => { el._clicks = (el._clicks || 0) + 1; };
+        }
         return el;
       };
 
@@ -119,7 +122,10 @@ module.exports = {
       t.cierto(!!ancla, "debe añadir un ancla al body");
       t.cierto(ancla.download.indexOf("BITACORA_VIGILANTE_REAL_") === 0, "nombre del archivo");
       t.igual(ancla.href, "blob:reporte");
-      t.cierto(alertas.length === 1 && alertas[0].indexOf("✅") === 0, "debe avisar éxito, no error");
+      t.igual(ancla._clicks, 1, "el ancla se clickeó (descarga disparada)");
+      // v17.x — el aviso de éxito va al toast (showToast), no al alert() del navegador: la
+      // rama de éxito quedó probada por el flujo completo (blob + ancla + click).
+      t.igual(alertas.length, 0, "v17.x — la rama de éxito ya no usa alert() (aviso por toast)");
     });
 
     // ---------- allStats / statsToday ----------

@@ -77,6 +77,11 @@ function crearEntorno(opciones) {
   if (!o.defaultOff && !("vgl_cfg" in almacen)) {
     almacen["vgl_cfg"] = JSON.stringify({ reporte: true, uxTelemetria: true });
   }
+  // v14.2.0 — La migración de ESTRENO (vgl_v1420_estreno) enciende, una sola vez en el
+  // despliegue real, motorPortado/iaRedaccion/uxTelemetria/reporte. El banco verifica los
+  // valores DE FÁBRICA (todos apagados) y el comportamiento con cada bandera controlada a
+  // mano, así que aquí se marca como YA aplicada: el arnés no debe re-encender banderas.
+  if (!("vgl_v1420_estreno" in almacen)) almacen["vgl_v1420_estreno"] = "1";
   const storage = {
     getItem: (k) => (k in almacen ? almacen[k] : null),
     setItem: (k, v) => { almacen[k] = String(v); },
@@ -89,7 +94,7 @@ function crearEntorno(opciones) {
   const doc = crearDom();
 
   const win = {
-    location: { href: "https://neps.everestintelligent.com/viva/HCHealth/", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/HCHealth/", search: "", hash: "" },
+    location: { href: "https://neps.everestintelligent.com/viva/EverHealth/HCHealth", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/EverHealth/HCHealth", search: "", hash: "" },
     navigator: { userAgent: "node-test", locks: null },
     document: doc,
     localStorage: storage,
@@ -122,6 +127,11 @@ function crearEntorno(opciones) {
     DecompressionStream: undefined,
     Worker: undefined,
     MutationObserver: function () { this.observe = () => {}; this.disconnect = () => {}; },
+    // Un navegador real SIEMPRE tiene Event; el userscript lo usa sin guarda (setNgValue y
+    // el autologin de Athenea hacen `new Event('input',…)`). Sin esto, cualquier prueba que
+    // ejerza una escritura real por setNgValue caía en el catch y devolvía "no se pudo".
+    Event: function (type, opts) { this.type = type; this.bubbles = !!(opts && opts.bubbles); this.cancelable = !!(opts && opts.cancelable); },
+    CustomEvent: function (type, opts) { this.type = type; this.detail = opts ? opts.detail : undefined; this.bubbles = !!(opts && opts.bubbles); },
   };
   win.top = win; win.self = win;             // no sale por el guard de frames
   win.unsafeWindow = win;
@@ -216,7 +226,14 @@ function cargar(opciones) {
     "\n;try{ globalThis.__VGL__.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO = CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__CONDUCTA_LI_TEXTO_POR_ANALITO = CONDUCTA_LI_TEXTO_POR_ANALITO; }catch(e){}" +
     "\n;try{ globalThis.__VGL__.__COLORS = COLORS; }catch(e){}" +
-    "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}\n";
+    "\n;try{ globalThis.__VGL__.__FRIENDLY = FRIENDLY; }catch(e){}" +
+    // Helpers de reloj SOLO para pruebas: las cachés (resumen, meds, tabla oficial)
+    // caducan comparando Date.now() contra un `ts` guardado; sin esto, una prueba de
+    // TTL tendría que esperar minutos reales. Se insertan dentro del IIFE, donde la
+    // variable `_mtrCacheResumen` es alcanzable. (Mismo patrón que __uxVolcarBuffer.)
+    "\n;try{ globalThis.__VGL__.__envejecerCacheResumen = function(msAtras){ _mtrCacheResumen.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__envejecerCacheMeds = function(msAtras){ _mtrMedsCache.ts = Date.now() - msAtras; }; }catch(e){}" +
+    "\n;try{ globalThis.__VGL__.__envejecerTablaOficial = function(msAtras){ _tablaOficialVista.ts = Date.now() - msAtras; }; }catch(e){}\n";
 
   // se inserta justo antes del cierre del IIFE
   const cierre = src.lastIndexOf("\n})();");
