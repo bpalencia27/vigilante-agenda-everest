@@ -988,3 +988,24 @@ reales — SOBREVIVIERON el grep de tests y se descartaron de esta limpieza.
 El banco completo al cierre: **1.447 comprobaciones, 0 en rojo** (mismo número que antes de
 la limpieza — ninguna prueba dependía de este código). 957 → 944 funciones registradas en
 `__VGL__`. ~333 líneas netas retiradas.
+
+## v17.6.30 — 24-ago-2026 (Barrido S+ total — Bloque Editar, 1/62: negación simple en el cotejo de fuentes)
+
+Banco antes: 1.449 comprobaciones (con las 4 pruebas nuevas ya sumadas antes de la
+mutación) · después de restaurar: **1.450**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrTextoOpinaSobre`** | La lista de negaciones reconocidas vuelve a `/\b(niega\|no refiere\|sin antecedente\|descarta\|no presenta\|no tiene\|nunca ha)\b/` (se quita `no es\|no fue\|no fuma\|no consume\|no padece\|no usa\|no ha`) | `suite_01` | *v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo'…* → *'no fuma' debe negar, no afirmar: esperaba false y obtuvo true* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.450/1.450 tras la restauración.
+
+Nota sobre el primer intento de esta prueba: el caso original usaba "No es diabético…"
+contra el regex real de `diabetes` (`textoSi: /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i`),
+que no matchea por la tilde de "diabético" (`\bdiabet` exige la `e` sin acento) — un
+defecto distinto, no relacionado con esta negación, y fuera del alcance de este ítem. Se
+cambió el ejemplo de prueba a HTA (`hipertens`, sin tildes en el radical) para no mezclar
+ambos hallazgos; el problema de tildes en `MTR_HECHOS_SENSIBLES` queda anotado como
+oportunidad de mejora aparte.

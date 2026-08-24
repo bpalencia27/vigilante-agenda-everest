@@ -4,6 +4,15 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.30] — 2026-08-24 (Barrido S+ total — Bloque Editar, 1/62: negación simple en el cotejo de fuentes)
+
+Primer avance del bloque "Editar" del barrido total.
+
+### 🐛 Un "no fuma" en el texto libre ya no se interpreta como que SÍ fuma
+- `mtrTextoOpinaSobre` (usado por el cotejo de discrepancias entre fuentes, `mtrDiscrepanciasDeFuentes`) solo reconocía negaciones largas (`niega`, `no refiere`, `sin antecedente`, `descarta`, `no presenta`, `no tiene`, `nunca ha`). Una negación corta y común en la redacción real ("no fuma", "no es diabético", "no consume alcohol") no calzaba con ninguna, así que la frase caía en la afirmación por defecto de la línea siguiente: el texto libre que NIEGA un hecho terminaba usándose como la fuente que lo AFIRMA. Se amplió la lista de negaciones reconocidas para cubrir el patrón "no + verbo" más frecuente, sin tocar el resto de la lógica (antecedentes familiares siguen sin veredicto, una afirmación limpia sigue ganando sobre cualquier negación previa).
+
+---
+
 ## [Versión 17.6.29] — 2026-08-24 (Barrido S+ total — Bloque Eliminar: código muerto verificado, ~333 líneas)
 
 Primer avance del bloque "Eliminar" del barrido total. Cada función se verificó con grep exhaustivo en **producción Y en tests** antes de retirarla (el barrido automático solo había revisado el archivo de producción — 5 candidatos iniciales resultaron tener pruebas dedicadas reales y se descartaron de esta limpieza, quedan para una revisión aparte con más cuidado: `mtrPrincipioEnTexto`, el modelo de grupos de sábado 1-3/2-4 completo, `extractAgrupador`, `apiHcValidacionExamenCronicos`/`_base64SinRelleno`).

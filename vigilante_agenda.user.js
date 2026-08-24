@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.29
+// @version     17.6.30
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.29";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.30";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4634,7 +4634,12 @@
         if (!re.test(frase)) continue;
         const f = stripAccents(frase.toLowerCase());
         if (/\b(padre|madre|hermano|hermana|abuelo|abuela|familiar|antecedente familiar|hijo|hija|tio|tia)\b/.test(f)) continue;
-        if (/\b(niega|no refiere|sin antecedente|descarta|no presenta|no tiene|nunca ha)\b/.test(f)) { if (veredicto === null) veredicto = false; continue; }
+        // v17.6.30 — AUDITORÍA S+ (barrido total, 24-ago-2026): la lista de negaciones no
+        // reconocía el "no + verbo" simple ("no fuma", "no es diabético") — ninguna frase
+        // así calzaba con niega/no refiere/sin antecedente/descarta/no presenta/no tiene/
+        // nunca ha, así que caía en la afirmación de la línea de abajo: el texto libre que
+        // NIEGA un hecho terminaba usándose como fuente que lo AFIRMA.
+        if (/\b(niega|no refiere|sin antecedente|descarta|no presenta|no tiene|nunca ha|no es|no fue|no fuma|no consume|no padece|no usa|no ha)\b/.test(f)) { if (veredicto === null) veredicto = false; continue; }
         return true;   // una afirmación limpia manda sobre cualquier negación previa
       }
       return veredicto;
