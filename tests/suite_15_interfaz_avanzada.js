@@ -2676,5 +2676,152 @@ module.exports = {
     // arriba y CHANGELOG). Con las funciones borradas, que el tick no pueda pintar el
     // banner ya no depende de una guarda: es estructuralmente imposible.
 
+    // =====================================================================
+    // v17.6.13 — AUDITORÍA S+ DEL AGENDAMIENTO (5 hallazgos)
+    //  1. Sin sugerencia clínica NINGÚN turno nace activo (antes, el primero cronológico
+    //     quedaba preseleccionado y un clic a ciegas confirmaba una madrugada).
+    //  2. Los avisos de doble confirmación (antidup/vencimiento) se reinician al cambiar
+    //     de turno o de día (antes, el segundo Confirmar se los saltaba con datos nuevos).
+    //  3. El celular dice la verdad si no se pudo verificar (antes: "cargando…" colgado
+    //     con el SMS tildado, cita creada con celular vacío sin avisar).
+    //  4. Accesibilidad: aria-live en los estados que mutan + aria-current en el stepper.
+    //  5. El cupo desaconsejado se ve usable (opacidad .85) y explica su razón en la
+    //     loseta, no solo en el tooltip.
+    // =====================================================================
+
+    const _mockAgendaComun = (extraFetch) => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const urlsVistas = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          urlsVistas.push(u);
+          const extra = extraFetch && extraFetch(u);
+          if (extra) return extra;
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [
+            { id: 701, horaTexto: "07:00 AM", estado: "ACT" },
+            { id: 702, horaTexto: "10:00 AM", estado: "ACT" },
+          ] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(c);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      return { c, urlsVistas };
+    };
+
+    await t.casoAsync("v17.6.13: sin sugerencia clínica, NINGÚN turno nace activo y el botón explica por qué (v16.9.0)", async () => {
+      const { c } = _mockAgendaComun();
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const activos = [...slots.children].filter((b) => b.className.includes("active"));
+      t.igual(activos.length, 0, "sin perfil que recomiende, no hay preselección de madrugada");
+      t.igual(confirmBtn.disabled, true, "el botón sigue apagado hasta que el médico elija");
+      t.cierto(confirmBtn.textContent.includes("Elija un horario"), "el botón dice POR QUÉ está apagado");
+    });
+
+    await t.casoAsync("v17.6.13: con turno clínico recomendado, el sugerido SÍ nace activo y listo para confirmar", async () => {
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [
+          { id: 4, descripcion: "Diabetes", swProgramaEspecial: false },
+        ] } });
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const btnSugerido = [...slots.children].find((b) => (b.innerHTML || "").includes("⭐ SUGERIDO"));
+      t.cierto(!!btnSugerido && btnSugerido.classList.contains("active"), "el sugerido queda preseleccionado");
+      t.igual(confirmBtn.disabled, false, "con sugerencia, el botón ya está listo");
+      t.cierto(confirmBtn.textContent.includes("07:00 AM"), "el botón nombra la hora sugerida");
+    });
+
+    await t.casoAsync("v17.6.13: cambiar de turno reinicia la doble confirmación (el aviso antidup no se puede saltar con datos nuevos)", async () => {
+      const { c, urlsVistas } = _mockAgendaComun();
+      c.api.markCitaAgendadaHoy("555111", "2026-08-23");
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const btn1 = [...slots.children].find((b) => (b.innerHTML || "").includes("07:00 AM"));
+      const btn2 = [...slots.children].find((b) => (b.innerHTML || "").includes("10:00 AM"));
+      disparar(btn1, "click");
+      disparar(confirmBtn, "click");
+      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "1er confirmar muestra el aviso antidup");
+      t.igual(confirmBtn.dataset.dupOk, "1", "y lo marca en el dataset");
+      disparar(btn2, "click");
+      t.igual(confirmBtn.dataset.dupOk, "", "cambiar de turno reinicia la marca");
+      t.cierto(confirmBtn.textContent.includes("10:00 AM"), "el botón nombra la hora recién elegida");
+      // El anti-doble-clic (v17.6.8) ignora un segundo clic en <700 ms del anterior: se
+      // espera el tiempo real entre los dos confirmar, como en la consulta.
+      await esperar(750);
+      disparar(confirmBtn, "click");
+      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "el 2º confirmar vuelve a exigir la doble confirmación");
+      t.falso(urlsVistas.some((u) => u.includes("AsignarTurno")), "no se creó ninguna cita por el clic a ciegas");
+    });
+
+    await t.casoAsync("v17.6.13: si Everest no devuelve los datos del paciente, el celular no queda colgado en «cargando…»", async () => {
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson(null);   // red caída -> pageFetchJson devuelve null
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const inpTel = modal.querySelector("#vgl-agm-sms-tel");
+      const chkSms = modal.querySelector("#vgl-agm-sms-chk");
+      const notaSms = modal.querySelector("#vgl-agm-sms-nota");
+      t.cierto(inpTel.placeholder.includes("escríbalo a mano"), "el campo pide el celular a mano en vez de mentir con «cargando…»");
+      t.igual(chkSms.checked, false, "el SMS se desmarca: no se puede enviar un número que no se verificó");
+      t.cierto(notaSms.textContent.includes("no se pudo verificar"), "la nota dice qué pasó");
+    });
+
+    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 4 estados que mutan y aria-current en el stepper", () => {
+      const { c } = _mockAgendaComun();
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const vivas = (modal.innerHTML.match(/aria-live="polite"/g) || []).length;
+      t.igual(vivas, 4, "pc-est, sugerida, vencaviso y date-info anuncian sus cambios");
+      t.cierto(modal.innerHTML.includes('id="vgl-step-ind-1" role="listitem" aria-current="step"'), "el paso 1 arranca marcado como paso en curso");
+      const ind2 = modal.querySelector("#vgl-step-ind-2");
+      t.noLanza(() => disparar(modal.querySelector("#vgl-step-1-next"), "click"));
+      t.igual(ind2.getAttribute && ind2.getAttribute("aria-current"), "step", "al avanzar, aria-current salta al paso 2");
+      t.igual(modal.querySelector("#vgl-step-ind-1").getAttribute("aria-current"), null, "y el paso 1 deja de ser el actual");
+    });
+
+    await t.casoAsync("v17.6.13: el cupo desaconsejado se ve usable (opacidad .85) y la razón es visible en la loseta", async () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/\.vgl-agm-sbtn-adic-no\{opacity:\.85\}/.test(src), "opacidad .85: usable, no parece botón muerto");
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [
+          { id: 4, descripcion: "Diabetes", swProgramaEspecial: false },
+        ] } });
+        if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [
+          { id: 701, horaTexto: "07:00 AM", estado: "ACT" },
+          { id: 703, horaTexto: "09:30 AM", estado: "ACT" },   // 09:30 = hora ADICIONAL (lista del médico)
+        ] });
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const btnNoRecomendado = [...slots.children].find((b) => b.className.includes("vgl-agm-sbtn-adic-no"));
+      t.cierto(!!btnNoRecomendado, "el cupo adicional para un diabético lleva la clase de desaconsejado");
+      t.cierto((btnNoRecomendado.innerHTML || "").includes("SOLO SI NO HAY OTRA CITA"), "la razón va visible en la loseta, no solo en el tooltip");
+    });
+
   },
 };

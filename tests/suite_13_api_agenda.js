@@ -51,6 +51,9 @@ module.exports = {
     const hayTexto = (c, frag) => c.env.doc._nodos.some((n) => typeof n.textContent === "string" && n.textContent.includes(frag));
 
     // ---------- apiRecordar ----------
+    // v17.6.14 — H4: la URL aprendida se persiste OFUSCADA en localStorage (antes en
+    // claro). Estas pruebas comparan contra la URL recuperada (desofuscada).
+    const urlPersistida = (c) => c.api._vglDesofusca(c.env.almacen["vgl_api_url"]);
     t.caso("apiRecordar: ignora URLs que no son la llamada de la agenda", () => {
       const c = cargar({ silencioso: true });
       c.api.apiRecordar("/apiviva/otro/Endpoint?x=1");
@@ -62,7 +65,7 @@ module.exports = {
     t.caso("apiRecordar: aprende la URL relativa, la vuelve absoluta y la persiste", () => {
       const c = cargar({ silencioso: true });
       c.api.apiRecordar(URL_AGENDA);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      t.igual(urlPersistida(c), ABS_AGENDA);
       t.cierto(c.api.apiUtil(), "con URL aprendida el API ya es utilizable");
     });
 
@@ -70,7 +73,7 @@ module.exports = {
       const c = cargar({ silencioso: true });
       const abs = "https://neps.everestintelligent.com/apiviva/X/ObtenerConsultas?a=9";
       c.api.apiRecordar(abs);
-      t.igual(c.env.almacen["vgl_api_url"], abs);
+      t.igual(urlPersistida(c), abs);
     });
 
     // ---------- apiSniffPerf ----------
@@ -86,7 +89,7 @@ module.exports = {
         },
       };
       c.api.apiSniffPerf(winFalso);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA + "&nueva=2", "recorre desde el final: gana la última");
+      t.igual(urlPersistida(c), ABS_AGENDA + "&nueva=2", "recorre desde el final: gana la última");
     });
 
     t.caso("apiSniffPerf: sin registro o sin coincidencias no aprende nada ni lanza", () => {
@@ -113,7 +116,7 @@ module.exports = {
       t.cierto(!!winFalso.__vglPO, "deja la marca para no duplicarse");
       // La aplicación hace la llamada: el observador la ve y la aprende
       cb({ getEntries: () => [{ name: ABS_AGENDA }] });
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      t.igual(urlPersistida(c), ABS_AGENDA);
       // Segunda instalación: no crea otro observador
       c.api.apiObservar(winFalso);
       t.igual(construcciones, 1, "con __vglPO presente no vuelve a instalarse");

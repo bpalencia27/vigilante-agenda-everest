@@ -4,6 +4,95 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.14] — 2026-08-23 (Telemetría S+: beacon con acuse, memoria acotada, backoff, RUM fijado y URL ofuscada)
+
+Auditoría completa del workflow de telemetría y recopilación de datos. Veredicto previo: SÓLIDA (cola persistente con acuse real, cero PHI en el canal remoto, sin await en el camino crítico, topes y dedupe). Cinco refinamientos S+:
+
+### 🚨 H1 — El beacon de salida ya no retira evidencia a ciegas
+- `sendBeacon`/`fetch(no-cors)` no dan acuse (respuesta opaca): al cerrar la pestaña, una fila "despachada" contra un panel caído, un login de Google o un token rotado se perdía en silencio — los tres rechazos que `repPost` SÍ detecta y reencola. Ahora el vaciado al salir solo despacha con **acuse fresco** (último envío confirmado hace < 30 min); si no, las filas quedan en la cola y el próximo arranque las reintenta por `repFlush` (que sí lee el acuse). El servidor ya descarta duplicados por `lote`.
+
+### 🧠 H2 — Techo de memoria real en el reporte de errores
+- El tope de 40 huellas limitaba el ENVÍO pero no la memoria: `_errVistos` crecía sin límite durante el día (un fallo del API con mensaje variable lo inflaba) y `_errVeces` añadía una clave por huella. El contador agregado (`error.distintos`) sigue viendo TODAS las huellas; el Set y el contador ahora se podan al umbral de 40.
+
+### 📊 H3 — El mapeo URL→etiqueta del RUM queda fijado por pruebas
+- El bug Annar/Citi (misma etiqueta para dos endpoints) entró sin que el banco lo viera: ninguna suite exportaba el mapeo. Nuevas pruebas fijan las 21 etiquetas + "otro", el orden Annar-antes-que-Citi (la semántica real) y que ninguna etiqueta filtra el id de la URL.
+
+### 🔒 H4 — La URL aprendida del API ya no duerme en texto plano
+- `apiRecordar` persistía la URL completa de `ObtenerConsultas` (con el `profesionalId`) en el localStorage del origen, legible para cualquier script de la página de Athenea. Ahora se persiste **ofuscada** (mismo mecanismo que la clave Gemini); la carga desofusca con migración tolerante al valor viejo en claro. En memoria y en las llamadas, la URL sigue siendo la completa.
+
+### ⏱️ H5 — Backoff de red para la cola de reportes
+- Cada evento reintentaba contra un panel caído: cada `repPost` espera hasta 20 s en fallar y hasta 60 filas/día (errores + fraudes) se encolaban con su intento inútil. Si el último envío falló hace < 3 min, la fila queda en la cola y la barre el timer de `repFlush` (10 min) que ya existía.
+
+### 🧪 Verificación
+- Suite 23: +7 casos (beacon sin/con acuse, techo de huellas, mapeo RUM, `_rumTrack` ok/err, backoff sí/no). Suite 13 y 19: aserciones actualizadas a la URL ofuscada + caso de migración. **4 mutaciones verificadas** (sin backoff, sin sello fresco, Set sin tope, URL en claro → cada una cae a rojo y se restauró). Banco local en verde: **1.424 comprobaciones, 0 en rojo** (44 suites presentes; ver nota de entorno en 17.6.11).
+
+---
+
+## [Versión 17.6.13] — 2026-08-23 (Agendamiento S+: sin preselección a ciegas, doble confirmación reiniciada, celular honesto y accesibilidad)
+
+Auditoría S+ del módulo de Agendamiento (`openAgendamientoModal`). Ninguna regla clínica cambió: cinco hallazgos de UI/UX/robustez verificados contra el código real.
+
+### 🎯 La hora se elige, nunca viene puesta
+- Sin sugerencia clínica (modo manual o sin perfil), **ningún turno nace activo**: antes se preseleccionaba el primer horario cronológico (normalmente 06:00) y bastaba un clic a ciegas en Confirmar para crear la cita en una madrugada que nadie decidió. Se cumple la orden ya aplicada en v16.9.0 ("sin datos para recomendar, NINGÚN chip sale activo"). El botón queda apagado y dice **"Elija un horario para continuar"** en vez de un "Sí, Crear Cita" muerto.
+
+### 🔁 Doble confirmación que no se deja saltar
+- Los avisos "pulse otra vez" (anti-duplicado y vencimiento) se marcaban con `dataset.dupOk`/`vencOk` y **jamás se limpiaban**: si el médico veía el aviso y luego cambiaba de día o de turno, el siguiente Confirmar se lo saltaba con los datos NUEVOS. Ahora cada cambio de fecha o de turno reinicia ambas marcas.
+
+### 📱 El celular dice la verdad
+- Si Everest no devuelve los datos del paciente (red caída o respuesta sin cuerpo), el campo quedaba colgado en "cargando…" con el SMS tildado y la cita se creaba con celular vacío sin avisar. Ahora: placeholder "no se pudo cargar — escríbalo a mano", SMS desmarcado y nota "no se pudo verificar el celular del paciente". Distinto de "sin celular registrado" (que solo se dice cuando Everest confirma que no hay número).
+
+### ♿ Accesibilidad
+- `aria-live="polite"` en los 4 estados que mutan (sondeo de primer cupo, banner de sugerencia, aviso de vencimiento, info de fecha); el stepper lleva `role="list"`/`role="listitem"`, `aria-current="step"` que salta al paso en curso y el foco se mueve al primer elemento interactivo de cada paso (antes quedaba en un botón `display:none`).
+
+### ⚠️ Cupo desaconsejado legible
+- Opacidad `.62 → .85`: a .62 parecía un botón deshabilitado cuando en realidad es usable. La razón ("no recomendado para este paciente") ya no vive solo en el tooltip: la loseta lleva la etiqueta visible **"⚠ SOLO SI NO HAY OTRA CITA"** en ámbar, y el tooltip sigue como complemento.
+
+### 🧪 Verificación
+- Suite 15: +6 casos (preselección sin/con sugerencia, reinicio antidup, celular con red caída, aria-live/aria-current, etiqueta del cupo) con **5 mutaciones verificadas** (preselección vieja, sin reset, sin estado del celular, sin aria-current, sin etiqueta → cada una cae a rojo y se restauró). Suite 25: la regla nueva del variante ámbar sube especificidad para no colisionar con la base (Regla A). Banco local en verde: **1.416 comprobaciones, 0 en rojo** (44 suites presentes; ver nota de entorno en 17.6.11).
+
+---
+
+## [Versión 17.6.12] — 2026-08-23 (Redacción IA, 2ª tanda S+: textos exactos, memoria acotada, autosize y aviso al cerrar)
+
+Segunda iteración de perfeccionamiento del módulo de Redacción Asistida con IA. Ninguna regla clínica cambió: pulido de UI/UX y de robustez sobre lo ya entregado en 17.6.11.
+
+### ✏️ Textos exactos
+- El contador del modal decía "Generando 1/4" y "hechas/4": el modal tiene **3 casillas**, no 4. Ahora dice `Generando 1/3…` por casilla y `✓ N borrador(es) listos` al terminar (con la nota del saltado de Análisis y plan si aplica).
+
+### 🧠 Memoria acotada
+- `_vglTextoPrevio` (último texto visto por `docId|modo`) crecía sin límite en sesiones largas: una entrada por cada par. Nueva función pura `_vglTextoPrevioPodar(mapa, tope)` que recorta a las **200 entradas más recientes** por orden de inserción; se llama tras cada escritura.
+
+### 📐 Autosize del borrador
+- El área de texto del borrador crece con el contenido (mín. 220 px, máx. 460 px) al escribir, al generar y al pintar errores — las notas clínicas largas ya no fuerzan scroll interno invisible.
+
+### 🚪 Aviso al cerrar
+- Si hay borradores con texto y **ninguno insertado**, al cerrar el modal se confirma con el diálogo nativo del navegador antes de descartar el trabajo (nada se ordena ni se pierde en silencio).
+
+### 🧪 Verificación
+- Suite 57: +2 casos para `_vglTextoPrevioPodar` (recorte a tope conservando los recientes; no toca mapas dentro del tope; aguanta tope inválido y sin mapa) con **mutación verificada** (poda desactivada → suite roja; restaurada → verde). Banco local en verde: **1.410 comprobaciones, 0 en rojo** (44 suites presentes; ver nota de entorno en 17.6.11).
+
+---
+
+## [Versión 17.6.11] — 2026-08-23 (Redacción IA: contador, atajo, bloqueo de carrera y Deshacer)
+
+Rediseño S+ del módulo de Redacción Asistida con IA. Ninguna regla clínica cambió: son mejoras de UI/UX y de robustez sobre el flujo existente.
+
+### ✨ Lo nuevo en el modal
+- **Contador del borrador**: tras generar o al editar, muestra `N palabras · N caracteres · modelo usado`, para juzgar la extensión de un vistazo.
+- **Atajo Ctrl+Enter** (o Cmd+Enter): genera desde cualquier campo del modal, sin tocar el Enter normal de las casillas de texto.
+- **Deshacer tras insertar**: ahora también al insertar en una casilla vacía — el botón ↩ Deshacer devuelve la casilla a como estaba.
+- **Accesibilidad**: el estado del modal se anuncia con `aria-live="polite"` y el área de texto lleva rótulo para lectores de pantalla.
+
+### 🛡️ Corrección de carrera (en vivo)
+- Los chips de casilla se **congelan mientras se genera**: antes, cambiar de casilla a mitad de la llamada entregaba el borrador en el chip equivocado. El resultado ahora se guarda bajo SU modo y solo se pinta si ese modo sigue activo. Igual en "Generar todo".
+
+### 🧪 Verificación
+- Suite 57: +1 caso para el contador (función pura, 6 comprobaciones) con mutación verificada (romper el contador cae a rojo y se restauró). Suite 25: censo de `!important` 348 → 350 (el contador usa 2 marcas scoped). Banco local en verde: **1.408 comprobaciones, 0 en rojo** (las suites que faltan del conteo 1.908 no están presentes en `tests/` en este equipo; ver abajo).
+
+> **Nota de entorno**: al abrir esta sesión, 22 suites que corrían en v17.6.10 (38, 40–56, 59, 62, 67–69) ya no estaban en `tests/` (las únicas copias parciales están en `.claude/worktrees/motor-portado`). El banco local valida con las 44 suites presentes y sale verde; si esas suites deben volver, se restauran desde el historial de git del repositorio canónico.
+
+---
+
 ## [Versión 17.6.10] — 2026-08-23 (Limpieza final: se retiran opciones de Ajustes y código muerto)
 
 Auditoría línea por línea de las ~34.000 líneas del archivo para eliminar lo duplicado,

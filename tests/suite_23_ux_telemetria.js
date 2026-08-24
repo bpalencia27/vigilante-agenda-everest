@@ -964,6 +964,10 @@ module.exports = {
       c.ctx.Blob = function (partes) { this._t = String(partes[0]); };
       c.ctx.fetch = undefined;          // sin respaldo por fetch: se mide solo el beacon
       c.env.doc.visibilityState = "hidden";
+      // v17.6.14 — H1: el beacon solo despacha con ACUSE FRESCO (< 30 min). Las pruebas
+      // viejas del despacho asumen un panel sano; este espiador sella ese acuse como
+      // precondición (los casos que prueban la ausencia de acuse lo siembran aparte).
+      c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date().toISOString());
       return enviados;
     }
 
@@ -1194,6 +1198,122 @@ module.exports = {
       const vacio = c.api.mtrTableroTelemetriaHtml(c.api.mtrTableroTelemetria(null));
       t.cierto(/Sin eventos/.test(vacio), "sin datos se dice, no se pinta un tablero vacío");
       t.igual(c.api.mtrTableroTelemetriaHtml(null), "", "null no pinta nada");
+    });
+
+    // =====================================================================
+    // v17.6.14 — AUDITORÍA S+ DE LA TELEMETRÍA (hallazgos H1/H2/H3/H5)
+    //  H1. El beacon de salida no daba acuse (respuesta opaca): se retiraba evidencia
+    //      en silencio contra un panel caído, un login de Google o un token rotado.
+    //      Ahora solo despacha con acuse fresco (< 30 min); si no, las filas esperan
+    //      al próximo repFlush, que sí lee el acuse.
+    //  H2. _errVistos/_errVeces crecían sin techo: el tope de 40 limitaba el ENVÍO,
+    //      no la memoria. Ahora el umbral poda los dos.
+    //  H3. El mapeo URL→etiqueta del RUM no estaba fijado por ninguna prueba (el bug
+    //      Annar/Citi entró sin que el banco lo viera). Queda fijado, con el orden.
+    //  H5. Sin backoff, cada evento reintentaba contra un panel caído (hasta 20 s por
+    //      intento). Ahora un fallo reciente (< 3 min) deja la fila para el timer.
+    // =====================================================================
+
+    t.caso("v17.6.14: _vaciarTelemetriaAlSalir SIN acuse fresco NO retira evidencia (espera a repFlush con acuse)", () => {
+      const c = cargar({ silencioso: true });
+      const filas = _colaDemo(c);
+      _espiarBeacon(c, true);
+      c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString());
+      t.igual(c.api._vaciarTelemetriaAlSalir(), 0, "sello de 2 h: el beacon no es de fiar, no se despacha nada");
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, filas.length, "las 4 filas quedan para el próximo arranque/repFlush (que sí lee el acuse)");
+    });
+
+    t.caso("v17.6.14: _vaciarTelemetriaAlSalir CON acuse fresco sí despacha (refuerzo al cerrar con el panel sano)", () => {
+      const c = cargar({ silencioso: true });
+      const filas = _colaDemo(c);
+      const enviados = _espiarBeacon(c, true);
+      c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date().toISOString());
+      const n = c.api._vaciarTelemetriaAlSalir();
+      t.igual(n, filas.length, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre");
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "y las filas salen de la cola, sin duplicados en el tablero");
+    });
+
+    t.caso("v17.6.14: reportarError no deja crecer la memoria de huellas por encima del techo (40)", () => {
+      const c = cargar(cfgRed);
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = "[]";
+      for (let i = 0; i < 50; i++) {
+        c.api.reportarError("js", "fallo numero " + i + " con mensaje variable para crear huellas distintas", "funcion" + i + ".js:10");
+      }
+      const errores = cola(c).filter((f) => f.evento === "error");
+      t.igual(errores.length, 40, "solo las 40 primeras huellas viajan con detalle (el techo de red es también el techo de memoria)");
+      t.igual(cola(c).length, 40, "las 10 restantes solo suman en el contador agregado: no llenan la cola ni la memoria");
+    });
+
+    t.caso("v17.6.14: _rumEndpointLabel fija el mapeo URL→etiqueta (el orden Annar/Citi es la semántica)", () => {
+      const c = cargar({ silencioso: true });
+      const casos = [
+        ["/api/Paciente/BuscarPacienteDetallado?id=1", "pacienteDetallado"],
+        ["/api/Paciente/BuscarPaciente?q=2", "buscarPaciente"],
+        ["/api/AgdValidarAgenda", "validarAgenda"],
+        ["/api/AsignarTurno", "asignarTurno"],
+        ["/api/BuscarCitasDisponibles", "citasDisponibles"],
+        ["/api/ObtenerTurnos", "turnos"],
+        ["/api/GetUsuarioPerfil/abc", "perfilUsuario"],
+        ["/api/EnviarSMS", "enviarSms"],
+        ["/api/EnviarEmailOrdenamiento", "enviarEmailOrden"],
+        ["/api/ObtenerResultadosLaboratorioAnnar?f=1", "resultadosLabAnnar"],
+        ["/api/ObtenerResultadosLaboratorioCiti?f=1", "resultadosLabCiti"],
+        ["/api/ObtenerResultadosLaboratorio?f=1", "resultadosLab"],
+        ["/api/GenerarLinksImpresionOrdenamientos", "linksImpresionOrden"],
+        ["/api/ImprimirRecordatorioCita", "imprimirRecordatorio"],
+        ["/api/ObtenerConsultas?profesionalId=9", "consultas"],
+        ["/api/ObtenerEstadoCita", "estadoCita"],
+        ["/api/guardarHoraApertura", "horaApertura"],
+        ["/api/ObtenerListadoCupsPorPaciente", "listadoCups"],
+        ["/api/ObtenerListadoDiagnostico", "listadoDiagnostico"],
+        ["/api/GuardarOrdenamiento", "guardarOrdenamiento"],
+        ["/api/FinalizarTicket", "finalizarTicket"],
+        ["/api/AlgoQueNoExiste", "otro"],
+      ];
+      for (const [url, etq] of casos) t.igual(c.api._rumEndpointLabel(url), etq, url + " -> " + etq);
+      t.igual(c.api._rumEndpointLabel("/api/ObtenerResultadosLaboratorioAnnar"), "resultadosLabAnnar", "Annar NO cae en la etiqueta genérica (el orden es la semántica)");
+      t.igual(c.api._rumEndpointLabel("/api/ObtenerResultadosLaboratorioCiti"), "resultadosLabCiti", "Citi tampoco");
+      const conCedula = c.api._rumEndpointLabel("/api/ObtenerConsultas?profesionalId=1234567890&doc=98765432");
+      t.falso(/\d/.test(conCedula), "la etiqueta es fija: ni el profesionalId ni la cédula salen de la URL");
+    });
+
+    await t.casoAsync("v17.6.14: _rumTrack cuenta ok/err con la etiqueta fija, sin filtrar el id de la URL", async () => {
+      const c = cargar({ silencioso: true });
+      const okP = Promise.resolve({ data: 1 });
+      c.api._rumTrack("/api/ObtenerConsultas?profesionalId=9876543210", 12, okP);
+      const errP = Promise.reject(new Error("x"));
+      errP.catch(() => {});   // sin handler, Node avisaría de una promesa no atendida
+      c.api._rumTrack("/api/ObtenerResultadosLaboratorioCiti?f=1", 3, errP);
+      await esperar(30);
+      const v = ventana(c);
+      const acciones = (v && v.acciones) || {};
+      t.cierto(!!acciones["api.consultas.ok"], "la promesa resuelta cuenta api.consultas.ok");
+      t.cierto(!!acciones["api.resultadoslabciti.err"], "la promesa rechazada cuenta api.resultadosLabCiti.err (uxClaveLimpia minúsculiza)");
+    });
+
+    t.caso("v17.6.14: reportar con el panel caído hace backoff (fallo reciente = la fila espera, sin intento)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      let intentos = 0;
+      c.env.win.GM_xmlhttpRequest = (o) => { intentos++; if (o.onerror) o.onerror(new Error("red")); };
+      c.env.win.localStorage.setItem("vgl_rep_last_err", JSON.stringify({ ts: new Date().toISOString(), detalle: "el panel no respondió" }));
+      c.api.reportar("ux", { clave: "fn.prueba" });
+      t.igual(intentos, 0, "fallo hace < 3 min: NO se dispara el intento inútil al encolar");
+      t.igual(cola(c).length, 1, "la fila queda esperando en la cola para el timer de 10 min");
+    });
+
+    t.caso("v17.6.14: con el fallo viejo (o sin sello), reportar sí reintenta de inmediato", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      let intentos = 0;
+      c.env.win.GM_xmlhttpRequest = (o) => { intentos++; if (o.onerror) o.onerror(new Error("red")); };
+      c.env.win.localStorage.setItem("vgl_rep_last_err", JSON.stringify({ ts: new Date(Date.now() - 10 * 60 * 1000).toISOString(), detalle: "viejo" }));
+      c.api.reportar("ux", { clave: "fn.prueba" });
+      t.igual(intentos, 1, "con el fallo hace > 3 min se reintenta (la cola no se queda dormida)");
     });
   }
 };

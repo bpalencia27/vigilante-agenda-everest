@@ -27,7 +27,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -489,6 +489,15 @@ module.exports = {
       t.falso(api.mtrRespuestaGemini(JSON.stringify({ candidates: [] })).ok, "sin candidatos");
       t.falso(api.mtrRespuestaGemini("no es json").ok, "no-JSON");
       t.falso(api.mtrRespuestaGemini(null).ok, "nulo");
+    });
+
+    t.caso("v17.6.11: el contador de palabras del borrador nunca miente ni revienta", () => {
+      t.igual(api.mtrContarPalabrasTexto(""), 0, "vacío");
+      t.igual(api.mtrContarPalabrasTexto("   "), 0, "solo espacios");
+      t.igual(api.mtrContarPalabrasTexto(null), 0, "nulo");
+      t.igual(api.mtrContarPalabrasTexto("Evoluciona estable."), 2, "dos palabras");
+      t.igual(api.mtrContarPalabrasTexto("Hoy: 8.5 mg/dL y TA 120/80."), 6, "símbolos separados cuentan igual");
+      t.igual(api.mtrContarPalabrasTexto("a\n\nb\nc"), 3, "saltos de línea múltiples colapsan");
     });
 
     // ================= CONECTOR (mock de red) =================
@@ -975,6 +984,26 @@ module.exports = {
       let r;
       t.noLanza(() => { r = api.mtrCalcularDeltaEdicion(venenoso, "texto normal del médico"); });
       t.igual(r, "edicion_leve");
+    });
+
+    t.caso("v17.6.12: _vglTextoPrevioPodar recorta a tope y conserva los más recientes (orden de inserción)", () => {
+      const m = new Map([["a", 1], ["b", 2], ["c", 3], ["d", 4], ["e", 5]]);
+      api._vglTextoPrevioPodar(m, 3);
+      t.igual(m.size, 3, "queda en el tope");
+      t.cierto(!m.has("a") && !m.has("b"), "se fueron los más viejos");
+      t.cierto(m.has("c") && m.has("d") && m.has("e"), "quedan los más recientes");
+    });
+
+    t.caso("v17.6.12: _vglTextoPrevioPodar no toca un mapa dentro del tope y aguanta tope inválido o sin mapa", () => {
+      const m = new Map([["x", 1], ["y", 2]]);
+      api._vglTextoPrevioPodar(m, 200);
+      t.igual(m.size, 2, "por debajo del tope no se toca");
+      const conTopeInvalido = new Map([["x", 1]]);
+      api._vglTextoPrevioPodar(conTopeInvalido, 0);
+      t.igual(conTopeInvalido.size, 1, "tope 0 no trunca nada");
+      let r;
+      t.noLanza(() => { r = api._vglTextoPrevioPodar(null, 200); });
+      t.cierto(r && r.constructor && r.constructor.name === "Map", "sin mapa devuelve un Map vacío");
     });
 
   },

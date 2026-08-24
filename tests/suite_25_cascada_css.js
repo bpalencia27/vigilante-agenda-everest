@@ -578,8 +578,10 @@ module.exports = {
       // en sala (.vgl-cd.vgl-cron: background y color + la variante .light).
       // v17.6.7 (cierre de turno): 345 -> 348. +3 del badge de inasistencias previas
       // (.vgl-cd.vgl-adh: background y color + la variante .light), mismo patrón que el cron.
+      // v17.6.11 (Redacción IA S+): 348 -> 350. +2 del contador de palabras del borrador
+      // (#vgl-ia-modal .vgl-ia-meta: color y su <b> verde).
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 348, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del cronómetro del v17.6.6 (.vgl-cron), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 348, salió ${importantTotal})`);
+      t.cierto(importantTotal === 350, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del cronómetro del v17.6.6 (.vgl-cron), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 350, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {

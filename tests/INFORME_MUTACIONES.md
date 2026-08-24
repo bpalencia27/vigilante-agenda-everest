@@ -707,3 +707,54 @@ documentado aquí como evidencia de que nada depende de ese código.
 Se restauró de inmediato (borrada otra vez) y suite_57 volvió a verde antes de cerrar la
 versión. El banco completo al cierre: **1.908 comprobaciones, 0 en rojo** (1919 en 17.6.9;
 −11 casos de prueba retirados junto con el código muerto que probaban).
+
+## v17.6.11 — 23-ago-2026 (Redacción IA S+: contador de palabras)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~32024 (v17.6.11) | `mtrContarPalabrasTexto` mutada a `return 0` (el contador del borrador nunca reporta palabras) | NO | Ninguna: la prueba *v17.6.11: el contador de palabras del borrador nunca miente ni revienta* (suite_57) cayó a rojo como se esperaba. Restaurada de inmediato; suite_57 volvió a 73/73. |
+
+Mutación aplicada sobre el archivo de producción, corrida suite_57, confirmado el rojo con la
+aserción esperada, y restaurada antes de cerrar la versión. El banco completo quedó en verde
+con las suites presentes en este equipo (44 suites, 1.408 comprobaciones).
+
+## v17.6.12 — 23-ago-2026 (Redacción IA, 2ª tanda S+: poda de memoria del texto previo)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~31322 (v17.6.12) | `_vglTextoPrevioPodar` mutada a `const sobra = 0` (la poda nunca recorta: el mapa de textos previos crecería sin límite en sesiones largas) | NO | Ninguna: la prueba *v17.6.12: _vglTextoPrevioPodar recorta a tope y conserva los más recientes* (suite_57) cayó a rojo como se esperaba. Restaurada de inmediato; suite_57 volvió a 75/75. |
+
+Mutación aplicada sobre el archivo de producción, corrida suite_57 (74 ok + 1 rojo con la
+aserción esperada), restaurada y confirmado el verde antes de cerrar la versión. El banco
+completo quedó en verde con las suites presentes en este equipo (44 suites, **1.410
+comprobaciones**, +2 por los casos nuevos de la poda).
+
+## v17.6.13 — 23-ago-2026 (Auditoría S+ del Agendamiento: 5 hallazgos, 5 mutaciones)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~19672 (v17.6.13) | `if (esSugerida)` vuelto a `if (esSugerida \|\| (!_preseleccion && idx === 0))` (la preselección de madrugada sin sugerencia reaparece) | NO | Ninguna: *v17.6.13: sin sugerencia clínica, NINGÚN turno nace activo* (suite_15) cayó a rojo. Restaurada; suite_15 volvió a 144/144. |
+| ~19683 (v17.6.13) | Quitado el reset `confirmBtn.dataset.dupOk/vencOk` del clic de turno (cambiar de turno conservaba la marca del aviso visto) | NO | Ninguna: *v17.6.13: cambiar de turno reinicia la doble confirmación* (suite_15) cayó a rojo. Restaurada de inmediato. |
+| ~19358 (v17.6.13) | Quitado `_vglCelularSinDatos()` de la rama de datos incompletos (el celular vuelve a quedarse en "cargando…" con SMS tildado) | NO | Ninguna: *v17.6.13: si Everest no devuelve los datos del paciente...* (suite_15) cayó a rojo. Restaurada de inmediato. |
+| ~18824 (v17.6.13) | Quitado `aria-current="step"` del indicador inicial del stepper | NO | Ninguna: *v17.6.13: accesibilidad del modal — aria-live... y aria-current* (suite_15) cayó a rojo. Restaurada de inmediato. |
+| ~19618 (v17.6.13) | `marcaNoRecomendado` forzado a `""` (la razón del cupo desaconsejado vuelve a vivir solo en el tooltip) | NO | Ninguna: *v17.6.13: el cupo desaconsejado se ve usable...* (suite_15) cayó a rojo. Restaurada de inmediato. |
+
+Las 5 mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada
+una antes de la siguiente), cada corrida dejó suite_15 en 143 ok + 1 rojo con la aserción
+esperada, y se confirmó el verde (144/144) al restaurar. El banco completo al cierre:
+**1.416 comprobaciones, 0 en rojo** (44 suites presentes, +6 casos nuevos en suite_15).
+
+## v17.6.14 — 23-ago-2026 (Telemetría S+: beacon con acuse, memoria acotada, backoff y URL ofuscada)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~8001 (v17.6.14) | Quitado el backoff de `reportar()` (vuelve el flush inmediato: cada evento reintenta contra un panel caído, hasta 20 s de timeout por intento) | NO | Ninguna: *v17.6.14: reportar con el panel caído hace backoff* (suite_23) cayó a rojo. Restaurada; suite_23 volvió a verde. |
+| ~8430 (v17.6.14) | Quitada la guarda de acuse fresco de `_vaciarTelemetriaAlSalir` (el beacon vuelve a retirar evidencia sin acuse: panel caído/token rotado = fila perdida en silencio) | NO | Ninguna: *v17.6.14: _vaciarTelemetriaAlSalir SIN acuse fresco NO retira evidencia* (suite_23) cayó a rojo. Restaurada de inmediato. |
+| ~8109 (v17.6.14) | `_errVistos.add(huella)` incondicional (el Set vuelve a crecer sin tope: la memoria ya no está acotada a 40 huellas) | NO | Ninguna: *v17.6.14: reportarError no deja crecer la memoria de huellas por encima del techo* (suite_23) cayó a rojo, y también la prueba vieja del techo por huella (ahora 41 filas). Restaurada de inmediato. |
+| ~10800 (v17.6.14) | `localStorage.setItem("vgl_api_url", abs)` (la URL con el profesionalId vuelve a dormir en claro, legible para scripts del host) | NO | Ninguna: las aserciones de ofuscación de suite_19 (2 casos) cayeron a rojo. Restaurada de inmediato. |
+
+Las 4 mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada
+una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
+verde al restaurar. El banco completo al cierre: **1.424 comprobaciones, 0 en rojo** (44
+suites presentes; +7 casos en suite_23, +1 en suite_19, y suites 13/19 ajustadas a la URL
+ofuscada).

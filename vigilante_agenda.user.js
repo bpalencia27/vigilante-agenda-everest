@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.10
+// @version     17.6.14
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1006,7 +1006,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.10";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.14";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7997,7 +7997,16 @@ _vglOfrecerDeshacer(btn);
     if (!repOn()) return;
     repQLoad();
     repQ.push(Object.assign({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento, ts: new Date().toISOString(), dia: todayStamp(), lote: _loteId() }, extra || {}));
-    repQSave(); repFlush();
+    repQSave();
+    // v17.6.14 — H5: BACKOFF de facto. Sin esto, cada evento reintentaba contra un panel
+    // caído: cada repPost espera hasta 20 s en fallar, y hasta 40 errores + 20 fraudes
+    // por día se encolaban con su intento inútil en background. Si el último intento
+    // falló hace menos de 3 minutos, la fila queda en la cola y la barre el timer de
+    // repFlush (10 min) que ya existía — mismo reintento, sin la ráfaga.
+    let errTs = 0;
+    try { const e = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); if (e && e.ts) errTs = new Date(e.ts).getTime(); } catch (e2) {}
+    if (errTs > 0 && Date.now() - errTs < 3 * 60 * 1000) return;
+    repFlush();
   }
 
   // v12.6.9 — ENTORNO, una vez al día. Para leer un fallo reportado hace falta saber sobre
@@ -8090,7 +8099,15 @@ _vglOfrecerDeshacer(btn);
       // aunque el tope de detalle ya esté agotado.
       const huella = (origen || "js") + "|" + (donde ? String(donde).slice(0, 60) : _sanearMensajeError(msg).slice(0, 40));
       const esNueva = !_errVistos.has(huella);
-      if (esNueva) { _errVistos.add(huella); uxTrack("error.distintos"); }
+      // v17.6.14 — H2: el tope de 40 limitaba el ENVÍO pero no la memoria: el `add`
+      // corría ANTES del chequeo y el Set crecía sin límite durante el día (un fallo del
+      // API con mensaje variable inflaba ambos). El contador agregado (error.distintos)
+      // sigue viendo TODAS las huellas del día; el Set solo retiene las primeras 40 (las
+      // únicas que viajarán con detalle), y _errVeces se poda al mismo umbral.
+      if (esNueva) {
+        uxTrack("error.distintos");
+        if (_errVistos.size < ERR_HUELLAS_MAX_DIA) _errVistos.add(huella);
+      }
       // v17.1.0 (#148) — «5 por día es muy poco, se debe reportar TODO» (orden del médico,
       // 21-ago). El tope viejo era GLOBAL: los cinco primeros fallos del día tapaban a
       // todos los demás, aunque fueran defectos distintos. Ahora el presupuesto se gasta
@@ -8102,8 +8119,9 @@ _vglOfrecerDeshacer(btn);
       // mandar la misma falla veinte veces y ninguna de las otras.
       _errRepeticion(huella);
       if (!repOn()) return;
-      if (!esNueva) return;                                   // ya viajó con detalle
-      if (_errVistos.size > ERR_HUELLAS_MAX_DIA) return;      // techo de red, no de verdad
+      // v17.6.14 — H2: repetición -> ya viajó con detalle; huella nueva sin sitio -> el
+      // cupo de 40 está agotado y solo suma en su contador agregado. En ambos casos, nada.
+      if (!esNueva || !_errVistos.has(huella)) return;
       reportar("error", {
         origen: String(origen || "js").slice(0, 12),
         msg: _sanearMensajeError(msg),
@@ -8119,10 +8137,17 @@ _vglOfrecerDeshacer(btn);
   const _errVeces = Object.create(null);
   function _errRepeticion(huella) {
     _errVeces[huella] = (_errVeces[huella] || 0) + 1;
+    const n = _errVeces[huella];
     // Marcas de volumen, no una por repetición: 10, 100 y 1.000 bastan para saber si algo
     // está en bucle sin convertir el bucle en una tormenta de telemetría.
-    const n = _errVeces[huella];
     if (n === 10 || n === 100 || n === 1000) { try { uxTrack("error.repetido." + n); } catch (e) {} }
+    // v17.6.14 — H2: poda al mismo umbral del Set (40): el objeto crecía una clave por
+    // huella nueva sin techo hasta el cambio de día. Se podan las más viejas, y el `n`
+    // ya se leyó arriba, así que la marca de volumen de ESTA repetición nunca se pierde.
+    const claves = Object.keys(_errVeces);
+    if (claves.length > ERR_HUELLAS_MAX_DIA) {
+      for (let i = 0; i < claves.length - ERR_HUELLAS_MAX_DIA; i++) delete _errVeces[claves[i]];
+    }
   }
   // Solo se enganchan los errores que salen del PROPIO script: el userscript comparte
   // ventana con Everest y con Athenea, y subir los errores ajenos llenaría el tablero de
@@ -8391,6 +8416,17 @@ _vglOfrecerDeshacer(btn);
       uxFlush();
       repQLoad();
       if (!repQ || !repQ.length || typeof repBeacon !== "function") return 0;
+      // v17.6.14 — H1: sendBeacon/fetch(no-cors) NO dan acuse (la respuesta es opaca):
+      // una fila "despachada" contra un panel caído, un login de Google o un token rotado
+      // se perdía en silencio — los tres rechazos que repPost SÍ detecta y reencola. Beacon
+      // solo cuando el último envío CONFIRMADO está fresco (< 30 min): si el panel está
+      // sano, es un refuerzo al cerrar; si no hay sello fresco, las filas quedan en la cola
+      // y el próximo arranque las reintenta por repFlush (que sí lee el acuse). El servidor
+      // ya descarta duplicados por `lote`, así que reintentar nunca duplica.
+      let ultimoOk = 0;
+      try { const iso = localStorage.getItem("vgl_rep_last_ok"); if (iso) ultimoOk = new Date(iso).getTime(); } catch (e) {}
+      const selloFresco = ultimoOk > 0 && (Date.now() - ultimoOk) < 30 * 60 * 1000;
+      if (!selloFresco) return 0;
       // TODAS las filas pendientes, no solo la primera: la cola admite hasta 30 y las que
       // mas importan (fraude, resumen diario) pueden estar en cualquier posicion. Cada
       // fila que SI sale se retira y se persiste — igual que hace repFlush con
@@ -10749,7 +10785,12 @@ _vglOfrecerDeshacer(btn);
   // parece a esto, el API se descarta y se sigue por el camino de siempre.
   const EST_RE = /en sala|sin presentar|atendid|pendiente|confirmad|cancelad|agendad|asignad|no asisti|inasist|reprogram|programad|espera|admitid|admision|llamad|triage|ausente/i;
   try {
-    API.url = localStorage.getItem("vgl_api_url") || "";
+    // v17.6.14 — H4: la URL aprendida (que trae el profesionalId en el query) se persiste
+    // OFUSCADA. Antes viajaba en texto plano en el localStorage del origen, legible para
+    // cualquier script de la página de Athenea (mismo origen). La migración tolera el
+    // valor en claro que ya exista: si la desofuscación no produce nada, se usa tal cual.
+    const urlGuardada = localStorage.getItem("vgl_api_url") || "";
+    API.url = _vglDesofusca(urlGuardada) || urlGuardada || "";
     API.medicoId = parseInt(localStorage.getItem("vgl_api_medico"), 10) || 0;
   } catch (e) {}
   function apiRecordar(url) {
@@ -10758,7 +10799,7 @@ _vglOfrecerDeshacer(btn);
       const abs = url.indexOf("http") === 0 ? url : (location.origin + (url[0] === "/" ? "" : "/") + url);
       if (abs === API.url) { API.visto = Date.now(); return; }
       API.url = abs; API.visto = Date.now(); API.fallos = 0;
-      localStorage.setItem("vgl_api_url", abs);
+      localStorage.setItem("vgl_api_url", _vglOfusca(abs));
       // v12.3.6 — Se etiqueta la URL aprendida con el médico bajo el cual se aprendió.
       // Ver invalidarApiSiCambioMedico() para el porqué: en un equipo de consultorio
       // compartido, esta URL trae el profesionalId de OTRO médico y no debe reusarse.
@@ -13149,6 +13190,12 @@ _vglOfrecerDeshacer(btn);
       .vgl-agm-dinfo:empty{display:none}
       .vgl-agm-dinfo b{color:var(--c-verde)}
       .vgl-agm-dinfo span{color:var(--c-verde)!important}
+      /* v17.6.11 — Redacción IA S+: chips congelados mientras se genera (evita que un
+         cambio de casilla a mitad de generación entregue el borrador en el chip equivocado)
+         y contador de palabras del borrador (N palabras · N caracteres · modelo). */
+      .vgl-ia-lock{opacity:.45;pointer-events:none}
+      #vgl-ia-modal .vgl-ia-meta{color:var(--fg2) !important}
+      #vgl-ia-modal .vgl-ia-meta b{color:var(--c-verde) !important}
       /* v15.3 — GAP 1: aviso de la fecha de control sugerida por el motor. */
       .vgl-agm-sugerida:empty{display:none}
       .vgl-agm-sugerida-on{
@@ -13296,10 +13343,20 @@ _vglOfrecerDeshacer(btn);
       }
       /* Desaconsejada por perfil (diabético o renal): se atenúa, NUNCA se oculta ni se
          bloquea — el médico debe poder usarla cuando no queda otra cita, que es justo el
-         caso puntual que él describió. */
-      .vgl-agm-sbtn-adic-no{opacity:.62}
+         caso puntual que él describió.
+         v17.6.13 — opacidad .62 -> .85: a .62 parecía deshabilitado (afordancia de botón
+         muerto) cuando en realidad es usable; la razón va ahora además en una etiqueta
+         visible en la loseta, no solo en el tooltip. */
+      .vgl-agm-sbtn-adic-no{opacity:.85}
       .vgl-agm-sbtn-adic-no .vgl-agm-cupo-adic{
         color:var(--fg3);background:rgba(var(--rgb-atendido),.16);border-color:rgba(var(--rgb-atendido),.40)
+      }
+      /* v17.6.13 — variante «solo si no hay otra cita»: especificidad MAYOR (3 clases) para
+         que suite_25 no la considere colisión con la base: la loseta lleva AMBAS clases
+         (vgl-agm-cupo-adic + vgl-agm-cupo-adic-no) y el ámbar debe ganar siempre, sin
+         depender del orden de la hoja. */
+      .vgl-agm-sbtn-adic-no .vgl-agm-cupo-adic.vgl-agm-cupo-adic-no{
+        color:var(--c-ambar);background:rgba(var(--rgb-ambar),.14);border-color:rgba(var(--rgb-ambar),.45)
       }
       #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-adicional,
@@ -18810,12 +18867,12 @@ _vglOfrecerDeshacer(btn);
         </div>
 
         <!-- Stepper Indicator -->
-        <div class="vgl-stepper-bar">
-          <div class="vgl-stepper-step active" id="vgl-step-ind-1"><span class="vgl-step-num">1</span> Tipo de Cita</div>
+        <div class="vgl-stepper-bar" role="list" aria-label="Pasos para agendar la cita">
+          <div class="vgl-stepper-step active" id="vgl-step-ind-1" role="listitem" aria-current="step"><span class="vgl-step-num">1</span> Tipo de Cita</div>
           <div class="vgl-stepper-line"></div>
-          <div class="vgl-stepper-step" id="vgl-step-ind-2"><span class="vgl-step-num">2</span> Fecha y Turno Inteligente</div>
+          <div class="vgl-stepper-step" id="vgl-step-ind-2" role="listitem"><span class="vgl-step-num">2</span> Fecha y Turno Inteligente</div>
           <div class="vgl-stepper-line"></div>
-          <div class="vgl-stepper-step" id="vgl-step-ind-3"><span class="vgl-step-num">3</span> Confirmación</div>
+          <div class="vgl-stepper-step" id="vgl-step-ind-3" role="listitem"><span class="vgl-step-num">3</span> Confirmación</div>
         </div>
 
         <!-- Banner de Cita Previa Activa / Cancelación -->
@@ -18885,14 +18942,14 @@ _vglOfrecerDeshacer(btn);
                 <input type="date" id="vgl-agm-manual-fecha" class="vgl-agm-input vgl-d-none" style="max-width:180px;padding:6px 8px">
                 <span id="vgl-agm-manual-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0">Modo manual: usted eligió la fecha. Sin sugerencias del asistente; se muestran los turnos de esa fecha y ±7 días hábiles.</span>
                 <button type="button" id="vgl-agm-manual-volver" class="vgl-agm-pbtn vgl-d-none">↩ Volver a las sugerencias</button>
-                <span id="vgl-agm-pc-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0"></span>
+                <span id="vgl-agm-pc-est" class="vgl-agm-dinfo vgl-d-none" style="margin:0" aria-live="polite"></span>
               </div>
-              <div id="vgl-agm-sugerida" class="vgl-agm-sugerida"></div>
-              <div id="vgl-agm-vencaviso" class="vgl-d-none"></div>
+              <div id="vgl-agm-sugerida" class="vgl-agm-sugerida" aria-live="polite"></div>
+              <div id="vgl-agm-vencaviso" class="vgl-d-none" aria-live="polite"></div>
               <!-- v16.0.0 — puerta al módulo de riesgo y exámenes, desde el propio agendamiento -->
               <button type="button" class="vgl-agm-lnk" id="vgl-agm-vertablero" style="margin-top:6px">❤️ Ver riesgo cardiovascular y vigencias de exámenes</button>
               <div id="vgl-day-chips" class="vgl-agm-presets" style="margin-top:8px;gap:5px;flex-wrap:wrap"></div>
-              <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px">Calculando fecha deseada...</div>
+              <div id="vgl-agm-date-info" class="vgl-agm-dinfo" style="margin-top:6px" aria-live="polite">Calculando fecha deseada...</div>
             </div>
 
             <!-- Píldora explicativa de Complejidad Clínica -->
@@ -18901,7 +18958,7 @@ _vglOfrecerDeshacer(btn);
             </div>
 
             <div class="vgl-agm-cell vgl-agm-c12">
-              <label class="vgl-agm-lbl"><span class="vgl-agm-step">3</span>Horarios disponibles en la agenda del servicio${vglTip("Son los cupos reales de la agenda de Everest a esa fecha. El turno sugerido según la complejidad clínica del paciente queda preseleccionado automáticamente con ⭐.")}</label>
+              <label class="vgl-agm-lbl"><span class="vgl-agm-step">3</span>Horarios disponibles en la agenda del servicio${vglTip("Son los cupos reales de la agenda de Everest a esa fecha. Cuando hay turno clínico recomendado, queda preseleccionado con ⭐; si no hay recomendación, usted elige — nunca se agendará una hora que nadie decidió.")}</label>
               <div id="vgl-agm-slots" class="vgl-agm-slots"><div class="vgl-agm-loading">Consultando horarios disponibles...</div></div>
             </div>
           </div>
@@ -19075,6 +19132,19 @@ _vglOfrecerDeshacer(btn);
       if (ind1) { ind1.classList.toggle("active", paso === 1); ind1.classList.toggle("completed", paso > 1); }
       if (ind2) { ind2.classList.toggle("active", paso === 2); ind2.classList.toggle("completed", paso > 2); }
       if (ind3) { ind3.classList.toggle("active", paso === 3); }
+      // v17.6.13 — ACCESIBILIDAD del stepper: aria-current marca el paso en curso y el
+      // foco salta al primer elemento interactivo del paso visible (antes quedaba en un
+      // botón display:none del paso anterior — un lector de pantalla no sabía dónde estaba).
+      if (ind1) { if (paso === 1) ind1.setAttribute("aria-current", "step"); else ind1.removeAttribute("aria-current"); }
+      if (ind2) { if (paso === 2) ind2.setAttribute("aria-current", "step"); else ind2.removeAttribute("aria-current"); }
+      if (ind3) { if (paso === 3) ind3.setAttribute("aria-current", "step"); else ind3.removeAttribute("aria-current"); }
+      const vistaActiva = paso === 1 ? v1 : paso === 2 ? v2 : v3;
+      if (vistaActiva) {
+        const focoInicial = vistaActiva.querySelector("button, input, select, textarea, [tabindex]");
+        if (focoInicial && typeof focoInicial.focus === "function") {
+          try { focoInicial.focus({ preventScroll: true }); } catch (eFoco) { try { focoInicial.focus(); } catch (eFoco2) {} }
+        }
+      }
 
       if (paso === 2) {
         // Sin plazo elegido no se pintan días: se pide elegir uno (o usar el calendario).
@@ -19275,6 +19345,12 @@ _vglOfrecerDeshacer(btn);
       selectedTurnoCtx = null;
       confirmBtn.disabled = true;
       confirmBtn.textContent = "✓ Sí, Crear Cita";
+      // v17.6.13 — los avisos de doble confirmación (antidup y vencimiento) se marcaban
+      // con dataset.dupOk/vencOk y JAMÁS se limpiaban: si el médico veía el aviso y luego
+      // cambiaba de día o de turno, el siguiente Confirmar se saltaba el aviso con los
+      // datos NUEVOS. Cada cambio de fecha/turno vuelve a exigir la doble confirmación.
+      confirmBtn.dataset.dupOk = "";
+      confirmBtn.dataset.vencOk = "";
       if (step2Next) step2Next.disabled = true;
       dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span style="color:var(--c-verde)">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
@@ -19303,9 +19379,29 @@ _vglOfrecerDeshacer(btn);
 
       if (!progCargados) {
         progCargados = true;
+        // v17.6.13 — estado honesto del celular cuando NO se pudo verificar: el campo
+        // quedaba colgado en "cargando…" con el SMS tildado y la cita se creaba con
+        // celular vacío sin avisar. Se usa tanto cuando la respuesta no trae datos
+        // (red caída -> pageFetchJson devuelve null) como si algo lanza en el camino.
+        const _vglCelularSinDatos = () => {
+          const _telF = modal.querySelector("#vgl-agm-sms-tel");
+          const _chkF = modal.querySelector("#vgl-agm-sms-chk");
+          const _notaF = modal.querySelector("#vgl-agm-sms-nota");
+          if (_telF && !_celularSmsEditadoManual) {
+            _telF.value = "";
+            _telF.placeholder = "no se pudo cargar — escríbalo a mano";
+            if (_chkF) _chkF.checked = false;
+            if (_notaF) _notaF.textContent = "— no se pudo verificar el celular del paciente";
+          }
+        };
         try {
           const det = await pageFetchJson(`/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado?idPaciente=${pacienteIdAcceso}`);
           if (!vivo()) return;
+          // v17.6.13 — si la respuesta no trae datos, el paciente NO es "sin celular":
+          // es "no verificado". El flag evita que el rellenado de más abajo pise el
+          // estado de error con "sin celular registrado" (mentira distinta, mismo daño).
+          const _datosPacienteIncompletos = !det || !det.data;
+          if (_datosPacienteIncompletos) { _vglCelularSinDatos(); }
           pacienteEpsNombre = (det && det.data && det.data.eps && det.data.eps.nombre) || "";
           pacienteNombreCompleto = (det && det.data && det.data.nombreCompleto) || "";
           const etiquetasPaciente = ((det && det.data && det.data.programasPaciente) || [])
@@ -19357,7 +19453,7 @@ _vglOfrecerDeshacer(btn);
           // listener de _celularSmsEditadoManual más arriba). Si el médico YA corrigió el
           // celular a mano, este repintado NO lo pisa — antes sí, y ese pisado silencioso
           // era la causa real de "el SMS igual le llega al registrado en Everest".
-          if (inpTel && !_celularSmsEditadoManual) {
+          if (inpTel && !_celularSmsEditadoManual && !_datosPacienteIncompletos) {
             inpTel.value = tel;
             inpTel.placeholder = tel ? "" : "sin celular registrado";
             if (!tel) {
@@ -19380,7 +19476,12 @@ _vglOfrecerDeshacer(btn);
           actualizarNotaLabSms();
           if (chkSms) chkSms.addEventListener("change", actualizarNotaLabSms);
           if (inpTel) inpTel.addEventListener("input", actualizarNotaLabSms);
-        } catch (e) { console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e); }
+        } catch (e) {
+          // v17.6.13 — si algo lanza en el camino, el campo del celular también dice la
+          // verdad (mismo estado honesto que cuando la red no respondió).
+          console.warn("[Vigilante] no se pudieron cargar los datos del paciente:", e);
+          try { _vglCelularSinDatos(); } catch (e2) {}
+        }
       }
 
       const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
@@ -19529,8 +19630,8 @@ _vglOfrecerDeshacer(btn);
       //  (1) ORDEN: el sugerido va de primero y la franja recomendada inmediatamente
       //      después (las dos primeras filas de la cuadrícula son las sugerencias); el
       //      resto conserva su orden cronológico más abajo.
-      //  (2) SELECCIÓN ÚNICA: solo se preselecciona EL sugerido (o el primero si no hay
-      //      sugerencia) — nunca dos botones activos.
+      //  (2) SELECCIÓN ÚNICA: solo se preselecciona EL sugerido (y sin sugerencia, ninguno
+      //      — v17.6.13) — nunca dos botones activos, nunca una hora que nadie decidió.
       const _rangoTurno = (par) => {
         const h = hora24De((par.turno && (par.turno.horaTexto || par.turno.hora || par.turno.horaInicio)) || "");
         if (recHorario.sugerida && h === recHorario.sugerida) return 0;
@@ -19556,7 +19657,12 @@ _vglOfrecerDeshacer(btn);
         const adicionalDesaconsejada = esAdicional && perfilDelPaciente && perfilDelPaciente.adicionales === false;
 
         const marcaAdicional = esAdicional ? `<span class="vgl-agm-cupo-adic">+ ADICIONAL</span> ` : "";
-        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : (enFranja ? "● " : "✓ ")) + marcaAdicional + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
+        // v17.6.13 — la razón del cupo desaconsejado ya no vive SOLO en el tooltip: una
+        // etiqueta visible en la loseta dice por qué está atenuado y que sí se puede usar.
+        const marcaNoRecomendado = adicionalDesaconsejada
+          ? `<span class="vgl-agm-cupo-adic vgl-agm-cupo-adic-no">⚠ SOLO SI NO HAY OTRA CITA</span> `
+          : "";
+        const labelCompleto = (esSugerida ? "⭐ SUGERIDO · " : (enFranja ? "● " : "✓ ")) + marcaAdicional + marcaNoRecomendado + `${escapeHtml(horaTxt)} — ${escapeHtml(profesional)} (${escapeHtml(String(fecha || ""))}${sede ? " · " + escapeHtml(String(sede)) : ""})`;
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "vgl-agm-sbtn" + (selectedEspId !== 12 ? " vgl-wrap" : "") +
@@ -19599,10 +19705,15 @@ _vglOfrecerDeshacer(btn);
         }
         btn.innerHTML = labelCompleto;
 
-        // v15.4.0 — Candidato a preselección: SOLO el sugerido; si no hay sugerido, el
-        // primero de la lista ya ordenada. La activación real ocurre una única vez tras
-        // el bucle (antes, "sugerida O primero" podía dejar DOS botones activos).
-        if (esSugerida || (!_preseleccion && idx === 0)) {
+        // v15.4.0 — Candidato a preselección: SOLO el sugerido. La activación real ocurre
+        // una única vez tras el bucle (antes, "sugerida O primero" podía dejar DOS botones
+        // activos).
+        // v17.6.13 — SIN SUGERENCIA, NINGÚN turno nace activo (v16.9.0: "sin datos para
+        // recomendar, NINGÚN chip sale activo"; la misma orden que quitó el cupo por
+        // defecto de la toma de labs en v16.4.0). Antes, en modo manual o sin perfil, se
+        // preseleccionaba el primer turno cronológico (normalmente 06:00) y bastaba un
+        // clic a ciegas en Confirmar para crear la cita en una madrugada que nadie eligió.
+        if (esSugerida) {
           _preseleccion = { btn, t, agendaId, horaTxt };
         }
 
@@ -19611,6 +19722,10 @@ _vglOfrecerDeshacer(btn);
           if (!_fnHorario) { _fnHorario = true; try { uxTrack("fn.agendar.horario"); } catch (e) {} }
           modal.querySelectorAll(".vgl-agm-sbtn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
+          // v17.6.13 — cambiar de turno reinicia la doble confirmación: el aviso de
+          // vencimiento/antidup visto pertenecía a la hora anterior, no a esta.
+          confirmBtn.dataset.dupOk = "";
+          confirmBtn.dataset.vencOk = "";
           selectedTurnoObj = t;
           selectedTurnoCtx = { agendaId, fecha: selectedDateInfo.fmt, horaTxt };
           confirmBtn.disabled = false;
@@ -19629,6 +19744,12 @@ _vglOfrecerDeshacer(btn);
         if (step2Next) step2Next.disabled = false;
         markAgendamientoPendiente(apt.doc_id);
         try { _pintarPlanLinea(); } catch (e) {}
+      } else {
+        // v17.6.13 — sin sugerencia, el botón explica por qué sigue apagado en vez de
+        // dejar un "Sí, Crear Cita" muerto: la hora se elige, nunca viene puesta.
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = "Elija un horario para continuar";
+        if (step2Next) step2Next.disabled = true;
       }
     }
 
@@ -31307,6 +31428,20 @@ _vglOfrecerDeshacer(btn);
   // _labsPrefetch, así que la espera es nula. También se reevalúan las discrepancias,
   // porque el texto es una de las cinco fuentes del reconciliador.
   const _vglTextoPrevio = new Map();          // docId|modo -> último texto visto
+  // v17.6.12 — TOPE DE MEMORIA (P3): el mapa crecía sin límite en sesiones largas
+  // (una entrada por docId|modo). Función pura y testeable: poda el Map a los `tope`
+  // pares más recientes por orden de inserción. Se llama tras cada escritura.
+  function _vglTextoPrevioPodar(mapa, tope) {
+    const m = mapa || new Map();
+    if (!(tope > 0) || m.size <= tope) return m;
+    const sobra = m.size - tope;
+    let i = 0;
+    for (const k of m.keys()) {
+      if (i++ >= sobra) break;
+      m.delete(k);
+    }
+    return m;
+  }
   function _vglNotarTextoLibre(docId, modo, valor) {
     try {
       const id = String(docId || "");
@@ -31315,6 +31450,7 @@ _vglOfrecerDeshacer(btn);
       const ahora = String(valor == null ? "" : valor);
       const antes = _vglTextoPrevio.get(k);
       _vglTextoPrevio.set(k, ahora);
+      _vglTextoPrevioPodar(_vglTextoPrevio, 200);   // v17.6.12 — sesión larga acotada
       if (antes === undefined || antes === ahora) return false;   // primera vista o sin cambio
       try { mtrCacheResumenBorrar(); } catch (e) {}
       try { console.log("[Vigilante] El texto de «" + ((MTR_CASILLAS_CONTEXTO[modo] || {}).etiqueta || modo) + "» cambió: el análisis se rehará con lo nuevo."); } catch (e) {}
@@ -32013,6 +32149,14 @@ _vglOfrecerDeshacer(btn);
     } catch (e) {}
   }
 
+  // v17.6.11 — Conteo de palabras del borrador para el contador del modal de IA.
+  // Función pura (el banco la prueba directo): vacío/espacios => 0, nunca NaN.
+  function mtrContarPalabrasTexto(t) {
+    const s = String(t == null ? "" : t).trim();
+    if (!s) return 0;
+    return s.split(/\s+/).length;
+  }
+
   // v14.2.11 — `opts.modo` (opcional): modo con el que abre el panel. Lo usa el modal de
   // riesgo/IA, que ofrece un botón por modo; sin opts abre en "Enfermedad actual" como siempre.
   // v16.5.0 — decisión del médico: Motivo, Nota clínica y Resumen previo salen del
@@ -32062,14 +32206,15 @@ _vglOfrecerDeshacer(btn);
         + '<input type="text" id="vgl-ia-pregunta" class="vgl-agm-input' + (modoInicial === "consulta" ? '' : ' vgl-d-none') + '" placeholder="Escriba su pregunta sobre este paciente…" style="width:100%;margin-bottom:8px">'
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Indicaciones para este borrador (opcional): lo que usted quiera que la IA tenga en cuenta — hallazgos de hoy, énfasis, tono…"></textarea>'
-        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri">✨ Generar</button>'
+        + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
         + '<button id="vgl-ia-generar-todo" class="vgl-agm-btn sec" title="Genera los borradores de las TRES casillas en cadena (las notas largas con el modelo potente, las cortas con la rotación). Después usted las revisa e inserta una por una.">✨ Generar todo (3)</button>'
         + '<button id="vgl-ia-datos-btn" class="vgl-agm-btn sec" title="Abre un formulario opcional para agregar motivo, síntomas, adherencia u otros datos que mejoran el borrador — nada obligatorio">➕ Datos del paciente</button>'
         + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
         + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button>'
         + '<button id="vgl-ia-estilo-guardar" class="vgl-agm-btn sec" disabled title="Guarda este texto (desidentificado) como ejemplo para que futuras redacciones suenen a usted">💾 Guardar mi estilo</button></div>'
-        + '<div id="vgl-ia-estado" class="vgl-agm-dinfo"></div>'
-        + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite."></textarea>'
+        + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
+        + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
+        + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
         + '<div id="vgl-ia-cifras"></div>'
         + '<div class="vgl-rcv-pie" style="margin-top:6px">A Gemini se envían datos clínicos y FECHAS de atención (necesarias para la cronología — decisión suya del 20-ago), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
         + '</div>';
@@ -32079,14 +32224,70 @@ _vglOfrecerDeshacer(btn);
       const $ = (s) => modal.querySelector(s);
       const salida = $("#vgl-ia-salida"), estado = $("#vgl-ia-estado");
       const btnGen = $("#vgl-ia-generar"), btnCop = $("#vgl-ia-copiar"), btnIns = $("#vgl-ia-insertar"), btnEst = $("#vgl-ia-estilo-guardar");
+      // v17.6.11 — CONTADOR DEL BORRADOR (N palabras · N caracteres) y recordatorio del
+      // último modelo usado. Se repinta con cada tecla y tras cada generación/cambio de chip.
+      let _ultimoModelo = "";
+      const _pintarMeta = () => {
+        try {
+          const meta = modal.querySelector("#vgl-ia-meta");
+          if (!meta) return;
+          const t = salida.value || "";
+          const n = mtrContarPalabrasTexto(t);
+          meta.innerHTML = n ? "<b>" + n + "</b> palabra" + (n === 1 ? "" : "s") + " · " + t.length + " caracteres"
+            + (_ultimoModelo ? " · modelo: " + esc(_ultimoModelo) : "") : "";
+        } catch (e) {}
+      };
+      // v17.6.12 — AUTOSIZE del área de salida: crece con el borrador (220px mín.,
+      // 460px máx.) para leer notas largas sin scroll interno; el scroll de la tarjeta
+      // sigue siendo el del modal.
+      const _autosizeSalida = () => {
+        try {
+          salida.style.height = "auto";
+          const h = Math.max(220, Math.min(460, salida.scrollHeight));
+          salida.style.height = h + "px";
+        } catch (e) {}
+      };
+      // v17.6.11 — CONGELAR CHIPS mientras se genera: un cambio de casilla a mitad de la
+      // llamada entregaba el borrador en el chip equivocado (modo es `let`, la promesa
+      // lee el valor actual). Se captura además el modo GENERADO para rutear el resultado
+      // a SU borrador aunque algo cambie el chip por código.
+      const _chips = () => modal.querySelectorAll(".vgl-ia-modos [data-modo]");
+      const _congelarChips = (si) => { try { _chips().forEach((x) => x.classList.toggle("vgl-ia-lock", si)); } catch (e) {} };
+      // v17.6.12 — CONFIRMAR AL CERRAR: si hay borradores con texto y ninguno insertado,
+      // un cierre accidental los pierde; se pregunta UNA vez (nativo, breve). Tras
+      // insertar una casilla, el resto pendiente ya no re-pregunta en cada cierre.
+      const _hayBorradoresSinInsertar = () => {
+        try {
+          return Object.keys(_borradores).some((m) => {
+            const b = _borradores[m];
+            return b && !b.insertado && String(b.texto || "").trim().length > 0;
+          });
+        } catch (e) { return false; }
+      };
       const closeMod = () => {
         try {
+          if (_hayBorradoresSinInsertar() && typeof confirm === "function") {
+            try {
+              if (!confirm("Hay borradores sin insertar en la historia. ¿Cerrar de todos modos? Se perderán.")) return;
+            } catch (e) {}
+          }
           if (!completado) uxTrack("fn.ia.abandon");
           modal.remove();
         } catch (e) {}
       };
       $("#vgl-ia-x").addEventListener("click", closeMod);
       if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, closeMod);
+      // v17.6.11 — ATAJO S+: Ctrl+Enter (o Cmd+Enter) genera desde cualquier campo del
+      // modal; no interfiere con el Enter normal de las casillas de texto.
+      modal.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          const focado = document.activeElement;
+          if (focado && modal.contains(focado) && !btnGen.disabled) { e.preventDefault(); btnGen.click(); }
+        }
+      });
+      // v17.6.11 — anexa texto al estado SIN pisar los botones que ya estén montados ahí
+      // (Deshacer tras insertar): los avisos enriquecidos dejaron de ser texto plano.
+      const _estadoAnexar = (txt) => { try { const s = document.createElement("span"); s.textContent = txt; estado.appendChild(s); } catch (e) {} };
 
       // v15.6.0 — TODAS las casillas del registro se pueden insertar; nota/briefing/consulta
       // se copian (no tienen casilla propia).
@@ -32139,6 +32340,7 @@ _vglOfrecerDeshacer(btn);
         estado.textContent = _bor.insertado ? "✓ Ya insertado en la historia. Puede regenerar o pasar a otra casilla." : (_bor.estado || "");
         habilitarPost(salida.value);
         _pintarCifras();
+        _pintarMeta();
         pintarRotuloInsertar();
         _pintarChipsHechos();
       }));
@@ -32275,6 +32477,7 @@ _vglOfrecerDeshacer(btn);
       const btnTodo = $("#vgl-ia-generar-todo");
       if (btnTodo) btnTodo.addEventListener("click", async () => {
         if (!mtrLeerClaveGemini()) { estado.textContent = "Falta la clave de Gemini (Ajustes → Redacción IA)."; return; }
+        _congelarChips(true);   // v17.6.11 — la cadena entera corre sin cambiar de casilla
         const ordenTodo = ["enfermedad_actual", "analisis_plan", "recomendaciones"];
         // El único crítico BLOQUEANTE del lote es la categoría de riesgo (TFG y
         // medicamentos son blandos: la nota los declara). Se evalúa directo — no vía
@@ -32296,7 +32499,8 @@ _vglOfrecerDeshacer(btn);
             saltadas++;
             continue;
           }
-          estado.textContent = "Generando " + (i + 1) + "/4: " + etiq + " (" + mtrModeloGemini(m) + ")…";
+          estado.textContent = "Generando " + (i + 1) + "/3: " + etiq + " (" + mtrModeloGemini(m) + ")…";
+          _ultimoModelo = mtrModeloGemini(m);
           const r = await _generarPara(m);
           if (r.ok) {
             _borradores[m] = { texto: r.texto, original: r.texto, estado: "Borrador listo. Revíselo y edítelo antes de usarlo." };
@@ -32306,16 +32510,20 @@ _vglOfrecerDeshacer(btn);
           }
           if (m === modo) { salida.value = _borradores[m].texto; textoGeneradoOriginal = _borradores[m].original; habilitarPost(salida.value); _pintarCifras(); }
         }
+        _congelarChips(false);
         btnTodo.disabled = false; btnGen.disabled = false;
         estado.textContent = "✓ " + hechas + " borrador(es) listos" + (saltadas ? " · 1 saltado (Análisis y plan: complete los datos críticos)" : "") + ". Revise casilla por casilla e inserte — cada chip guarda el suyo.";
         const b = _borradores[modo];
-        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); _pintarCifras(); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/4 listas."; }
+        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); _pintarCifras(); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/3 listas."; }
+        _pintarMeta();
       });
 
       btnGen.addEventListener("click", async () => {
+        const modoGen = modo;   // v17.6.11 — el borrador va a SU casilla aunque el chip cambie a mitad de llamada
+        _congelarChips(true);
         {
           const faltan = _criticosFaltantes();
-          if (faltan.length) { _pintarCriticos(faltan); estado.textContent = "Complete lo marcado para una nota válida."; return; }
+          if (faltan.length) { _congelarChips(false); _pintarCriticos(faltan); estado.textContent = "Complete lo marcado para una nota válida."; return; }
         }
         const opts = {
           usarEstilo: $("#vgl-ia-estilo").checked, estiloEjemplos: mtrEstiloLeer(),
@@ -32333,20 +32541,23 @@ _vglOfrecerDeshacer(btn);
           jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
         };
         if (!mtrLeerClaveGemini()) {
+          _congelarChips(false);
           salida.value = mtrHojaDeHechosTexto(hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
-        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modo) + "…"; salida.value = "";
+        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
+        _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
-        const r = await mtrGeminiRedactar(hoja, modo, opts);
+        const r = await mtrGeminiRedactar(hoja, modoGen, opts);
         btnGen.disabled = false;
+        _congelarChips(false);
         if (r.ok) {
           let textoFinal = r.texto;
           // v16.5.0 — los marcadores del encabezado se rellenan AQUÍ, en el equipo del
           // médico: el identificador jamás viaja a la IA (decisión de diseño del modal).
-          if (modo === "analisis_plan") {
+          if (modoGen === "analisis_plan") {
             try {
               const d = new Date();
               const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
@@ -32355,11 +32566,18 @@ _vglOfrecerDeshacer(btn);
                 .replace(/\[A[NÑ]O_MES\]/g, anioMes);
             } catch (e) {}
           }
-          salida.value = textoFinal;
-          textoGeneradoOriginal = textoFinal;
-          estado.textContent = "Borrador listo. Revíselo y edítelo antes de usarlo.";
-          habilitarPost(textoFinal);
-          _pintarCifras();
+          // v17.6.11 — el borrador se guarda bajo SU modo y solo se pinta si ese modo
+          // sigue activo; así un cambio de chip (por código) nunca mezcla casillas.
+          _borradores[modoGen] = { texto: textoFinal, original: textoFinal, estado: "Borrador listo. Revíselo y edítelo antes de usarlo." };
+          if (modoGen === modo) {
+            salida.value = textoFinal;
+            textoGeneradoOriginal = textoFinal;
+            estado.textContent = "Borrador listo. Revíselo y edítelo antes de usarlo.";
+            habilitarPost(textoFinal);
+            _pintarCifras();
+            _autosizeSalida();   // v17.6.12
+          }
+          _pintarMeta();
           // v17.3.0 — Reporte real de consola (21-ago): "Uncaught (in promise) ReferenceError:
           // _frenoMarcaOk is not defined" en cada generación exitosa, en los tres modos. La
           // función nunca existió en este archivo (ni en el CHANGELOG ni en ninguna suite) —
@@ -32370,10 +32588,10 @@ _vglOfrecerDeshacer(btn);
           salida.value = mtrHojaDeHechosTexto(hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "La IA no redactó (" + (r.motivo || "desconocido") + "). Le dejo los hechos para copiar a mano.";
-          habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true;
+          habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; _pintarMeta(); _autosizeSalida();
         }
       });
-      salida.addEventListener("input", _pintarCifras);
+      salida.addEventListener("input", () => { _pintarCifras(); _pintarMeta(); _autosizeSalida(); });
 
       btnCop.addEventListener("click", () => {
         try {
@@ -32449,7 +32667,7 @@ _vglOfrecerDeshacer(btn);
           if (sig) {
             const chip = modal.querySelector('.vgl-ia-modos [data-modo="' + sig + '"]');
             if (chip && chip.click) chip.click();
-            estado.textContent += " → Siguiente: " + ((MTR_CASILLAS_REDACTOR[sig] || {}).etiqueta || sig) + ".";
+            _estadoAnexar(" → Siguiente: " + ((MTR_CASILLAS_REDACTOR[sig] || {}).etiqueta || sig) + ".");
           }
         } catch (e) {}
       };
@@ -32477,9 +32695,20 @@ _vglOfrecerDeshacer(btn);
         }
         let msg = "";
         if (res.ok) {
-          msg = "✓ Insertado en " + (info.etiqueta || "la casilla") + " (" + (info.pestania || "") + "). Revise y guarde la historia usted.";
+          // v17.6.11 — UNDO también en la inserción en casilla VACÍA: se guarda el previo
+          // ("") y se ofrece Deshacer para volver a dejarla vacía si el médico cambia de idea.
           _registrarInsercion();
-          estado.textContent = msg;
+          try { if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: res.el, prev: res.previo || "" }], "Redactor IA"); } catch (e) {}
+          estado.innerHTML = "";
+          const okTxt = document.createElement("span");
+          okTxt.textContent = "✓ Insertado en " + (info.etiqueta || "la casilla") + " (" + (info.pestania || "") + "). Revise y guarde la historia usted. ";
+          const bUndo = document.createElement("button");
+          bUndo.className = "vgl-agm-btn sec"; bUndo.textContent = "↩ Deshacer";
+          bUndo.addEventListener("click", () => {
+            const n = (typeof _vglEjecutarDeshacer === "function") ? _vglEjecutarDeshacer() : 0;
+            estado.textContent = n ? "↩ Listo: la casilla volvió a quedar vacía." : "Ya no se pudo deshacer (venció el tiempo o cambió la historia).";
+          });
+          estado.appendChild(okTxt); estado.appendChild(bUndo);
           _casillaHechaYSiguiente();
         } else if (res.motivo === "otro_paciente") {
           estado.textContent = "⚠ La historia abierta ya no es la de este paciente. No se insertó nada.";
