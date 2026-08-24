@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.30
+// @version     17.6.31
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.30";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.31";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4631,8 +4631,12 @@
       let veredicto = null;
       const partes = t.split(/[.;\n]+/);
       for (const frase of partes) {
-        if (!re.test(frase)) continue;
         const f = stripAccents(frase.toLowerCase());
+        // v17.6.31 — AUDITORÍA S+ (barrido total, 24-ago-2026): el filtro inicial probaba
+        // `re` contra `frase` SIN quitar tildes ("no es diabético" no calzaba con
+        // /\bdiabet.../ porque exige "diabet" literal y la palabra real trae "diabét"),
+        // así que la frase entera se descartaba antes de llegar a la lógica de negación.
+        if (!re.test(f)) continue;
         if (/\b(padre|madre|hermano|hermana|abuelo|abuela|familiar|antecedente familiar|hijo|hija|tio|tia)\b/.test(f)) continue;
         // v17.6.30 — AUDITORÍA S+ (barrido total, 24-ago-2026): la lista de negaciones no
         // reconocía el "no + verbo" simple ("no fuma", "no es diabético") — ninguna frase

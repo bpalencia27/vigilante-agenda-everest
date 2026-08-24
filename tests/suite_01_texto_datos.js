@@ -265,5 +265,14 @@ module.exports = {
       t.igual(api.mtrTextoOpinaSobre(null, RE_FUMA), null);
       t.igual(api.mtrTextoOpinaSobre("Consulta de control por hipertensión.", RE_FUMA), null, "el texto no menciona el hecho buscado");
     });
+
+    t.caso("v17.6.31: mtrTextoOpinaSobre reconoce el hecho aunque la frase real lleve tilde y el patrón no", () => {
+      const RE_DIABETES = /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i;
+      // "diabético" lleva tilde; el patrón exige "diabet" literal (sin tilde) — antes del
+      // fix, re.test(frase) fallaba contra la frase CRUDA y la frase entera se descartaba.
+      t.igual(api.mtrTextoOpinaSobre("No es diabético, controles normales.", RE_DIABETES), false, "'no es diabético' debe negar (antes daba null: la frase ni pasaba el filtro inicial)");
+      t.igual(api.mtrTextoOpinaSobre("Refiere ser diabético de larga data.", RE_DIABETES), true, "una afirmación con tilde también debe reconocerse");
+      t.igual(api.mtrTextoOpinaSobre("Padre diabético, madre sana.", RE_DIABETES), null, "antecedente familiar con tilde: sigue sin veredicto");
+    });
   },
 };

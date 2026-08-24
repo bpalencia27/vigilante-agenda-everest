@@ -1007,5 +1007,18 @@ contra el regex real de `diabetes` (`textoSi: /\bdiabet|\bdm2?\b|\bdmid\b|insuli
 que no matchea por la tilde de "diabético" (`\bdiabet` exige la `e` sin acento) — un
 defecto distinto, no relacionado con esta negación, y fuera del alcance de este ítem. Se
 cambió el ejemplo de prueba a HTA (`hipertens`, sin tildes en el radical) para no mezclar
-ambos hallazgos; el problema de tildes en `MTR_HECHOS_SENSIBLES` queda anotado como
-oportunidad de mejora aparte.
+ambos hallazgos; el problema de tildes se corrigió aparte en v17.6.31.
+
+## v17.6.31 — 24-ago-2026 (hallazgo colateral de v17.6.30: tildes en el cotejo de fuentes)
+
+Banco antes: 1.451 comprobaciones (con la prueba nueva ya sumada antes de la mutación) ·
+después de restaurar: **1.451** (sin cambio — la mutación no agrega pruebas, solo prueba
+la ya escrita).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrTextoOpinaSobre`** | El filtro inicial vuelve a `if (!re.test(frase)) continue;` (prueba el patrón contra la frase CRUDA, con tildes, en vez de contra `f`, la versión ya sin tildes) | `suite_01` | *v17.6.31: mtrTextoOpinaSobre reconoce el hecho aunque la frase real lleve tilde y el patrón no* → *'no es diabético' debe negar…: esperaba false y obtuvo null* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.451/1.451 tras la restauración.

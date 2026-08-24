@@ -4,6 +4,16 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.31] — 2026-08-24 (Barrido S+ total — hallazgo colateral de v17.6.30: tildes en el cotejo de fuentes)
+
+Al probar el fix de v17.6.30 apareció un segundo defecto en la misma función, distinto y
+anterior en la cadena: se corrige aparte para no mezclar dos mutaciones en una versión.
+
+### 🐛 Una frase con tilde ya no se descarta antes de ser leída
+- El cotejo de discrepancias entre fuentes comparaba la palabra clave del hecho (ej. "diabet") contra la frase **con sus tildes originales** — "No es diabético" no calzaba porque la comparación esperaba la sílaba sin acento, y la frase quedaba fuera del análisis por completo, en vez de reconocerse como una negación. Cualquier mención de un hecho con tilde en la sílaba clave ("diabético" es el caso real observado; hipertensión y enfermedad renal ya estaban a salvo) quedaba invisible para este cotejo. Ahora la comparación ignora tildes igual que el resto de la lógica de la función, así que estas frases se reconocen correctamente.
+
+---
+
 ## [Versión 17.6.30] — 2026-08-24 (Barrido S+ total — Bloque Editar, 1/62: negación simple en el cotejo de fuentes)
 
 Primer avance del bloque "Editar" del barrido total.
