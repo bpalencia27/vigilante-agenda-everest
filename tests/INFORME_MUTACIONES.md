@@ -944,3 +944,20 @@ Las cuatro mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ 
 cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
 confirmó el verde al restaurar. El banco completo al cierre: **1.439 comprobaciones, 0 en
 rojo** (44 suites presentes; +9 casos nuevos entre suite_08/09/28/32).
+
+## v17.6.28 — 24-ago-2026 (Barrido S+ total — Bloque S1, parte 2/2: 4 bugs críticos, cierra el bloque)
+
+Segunda y última parte del Bloque S1 (8/8 críticos corregidos y verificados).
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~19797 (v17.6.28) | `cargarHorasLab`: la guarda `if (!resAgEx \|\| !resAgEx.ok)` mutada a `if (false)` (nunca detecta la falta de respuesta) | NO | Ninguna: *v17.6.28: cargarHorasLab y cargarHorasLabSolo usan gmPostJsonEx* (suite_15) cayó a rojo. Restaurada de inmediato; suite_15 volvió a verde. |
+| ~28481 (v17.6.28) | `mtrAvisosFarmacologicos`: reintroducido `\|\| base.motivo === "SIN_FUNCION_RENAL"` en la guarda de corte temprano (vuelve a silenciar las interacciones sin CG) | NO | Ninguna: *v17.6.28: sin Cockcroft-Gault, las interacciones farmacológicas SÍ se evalúan* (suite_39) cayó a rojo. Restaurada de inmediato; suite_39 volvió a verde. |
+| ~2206 (v17.6.28) | `atheneaCredsSet`: reintroducidas las 4 escrituras en claro (GM y localStorage de `vgl_ath_user`/`vgl_ath_pass`) | NO | Ninguna: *v17.6.28: atheneaCredsSet NO deja ninguna copia en claro* (suite_18) cayó a rojo. Restaurada de inmediato; suite_18 volvió a verde. |
+| ~20774 (v17.6.28) | La notificación de cita creada vuelta a "SMS de recordatorio enviado al X." (afirmación de entrega confirmada) | NO | Ninguna: *v17.6.28: la notificación de cita creada ya NO afirma que el SMS se entregó* (suite_15) cayó a rojo. Restaurada de inmediato. |
+
+Las cuatro mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo al cierre: **1.447 comprobaciones, 0 en
+rojo** (44 suites presentes; +8 casos nuevos entre suite_15/18/39). Con esto se cierra el
+Bloque S1 completo (8/8 hallazgos críticos del barrido total corregidos y verificados).

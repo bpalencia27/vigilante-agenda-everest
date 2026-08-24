@@ -4,6 +4,24 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.28] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 2/2: 4 bugs críticos, cierra el bloque)
+
+Segunda y última parte del Bloque S1 del barrido exhaustivo (8/8 críticos corregidos).
+
+### 🐛 Un timeout de AppCita ya no se presenta como "no hay turnos de laboratorio"
+- `cargarHorasLab` y `cargarHorasLabSolo` usaban `gmPostJson`, que no distingue "AppCita contestó: sin turnos" de "no contestó" (timeout, sin red, 500) — misma clase de bug que la AUDITORÍA #11 ya corrigió en `apiLaboratorioAgendarAuto`, pero seguía viva aquí. Ahora usan `gmPostJsonEx` y avisan honestamente cuando no hubo respuesta, sin tocar el interruptor de la toma.
+
+### 🐛 Las interacciones farmacológicas ya no se silencian por falta de Cockcroft-Gault
+- `mtrAvisosFarmacologicos` apagaba TODO —avisos de dosis Y las interacciones (Triple Whammy incluido)— cuando faltaba solo el Cockcroft-Gault, aunque las interacciones no lo necesitan. Además, el panel de Medicamentos nunca pasaba `tfgCockcroftGault` en absoluto: quedaba permanentemente en "Falta la función renal" para TODO paciente. Los dos huecos, corregidos.
+
+### 🐛 La contraseña institucional de Athenea ya no se guarda en claro
+- `atheneaCredsSet` escribía la credencial compartida en CUATRO sitios EN CLARO (GM y localStorage de los dos orígenes) al lado de la copia ofuscada, anulando la protección documentada. Ahora la copia ofuscada es la única escritura; las claves en claro heredadas de versiones viejas se migran y se borran al leerse.
+
+### 🐛 "SMS enviado" ya no se afirma antes de saberlo
+- La notificación de cita creada decía "SMS de recordatorio enviado al X" en el mismo instante en que se disparaba la petición (fire-and-forget) — un rechazo del proveedor o un fallo de red se anunciaba igual como éxito. El texto ahora dice lo único que se sabe con certeza en ese momento: que se solicitó el envío.
+
+---
+
 ## [Versión 17.6.27] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 1/2: 4 bugs críticos)
 
 Primer lote del barrido exhaustivo línea por línea de todo el archivo (33.869 líneas, 48 agentes, verificación adversarial): 8 hallazgos S1 confirmados. Estos 4 primeros.

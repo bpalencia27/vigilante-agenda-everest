@@ -2823,5 +2823,46 @@ module.exports = {
       t.cierto((btnNoRecomendado.innerHTML || "").includes("SOLO SI NO HAY OTRA CITA"), "la razón va visible en la loseta, no solo en el tooltip");
     });
 
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): cargarHorasLab y
+    // cargarHorasLabSolo usaban gmPostJson, que no distingue "AppCita contestó: sin
+    // turnos" de "no contestó" (timeout/red caída/500) — ambos casos se presentaban al
+    // médico como el HECHO verificado "No hay turnos de laboratorio disponibles", y en
+    // cargarHorasLab además desmarcaba/deshabilitaba el interruptor de la toma. Misma
+    // clase de bug que ya corrigió la AUDITORÍA #11 en apiLaboratorioAgendarAuto
+    // (gmPostJsonEx, ~15326) y en las agendas (resAgendas.__sinRespuesta, ~19473). No hay
+    // unidad aislable sin reconstruir el modal completo de agendamiento (>2000 líneas de
+    // closures) — se protege por texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.28: cargarHorasLab y cargarHorasLabSolo usan gmPostJsonEx (distinguen sin-respuesta de sin-turnos)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const fnCargarHorasLab = src.slice(src.indexOf("async function cargarHorasLab() {"), src.indexOf("async function cargarHorasLab() {") + 2200);
+      t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLab), "cargarHorasLab consulta con gmPostJsonEx, no gmPostJson");
+      t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLab), "y distingue el caso 'no hubo respuesta' antes de mirar la lista de turnos");
+
+      const fnCargarHorasLabSolo = src.slice(src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {"), src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {") + 1600);
+      t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLabSolo), "cargarHorasLabSolo también consulta con gmPostJsonEx");
+      t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLabSolo), "y también distingue sin-respuesta de sin-turnos");
+    });
+
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): `ultimoSmsEnviado` se fija en
+    // cuanto se DISPARA el fetch de EnviarSMS (fire-and-forget, sin esperar el .then()) y
+    // la notificación de "Cita asignada" que lo muestra es SÍNCRONA justo después — así
+    // que un rechazo del proveedor de SMS o un fallo de red se anunciaba igual como
+    // "SMS de recordatorio enviado al X", una afirmación que en ese momento nadie había
+    // confirmado. Se corrige el verbo a lo único que ahí se sabe con certeza: que la
+    // petición se envió, no que llegó. No hay unidad aislable (vive dentro del cierre
+    // async de creación de cita, con turnoId/celularSms de closure) — se protege por
+    // texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.28: la notificación de cita creada ya NO afirma que el SMS se entregó, solo que se solicitó", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/SMS de recordatorio enviado al \$\{ultimoSmsEnviado\}/.test(src), "ya no debe quedar la afirmación de entrega confirmada");
+      t.cierto(/Se solicitó el envío del SMS de recordatorio al \$\{ultimoSmsEnviado\}/.test(src), "el texto ahora dice lo que de verdad se sabe: que se solicitó");
+    });
+
   },
 };

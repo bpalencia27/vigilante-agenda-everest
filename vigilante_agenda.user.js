@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.27
+// @version     17.6.28
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -936,13 +936,12 @@
           const p = passInput.value;
           if (u && p) {
             try {
+              // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): esto guardaba la
+              // contraseña institucional compartida EN CLARO (GM y localStorage del
+              // origen de Athenea), justo al lado de atheneaCredsSet(u, p) que YA la
+              // guarda ofuscada — anulando por completo la protección documentada más
+              // abajo. atheneaCredsSet es ahora la ÚNICA vía de escritura.
               if (typeof atheneaCredsSet === "function") atheneaCredsSet(u, p);
-              if (typeof GM_setValue !== "undefined") {
-                GM_setValue("vgl_ath_user", u);
-                GM_setValue("vgl_ath_pass", p);
-              }
-              localStorage.setItem("vgl_ath_user", u);
-              localStorage.setItem("vgl_ath_pass", p);
               console.log("[Vigilante Athenea] Credenciales capturadas y guardadas para auto-login permanente.");
             } catch (e) {}
           }
@@ -1006,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.27";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.28";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2186,6 +2185,16 @@
   function _vglXor(s) { const k = "Vgl-Athenea-2026-local"; let o = ""; for (let i = 0; i < s.length; i++) o += String.fromCharCode(s.charCodeAt(i) ^ k.charCodeAt(i % k.length)); return o; }
   function _vglOfusca(s) { try { return btoa(unescape(encodeURIComponent(_vglXor(String(s))))); } catch (e) { return ""; } }
   function _vglDesofusca(s) { try { return _vglXor(decodeURIComponent(escape(atob(String(s))))); } catch (e) { return ""; } }
+  // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): atheneaCredsSet guardaba la
+  // contraseña institucional compartida en CUATRO sitios EN CLARO (GM vgl_ath_user/pass
+  // y localStorage de los dos orígenes en los que corre este módulo) además de la copia
+  // ofuscada — anulando por completo la protección que el comentario de arriba promete
+  // ("una filtración obliga a cambiar la clave, no a auditar el historial de git" deja de
+  // sostenerse si la clave real vive sin cifrar al lado). ATH_CRED_KEY (ofuscada) es
+  // ahora la ÚNICA escritura. Las claves en claro (`vgl_ath_user`/`vgl_ath_pass`, en GM y
+  // en localStorage) solo se LEEN como fallback de equipos con una versión vieja del
+  // script — y en cuanto se leen, se MIGRAN: se guardan ofuscadas y las copias en claro
+  // se borran, para que no sigan viviendo en el disco del consultorio.
   function atheneaCredsGet() {
     try {
       const c = (typeof GM_getValue !== "undefined") ? GM_getValue(ATH_CRED_KEY, null) : null;
@@ -2195,24 +2204,33 @@
       }
       const u2 = (typeof GM_getValue !== "undefined") ? (GM_getValue("vgl_ath_user", "") || "") : "";
       const p2 = (typeof GM_getValue !== "undefined") ? (GM_getValue("vgl_ath_pass", "") || "") : "";
-      if (u2 && p2) return { u: u2, p: p2 };
+      if (u2 && p2) { _atheneaCredsMigrarDeClaro(u2, p2); return { u: u2, p: p2 }; }
 
       const lu = localStorage.getItem("vgl_ath_user") || "";
       const lp = localStorage.getItem("vgl_ath_pass") || "";
-      if (lu && lp) return { u: lu, p: lp };
+      if (lu && lp) { _atheneaCredsMigrarDeClaro(lu, lp); return { u: lu, p: lp }; }
     } catch (e) { return null; }
     return null;
+  }
+  // Re-guarda ofuscado lo que se encontró en claro (herencia de versiones viejas) y
+  // borra las claves en claro para que no sigan viviendo sin cifrar en el disco.
+  function _atheneaCredsMigrarDeClaro(u, p) {
+    try {
+      if (typeof GM_setValue !== "undefined") {
+        GM_setValue(ATH_CRED_KEY, { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() });
+        GM_setValue("vgl_ath_user", null);
+        GM_setValue("vgl_ath_pass", null);
+      }
+      localStorage.removeItem("vgl_ath_user");
+      localStorage.removeItem("vgl_ath_pass");
+    } catch (e) {}
   }
   function atheneaCredsSet(u, p) {
     if (!u || !p) return false;
     try {
       if (typeof GM_setValue !== "undefined") {
         GM_setValue(ATH_CRED_KEY, { u: _vglOfusca(u), p: _vglOfusca(p), savedAt: Date.now() });
-        GM_setValue("vgl_ath_user", u);
-        GM_setValue("vgl_ath_pass", p);
       }
-      localStorage.setItem("vgl_ath_user", u);
-      localStorage.setItem("vgl_ath_pass", p);
       atheneaLoginBloqueado = false;
       return true;
     } catch (e) { return false; }
@@ -17868,6 +17886,13 @@ _vglOfrecerDeshacer(btn);
       avisos = mtrRenderAvisosHtml({
         medicamentos: meds || [],
         tfgCkdEpi: tfg,
+        // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): este llamador nunca pasaba
+        // tfgCockcroftGault, así que mtrAvisosDosisRenal SIEMPRE recibía cg=null y el
+        // panel de Medicamentos quedaba permanentemente en "Falta la función renal" —
+        // para TODO paciente, no solo los que de verdad carecen de Cockcroft-Gault en
+        // Everest. Mismo campo (resumen.erc.crcl) que ya usa el resto del script para el
+        // Cockcroft-Gault (p. ej. la Ficha viva, línea ~17458).
+        tfgCockcroftGault: (resumen && resumen.erc && resumen.erc.crcl != null) ? resumen.erc.crcl : null,
         potasio: (resumen && resumen._ultimos && resumen._ultimos.POTASIO && resumen._ultimos.POTASIO.valor) || null,
         medicamentosFrecuencia: (resumen && resumen.medicamentosFrecuencia) || undefined,   // v17.2.0 (#114)
       }) || "";
@@ -19793,10 +19818,23 @@ _vglOfrecerDeshacer(btn);
       if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
       try {
         const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${selectedLabDateInfo.iso}`;
-        const resAg = await gmPostJson(urlTurnos, {});
+        // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): esto usaba gmPostJson, que
+        // devuelve null tanto si AppCita contesta "no hay turnos" como si NO CONTESTA
+        // (timeout, sin red, 500) — misma clase de bug que la AUDITORÍA #11 ya corrigió en
+        // apiLaboratorioAgendarAuto (línea ~15326) y en las agendas (resAgendas.__sinRespuesta,
+        // línea ~19473), pero que seguía viva aquí y en cargarHorasLabSolo. Un timeout de
+        // AppCita se presentaba como el HECHO verificado "No hay turnos de laboratorio
+        // disponibles" y encima desmarcaba/deshabilitaba el interruptor de la toma.
+        const resAgEx = await gmPostJsonEx(urlTurnos, {});
         if (!vivo()) return;
         if (labToken !== _cargarHorasLabToken) return;
-        const turnos = extractAgendasList(resAg);
+        if (!resAgEx || !resAgEx.ok) {
+          if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo consultar la disponibilidad de laboratorio en AppCita${resAgEx && resAgEx.status ? " (respuesta " + resAgEx.status + ")" : " (sin conexión)"}. Reintente.</option>`;
+          // Sin respuesta real no se sabe si hay o no cupos: el interruptor se deja como
+          // ya estaba (deshabilitado desde el arranque de la función), sin afirmar nada.
+          return;
+        }
+        const turnos = extractAgendasList(resAgEx.data);
         const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
         if (labTimeSel) {
           if (turnosConHora.length > 0) {
@@ -20731,9 +20769,17 @@ _vglOfrecerDeshacer(btn);
         uxTrack("cita.creada:" + selectedEspId);
         _fnCompletado = true;
         try { uxTrack("fn.agendar.complete"); } catch (e) {}
+        // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): `ultimoSmsEnviado` se fija
+        // en cuanto se DISPARA el fetch de EnviarSMS (línea ~16141), no cuando se confirma
+        // — el envío es fire-and-forget y su resultado real solo se conoce después, dentro
+        // del .then()/.catch() de más arriba, que si falla SOLO lo dice por consola. Esta
+        // notificación es SÍNCRONA justo tras crear la cita, así que en el peor caso
+        // (rechazo del proveedor de SMS, sin red) el médico leía "enviado" sobre un mensaje
+        // que nunca llegó. Se cambia el verbo a lo único que aquí se sabe con certeza: que
+        // la petición se envió, no que el paciente la recibió.
         notify("VERDE", "✅ Cita asignada exitosamente",
           `Paciente: ${patientName}\nFecha: ${fechaElegida.fmt} · Hora: ${horaTxt}`
-          + (ultimoSmsEnviado ? `\nSMS de recordatorio enviado al ${ultimoSmsEnviado}.` : `\nSin SMS de recordatorio.`),
+          + (ultimoSmsEnviado ? `\nSe solicitó el envío del SMS de recordatorio al ${ultimoSmsEnviado} (revise la consola si el paciente dice no haberlo recibido).` : `\nSin SMS de recordatorio.`),
           false, "cita|" + apt.doc_id + "|" + fechaElegida.iso);
         // v17.1.0 (#146) — RETIRADO `bumpStat("atiempo")`. Asignar una cita no es que un
         // paciente llegara a tiempo: este contador alimenta el indicador «A TIEMPO» del
@@ -20917,9 +20963,17 @@ _vglOfrecerDeshacer(btn);
       if (labTimeSel) labTimeSel.innerHTML = `<option value="">⏳ Consultando disponibilidades en AppCita...</option>`;
       try {
         const urlTurnos = `https://appcita.viva1a.com.co:8051/apiLaboratorioV2/api/Agendamiento/ObtenerTurnosPorFecha?sedeId=${mtrSedeIdLab()}&fechaBuscar=${selectedLabDateInfo.iso}`;
-        const resAg = await gmPostJson(urlTurnos, {});
+        // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug que
+        // cargarHorasLab — gmPostJson no distingue "AppCita contestó: sin turnos" de "no
+        // contestó" (timeout, sin red, 500), y ambos casos pintaban "No hay turnos" como
+        // un hecho verificado. Ver AUDITORÍA #11 (apiLaboratorioAgendarAuto, ~15326).
+        const resAgEx = await gmPostJsonEx(urlTurnos, {});
         if (!vivo() || token !== _tokenLabSolo || isSubmitting) return;
-        const turnos = extractAgendasList(resAg);
+        if (!resAgEx || !resAgEx.ok) {
+          if (labTimeSel) labTimeSel.innerHTML = `<option value="">⚠ No se pudo consultar la disponibilidad en AppCita${resAgEx && resAgEx.status ? " (respuesta " + resAgEx.status + ")" : " (sin conexión)"}. Reintente.</option>`;
+          return;
+        }
+        const turnos = extractAgendasList(resAgEx.data);
         const turnosConHora = (turnos || []).filter((t) => t && (t.hora || t.horaTexto || t.Hora));
         if (labTimeSel) {
           if (turnosConHora.length > 0) {
@@ -28457,7 +28511,17 @@ _vglOfrecerDeshacer(btn);
   // primero, porque en consulta nadie lee la tercera línea.
   function mtrAvisosFarmacologicos(ctx) {
     const base = mtrAvisosDosisRenal(ctx);
-    if (base.motivo === "SIN_LISTA_DE_MEDICAMENTOS" || base.motivo === "SIN_FUNCION_RENAL") {
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): "SIN_FUNCION_RENAL" (falta
+    // Cockcroft-Gault) apagaba TODO — avisos de dosis Y las interacciones farmacológicas
+    // (Triple Whammy, doble bloqueo del SRAA, hiperkalemia sinérgica...), que solo
+    // necesitan la lista de medicamentos y la CKD-EPI (mtrEvaluarInteraccionesAmpliadas/
+    // mtrEvaluarConCatalogoRcv ya toleran egfr/crcl null internamente). Sin CG, el panel
+    // de Medicamentos quedaba permanentemente en "Falta la función renal" sin mostrar
+    // NINGUNA interacción, aunque hubiera CKD-EPI de sobra. Ahora solo SIN_LISTA_DE_
+    // MEDICAMENTOS corta todo (sin saber qué toma, no se evalúa nada de ningún tipo);
+    // sin CG, los avisos de dosis renal siguen vacíos (base.avisos ya lo es), pero las
+    // interacciones se calculan igual.
+    if (base.motivo === "SIN_LISTA_DE_MEDICAMENTOS") {
       return { avisos: [], interacciones: [], motivo: base.motivo, legible: base.legible };
     }
     const c = ctx || {};
@@ -28489,11 +28553,17 @@ _vglOfrecerDeshacer(btn);
     try { const cob = mtrMedsSinGrupo(meds || []); if (cob.total) uxTrack("farmaco.cobertura", cob); } catch (e) {}
 
     const n = todo.length;
+    // v17.6.28 — si NO se halló nada (n=0) pero la razón de fondo era SIN_FUNCION_RENAL
+    // (no se pudo evaluar dosis por falta de CG), el motivo se conserva: la vista de
+    // presentación (mtrRenderAvisosHtml) distingue "no se pudo evaluar" (ámbar,
+    // .vgl-mtr-sinjuicio) de "se evaluó y está limpio" (.vgl-mtr-limpio) — con n=0 y
+    // motivo "SIN_HALLAZGOS" a secas se habría pintado en verde un caso que en realidad
+    // nunca llegó a juzgar la dosis renal.
     return {
       avisos: avisosRenales,
       interacciones: inter.concat(interCatalogo),
       todo: todo,
-      motivo: n ? "OK" : (base.motivo === "SIN_MEDICAMENTOS_ACTIVOS" ? base.motivo : "SIN_HALLAZGOS"),
+      motivo: n ? "OK" : (base.motivo === "SIN_MEDICAMENTOS_ACTIVOS" || base.motivo === "SIN_FUNCION_RENAL" ? base.motivo : "SIN_HALLAZGOS"),
       legible: n ? (n + " aviso(s) de seguridad farmacológica") : base.legible,
     };
   }
