@@ -872,3 +872,29 @@ v17.6.22 (mismo día): el médico aceptó el aviso honesto pero pidió la causa 
 se conservan AMBOS (el aviso como red de seguridad, el tope subido como arreglo real). El
 banco completo al cierre: **1.429 comprobaciones, 0 en rojo** (44 suites presentes; 0
 casos nuevos, 2 aserciones existentes actualizadas al nuevo valor).
+
+## v17.6.24-25 — 24-ago-2026 (Redactor IA — Bloque A de la auditoría S+ de 20 bugs: botón «Preguntar» y datos que se perdían)
+
+Primer bloque de una auditoría multi-agente de 20 hallazgos confirmados sobre la
+Redacción Asistida (IA), pedida por el médico tras revisarlos ("hay botones de más").
+Se implementa **por bloques, con pausa de revisión entre cada uno** (pedido explícito del
+médico) — este es el Bloque A, correcciones aisladas sin dependencias.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~13400 (v17.6.24) | Borrada la regla CSS `.vgl-agm-btn.sec.active` completa | NO | Ninguna: *v17.6.24: el botón «Preguntar» tiene una regla CSS .active* (suite_57) Y *Regla G — censo de `!important`* (suite_25, esperaba 349, salió 347) cayeron a rojo. Restaurada de inmediato; ambas suites volvieron a verde. |
+| ~32016 (v17.6.25) | `const datos = Object.assign({}, mtrDatosExtraLeer(docId) \|\| {});` vuelto a `const datos = {};` (el Guardar de «➕ Datos del paciente» vuelve a reemplazar el almacén en vez de fusionar) | NO | Ninguna: *v17.6.25: «Datos del paciente» fusiona con lo ya guardado, no lo reemplaza* (suite_57) cayó a rojo. Restaurada de inmediato; suite_57 volvió a verde. |
+
+Las dos mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El bug de v17.6.24 no tiene una unidad aislable (el toggle
+de `.active` vive dentro del handler delegado de clic del modal de 600 líneas) — se
+protege por texto fuente, mismo criterio ya establecido en este archivo para "uxTrack no
+arrastra texto clínico" y el contexto obsoleto de v17.6.22. El de v17.6.25 igual: el
+handler de Guardar vive dentro de `mtrAbrirDatosAdicionales`, que construye un modal real
+con `document.createElement`/`querySelector` sobre subárboles que el DOM de prueba de
+este arnés no soporta (`elem.querySelector()` siempre devuelve `null`, ver
+`tests/harness.js`) — reconstruir el modal completo para aislar el clic no es viable, así
+que se protege igual por texto fuente. El banco completo al cierre: **1.431
+comprobaciones, 0 en rojo** (44 suites presentes; +2 casos nuevos en suite_57, censo de
+suite_25 ajustado de 347 a 349).

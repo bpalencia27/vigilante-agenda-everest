@@ -4,6 +4,18 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.25] — 2026-08-24 (Redactor IA — Bloque A: botón «Preguntar» y datos del paciente que se perdían)
+
+Primer bloque de la auditoría S+ de 20 bugs sobre la Redacción Asistida (IA), pedida por el médico tras revisar los hallazgos ("hay botones de más", además de los ya conocidos de contexto/rotación/tokens que se atacan en bloques siguientes). Correcciones aisladas, sin dependencias entre sí.
+
+### 🐛 v17.6.24 — El botón «❓ Preguntar sobre este paciente» ahora SÍ se ve seleccionado
+- Comparte el selector delegado de los 3 chips de casilla (`.vgl-ia-modos [data-modo]`) y sí recibía la clase `.active` al hacer clic, pero llevaba `class="vgl-agm-btn sec"` (no `vgl-agm-pbtn`) y no existía ninguna regla CSS `.active` para esa combinación en toda la hoja de estilos: el clic cambiaba de modo de verdad (aparecía el campo de pregunta) pero apagaba los 3 chips sin encender nada — parecía que el clic no había hecho efecto. Nueva regla `.vgl-agm-btn.sec.active`, misma paleta que `.vgl-agm-pbtn.active`. Censo de `!important` de suite_25: 347 → 349 (+2, documentado en el propio test).
+
+### 🐛 v17.6.25 — «➕ Datos del paciente» ya no borra en silencio lo que la caja de críticos había guardado
+- El Guardar de ese formulario armaba `datos` desde cero con solo sus 9 campos y llamaba `mtrDatosExtraGuardar`, que **reemplaza** todo el almacén (no fusiona). Si antes el médico había llenado la caja roja de datos críticos del Análisis y plan (categoría de riesgo, TFG, medicamentos — que sí fusiona con `Object.assign`), esos 3 campos se perdían sin ningún aviso al guardar el formulario general. Ahora el Guardar arranca desde lo ya guardado (leído fresco, no la foto de cuando se abrió el modal) y superpone sus 9 campos encima.
+
+---
+
 ## [Versión 17.6.23] — 2026-08-24 (Redactor IA: se ataca la causa raíz del truncamiento, no solo el aviso)
 
 Corrección sobre v17.6.22: "necesito que siempre salga completo, así no me sirve" — el aviso honesto de borrador incompleto queda como red de seguridad, pero se sube el presupuesto real de tokens.

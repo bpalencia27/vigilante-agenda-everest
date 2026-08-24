@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.23
+// @version     17.6.25
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1006,7 +1006,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.23";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.25";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13388,6 +13388,19 @@ _vglOfrecerDeshacer(btn);
       }
       .vgl-agm-btn.sec{background:var(--bg3);color:var(--fg) !important}
       .vgl-agm-btn.sec:hover{background:var(--bg4)}
+      /* v17.6.24 — REPORTE DE CAMPO: «❓ Preguntar sobre este paciente» del Redactor IA
+         (vgl-ia-btn-preguntar) comparte el selector delegado de los chips de casilla
+         (.vgl-ia-modos [data-modo]) y SÍ recibe la clase .active al seleccionarlo — pero
+         al llevar class="vgl-agm-btn sec" (no vgl-agm-pbtn), no existía ninguna regla
+         .vgl-agm-btn.active en toda la hoja de estilos: el clic cambiaba de modo de verdad
+         (aparecía el campo de pregunta) pero apagaba los 3 chips sin encender nada, así
+         que parecía que el clic no había hecho efecto. Misma paleta que .vgl-agm-pbtn.active
+         (línea ~13139) para que el estado "seleccionado" se lea igual en todo el panel.
+         Especificidad más alta que .sec para no depender del orden de clases del HTML. */
+      .vgl-agm-btn.sec.active{
+        background:rgba(var(--rgb-azul),.22)!important;color:var(--c-azul)!important;
+        box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.30),0 4px 14px rgba(var(--rgb-azul),.18)
+      }
       .vgl-agm-btn.pri{
         background:linear-gradient(135deg,rgba(var(--rgb-verde),.30),rgba(var(--rgb-verde),.16)); /* [UI-CSS] */
         color:var(--c-verde) !important;
@@ -31991,8 +32004,16 @@ _vglOfrecerDeshacer(btn);
       modal.querySelector("#vgl-dx-cancel").addEventListener("click", cerrar);
       if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, cerrar);
       modal.querySelector("#vgl-dx-guardar").addEventListener("click", () => {
-        // Lectura ÚNICA de todos los campos (nada corre mientras se escribe).
-        const datos = {};
+        // v17.6.25 — REPORTE DE CAMPO: este Guardar armaba `datos` desde cero con SOLO
+        // los 9 campos de este formulario y se lo pasaba a mtrDatosExtraGuardar, que
+        // REEMPLAZA todo el almacén (línea ~31479: `_mtrDatosExtra = {docId, datos}`).
+        // Si antes el médico ya había llenado la caja roja de críticos del Redactor
+        // (_pintarCriticos, que SÍ fusiona con Object.assign), esos 3 campos —categoría
+        // de riesgo, TFG, medicamentos— se borraban en silencio al guardar este modal.
+        // Se parte de lo que ya hay guardado (leído fresco, no la foto de cuando se
+        // abrió el modal: pudo cambiar mientras estuvo abierto) y se superponen los 9
+        // campos de este formulario encima — nunca al revés.
+        const datos = Object.assign({}, mtrDatosExtraLeer(docId) || {});
         for (const k of Object.keys(MTR_DATOS_EXTRA_ETIQUETAS)) {
           const el = modal.querySelector("#vgl-dx-" + k);
           if (el) datos[k] = String(el.value || "").trim();

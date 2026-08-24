@@ -682,6 +682,34 @@ module.exports = {
       t.cierto(/mtrAbrirDatosAdicionales\(resumen\._docId, \{ motivo: _libreAlAbrir\.motivo/.test(src), "el prellenado de «Datos del paciente» también lee fresco, no la foto vieja");
     });
 
+    // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
+    // selector delegado de los 3 chips de casilla (.vgl-ia-modos [data-modo]) y SÍ recibe la
+    // clase .active al seleccionarlo, pero lleva class="vgl-agm-btn sec" (no vgl-agm-pbtn) y
+    // no existía ninguna regla CSS .active para esa combinación: el clic cambiaba de modo de
+    // verdad (aparecía el campo de pregunta) pero apagaba los 3 chips sin encender nada —
+    // parecía que el clic no había hecho efecto.
+    t.caso("v17.6.24: el botón «Preguntar» tiene una regla CSS .active (antes no existía ninguna)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/\.vgl-agm-btn\.sec\.active\s*\{/.test(src), "existe una regla que targetea .vgl-agm-btn.sec.active");
+      t.cierto(/class="vgl-agm-btn sec"[^>]*id="vgl-ia-btn-preguntar"/.test(src),
+        "el botón Preguntar sigue llevando exactamente las clases que la regla nueva cubre");
+    });
+
+    // v17.6.25 — AUDITORÍA S+ (24-ago-2026): el Guardar de «➕ Datos del paciente» armaba
+    // `datos` desde cero con SOLO sus 9 campos y llamaba mtrDatosExtraGuardar, que REEMPLAZA
+    // todo el almacén (no fusiona) — si antes la caja roja de críticos del Redactor
+    // (_pintarCriticos, que SÍ fusiona con Object.assign) ya había guardado categoría de
+    // riesgo/TFG/medicamentos, esos 3 campos se perdían en silencio al guardar este modal.
+    // No hay forma de aislar el handler de clic sin reconstruir el modal completo (el DOM de
+    // prueba de este arnés no soporta querySelector real sobre subárboles construidos en
+    // tiempo de ejecución) — se protege por texto fuente, mismo criterio que el caso de
+    // arriba.
+    t.caso("v17.6.25: «Datos del paciente» fusiona con lo ya guardado, no lo reemplaza", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/const datos = Object\.assign\(\{\}, mtrDatosExtraLeer\(docId\) \|\| \{\}\);/.test(src),
+        "el Guardar arranca desde lo ya guardado (leído fresco), no desde un objeto vacío");
+    });
+
     // v17.3.0 — Reporte real de consola (21-ago): "Análisis y plan" y "Recomendaciones"
     // morían de un solo tiro con 404 (gemini-2.5-flash, retirado por Google) o 400 (el
     // propio gemini-3.7-flash, recién liberado, lo devolvió varias veces esa misma
