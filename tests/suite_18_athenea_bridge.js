@@ -1012,11 +1012,12 @@ module.exports = {
       t.igual(glucosa.__vglToken, "TOK-DOS");
     });
 
-    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> [] sin llegar nunca a pedir detalle", async () => {
+    await t.casoAsync("getAtheneaLabsAuto: sesión caída (paso 1 con login) -> null sin llegar nunca a pedir detalle (v16.2.8)", async () => {
       const e = entornoAthenea();
       e.setPlan((o) => o.onload({ status: 200, responseText: `<input type="password" /> Iniciar sesión` }));
       const labs = await e.c.api.getAtheneaLabsAuto(DOC);
-      t.igual(labs, []);
+      // v16.2.8 — «no se pudo leer el portal» NO es «no tiene laboratorios»: null ≠ [].
+      t.igual(labs, null, "sesión caída = no se pudo leer (null), no una lista vacía");
       t.falso(e.llamadas.some((o) => String(o.url).includes("consultaDetalleSolicitud")));
     });
 

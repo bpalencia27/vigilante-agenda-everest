@@ -368,19 +368,19 @@ module.exports = {
       const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
       const st = c.api.__state;
       st.lastSnapshot = null;
-      t.igual(c.api.apiCadencia(), 90000, "sin agenda: reposo de 90 s");
+      t.igual(c.api.apiCadencia(), 30000, "sin agenda: reposo de 30 s (v14.2.11)");
       st.lastSnapshot = { list: [{ estado: "Atendido", elapsed: 0 }, { estado: "En Sala", elapsed: 99 }] };
-      t.igual(c.api.apiCadencia(), 90000, "todas resueltas: nada que vigilar de cerca");
+      t.igual(c.api.apiCadencia(), 30000, "todas resueltas: nada que vigilar de cerca");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
       t.igual(c.api.apiCadencia(), 5000, "en el cruce exacto (ventana crítica): 5 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 8 }] };
-      t.igual(c.api.apiCadencia(), 15000, "8 min ANTES del cruce: 15 s (bisagra de aproximación)");
+      t.igual(c.api.apiCadencia(), 10000, "8 min ANTES del cruce: 10 s (bisagra de aproximación)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 8 }] };
       t.igual(c.api.apiCadencia(), 8000, "8 min DESPUÉS del cruce: 8 s — MÁS agresivo que antes, por diseño (asimetría v12.3.8)");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL - 30 }] };
-      t.igual(c.api.apiCadencia(), 45000, "lejos de la tolerancia, antes del cruce: 45 s");
+      t.igual(c.api.apiCadencia(), 20000, "lejos de la tolerancia, antes del cruce: 20 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
-      t.igual(c.api.apiCadencia(), 15000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 15 s");
+      t.igual(c.api.apiCadencia(), 10000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 10 s");
     });
 
     // ---------- tickApi ----------
@@ -454,10 +454,14 @@ module.exports = {
       t.cierto(e.reg.fetches[1].url.includes("PuntoAtencionId=0"));
     });
 
-    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si nada responde, devuelve null sin lanzar", async () => {
+    await t.casoAsync("apiAccesoBuscarCitasDisponibles: si nada responde, devuelve la marca de no-respuesta sin lanzar (v16.7.0)", async () => {
       const e = entornoApi();
       e.setFetch(respuestaError(404));
-      t.igual(await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-16"), null);
+      // v16.7.0 — auditoría #11: «no hay cupos» y «no se pudo preguntar» son cosas
+      // distintas; la no-respuesta queda MARCADA (__sinRespuesta) para que el modal no
+      // anuncie un hecho que nadie comprobó. extractAgendasList sigue dando [] con la marca.
+      const r = await e.c.api.apiAccesoBuscarCitasDisponibles(77, "2026-08-16");
+      t.igual(r && r.__sinRespuesta, true, "la respuesta viene marcada como sin-respuesta");
       t.igual(e.reg.fetches.length, 2, "un 4xx no se reintenta: una llamada por ruta");
     });
 
