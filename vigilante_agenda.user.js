@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.31
+// @version     17.6.32
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.31";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.32";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7752,7 +7752,7 @@ _vglOfrecerDeshacer(btn);
         // Ya NO es un fallo silencioso (v7.8): con el formato compacto esto exigiría una
         // base ~4 veces mayor que la actual; si algún día pasa, que se sepa.
         GM_setValue("vgl_pym", ""); GM_setValue("vgl_pym_dia", "");
-        setSummary("La lista de prevención de hoy es demasiado grande para guardarla en este equipo (" + Math.round(txt.length / 1048576) + " MB): cada recarga volverá a leerla. Repórtalo.", "warn");
+        setSummary("La lista de prevención de hoy es demasiado grande para guardarla en este equipo (" + Math.round(txt.length / 1048576) + " MB): cada recarga volverá a leerla. Repórtelo.", "warn");
       }
     } catch (e) {}
   }
@@ -9210,7 +9210,7 @@ _vglOfrecerDeshacer(btn);
             buf = b; nombre = fb.name; break;
           } catch (e) { err = (e && e.message) || "error"; }
         }
-        if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábrelo una vez con tu usuario y recarga esta página."); return; }
+        if (!buf) { spToast("No pude bajar el PyM (" + err + "). Ábralo una vez con su usuario y recargue esta página."); return; }
       }
       const idx = await readPym(nombre, buf);
       const txt = await packPym(idx.map, idx.todos, idx.abandono, { date: todayStamp(), name: nombre + (esFallback ? " (base piloto — aún no llega la de hoy)" : " (PyM de hoy)"), mtime, fp: pymFP(nombre, mtime), fb: esFallback }, makeYielder(15));
@@ -9304,7 +9304,7 @@ _vglOfrecerDeshacer(btn);
     // en cuanto aparece en SharePoint (hallazgo ALTO de la revisión adversarial).
     const esDeHoy = esNombreDeHoy(file.name);
     if (name.endsWith(".csv")) { reader.onload = async (e) => { try { const all = parseCSV(String(e.target.result)); const idx = await indexRowsAsync(all[0] || [], all.slice(1), makeYielder(15)); state.pymFallback = false; applyPymIdx(idx, file.name, "", file.name, esDeHoy); } catch (err) { setSummary("No se pudo leer el archivo (.csv): " + err.message, "error"); } }; reader.readAsText(file, "UTF-8"); }
-    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; usa .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : ""), "", file.name, esDeHoy); } catch (err) { setSummary("No se pudo leer el archivo (.xlsx) (" + err.message + "). Prueba .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
+    else { reader.onload = async (e) => { try { if (typeof DecompressionStream === "undefined") throw new Error("Navegador sin soporte .xlsx; use .csv."); const r = await readPymWorkbookStream(e.target.result); state.pymFallback = false; state.pymHoja = r.sheetName || ""; applyPymIdx({ map: r.map, todos: r.todos, abandono: r.abandono }, file.name + (r.sheetName ? " · hoja «" + r.sheetName + "»" : ""), "", file.name, esDeHoy); } catch (err) { setSummary("No se pudo leer el archivo (.xlsx) (" + err.message + "). Pruebe .csv.", "error"); } }; reader.readAsArrayBuffer(file); }
   }
 
   // ---- Extracción del DOM (parametrizada por documento: sirve para la página o para el clon) ----
@@ -10777,8 +10777,8 @@ _vglOfrecerDeshacer(btn);
   function testNotifications() {
     if (typeof Notification === "undefined") { setSummary("Este navegador no soporta notificaciones de escritorio.", "error"); return; }
     if (Notification.permission === "denied") {
-      setSummary("Notificaciones BLOQUEADAS: clic en el candado de la barra de direcciones → Notificaciones → Permitir, y recarga.", "error");
-      showToast("ROJO", "⛔ Prueba (solo navegador)", "Windows está bloqueado para este sitio. Actívalo en el candado de la barra de direcciones.", true);
+      setSummary("Notificaciones BLOQUEADAS: clic en el candado de la barra de direcciones → Notificaciones → Permitir, y recargue.", "error");
+      showToast("ROJO", "⛔ Prueba (solo navegador)", "Windows está bloqueado para este sitio. Actívelo en el candado de la barra de direcciones.", true);
       return;
     }
     if (Notification.permission !== "granted") { setSummary("Pulse «Permitir» en el aviso del navegador…"); enableOsNotifications(); return; }
@@ -17005,7 +17005,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-ux-caption">Los resultados de laboratorio del paciente en los últimos 365 días. Aquí solo se consultan — nada se modifica en Everest. Para agendar la toma de muestras use Agendamiento; para pedir un examen nuevo, Ordenamiento.</div>
 
         <div class="vgl-agm-sec vgl-labs-srcbar" style="margin-bottom:14px">
-          <span class="vgl-labs-srclbl"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b>${vglTip("Estos resultados se traen solos del sistema del laboratorio (Athenea), sin que tengas que buscarlos. El botón de la derecha abre el portal oficial por si necesitas el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
+          <span class="vgl-labs-srclbl"><b>Fuente de Consulta:</b> Búsqueda automática directa en <b>Athenea Soluciones API</b>${vglTip("Estos resultados se traen solos del sistema del laboratorio (Athenea), sin que tenga que buscarlos. El botón de la derecha abre el portal oficial por si necesita el reporte completo en PDF o resultados más antiguos que los de aquí.")}</span>
           <a href="${atheneaUrl}" target="_blank" class="vgl-agm-btn sec vgl-labs-portal">
             🌐 Abrir en Portal Athenea (Auto-Login)
           </a>
@@ -24080,7 +24080,7 @@ _vglOfrecerDeshacer(btn);
       const anterior = GM_getValue("vgl_last_ver", "");
       const cambio = anterior !== VERSION;
       if (anterior && cambio) {
-        notify("AZUL", "✅ Vigilante actualizado", `Ya tienes la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
+        notify("AZUL", "✅ Vigilante actualizado", `Ya tiene la última versión (v${VERSION}).`, false, "verupd|" + VERSION);
       }
       if (cambio) {
         GM_setValue("vgl_last_ver", VERSION);
@@ -24103,7 +24103,7 @@ _vglOfrecerDeshacer(btn);
       if (ultimoAviso && Math.floor((new Date(hoy) - new Date(ultimoAviso)) / 86400000) < 30) return;
       GM_setValue("vgl_ver_aviso", hoy);
       notify("AZUL", "🔄 Recordatorio de actualización",
-        `Llevas ${dias} días en la v${VERSION} sin ver una versión nueva.\nSi esperabas una y no llegó, revisa Tampermonkey → Panel de control → menú → «Check for userscript updates».`,
+        `Lleva ${dias} días en la v${VERSION} sin ver una versión nueva.\nSi esperaba una y no llegó, revise Tampermonkey → Panel de control → menú → «Check for userscript updates».`,
         false, "verold|" + hoy);
     } catch (e) {}
   }
@@ -24490,13 +24490,13 @@ _vglOfrecerDeshacer(btn);
             if (needsUpdate || forceReload) {
               // v7.8.1: SOLO reload si NO hay historia clínica abierta (evita pérdida de datos)
               if (seccionActiva() === "historia") {
-                setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierres la historia clínica`, "info");
+                setSummary(`📦 Actualización v${minVer} disponible — se aplicará cuando cierre la historia clínica`, "info");
                 return;
               }
               const marca = "vgl_upd|" + minVer;
               try {
                 if (sessionStorage.getItem(marca)) {
-                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualízala desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».`, "warn");
+                  setSummary(`📦 Hay una versión nueva (v${minVer}). Actualícela desde el Menú de Tampermonkey → «Buscar actualizaciones del complemento».`, "warn");
                   return;
                 }
                 sessionStorage.setItem(marca, "1");

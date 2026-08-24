@@ -2864,5 +2864,48 @@ module.exports = {
       t.cierto(/Se solicitó el envío del SMS de recordatorio al \$\{ultimoSmsEnviado\}/.test(src), "el texto ahora dice lo que de verdad se sabe: que se solicitó");
     });
 
+    // =================================================================
+    // v17.6.32 — AUDITORÍA S+ (barrido total, 24-ago-2026): 10 textos visibles al médico
+    // usaban tuteo (tú) mientras el resto de la interfaz — y el propio proyecto — trata al
+    // médico de usted de forma consistente ("Pulse", "Verifique", "Escriba"). Mezclar
+    // ambos tratos dentro del mismo flujo (a veces en la misma notificación) lee como
+    // descuido. Se protegen por texto fuente: son cambios de redacción sin lógica que
+    // mutar, mismo criterio que la prueba de SMS de arriba.
+    t.caso("v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const tuteos = [
+        /Ya tienes la última versión/,
+        /Llevas \$\{dias\} días/,
+        /Repórtalo\./,
+        /Ábrelo una vez con tu usuario/,
+        /Navegador sin soporte \.xlsx; usa \.csv/,
+        /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Prueba \.csv/,
+        /Notificaciones BLOQUEADAS:.*recarga\./,
+        /Actívalo en el candado/,
+        /sin que tengas que buscarlos/,
+        /por si necesitas el reporte completo/,
+        /cuando cierres la historia clínica/,
+        /Actualízala desde el Menú de Tampermonkey/,
+      ];
+      tuteos.forEach((re) => t.falso(re.test(src), `no debe quedar tuteo: ${re}`));
+      const ustedes = [
+        /Ya tiene la última versión/,
+        /Lleva \$\{dias\} días/,
+        /Repórtelo\./,
+        /Ábralo una vez con su usuario/,
+        /Navegador sin soporte \.xlsx; use \.csv/,
+        /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Pruebe \.csv/,
+        /Notificaciones BLOQUEADAS:.*recargue\./,
+        /Actívelo en el candado/,
+        /sin que tenga que buscarlos/,
+        /por si necesita el reporte completo/,
+        /cuando cierre la historia clínica/,
+        /Actualícela desde el Menú de Tampermonkey/,
+      ];
+      ustedes.forEach((re) => t.cierto(re.test(src), `debe quedar en usted: ${re}`));
+    });
+
   },
 };

@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.32] — 2026-08-24 (Barrido S+ total — Bloque Editar: trato de usted, consistente en toda la interfaz)
+
+### 🧹 Diez avisos que tuteaban al médico ahora tratan de usted, como el resto de la interfaz
+- El aviso de actualización disponible, el recordatorio de auto-actualización lenta, el aviso de lista de prevención demasiado grande para guardar, la caída de descarga de SharePoint, los dos mensajes de "pruebe con .csv", la prueba de notificaciones de escritorio (dos avisos), el tooltip de la fuente de laboratorios y los dos avisos de nueva versión disponible en Ajustes tuteaban al médico ("Ya tienes", "Actívalo", "Ábrelo", "cierres") mientras el resto de la interfaz —incluida la notificación de PyM que sale en el mismo flujo— trata siempre de usted. Ahora los diez quedan en usted, sin excepciones.
+
+---
+
 ## [Versión 17.6.31] — 2026-08-24 (Barrido S+ total — hallazgo colateral de v17.6.30: tildes en el cotejo de fuentes)
 
 Al probar el fix de v17.6.30 apareció un segundo defecto en la misma función, distinto y

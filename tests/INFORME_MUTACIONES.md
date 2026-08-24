@@ -1022,3 +1022,25 @@ la ya escrita).
 Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
 rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 1.451/1.451 tras la restauración.
+
+## v17.6.32 — 24-ago-2026 (Barrido S+ total — Bloque Editar: trato de usted, consistente en toda la interfaz)
+
+Banco antes: 1.452 (con la prueba nueva ya sumada) · después de restaurar: **1.452**.
+Diez sitios de texto (`avisarSiActualizado`, `chequearAutoUpdateLento`, el aviso de lista
+de prevención demasiado grande, la caída de descarga de SharePoint, los dos "pruebe con
+.csv", `testNotifications` ×2, el tooltip de fuente de laboratorios, y los dos avisos de
+Ajustes) tuteaban al médico; se corrigieron los diez a usted y se protegieron con una
+única prueba de fuente (source-regex) que exige la ausencia de las 12 formas de tuteo Y
+la presencia de las 12 formas de usted — mismo patrón que la prueba de SMS de v17.6.28 en
+`suite_15`.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.452/1.452 tras la restauración. Las otras 9 correcciones no se mutaron una a una por ser
+la misma clase de cambio (texto sin lógica) verificado por la misma prueba en bucle sobre
+las 12 formas; cualquier regresión futura en cualquiera de los 10 sitios hace caer esta
+misma prueba.
