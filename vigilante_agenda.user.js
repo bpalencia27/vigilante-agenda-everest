@@ -23178,13 +23178,18 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  // Hoisted TypedArrays for fuzzyMatch dynamic programming to avoid repetitive memory allocation
+  const _fuzzyFwRowPrev = new Uint16Array(255);
+  const _fuzzyFwRowCurr = new Uint16Array(255);
+  const _fuzzyFwRowPrevPrev = new Uint16Array(255);
+
   function fuzzyMatch(q, text) {
     const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = _fuzzyFwRowPrev;
+    let currRow = _fuzzyFwRowCurr;
+    let prevPrevRow = _fuzzyFwRowPrevPrev;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -23219,10 +23224,10 @@ _vglOfrecerDeshacer(btn);
             }
           }
           // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
