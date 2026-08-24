@@ -898,3 +898,31 @@ este arnés no soporta (`elem.querySelector()` siempre devuelve `null`, ver
 que se protege igual por texto fuente. El banco completo al cierre: **1.431
 comprobaciones, 0 en rojo** (44 suites presentes; +2 casos nuevos en suite_57, censo de
 suite_25 ajustado de 347 a 349).
+
+## v17.6.26 — 24-ago-2026 (Redactor IA — se retira «Datos del paciente» por redundante, el estilo se aprende solo, texto interno fuera de pantalla)
+
+Seguimiento inmediato al Bloque A: el médico revisó el resumen y pidió tres cosas más
+antes de seguir con la rotación de modelos. **Esta versión SUPERSEDE el parche de
+v17.6.25**: en vez de arreglar el bug de fusión de `mtrAbrirDatosAdicionales`, se retira
+la función completa (con su bug incluido) por ser una superficie redundante con
+"Indicaciones" — la mutación de v17.6.25 documentada arriba ya no aplica porque el código
+que protegía ya no existe; queda en el historial como evidencia de que el bug era real
+antes de decidir eliminar la superficie en vez de parchearla.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~31970 (v17.6.26) | Reinsertados `function mtrAbrirDatosAdicionales(x){}` y una referencia fantasma a `"vgl-ia-datos-btn"` al final del archivo | NO | Ninguna: *v17.6.26: «➕ Datos del paciente» se retiró por completo* (suite_57) cayó a rojo. Restaurada de inmediato; suite_57 volvió a verde. |
+| ~32473 (v17.6.26) | `_autoAprenderEstilo`: el umbral `delta === "intacta"` mutado a `delta === "reescritura"` (guardaría como ejemplo de estilo justo los textos que el médico tuvo que reescribir) | NO | Ninguna: *v17.6.26: el guardado de estilo es automático* (suite_57) cayó a rojo. Restaurada de inmediato. |
+| ~30827 (v17.6.26) | `mtrRedaccionPrompt`: reinsertado el interruptor `o.usarEstilo &&` en el cálculo de `ejemplos` | NO | Ninguna: DOS pruebas cayeron a rojo: el guardia de código fuente (*v17.6.26: el guardado de estilo es automático*, `t.falso(/o\.usarEstilo/...)`) Y la de comportamiento (*los ejemplos de estilo se inyectan automáticamente, sin ningún interruptor*). Restaurada de inmediato; suite_57 volvió a verde. |
+
+Las tres mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. Los tres textos de interfaz corregidos (aviso de
+privacidad del Redactor, tooltip de "Hoja educativa", dos criterios de clasificación de
+riesgo) son cambios de contenido de texto sin lógica que mutar — se verificaron por
+lectura: ninguno de los tres conserva la referencia a fecha/decisión interna, y el
+contenido clínico (qué se envía a Gemini, por qué el piso de diabetes/edad aplica) quedó
+intacto. El banco completo al cierre: **1.432 comprobaciones, 0 en rojo** (44 suites
+presentes; +2 casos nuevos en suite_57 netos: se agregaron 4 y se retiró 1 obsoleto de
+v17.6.25 más el ajuste de 2 pruebas existentes a las 3 claves restantes de
+`MTR_DATOS_EXTRA_ETIQUETAS`).

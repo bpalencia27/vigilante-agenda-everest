@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.25
+// @version     17.6.26
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1006,7 +1006,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.25";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.26";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8349,7 +8349,7 @@ _vglOfrecerDeshacer(btn);
   const RAGE_ETIQUETAS = new Set([
     "dock-btn", "dock-toggle", "agm-btn", "agm-sbtn", "agm-pbtn", "agm-close", "agm-input",
     "ord-chk", "ord-conducta", "ord-cancel", "ord-x", "labs-x", "labs-close", "labs-portal",
-    "riesgo-x", "riesgo-cancel", "ia-generar", "ia-copiar", "ia-insertar", "ia-estilo-guardar",
+    "riesgo-x", "riesgo-cancel", "ia-generar", "ia-copiar", "ia-insertar",
     "ia-x", "tip-btn", "chip", "fchip", "tab", "btn", "load", "sheet", "head", "sum", "list",
     "lab-inj", "exf-btn", "examen-normalidad", "examen-guardar", "examen-aplicar", "visib-pill", "deshacer-lote",
   ]);
@@ -11392,7 +11392,7 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-ia-datos,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -11479,7 +11479,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-ia-datos.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -11680,7 +11680,7 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-toasts,body.vgl-modo-oculto #vgl-postcita-panel,body.vgl-modo-oculto #vgl-tip-pop,
       body.vgl-modo-oculto #vgl-modal,body.vgl-modo-oculto #vgl-agendar-modal,body.vgl-modo-oculto #vgl-ordenar-modal,
       body.vgl-modo-oculto #vgl-labs-modal,body.vgl-modo-oculto #vgl-labsv-modal,body.vgl-modo-oculto #vgl-ia-modal,
-      body.vgl-modo-oculto #vgl-ia-datos,body.vgl-modo-oculto #vgl-riesgo-modal,body.vgl-modo-oculto #vgl-ficha-modal,body.vgl-modo-oculto #vgl-tablero-modal,body.vgl-modo-oculto #vgl-acomp-burbuja,body.vgl-modo-oculto #vgl-pes-modal,body.vgl-modo-oculto #vgl-panel-modal,
+      body.vgl-modo-oculto #vgl-riesgo-modal,body.vgl-modo-oculto #vgl-ficha-modal,body.vgl-modo-oculto #vgl-tablero-modal,body.vgl-modo-oculto #vgl-acomp-burbuja,body.vgl-modo-oculto #vgl-pes-modal,body.vgl-modo-oculto #vgl-panel-modal,
       body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
@@ -12891,7 +12891,7 @@ _vglOfrecerDeshacer(btn);
          página — consistente con el «no hace nada» reportado en consultorio. Mismo
          esqueleto que los otros modales; la Ficha del paciente nueva entra a la lista.
          Sin blur nuevo: estos cuatro comparten el fondo oscurecido sin backdrop-filter. */
-      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ia-datos,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal{
+      #vgl-riesgo-modal,#vgl-ia-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-confirma-modal,#vgl-panel-modal,#vgl-llenar-modal{
         position:fixed;top:0;left:0;width:100vw;height:100vh;
         background:rgba(2,4,9,.78);z-index:var(--z-modal);
         display:flex;align-items:center;justify-content:center;
@@ -12913,9 +12913,9 @@ _vglOfrecerDeshacer(btn);
          se pisa porque el rótulo solo se blinda dentro de #vgl-ia-modal, y el chip activo
          se excluye con :not(.active) para no matar su azul de estado. */
       #vgl-ia-modal .vgl-agm-lbl{color:var(--c-azul) !important}
-      #vgl-ia-modal .vgl-agm-check-lbl,#vgl-ia-datos .vgl-agm-check-lbl,#vgl-riesgo-modal .vgl-agm-check-lbl,#vgl-ficha-modal .vgl-agm-check-lbl,#vgl-tablero-modal .vgl-agm-check-lbl,#vgl-confirma-modal .vgl-agm-check-lbl,#vgl-panel-modal .vgl-agm-check-lbl{color:var(--fg) !important}
-      #vgl-ia-modal .vgl-agm-pbtn:not(.active),#vgl-ia-datos .vgl-agm-pbtn:not(.active),#vgl-riesgo-modal .vgl-agm-pbtn:not(.active),#vgl-ficha-modal .vgl-agm-pbtn:not(.active),#vgl-tablero-modal .vgl-agm-pbtn:not(.active),#vgl-confirma-modal .vgl-agm-pbtn:not(.active),#vgl-panel-modal .vgl-agm-pbtn:not(.active){color:var(--fg) !important}
-      #vgl-ia-modal .vgl-agm-btn span,#vgl-ia-datos .vgl-agm-btn span,#vgl-riesgo-modal .vgl-agm-btn span,#vgl-ficha-modal .vgl-agm-btn span,#vgl-tablero-modal .vgl-agm-btn span,#vgl-confirma-modal .vgl-agm-btn span,#vgl-panel-modal .vgl-agm-btn span{color:inherit !important}
+      #vgl-ia-modal .vgl-agm-check-lbl,#vgl-riesgo-modal .vgl-agm-check-lbl,#vgl-ficha-modal .vgl-agm-check-lbl,#vgl-tablero-modal .vgl-agm-check-lbl,#vgl-confirma-modal .vgl-agm-check-lbl,#vgl-panel-modal .vgl-agm-check-lbl{color:var(--fg) !important}
+      #vgl-ia-modal .vgl-agm-pbtn:not(.active),#vgl-riesgo-modal .vgl-agm-pbtn:not(.active),#vgl-ficha-modal .vgl-agm-pbtn:not(.active),#vgl-tablero-modal .vgl-agm-pbtn:not(.active),#vgl-confirma-modal .vgl-agm-pbtn:not(.active),#vgl-panel-modal .vgl-agm-pbtn:not(.active){color:var(--fg) !important}
+      #vgl-ia-modal .vgl-agm-btn span,#vgl-riesgo-modal .vgl-agm-btn span,#vgl-ficha-modal .vgl-agm-btn span,#vgl-tablero-modal .vgl-agm-btn span,#vgl-confirma-modal .vgl-agm-btn span,#vgl-panel-modal .vgl-agm-btn span{color:inherit !important}
       /* v17.3.1 — el mismo hueco de arriba (ver el comentario largo junto al trío
          Agendar/Ordenar/Labs, línea ~11623) también estaba aquí: .vgl-agm-check-lbl
          (línea ~12473) blinda la ETIQUETA, no el <span> suelto que lleva el texto
@@ -12926,8 +12926,8 @@ _vglOfrecerDeshacer(btn);
          del todo — la armadura general que se le agregó en v17.0.3 (línea ~13767) no
          lleva !important (bug #2 del CLAUDE.md) y no alcanza contra el
          span{...!important} de Everest. */
-      #vgl-ia-modal .vgl-agm-check-lbl span,#vgl-ia-datos .vgl-agm-check-lbl span,#vgl-riesgo-modal .vgl-agm-check-lbl span,#vgl-ficha-modal .vgl-agm-check-lbl span,#vgl-tablero-modal .vgl-agm-check-lbl span,#vgl-confirma-modal .vgl-agm-check-lbl span,#vgl-panel-modal .vgl-agm-check-lbl span{color:inherit !important}
-      #vgl-ia-modal .vgl-agm-check-lbl b,#vgl-ia-datos .vgl-agm-check-lbl b,#vgl-riesgo-modal .vgl-agm-check-lbl b,#vgl-ficha-modal .vgl-agm-check-lbl b,#vgl-tablero-modal .vgl-agm-check-lbl b,#vgl-confirma-modal .vgl-agm-check-lbl b,#vgl-panel-modal .vgl-agm-check-lbl b{color:inherit !important}
+      #vgl-ia-modal .vgl-agm-check-lbl span,#vgl-riesgo-modal .vgl-agm-check-lbl span,#vgl-ficha-modal .vgl-agm-check-lbl span,#vgl-tablero-modal .vgl-agm-check-lbl span,#vgl-confirma-modal .vgl-agm-check-lbl span,#vgl-panel-modal .vgl-agm-check-lbl span{color:inherit !important}
+      #vgl-ia-modal .vgl-agm-check-lbl b,#vgl-riesgo-modal .vgl-agm-check-lbl b,#vgl-ficha-modal .vgl-agm-check-lbl b,#vgl-tablero-modal .vgl-agm-check-lbl b,#vgl-confirma-modal .vgl-agm-check-lbl b,#vgl-panel-modal .vgl-agm-check-lbl b{color:inherit !important}
       /* v16.7.0 — Barra de módulos MINIMIZADOS (orden del médico del 20-ago). Va abajo a
          la IZQUIERDA para no pelear con el dock, que vive abajo a la derecha (#vgl-root,
          690px). Por encima de --z-modal en 1: con un modal abierto a pantalla completa la
@@ -14258,7 +14258,6 @@ _vglOfrecerDeshacer(btn);
          nuestro real, solo tapa lo que dependía de herencia y Everest interceptaba. */
       #vgl-riesgo-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-ia-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
-      #vgl-ia-datos :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-ficha-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-tablero-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-confirma-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
@@ -18343,7 +18342,7 @@ _vglOfrecerDeshacer(btn);
         + dentro
         + '<div class="vgl-agm-foot" style="margin-top:14px">'
         + '<span class="vgl-agm-dinfo" style="margin:0">Datos ' + escapeHtml(frescura) + ' · se revisa solo mientras el panel esté abierto</span>'
-        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente (B5, decisión del 22-ago)">🖨 Hoja educativa</button>' : "")
+        + (_resumen ? '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-hoja" title="Hoja educativa imprimible para entregar al paciente">🖨 Hoja educativa</button>' : "")
         + '<button type="button" class="vgl-agm-btn sec" id="vgl-panel-labs">🔄 Buscar laboratorios nuevos</button>'
         + '<button type="button" class="vgl-agm-btn pri" id="vgl-panel-cerrar">Cerrar</button>'
         + '</div>';
@@ -28780,7 +28779,7 @@ _vglOfrecerDeshacer(btn);
     if (x.diabetes) {
       return Object.assign({}, base, {
         categoria: "alto", paso: 2, pisoPorDiabetes: true,
-        criterios: c2.concat(["Diabetes mellitus: toda diabetes entra como riesgo ALTO como mínimo (decisión clínica del médico, 20-ago-2026)"]),
+        criterios: c2.concat(["Diabetes mellitus (piso institucional: riesgo ALTO como mínimo, independiente de otros factores)"]),
       });
     }
 
@@ -28796,7 +28795,7 @@ _vglOfrecerDeshacer(btn);
       if (edadPiso !== null && edadPiso > 79) {
         return Object.assign({}, base, {
           categoria: "alto", paso: 2, pisoPorEdad: true,
-          criterios: c2.concat(["Mayor de 79 años: entra como riesgo ALTO como mínimo (decisión del médico, 20-ago-2026); la escala ASCVD no está validada a esta edad"]),
+          criterios: c2.concat(["Mayor de 79 años (piso institucional: riesgo ALTO como mínimo; la escala ASCVD no está validada a esta edad)"]),
         });
       }
     }
@@ -30460,7 +30459,15 @@ _vglOfrecerDeshacer(btn);
   // Se guardan HASTA 3 notas previas del médico, ya desidentificadas (scrubPII) y
   // acotadas, como ejemplos few-shot. Es lo que hace la redacción "personalizada": el
   // modelo imita su voz. Viven en su equipo; jamás se mandan a ningún lado salvo, ya
-  // limpias, dentro del propio prompt de redacción cuando él activa "mi estilo".
+  // limpias, dentro del propio prompt de redacción.
+  // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "esto debería ser automático, una memoria
+  // personalizada... la IA debe ir aprendiendo con cada iteración". Se retira el botón
+  // manual "💾 Guardar mi estilo" y el checkbox "Mi estilo": aprender y usar el estilo ya
+  // no son decisiones del médico, son automáticas. mtrEstiloGuardar se llama sola cuando
+  // el médico ACEPTA un borrador prácticamente intacto (mtrCalcularDeltaEdicion === "intacta"
+  // al copiar o insertar, ver _autoAprenderEstilo más abajo) — un texto que necesitó
+  // reescritura no enseña nada bueno. Y mtrRedaccionPrompt usa los ejemplos guardados
+  // SIEMPRE que haya al menos uno, sin necesidad de marcar ninguna casilla.
   const MTR_ESTILO_KEY = "vgl_estilo_ejemplos";
   function mtrEstiloGuardar(texto) {
     try {
@@ -30713,17 +30720,19 @@ _vglOfrecerDeshacer(btn);
     return s;
   }
 
-  // Renderiza los datos que el médico aportó en el modal aparte, SOLO los no vacíos, ya
-  // desidentificados (scrubPII / mtrSanearTextoLibreAI). Etiquetas alineadas con lo que piden los redactores.
+  // Renderiza los datos que el médico aportó, SOLO los no vacíos, ya desidentificados
+  // (scrubPII / mtrSanearTextoLibreAI).
+  // v17.6.26 — REDUCIDO a los 3 campos de la caja roja de críticos (_pintarCriticos): los
+  // otros 9 (motivo, síntomas, adherencia, tabaquismo, alcohol, actividad, dieta,
+  // automonitoreo, otros) vivían en el modal aparte "➕ Datos del paciente", retirado por
+  // redundante con el textarea "Indicaciones" del panel principal — ver el comentario
+  // junto a mtrEstiloGuardar. Estos 3 SÍ siguen siendo distintos: son valores tipados que
+  // bloquean la generación de Análisis y plan si faltan (categoría de riesgo obligatoria),
+  // no texto libre de contexto.
   const MTR_DATOS_EXTRA_ETIQUETAS = {
-    // v16.5.0 — aportados por el cuadro de datos críticos del modal (entrevista 20-ago):
     categoriaRiesgoConfirmada: "CATEGORÍA DE RIESGO CONFIRMADA POR EL MÉDICO",
     tfgAportada: "TFG APORTADA POR EL MÉDICO (ml/min)",
     medicamentosAportados: "MEDICAMENTOS APORTADOS POR EL MÉDICO",
-    motivo: "Motivo de consulta de hoy", sintomas: "Síntomas / semiología de hoy",
-    adherencia: "Adherencia al tratamiento", tabaquismo: "Tabaquismo", alcohol: "Alcohol",
-    actividad: "Actividad física", dieta: "Dieta", automonitoreo: "Automonitoreo de presión arterial",
-    otros: "Otros datos relevantes",
   };
   function mtrDatosExtraTexto(datos) {
     if (!datos || typeof datos !== "object") return "";
@@ -30817,7 +30826,9 @@ _vglOfrecerDeshacer(btn);
     const hechos = mtrHojaDeHechosTexto(hoja);
     const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim()) : "";
     const datosExtra = mtrDatosExtraTexto(o.datosExtra);
-    const ejemplos = (o.usarEstilo && Array.isArray(o.estiloEjemplos) && o.estiloEjemplos.length)
+    // v17.6.26 — sin checkbox que marcar: el estilo se usa SIEMPRE que haya al menos un
+    // ejemplo aprendido (mtrEstiloGuardar sigue siendo automático, ver más abajo).
+    const ejemplos = (Array.isArray(o.estiloEjemplos) && o.estiloEjemplos.length)
       ? "EMULA EL ESTILO de estos ejemplos de redacción del médico (imita su tono y estructura, NO copies su contenido):\n---\n" + o.estiloEjemplos.slice(0, 3).map(mtrSanearTextoLibreAI).join("\n---\n") + "\n---"
       : "";
 
@@ -31964,65 +31975,20 @@ _vglOfrecerDeshacer(btn);
     return mtrHojaDeHechos(resumen, { ultimos: (resumen && resumen._ultimos) || {}, hoyIso: (resumen && resumen._hoyIso) || todayStamp(), medicamentos: meds, medicamentosFrecuencia: medsFrecuencia });
   }
 
-  // Modal APARTE de "Datos del paciente" (petición 17-08): liviano por diseño — HTML
-  // estático, SIN escuchas por tecla, SIN timers, SIN observadores; los valores se leen
-  // UNA sola vez al Guardar. Se prellena con lo que el script ya extrajo (motivo, revisión
-  // por sistemas) para que el médico complete/corrija, no arranque en blanco.
-  function mtrAbrirDatosAdicionales(docId, prefill) {
-    try {
-      const prev = document.getElementById("vgl-ia-datos"); if (prev) prev.remove();
-      const pre = prefill || {};
-      const yaGuardado = mtrDatosExtraLeer(docId) || {};
-      const v = (k, alt) => escapeHtml(String((yaGuardado[k] != null ? yaGuardado[k] : (alt != null ? alt : "")) || ""));
-      const campo = (k, etiqueta, alt, area) => '<label class="vgl-agm-lbl" style="margin-top:8px">' + escapeHtml(etiqueta) + '</label>'
-        + (area
-          ? '<textarea id="vgl-dx-' + k + '" class="vgl-agm-input" style="width:100%;min-height:52px">' + v(k, alt) + '</textarea>'
-          : '<input type="text" id="vgl-dx-' + k + '" class="vgl-agm-input" style="width:100%" value="' + v(k, alt) + '">');
-      const modal = document.createElement("div");
-      modal.id = "vgl-ia-datos"; modal.className = isLight() ? "light" : "";
-      modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
-      modal.innerHTML =
-        '<div class="vgl-agm-card" style="max-width:620px;max-height:88vh;overflow:auto">'
-        + '<div class="vgl-agm-head"><div style="min-width:0">'
-        + '<div class="vgl-agm-title vgl-agm-kicker">➕ Datos del paciente (opcional)</div>'
-        + '<div class="vgl-agm-sub">Complete o corrija lo que la IA usará. Solo lo que llene se agrega. Prellenado con lo que ya escribió hoy.</div>'
-        + '</div><button class="vgl-agm-close" id="vgl-dx-x" aria-label="Cerrar">✕</button></div>'
-        + campo("motivo", "Motivo de consulta de hoy", pre.motivo, false)
-        + campo("sintomas", "Síntomas / semiología de hoy", pre.sintomas, true)
-        + campo("adherencia", "Adherencia al tratamiento", "", false)
-        + campo("tabaquismo", "Tabaquismo (paquetes/año o exfumador desde…)", "", false)
-        + campo("alcohol", "Alcohol (unidades/semana o abstinencia)", "", false)
-        + campo("actividad", "Actividad física (tipo, días/sem, min)", "", false)
-        + campo("dieta", "Dieta", "", false)
-        + campo("automonitoreo", "Automonitoreo de presión arterial", "", false)
-        + campo("otros", "Otros datos relevantes", "", true)
-        + '<div class="vgl-agm-foot" style="margin-top:10px"><button id="vgl-dx-cancel" class="vgl-agm-btn sec">Cancelar</button><button id="vgl-dx-guardar" class="vgl-agm-btn pri">Guardar</button></div>'
-        + '</div>';
-      document.body.appendChild(modal);
-      const cerrar = () => { try { modal.remove(); } catch (e) {} };
-      modal.querySelector("#vgl-dx-x").addEventListener("click", cerrar);
-      modal.querySelector("#vgl-dx-cancel").addEventListener("click", cerrar);
-      if (typeof _activarAccesibilidadModal === "function") _activarAccesibilidadModal(modal, cerrar);
-      modal.querySelector("#vgl-dx-guardar").addEventListener("click", () => {
-        // v17.6.25 — REPORTE DE CAMPO: este Guardar armaba `datos` desde cero con SOLO
-        // los 9 campos de este formulario y se lo pasaba a mtrDatosExtraGuardar, que
-        // REEMPLAZA todo el almacén (línea ~31479: `_mtrDatosExtra = {docId, datos}`).
-        // Si antes el médico ya había llenado la caja roja de críticos del Redactor
-        // (_pintarCriticos, que SÍ fusiona con Object.assign), esos 3 campos —categoría
-        // de riesgo, TFG, medicamentos— se borraban en silencio al guardar este modal.
-        // Se parte de lo que ya hay guardado (leído fresco, no la foto de cuando se
-        // abrió el modal: pudo cambiar mientras estuvo abierto) y se superponen los 9
-        // campos de este formulario encima — nunca al revés.
-        const datos = Object.assign({}, mtrDatosExtraLeer(docId) || {});
-        for (const k of Object.keys(MTR_DATOS_EXTRA_ETIQUETAS)) {
-          const el = modal.querySelector("#vgl-dx-" + k);
-          if (el) datos[k] = String(el.value || "").trim();
-        }
-        mtrDatosExtraGuardar(docId, datos);
-        cerrar();
-      });
-    } catch (e) {}
-  }
+  // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "¿ya auditaste si el cuadro de texto libre
+  // y Datos del paciente no sean algo redundante? deja una sola opción que sirva para
+  // todo". Tenía razón: el modal "➕ Datos del paciente" (9 campos estructurados, tras un
+  // botón, tras abrir/llenar/guardar/cerrar) y el textarea "Indicaciones" del panel
+  // principal (un cuadro, cero clics extra) alimentaban el MISMO destino — el bloque
+  // "DATOS APORTADOS"/"INSTRUCCIONES DEL MÉDICO" del prompt, que el propio system prompt
+  // ya trata como una sola fuente de verdad conjunta (ver FUENTE DE VERDAD en
+  // MTR_BASE_CASILLA_SYS/MTR_EA_SYS). El modal se retira por completo (mtrAbrirDatosAdicionales,
+  // su botón y su handler): "Indicaciones" pasa a cubrir también síntomas, adherencia y
+  // hábitos en texto libre. La caja roja de críticos (_pintarCriticos) NO se toca: esa es
+  // un guardián que BLOQUEA la generación de Análisis y plan cuando falta un dato que
+  // invalidaría la nota (categoría de riesgo obligatoria, valores tipados para el motor),
+  // no una alternativa de captura de texto — sirve un propósito distinto y se dispara sola,
+  // nunca hay que abrirla a mano.
 
   // v17.6.11 — Conteo de palabras del borrador para el contador del modal de IA.
   // Función pura (el banco la prueba directo): vacío/espacios => 0, nunca NaN.
@@ -32085,30 +32051,26 @@ _vglOfrecerDeshacer(btn);
            visible y rotulada opcional, no escondida entre chips. */
         + '<button class="vgl-agm-btn sec" id="vgl-ia-btn-preguntar" data-modo="consulta" style="font-weight:700">❓ Preguntar sobre este paciente <span style="font-weight:400;opacity:.75">(opcional)</span></button>'
         + vglTip("Responde una duda puntual sobre este paciente usando SOLO sus datos — no escribe en la historia. Es opcional: las tres casillas de arriba son el trabajo principal.")
-        + '<label class="vgl-agm-check-lbl" style="margin-left:auto"><input type="checkbox" id="vgl-ia-estilo"><span>Mi estilo</span></label>'
-        + vglTip("El borrador imita los ejemplos que usted guardó antes con 💾 Guardar mi estilo, para que suene a como usted redacta. Si no ha guardado ninguno todavía, no cambia nada.")
-        + '</div>' 
+        + '</div>'
         + '<input type="text" id="vgl-ia-pregunta" class="vgl-agm-input' + (modoInicial === "consulta" ? '' : ' vgl-d-none') + '" placeholder="Escriba su pregunta sobre este paciente…" style="width:100%;margin-bottom:8px">'
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
-        + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Indicaciones para este borrador (opcional): lo que usted quiera que la IA tenga en cuenta — hallazgos de hoy, énfasis, tono…"></textarea>'
+        + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
         + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
         + '<button id="vgl-ia-generar-todo" class="vgl-agm-btn sec" title="Genera los borradores de las TRES casillas en cadena (las notas largas con el modelo potente, las cortas con la rotación). Después usted las revisa e inserta una por una.">✨ Generar todo (3)</button>'
-        + '<button id="vgl-ia-datos-btn" class="vgl-agm-btn sec" title="Abre un formulario opcional para agregar motivo, síntomas, adherencia u otros datos que mejoran el borrador — nada obligatorio">➕ Datos del paciente</button>'
         + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
-        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button>'
-        + '<button id="vgl-ia-estilo-guardar" class="vgl-agm-btn sec" disabled title="Guarda este texto (desidentificado) como ejemplo para que futuras redacciones suenen a usted">💾 Guardar mi estilo</button></div>'
+        + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
         + '<textarea id="vgl-ia-salida" class="vgl-agm-input" style="width:100%;min-height:220px;white-space:pre-wrap" placeholder="Aquí aparecerá el borrador para que lo revise y edite." aria-label="Borrador generado por la IA"></textarea>'
         + '<div id="vgl-ia-meta" class="vgl-ia-meta" style="font-size:var(--t-micro);margin:4px 2px 0;min-height:16px"></div>'
         + '<div id="vgl-ia-cifras"></div>'
-        + '<div class="vgl-rcv-pie" style="margin-top:6px">A Gemini se envían datos clínicos y FECHAS de atención (necesarias para la cronología — decisión suya del 20-ago), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
+        + '<div class="vgl-rcv-pie" style="margin-top:6px">A Gemini se envían datos clínicos y fechas de atención (necesarias para la cronología), NUNCA nombres, cédulas, teléfonos ni direcciones. El texto es un borrador: revíselo antes de firmar.</div>'
         + '</div>';
       document.body.appendChild(modal);
 
       let modo = modoInicial;
       const $ = (s) => modal.querySelector(s);
       const salida = $("#vgl-ia-salida"), estado = $("#vgl-ia-estado");
-      const btnGen = $("#vgl-ia-generar"), btnCop = $("#vgl-ia-copiar"), btnIns = $("#vgl-ia-insertar"), btnEst = $("#vgl-ia-estilo-guardar");
+      const btnGen = $("#vgl-ia-generar"), btnCop = $("#vgl-ia-copiar"), btnIns = $("#vgl-ia-insertar");
       // v17.6.11 — CONTADOR DEL BORRADOR (N palabras · N caracteres) y recordatorio del
       // último modelo usado. Se repinta con cada tecla y tras cada generación/cambio de chip.
       let _ultimoModelo = "";
@@ -32181,7 +32143,7 @@ _vglOfrecerDeshacer(btn);
       const pintarRotuloInsertar = () => { try { btnIns.textContent = puedeInsertar() ? rotuloInsertar() : "⬇ Insertar"; } catch (e) {} };
       const habilitarPost = (texto) => {
         const hay = !!String(texto || "").trim();
-        btnCop.disabled = !hay; btnEst.disabled = !hay;
+        btnCop.disabled = !hay;
         btnIns.disabled = !(hay && puedeInsertar());
       };
       // v16.6.0 — memoria de borradores por casilla + chips con marca de "✓ insertado".
@@ -32230,11 +32192,6 @@ _vglOfrecerDeshacer(btn);
         _pintarChipsHechos();
       }));
       pintarRotuloInsertar();
-
-      $("#vgl-ia-datos-btn").addEventListener("click", () => {
-        const _libreAlAbrir = libreAhora();
-        mtrAbrirDatosAdicionales(resumen._docId, { motivo: _libreAlAbrir.motivo, sintomas: _libreAlAbrir.sintomas });
-      });
 
       // v16.5.0 — CUADRO DE DATOS CRÍTICOS (decisión del médico: "solo lo que invalida la
       // nota"). Tres faltantes y solo tres: categoría de riesgo (BLOQUEA — el propio
@@ -32335,7 +32292,7 @@ _vglOfrecerDeshacer(btn);
 
       const _generarPara = async (modoX) => {
         const optsX = {
-          usarEstilo: $("#vgl-ia-estilo").checked, estiloEjemplos: mtrEstiloLeer(),
+          estiloEjemplos: mtrEstiloLeer(),
           pregunta: scrubPII($("#vgl-ia-pregunta").value),
           indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
           datosExtra: mtrDatosExtraLeer(resumen._docId),
@@ -32412,7 +32369,7 @@ _vglOfrecerDeshacer(btn);
           if (faltan.length) { _congelarChips(false); _pintarCriticos(faltan); estado.textContent = "Complete lo marcado para una nota válida."; return; }
         }
         const opts = {
-          usarEstilo: $("#vgl-ia-estilo").checked, estiloEjemplos: mtrEstiloLeer(),
+          estiloEjemplos: mtrEstiloLeer(),
           // v14.2.0 (auditoría pre-producción) — esta era la ÚNICA de las cuatro entradas de
           // texto libre del panel de IA que llegaba a Gemini SIN pasar por scrubPII (las
           // otras tres se limpian dentro de sus propias funciones lectoras). El pie del modal
@@ -32479,6 +32436,15 @@ _vglOfrecerDeshacer(btn);
       });
       salida.addEventListener("input", () => { _pintarCifras(); _pintarMeta(); _autosizeSalida(); });
 
+      // v17.6.26 — APRENDIZAJE AUTOMÁTICO DE ESTILO: reemplaza el botón manual "💾 Guardar
+      // mi estilo". Se llama SIEMPRE que el médico acepta un borrador (Copiar o Insertar),
+      // pero solo guarda cuando delta === "intacta" — el médico lo aceptó tal cual salió,
+      // sin tocarlo. Un texto que necesitó reescritura ("reescritura"/"descarte") no enseña
+      // estilo: enseñaría justo lo que el médico rechazó. "edicion_leve" tampoco se guarda
+      // por ahora — arranque conservador, se puede ampliar si hace falta más variedad.
+      const _autoAprenderEstilo = (delta) => {
+        if (delta === "intacta") { try { mtrEstiloGuardar(salida.value); } catch (e) {} }
+      };
       btnCop.addEventListener("click", () => {
         try {
           navigator.clipboard.writeText(salida.value);
@@ -32488,12 +32454,10 @@ _vglOfrecerDeshacer(btn);
           uxTrack("ia.adopcion." + delta);
           uxTrack("fn.ia.copiar");
           uxTrack("fn.ia.complete");
+          _autoAprenderEstilo(delta);
         } catch (e) {
           estado.textContent = "No se pudo copiar; seleccione y copie a mano.";
         }
-      });
-      btnEst.addEventListener("click", () => {
-        estado.textContent = mtrEstiloGuardar(salida.value) ? "Guardado como ejemplo de su estilo." : "No se guardó (texto muy corto).";
       });
       // v15.6.0 — inserción generalizada: la casilla del modo elegido, con las guardas de
       // siempre (mismo paciente, no pisar) y REEMPLAZO opcional que deja Deshacer.
@@ -32503,6 +32467,7 @@ _vglOfrecerDeshacer(btn);
         uxTrack("ia.adopcion." + delta);
         uxTrack("fn.ia.insert");
         uxTrack("fn.ia.complete");
+        _autoAprenderEstilo(delta);
       };
       // v16.6.0 — PASTILLA DE PROGRESO: mientras el script navega y pega, el modal se
       // quita de en medio (orden del médico: "el botón debe navegar por nosotros...

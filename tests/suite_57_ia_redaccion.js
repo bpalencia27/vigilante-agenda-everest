@@ -204,21 +204,29 @@ module.exports = {
       t.cierto(ea.user.indexOf("JSON DEL MOTOR") < 0, "la enfermedad actual no necesita el JSON");
     });
 
+    // v17.6.26 — datosExtra ahora solo trae los 3 campos de la caja roja de críticos
+    // (categoría de riesgo, TFG, medicamentos); síntomas/adherencia/motivo/etc. viajan por
+    // "Indicaciones" (contextoLibre/indicaciones), no por datosExtra — ver el caso dedicado
+    // a la fusión de "Datos del paciente" más abajo.
     t.caso("los datos aportados por el médico y el texto libre entran al prompt (desidentificados)", () => {
       const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {
         contextoLibre: "Motivo: control. Revisión/examen: refiere cefalea leve.",
-        datosExtra: { sintomas: "disnea de esfuerzo, correo juan@x.com colado", adherencia: "buena", motivo: "" },
+        datosExtra: { medicamentosAportados: "losartán 50 mg, correo juan@x.com colado", tfgAportada: "", categoriaRiesgoConfirmada: "ALTO" },
       });
       t.cierto(/DATOS APORTADOS POR EL MÉDICO/.test(p.user), "bloque de datos aportados");
-      t.cierto(p.user.indexOf("disnea de esfuerzo") >= 0, "incluye el síntoma aportado");
+      t.cierto(p.user.indexOf("losartán 50 mg") >= 0, "incluye el medicamento aportado");
       t.cierto(p.user.indexOf("juan@x.com") < 0, "pero desidentifica lo colado");
       t.cierto(/TEXTO YA REGISTRADO/.test(p.user) && p.user.indexOf("cefalea leve") >= 0, "y el texto ya escrito hoy");
     });
 
-    t.caso("con 'mi estilo' activo, se inyectan los ejemplos (ya desidentificados)", () => {
-      const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), { usarEstilo: true, estiloEjemplos: ["Paciente que acude a control, estable."] });
-      t.cierto(/EMULA EL ESTILO/.test(p.user), "el prompt pide emular el estilo");
+    // v17.6.26 — el estilo ya no depende de un interruptor: se usa SIEMPRE que haya
+    // ejemplos guardados (checkbox "Mi estilo" retirado del panel).
+    t.caso("los ejemplos de estilo se inyectan automáticamente, sin ningún interruptor", () => {
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), { estiloEjemplos: ["Paciente que acude a control, estable."] });
+      t.cierto(/EMULA EL ESTILO/.test(p.user), "el prompt pide emular el estilo con solo pasar los ejemplos");
       t.cierto(p.user.indexOf("acude a control") >= 0, "e incluye el ejemplo");
+      const sinEjemplos = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
+      t.falso(/EMULA EL ESTILO/.test(sinEjemplos.user), "sin ejemplos guardados, no aparece la sección (nada que emular)");
     });
 
     t.caso("guía Gemini 3.x: el contexto va primero y la TAREA al final, anclada a lo anterior", () => {
@@ -679,7 +687,6 @@ module.exports = {
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
       const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
       t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
-      t.cierto(/mtrAbrirDatosAdicionales\(resumen\._docId, \{ motivo: _libreAlAbrir\.motivo/.test(src), "el prellenado de «Datos del paciente» también lee fresco, no la foto vieja");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
@@ -695,19 +702,38 @@ module.exports = {
         "el botón Preguntar sigue llevando exactamente las clases que la regla nueva cubre");
     });
 
-    // v17.6.25 — AUDITORÍA S+ (24-ago-2026): el Guardar de «➕ Datos del paciente» armaba
-    // `datos` desde cero con SOLO sus 9 campos y llamaba mtrDatosExtraGuardar, que REEMPLAZA
-    // todo el almacén (no fusiona) — si antes la caja roja de críticos del Redactor
-    // (_pintarCriticos, que SÍ fusiona con Object.assign) ya había guardado categoría de
-    // riesgo/TFG/medicamentos, esos 3 campos se perdían en silencio al guardar este modal.
-    // No hay forma de aislar el handler de clic sin reconstruir el modal completo (el DOM de
-    // prueba de este arnés no soporta querySelector real sobre subárboles construidos en
-    // tiempo de ejecución) — se protege por texto fuente, mismo criterio que el caso de
-    // arriba.
-    t.caso("v17.6.25: «Datos del paciente» fusiona con lo ya guardado, no lo reemplaza", () => {
+    // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "¿ya auditaste si el cuadro de texto libre
+    // y Datos del paciente no sean algo redundante? deja una sola opción que sirva para
+    // todo". El modal "➕ Datos del paciente" (9 campos tras un botón) y el textarea
+    // "Indicaciones" del panel principal alimentaban el MISMO bloque del prompt — se retira
+    // el modal por completo y "Indicaciones" pasa a cubrir todo. La caja roja de críticos
+    // (_pintarCriticos) se conserva: es un guardián que bloquea la generación, no una
+    // alternativa de captura de texto.
+    t.caso("v17.6.26: «➕ Datos del paciente» se retiró por completo (redundante con Indicaciones)", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/const datos = Object\.assign\(\{\}, mtrDatosExtraLeer\(docId\) \|\| \{\}\);/.test(src),
-        "el Guardar arranca desde lo ya guardado (leído fresco), no desde un objeto vacío");
+      t.falso(/function mtrAbrirDatosAdicionales/.test(src), "la función del modal ya no existe");
+      t.falso(/vgl-ia-datos-btn/.test(src), "ni su botón");
+      t.cierto(/Datos e indicaciones para este borrador/.test(src), "«Indicaciones» ahora rotula que cubre también los datos");
+      // La caja roja de críticos, que SÍ debe sobrevivir (bloquea Análisis y plan sin
+      // categoría de riesgo), sigue intacta.
+      t.cierto(/function mtrDatosExtraGuardar/.test(src) && /function mtrDatosExtraLeer/.test(src), "el almacén sigue vivo: lo sigue usando _pintarCriticos");
+    });
+
+    // v17.6.26 — REPORTE DE CAMPO (mismo día): "ya que tendremos guardado automático,
+    // borra el botón de guardar mi estilo y todas esas opciones — ahora será
+    // inteligentemente automático". Se retira el botón manual «💾 Guardar mi estilo» y el
+    // checkbox «Mi estilo»: mtrEstiloGuardar se llama sola cuando el médico acepta un
+    // borrador SIN editarlo (delta "intacta"), y mtrRedaccionPrompt usa los ejemplos
+    // guardados siempre que haya al menos uno, sin marcar nada.
+    t.caso("v17.6.26: el guardado de estilo es automático — sin botón manual ni checkbox", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/vgl-ia-estilo-guardar/.test(src), "el botón «Guardar mi estilo» ya no existe");
+      t.falso(/id="vgl-ia-estilo"/.test(src), "ni el checkbox «Mi estilo»");
+      t.falso(/o\.usarEstilo/.test(src), "mtrRedaccionPrompt ya no depende de un interruptor manual");
+      t.cierto(/const _autoAprenderEstilo = \(delta\) => \{\s*\n\s*if \(delta === "intacta"\)/.test(src),
+        "el aprendizaje automático solo guarda cuando el médico aceptó el borrador TAL CUAL (delta intacta)");
+      const usos = (src.match(/_autoAprenderEstilo\(delta\);/g) || []).length;
+      t.igual(usos, 2, "se llama en los dos caminos de aceptación: Copiar e Insertar/Reemplazar (vía _registrarInsercion)");
     });
 
     // v17.3.0 — Reporte real de consola (21-ago): "Análisis y plan" y "Recomendaciones"
@@ -831,10 +857,13 @@ module.exports = {
       t.igual(c.api.mtrDatosExtraLeer("111"), null, "cambiar de paciente descarta lo anterior (no cruza)");
     });
 
+    // v17.6.26 — REDUCIDO a los 3 campos de la caja roja de críticos (categoría de riesgo,
+    // TFG, medicamentos): los otros 9 vivían en el modal "➕ Datos del paciente", retirado
+    // por redundante con «Indicaciones» (ver test dedicado más abajo).
     t.caso("mtrDatosExtraTexto solo emite lo no vacío y desidentifica", () => {
-      const txt = api.mtrDatosExtraTexto({ sintomas: "disnea, tel 3151234567", adherencia: "", motivo: "control" });
-      t.cierto(/Síntomas .*disnea/.test(txt), "incluye síntomas");
-      t.cierto(txt.indexOf("Adherencia") < 0, "omite lo vacío");
+      const txt = api.mtrDatosExtraTexto({ medicamentosAportados: "losartán, tel 3151234567", tfgAportada: "", categoriaRiesgoConfirmada: "ALTO" });
+      t.cierto(/MEDICAMENTOS.*losartán/.test(txt), "incluye medicamentos");
+      t.cierto(txt.indexOf("TFG") < 0, "omite lo vacío");
       t.cierto(txt.indexOf("3151234567") < 0, "censura el teléfono colado");
     });
 

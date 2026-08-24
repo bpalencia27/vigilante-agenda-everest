@@ -4,6 +4,23 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.26] — 2026-08-24 (Redactor IA — se elimina la redundancia «Datos del paciente», el estilo se aprende solo, y se limpia texto interno que se colaba a pantalla)
+
+Seguimiento inmediato al Bloque A: el médico revisó el resumen de los cambios y encontró tres cosas más antes de seguir con la rotación de modelos.
+
+### 🗑 «➕ Datos del paciente» se retira por completo — redundante con «Indicaciones»
+- Existían DOS lugares para darle contexto extra a la IA: el textarea "Indicaciones" del panel principal (un cuadro, cero clics) y el modal "➕ Datos del paciente" (botón → abrir → llenar 9 campos → guardar → cerrar). Ambos alimentaban el mismo bloque del prompt. Se retira el modal (`mtrAbrirDatosAdicionales`, su botón y su handler); "Indicaciones" pasa a cubrir también síntomas, adherencia y hábitos en texto libre.
+- La caja roja de datos críticos (categoría de riesgo, TFG, medicamentos — la que bloquea la generación de Análisis y plan si falta algo obligatorio) **no se toca**: es un guardián automático, no una alternativa de captura de texto.
+- `MTR_DATOS_EXTRA_ETIQUETAS` se reduce de 12 a 3 claves (las de la caja roja); las 9 del modal retirado ya no las alimenta nadie.
+
+### 🧠 La memoria de estilo ahora es automática — sin botón, sin checkbox
+- Se retiran el botón "💾 Guardar mi estilo" y el checkbox "Mi estilo": ya no son decisiones manuales del médico. `mtrEstiloGuardar` se llama sola cada vez que el médico acepta un borrador (Copiar o Insertar) SIN editarlo (`mtrCalcularDeltaEdicion === "intacta"`) — un texto que necesitó reescritura no enseña estilo. Y los ejemplos guardados se usan SIEMPRE que haya al menos uno: nada que marcar.
+
+### 🐛 Texto interno filtrado a la pantalla del médico
+- Tres textos visibles en la interfaz citaban fechas y "decisiones" de una conversación de desarrollo interna ("decisión suya del 20-ago", "decisión del 22-ago", "decisión clínica del médico, 20-ago-2026") — lenguaje que solo tiene sentido en el registro de cambios, no en una herramienta que usan médicos que no participaron en esa conversación. Corregido en: el aviso de privacidad del Redactor IA, el tooltip del botón "Hoja educativa", y dos criterios de clasificación de riesgo (piso por diabetes, piso por edad) — el contenido clínico se conserva intacto, solo se retira la referencia a la fecha/decisión.
+
+---
+
 ## [Versión 17.6.25] — 2026-08-24 (Redactor IA — Bloque A: botón «Preguntar» y datos del paciente que se perdían)
 
 Primer bloque de la auditoría S+ de 20 bugs sobre la Redacción Asistida (IA), pedida por el médico tras revisar los hallazgos ("hay botones de más", además de los ya conocidos de contexto/rotación/tokens que se atacan en bloques siguientes). Correcciones aisladas, sin dependencias entre sí.
