@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.14
+// @version     17.6.23
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1006,7 +1006,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.14";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.23";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6142,18 +6142,9 @@ _vglOfrecerDeshacer(btn);
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     tamanoLetra: "normal",    // v15.8.0 — tamaño de letra del asistente: normal | grande | muygrande (N5)
-    pausas: false,            // v17.6.6 — pausa activa: aviso suave cada N min para parar/hidratarse. APAGADO por defecto (el médico decide).
-    pausaMin: 90,             // v17.6.6 — cada cuántos minutos recordar la pausa (60/90/120)
-    ojos: false,              // v17.6.6 — regla 20-20-20: aviso cada N min para mirar a 6 m. APAGADO por defecto.
-    ojosMin: 20,              // v17.6.6 — cada cuántos minutos (20/30)
-    cronometro: false,        // v17.6.6 — cronómetro del paciente en sala junto a su tarjeta. APAGADO por defecto.
     // v17.6.7 — Cierre de turno (todo APAGADO por defecto; el médico lo enciende en Ajustes):
     checkCierre: false,       // aviso suave al pasar a Atendido si el plan del paciente tiene exámenes pendientes
-    escalada: false,          // aviso suave cuando un paciente en sala excede escalaMin minutos
-    escalaMin: 30,            // v17.6.7 — umbral de espera prolongada en sala (20/30/45/60)
-    seguimiento: false,       // v17.6.7 — bloque "Seguimiento sugerido" en el Resumen del turno
     adherencia: false,        // v17.6.7 — badge de inasistencias previas en la tarjeta del paciente
-    resumenFin: false,        // v17.6.7 — botón "Fin de turno" en el Resumen del turno
     smsPlantillaCita: "",     // v15.8.0 — texto REAL del SMS de cita capturado por el administrador (N4).
                               // Vacío = vista previa honesta genérica. Acepta {fecha} {hora} {sede} {profesional}.
     smsPlantillaLab: "",      // v15.8.0 — ídem para el SMS de la toma de laboratorios de AppCita. Acepta {fecha} {hora}.
@@ -6522,8 +6513,6 @@ _vglOfrecerDeshacer(btn);
     applyTheme();
     aplicarTamanoLetra();
     restartPolling();
-    // [v17.6.6] Canal de bienestar: evalúa cada minuto si toca avisar pausa / 20-20-20.
-    try { _relojCada("bienestar", 60000, _bienestarTick); } catch (e) {}
   }
   function clampNum(v, lo, hi, def) { const n = parseFloat(v); if (!isFinite(n)) return def; return Math.min(hi, Math.max(lo, n)); }
   function darkPreferred() { try { return !PAGEWIN.matchMedia || PAGEWIN.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) { return true; } }
@@ -6670,6 +6659,9 @@ _vglOfrecerDeshacer(btn);
 
   const rawState = {
     pym: new Map(), pymTodos: null, pymAbandono: new Set(), pymFile: "", pymMTime: "", pymFP: "", pymFallback: false, pymHoja: "", pymDia: "", historical: new Map(),
+    // v17.6.21 — candidato de estado sin confirmar (ver colorAndAlert): una lectura que
+    // difiere del último estado CONFIRMADO se guarda aquí, no se acepta todavía.
+    estadoPendiente: new Map(),
     // [v14.2.0 — backlog §3] Candidatura a cupos Adicional/sábado, SOLO para pacientes cuyo
     // perfil ya se calculó hoy de verdad (al abrir su modal de agendamiento) — nunca se sale a
     // buscar esto por adelantado para todo el panel: eso exigiría llamadas de red por cada
@@ -6692,10 +6684,8 @@ _vglOfrecerDeshacer(btn);
     // [v17.6.5] Reloj del turno: turnoInicio = cuándo montó el panel (sesión); ultimaLectura
     // = última vez que render() recibió una lectura real de la agenda (ámbar si pasa 30 s).
     turnoInicio: 0, ultimaLectura: 0,
-    // [v17.6.6] Bienestar: próximo aviso de pausa/20-20-20 (timestamps) y cronómetro por cita.
-    pausaProx: 0, ojosProx: 0, pacienteDesde: {},
-    // [v17.6.7] Cierre de turno: dedup de avisos UNA vez por cita (checklist y espera prolongada).
-    checkCierreAvisados: new Set(), escaladoAvisados: new Set(),
+    // [v17.6.7] Cierre de turno: dedup de avisos UNA vez por cita (checklist).
+    checkCierreAvisados: new Set(),
     notified: new Map(), summarized: false, osNotif: false,
     lastVersionCheck: 0, versionCheckUrl: "https://script.google.com/macros/s/AKfycbwXwwQdSGGMyt4X6Wf5YbJVRZjB_z_cYEVVpRoebO_VrobIhtHKD3nAJs689kq3R7tC/exec",
     leader: false, shared: null,
@@ -9410,12 +9400,11 @@ _vglOfrecerDeshacer(btn);
     if (diaActual === d) return;
     diaActual = d;
     state.sessionEpoch = Date.now(); // v8.1.0: KR-02 Invalida peticiones en vuelo de ayer
-    state.historical.clear(); state.notified.clear();
+    state.historical.clear(); state.estadoPendiente.clear(); state.notified.clear();
     try { localStorage.removeItem(SIEMBRA_KEY); } catch (e) {}   // v14.1.5 — día nuevo, siembra nueva
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
     state.contadas.clear();   // v17.1.0 (#72/#146) — día nuevo, contadores nuevos
-    try { state.pacienteDesde = {}; } catch (e) {}   // v17.6.6 — cronómetro del turno anterior no aplica
-    try { state.checkCierreAvisados.clear(); state.escaladoAvisados.clear(); } catch (e) {}   // v17.6.7 — avisos de cierre por cita, día nuevo
+    try { state.checkCierreAvisados.clear(); } catch (e) {}   // v17.6.7 — avisos de cierre por cita, día nuevo
     // v16.7.0 — AUDITORÍA #9: al cruzar medianoche el Excel PyM cargado ayer seguía
     // usándose SIN NINGUNA MARCA, como si fuera el del día. No se borra (a las 00:01 de
     // un turno nocturno sigue siendo lo mejor que hay), pero desde ahora la barra lo
@@ -9438,8 +9427,31 @@ _vglOfrecerDeshacer(btn);
     if (heartbeat() && typeof GM_xmlhttpRequest !== "undefined") loadPymDiario(true).catch(() => {});
   }
   function colorAndAlert(a, now) {
-    const st = (a.estado || "").toLowerCase(); const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
-    const prev = state.historical.get(key) || "";
+    const stCrudoRaw = a.estado || ""; const stCrudo = stCrudoRaw.toLowerCase();
+    const key = apptKey(a); const elapsed = elapsedMin(a.hora_texto, now); const pym = getActivities(a.doc_id);
+    const esNueva = !state.historical.has(key);
+    const prevRaw = state.historical.get(key) || ""; const prev = prevRaw.toLowerCase();
+    // v17.6.21 — REPORTE DE CAMPO (24-ago-2026, con CSV real de auditoría adjunto):
+    // "la tarjeta titilaba entre verde y ámbar" y un aviso de confirmación extemporánea
+    // llegó "súper tarde". Evidencia del CSV: el MISMO paciente alternaba "En Sala" ↔
+    // "Sin presentarse" más de 10 veces en 15 minutos, y varios pacientes distintos
+    // cambiaban en el MISMO instante exacto — la firma de dos fuentes (API vs raspado del
+    // DOM) que no coinciden en ese tick, no de pacientes moviéndose de verdad. Cada
+    // parpadeo pasaba por aquí como un CAMBIO_ESTADO real, ensuciando la auditoría y
+    // pudiendo disparar una alerta de fraude por una lectura transitoria.
+    // DEBOUNCE: una lectura que difiere del último estado CONFIRMADO no se acepta a la
+    // primera — se guarda como candidato. Solo si la MISMA lectura se repite en el
+    // siguiente tick (segunda vez seguida) se confirma y pasa a alimentar color/aviso/
+    // auditoría; mientras tanto se sigue mostrando el último estado confirmado (texto Y
+    // color juntos — nunca una tarjeta con el badge de un estado y el color de otro). Un
+    // cambio real sigue avisando en el siguiente tick (unos segundos); un parpadeo de una
+    // sola lectura queda absorbido sin generar ruido. La primera vez que se ve una cita
+    // (esNueva) nunca se demora: no hay "confirmado" previo con qué comparar.
+    let stRaw = stCrudoRaw, st = stCrudo;
+    if (!esNueva && stCrudo !== prev) {
+      if (state.estadoPendiente.get(key) === stCrudo) { state.estadoPendiente.delete(key); stRaw = stCrudoRaw; st = stCrudo; }
+      else { state.estadoPendiente.set(key, stCrudo); stRaw = prevRaw; st = prev; }
+    } else state.estadoPendiente.delete(key);
     const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false;
     if (st.includes("en sala")) {
       if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); } }
@@ -9468,10 +9480,10 @@ _vglOfrecerDeshacer(btn);
     // forma de saber a qué hora se confirmó realmente. Pedido textual: "no me dice a qué
     // hora exactamente me la confirmaron y es importante para mí ese dato para poder
     // hacer reclamaciones". Se devuelve en el objeto para que maybeNotify la pinte.
-    if (!state.leader) { state.historical.set(key, st); return { ...a, key, color, reason, arrival, visto: stamp, sound: false, elapsed: Math.round(elapsed * 10) / 10, pym }; }
-    if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
-    else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, previo: prev, min: mins, nombre: a.nombre });
-    state.historical.set(key, st);
+    if (!state.leader) { state.historical.set(key, stRaw); return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound: false, elapsed: Math.round(elapsed * 10) / 10, pym }; }
+    if (sound) { logEvent({ t: stamp, ev: "FRAUDE_EXTEMPORANEO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: mins, nombre: a.nombre }); reportarFraude(a.hora_texto, mins); }
+    else if (st !== prev && prev !== "") logEvent({ t: stamp, ev: "CAMBIO_ESTADO", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, previo: prev, min: mins, nombre: a.nombre });
+    state.historical.set(key, stRaw);
     // [v17.6.7] Checklist de cierre: al pasar a Atendido, si el plan del paciente tiene
     // exámenes pendientes (vencidos o nunca tomados), aviso suave UNA vez por cita. Solo
     // líder, solo transiciones observadas (no el estado inicial del arranque tardío) y
@@ -9485,7 +9497,7 @@ _vglOfrecerDeshacer(btn);
         if (_msg) showToast("AZUL", "Cierre de consulta", (a.nombre || "El paciente") + ": " + _msg, false, key);
       } catch (e) {}
     }
-    return { ...a, key, color, reason, arrival, visto: stamp, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
+    return { ...a, estado: stRaw, key, color, reason, arrival, visto: stamp, sound, elapsed: Math.round(elapsed * 10) / 10, pym };
   }
 
   let audioCtx = null;
@@ -9988,29 +10000,10 @@ _vglOfrecerDeshacer(btn);
   const MTR_AVISO_GRACIA_MS = 5000;
   function _avisoUnivReset() { _avisoUnivEspera = new Map(); _avisoUnivParcial.clear(); }
 
-  // v17.6.3 — B2 (decisión del médico, 22-ago): AVISO ÚNICO CON CHIPS ACCIONABLES.
-  // Un clic en un chip de laboratorio (o PyM) abre el panel de órdenes; «Agendar
-  // control» abre el agendamiento. Sube hasta 3 niveles del árbol de eventos (el chip
-  // va dentro de un contenedor dentro del modal). PURA: devuelve la acción o null.
-  function mtrAvisoAccionDe(target) {
-    try {
-      let n = target;
-      for (let i = 0; i < 3 && n; i++) {
-        const a = n.getAttribute && n.getAttribute("data-aviso-accion");
-        if (a === "ordenar" || a === "agendar") return a;
-        n = n._parent || null;
-      }
-    } catch (e) {}
-    return null;
-  }
-
   function avisoUniversal(nombre, datos, esPrueba) {
     try {
       datos = datos || {};
       const pym = datos.pym || [], labs = datos.labs || [], abandono = !!datos.abandono;
-      // v17.6.3 — B2: el aviso necesita saber QUIÉN es el paciente para que sus acciones
-      // abran el panel de órdenes o el agendamiento con él. Lo manda checkAvisoUniversal.
-      const apt = datos.apt || null;
       if (!abandono && !pym.length && !labs.length) return; // nada que mostrar
       let ov = document.getElementById("vgl-pym-modal");
       if (ov) ov.remove();
@@ -10025,38 +10018,26 @@ _vglOfrecerDeshacer(btn);
         secciones.push('<div class="vgl-au-prio" style="background:rgba(var(--rgb-pes),.14);border:1px solid rgba(var(--rgb-pes),.45);color:var(--fg);font-weight:800;font-size:var(--t-micro);padding:9px 12px;border-radius:11px;margin-bottom:12px;line-height:1.45;text-align:left">🫀 <b>Abandono Programa RCV.</b> Priorice el control de riesgo cardiovascular en esta consulta.</div>');
       }
       if (pym.length) {
-        // v17.6.3 — B2: cada chip es un BOTÓN que abre el panel de órdenes (es donde se
-        // solicitan las actividades preventivas). Antes eran etiquetas inertes. Sin apt
-        // (no se sabe quién es el paciente) vuelven a ser etiquetas: un botón que no
-        // puede abrir nada sería ruido.
-        const chipPym = (a) => apt
-          ? '<button type="button" class="vgl-pym-chip vgl-chip-btn" data-aviso-accion="ordenar" title="Abrir el panel de órdenes para solicitar esta actividad">' + escapeHtml(a) + "</button>"
-          : '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>";
+        // v17.6.18 — REPORTE DE CAMPO (24-ago-2026): "los botones para ordenar
+        // laboratorios y agendar cita... no les veo utilidad — elimínalos". Vuelven a
+        // ser SOLO informativos (v17.6.3/B2 los había convertido en botones): este aviso
+        // es un recordatorio al abrir la historia, no un atajo de flujo — el médico ya
+        // tiene 🗓️/📋/🧪 en el dock de acciones para eso.
+        const chipPym = (a) => '<span class="vgl-pym-chip">' + escapeHtml(a) + "</span>";
         const chips = pym.map(chipPym).join("");
         secciones.push('<div class="vgl-pym-lead">Actividades preventivas por solicitar:</div><div class="vgl-pym-list">' + chips + "</div>");
       }
       if (labs.length) {
-        const chipLab = (f) => apt
-          ? '<button type="button" class="vgl-labsv-chip vgl-chip-btn" data-aviso-accion="ordenar" title="Abrir el panel de órdenes para agendar este examen">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</button>"
-          : '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
+        const chipLab = (f) => '<span class="vgl-labsv-chip">' + escapeHtml(f && f.nombre ? f.nombre : String(f)) + "</span>";
         const chips = labs.map(chipLab).join("");
         secciones.push('<div style="font-size:var(--t-micro);color:var(--c-rojo);font-weight:600;margin-bottom:10px;text-align:center">Laboratorios RCV sin resultado vigente:</div><div class="vgl-pym-list">' + chips + "</div>");
       }
-      // v17.6.3 — B2: acciones del aviso. Solo si se sabe quién es el paciente (apt):
-      // sin eso, un botón que no puede abrir nada sería ruido.
-      const acciones = apt
-        ? '<div class="vgl-pym-acciones">'
-          + '<button type="button" class="vgl-pym-btn" data-aviso-accion="ordenar">📋 Ordenar paraclínicos</button>'
-          + '<button type="button" class="vgl-pym-btn pri" data-aviso-accion="agendar">📅 Agendar control</button>'
-          + '</div>'
-        : "";
       ov.innerHTML = '<div class="vgl-pym-card">' +
         '<div class="vgl-pym-ic">' + ico + "</div>" +
         '<div class="vgl-pym-t">Pendientes de este paciente</div>' +
         '<div class="vgl-pym-n"></div>' +
         secciones.join("") +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
-        acciones +
         '<button class="vgl-pym-ok">Entendido</button>' +
         "</div>";
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
@@ -10064,20 +10045,6 @@ _vglOfrecerDeshacer(btn);
       const ok = ov.querySelector ? ov.querySelector(".vgl-pym-ok") : null;
       const closeMod = () => { if (!esPrueba) uxTrack("aviso.universal.entendido"); ov.remove(); };
       if (ok && typeof ok.addEventListener === "function") ok.addEventListener("click", closeMod);
-      // v17.6.3 — B2: delegación de clics sobre los chips/acciones. El chip abre el
-      // panel de órdenes; «Agendar control» abre el agendamiento. El aviso se cierra
-      // antes para no tapar el modal que viene.
-      ov.addEventListener("click", (e) => {
-        try {
-          const accion = mtrAvisoAccionDe(e.target);
-          if (!accion) return;
-          if (e.stopPropagation) e.stopPropagation();
-          ov.remove();
-          try { uxTrack("aviso.universal.accion", { a: accion }); } catch (e2) {}
-          if (accion === "ordenar" && typeof openOrdenamientoModal === "function") openOrdenamientoModal(apt);
-          else if (accion === "agendar" && typeof openAgendamientoModal === "function") openAgendamientoModal(apt);
-        } catch (e2) {}
-      });
       if (!esPrueba) uxTrack("aviso.universal.mostrado", { ab: abandono ? 1 : 0, pym: pym.length, labs: labs.length });
       _activarAccesibilidadModal(ov, closeMod);
       document.body.appendChild(ov);
@@ -10114,9 +10081,6 @@ _vglOfrecerDeshacer(btn);
       } : undefined;
       const faltantes = labsListos ? _analitosRcvVencidos(labsCrudos, todayStamp(), _optsAviso) : [];
       const nombreDe = () => { const cita = (state.lastSnapshot && state.lastSnapshot.list || []).find((a) => normalizeKey(a.doc_id) === key); return cita ? cita.nombre : ""; };
-      // v17.6.3 — B2: el aviso lleva la identidad mínima del paciente (id + nombre) para
-      // que sus acciones (ordenar/agendar) abran el modal correcto con él.
-      const _aptAviso = { doc_id: doc, nombre: nombreDe() };
       const uid = "avisouniv|" + key;
 
       if (avisoYaVisto(uid)) {
@@ -10125,7 +10089,7 @@ _vglOfrecerDeshacer(btn);
         if (labsListos && faltantes.length && _avisoUnivParcial.has(key) && !avisoYaVisto("avisounivlab|" + key)) {
           _avisoUnivParcial.delete(key);
           avisoMarcarVisto("avisounivlab|" + key);
-          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes, apt: _aptAviso });
+          avisoUniversal(nombreDe(), { abandono: false, pym: [], labs: faltantes });
         }
         return;
       }
@@ -10145,7 +10109,7 @@ _vglOfrecerDeshacer(btn);
         // "visto" sin haberse mostrado y no volvía en toda la jornada. Ahora se pinta
         // primero y se marca después: una falla de render deja el aviso pendiente y el
         // siguiente tick lo reintenta.
-        avisoUniversal(nombreDe(), { abandono, pym, labs: [], apt: _aptAviso });
+        avisoUniversal(nombreDe(), { abandono, pym, labs: [] });
         avisoMarcarVisto(uid);
         return;
       }
@@ -10154,7 +10118,7 @@ _vglOfrecerDeshacer(btn);
       // Labs resueltos: aviso completo si hay algo.
       if (!abandono && !pym.length && !faltantes.length) return;
       // v17.6.8 — mismo orden que la rama parcial: pintar primero, marcar después.
-      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes, apt: _aptAviso });
+      avisoUniversal(nombreDe(), { abandono, pym, labs: faltantes });
       avisoMarcarVisto(uid);
     } catch (e) {}
   }
@@ -11019,7 +10983,6 @@ _vglOfrecerDeshacer(btn);
       if (citas === null) {
         API.fallos++;
         try { _saludMarca("agenda", false); } catch (e2) {}   // v15.8.0 (N2)
-        if (API.fallos >= 3) purgarApiUrl("la respuesta ya no tiene la forma esperada");
         return null;
       }
       API.fallos = 0; API.ok++;
@@ -11027,18 +10990,21 @@ _vglOfrecerDeshacer(btn);
     } catch (e) {
       API.fallos++;
       try { _saludMarca("agenda", false); } catch (e2) {}   // v15.8.0 (N2) — la lectura directa de agenda falló
-      if (API.fallos >= 3) purgarApiUrl((e && e.message) || String(e));
       return null;
     } finally { clearTimeout(corte); API.enVuelo = false; }
   }
-  // v12.3.7 — Antes se insistía contra la MISMA url hasta 5 fallos y luego se esperaban
-  // 5 minutos completos, una y otra vez, contra una url que —salvo un corte de red
-  // pasajero— casi nunca se recupera sola (sesión caída, médico distinto, o Everest
-  // cambió la forma de la llamada). A los 3 fallos SEGUIDOS se olvida la URL entera: la
-  // próxima vez que la propia Everest haga esa llamada (apiObservar está siempre activo),
-  // se vuelve a aprender sin que nadie tenga que esperar ni volver a "Citas del día" a la
-  // fuerza. Generaliza invalidarApiSiCambioMedico() a CUALQUIER causa de fallo repetido,
-  // no solo el cambio de médico.
+  // v17.6.16 — REPORTE DE CAMPO (24-ago-2026): "necesito que funcione en tiempo real
+  // aunque esté en otra pestaña o dentro de la historia clínica, sin tener que volver a
+  // Citas del día a cada rato". La v12.3.7 (comentario que vivía aquí) purgaba la URL
+  // aprendida a los 3 fallos SEGUIDOS, razonando que "Everest la vuelve a enseñar sola" —
+  // cierto, PERO solo si el médico visita Citas del día en ESA pestaña, que es EXACTAMENTE
+  // lo que se quiere evitar. Y la causa más común de 3 fallos seguidos no es que la URL
+  // esté mal: es la sesión de Athenea caída (el propio script ya la revive sola con
+  // atheneaKeepAlive, ver más abajo) — purgar tira una URL perfectamente buena por un bache
+  // pasajero. Ahora los fallos NUNCA purgan la URL por sí solos: solo se sigue el
+  // enfriamiento de apiUtil() (>=5 fallos → 5 min de descanso, reintenta sola después,
+  // contra la MISMA url). La URL solo se abandona por una causa real de identidad —
+  // invalidarApiSiCambioMedico(), cuando cambia el médico de la sesión— no por fallos.
   function purgarApiUrl(motivo) {
     console.warn("[Vigilante] se descarta la llamada de agenda aprendida tras fallos repetidos (" + motivo + ").");
     API.url = ""; API.fallos = 0; API.ok = 0; API.medicoId = 0;
@@ -12414,9 +12380,6 @@ _vglOfrecerDeshacer(btn);
       #vgl-root.light .vgl-cd.warn{color:var(--c-morado)}
       .vgl-cd.late{background:rgba(var(--rgb-ambar),.18);color:var(--c-ambar)}
       #vgl-root.light .vgl-cd.late{color:var(--c-ambar)}
-      /* [v17.6.6] Cronómetro del paciente en sala: azul sutil, blindado contra el hostil */
-      .vgl-cd.vgl-cron{background:rgba(var(--rgb-azul),.16) !important;color:var(--c-azul) !important}
-      #vgl-root.light .vgl-cd.vgl-cron{color:var(--c-azul) !important}
       /* [v17.6.7] Inasistencias previas en la tarjeta: ámbar sutil, blindado contra el hostil */
       .vgl-cd.vgl-adh{background:rgba(var(--rgb-ambar),.18) !important;color:var(--c-ambar) !important}
       #vgl-root.light .vgl-cd.vgl-adh{color:var(--c-ambar) !important}
@@ -16985,7 +16948,6 @@ _vglOfrecerDeshacer(btn);
       try { if (!_fnCompletado) uxTrack("fn.labs.abandon"); } catch (e) {}
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
-      try { if (!_fnCompletado) uxTrack("fn.agendar.abandon"); } catch (e) {}
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
       modal.innerHTML = "";
       modal.remove();
@@ -19096,6 +19058,10 @@ _vglOfrecerDeshacer(btn);
     const vivo = () => !cerrado && modal.isConnected !== false;
     const closeMod = () => {
       cerrado = true;
+      // v17.6.20 — REVISIÓN: este embudo (fn.agendar.open/complete) nunca registraba SU
+      // PROPIO abandono — el aviso vivía, por copia-pega, dentro de openLaboratoriosModal
+      // (contaminando el embudo de OTRO módulo). Se restaura aquí, donde de verdad ocurre.
+      try { if (!_fnCompletado) uxTrack("fn.agendar.abandon"); } catch (e) {}
       xBtn?.removeEventListener("click", closeMod);
       cancelBtn?.removeEventListener("click", closeMod);
       modal.removeEventListener("click", typeof bgClick !== 'undefined' ? bgClick : closeMod);
@@ -22753,12 +22719,10 @@ _vglOfrecerDeshacer(btn);
       </div>
       ${(function () { try { return mtrProductividadHtml(mtrProductividadVistas(mtrProdLeer(), todayStamp())); } catch (e) { return ""; } })()}
       ${(function () { try { return mtrTableroTelemetriaHtml(mtrTableroTelemetria(readJSON(UX_KEY, null))); } catch (e) { return ""; } })()}
-      ${(function () { try { return _seguimientoHtml(); } catch (e) { return ""; } })()}
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Eventos registrados hoy<span class="vgl-hint">Cambios de estado y alertas, con hora exacta.</span></label><b class="vgl-count">${evs.length}</b></div>
         <div class="vgl-fld"><label>Reporte de auditoría<span class="vgl-hint">Archivo .csv que se abre en Excel. No sale del computador.</span></label><button class="vgl-btn primary" id="vgl-exp">Descargar</button></div>
         <div class="vgl-fld"><label>Copiar resumen<span class="vgl-hint">Para pegarlo en un correo o en el acta del turno.</span></label><button class="vgl-btn" id="vgl-copy">Copiar</button></div>
-        ${S.resumenFin ? `<div class="vgl-fld"><label>Fin de turno<span class="vgl-hint">Arma el resumen de la jornada (atendidas, en sala, sin presentarse, extemporáneas) y lo copia al portapapeles, listo para su reporte. Apagado en Ajustes → Turno (avanzado).</span></label><button class="vgl-btn" id="vgl-finturno">🏁 Fin de turno</button></div>` : ""}
       </div>
       <div class="vgl-grp">
         <div class="vgl-fld"><label>Archivo PyM en uso<span class="vgl-hint">${escapeHtml(state.pymFile || "ninguno")}</span></label><b class="vgl-count">${state.pym.size}</b></div>
@@ -22769,13 +22733,6 @@ _vglOfrecerDeshacer(btn);
     { const dBtn = el.sheet.querySelector("#vgl-diag"); if (dBtn) dBtn.addEventListener("click", downloadDiagnostic); }
     { const pBtn = el.sheet.querySelector("#vgl-prod-exp"); if (pBtn) pBtn.addEventListener("click", () => exportarProductividadSemana()); }
     el.sheet.querySelector("#vgl-copy").addEventListener("click", copySummary);
-    // v17.6.7 — Fin de turno: arma el resumen de la jornada, lo copia al portapapeles y lo muestra.
-    { const ft = el.sheet.querySelector("#vgl-finturno"); if (ft) ft.addEventListener("click", () => {
-      try { uxTrack("resumen.finturno"); } catch (e) {}
-      const txt = _textoFinTurno((state.lastSnapshot && state.lastSnapshot.list) || [], statsToday());
-      try { if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt); } catch (e) {}
-      showToast("VERDE", "Fin de turno", txt.replace(/\n/g, " · "), true);
-    }); }
   }
   function copySummary() {
     const h = statsToday(), lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
@@ -22907,27 +22864,11 @@ _vglOfrecerDeshacer(btn);
           <select id="c-fz"><option value="normal">Normal</option><option value="grande">Grande</option><option value="muygrande">Muy grande</option></select></div>
         <div class="vgl-fld"><label>Modo rendimiento<span class="vgl-hint">Si este computador se siente lento, enciéndalo: la pantalla se ve más sencilla y todo responde más rápido.</span></label>${sw("c-perf", S.modoRendimiento)}</div>
       </div>
-      <!-- [v17.6.6] Bienestar: todo APAGADO por defecto; el médico elige. Avisos suaves, nunca críticos. -->
-      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Bienestar (turno largo)</div>
-        <div class="vgl-fld"><label>Recordar pausas activas<span class="vgl-hint">Un aviso suave le recuerda parar, estirar y tomar agua después de horas seguidas de consulta.</span></label>${sw("c-pausas", S.pausas)}</div>
-        <div class="vgl-fld"><label>Pausa cada<span class="vgl-hint">Cada cuántos minutos suena el recordatorio de pausa.</span></label>
-          <select id="c-pausa-min"><option value="60" ${S.pausaMin === 60 ? "selected" : ""}>60 min</option><option value="90" ${S.pausaMin === 90 ? "selected" : ""}>90 min</option><option value="120" ${S.pausaMin === 120 ? "selected" : ""}>120 min</option></select></div>
-        <div class="vgl-fld"><label>Regla 20-20-20<span class="vgl-hint">Cada 20 minutos, mire algo a 6 metros durante 20 segundos: descansa la vista sin dejar de atender.</span></label>${sw("c-ojos", S.ojos)}</div>
-        <div class="vgl-fld"><label>Pausa visual cada<span class="vgl-hint">Cada cuántos minutos recuerda la mirada a 6 metros.</span></label>
-          <select id="c-ojos-min"><option value="20" ${S.ojosMin === 20 ? "selected" : ""}>20 min</option><option value="30" ${S.ojosMin === 30 ? "selected" : ""}>30 min</option></select></div>
-        <div class="vgl-fld"><label>Cronómetro del paciente en sala<span class="vgl-hint">Muestra junto a la tarjeta cuánto lleva el paciente en consulta. Apáguelo si prefiere no verlo.</span></label>${sw("c-cron", S.cronometro)}</div>
-      </div>
       <!-- [v17.6.7] Cierre de turno: todo APAGADO por defecto; el médico elige. Avisos suaves, nunca críticos. -->
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-morado"><i></i>Turno (avanzado)</div>
         <div class="vgl-fld"><label>Recordar cierre de consulta<span class="vgl-hint">Al pasar a «Atendido», si el paciente tiene exámenes pendientes en su plan, un aviso suave sugiere verificar que se ordenaron y entregaron todo. Apagado por defecto.</span></label>${sw("c-check", S.checkCierre)}</div>
-        <div class="vgl-fld"><label>Espera prolongada en sala<span class="vgl-hint">Un aviso suave le recuerda que un paciente lleva mucho tiempo en sala y quizá convenga atenderlo o avisar la demora.</span></label>${sw("c-escala", S.escalada)}</div>
-        <div class="vgl-fld"><label>Avisar desde<span class="vgl-hint">Minutos en sala a partir de los cuales se considera espera prolongada.</span></label>
-          <select id="c-escala-min"><option value="20" ${S.escalaMin === 20 ? "selected" : ""}>20 min</option><option value="30" ${S.escalaMin === 30 ? "selected" : ""}>30 min</option><option value="45" ${S.escalaMin === 45 ? "selected" : ""}>45 min</option><option value="60" ${S.escalaMin === 60 ? "selected" : ""}>60 min</option></select></div>
-        <div class="vgl-fld"><label>Sugerir fecha de control<span class="vgl-hint">En el Resumen del turno, muestra para los atendidos del día la fecha de control que sugiere el plan de exámenes (laboratorio y control). Es solo una sugerencia: usted decide.</span></label>${sw("c-seg", S.seguimiento)}</div>
         <div class="vgl-fld"><label>Inasistencias previas en la tarjeta<span class="vgl-hint">Muestra en la tarjeta del paciente cuántas inasistencias registradas tiene de días anteriores, para priorizar el recordatorio o el diálogo. Se guarda solo en este computador.</span></label>${sw("c-adh", S.adherencia)}</div>
-        <div class="vgl-fld"><label>Botón de fin de turno<span class="vgl-hint">Agrega al Resumen del turno un botón que arma el resumen de la jornada (atendidas, en sala, sin presentarse, extemporáneas) listo para copiar a su reporte.</span></label>${sw("c-rfin", S.resumenFin)}</div>
       </div>
       <div class="vgl-grp">
         <div class="vgl-set-cap vgl-cap-ambar"><i></i>Alertas y sonido</div>
@@ -23033,18 +22974,9 @@ _vglOfrecerDeshacer(btn);
     { const fzSel = q("#c-fz"); if (fzSel) { fzSel.value = S.tamanoLetra || "normal"; fzSel.addEventListener("change", () => { const prev = S.tamanoLetra; try { S.tamanoLetra = fzSel.value; aplicarTamanoLetra(); } catch (e) {} S.tamanoLetra = prev; }); } }
     bind("#c-fz", "tamanoLetra", (n) => n.value);
     bind("#c-perf", "modoRendimiento", (n) => n.checked);
-    bind("#c-pausas", "pausas", (n) => n.checked);
-    bind("#c-pausa-min", "pausaMin", (n) => clampNum(n.value, 30, 240, 90));
-    bind("#c-ojos", "ojos", (n) => n.checked);
-    bind("#c-ojos-min", "ojosMin", (n) => clampNum(n.value, 15, 60, 20));
-    bind("#c-cron", "cronometro", (n) => n.checked);
     // v17.6.7 — cierre de turno (todo apagado por defecto; el médico lo enciende aquí).
     bind("#c-check", "checkCierre", (n) => n.checked);
-    bind("#c-escala", "escalada", (n) => n.checked);
-    bind("#c-escala-min", "escalaMin", (n) => clampNum(n.value, 15, 120, 30));
-    bind("#c-seg", "seguimiento", (n) => n.checked);
     bind("#c-adh", "adherencia", (n) => n.checked);
-    bind("#c-rfin", "resumenFin", (n) => n.checked);
     bind("#c-snd", "sonido", (n) => n.checked);
     // v15.8.0 (N4) — plantillas del SMS real (modo programador).
     bind("#c-sms-plantilla", "smsPlantillaCita", (n) => n.value);
@@ -23506,45 +23438,8 @@ _vglOfrecerDeshacer(btn);
       c.title = fresco ? "Hora actual y tiempo de turno. Datos al día." : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".";
     } catch (e) {}
   }
-  // [v17.6.6] Bienestar en turnos largos (todo APAGADO por defecto; el médico lo enciende en
-  // Ajustes → Bienestar). La primera pausa se programa N minutos después de encenderlo, no
-  // al instante; apagarlo limpia el próximo aviso. Los toasts son suaves (AZUL, no críticos).
-  function _bienestarTick() {
-    try {
-      const ahora = Date.now();
-      if (S.pausas) {
-        if (!state.pausaProx) state.pausaProx = ahora + S.pausaMin * 60000;
-        else if (ahora >= state.pausaProx) {
-          state.pausaProx = ahora + S.pausaMin * 60000;
-          showToast("AZUL", "Pausa activa", "Lleva " + Math.round(S.pausaMin) + " min seguidos. Párese, estire y tome agua: su turno también es un paciente.", false);
-        }
-      } else state.pausaProx = 0;
-      if (S.ojos) {
-        if (!state.ojosProx) state.ojosProx = ahora + S.ojosMin * 60000;
-        else if (ahora >= state.ojosProx) {
-          state.ojosProx = ahora + S.ojosMin * 60000;
-          showToast("AZUL", "Regla 20-20-20", "Mire algo a 6 metros durante 20 segundos: sus ojos le van a agradecer la tarde completa.", false);
-        }
-      } else state.ojosProx = 0;
-      _escaladaTick();   // v17.6.7 — espera prolongada en sala (apagada por defecto)
-    } catch (e) {}
-  }
-  // [v17.6.6] Cronómetro del paciente en sala: cuánto lleva en consulta, junto a su tarjeta.
-  // La marca se crea la PRIMERA vez que el estado pasa a "en sala" y no se reinicia sola:
-  // se limpia en diaNuevo() junto al resto del estado por cita.
-  function cronometroDe(a) {
-    if (!S.cronometro || !a || !a.key) return null;
-    if (!/en sala/.test((a.estado || "").toLowerCase())) return null;
-    if (!state.pacienteDesde[a.key]) state.pacienteDesde[a.key] = Date.now();
-    const min = Math.max(0, Math.floor((Date.now() - state.pacienteDesde[a.key]) / 60000));
-    const h = Math.floor(min / 60), m = min % 60;
-    return { text: "⏱ " + (h ? h + "h" + String(m).padStart(2, "0") : m + "m"), title: "Lleva " + min + " min con el paciente en sala" };
-  }
-  // ===== [v17.6.7] Cierre de turno: checklist, espera prolongada, seguimiento, adherencia y fin de turno.
+  // ===== [v17.6.7] Cierre de turno: checklist y adherencia.
   // Todo APAGADO por defecto (regla del proyecto: lo que interrumpe lo enciende el médico).
-  // Las funciones puras (_checklistCierreMsg, _escaladaDe, _seguimientoSugerido, _textoFinTurno)
-  // son las que prueban las suites; las de integración (_escaladaTick, _seguimientoHtml) son
-  // delgadas y no hacen nada si su interruptor está apagado.
   function _checklistCierreMsg(plan) {
     if (!plan) return null;
     const nV = (plan.vencidos || []).length;
@@ -23579,81 +23474,6 @@ _vglOfrecerDeshacer(btn);
     // No cuenta el no-show de HOY: la tarjeta ya lo pinta con su color ámbar.
     return (e.ultima === todayStamp()) ? Math.max(0, e.total - 1) : (e.total || 0);
   }
-  function _escaladaDe(a, ahora) {
-    if (!S.escalada || !a || !a.key) return null;
-    if (!/en sala/.test((a.estado || "").toLowerCase())) return null;
-    if (!state.pacienteDesde[a.key]) state.pacienteDesde[a.key] = Date.now();
-    const min = Math.max(0, Math.floor(((ahora || Date.now()) - state.pacienteDesde[a.key]) / 60000));
-    if (min < S.escalaMin) return null;
-    return { min, key: a.key, nombre: a.nombre };
-  }
-  // Devuelve cuántos avisos nuevos disparó (para la prueba); suave, UNA vez por cita.
-  function _escaladaTick() {
-    try {
-      if (!S.escalada) return 0;
-      const lista = (state.lastSnapshot && state.lastSnapshot.list) || [];
-      let n = 0;
-      for (const a of lista) {
-        const esc = _escaladaDe(a);
-        if (esc && !state.escaladoAvisados.has(esc.key)) {
-          state.escaladoAvisados.add(esc.key);
-          showToast("AMBAR", "Espera prolongada", (esc.nombre || "El paciente") + " lleva " + esc.min + " min en sala.", false, esc.key);
-          n++;
-        }
-      }
-      return n;
-    } catch (e) { return 0; }
-  }
-  function _seguimientoSugerido(plan, programa, hoyIso) {
-    if (!plan) return null;
-    const objetivo = (plan.control && plan.control.fecha) || (typeof mtrControlDesdeLabs === "function" ? mtrControlDesdeLabs(plan.ftl) : null);
-    if (!objetivo) return null;
-    return mtrSugerenciaPorPlazo(plan, null, objetivo, hoyIso, programa || "");
-  }
-  // Bloque del Resumen del turno: hasta 6 atendidos del día con plan en caché y control sugerido.
-  // `leer` es inyectable para la prueba (por defecto usa el caché real del módulo clínico).
-  function _seguimientoHtml(leer) {
-    try {
-      if (!S.seguimiento) return "";
-      const lista = (state.lastSnapshot && state.lastSnapshot.list) || [];
-      const leerRC = leer || (typeof mtrCacheResumenLeer === "function" ? mtrCacheResumenLeer : null);
-      if (!leerRC) return "";
-      const hoy = todayStamp();
-      const filas = [];
-      const vistos = new Set();
-      for (const a of lista) {
-        const s = (a.estado || "").toLowerCase();
-        if (!s.includes("atendido") || !a.doc_id || vistos.has(a.doc_id)) continue;
-        vistos.add(a.doc_id);
-        let rc = null;
-        try { rc = leerRC(a.doc_id); } catch (e) { rc = null; }
-        const sug = _seguimientoSugerido(rc && rc.plan, rc && rc.programa, hoy);
-        if (sug && sug.iso) filas.push({ nombre: a.nombre, iso: sug.iso, motivo: sug.motivo || "" });
-        if (filas.length >= 6) break;
-      }
-      if (!filas.length) return "";
-      return `<div class="vgl-grp"><div class="vgl-set-cap vgl-cap-azul"><i></i>Seguimiento sugerido (control)</div>` +
-        filas.map((f) => `<div class="vgl-fld vgl-sug"><label>${escapeHtml(f.nombre)}<span class="vgl-hint">Control sugerido: <b>${mtrFechaLegible(f.iso)}</b>. ${escapeHtml(f.motivo)}</span></label></div>`).join("") +
-        `</div>`;
-    } catch (e) { return ""; }
-  }
-  function _textoFinTurno(lista, statsDia) {
-    const l = lista || [];
-    let atend = 0, sala = 0, pend = 0, ext = 0;
-    for (const a of l) {
-      const s = (a.estado || "").toLowerCase();
-      if (s.includes("atendido")) atend++;
-      else if (s.includes("en sala")) sala++;
-      else if (s.includes("sin presentarse")) { pend++; if (a.color === "AMBAR") ext++; }
-    }
-    const st = statsDia || {};
-    return "Fin de turno — " + todayStamp() + "\n" +
-      "Citas del día: " + l.length + "\n" +
-      "Atendidas: " + atend + "\n" +
-      "En sala: " + sala + "\n" +
-      "Sin presentarse: " + pend + " (" + ext + " con tolerancia vencida)\n" +
-      "Extemporáneas (día): " + (st.fraude || 0) + " · Inasistencias: " + (st.inasistencia || 0) + " · A tiempo: " + (st.atiempo || 0);
-  }
   function render(list, source, at) {
     if (source) state.ultimaLectura = Date.now();
     const sinCruce = state.pymFile && state.pym.size > 0 && list.length > 0 && list.every((a) => !a.pym || !a.pym.length);
@@ -23686,7 +23506,11 @@ _vglOfrecerDeshacer(btn);
     const sig = (source || "C") + "|" + state.filtro + "|" + state.busqueda + "|" + signatureOf(vista);
     if (sig === state.lastSignature) { refrescarCuentas(vista); return; }
     state.lastSignature = sig;
-    if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">Aún sin citas.<br>Entra una vez a "Citas del día" para leer la agenda.</div>`; return; }
+    // v17.6.17 — ajuste cosmético tras v17.6.16: la URL de agenda aprendida ya no se
+    // purga por fallos pasajeros, así que "entra una vez" ya no es literal cada vez que
+    // este mensaje aparece (puede ser el primer arranque del día, o el vigilante
+    // reintentando solo mientras Athenea se restablece). Texto honesto para ambos casos.
+    if (!list.length) { el.list.innerHTML = `<div id="vgl-empty">Aún sin citas.<br>Si es el primer arranque del día, entra un momento a "Citas del día" para que el vigilante aprenda a leerla.</div>`; return; }
     if (!vista.length) { el.list.innerHTML = `<div id="vgl-empty">Ninguna cita coincide con el filtro.<br><span class="vgl-empty-msg">${escapeHtml(list.length + " cita(s) ocultas")}</span></div>`; return; }
     el.list.innerHTML = "";
     // v16.6.1 — semáforo de pre-consulta: UNA lectura del almacén para toda la lista
@@ -23756,7 +23580,7 @@ _vglOfrecerDeshacer(btn);
               if (pe === "listo") return '<span class="vgl-precon-dot listo" title="Laboratorios precargados: la ficha de este paciente abre al instante"></span>';
               if (pe === "cola") return '<span class="vgl-precon-dot cola" title="En cola de pre-consulta: sus laboratorios se están trayendo en segundo plano"></span>';
               return ""; } catch (e) { return ""; } })()}
-            ${countdown(a)}${(function () { const cr = cronometroDe(a); return cr ? `<span class="vgl-cd vgl-cron" title="${cr.title}">${cr.text}</span>` : ""; })()}
+            ${countdown(a)}
           </div>
           <div class="vgl-card-badges-wrap">
             ${flag}${pesFlag}${agendPend}${adicFlag}
@@ -23792,18 +23616,6 @@ _vglOfrecerDeshacer(btn);
           if (cd.textContent !== p.text) cd.textContent = p.text;
         }
         else { const badge = card.querySelector(".vgl-badge"); if (badge) badge.insertAdjacentHTML("beforebegin", `<span class="vgl-cd${p.cls}" title="${p.title}">${p.text}</span>`); }
-        // [v17.6.6] Cronómetro del paciente en sala: se actualiza en el sitio como el countdown.
-        const cr = cronometroDe(a);
-        const crEl = card.querySelector(".vgl-cron");
-        if (cr) {
-          if (crEl) {
-            if (crEl.textContent !== cr.text) crEl.textContent = cr.text;
-            if (crEl.title !== cr.title) crEl.title = cr.title;
-          } else {
-            const tW = card.querySelector(".vgl-card-time-wrap");
-            if (tW) tW.insertAdjacentHTML("beforeend", `<span class="vgl-cd vgl-cron" title="${cr.title}">${cr.text}</span>`);
-          }
-        } else if (crEl) crEl.remove();
         // [v17.6.7] Inasistencias previas (días anteriores, apagado por defecto): badge junto al cronómetro.
         const adhN = S.adherencia ? _noShowPrevia(a.doc_id) : 0;
         const adhEl = card.querySelector(".vgl-adh");
@@ -24055,6 +23867,25 @@ _vglOfrecerDeshacer(btn);
       if (enVistaVigilada && (!data || !data.citas.length)) {
         const dPag = extractAgenda(document);
         if (dPag.visible && dPag.citas.length) { data = dPag; source = "pagina"; }
+      }
+      // v17.6.15 — REPORTE DE CAMPO (23-ago-2026): "los avisos llegan tarde y el tiempo
+      // que pasó hasta que confirmaron no queda fijo". Causa real: fuera de "Citas del
+      // día"/Historia, el modo API en segundo plano (arriba) es la ÚNICA fuente — el
+      // scrape del DOM exige `enVistaVigilada`. Si esa pestaña nunca aprendió la llamada
+      // de agenda (arranque en frío del día, o API invalidado por cambio de médico —ver
+      // invalidarApiSiCambioMedico—), no hay NINGUNA fuente mientras el médico trabaje en
+      // otra pantalla: el vigilante queda ciego en silencio, no solo lento, y cuando
+      // vuelve a Citas del día el `elapsed` que ve ya no refleja el instante real de la
+      // confirmación, sino el de esta lectura tardía. No se puede resucitar el dato que
+      // nunca se leyó (casilla vacía antes que dato inventado — no hay snapshot que
+      // fabricar), pero silenciar el vacío sería peor: el médico cree que está vigilado
+      // y no lo está. Un aviso HONESTO, una sola vez por día (avisoYaVisto ya está
+      // fechado por día), solo dentro del módulo clínico y solo cuando de verdad no hay
+      // ninguna fuente viva.
+      if (leader && _enModuloHCHealth() && !enVistaVigilada && (!data || !data.citas.length)) {
+        osNotify("AMBAR", "⚠ Vigilante sin lectura de la agenda",
+          "Aún no aprendió la conexión de 'Citas del día' esta sesión: mientras tanto NO puede avisar llegadas ni confirmaciones. Pase un momento por esa pantalla para que se active.",
+          false, "vgl-sin-datos-agenda");
       }
       if (data && data.citas.length) {
         // v14.2.0 (auditoría pre-producción) — antes, una sola cita con datos atípicos que
@@ -31059,6 +30890,19 @@ _vglOfrecerDeshacer(btn);
     return { ok: true, texto: texto, motivo: null, finishReason: finishReason };
   }
 
+  // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "los resultados a veces aparecen cortados
+  // incompletos". Causa real: mtrRespuestaGemini trata MAX_TOKENS como éxito normal
+  // (r.ok=true) A PROPÓSITO — un borrador parcial es mejor que nada, y cortarlo en seco
+  // perdería trabajo real del modelo — pero nadie se lo decía al médico: el panel pintaba
+  // el mismo "Borrador listo" de siempre. Ahora, cuando el modelo se quedó sin espacio de
+  // salida, el estado lo dice explícitamente para que revise con más cuidado (o regenere)
+  // en vez de firmar un texto que se corta a mitad de frase. PURA: la prueba llama directo.
+  function mtrEstadoBorrador(r) {
+    return (r && r.finishReason === "MAX_TOKENS")
+      ? "⚠ Borrador incompleto: el modelo llegó a su límite de longitud antes de terminar. Revíselo con cuidado — puede cortarse a mitad de frase — o genere de nuevo."
+      : "Borrador listo. Revíselo y edítelo antes de usarlo.";
+  }
+
   // v15.2.0 — MÉTRICA REINA LLMOps (Zero-PHI):
   // Evalúa la tasa de adopción comparando el texto original generado contra el editado
   // por el médico. NUNCA registra texto, solo la categoría discreta:
@@ -31229,6 +31073,16 @@ _vglOfrecerDeshacer(btn);
         // arma POR MODELO porque la rotación puede cruzar de generación en pleno reintento.
         // maxOutputTokens sube 1400 -> 2048: la nota clínica completa (7 secciones) podía
         // rozar el tope y salir truncada por MAX_TOKENS.
+        // v17.6.23 — REPORTE DE CAMPO (24-ago-2026): el aviso honesto de "borrador
+        // incompleto" (mtrEstadoBorrador) no basta — "necesito que siempre salga completo,
+        // así no me sirve". El aviso queda como red de seguridad, pero la causa raíz se
+        // ataca aquí: 2048 -> 8192. En los modelos 3.x el PENSAMIENTO consume del MISMO
+        // presupuesto que el texto visible (ver el comentario de _esCasillaCorta más abajo)
+        // y las notas largas NO restringen el pensamiento a propósito (conservan el
+        // comportamiento por defecto del modelo) — con 2048 de tope total, una nota de 7
+        // secciones podía quedarse sin espacio de salida real después de que el modelo
+        // "pensara". 8192 es un techo ampliamente soportado por los modelos gratuitos de
+        // la rotación (2.x y 3.x) y cuadruplica el margen real.
         // v15.6.0 — Optimización por modelo (pedido del médico: explotar las ventajas de
         // los flash-lite y esquivar sus debilidades). Las CASILLAS de texto libre son
         // plantillar-desde-hechos, no razonamiento largo: en los Gemini 3.x se pide
@@ -31249,8 +31103,8 @@ _vglOfrecerDeshacer(btn);
         const _esCasillaCorta = MTR_CASILLAS_REDACTOR ? ((modo in MTR_CASILLAS_REDACTOR) && MTR_MODOS_NOTA_LARGA.indexOf(modo) < 0) || modo === "consulta" : false;
         const cuerpoPara = (modelo) => {
           const gen = /^gemini-2\./.test(modelo)
-            ? { temperature: 0.2, maxOutputTokens: 2048 }
-            : { maxOutputTokens: 2048 };
+            ? { temperature: 0.2, maxOutputTokens: 8192 }
+            : { maxOutputTokens: 8192 };
           if (_esCasillaCorta) {
             if (/^gemini-3/.test(modelo)) gen.thinkingConfig = { thinkingLevel: "minimal" };
             else if (/^gemini-2\.5-flash/.test(modelo)) gen.thinkingConfig = { thinkingBudget: 0 };
@@ -32174,7 +32028,17 @@ _vglOfrecerDeshacer(btn);
       const modoInicial = (MTR_IA_MODOS.includes(_modoPedido)) ? _modoPedido : "enfermedad_actual";
       const prev = document.getElementById("vgl-ia-modal"); if (prev) prev.remove();
       const hoja = mtrHojaDesdeResumen(resumen);
-      const libre = mtrLeerTextoLibreHistoria();   // lectura ÚNICA del texto ya escrito hoy
+      // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "no tiene en cuenta los datos que yo
+      // pongo en el cuadro de texto". Causa real: esto se leía UNA sola vez al abrir el
+      // panel y se reutilizaba para cada "Generar"/"Generar todo" — si el médico seguía
+      // escribiendo en Motivo/Síntomas de Everest DESPUÉS de abrir el Redactor (lo normal:
+      // el panel queda abierto mientras redacta la historia), el borrador se generaba con
+      // la foto vieja, ignorando lo que acababa de escribir. mtrLeerTextoLibreHistoria ya
+      // está documentada como "barata: una consulta al DOM, sin observadores" — pensada
+      // para leerse cada vez, no una sola. Ahora es una función, no una foto: cada punto
+      // que la necesita (Generar, Generar todo, prellenar «Datos del paciente») la vuelve
+      // a leer en el momento exacto del clic.
+      const libreAhora = () => mtrLeerTextoLibreHistoria();
       const modal = document.createElement("div");
       modal.id = "vgl-ia-modal"; modal.className = isLight() ? "light" : "";
       modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
@@ -32347,7 +32211,8 @@ _vglOfrecerDeshacer(btn);
       pintarRotuloInsertar();
 
       $("#vgl-ia-datos-btn").addEventListener("click", () => {
-        mtrAbrirDatosAdicionales(resumen._docId, { motivo: libre.motivo, sintomas: libre.sintomas });
+        const _libreAlAbrir = libreAhora();
+        mtrAbrirDatosAdicionales(resumen._docId, { motivo: _libreAlAbrir.motivo, sintomas: _libreAlAbrir.sintomas });
       });
 
       // v16.5.0 — CUADRO DE DATOS CRÍTICOS (decisión del médico: "solo lo que invalida la
@@ -32453,7 +32318,7 @@ _vglOfrecerDeshacer(btn);
           pregunta: scrubPII($("#vgl-ia-pregunta").value),
           indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
           datosExtra: mtrDatosExtraLeer(resumen._docId),
-          contextoLibre: libre.combinado,
+          contextoLibre: libreAhora().combinado,
           jsonV68: (modoX === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
           // v17.0.0 — ancla del control anterior (solo Enfermedad Actual, y solo si el
           // médico tiene carpeta local con historial de este paciente).
@@ -32503,7 +32368,7 @@ _vglOfrecerDeshacer(btn);
           _ultimoModelo = mtrModeloGemini(m);
           const r = await _generarPara(m);
           if (r.ok) {
-            _borradores[m] = { texto: r.texto, original: r.texto, estado: "Borrador listo. Revíselo y edítelo antes de usarlo." };
+            _borradores[m] = { texto: r.texto, original: r.texto, estado: mtrEstadoBorrador(r) };
             hechas++;
           } else {
             _borradores[m] = { texto: "", original: "", estado: "No se generó (" + (r.motivo || "desconocido") + ")." };
@@ -32537,7 +32402,7 @@ _vglOfrecerDeshacer(btn);
           // v17.0.0 — ancla del control anterior, solo para la Enfermedad Actual.
           anclaControlAnterior: (modo === "enfermedad_actual") ? _anclaPrevia : null,
           datosExtra: mtrDatosExtraLeer(resumen._docId),
-          contextoLibre: libre.combinado,
+          contextoLibre: libreAhora().combinado,
           jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
         };
         if (!mtrLeerClaveGemini()) {
@@ -32568,11 +32433,11 @@ _vglOfrecerDeshacer(btn);
           }
           // v17.6.11 — el borrador se guarda bajo SU modo y solo se pinta si ese modo
           // sigue activo; así un cambio de chip (por código) nunca mezcla casillas.
-          _borradores[modoGen] = { texto: textoFinal, original: textoFinal, estado: "Borrador listo. Revíselo y edítelo antes de usarlo." };
+          _borradores[modoGen] = { texto: textoFinal, original: textoFinal, estado: mtrEstadoBorrador(r) };
           if (modoGen === modo) {
             salida.value = textoFinal;
             textoGeneradoOriginal = textoFinal;
-            estado.textContent = "Borrador listo. Revíselo y edítelo antes de usarlo.";
+            estado.textContent = mtrEstadoBorrador(r);
             habilitarPost(textoFinal);
             _pintarCifras();
             _autosizeSalida();   // v17.6.12

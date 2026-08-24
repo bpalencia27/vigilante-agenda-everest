@@ -758,3 +758,117 @@ una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y
 verde al restaurar. El banco completo al cierre: **1.424 comprobaciones, 0 en rojo** (44
 suites presentes; +7 casos en suite_23, +1 en suite_19, y suites 13/19 ajustadas a la URL
 ofuscada).
+
+## v17.6.15 — 24-ago-2026 (Agenda S+: aviso honesto de lectura ciega fuera de Citas del día)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~24073 (v17.6.15) | Guarda del aviso forzada a `if (false && leader && ...)` (el Vigilante vuelve a quedar ciego en silencio, sin avisar que no tiene lectura de la agenda) | NO | Ninguna: *tick: sin API sano y fuera de agenda/historia (pero dentro de HCHealth), avisa UNA vez que está ciego* (suite_17) cayó a rojo. Restaurada de inmediato; suite_17 volvió a 41/41. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con la aserción
+esperada, y se confirmó el verde al restaurar. Una prueba preexistente de suite_17
+("...sin volver a notificar") se ajustó (filtro por título en vez de contador global) porque
+el mismo escenario que prueba ahora dispara, LEGÍTIMAMENTE, el nuevo aviso honesto —
+ver CHANGELOG.md v17.6.15. El banco completo al cierre: **1.425 comprobaciones, 0 en
+rojo** (44 suites presentes; +1 caso nuevo en suite_17).
+
+## v17.6.16 — 24-ago-2026 (Agenda S+: la URL de agenda ya no se abandona por fallos pasajeros)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~11026 (v17.6.16) | Reintroducido `if (API.fallos >= 3) purgarApiUrl(...)` en la rama catch de `apiLeerAgenda` (la URL vuelve a olvidarse tras 3 fallos seguidos) | NO | Ninguna: *apiEspera/apiUtil: una racha larga de fallos NO purga la URL — solo se enfría (v17.6.16)* (suite_13) cayó a rojo. Restaurada de inmediato; suite_13 volvió a 60/60. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con la aserción
+esperada, y se confirmó el verde al restaurar. La prueba preexistente que verificaba el
+purgado a los 3 fallos (v12.3.7) se reescribió para verificar el comportamiento nuevo
+(sobrevive una racha larga, entra al enfriamiento de 5 min de `apiUtil()`, y se recupera
+sola sin volver a "Citas del día") — ver CHANGELOG.md v17.6.16. El banco completo al
+cierre: **1.425 comprobaciones, 0 en rojo** (44 suites presentes).
+
+## v17.6.18 — 24-ago-2026 (Panel del paciente S+: el aviso al abrir la historia vuelve a ser solo informativo)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~10028 (v17.6.18) | Reinsertado el botón `📅 Agendar control` en `avisoUniversal` (el aviso vuelve a mostrar acciones) | NO | Ninguna: *avisoUniversal: los chips son informativos (spans), sin botones de acción (v17.6.18)* (suite_04) cayó a rojo. Restaurada de inmediato; suite_04 volvió a 192/192. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con la aserción
+esperada, y se confirmó el verde al restaurar. Se retiraron, sin dejar rastro: los dos
+botones de acción del aviso, la conversión de los chips en botones (`data-aviso-accion`),
+la delegación de clics asociada, el helper puro `mtrAvisoAccionDe` (ya sin llamador) y su
+prueba dedicada, y el parámetro `apt`/`_aptAviso` que solo existía para esas acciones —
+ver CHANGELOG.md v17.6.18. El banco completo al cierre: **1.423 comprobaciones, 0 en
+rojo** (44 suites presentes; -2 casos consolidados en 1 en suite_04, -1 prueba de la
+función eliminada).
+
+## v17.6.19 — 24-ago-2026 (Bienestar/Turno: se retiran 4 funciones sin uso real en consultorio)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~12368 (v17.6.19) | Reinsertadas las 2 reglas CSS `.vgl-cd.vgl-cron` (3 `!important`) que el cronómetro dejó al retirarse | NO | Ninguna: *Regla G - escala tipográfica...* (suite_25, censo de `!important`) cayó a rojo (esperaba 347, salió 350). Restaurada de inmediato; suite_25 volvió a 15/15. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con la aserción
+esperada, y se confirmó el verde al restaurar. Los otros 3 retiros (Regla 20-20-20,
+Sugerir fecha de control, Botón de fin de turno) no tenían prueba dedicada que los
+protegiera (los cuatro estaban APAGADOS por defecto, sin cobertura propia) — se verificó
+su retiro completo por lectura: sin llamadores huérfanos, sin referencias a `S.ojos`/
+`S.ojosMin`/`S.seguimiento`/`S.resumenFin` en el resto del archivo ni en tests/. El banco
+completo al cierre: **1.423 comprobaciones, 0 en rojo** (44 suites presentes; censo de
+suite_25 ajustado de 350 a 347 y su comentario actualizado).
+
+## v17.6.20 — 24-ago-2026 (Telemetria corregida + se retiran Espera prolongada y Pausa activa)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~19049 (v17.6.20) | Quitado `if (!_fnCompletado) uxTrack("fn.agendar.abandon")` del closeMod real de `openAgendamientoModal` (el embudo vuelve a quedarse sin su propio abandono) | NO | Ninguna: *embudo de Agendamiento: cerrar sin crear cita cuenta como abandono de SU PROPIO embudo* (suite_23, nueva) Y la prueba genérica *embudo: todo modal con fn.X.open tiene tambien su fn.X.complete y su fn.X.abandon* cayeron a rojo. Restaurada de inmediato; suite_23 volvió a 91/91. |
+| ~12368 — revisado, no reaplicado (ver v17.6.19) | (mutación de la limpieza de Espera prolongada/Pausa activa) | — | Sin prueba dedicada que proteja estos dos retiros (estaban APAGADOS de fábrica, sin cobertura propia, igual que los 3 de v17.6.19) — se verificó el retiro completo por lectura: cero referencias a `S.pausas`/`S.escalada`/`state.pacienteDesde`/`state.escaladoAvisados`/`state.pausaProx`/`state.ojosProx` en el resto del archivo ni en tests/. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con la aserción
+esperada, y se confirmó el verde al restaurar. El banco completo al cierre: **1.424
+comprobaciones, 0 en rojo** (44 suites presentes; +2 casos en suite_23: la contaminación
+cruzada de embudos y el embudo propio de Agendamiento).
+
+## v17.6.21 — 24-ago-2026 (Agenda S+: debounce contra el parpadeo de estado entre fuentes)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~9450 (v17.6.21) | Quitado el bloque de debounce completo en `colorAndAlert` (`stRaw`/`st` vuelven a ser siempre la lectura cruda, sin confirmación de dos ticks) | NO | Ninguna: *un solo parpadeo... queda absorbido* Y *la MISMA lectura repetida dos veces seguidas SÍ se confirma* (suite_04, ambas nuevas) cayeron a rojo. Restaurada de inmediato; suite_04 volvió a 194/194. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con las dos
+aserciones esperadas, y se confirmó el verde al restaurar. Diagnosticado a partir de un
+CSV real de auditoría que el médico adjuntó (sin PHI copiado a este repositorio ni a
+código/pruebas: el patrón se verificó leyendo el CSV, nunca se persistió nombre ni
+documento de paciente). El banco completo al cierre: **1.426 comprobaciones, 0 en rojo**
+(44 suites presentes; +2 casos nuevos en suite_04).
+
+## v17.6.22 — 24-ago-2026 (Redactor IA: borradores incompletos avisados, contexto ya no queda obsoleto)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~30900 (v17.6.22) | `mtrEstadoBorrador` devuelto a un único mensaje fijo, sin distinguir MAX_TOKENS | NO | Ninguna: *mtrEstadoBorrador: MAX_TOKENS avisa honestamente...* (suite_57) cayó a rojo. Restaurada; suite_57 volvió a 78/78. |
+| ~32031 (v17.6.22) | `libreAhora` vuelto a envolver una foto única (`const libre = mtrLeerTextoLibreHistoria(); libreAhora = () => libre`) — reintroduce la foto vieja por una vía indirecta | NO | Ninguna: *el panel de redacción ya NO congela el texto libre...* (suite_57, aserción por texto fuente) cayó a rojo. Restaurada de inmediato. |
+| ~32395 (v17.6.22) | Uno de los DOS disparadores de generación (botón «Generar») vuelto a `contextoLibre: ""` — regresión PARCIAL, solo un sitio | NO | Ninguna: la misma aserción de conteo (`usos === 2`) cayó a rojo al bajar a 1. Restaurada de inmediato. |
+
+Tres mutaciones aplicadas sobre el archivo de producción, UNA A LA VEZ (restaurando cada
+una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. Se refactorizó `_estadoBorrador` (cierre interno del
+modal, sin llamador aislable) a `mtrEstadoBorrador` (función pura de nivel superior) para
+poder protegerla con una prueba directa, sin reconstruir el modal completo — mismo
+criterio de diseño testeable que ya usa el resto del módulo. El fix del contexto obsoleto
+se protege por aserción de texto fuente (mismo patrón ya establecido en este archivo para
+"uxTrack no arrastra texto clínico"): no hay una unidad aislable para probar "se lee en el
+momento del clic" sin reconstruir el modal completo de 600 líneas. El banco completo al
+cierre: **1.429 comprobaciones, 0 en rojo** (44 suites presentes; +3 casos nuevos en
+suite_57).
+
+## v17.6.23 — 24-ago-2026 (Redactor IA: se ataca la causa raiz del truncamiento, no solo el aviso)
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~31106-31107 (v17.6.23) | `maxOutputTokens` devuelto de 8192 a 2048 en ambas ramas de `cuerpoPara` | NO | Ninguna: dos pruebas de suite_57 ("tope de salida 8192..." y "el tope de salida NO se recorta... v17.6.23") cayeron a rojo. Restaurada de inmediato; suite_57 volvió a 78/78. |
+
+Mutación aplicada sobre el archivo de producción, corrida dejó rojo con ambas
+aserciones esperadas, y se confirmó el verde al restaurar. Corrección directa sobre
+v17.6.22 (mismo día): el médico aceptó el aviso honesto pero pidió la causa raíz —
+se conservan AMBOS (el aviso como red de seguridad, el tope subido como arreglo real). El
+banco completo al cierre: **1.429 comprobaciones, 0 en rojo** (44 suites presentes; 0
+casos nuevos, 2 aserciones existentes actualizadas al nuevo valor).

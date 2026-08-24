@@ -324,14 +324,14 @@ module.exports = {
       t.igual(c.api.apiEspera(60000), 60000, "la base manda cuando es mayor");
     });
 
-    // v12.3.7 REDISEÑÓ este ciclo: "olvido tras 3 fallos SEGUIDOS" (purgarApiUrl) reemplazó
-    // al viejo "insistir hasta 5 y descansar 5 min contra la MISMA url". Ambos incrementos de
-    // API.fallos (apiLeerAgenda, tanto citas===null como el catch) llaman a purgarApiUrl en
-    // cuanto fallos llega a 3 — API.fallos JAMÁS alcanza 4 o 5 por esta vía: los umbrales
-    // ">=5" de apiUtil/apiEspera quedaron como código vestigial, protegido por el nuevo
-    // camino más agresivo, pero inalcanzable desde aquí (verificado leyendo cada
-    // incremento de API.fallos en el archivo — ninguno más existe).
-    await t.casoAsync("apiEspera/apiUtil: a los 3 fallos SEGUIDOS se olvida la URL entera (v12.3.7)", async () => {
+    // v17.6.16 — REDISEÑÓ este ciclo otra vez: el purgado a los 3 fallos de v12.3.7 exigía
+    // que el médico volviera a Citas del día para que Everest "reenseñara" la URL — que es
+    // justo lo que el reporte de campo pide evitar. Ahora los fallos NUNCA purgan por sí
+    // solos: la URL aprendida sobrevive a una racha larga de fallos (p. ej. sesión de
+    // Athenea caída, que el propio script revive sola) y sigue reintentándose, cada vez
+    // más espaciado, hasta el tope de apiUtil()/apiEspera() (>=5 fallos → 5 min de
+    // descanso, contra la MISMA url — ya no es código vestigial).
+    await t.casoAsync("apiEspera/apiUtil: una racha larga de fallos NO purga la URL — solo se enfría (v17.6.16)", async () => {
       const e = entornoApi();
       e.c.api.apiRecordar(URL_AGENDA);
       e.setFetch(respuestaError(500));
@@ -343,16 +343,17 @@ module.exports = {
       await e.c.api.apiLeerAgenda();
       t.igual(e.c.api.apiEspera(0), 15000, "2 fallos -> 15 s");
       t.cierto(e.c.api.apiUtil(), "con 2 fallos todavía se intenta");
-      // Fallo 3: purgarApiUrl se dispara DENTRO de apiLeerAgenda — la URL se olvida entera
+      // Fallo 3: ya NO purga — antes (v12.3.7) aquí se olvidaba la URL entera
       await e.c.api.apiLeerAgenda();
-      t.falso(e.c.api.apiUtil(), "sin URL aprendida ya no hay nada que intentar");
-      t.igual(e.c.api.apiEspera(0), 4000, "fallos vueltos a cero: ritmo base, no el creciente");
-      t.falso(e.c.api.apiSano());
-      // v12.3.7 — "la próxima vez que la propia Everest haga esa llamada ... se vuelve a
-      // aprender sin que nadie tenga que esperar": simula ese re-aprendizaje.
-      e.c.api.apiRecordar(URL_AGENDA);
-      t.cierto(e.c.api.apiUtil(), "URL reaprendida: vuelve a intentarse de inmediato, sin esperar minutos");
-      // Y si el servidor responde bien esta vez, vuelve la confianza
+      t.cierto(e.c.api.apiUtil(), "3 fallos: la URL SIGUE aprendida, no hizo falta volver a Citas del día");
+      t.falso(e.c.api.apiSano(), "todavía no hay éxito reciente");
+      // Fallos 4 y 5: entra al enfriamiento largo de apiUtil(), pero la URL sigue viva
+      await e.c.api.apiLeerAgenda();
+      await e.c.api.apiLeerAgenda();
+      t.igual(e.c.api.apiEspera(0), 300000, "5 fallos: enfriamiento de 5 min, contra la MISMA url");
+      t.cierto(e.c.api.apiUtil(), "aún con 5 fallos, apiUtil() deja reintentar tras el enfriamiento (no purgó)");
+      // Y si el servidor responde bien esta vez (p. ej. la sesión de Athenea se restauró
+      // sola), vuelve la confianza SIN que nadie haya vuelto a Citas del día
       e.setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(FILAS) }));
       const citas = await e.c.api.apiLeerAgenda();
       t.igual(citas.length, 2);

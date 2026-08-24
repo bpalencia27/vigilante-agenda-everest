@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "mtrAvisoAccionDe", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -93,6 +93,53 @@ module.exports = {
       c.api.__state.historical.set(r.key, "en sala");
       const r2 = c.api.colorAndAlert(a, refDate);
       t.falso(r2.arrival, "ya no es la primera vez que se lee en sala");
+    });
+
+    // v17.6.21 — REPORTE DE CAMPO (24-ago-2026, con CSV real de auditoría adjunto): "la
+    // tarjeta titilaba entre verde y ámbar" y un aviso de confirmación extemporánea llegó
+    // "súper tarde". El CSV mostró el MISMO paciente alternando En Sala/Sin presentarse
+    // más de 10 veces en 15 min — la firma de dos fuentes (API vs DOM) en desacuerdo, no
+    // de un paciente moviéndose de verdad. Cada parpadeo generaba un CAMBIO_ESTADO real.
+    t.caso("colorAndAlert: un solo parpadeo (una lectura distinta que NO se repite) queda absorbido — sin cambio de color ni de texto", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:20:00").getTime();
+      const aSinPres = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+
+      const r1 = c.api.colorAndAlert(aSinPres, refDate);
+      t.igual(r1.color, "AMBAR", "primera lectura: confirmada de inmediato (no hay historial previo)");
+      t.igual(r1.estado, "Sin presentarse");
+
+      // Lectura 2: OTRA fuente dice "En Sala" — un solo tick, no se repite todavía.
+      const aEnSala = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "JUAN", index: 1, doc_id: "123" };
+      const r2 = c.api.colorAndAlert(aEnSala, refDate);
+      t.igual(r2.color, "AMBAR", "el parpadeo NO se acepta a la primera lectura: sigue el color confirmado");
+      t.igual(r2.estado, "Sin presentarse", "y el texto de la tarjeta tampoco cambia — color y texto van SIEMPRE juntos");
+      t.falso(r2.arrival, "no se cuenta como llegada: nunca se confirmó");
+
+      // Lectura 3: vuelve a "Sin presentarse" — el parpadeo se resolvió solo, sin dejar rastro.
+      const r3 = c.api.colorAndAlert(aSinPres, refDate);
+      t.igual(r3.color, "AMBAR");
+      t.igual(r3.estado, "Sin presentarse");
+    });
+
+    t.caso("colorAndAlert: la MISMA lectura repetida dos veces seguidas SÍ se confirma como cambio real", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T07:58:00").getTime(); // dentro de la gracia: sin fraudWatch todavía
+      const aSinPres = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = true;
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      c.api.colorAndAlert(aSinPres, refDate); // primera lectura: confirmada (sin historial previo)
+
+      const aEnSala = { hora_texto: "08:00 AM", estado: "En Sala", nombre: "JUAN", index: 1, doc_id: "123" };
+      const r2 = c.api.colorAndAlert(aEnSala, refDate); // candidato: todavía no confirma
+      t.igual(r2.color, "AZUL", "todavía dentro de la gracia con 'Sin presentarse' confirmado");
+
+      const r3 = c.api.colorAndAlert(aEnSala, refDate); // MISMA lectura otra vez: confirma
+      t.igual(r3.color, "VERDE", "segunda lectura seguida del mismo valor: el cambio real SÍ se acepta");
+      t.igual(r3.estado, "En Sala");
+      t.cierto(r3.arrival, "y cuenta como llegada, porque el estado confirmado anterior no era 'en sala'");
     });
 
     t.caso("muted / muteFor / unmute controlan el estado de silencio temporal", () => {
@@ -519,10 +566,11 @@ module.exports = {
       t.falso(!!c2.env.doc.getElementById("vgl-pym-modal"), "sin nada que mostrar, no hay aviso");
     });
 
-    // v17.6.3 — B2 (decisión del médico, 22-ago): el aviso único pasa de informar a
-    // ACTUAR. Cada chip (lab o PyM) y los botones de acción abren el panel de órdenes o
-    // el agendamiento; el aviso solo lleva acciones cuando se sabe quién es el paciente.
-    t.caso("avisoUniversal: con apt, los chips y las acciones llevan data-aviso-accion (B2)", () => {
+    // v17.6.18 — REPORTE DE CAMPO (24-ago-2026): "los botones para ordenar laboratorios
+    // y agendar cita... no les veo utilidad — elimínalos". La v17.6.3 (B2) los había
+    // convertido en botones accionables; se revierte a SOLO informativo — el aviso al
+    // abrir la historia es un recordatorio, no un atajo de flujo.
+    t.caso("avisoUniversal: los chips son informativos (spans), sin botones de acción (v17.6.18)", () => {
       const c = cargar({ silencioso: true });
       c.api.avisoUniversal("Paciente Prueba", {
         pym: ["Tamización VIH"],
@@ -530,31 +578,12 @@ module.exports = {
         apt: { doc_id: "111", nombre: "Paciente Prueba" },
       }, true);
       const m = c.env.doc.getElementById("vgl-pym-modal");
-      t.cierto(m.innerHTML.indexOf('data-aviso-accion="ordenar"') >= 0, "el chip de labs lleva la acción ordenar");
-      t.cierto(m.innerHTML.indexOf('data-aviso-accion="agendar"') >= 0, "el botón «Agendar control» lleva la acción agendar");
-      t.cierto(m.innerHTML.indexOf("📅 Agendar control") >= 0, "el botón «Agendar control» está a la vista");
-      t.cierto(m.innerHTML.indexOf("📋 Ordenar paraclínicos") >= 0, "el botón «Ordenar paraclínicos» está a la vista");
-      t.cierto(m.innerHTML.indexOf("Entendido") >= 0, "y sigue existiendo el «Entendido» para cerrar sin hacer nada");
-    });
-
-    t.caso("avisoUniversal: SIN apt no inventa acciones (un botón que no abre nada sería ruido)", () => {
-      const c = cargar({ silencioso: true });
-      c.api.avisoUniversal("Paciente Prueba", { labs: [{ nombre: "Creatinina" }] }, true);
-      const m = c.env.doc.getElementById("vgl-pym-modal");
-      t.cierto(!!m, "el aviso igual sale (informa aunque no se sepa quién es)");
-      t.falso(m.innerHTML.indexOf("data-aviso-accion") >= 0, "sin apt no hay chips ni botones accionables");
-    });
-
-    t.caso("mtrAvisoAccionDe: encuentra la acción en el chip y en sus contenedores, y nada fuera", () => {
-      const c = cargar({ silencioso: true });
-      const chip = { getAttribute: () => "ordenar" };
-      const contenedor = { getAttribute: () => null, _parent: chip };
-      const lista = { getAttribute: () => null, _parent: contenedor };
-      t.igual(c.api.mtrAvisoAccionDe(chip), "ordenar", "el chip mismo la lleva");
-      t.igual(c.api.mtrAvisoAccionDe(contenedor), "ordenar", "sube un nivel al contenedor");
-      t.igual(c.api.mtrAvisoAccionDe(lista), "ordenar", "sube dos niveles a la lista");
-      t.igual(c.api.mtrAvisoAccionDe({ getAttribute: () => "otra" }), null, "una acción desconocida no abre nada");
-      t.igual(c.api.mtrAvisoAccionDe(null), null, "sin target no lanza");
+      t.falso(m.innerHTML.indexOf("data-aviso-accion") >= 0, "ningún chip lleva acción");
+      t.falso(m.innerHTML.indexOf("📅 Agendar control") >= 0, "el botón «Agendar control» ya no existe");
+      t.falso(m.innerHTML.indexOf("📋 Ordenar paraclínicos") >= 0, "el botón «Ordenar paraclínicos» ya no existe");
+      t.cierto(m.innerHTML.indexOf("Tamización VIH") >= 0, "el pendiente se sigue informando");
+      t.cierto(m.innerHTML.indexOf("Creatinina en Suero") >= 0, "el laboratorio vencido se sigue informando");
+      t.cierto(m.innerHTML.indexOf("Entendido") >= 0, "solo queda «Entendido» para cerrar");
     });
 
     t.caso("checkAvisoUniversal: sin paciente abierto -> no lanza y no revisa nada", () => {

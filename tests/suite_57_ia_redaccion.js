@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 // =====================================================================
 //  SUITE 57 — Redacción IA: prompts, parser, conector y estilo
 //
@@ -27,7 +29,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrEstadoBorrador", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -251,7 +253,7 @@ module.exports = {
     // 22-ago contra el panel real de límites — ver MTR_GEMINI_MODELOS), así que la rama
     // vuelve a ser alcanzable. Esta prueba pasa de "TODA la rotación es 3.x" a "el intento
     // que cae en el único 2.x SÍ lleva temperature/thinkingBudget; los demás no".
-    await t.casoAsync("conector: los modelos 3.x NO llevan temperature (guía oficial, tope 2048); el único 2.x de la rotación (gemini-2.5-flash-lite) SÍ conserva temperature 0.2", async () => {
+    await t.casoAsync("conector: los modelos 3.x NO llevan temperature (guía oficial, tope 8192); el único 2.x de la rotación (gemini-2.5-flash-lite) SÍ conserva temperature 0.2", async () => {
       const cuerpos = [];
       const c = cargar({ silencioso: true, gmxhr: (opts) => {
         const m = /models\/([^:]+):/.exec(opts.url || "");
@@ -270,7 +272,7 @@ module.exports = {
           t.falso("temperature" in x.body.generationConfig, "3.x: sin parámetros de muestreo (" + x.modelo + ")");
         }
       });
-      t.cierto(cuerpos.every((x) => x.body.generationConfig.maxOutputTokens === 2048), "tope de salida 2048 en los tres (nota completa sin truncar)");
+      t.cierto(cuerpos.every((x) => x.body.generationConfig.maxOutputTokens === 8192), "tope de salida 8192 en los tres (v17.6.23: cuadriplicado para que la nota de 7 secciones no se quede sin espacio tras el pensamiento del modelo)");
     });
 
     // ================= PARSER =================
@@ -399,7 +401,7 @@ module.exports = {
       const corta = await armar("motivo_consulta");
       t.cierto(corta.every((x) => /^gemini-3\./.test(x.modelo)), "los tres intentos son 3.x (ya no queda 2.x en la rotación): " + corta.map((x) => x.modelo).join(", "));
       t.cierto(corta.every((x) => x.body.generationConfig.thinkingConfig && x.body.generationConfig.thinkingConfig.thinkingLevel === "minimal"), "3.x en casilla corta: thinkingLevel minimal en los tres intentos");
-      t.cierto(corta.every((x) => x.body.generationConfig.maxOutputTokens === 2048), "el tope de salida NO se recorta en ninguno (lección v14.2: notas truncadas)");
+      t.cierto(corta.every((x) => x.body.generationConfig.maxOutputTokens === 8192), "el tope de salida NO se recorta en ninguno (lección v14.2/v17.6.23: notas truncadas)");
       const larga = await armar("analisis_plan");
       const l3 = larga.find((x) => /^gemini-3\./.test(x.modelo));
       t.falso(!!(l3.body.generationConfig.thinkingConfig), "nota clínica: el modelo piensa con su valor por defecto");
@@ -637,6 +639,47 @@ module.exports = {
       t.falso(r.ok, "no ok");
       t.cierto(/satura/i.test(r.motivo), "el motivo dice saturado/alta demanda");
       t.falso(/cuota/i.test(r.motivo), "y NO dice cuota agotada: es un motivo distinto");
+    });
+
+    // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "los resultados a veces aparecen
+    // cortados incompletos". mtrRespuestaGemini trata MAX_TOKENS como éxito A PROPÓSITO
+    // (texto parcial es mejor que nada), pero antes de esta versión NADA en el camino le
+    // decía al médico que el borrador estaba incompleto — llegaba con el mismo "Borrador
+    // listo" de siempre. Estas dos pruebas protegen, por separado: (1) que el conector
+    // SIGUE entregando el texto parcial con ok=true (comportamiento deliberado, no romperlo)
+    // y (2) que el mensaje honesto de mtrEstadoBorrador distingue ese caso.
+    await t.casoAsync("mtrGeminiRedactar: MAX_TOKENS entrega el texto parcial con ok=true y el finishReason viaja intacto", async () => {
+      const respTruncada = JSON.stringify({ candidates: [{ content: { parts: [{ text: "ANÁLISIS: el paciente presenta hipertensión arterial en manejo con" }] }, finishReason: "MAX_TOKENS" }] });
+      const c = cargar({ silencioso: true, gmxhr: (opts) => setTimeout(() => opts.onload({ status: 200, responseText: respTruncada }), 0) });
+      c.api.mtrGuardarClaveGemini("X");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "analisis_plan", {});
+      t.cierto(r.ok, "un borrador parcial sigue siendo mejor que nada: no se descarta");
+      t.cierto(/manejo con$/.test(r.texto), "el texto parcial llega tal cual, cortado donde el modelo se quedó sin espacio");
+      t.igual(r.finishReason, "MAX_TOKENS", "la bandera viaja para que el panel pueda avisar");
+    });
+
+    t.caso("mtrEstadoBorrador: MAX_TOKENS avisa honestamente que el borrador puede estar incompleto", () => {
+      t.cierto(/incompleto/i.test(api.mtrEstadoBorrador({ ok: true, finishReason: "MAX_TOKENS" })), "MAX_TOKENS: avisa incompleto");
+      t.igual(api.mtrEstadoBorrador({ ok: true, finishReason: "STOP" }), "Borrador listo. Revíselo y edítelo antes de usarlo.", "STOP normal: mensaje de siempre");
+      t.igual(api.mtrEstadoBorrador(null), "Borrador listo. Revíselo y edítelo antes de usarlo.", "sin objeto: no lanza, mensaje por defecto");
+    });
+
+    // v17.6.22 — REPORTE DE CAMPO (mismo día): "no tiene en cuenta los datos que yo pongo
+    // en el cuadro de texto" (Revisión por sistemas / Examen físico de Everest). Causa
+    // real: el panel leía mtrLeerTextoLibreHistoria() UNA sola vez al abrirse y reutilizaba
+    // esa foto para cada "Generar" — si el médico seguía escribiendo en esas casillas
+    // DESPUÉS de abrir el Redactor (lo normal: el panel queda abierto mientras redacta),
+    // el borrador se generaba con la foto vieja. La función en sí ya era barata y sin
+    // efectos secundarios (una consulta al DOM); el defecto era CUÁNDO se llamaba, no
+    // cómo. No hay una unidad aislable para probar "se llama en el momento del clic" sin
+    // reconstruir el modal completo — se protege por texto fuente, mismo criterio que ya
+    // usa este archivo para "uxTrack no arrastra texto clínico" (ver más abajo).
+    t.caso("el panel de redacción ya NO congela el texto libre en una foto única al abrir", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
+      const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
+      t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
+      t.cierto(/mtrAbrirDatosAdicionales\(resumen\._docId, \{ motivo: _libreAlAbrir\.motivo/.test(src), "el prellenado de «Datos del paciente» también lee fresco, no la foto vieja");
     });
 
     // v17.3.0 — Reporte real de consola (21-ago): "Análisis y plan" y "Recomendaciones"

@@ -4,12 +4,102 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.23] — 2026-08-24 (Redactor IA: se ataca la causa raíz del truncamiento, no solo el aviso)
+
+Corrección sobre v17.6.22: "necesito que siempre salga completo, así no me sirve" — el aviso honesto de borrador incompleto queda como red de seguridad, pero se sube el presupuesto real de tokens.
+
+### 🔧 Tope de salida de Gemini cuadruplicado: 2048 → 8192
+- En los modelos 3.x, el PENSAMIENTO del modelo consume del MISMO presupuesto que el texto visible — y las notas largas (Enfermedad actual, Análisis y plan) no restringen el pensamiento a propósito (conservan el comportamiento por defecto). Con 2048 de tope total, una nota clínica de 7 secciones podía quedarse sin espacio de salida real después de que el modelo terminara de "pensar", incluso antes de escribir la nota completa.
+- 8192 es un techo ampliamente soportado por los modelos gratuitos de la rotación (2.x y 3.x) y cuadruplica el margen real disponible para el texto visible.
+- El aviso de v17.6.22 (`mtrEstadoBorrador`) se conserva como red de seguridad honesta para el caso raro que aún así ocurra — no se retira, porque nunca mentir sobre el estado del borrador sigue siendo la regla.
+
+---
+
+## [Versión 17.6.22] — 2026-08-24 (Redactor IA: borradores incompletos avisados, contexto ya no queda obsoleto)
+
+Reporte en consultorio, mismo día: "esa sección de redacción asistida con IA está muy mal diseñada, porque los resultados a veces aparecen cortados incompletos, no tiene en cuenta los datos que yo pongo en el cuadro de texto".
+
+### 🐛 Borrador truncado por el modelo: ahora se avisa, en vez de fingir que está completo
+- `mtrRespuestaGemini` ya trataba `finishReason: "MAX_TOKENS"` como éxito a propósito (un borrador parcial es mejor que nada — cortarlo en seco perdería trabajo real del modelo), pero nada en el camino se lo decía al médico: el panel pintaba el mismo "Borrador listo" de siempre. Nueva función pura `mtrEstadoBorrador(r)`: cuando el modelo se quedó sin espacio de salida, el estado dice explícitamente "⚠ Borrador incompleto... puede cortarse a mitad de frase" en vez de sonar terminado.
+
+### 🐛 El contexto que el médico escribe en Everest ya no queda congelado en una foto vieja
+- El panel leía `mtrLeerTextoLibreHistoria()` (motivo, revisión por sistemas, examen físico, hábitos) **una sola vez al abrirse** y reutilizaba esa foto para cada "Generar"/"Generar todo" — si el médico seguía escribiendo en esas casillas de Everest después de abrir el Redactor (lo normal: el panel queda abierto mientras redacta), el borrador se generaba ignorando lo recién escrito. Ahora se lee fresco en el momento exacto de cada clic — Generar, Generar todo, y el prellenado del formulario "➕ Datos del paciente".
+- Nota honesta: el prompt en sí (`mtrRedaccionPrompt`) siempre incluyó correctamente estos bloques — el defecto no era QUÉ se le pedía al modelo, sino CUÁNDO se leían los datos que se le pasaban.
+
+---
+
+## [Versión 17.6.21] — 2026-08-24 (Agenda S+: debounce contra el parpadeo de estado entre fuentes)
+
+Reporte en consultorio, con CSV real de auditoría adjunto (sin PHI en este registro): "la tarjeta titilaba entre verde y ámbar" y una confirmación extemporánea "me avisó súper tarde y quedé con la duda".
+
+### 🐛 Parpadeo de estado corregido con confirmación en dos lecturas (debounce)
+- El CSV mostró el mismo paciente alternando "En Sala" ↔ "Sin presentarse" más de 10 veces en 15 minutos, y varios pacientes distintos cambiando en el mismo instante exacto — la firma de que el modo API y el respaldo por lectura de pantalla no coincidían en ese tick, no de pacientes moviéndose de verdad. Cada parpadeo pasaba por `colorAndAlert` como un `CAMBIO_ESTADO` real: ensuciaba la auditoría y podía disparar o retrasar una alerta de fraude por una lectura transitoria — la causa más probable del aviso "súper tarde".
+- Ahora una lectura que difiere del último estado **confirmado** no se acepta a la primera: se guarda como candidato. Solo si la misma lectura se repite en el siguiente tick (unos segundos después, no minutos) se confirma y recién ahí alimenta color, aviso y auditoría. Mientras tanto la tarjeta sigue mostrando el último estado confirmado — texto y color **siempre juntos**, nunca una combinación imposible. Un cambio real sigue avisando en segundos; un parpadeo de una sola lectura queda absorbido sin dejar rastro. La primera vez que se observa una cita nunca se demora.
+
+---
+
+## [Versión 17.6.20] — 2026-08-24 (Telemetría corregida + se retiran Espera prolongada y Pausa activa)
+
+### 🐛 Bug de telemetría corregido: el embudo de Agendamiento no tenía abandono propio
+- Al auditar Laboratorios se encontró un residuo de copia-pega: el `closeMod` de `openLaboratoriosModal` disparaba `uxTrack("fn.agendar.abandon")` — un evento del embudo de OTRO módulo — cada vez que se cerraba el modal de Laboratorios. Contaminaba la métrica de abandono de Agendamiento (`mtrTableroTelemetria`, Resumen del turno) con eventos que nunca fueron un agendamiento abierto.
+- Peor aún: al quitarlo se confirmó que el embudo real de Agendamiento (`fn.agendar.open`/`fn.agendar.complete`) **nunca había tenido su propio abandono** — vivía, por error, en el modal equivocado. Se restauró en el `closeMod` real de `openAgendamientoModal`.
+
+### 🗑 Se retiran "Espera prolongada en sala" y "Pausa activa" (mismo pedido de campo que retiró Regla 20-20-20/Cronómetro/Sugerir fecha de control/Fin de turno en v17.6.19)
+- Ambos estaban APAGADOS por defecto. Se retiran `_bienestarTick`, `_escaladaDe`, `_escaladaTick`, sus interruptores en Ajustes y el estado que solo ellos usaban (`state.pausaProx`, `state.pacienteDesde`, `state.escaladoAvisados`; también se limpió `state.ojosProx`, huérfano desde v17.6.19). El grupo "Bienestar (turno largo)" de Ajustes, que solo contenía Pausa activa, se retira completo.
+
+---
+
+## [Versión 17.6.19] — 2026-08-24 (Bienestar/Turno: se retiran 4 funciones sin uso real en consultorio)
+
+Reporte en consultorio, mismo día: pidió eliminar directamente cuatro controles de Ajustes que, ya probados, "no le encontró utilidad" — Regla 20-20-20, Cronómetro del paciente en sala, Sugerir fecha de control y Botón de fin de turno. Los cuatro estaban APAGADOS por defecto (nadie los perdía encendidos sin saberlo).
+
+### 🗑 Cuatro controles retirados por completo
+- **Regla 20-20-20** (`S.ojos`/`S.ojosMin`): aviso cada N min para mirar a 6 metros. Se retira el interruptor, el selector de minutos y el aviso en `_bienestarTick`.
+- **Cronómetro del paciente en sala** (`S.cronometro`): tiempo transcurrido junto a la tarjeta. Se retira la función `cronometroDe`, su pintado en la tarjeta y su refresco en vivo, el interruptor en Ajustes y el CSS asociado (3 reglas `!important`, censo de suite_25: 350 → 347).
+- **Sugerir fecha de control** (`S.seguimiento`): bloque en el Resumen del turno con la fecha de control sugerida para los atendidos del día. Se retiran `_seguimientoHtml`/`_seguimientoSugerido` y su interruptor.
+- **Botón de fin de turno** (`S.resumenFin`): armaba el resumen de la jornada y lo copiaba al portapapeles. Se retira `_textoFinTurno`, el botón y su manejador de clic.
+- "Espera prolongada en sala" (`S.escalada`) y "Pausa activa" (`S.pausas`) **no se tocan** — no fueron parte del pedido.
+
+---
+
+## [Versión 17.6.18] — 2026-08-24 (Panel del paciente S+: el aviso al abrir la historia vuelve a ser solo informativo)
+
+Reporte en consultorio, mismo día: "al inicio cuando se abre la historia clínica que aparecen los recordatorios de PyM y demás, se habilitaron unos botones para ordenar laboratorios y agendar cita, por favor elimínalos porque no les veo utilidad".
+
+### 🗑 Se retiran los botones de acción del aviso único (📋 Ordenar paraclínicos / 📅 Agendar control)
+- La v17.6.3 (decisión "B2") había convertido los chips de PyM/laboratorios y añadido dos botones de acción para que el aviso, además de informar, pudiera abrir directamente el panel de órdenes o el agendamiento. En el uso real esos atajos no aportaban — el médico ya tiene 🗓️/📋/🧪 en el dock de acciones de la historia clínica para eso, y el aviso solo necesita ser el recordatorio que siempre fue.
+- Los chips de PyM y laboratorios vuelven a ser informativos (texto simple, no botones); se retiran los dos botones de acción y el helper de enrutado de clics (`mtrAvisoAccionDe`) que solo existía para ellos — sin dejar código muerto.
+- v17.6.17 (mismo lote): ajuste cosmético del mensaje "Aún sin citas" tras v17.6.16 — ya no dice "entra una vez" de forma incondicional, distingue el primer arranque del día de un reintento en curso.
+
+---
+
+## [Versión 17.6.16] — 2026-08-24 (Agenda S+: la URL de agenda ya no se abandona por fallos pasajeros)
+
+Reporte en consultorio, mismo día: "necesito que por lo general el script tenga acceso al endpoint que muestra el estado de citas del día para evitar tener que estar en frente de 'Citas del día' a cada rato — debe ser en tiempo real aunque esté en otra pestaña de Everest, o dentro de la historia clínica".
+
+### 🔌 La llamada de agenda aprendida ya no se purga por fallos repetidos
+- El sondeo en segundo plano (modo API) ya corría en TODA la aplicación, no solo en "Citas del día" (v12.3.11/v14.1.5) — eso ya funcionaba. Pero desde v12.3.7, a los 3 fallos SEGUIDOS se **olvidaba por completo** la URL aprendida, razonando que "Everest la vuelve a enseñar sola" — cierto, pero SOLO si el médico visita "Citas del día" en esa misma pestaña, que es justo lo que pedía evitar.
+- La causa más común de 3 fallos seguidos no es que la URL esté mal: es la sesión de Athenea caída (que el propio script ya revive sola, `atheneaKeepAlive`) o un corte de red pasajero. Purgar tiraba una URL perfectamente buena por un bache momentáneo.
+- Ahora los fallos **nunca** purgan la URL por sí solos: solo activan el enfriamiento ya existente de `apiUtil()` (≥5 fallos → 5 min de descanso, reintenta después contra la MISMA url, indefinidamente). La URL solo se abandona por una causa real de identidad — cambio de médico en un equipo compartido (`invalidarApiSiCambioMedico`), que sigue purgando como siempre.
+
+---
+
+## [Versión 17.6.15] — 2026-08-24 (Agenda S+: aviso honesto cuando el Vigilante queda ciego fuera de Citas del día)
+
+Reporte en consultorio: "los avisos de confirmación llegan tarde y el tiempo que pasó hasta que confirmaron no se queda fijo" cuando el médico no está directamente en "Citas del día".
+
+### ⚠ Vigilante sin lectura de la agenda
+- Causa real: fuera de "Citas del día"/Historia, el modo API en segundo plano es la ÚNICA fuente de datos — el respaldo por lectura de pantalla exige estar en esa vista. Si esa pestaña nunca aprendió la llamada de agenda de Everest (arranque en frío del día, o el API se invalidó por cambio de médico en un equipo compartido), no queda ninguna fuente viva mientras el médico trabaja en otra pantalla: el Vigilante queda ciego **en silencio**, y el "tiempo transcurrido" que se ve al volver ya no refleja el instante real de la confirmación, sino el de esa lectura tardía.
+- No se puede resucitar un dato que nunca se leyó (casilla vacía antes que dato inventado — no hay snapshot que fabricar). Pero el silencio total es peor: el médico cree que está vigilado y no lo está. Ahora, una sola vez por día y solo dentro del módulo clínico, un aviso honesto le dice que pase un momento por "Citas del día" para que el Vigilante aprenda la conexión.
+
+---
+
 ## [Versión 17.6.14] — 2026-08-23 (Telemetría S+: beacon con acuse, memoria acotada, backoff, RUM fijado y URL ofuscada)
 
 Auditoría completa del workflow de telemetría y recopilación de datos. Veredicto previo: SÓLIDA (cola persistente con acuse real, cero PHI en el canal remoto, sin await en el camino crítico, topes y dedupe). Cinco refinamientos S+:
 
 ### 🚨 H1 — El beacon de salida ya no retira evidencia a ciegas
-- `sendBeacon`/`fetch(no-cors)` no dan acuse (respuesta opaca): al cerrar la pestaña, una fila "despachada" contra un panel caído, un login de Google o un token rotado se perdía en silencio — los tres rechazos que `repPost` SÍ detecta y reencola. Ahora el vaciado al salir solo despacha con **acuse fresco** (último envío confirmado hace < 30 min); si no, las filas quedan en la cola y el próximo arranque las reintenta por `repFlush` (que sí lee el acuse). El servidor ya descarta duplicados por `lote`.
+- `sendBeacon`/envío silencioso (no-cors) no dan acuse (respuesta opaca): al cerrar la pestaña, una fila "despachada" contra un panel caído, un login de Google o un token rotado se perdía en silencio — los tres rechazos que `repPost` SÍ detecta y reencola. Ahora el vaciado al salir solo despacha con **acuse fresco** (último envío confirmado hace < 30 min); si no, las filas quedan en la cola y el próximo arranque las reintenta por `repFlush` (que sí lee el acuse). El servidor ya descarta duplicados por `lote`.
 
 ### 🧠 H2 — Techo de memoria real en el reporte de errores
 - El tope de 40 huellas limitaba el ENVÍO pero no la memoria: `_errVistos` crecía sin límite durante el día (un fallo del API con mensaje variable lo inflaba) y `_errVeces` añadía una clave por huella. El contador agregado (`error.distintos`) sigue viendo TODAS las huellas; el Set y el contador ahora se podan al umbral de 40.

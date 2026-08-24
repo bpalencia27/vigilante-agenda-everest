@@ -1137,6 +1137,11 @@ module.exports = {
 
       t.igual(ventana(c).acciones["fn.labs.abandon"], 1, "cerrar sin datos es un abandono");
       t.falso(!!ventana(c).acciones["fn.labs.complete"], "y sigue sin contarse como completado");
+      // v17.6.20 — REVISIÓN: copia-pega residual en closeMod disparaba TAMBIÉN
+      // "fn.agendar.abandon" al cerrar el modal de Laboratorios — contaminaba el embudo
+      // de Agendamiento (mtrTableroTelemetria) con abandonos que nunca fueron un
+      // agendamiento abierto. Este modal solo debe anotar SU PROPIO embudo.
+      t.falso(!!ventana(c).acciones["fn.agendar.abandon"], "cerrar Laboratorios NO contamina el embudo de Agendamiento");
     });
 
     await t.casoAsync("embudo de Laboratorios: si la consulta termina, se cierra con exito y cerrarlo despues NO cuenta como abandono", async () => {
@@ -1155,6 +1160,24 @@ module.exports = {
       const modal = c.env.doc.body.children.filter((n) => n.id === "vgl-labs-modal").pop();
       modal.querySelector("#vgl-labs-x")._listeners.click[0]({});
       t.falso(!!ventana(c).acciones["fn.labs.abandon"], "cerrar despues de que cumplio NO es abandonar");
+    });
+
+    // v17.6.20 — REVISIÓN: el embudo de Agendamiento (fn.agendar.open/complete) nunca
+    // había registrado SU PROPIO abandono — el aviso vivía, por copia-pega, dentro del
+    // closeMod de openLaboratoriosModal (ver caso anterior). Se restauró en el closeMod
+    // real de openAgendamientoModal; esta prueba protege que el embudo quede completo.
+    t.caso("embudo de Agendamiento: cerrar sin crear cita cuenta como abandono de SU PROPIO embudo", () => {
+      const c = cargar({ silencioso: true });
+      _enriquecerDom(c);
+      c.api.__S.uxTelemetria = true;
+      c.api.openAgendamientoModal({ doc_id: "12345678", nombre: "ANA PEREZ" });
+      t.igual(ventana(c).acciones["fn.agendar.open"], 1, "se anota la apertura");
+
+      const modal = c.env.doc.body.children.filter((n) => n.id === "vgl-agendar-modal").pop();
+      modal.querySelector("#vgl-agm-x")._listeners.click[0]({});
+
+      t.igual(ventana(c).acciones["fn.agendar.abandon"], 1, "cerrar sin crear cita es un abandono, registrado en SU PROPIO embudo");
+      t.falso(!!ventana(c).acciones["fn.agendar.complete"], "y sigue sin contarse como completado");
     });
 
     // v17.6.3 — D1 (decisión del médico, 22-ago): tablero local de telemetría y la

@@ -424,8 +424,8 @@ module.exports = {
     t.caso("tick: en HCHealth (aunque la sección sea 'otra') pinta los carteles que quedaron en cola, sin volver a notificar", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // sin marcadores de agenda/historia
-      let notifCount = 0;
-      c.env.win.Notification = class { constructor() { notifCount++; } };
+      let notifTitles = [];
+      c.env.win.Notification = class { constructor(title) { notifTitles.push(title); } };
       c.env.win.Notification.permission = "granted";
       c.api.__S.cartel = true;   // el cartel de pantalla (bigAlert) monta #vgl-modal
       // Sin `ts`: es un aviso encolado por una versión anterior. No debe caducar por eso.
@@ -434,9 +434,36 @@ module.exports = {
       c.api.tick();
       t.igual(c.api.__state.lastSeccion, "otra", "no hay marcadores de agenda/historia: la sección sigue siendo 'otra'");
       t.cierto(c.env.doc._nodos.some((n) => n.id === "vgl-modal"), "el cartel pendiente se pinta, porque la pestaña SÍ está en HCHealth");
-      t.igual(notifCount, 0, "y NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
+      // v17.6.15 — este escenario (Ordenamiento, sin agenda en el DOM, API nunca aprendido)
+      // ahora SÍ dispara una notificación distinta: el aviso honesto de "sin lectura de la
+      // agenda" (ver caso siguiente). No es el mismo aviso que reenvía el cartel encolado
+      // ("t"), así que se filtra por título en vez de subir a ciegas el contador a 1.
+      t.falso(notifTitles.includes("t"), "el cartel encolado NO se vuelve a notificar al sistema: eso ya sonó cuando ocurrió el hecho");
       const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
       t.igual(cola.length, 0, "la cola quedó vacía");
+    });
+
+    // v17.6.15 — REPORTE DE CAMPO (23-ago-2026): "los avisos llegan tarde si no estoy
+    // directamente en Citas del día". Causa real: fuera de esa vista, el modo API en
+    // segundo plano es la ÚNICA fuente posible — y si esa pestaña nunca aprendió la
+    // llamada de agenda (apiSano()===false), no queda NINGUNA fuente viva. Antes esto
+    // fallaba en silencio total; ahora avisa UNA vez al médico, honestamente, en vez de
+    // dejarlo creer que está vigilado sin estarlo.
+    t.caso("tick: sin API sano y fuera de agenda/historia (pero dentro de HCHealth), avisa UNA vez que está ciego", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/Ordenamiento";   // dentro del módulo, sección 'otra'
+      c.env.doc.querySelectorAll = () => [];                          // sin agenda en el DOM
+      let notifs = [];
+      c.env.win.Notification = class { constructor(title, opt) { notifs.push({ title, body: opt && opt.body }); } };
+      c.env.win.Notification.permission = "granted";
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "avisa una vez que no tiene lectura de la agenda");
+      t.cierto(/sin lectura/i.test(notifs[0].title), "el título es honesto sobre el estado ciego");
+      t.cierto(/no puede avisar/i.test(notifs[0].body), "el cuerpo explica qué implica: ningún aviso mientras tanto");
+
+      c.api.tick();
+      t.igual(notifs.length, 1, "NO se repite en el mismo día: un aviso, no un martilleo");
     });
 
     t.caso("_flushAvisosPendientes v14.1.5: un cartel de hace más de 10 minutos ya no se pinta — el aviso se dio en su momento", () => {
