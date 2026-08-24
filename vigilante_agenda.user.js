@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.26
+// @version     17.6.27
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1006,7 +1006,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.26";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.27";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1514,7 +1514,27 @@
               chips.push("Parámetros alterados");
           }
       } else {
-          chips.push("Límpido", "Leucocitos (-)", "Nitritos (-)");
+          // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): esta rama pintaba
+          // "Límpido · Leucocitos (-) · Nitritos (-)" SIEMPRE que la heurística no marcaba
+          // patológico — literales fijos, no lo que el informe realmente dice. Un aspecto
+          // "TURBIO" (que _esUroComponenteAlterado no reconoce: no está en su lista de
+          // valores negativos ni en la de positivos, y parseFloat da NaN) salía con
+          // "Límpido" inventado junto al badge "Sin hallazgos patológicos". Ahora se
+          // muestran los valores REALES de aspecto/color/leucocitos/nitritos si el informe
+          // los trae; si no trae ninguno de los cuatro, un texto neutro que no afirma nada
+          // que no se midió — nunca un dato fabricado.
+          const buscarComponente = (subs) => comps.find((c) => {
+              const nom = stripAccents(String(c.nombre || "")).toLowerCase();
+              return subs.some((s) => nom.includes(s));
+          });
+          const reales = [
+              buscarComponente(["aspecto"]),
+              buscarComponente(["color"]),
+              buscarComponente(["leucocito"]),
+              buscarComponente(["nitrito"]),
+          ].filter(Boolean).map((c) => `${c.nombre}: ${c.resultado}`);
+          if (reales.length) chips.push(...reales.slice(0, 3));
+          else chips.push("Sin alteraciones reconocidas");
       }
       return {
           esPatologico,
@@ -3733,15 +3753,25 @@
   }
 
   function _vigenciaDiasParaAnalito(key, resultValCrudo, opts) {
+      // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): `base` (la vigencia por
+      // estadio/programa, si hay contexto) se calcula UNA sola vez y YA NO retorna de
+      // inmediato. Antes, con opts.estadio/opts.programa (el caso principal para el que
+      // se escribió la regla "50% fuera de meta" de v16.4.0 más abajo, ya que los dos
+      // únicos llamadores con aplicar50:true —checkAvisoUniversal y
+      // pymRcvCubiertoPorAthenea— siempre pasan también programa/estadio cuando hay
+      // resumen en caché), esta función retornaba aquí mismo y el bloque de aplicar50
+      // quedaba inalcanzable: un LDL fuera de meta con contexto clínico completo se
+      // reportaba "vigente" por los 180 días enteros de la tabla, sin acortar a la mitad.
+      let base = null;
       if (opts && (opts.estadio || opts.programa)) {
           const analito = analitoTablaDesdeClaveRcv(key);
           if (analito) {
               const programa = opts.programa || (opts.estadio ? "ERC" : null);
               const v = vigenciaPorEstadio(programa, opts.estadio, analito, opts);
-              if (typeof v === "number") return v;
-              if (v && typeof v === "object") {
-                  if (Number.isFinite(v.max)) return v.max;
-                  if (Number.isFinite(v.min)) return v.min;
+              if (typeof v === "number") base = v;
+              else if (v && typeof v === "object") {
+                  if (Number.isFinite(v.max)) base = v.max;
+                  else if (Number.isFinite(v.min)) base = v.min;
               }
           }
       }
@@ -3751,24 +3781,11 @@
       // unificado— parte la vigencia a la mitad TAMBIÉN aquí, que es la vara del aviso de
       // entrada y del antiduplicado de Ordenar. Sin contexto, todo sigue igual que antes.
       if (opts && opts.aplicar50 && typeof mtrFueraDeMeta === "function" && MTR_CLAVES_CON_META.indexOf(key) >= 0) {
-          const base = (() => {
-              if (opts.estadio || opts.programa) {
-                  const analito = analitoTablaDesdeClaveRcv(key);
-                  if (analito) {
-                      const programa = opts.programa || (opts.estadio ? "ERC" : null);
-                      const v = vigenciaPorEstadio(programa, opts.estadio, analito, opts);
-                      if (typeof v === "number") return v;
-                      if (v && typeof v === "object") return Number.isFinite(v.max) ? v.max : (Number.isFinite(v.min) ? v.min : null);
-                  }
-              }
-              return RCV_VIGENCIA_DIAS;
-          })();
-          if (typeof base === "number") {
-              const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
-              if (fuera === true) return Math.max(1, Math.floor(base / 2));
-              return base;
-          }
+          const baseParaRegla = (base != null) ? base : RCV_VIGENCIA_DIAS;
+          const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
+          return fuera === true ? Math.max(1, Math.floor(baseParaRegla / 2)) : baseParaRegla;
       }
+      if (base != null) return base;
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
           // rango con desigualdad ("> 300", ">= 30"). Number("> 300") es NaN, así que sin
@@ -4434,7 +4451,7 @@
       // cero intromisión en su pantalla. Solo se guarda lo DOCUMENTADO (true o false
       // explícitos): un campo que no está en pantalla no se archiva como "no lo tiene",
       // porque esa confusión es justo el defecto que se está corrigiendo.
-      const vistos = _vglCosecharFactoresVisibles(document);
+      const vistos = _vglCosecharFactoresVisibles(document, id);
       if (vistos && vistos.n > 0) {
         guardado = _vglCosechaGuardar(id, { factores: vistos.mapa, factoresIso: todayStamp() });
       }
@@ -4446,11 +4463,24 @@
   // devuelve {mapa, n}. `mapa` fusiona lo ya archivado con lo nuevo, guardando por campo
   // el valor y CUÁNDO se vio — la frescura importa: si el médico lo cambia hoy, lo de hoy
   // manda sobre lo de hace una hora.
-  function _vglCosecharFactoresVisibles(doc) {
+  // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): el párrafo de arriba prometía
+  // la fusión desde v16.2.9, pero `mapa` arrancaba SIEMPRE vacío (`const mapa = {}`) y
+  // `_vglCosechaGuardar` fusiona PLANO (Object.assign de nivel superior) — así que
+  // `{factores: mapa}` REEMPLAZABA entero el archivo cada vez. El médico abría
+  // Antecedentes (diabetes=Sí, HTA=Sí quedaban archivados) y al pasar a Hábitos, esa
+  // cosecha solo veía tabaquismo/alcohol — diabetes y HTA desaparecían del archivo del
+  // paciente. Mismo pozo que _vglConfirmacionGuardar ya documenta y esquiva a mano para
+  // las confirmaciones (línea ~4364); aquí faltaba el mismo tratamiento. Ahora `mapa`
+  // arranca de lo ya archivado para ESTE paciente (docId) y la pantalla actual se
+  // superpone encima — nunca al revés.
+  function _vglCosecharFactoresVisibles(doc, docId) {
     try {
       const C = (typeof MTR_CAMPOS_FACTORES !== "undefined") ? MTR_CAMPOS_FACTORES : null;
       if (!C || typeof mtrLeerRadioSiNo !== "function") return null;
-      const mapa = {}; let n = 0;
+      let previo = {};
+      try { previo = (docId && (_vglCosechaLeer(docId) || {}).factores) || {}; } catch (e0) { previo = {}; }
+      const mapa = Object.assign({}, previo);
+      let n = 0;
       for (const clave of Object.keys(C)) {
         let v = null;
         try { v = mtrLeerRadioSiNo(C[clave], doc); } catch (e) { v = null; }
@@ -6286,6 +6316,16 @@ _vglOfrecerDeshacer(btn);
   // CHANGELOG.
 
   const S = Object.assign({}, DEFAULTS, readJSON(SETTINGS_KEY, {}));
+  // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): capturada AQUÍ, antes de que
+  // corra cualquier migración. La migración "estreno" (más abajo) la usaba para
+  // distinguir instalación nueva de actualización, pero la leía DESPUÉS de que las
+  // cuatro migraciones anteriores (v7.3, v14.2-notif, v15.4, v15.0-banner) ya habían
+  // escrito SETTINGS_KEY con writeJSON — así que en TODA instalación limpia
+  // localStorage.getItem(SETTINGS_KEY) ya daba truthy para cuando la migración de
+  // estreno lo comprobaba, y motorPortado/iaRedaccion/uxTelemetria/reporte se
+  // encendían solos. Exactamente el defecto que el comentario de v17.6.8 declara
+  // corregido, reintroducido por el orden de las migraciones.
+  const _habiaConfigPrevia = !!localStorage.getItem(SETTINGS_KEY);
   // Migración a v7.3 MODO LIGERO (una sola vez): en instalaciones que ya tenían ajustes
   // guardados se apagan los canales extra.
   try {
@@ -6329,11 +6369,21 @@ _vglOfrecerDeshacer(btn);
     // reporte remoto sin que el médico los hubiera encendido. Ahora solo aplica a equipos
     // que YA tenían configuración (la ruta de actualización para la que fue diseñada); las
     // instalaciones limpias respetan los valores de fábrica, todos en false.
-    const _habiaConfigPrevia = !!localStorage.getItem(SETTINGS_KEY);
-    if (_habiaConfigPrevia && localStorage.getItem("vgl_v1420_estreno") !== "1") {
+    // v17.6.27 — `_habiaConfigPrevia` ahora se captura ARRIBA, antes de las migraciones
+    // anteriores (ver ese comentario). Además, la marca "ya evaluada" ahora se pone
+    // SIEMPRE que se evalúa, tenga o no configuración previa — no solo cuando enciende
+    // las banderas. Antes, una instalación limpia nunca ponía la marca (el `if` entero
+    // dependía de `_habiaConfigPrevia`), así que si ese mismo equipo más tarde generaba
+    // su primer vgl_cfg (el médico cambia cualquier ajuste), esta migración se disparaba
+    // TARDE y encendía las 4 banderas sin que nadie lo hubiera pedido — la migración deja
+    // de ser "de una sola pasada al momento de la actualización" y pasa a ser "la próxima
+    // vez que exista config", que es justo lo que la migración no debía hacer.
+    if (localStorage.getItem("vgl_v1420_estreno") !== "1") {
       localStorage.setItem("vgl_v1420_estreno", "1");
-      S.motorPortado = true; S.iaRedaccion = true; S.uxTelemetria = true; S.reporte = true;
-      writeJSON(SETTINGS_KEY, S);
+      if (_habiaConfigPrevia) {
+        S.motorPortado = true; S.iaRedaccion = true; S.uxTelemetria = true; S.reporte = true;
+        writeJSON(SETTINGS_KEY, S);
+      }
     }
   } catch (e) {}
   function saveSettings() { writeJSON(SETTINGS_KEY, S); applySettings(); }

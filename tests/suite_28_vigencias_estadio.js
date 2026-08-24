@@ -9,7 +9,7 @@
 // =====================================================================
 module.exports = {
   nombre: "Vigencias por estadio renal (R2, sombra)",
-  cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv"],
+  cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv", "_vigenciaDiasParaAnalito"],
 
   pruebas(t, api) {
     // --- Programa ERC: creatinina, los tres rangos {min,max} tal cual la tabla fuente ---
@@ -211,6 +211,37 @@ module.exports = {
       t.igual(api.analitoTablaDesdeClaveRcv("NO_EXISTE_ESTA_CLAVE"), null);
       t.igual(api.analitoTablaDesdeClaveRcv(""), null);
       t.igual(api.analitoTablaDesdeClaveRcv(null), null);
+    });
+
+    // =================================================================
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): con opts.estadio/opts.programa
+    // (el caso principal: los dos únicos llamadores con aplicar50:true SIEMPRE pasan
+    // también programa/estadio cuando hay resumen en caché), _vigenciaDiasParaAnalito
+    // retornaba la vigencia por tabla ANTES de llegar al bloque de v16.4.0 que la parte a
+    // la mitad si el resultado está fuera de meta — la regla "50% en todo" quedaba
+    // inalcanzable justo para los pacientes con contexto clínico completo.
+    // =================================================================
+    t.caso("v17.6.27: aplicar50 SÍ se aplica cuando hay programa/estadio (antes era inalcanzable)", () => {
+      // Programa HTA, tabla: ldl = 180 días planos. Meta "alto" = 70 mg/dL, margen 15% = 80.5.
+      const opts = { programa: "HTA", aplicar50: true, categoriaRiesgo: "alto" };
+      t.igual(api._vigenciaDiasParaAnalito("COLESTEROL_LDL", "150", opts), 90,
+        "LDL 150 (fuera de meta 80.5) con programa HTA: 180/2 = 90, no los 180 completos");
+      t.igual(api._vigenciaDiasParaAnalito("COLESTEROL_LDL", "60", opts), 180,
+        "LDL 60 (dentro de meta) con programa HTA: se conservan los 180 días completos, sin acortar");
+    });
+
+    t.caso("v17.6.27: aplicar50 también funciona por estadio ERC (rango {min,max} de la tabla)", () => {
+      // ERC/creatinina en G3a es un RANGO {min:90,max:121} — la regla usa el max (121) como base.
+      const opts = { estadio: "G3a", aplicar50: true, categoriaRiesgo: "alto" };
+      // "CREATININA" no tiene meta (no está en MTR_CLAVES_CON_META): mtrFueraDeMeta
+      // devuelve null y la vigencia por estadio se conserva sin tocar.
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", "1.4", opts), 121,
+        "sin meta que evaluar para creatinina, se usa el max del rango por estadio, no RCV_VIGENCIA_DIAS (180)");
+    });
+
+    t.caso("v17.6.27: sin opts.aplicar50, el resultado por estadio/programa no cambia (compatibilidad)", () => {
+      t.igual(api._vigenciaDiasParaAnalito("COLESTEROL_LDL", "150", { programa: "HTA", categoriaRiesgo: "alto" }), 180,
+        "sin aplicar50, la vigencia por tabla se respeta tal cual, sin acortar");
     });
   },
 };

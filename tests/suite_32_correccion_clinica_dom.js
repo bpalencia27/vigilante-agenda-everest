@@ -14,6 +14,29 @@
 const fs = require("fs");
 const path = require("path");
 
+// DOM de prueba: un par de radios SI/NO por cada campo en `marcas` (mismo contrato que
+// mtrLeerRadioSiNo espera: input[name="..."][value="true"/"false"].checked).
+function domRadios(marcas) {
+  const nodos = [];
+  for (const nombre of Object.keys(marcas)) {
+    const v = marcas[nombre];
+    nodos.push({ name: nombre, value: "true", checked: v === true, type: "radio" });
+    nodos.push({ name: nombre, value: "false", checked: v === false, type: "radio" });
+  }
+  return {
+    querySelectorAll(sel) {
+      const m = /^input\[name="(.*)"\]$/.exec(sel);
+      if (!m) return [];
+      const buscado = m[1].replace(/\\"/g, '"');
+      return nodos.filter((n) => n.name === buscado);
+    },
+    querySelector(sel) {
+      const r = this.querySelectorAll(sel);
+      return r.length ? r[0] : null;
+    },
+  };
+}
+
 module.exports = {
   nombre: "Corrección Clínica, Frontera DOM y Límites (M2)",
   cubre: [
@@ -25,7 +48,8 @@ module.exports = {
     "todayStamp", "horaBonita", "parseHoraMin", "apptKey",
     "colorAndAlert", "pymCubiertoPorOrdenVigente",
     "_ordenesVigentesInvalidar", "_demograficosInvalidar",
-    "apiAccesoObtenerDemograficos", "exportAudit"
+    "apiAccesoObtenerDemograficos", "exportAudit",
+    "_vglCosecharFactoresVisibles", "_vglCosechaGuardar", "_vglCosechaLeer",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -531,6 +555,58 @@ module.exports = {
       t.cierto(csv.charCodeAt(0) === 0xFEFF, "debe iniciar con UTF-8 BOM para Excel");
       t.cierto(csv.includes("Fecha;2026-08-01"), "debe incluir la fecha");
       t.cierto(csv.includes("Hora;Evento;Hora cita;Documento;Estado;Estado previo;Minutos;Paciente"), "debe incluir cabecera");
+    });
+
+    // =================================================================
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): la cosecha de factores por
+    // pestaña se PISABA en cada guardado. _vglCosecharFactoresVisibles decía en su propio
+    // comentario que "mapa fusiona lo ya archivado con lo nuevo", pero arrancaba de un
+    // objeto vacío y solo veía lo visible en la pantalla ACTUAL; _vglCosechaGuardar fusiona
+    // PLANO, así que {factores: mapa} reemplazaba entero el archivo. El médico abría
+    // Antecedentes (diabetes/HTA quedaban archivados) y al pasar a Hábitos, esos dos
+    // factores desaparecían del archivo del paciente — riesgo cardiovascular falsamente
+    // bajo con la compuerta de contexto abierta.
+    // =================================================================
+    t.caso("v17.6.27: la cosecha de factores por pestaña SE ACUMULA — visitar Hábitos no borra lo visto en Antecedentes", () => {
+      const c = cargar({ silencioso: true });
+      const docId = "999";
+
+      // 1) El médico abre Antecedentes: diabetes=Sí, HTA=Sí.
+      const domAntecedentes = domRadios({
+        "AntecedentePatologicos.Diabetes": true,
+        "AntecedentePatologicos.Hipertension": true,
+      });
+      const v1 = c.api._vglCosecharFactoresVisibles(domAntecedentes, docId);
+      t.cierto(v1 && v1.n === 2, "ve los 2 radios de Antecedentes en pantalla");
+      c.api._vglCosechaGuardar(docId, { factores: v1.mapa, factoresIso: "2026-08-24" });
+      t.cierto(c.api._vglCosechaLeer(docId).factores.diabetes.v === true, "diabetes archivada tras Antecedentes");
+      t.cierto(c.api._vglCosechaLeer(docId).factores.hta.v === true, "HTA archivada tras Antecedentes");
+
+      // 2) El médico pasa a Hábitos: tabaquismo=Sí, alcohol=No. Diabetes/HTA NO están en
+      // esta pantalla — antes del arreglo, el archivo las perdía aquí.
+      const domHabitos = domRadios({
+        "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador": true,
+        "hs.HabitosGestionRiesgo.alcohol": false,
+      });
+      const v2 = c.api._vglCosecharFactoresVisibles(domHabitos, docId);
+      t.cierto(v2 && v2.n === 2, "ve los 2 radios de Hábitos en pantalla (n cuenta SOLO lo visible ahora)");
+      c.api._vglCosechaGuardar(docId, { factores: v2.mapa, factoresIso: "2026-08-24" });
+
+      const archivado = c.api._vglCosechaLeer(docId).factores;
+      t.cierto(archivado.diabetes && archivado.diabetes.v === true, "diabetes SIGUE archivada tras visitar Hábitos (antes se perdía)");
+      t.cierto(archivado.hta && archivado.hta.v === true, "HTA SIGUE archivada tras visitar Hábitos (antes se perdía)");
+      t.cierto(archivado.tabaquismo && archivado.tabaquismo.v === true, "y tabaquismo, lo nuevo de Hábitos, también quedó");
+      t.cierto(archivado.alcohol && archivado.alcohol.v === false, "y alcohol=No, lo nuevo de Hábitos, también quedó");
+
+      // 3) Si el médico corrige algo que ya estaba (vuelve a Antecedentes y marca
+      // diabetes=No), lo de HOY debe ganarle a lo archivado — la fusión no debe congelar
+      // el primer valor visto para siempre.
+      const domCorreccion = domRadios({ "AntecedentePatologicos.Diabetes": false });
+      const v3 = c.api._vglCosecharFactoresVisibles(domCorreccion, docId);
+      c.api._vglCosechaGuardar(docId, { factores: v3.mapa, factoresIso: "2026-08-24" });
+      const final = c.api._vglCosechaLeer(docId).factores;
+      t.igual(final.diabetes.v, false, "la corrección de HOY le gana a lo archivado ayer");
+      t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
     });
 
   }

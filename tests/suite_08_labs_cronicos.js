@@ -5,6 +5,7 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
+    "_resumenClinicoUro", "_esUroComponenteAlterado",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto"
@@ -1608,6 +1609,42 @@ module.exports = {
       const hba1cEnPaquete = i10x.cups.find((x) => x.desc.toUpperCase().includes("GLICOSILADA"));
       t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
       t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
+    });
+
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): cuando la heurística de
+    // patológico no marcaba nada, _resumenClinicoUro pintaba SIEMPRE los chips fijos
+    // "Límpido · Leucocitos (-) · Nitritos (-)" — un dato inventado que no reflejaba el
+    // informe real. Un aspecto "TURBIO" (que _esUroComponenteAlterado no reconoce: no está
+    // en su lista de valores negativos ni positivos, y parseFloat da NaN) salía como
+    // "Límpido" fabricado junto al badge "Sin hallazgos patológicos" — justo lo que la
+    // regla de oro #1 del proyecto prohíbe (sin dato real = sin suposición).
+    t.caso("v17.6.27: _resumenClinicoUro NUNCA inventa chips fijos — usa los valores reales del informe", () => {
+      const componente = (nombre, resultado) => ({ nombre, resultado });
+      // Caso A: aspecto realmente alterado ("Turbio") que la heurística de altered no
+      // reconoce (esPatologico queda false) — el chip debe decir la verdad, no "Límpido".
+      const turbio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Turbio"),
+        componente("Color", "Amarillo"),
+      ]);
+      t.falso(turbio.esPatologico, "precondición: la heurística de 'alterado' no reconoce 'turbio'");
+      t.falso(turbio.chips.includes("Límpido"), "jamás debe afirmar 'Límpido' cuando el informe dice 'Turbio'");
+      t.cierto(turbio.chips.some((x) => x.includes("Turbio")), "el chip refleja el aspecto REAL del informe: " + turbio.chips.join(" | "));
+
+      // Caso B: informe realmente limpio — los chips deben venir de los componentes reales
+      // entregados, no de un literal que coincida por casualidad.
+      const limpio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Límpido"),
+        componente("Nitritos", "Negativo"),
+      ]);
+      t.falso(limpio.esPatologico);
+      t.cierto(limpio.chips.some((x) => x.includes("Límpido")) && limpio.chips.some((x) => x.includes("Nitritos")), "los chips citan los componentes reales presentes: " + limpio.chips.join(" | "));
+
+      // Caso C: sin patología y sin ninguno de los 4 componentes que se suelen resumir —
+      // nunca debe fabricar un dato; texto neutro en su lugar.
+      const sinDatos = c.api._resumenClinicoUro([componente("pH", "6.0")]);
+      t.falso(sinDatos.esPatologico);
+      t.falso(sinDatos.chips.includes("Límpido") || sinDatos.chips.includes("Nitritos (-)"), "sin aspecto/color/leucocitos/nitritos en el informe, no debe inventarlos");
+      t.igual(sinDatos.chips[0], "Sin alteraciones reconocidas");
     });
   }
 };

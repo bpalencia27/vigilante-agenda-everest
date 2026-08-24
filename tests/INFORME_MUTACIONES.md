@@ -926,3 +926,21 @@ intacto. El banco completo al cierre: **1.432 comprobaciones, 0 en rojo** (44 su
 presentes; +2 casos nuevos en suite_57 netos: se agregaron 4 y se retiró 1 obsoleto de
 v17.6.25 más el ajuste de 2 pruebas existentes a las 3 claves restantes de
 `MTR_DATOS_EXTRA_ETIQUETAS`).
+
+## v17.6.27 — 24-ago-2026 (Barrido S+ total — Bloque S1, parte 1/2: 4 bugs críticos)
+
+Primer lote de la auditoría exhaustiva línea por línea de las 33.869 líneas del archivo
+(48 agentes: 14 lectores por segmento + 6 transversales, verificación adversarial de cada
+hallazgo). 8 hallazgos S1 confirmados en total; estos 4 primeros.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~1517 (v17.6.27) | `_resumenClinicoUro`: la rama sin patología vuelta al literal fijo `chips.push("Límpido", "Leucocitos (-)", "Nitritos (-)")` (se quita la derivación de valores reales) | NO | Ninguna: *v17.6.27: \_resumenClinicoUro NUNCA inventa chips fijos* (suite_08) cayó a rojo. Restaurada de inmediato; suite_08 volvió a verde. |
+| ~4479 (v17.6.27) | `_vglCosecharFactoresVisibles`: `mapa` vuelto a `{}` (se quita la fusión con lo ya archivado) | NO | Ninguna: *v17.6.27: la cosecha de factores por pestaña SE ACUMULA* (suite_32) cayó a rojo. Restaurada de inmediato; suite_32 volvió a verde. |
+| ~3765 (v17.6.27) | `_vigenciaDiasParaAnalito`: `if (typeof v === "number") base = v;` vuelto a `return v;` (reintroduce el retorno temprano que hacía inalcanzable aplicar50) | NO | Ninguna: *v17.6.27: aplicar50 SÍ se aplica cuando hay programa/estadio* (suite_28, caso HTA/LDL numérico) cayó a rojo. Restaurada de inmediato. |
+| ~6362 y ~6374 (v17.6.27) | `_habiaConfigPrevia` movida de vuelta a después de las 4 migraciones anteriores, y la marca `vgl_v1420_estreno` vuelta a depender de `_habiaConfigPrevia` (reintroduce ambas capas del bug) | NO | Ninguna: *v17.6.27: instalación LIMPIA (sin vgl_cfg previo) NO enciende las 4 banderas de estreno* (suite_09) cayó a rojo. Restaurada de inmediato; suite_09 volvió a verde. |
+
+Las cuatro mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo al cierre: **1.439 comprobaciones, 0 en
+rojo** (44 suites presentes; +9 casos nuevos entre suite_08/09/28/32).

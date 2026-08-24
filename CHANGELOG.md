@@ -4,6 +4,24 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.27] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 1/2: 4 bugs críticos)
+
+Primer lote del barrido exhaustivo línea por línea de todo el archivo (33.869 líneas, 48 agentes, verificación adversarial): 8 hallazgos S1 confirmados. Estos 4 primeros.
+
+### 🐛 El uroanálisis ya no inventa resultados en pantalla
+- `_resumenClinicoUro` pintaba SIEMPRE "Límpido · Leucocitos (-) · Nitritos (-)" cuando la heurística no marcaba patológico — literales fijos, no lo que el informe real dice. Un aspecto "TURBIO" (que la heurística no reconoce: no está en su lista de valores negativos ni positivos) salía como "Límpido" fabricado junto al badge "Sin hallazgos patológicos". Ahora los chips citan los valores REALES de aspecto/color/leucocitos/nitritos del informe; si ninguno está presente, un texto neutro que no afirma nada no medido.
+
+### 🐛 Las comorbilidades ya no se pierden al cambiar de pestaña de Everest
+- `_vglCosecharFactoresVisibles` prometía en su propio comentario fusionar lo archivado con lo nuevo, pero arrancaba de un mapa vacío y `_vglCosechaGuardar` fusiona plano — cada pestaña visitada REEMPLAZABA entero el archivo de factores del paciente. Abrir Antecedentes (diabetes/HTA archivados) y pasar a Hábitos borraba diabetes/HTA del archivo, con la compuerta de contexto abierta: riesgo cardiovascular falsamente bajo. Ahora el mapa arranca de lo ya archivado y la pantalla actual se superpone — igual que ya hace `_vglConfirmacionGuardar` con las confirmaciones.
+
+### 🐛 La regla "50% de vigencia fuera de meta" ya llega a los pacientes con programa/estadio
+- `_vigenciaDiasParaAnalito` retornaba la vigencia por tabla de estadio ANTES de evaluar `opts.aplicar50` — la regla de v16.4.0 quedaba inalcanzable justo para los pacientes con contexto clínico completo (el caso principal para el que se escribió: los dos únicos llamadores con `aplicar50:true` siempre pasan también programa/estadio cuando hay resumen en caché). Un LDL fuera de meta con programa HTA salía "vigente" por 180 días completos en vez de acortarse a 90.
+
+### 🐛 Las funciones nuevas ya no se autoencienden en instalaciones limpias
+- La guarda `_habiaConfigPrevia` de la migración "estreno" (v14.2.0, ya blindada una vez en v17.6.8) se leía DESPUÉS de que cuatro migraciones anteriores ya habían escrito `vgl_cfg` — así que en TODA instalación limpia la guarda daba falso positivo y motor/IA/telemetría/reporte se encendían solos. Se captura ahora antes de la primera migración, y además la migración se marca como "ya evaluada" siempre (no solo cuando enciende las banderas), para que un equipo limpio que más tarde genera su primer `vgl_cfg` tampoco dispare la migración fuera de tiempo.
+
+---
+
 ## [Versión 17.6.26] — 2026-08-24 (Redactor IA — se elimina la redundancia «Datos del paciente», el estilo se aprende solo, y se limpia texto interno que se colaba a pantalla)
 
 Seguimiento inmediato al Bloque A: el médico revisó el resumen de los cambios y encontró tres cosas más antes de seguir con la rotación de modelos.
