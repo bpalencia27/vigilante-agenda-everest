@@ -7,8 +7,7 @@ module.exports = {
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
-    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
-    "_conductaBuscarYAgregarExamen"
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -38,6 +37,14 @@ module.exports = {
     };
 
     const testApi = c.api;
+
+    t.caso("_valorCrudoLab: conserva valores legitimos y descarta vacios", () => {
+      t.igual(testApi._valorCrudoLab(0), 0);
+      t.igual(testApi._valorCrudoLab("120"), "120");
+      t.igual(testApi._valorCrudoLab(""), undefined);
+      t.igual(testApi._valorCrudoLab(null), undefined);
+      t.igual(testApi._valorCrudoLab(undefined), undefined);
+    });
 
     t.caso("_matchLabInWhitelist: El código manda sobre el nombre (Incidente v11.0.1)", () => {
       const labHbA1c = { CodigoParametro: "903843", nombre: "GLUCOSA EN SUERO (TRUCO)" };
@@ -665,98 +672,11 @@ module.exports = {
       c.env.doc.querySelectorAll = prevQSA;
     });
 
-    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (Conducta nativa) =================
-    // Reproduce el clic <li>→espera→"Agregar" capturado en consultorio el 12-08-2026
-    // (captura_ordenamiento_paquete_HTA_20260812.json) para PTH/Fósforo/Albúmina/Hemoglobina/
-    // HbA1c. Nunca llama a la red — solo dispara los mismos clics que el médico ya hace a mano.
-    function crearLi(texto) {
-      return { textContent: texto, clicked: false, click() { this.clicked = true; } };
-    }
-    function crearBotonAgregar({ texto = "Agregar", disabled = false } = {}) {
-      return { textContent: texto, disabled, clicked: false, click() { this.clicked = true; } };
-    }
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: <li> exacto encontrado + botón Agregar habilitado -> clickea ambos y devuelve true", async () => {
-      const li = crearLi("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      const otroLi = crearLi("ALBUMINA EN SUERO U OTROS FLUIDOS");
-      const btnAgregar = crearBotonAgregar();
-      const btnCancelar = crearBotonAgregar({ texto: "Cancelar" });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [otroLi, li] : sel === "button" ? [btnCancelar, btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("HORMONA PARATIROIDEA MOLECULA INTACTA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r, "reporta éxito");
-      t.cierto(li.clicked, "el <li> del examen correcto recibe el clic");
-      t.falso(otroLi.clicked, "el otro <li> del listado no se toca");
-      t.cierto(btnAgregar.clicked, "el botón Agregar recibe el clic");
-      t.falso(btnCancelar.clicked, "Cancelar no se toca");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: coincidencia EXACTA de texto, nunca por substring — un examen parecido no debe clickearse", async () => {
-      // 'FOSFORO EN SUERO U OTROS FLUIDOS' es substring de un <li> más largo hipotético —
-      // si la búsqueda no fuera exacta, esto clickearía el examen EQUIVOCADO en un catálogo
-      // clínico real. La coincidencia parcial debe fallar limpio, no acertar por casualidad.
-      const liParecido = crearLi("FOSFORO EN SUERO U OTROS FLUIDOS (PANEL AMPLIADO)");
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [liParecido] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-      t.falso(liParecido.clicked, "sin coincidencia exacta, no se clickea el parecido");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: tildes/mayúsculas no importan (mismo _canonTexto que el resto del script)", async () => {
-      const li = crearLi("Fósforo en Suero u Otros Fluidos");
-      const btnAgregar = crearBotonAgregar();
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnAgregar] : []);
-      const r = await testApi._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(r);
-      t.cierto(li.clicked);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el examen no está en esta pantalla -> no clickea nada, devuelve false (fallo seguro)", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => [];
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: el <li> aparece pero Angular nunca habilita Agregar -> devuelve false, no lanza", async () => {
-      const li = crearLi("HEMOGLOBINA");
-      const btnDeshabilitado = crearBotonAgregar({ disabled: true });
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = (sel) => (sel === "li" ? [li] : sel === "button" ? [btnDeshabilitado] : []);
-      // La propia llamada no debe lanzar (no se envuelve en try/catch aquí a propósito: si
-      // _conductaBuscarYAgregarExamen lanzara, casoAsync lo reportaría como fallo solo).
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.cierto(li.clicked, "el <li> sí se clickeó — el fallo es solo en el paso del botón");
-      t.falso(r);
-      t.falso(btnDeshabilitado.clicked, "un botón deshabilitado nunca se clickea");
-    });
-
-    await t.casoAsync("_conductaBuscarYAgregarExamen: DOM roto (querySelectorAll lanza) -> no propaga la excepción, devuelve false", async () => {
-      const prevQSA = c.env.doc.querySelectorAll;
-      c.env.doc.querySelectorAll = () => { throw new Error("DOM no disponible"); };
-      const r = await testApi._conductaBuscarYAgregarExamen("HEMOGLOBINA");
-      c.env.doc.querySelectorAll = prevQSA;
-      t.falso(r);
-    });
-
-    t.caso("CONDUCTA_LI_TEXTO_POR_ANALITO: los 5 textos son los capturados LITERALMENTE en consultorio (no una paráfrasis del catálogo del Copiloto)", () => {
-      const tabla = testApi.__CONDUCTA_LI_TEXTO_POR_ANALITO;
-      t.igual(tabla.PTH, "HORMONA PARATIROIDEA MOLECULA INTACTA");
-      t.igual(tabla.ALBUMINA, "ALBUMINA EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.FOSFORO, "FOSFORO EN SUERO U OTROS FLUIDOS");
-      t.igual(tabla.HEMOGLOBINA, "HEMOGLOBINA");
-      // El catálogo del Copiloto dice solo "HEMOGLOBINA GLICOSILADA" — el <li> real de
-      // Everest capturado en consultorio trae además "AUTOMATIZADA", y es ese texto exacto
-      // el que hace falta para que el clic case.
-      t.igual(tabla.HBA1C, "HEMOGLOBINA GLICOSILADA AUTOMATIZADA");
-    });
+    // ================= v14.0.3 — _conductaBuscarYAgregarExamen (RETIRADA) =================
+    // Deuda muerta documentada en docs/cambios-pendientes/001-retiro-codigo-muerto.md:
+    // el mecanismo de clic <li>→"Agregar" y su tabla CONDUCTA_LI_TEXTO_POR_ANALITO se
+    // retiraron del script (grep en producción: sin coincidencias). Se retiran también
+    // sus casos y la declaración en `cubre`.
 
     t.caso("injectLabsIntoCronicos v12.5.11: un componente REAL del parcial de orina marca \"SI\" en ¿Uroanálisis? y lo reporta en uroanalisisMarcado", () => {
       mockDOM = {};
@@ -859,7 +779,7 @@ module.exports = {
       t.igual(mockDOM.fechaResultUroanalisis.value, "2026-08-10", "y también la fecha, porque estaba vacía");
     });
 
-    await t.casoAsync("injectLabsIntoCronicos v12.5.12: si el interruptor SI YA estaba elegido antes (no se marcó en esta corrida), NO se programa reintento", async () => {
+    await t.casoAsync("injectLabsIntoCronicos v17.1.0 (#71): aunque el interruptor ya estuviera en SI (no se marcó en esta corrida), el reintento SÍ corre", async () => {
       mockDOM = {};
       const inputNitritos = { placeholder: "Resultado Nitritos", value: "", dispatchEvent: () => {} };
       const { lista: radios } = crearRadiosUro({ siChecked: true }); // el médico ya lo había puesto en SI antes
@@ -875,7 +795,10 @@ module.exports = {
       mockDOM.resultadoUroanalisis = { value: "" }; // aparece igual, por otra razón cualquiera
       await new Promise((r) => setTimeout(r, 15));
       c.env.doc.querySelectorAll = prevQSA;
-      t.igual(mockDOM.resultadoUroanalisis.value, "", "sin reintento programado, la casilla queda vacía hasta el próximo click de Auto-Labs");
+      // v17.1.0 (#71) — el reintento ya NO exige haber marcado SI en esta corrida: al
+      // segundo clic del día (o con SI marcado a mano) el bloque igual se intenta, con
+      // las mismas guardas (paciente abierto, casilla vacía).
+      t.igual(mockDOM.resultadoUroanalisis.value, "NORMAL", "el reintento corre aunque el SI ya estuviera elegido antes");
     });
 
     await t.casoAsync("injectLabsIntoCronicos v12.5.12: si entre el click y el reintento el médico YA escribió algo, se respeta (no se pisa)", async () => {

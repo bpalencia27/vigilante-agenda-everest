@@ -13,9 +13,26 @@
 // =====================================================================
 module.exports = {
   nombre: "Función renal (R1)",
-  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG"],
+  cubre: ["cockcroftGault", "ckdEpi2021", "estadioKDIGO", "evaluarDiscordanciaTFG", "_esSexoFemenino"],
 
   pruebas(t, api) {
+    // ---------- _esSexoFemenino ----------
+    t.caso("_esSexoFemenino - reconoce 'F', 'FEMENINO' ignorando mayúsculas y espacios", () => {
+      t.cierto(api._esSexoFemenino("F"));
+      t.cierto(api._esSexoFemenino("f"));
+      t.cierto(api._esSexoFemenino("FEMENINO"));
+      t.cierto(api._esSexoFemenino("femenino"));
+      t.cierto(api._esSexoFemenino("  f  "));
+      t.cierto(api._esSexoFemenino("  FEMENINO  "));
+      t.falso(api._esSexoFemenino("M"));
+      t.falso(api._esSexoFemenino("m"));
+      t.falso(api._esSexoFemenino("MASCULINO"));
+      t.falso(api._esSexoFemenino("masculino"));
+      t.falso(api._esSexoFemenino(null));
+      t.falso(api._esSexoFemenino(undefined));
+      t.falso(api._esSexoFemenino(""));
+    });
+
     t.caso("cockcroftGault - caso 'paciente obesa' que motivó usar peso real (peso 113kg)", () => {
       t.igual(api.cockcroftGault(63, 113, 0.55, "F"), 186.8);
       t.igual(api.cockcroftGault(63, 113, 0.55, "M"), 219.7);
@@ -78,8 +95,15 @@ module.exports = {
       t.igual(api.estadioKDIGO(0.1), "G5", "por encima de cero, por bajo que sea, es una TFG medida");
     });
 
-    t.caso("evaluarDiscordanciaTFG - diferencia de 2 estadios no es alerta", () => {
-      t.igual(api.evaluarDiscordanciaTFG(95, 50), null);
+    t.caso("evaluarDiscordanciaTFG - diferencia de 2 estadios SÍ es alerta (v16.9.0, umbral del médico)", () => {
+      // v16.9.0 — mismo umbral que mtrEvaluarDiscrepanciaEstadios: la alerta empieza en DOS
+      // estadios (decisión del médico); desde TRES se pide además revisar el dato.
+      const d = api.evaluarDiscordanciaTFG(95, 50);
+      t.cierto(d && d.alerta === true, "a partir de 2 estadios la alerta se dispara");
+      t.igual(d.sospechaDatoCorrupto, false, "con 2 estadios avisa pero no pide revisar el dato (eso es desde 3)");
+      t.igual(d.estadioCG, "G1");
+      t.igual(d.estadioCKD, "G3a");
+      t.igual(d.diferenciaEstadios, 2);
     });
 
     t.caso("evaluarDiscordanciaTFG - diferencia de 3 estadios SÍ es alerta", () => {

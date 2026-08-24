@@ -148,16 +148,24 @@ module.exports = {
       t.igual(c.env.almacen["vgl_api_medico"], undefined, "sin id válido, ni siquiera se toca la etiqueta");
     });
 
+    // v17.6.14 — H4: la URL aprendida se persiste OFUSCADA en localStorage (antes en
+    // claro, legible para cualquier script de la página de Athenea, mismo origen).
+    const asertarUrlOfuscada = (c, t, tag) => {
+      const persistida = c.env.almacen["vgl_api_url"];
+      t.falso(String(persistida || "").includes("ObtenerConsultas"), "v17.6.14 (" + tag + "): la URL no viaja en claro por localStorage");
+      t.igual(c.api._vglDesofusca(persistida), ABS_AGENDA, "v17.6.14 (" + tag + "): se recupera idéntica al desofuscar");
+    };
+
     t.caso("invalidarApiSiCambioMedico: MISMO médico -> no purga la URL aprendida (pero re-etiqueta igual)", () => {
       const { c } = entorno();
       c.api.__state.activeDoctor.id = 100;
       c.api.apiRecordar(URL_AGENDA);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA);
+      asertarUrlOfuscada(c, t, "aprendida");
       t.igual(c.env.almacen["vgl_api_medico"], "100");
       c.api.__state.apiCitas = [{ x: 1 }];
       c.api.__state.apiEn = 12345;
       c.api.invalidarApiSiCambioMedico(100);
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA, "misma sesión de médico: la URL sigue aprendida");
+      asertarUrlOfuscada(c, t, "misma sesión");
       t.cierto(c.api.apiUtil(), "el API sigue utilizable");
       t.igual(c.api.__state.apiCitas, [{ x: 1 }], "no se tocan las citas ya cargadas");
       t.igual(c.api.__state.apiEn, 12345);
@@ -170,8 +178,27 @@ module.exports = {
       c.api.apiRecordar(URL_AGENDA);
       t.igual(c.env.almacen["vgl_api_medico"], "0");
       c.api.invalidarApiSiCambioMedico(300); // primera identidad que se resuelve
-      t.igual(c.env.almacen["vgl_api_url"], ABS_AGENDA, "medicoId=0 (sin dueño conocido): la rama de purga no aplica");
+      asertarUrlOfuscada(c, t, "medicoId=0");
       t.igual(c.env.almacen["vgl_api_medico"], "300", "de aquí en más ya queda protegida frente al próximo cambio");
+    });
+
+    await t.casoAsync("v17.6.14: la URL vieja en claro y la nueva ofuscada se cargan y sirven para leer la agenda (migración)", async () => {
+      const sembradas = [
+        { valor: ABS_AGENDA, tag: "en claro (versión vieja)" },
+        { valor: cargar({ silencioso: true }).api._vglOfusca(ABS_AGENDA), tag: "ofuscada (v17.6.14+)" },
+      ];
+      for (const s of sembradas) {
+        const llamadas = [];
+        const c = cargar({
+          silencioso: true,
+          almacen: { vgl_api_url: s.valor, vgl_api_medico: "100" },
+          fetch: (url) => { llamadas.push(String(url)); return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => JSON.stringify([{ horaCita: "07:00", estado: "EN SALA" }]) }); },
+          gmxhr: (o) => { if (o.onerror) o.onerror(new Error("GM no configurado")); },
+        });
+        const citas = await c.api.apiLeerAgenda();
+        t.cierto(Array.isArray(citas) && citas.length === 1, "con la URL " + s.tag + ": se lee la agenda");
+        t.igual(llamadas[0], ABS_AGENDA, "y la llamada usa la URL completa recuperada");
+      }
     });
 
     await t.casoAsync("invalidarApiSiCambioMedico: médico DISTINTO -> purga URL/fallos/ok/medicoId al estado inicial y re-etiqueta con el nuevo id", async () => {

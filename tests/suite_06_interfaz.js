@@ -40,6 +40,23 @@ module.exports = {
       t.igual(c.api.countdown({ hora_texto: "1", elapsed: -10, estado: "Sin presentarse" }), "<span class=\"vgl-cd\" title=\"Le quedan 16:00 para confirmar\">en 16:00</span>");
     });
 
+    t.caso("escapeHtml sanea caracteres especiales HTML", () => {
+      const c = cargar();
+      t.igual(c.api.escapeHtml('<script>alert("x")&\'test\'</script>'), '&lt;script&gt;alert(&quot;x&quot;)&amp;&#039;test&#039;&lt;/script&gt;');
+      t.igual(c.api.escapeHtml(""), "");
+      t.igual(c.api.escapeHtml(null), "");
+    });
+
+    t.caso("fraudesHoy lee la cuenta de fraudes de hoy", () => {
+      const c = cargar();
+      t.igual(typeof c.api.fraudesHoy(), "number");
+    });
+
+    t.caso("renderStats no lanza cuando no hay elemento stats montado", () => {
+      const c = cargar();
+      t.noLanza(() => c.api.renderStats([]));
+    });
+
     // =====================================================================
     // v12.6.6 — Reportado en consultorio con captura: el aviso "Laboratorios RCV sin
     // resultado vigente" salía como TEXTO SUELTO encima de la historia clínica —sin
@@ -68,7 +85,9 @@ module.exports = {
       const reId = /\bid\s*=\s*"(vgl-[a-z0-9-]+)"/g;
       let m;
       while ((m = reId.exec(src))) idsCreados.add(m[1]);
-      t.cierto(idsCreados.has("vgl-labsv-modal"), "el aviso de labs vencidos sigue existiendo");
+      // vgl-labsv-modal se retiró junto con labsVencidosAlert/checkLabsVencidos en la
+      // auditoría pre-producción 2026-08-18 (código muerto, sin llamadores vivos —
+      // ver CHANGELOG); el aviso de labs vencidos hoy vive en avisoUniversal/#vgl-pym-modal.
       t.cierto(idsCreados.has("vgl-postcita-panel"), "el panel post-cita sigue existiendo");
 
       // De esos, los que son OVERLAY de verdad: los que su propia regla CSS posiciona con
@@ -88,7 +107,6 @@ module.exports = {
           if (mSel && idsCreados.has(mSel[1])) fijosConEstilo.add(mSel[1]);
         }
       }
-      t.cierto(fijosConEstilo.has("vgl-labsv-modal"), "el aviso de labs vencidos es un overlay fijo");
       t.cierto(fijosConEstilo.has("vgl-postcita-panel"), "el panel post-cita es un overlay fijo");
 
       const sinTokens = [...fijosConEstilo].filter((id) => !listaTokens.includes("#" + id)).sort();

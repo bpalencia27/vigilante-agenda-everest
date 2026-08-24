@@ -59,13 +59,14 @@ module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
     "createLabInjectorUI", "createExamenFisicoInjectorUI", "_casillasExamenFisico", "setWinState", "buildOverlay",
-    "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openLabSoloModal", "openOrdenamientoModal",
+    "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openLabSoloModal", "openOrdenamientoModal", "esMedicoRCVActivo",
+    "candidatoAdicional",
     "savePos", "restorePos", "closeSheet", "toggleSheet", "sheetHeader",
     "wireClose", "renderResumen", "copySummary", "renderSettings",
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
-    "createPymBannerUI", "_refrescarBannerPym", "pymPaquetesDelPaciente",
+    "pymPaquetesDelPaciente",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -189,6 +190,16 @@ module.exports = {
       t.igual(hoja.innerHTML, "", "closeSheet vacía la hoja");
     });
 
+    t.caso("renderResumen, renderSettings, wireClose y _casillasExamenFisico: invocaciones directas", () => {
+      cv.api.renderResumen();
+      t.cierto(hoja.innerHTML.includes("Resumen del turno"));
+      cv.api.wireClose();
+      cv.api.renderSettings();
+      t.cierto(hoja.innerHTML.includes("Ajustes"));
+      const cas = cv.api._casillasExamenFisico();
+      t.cierto(Array.isArray(cas));
+    });
+
     t.caso("toggleSheet: repetir el mismo tipo funciona como conmutador (cierra)", () => {
       cv.api.toggleSheet("resumen");
       t.igual(cv.api.__state.sheet, "resumen");
@@ -203,55 +214,56 @@ module.exports = {
       t.igual(cv.api.__state.sheet, "ajustes");
       t.cierto(hoja.innerHTML.includes("Ajustes"));
       t.cierto(hoja.innerHTML.includes("Modo rendimiento"));
-      t.cierto(hoja.innerHTML.includes('vgl-d-none'), "sin opcionesTecnicas la sección técnica va oculta");
+      t.cierto(hoja.innerHTML.includes('vgl-d-none'), "sin el modo programador (_vglProgOn) la sección técnica va oculta — la clave opcionesTecnicas se retiró en v17.6.10");
       t.igual(hoja.querySelector("#c-tema").value, "oscuro", "el selector de tema refleja S.tema");
     });
 
-    // v14.0.4 — AUDITORIA_MOTOR_RCV_v68.md §7.4: la tabla FESTIVOS está codificada a mano
-    // por años — sin un aviso VISIBLE (no solo por consola), un festivo real que falta
-    // porque la tabla caducó puede ofrecer un día de agenda que en realidad está cerrado.
-    t.caso("renderSettings: la tabla de festivos muestra hasta qué año está vigente, sin aviso mientras falten años", () => {
-      cv.api.closeSheet();
-      cv.api.toggleSheet("ajustes");
-      t.cierto(hoja.innerHTML.includes("Tabla de festivos colombianos"));
-      t.cierto(hoja.innerHTML.includes("Vigente hasta el 31/12/2027"), "hoy (2026) todavía queda margen, sin aviso de vencida");
-      t.falso(hoja.innerHTML.includes("actualícela pronto"), "sin aviso mientras el año actual sea anterior al último cubierto");
-      cv.api.closeSheet();
+    // v15.5.0 — La tabla FESTIVOS salió de Ajustes (barrido); v16.9.0 — los festivos se
+    // CALCULAN (Ley Emiliani) y el aviso de respaldo ya no mira "hasta qué año está la
+    // tabla": compara el algoritmo contra la tabla escrita en los años que ambos cubren.
+    // Estos dos casos fijan el contrato nuevo (el aviso con el día exacto, una vez al día);
+    // la tabla de Ajustes ya no existe, así que ya no hay HTML que verificar.
+    t.caso("festivos v16.9.0: el aviso compara el cálculo contra la tabla; con discrepancia avisa una vez al día", () => {
+      const c = cargar({ silencioso: true });
+      // Sin tocar la tabla real: agregar un "festivo" inexistente garantiza la discrepancia
+      // sin depender de si el año de hoy coincide o no con la tabla escrita a mano.
+      t.cierto(c.api._festivosTablaAgregarParaTest("2026-99-99"), "se pudo ensuciar la tabla de prueba");
+      t.cierto(c.api._festivosAvisarSiVencida(2026), "discrepancia detectada → el aviso se dispara");
+      t.igual(c.env.storage.getItem("vgl_festivos_aviso"), c.api.todayStamp(), "el aviso deja su marca diaria (una vez al día, sin reaviso)");
+      t.cierto(c.api._festivosAvisarSiVencida(2026), "marca ya puesta el mismo día: devuelve true sin volver a pintar");
     });
 
-    t.caso("renderSettings: al llegar (o pasar) el último año cubierto, el aviso se vuelve visible", () => {
-      const cVencida = cargar({ silencioso: true });
-      const OriginalDate = cVencida.ctx.Date || Date;
-      const FakeDate = class extends OriginalDate {
-        constructor(...args) { if (args.length === 0) super("2027-06-01T12:00:00"); else super(...args); }
-      };
-      FakeDate.now = () => new OriginalDate("2027-06-01T12:00:00").getTime();
-      cVencida.ctx.Date = FakeDate;
-      enriquecerDom(cVencida);
-      cVencida.api.buildOverlay();
-      const raizVencida = cVencida.env.doc.body.children.find((n) => n.id === "vgl-root");
-      cVencida.api.toggleSheet("ajustes");
-      const hojaVencida = raizVencida.querySelector("#vgl-sheet");
-      t.cierto(hojaVencida.innerHTML.includes("Vigente solo hasta el 31/12/2027"));
-      t.cierto(hojaVencida.innerHTML.includes("actualícela pronto"), "con el año actual ya dentro del último cubierto, el aviso aparece");
+    t.caso("festivos v16.9.0: el mensaje de discrepancia nombra los días exactos de ambos lados", () => {
+      const msg = cargar({ silencioso: true }).api._festivosMensajeDiscrepancia(2026, ["2026-01-06"], ["2026-03-19"]);
+      t.cierto(msg.includes("2026"), "dice el año de la discrepancia");
+      t.cierto(msg.includes("2026-01-06"), "nombra el día que solo tiene la tabla");
+      t.cierto(msg.includes("2026-03-19"), "nombra el día que solo calcula el algoritmo");
+      t.cierto(msg.includes("confirme cuál es el correcto"), "remite a confirmar antes de agendar en esos días");
     });
 
-    t.caso("renderSettings: cambiar un interruptor guarda el ajuste en S y en localStorage", () => {
+    t.caso("renderSettings: cambiar un interruptor va al borrador y solo al Guardar toca S y localStorage", () => {
       const chk = hoja.querySelector("#c-snd");
       chk.checked = false;
       disparar(chk, "change");
-      t.igual(cv.api.__S.sonido, false, "S.sonido quedó apagado");
+      // v15.6.0 — el interruptor no aplica en el acto: pone el borrador («Tiene cambios sin
+      // guardar»); S sigue intacto hasta que el médico pulsa Guardar.
+      t.igual(cv.api.__S.sonido, true, "S.sonido NO cambia hasta Guardar (flujo de borrador)");
+      const n = cv.api._ajustesGuardar();
+      t.cierto(n >= 1, "el borrador tenía cambios y Guardar los aplicó");
+      t.igual(cv.api.__S.sonido, false, "al guardar, S.sonido quedó apagado");
       const cfg = JSON.parse(cv.env.almacen.vgl_cfg);
       t.igual(cfg.sonido, false, "saveSettings persistió el cambio");
     });
 
-    t.caso("renderSettings: el interruptor de opciones técnicas repinta mostrando la sección", () => {
-      const tec = hoja.querySelector("#c-tecnicas");
-      tec.checked = true;
-      disparar(tec, "change");
-      t.igual(cv.api.__S.opcionesTecnicas, true);
-      t.falso(hoja.innerHTML.includes('class="vgl-d-none"'), "la sección técnica ya no va oculta");
+    t.caso("renderSettings: la sección técnica se repinta mostrando el modo programador (v15.6.0)", () => {
+      cv.api.closeSheet();
+      cv.api.toggleSheet("ajustes");
+      t.cierto(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "sin modo programador, la sección técnica va oculta");
+      cv.api._vglAlternarModoProg(); // Ctrl+Shift+D: no se persiste, vive solo en la pestaña
+      cv.api.renderSettings();
+      t.falso(hoja.innerHTML.includes("vgl-grp-tec vgl-d-none"), "con el modo programador activo, la sección ya no va oculta");
       t.cierto(hoja.innerHTML.includes("Probar avisos"), "los controles técnicos están pintados");
+      cv.api._vglAlternarModoProg(); // se apaga para no contaminar el resto de la suite
       cv.api.closeSheet();
       t.igual(cv.api.__state.sheet, null);
     });
@@ -317,6 +329,32 @@ module.exports = {
       t.falso(caja.classList.contains("vgl-dragging"));
       docLis.mousemove({ clientX: 400, clientY: 400 });
       t.igual(caja.style.left, "inicial", "sin arrastre activo no se mueve nada");
+      cv.env.doc.addEventListener = () => {};
+    });
+
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Arrastre fantasma: si el médico
+    // suelta el clic fuera del viewport de Chrome, nunca llega un "mouseup" — antes el
+    // panel quedaba pegado al cursor para siempre. Hallazgo de la auditoría de
+    // Gemini/Antigravity, verificado y aplicado sobre el código vigente — ver
+    // BACKLOG_MEJORAS.md §4.5 y CHANGELOG.
+    t.caso("makeDraggable: si el botón se suelta fuera del viewport (mousemove con buttons=0), el arrastre se detiene solo", () => {
+      const docLis = {};
+      cv.env.doc.addEventListener = (tipo, fn) => { docLis[tipo] = fn; };
+      const caja = cv.env.doc.createElement("div");
+      caja.getBoundingClientRect = () => ({ left: 10, top: 20, width: 100, height: 40 });
+      const asa = cv.env.doc.createElement("div");
+      cv.api.makeDraggable(caja, asa);
+      disparar(asa, "mousedown", { target: { closest: () => null }, clientX: 110, clientY: 60, preventDefault() {} });
+      t.cierto(caja.classList.contains("vgl-dragging"), "arrastre iniciado");
+      docLis.mousemove({ clientX: 300, clientY: 200, buttons: 1 });
+      t.igual(caja.style.left, "200px", "con el botón presionado (buttons=1), sigue moviéndose normal");
+      // El botón se soltó fuera de la ventana de Chrome: nunca llega "mouseup", pero el
+      // siguiente mousemove SÍ llega con buttons=0.
+      docLis.mousemove({ clientX: 999, clientY: 999, buttons: 0 });
+      t.falso(caja.classList.contains("vgl-dragging"), "el arrastre se detuvo solo al detectar buttons=0");
+      t.igual(caja.style.left, "200px", "la posición NO salta a las coordenadas del mousemove fantasma");
+      docLis.mousemove({ clientX: 5, clientY: 5, buttons: 1 });
+      t.igual(caja.style.left, "200px", "y ya no reacciona a más mousemove: el arrastre quedó realmente cerrado, no colgado");
       cv.env.doc.addEventListener = () => {};
     });
 
@@ -443,7 +481,7 @@ module.exports = {
     t.caso("render: dos citas por API pintan tarjetas con bandera de fraude (sin chips PyM, amputados en T4)", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
-      t.cierto(suma.textContent.includes("Vigilando (directo) · 2 cita(s)"), "resumen de fuente directa");
+      t.cierto(suma.textContent.includes("Vigilando la agenda · 2 cita(s)"), "resumen de fuente directa (texto v17.x: 'Vigilando la agenda · N cita(s) · act. HH:MM')");
       t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen SÍ sigue diciendo esto (no se amputó, es el otro sitio)");
       t.igual(q("#vgl-dot").className, "bg", "el punto de origen marca API");
       t.igual(lista.children.length, 2, "una tarjeta por cita");
@@ -508,6 +546,48 @@ module.exports = {
       const card = lista.children[0];
       t.cierto(card.innerHTML.includes("❤ ABANDONO PROGRAMA RCV"), "la bandera PES lleva el texto nuevo");
       t.falso(card.innerHTML.includes("SEGUIMIENTO CARDIOVASCULAR"), "el texto viejo no debe sobrevivir en ningún sitio");
+    });
+
+    // [v14.2.0 — backlog §3] Candidatura a cupos Adicional/sábado: chip informativo en la
+    // tarjeta, SOLO para quien ya tiene perfil calculado hoy (perfilAdicionalCache, llenado
+    // por openAgendamientoModal) y ese perfil resultó sencillo. Nunca se inventa un valor
+    // para quien todavía no tiene entrada en la caché.
+    t.caso("v14.2.0 (§3) — chip CANDIDATO ADICIONAL: sale solo con perfil sencillo YA calculado hoy", () => {
+      vaciarLista();
+      cv.api.__state.perfilAdicionalCache = new Map([["999", { adicionales: true, motivo: "" }]]);
+      cv.api.__state.lastSignature = "";
+      const pac = { key: "adic-si", doc_id: "999", nombre: "PACIENTE SENCILLO", hora_texto: "10:00", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.render([pac], "api", new Date());
+      t.cierto(lista.children[0].innerHTML.includes("➕ CANDIDATO ADICIONAL"), "perfil sencillo cacheado: sale el chip");
+
+      vaciarLista();
+      cv.api.__state.perfilAdicionalCache = new Map([["998", { adicionales: false, motivo: "diabetes en la historia" }]]);
+      cv.api.__state.lastSignature = "";
+      const pacNo = { key: "adic-no", doc_id: "998", nombre: "PACIENTE COMPLEJO", hora_texto: "10:10", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.render([pacNo], "api", new Date());
+      t.falso(lista.children[0].innerHTML.includes("CANDIDATO ADICIONAL"), "perfil NO sencillo: sin chip, aunque haya entrada en caché");
+
+      vaciarLista();
+      cv.api.__state.perfilAdicionalCache = new Map();
+      cv.api.__state.lastSignature = "";
+      const pacSc = { key: "adic-sc", doc_id: "997", nombre: "PACIENTE SIN ABRIR MODAL AUN", hora_texto: "10:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
+      cv.api.render([pacSc], "api", new Date());
+      t.falso(lista.children[0].innerHTML.includes("CANDIDATO ADICIONAL"), "sin cálculo todavía: nada que mostrar, no se inventa un no-candidato");
+
+      cv.api.__state.perfilAdicionalCache = new Map();
+      cv.api.__state.lastSignature = "";
+    });
+
+    t.caso("candidatoAdicional: invocación directa — null sin doc_id o sin entrada; el objeto cacheado solo si adicionales===true", () => {
+      cv.api.__state.perfilAdicionalCache = new Map([
+        ["111", { adicionales: true, motivo: "" }],
+        ["222", { adicionales: "visibles", motivo: "" }],
+      ]);
+      t.igual(cv.api.candidatoAdicional(null), null, "sin documento: null");
+      t.igual(cv.api.candidatoAdicional("333"), null, "documento sin entrada en la caché: null");
+      t.igual(cv.api.candidatoAdicional("222"), null, "adicionales !== true (aquí 'visibles'): null, no es candidato");
+      t.cierto(!!cv.api.candidatoAdicional("111"), "adicionales === true: devuelve el objeto cacheado");
+      cv.api.__state.perfilAdicionalCache = new Map();
     });
 
     t.caso("render: el filtro 'ensala' deja solo la tarjeta que corresponde", () => {
@@ -596,7 +676,7 @@ module.exports = {
       t.igual(cLab.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
     });
 
-    await t.casoAsync("createLabInjectorUI: sin solicitud resoluble alerta y restaura el botón", async () => {
+    await t.casoAsync("createLabInjectorUI: sin solicitud resoluble el botón explica el fallo, no escribe nada y restaura su rótulo", async () => {
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       // El paciente SÍ se resuelve en la historia clínica (#anamesis + cédula en un
       // .text-muted, el mismo patrón que usa extractPacienteAbierto), pero Athenea no
@@ -610,35 +690,24 @@ module.exports = {
       };
       cLab.env.doc.querySelector = () => null;
       cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
-      const alertas = [];
-      cLab.ctx.alert = (m) => alertas.push(String(m));
+      // v15.6.0 — sin alert() del navegador: el resultado se cuenta EN el botón y el
+      // detalle va al toast. Lo observable aquí es el rótulo del botón y su restauración.
       await btn.onclick();
-      t.igual(alertas.length, 1);
-      t.cierto(alertas[0].includes("No se encontraron laboratorios para el paciente abierto (cédula 999888777) en Athenea"), "explica que no encontró laboratorios para el paciente resuelto");
-      t.cierto(alertas[0].includes("No se diligenció ninguna casilla"));
+      t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
+      t.cierto(btn.innerHTML.includes("❌") || btn.innerHTML.includes("Sin resultados") || btn.innerHTML.includes("Inicie sesión"), "el botón explica que no se pudo diligenciar");
+      await esperar(20);
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
 
     // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
-    // manual del botón también dejaba SIN cachear un resultado vacío, así que
-    // checkLabsVencidos seguía sin poder revisar a ese paciente ni tras el clic explícito
-    // del médico.
-    await t.casoAsync("createLabInjectorUI (clic manual): SIN laboratorios encontrados también actualiza _labsPrefetch — checkLabsVencidos ya no queda mudo (bug real de auditoría)", async () => {
-      const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
-      cLab.env.doc.getElementById = (id) => {
-        if (id === "vgl-lab-injector") return btn;
-        if (id === "anamesis") return {};
-        return null;
-      };
-      cLab.env.doc.querySelector = () => null;
-      cLab.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC 999888777", closest: () => null }] : []);
-      cLab.ctx.alert = () => {};
-      const uid = "labsv|" + cLab.api.normalizeKey("999888777");
-      t.falso(cLab.api.avisoYaVisto(uid));
-      await btn.onclick();
-      cLab.api.checkLabsVencidos();
-      t.cierto(cLab.api.avisoYaVisto(uid), "bug real de auditoría: antes, un clic manual sin resultados tampoco cacheaba, y checkLabsVencidos seguía mudo");
-    });
+    // manual del botón también dejaba SIN cachear un resultado vacío, así que el robot
+    // (autoFetchAtheneaLabsForActivePatient) no se enteraba de que ya se había consultado
+    // a ese paciente y podía volver a golpear Athenea enseguida.
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Esta prueba verificaba el fix vía
+    // checkLabsVencidos (retirado por código muerto, ver CHANGELOG). El mismo `if (labs)`
+    // (línea idéntica en ambas rutas, manual y automática) sigue cubierto por su equivalente
+    // en tests/suite_17_nucleo.js ("con CERO laboratorios en Athenea, el TTL de 10 min SÍ
+    // frena la siguiente consulta"), que lo prueba sin depender de una función eliminada.
 
     // ================= createAccionesDockUI (T5 — dock de widgets sobre la HC) =================
     // v14.0.0 (T5): el dock flotante con las 3 acciones rápidas (agendar/ordenar/labs) que
@@ -678,7 +747,11 @@ module.exports = {
       const btns = dock.children.find((n) => n.className === "vgl-dock-btns");
       t.cierto(!!btns, "existe el contenedor de botones");
       const accs = btns.children.map((b) => b.getAttribute("data-accion"));
-      t.igual(accs, ["agendar", "ordenar", "labs"]);
+      // v16.8.0+ — el dock creció a propósito: 🧾 Panel del paciente (ficha), atajos
+      // «Ir a [pestaña]» (uno por pestaña con algo pendiente por documentar — con el
+      // mock de esta suite son 2: Antecedentes y Hábitos) y ✍ Redactar (texto libre).
+      // El botón de «riesgo» se retiró en v16.8.0 (su contenido vive en el Panel).
+      t.igual(accs, ["agendar", "ordenar", "labs", "ficha", "ir-pestana", "ir-pestana", "redactar"]);
       t.cierto(dock.children.some((n) => n.getAttribute && n.getAttribute("data-accion") === "toggle"), "botón de colapsar presente");
 
       // Segunda llamada: no duplica el contenedor del dock.
@@ -765,7 +838,8 @@ module.exports = {
       c.api.createAccionesDockUI();
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const accs = dock.children.find((n) => n.className === "vgl-dock-btns").children.map((b) => b.getAttribute("data-accion"));
-      t.igual(accs, ["labs"]);
+      // v16.8.0+ — sin el botón de «riesgo» (retirado); el resto del dock se conserva completo.
+      t.igual(accs, ["labs", "ficha", "ir-pestana", "ir-pestana", "redactar"]);
     });
 
     t.caso("createAccionesDockUI: clic en toggle colapsa/expande y persiste la preferencia (GM_setValue)", () => {
@@ -793,6 +867,7 @@ module.exports = {
       bAg._listeners.click[0]({ stopPropagation() {} });
       t.cierto(!!c.env.doc.getElementById("vgl-agendar-modal") || !!c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal"), "el modal de agendamiento completo quedó montado");
       t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-labsolo-modal"), "NO el modal ligero de solo-laboratorio");
+      c.api._uxVolcarBuffer(); // v15.6.0: uxTrack acumula en memoria y vuelca en tandas de 2 s
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.cierto(w && w.acciones && w.acciones["widget.agendar.abrir"] === 1, "queda telemetría de la acción");
     });
@@ -806,6 +881,7 @@ module.exports = {
       const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
       const bAg = dock.children.find((n) => n.className === "vgl-dock-btns").children.find((b) => b.getAttribute("data-accion") === "agendar");
       bAg._listeners.click[0]({ stopPropagation() {} });
+      c.api._uxVolcarBuffer(); // v15.6.0: uxTrack acumula en memoria y vuelca en tandas de 2 s
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.cierto(w && w.acciones && w.acciones["widget.agendar.sololab"] === 1, "la rama 'solo falta el laboratorio' queda registrada, no la de agendamiento completo");
       t.falso(!!(w.acciones["widget.agendar.abrir"]));
@@ -839,6 +915,7 @@ module.exports = {
       // clic no lanzó (apt.doc_id llegó bien formado desde lastSnapshot.list) y que la
       // telemetría de apertura quedó registrada.
       t.noLanza(() => bLabs._listeners.click[0]({ stopPropagation() {} }));
+      c.api._uxVolcarBuffer(); // v15.6.0: uxTrack acumula en memoria y vuelca en tandas de 2 s
       const w = JSON.parse(c.env.storage.getItem("vgl_ux") || "null");
       t.cierto(w && w.acciones && w.acciones["widget.labs.abrir"] === 1);
     });
@@ -885,7 +962,7 @@ module.exports = {
       cv.api.createExamenFisicoInjectorUI();
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
       t.cierto(!!btnN, "el botón quedó en el body");
-      t.igual(btnN.innerHTML, "🩺 Normalidad fija");
+      t.igual(btnN.innerHTML, "🩺 Normalidad", "rótulo v17.x: el botón dice «Normalidad» (el nombre completo «Normalidad fija» quedó en el feedback y los toasts)");
       t.cierto(typeof btnN.onclick === "function", "el clic queda cableado");
       cv.env.doc.getElementById = (id) => (id === "vgl-examen-normalidad" ? btnN : null);
       cv.api.createExamenFisicoInjectorUI();
@@ -895,14 +972,12 @@ module.exports = {
     // ================= "Normalidad fija" (v12.10.3, plantilla incluida en el script) =================
     // v12.10.4 — a pedido directo del médico, este botón es el ÚNICO de la pestaña, pega de
     // un solo clic (SIN cuadro de confirmación) — pero jamás pisa una casilla con texto.
-    t.caso("Normalidad fija: sin casillas en pantalla, avisa y no revienta", () => {
+    t.caso("Normalidad fija: sin casillas en pantalla, el botón lo dice y no revienta", () => {
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
       cv.env.doc.querySelectorAll = () => [];
-      const alertas = [];
-      cv.ctx.alert = (m) => alertas.push(String(m));
-      btnN.onclick();
-      t.igual(alertas.length, 1);
-      t.cierto(alertas[0].includes("No se encontraron casillas"), "explica que no halló casillas de esta pestaña");
+      // v15.6.0 — sin alert() del navegador: el aviso queda EN el botón (feedback) y en el toast.
+      t.noLanza(() => btnN.onclick());
+      t.cierto(btnN.innerHTML.includes("Aquí no hay casillas de examen físico"), "el botón explica que en esta pantalla no están las casillas");
     });
 
     t.caso("Normalidad fija: un solo clic rellena SOLO las vacías, sin pedir confirmación, respeta las que ya tienen texto", () => {
@@ -911,7 +986,8 @@ module.exports = {
       const vacia1 = campoFalso("");
       const vacia2 = campoFalso("   "); // solo espacios: cuenta como vacía
       const oculta = campoFalso("", { oculto: true });
-      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [yaEscrita, vacia1, vacia2, oculta] : []);
+      const casillas36 = [yaEscrita, vacia1, vacia2].concat(Array.from({ length: 33 }, () => campoFalso(""))).concat([oculta]);
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? casillas36 : []);
       let confirmLlamado = false;
       cv.ctx.confirm = () => { confirmLlamado = true; return false; }; // si el botón llamara confirm() y devolviera false, esta prueba lo detectaría
       const alertas = [];
@@ -927,15 +1003,15 @@ module.exports = {
       cv.ctx.confirm = () => true;
     });
 
-    t.caso("Normalidad fija: si el número de casillas de hoy no coincide con las 36 de la plantilla fija, avisa el desajuste sin dejar de aplicar", () => {
+    t.caso("Normalidad fija: si el número de casillas de hoy no coincide con las 36 de la plantilla fija, el botón avisa el desajuste y se rehúsa por seguridad (v14.2.2)", () => {
       const btnN = cv.env.doc.body.children.find((n) => n.id === "vgl-examen-normalidad");
       const vacia = campoFalso("");
-      cv.env.doc.querySelectorAll = (sel) => (sel === 'input[id="alert_message"][type="text"]' ? [vacia] : []);
-      const alertas = [];
-      cv.ctx.alert = (m) => alertas.push(String(m));
+      cv.env.doc.querySelectorAll = (sel) => (typeof sel === "string" && sel.includes('input[id="alert_message"][type="text"]') ? [vacia] : []);
+      // v15.6.0 — sin alert() del navegador: el desajuste se cuenta EN el botón.
       btnN.onclick();
-      t.igual(vacia.value, "NEGATIVO PARA LESIONES, PRURITO O CAMBIOS DE COLORACIÓN.", "aun con desajuste, sí aplica lo que puede (posición 0)");
-      t.cierto(alertas.some((a) => a.includes("⚠️") && a.includes("1 casilla(s)") && a.includes("36")), "avisa el desajuste con ambas cifras");
+      t.igual(vacia.value, "", "por seguridad (v14.2.2) ante desajuste de casillas no se pega nada");
+      t.cierto(btnN.innerHTML.includes("⚠ No pegué nada"), "el botón anuncia el rehúso por seguridad");
+      t.cierto(btnN.innerHTML.includes("1 casillas") && btnN.innerHTML.includes("36"), "avisa el desajuste con ambas cifras (las de la pantalla y las de la plantilla)");
     });
 
     t.caso("Normalidad fija: la plantilla trae exactamente 36 frases (19 de revisión por sistema + 17 de examen físico, sin MAMAS ni GENITO/URINARIO)", () => {
@@ -1370,6 +1446,51 @@ module.exports = {
       t.cierto(suma.textContent.includes("no tiene documento legible"));
     });
 
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] El checkbox de RCV/Prevención no
+    // tenía efecto real para los médicos de esMedicoRCVActivo (apiAccesoAsignarTurno
+    // fuerza swIsPyM/SwProgramaEspecial a true de todas formas) pero seguía mostrándose
+    // como un control editable. Ahora se muestra marcado y deshabilitado para ellos, con
+    // una nota explicando por qué. Ver CHANGELOG.
+    t.caso("openAgendamientoModal: para un médico de la lista RCV, el checkbox sale marcado y deshabilitado (honesto)", () => {
+      const cRcv = cargar({ silencioso: true });
+      enriquecerDom(cRcv);
+      cRcv.api.__state.activeDoctor.id = 707;
+      cRcv.api.__state.activeDoctor.name = "BRANDON PALENCIA";
+      cRcv.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
+      const modal = cRcv.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      // El DOM simulado del arnés no refleja los atributos HTML checked/disabled a
+      // propiedades JS al parsear innerHTML (siempre quedan en false) — se verifica el
+      // marcado literal, como el resto de pruebas estructurales de este archivo.
+      t.cierto(
+        modal.innerHTML.includes('id="vgl-agm-pym-chk" checked disabled>'),
+        "sale marcado y deshabilitado: no hay elección real para este médico"
+      );
+      t.cierto(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "explica por qué está bloqueado");
+    });
+
+    t.caso("openAgendamientoModal: para un médico fuera de la lista RCV, el checkbox sigue siendo una elección real", () => {
+      const cNoRcv = cargar({ silencioso: true });
+      enriquecerDom(cNoRcv);
+      cNoRcv.api.__state.activeDoctor.id = 707;
+      cNoRcv.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
+      cNoRcv.api.openAgendamientoModal({ doc_id: "424242", nombre: "CARLOS RUIZ" });
+      const modal = cNoRcv.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      t.cierto(
+        modal.innerHTML.includes('id="vgl-agm-pym-chk" checked>'),
+        "sale marcado por defecto pero editable: para este médico el checkbox sí decide"
+      );
+      t.falso(modal.innerHTML.includes('id="vgl-agm-pym-chk" checked disabled>'), "no debe salir deshabilitado");
+      t.falso(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "sin la nota de bloqueo");
+    });
+
+    t.caso("esMedicoRCVActivo: invocación directa — coincide por sub-cadena, sin distinguir mayúsculas ni tildes", () => {
+      const cH = cargar({ silencioso: true });
+      cH.api.__state.activeDoctor.name = "dr. ánGEL estrada";
+      t.cierto(cH.api.esMedicoRCVActivo(), "ESTRADA está en RCV_DOCTORS, sin importar tilde/caja");
+      cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
+      t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en la lista");
+    });
+
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {
       // fetch por defecto del harness: responde {} y extractPatientId no saca nada
       const cAg = cargar({ silencioso: true });
@@ -1459,6 +1580,34 @@ module.exports = {
       t.igual(confirmar.disabled, false);
       t.cierto(confirmar.textContent.includes("(08:00 AM)"));
       t.cierto(botonTurno.classList.contains("active"));
+    });
+
+    // [v14.2.0 — backlog §3] La misma llamada a BuscarPacienteDetallado que ya arma el
+    // selector de programas ahora también alimenta perfilAdicionalCache, para que el panel
+    // principal pueda mostrar el chip sin pedirle nada nuevo a Everest.
+    await t.casoAsync("openAgendamientoModal: perfil sencillo (HTA pura) queda en perfilAdicionalCache para el panel principal", async () => {
+      const cHta = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) {
+            return respuestaJson({ data: { celular: "3009998877", sexo: "F", programasPaciente: [
+              { id: 1, descripcion: "Hipertensión", swProgramaEspecial: true },
+            ] } });
+          }
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 778 } });
+          if (u.includes("BuscarCitasDisponibles")) return respuestaJson({ agendas: [] });
+          return respuestaJson({});
+        },
+      });
+      enriquecerDom(cHta);
+      cHta.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cHta.api.openAgendamientoModal({ doc_id: "555222", nombre: "MARIA HTA" });
+      await esperar(60);
+      const cacheado = cHta.api.__state.perfilAdicionalCache.get("555222");
+      t.cierto(!!cacheado, "quedó una entrada para este documento");
+      t.igual(cacheado.adicionales, true, "HTA pura sin resumen que la degrade: candidata");
+      t.cierto(cHta.api.candidatoAdicional("555222").adicionales === true, "candidatoAdicional() la reconoce de inmediato");
     });
 
     // v14.0.1 — Reportado en consultorio EN VIVO con pantallazo: antes, un día sin agenda
@@ -1946,6 +2095,11 @@ module.exports = {
         static get permission() { return "granted"; }
       };
 
+      // v15.4.0 — política de un solo canal: con la pestaña VISIBLE el aviso va al toast y
+      // nada al sistema. Para ejercitar la rama de la notificación de Windows hace falta
+      // pestaña oculta (la rama real que sí usa Notification).
+      cLab.env.doc.visibilityState = "hidden";
+
       await cLab.api.openLabSoloModal({ doc_id: "424242", nombre: "PRUEBA SINTETICA" });
       await esperar(40);
 
@@ -1987,15 +2141,16 @@ module.exports = {
     enriquecerDom(cOrd);
     const ultimoOrd = () => cOrd.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
 
-    await t.casoAsync("openOrdenamientoModal: sin coincidencia PyM todo sale DESMARCADO con aviso", async () => {
+    await t.casoAsync("openOrdenamientoModal: sin coincidencia PyM no ofrece NADA para ordenar y lo avisa (v16.2.0)", async () => {
       await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
       const modal = ultimoOrd();
       t.cierto(!!modal);
-      t.cierto(modal.innerHTML.includes("No se detectaron actividades pendientes"));
-      t.cierto(modal.innerHTML.includes("sin marcar"));
+      t.cierto(modal.innerHTML.includes("No se detectaron actividades de prevención pendientes"), "aviso honesto de que no hay coincidencia en la base de PyM");
       t.falso(modal.innerHTML.includes(" checked"), "ninguna casilla premarcada sin coincidencia explícita");
-      const items = modal.innerHTML.split("vgl-ord-item").length - 1;
-      t.igual(items, cOrd.api.__PYM_CATALOG.length, "se ofrecen todas las actividades del catálogo");
+      // v16.2.0 — orden del médico: sin coincidencia NO se ofrece el catálogo entero para
+      // marcar a mano (era el riesgo de sobre-ordenar); no se pinta ni un ítem.
+      t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "sin coincidencia no se ofrece ninguna actividad");
+      t.cierto(modal.innerHTML.includes("Sin actividades para ordenar"), "el botón de confirmar queda deshabilitado con su rótulo honesto");
     });
 
     await t.casoAsync("openOrdenamientoModal: con coincidencia, el choque de sexo desmarca y advierte", async () => {
@@ -2156,14 +2311,27 @@ module.exports = {
     //     respaldo para cuando esa llamada falla.
     function mockOpen(c) {
       const llamadas = [];
-      c.env.win.open = (url, target) => { llamadas.push({ url, target }); return { closed: false }; };
+      // v16.2.0 — imprimirRecordatorioCita abre la pestaña VACÍA (anti-bloqueador) y navega
+      // por pestana.location.href apenas decide la URL final; el mock captura esa navegación
+      // como una llamada con su URL (imprimirOrdenPyM sigue abriendo window.open(url) directo).
+      c.env.win.open = (url, target) => {
+        const pestana = { closed: false };
+        let href = "";
+        Object.defineProperty(pestana, "location", {
+          configurable: true,
+          get() { return { set href(v) { href = String(v); if (v) llamadas.push({ url: String(v), target }); }, get href() { return href; } }; },
+        });
+        if (url) llamadas.push({ url, target });
+        return pestana;
+      };
       return llamadas;
     }
 
-    t.caso("imprimirRecordatorioCita: reproduce la URL real capturada (CitaId=radicado, Eps y nombreCompleto codificados)", () => {
+    await t.casoAsync("imprimirRecordatorioCita: reproduce la URL real capturada (CitaId=radicado, Eps y nombreCompleto codificados)", async () => {
       const c = cargar();
       const llamadas = mockOpen(c);
       c.api.imprimirRecordatorioCita(7813686, "NUEVA EPS ", "MARIA LUZMILA CARMONA CARMONA");
+      await esperar(20); // el fetch del arnés no trae blob(): cae al respaldo y navega a la URL real
       t.igual(llamadas.length, 1, "abre exactamente una pestaña");
       t.igual(llamadas[0].target, "_blank");
       const u = new URL(llamadas[0].url);
@@ -2311,7 +2479,7 @@ module.exports = {
       t.cierto(panel.innerHTML.includes("CARLOS RUIZ (de la tarjeta)"));
     });
 
-    t.caso("mostrarPanelPostCita: el botón de imprimir dispara imprimirRecordatorioCita con los datos de ESTA cita", () => {
+    await t.casoAsync("mostrarPanelPostCita: el botón de imprimir dispara imprimirRecordatorioCita con los datos de ESTA cita", async () => {
       const c = cargar();
       enriquecerDom(c);
       const llamadas = mockOpen(c);
@@ -2319,6 +2487,7 @@ module.exports = {
       const panel = c.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
       const printBtn = panel.querySelector("#vgl-postcita-print");
       disparar(printBtn, "click");
+      await esperar(20); // misma cadena async de imprimirRecordatorioCita (v16.2.0)
       t.igual(llamadas.length, 1);
       const u = new URL(llamadas[0].url);
       t.cierto(u.pathname.endsWith("/apiviva/APIImpresionV2/api/Impresion/ImprimirRecordatorioCita"));
@@ -2472,317 +2641,186 @@ module.exports = {
       t.igual(r.sinEmparejar, []);
     });
 
-    // ================= createPymBannerUI / _refrescarBannerPym (T7) =================
-    // v14.0.0 — Banner PyM superior, nivel 2 · persistente (D5). Reemplaza el aviso modal
-    // de checkRecordatorioPym/pymAlert. D4: si la verificación contra Everest (T6) falla,
-    // se muestra TODO como pendiente con un aviso honesto — nunca se apaga por una duda.
-    function mockPacienteBanner(c, doc) {
-      c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
-      c.env.doc.getElementById = (id) => (id === "anamesis" ? { id: "anamesis" } : null);
-      c.env.doc.querySelector = () => null;
-      c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [{ textContent: "CC " + doc, closest: () => null }] : []);
-    }
-    // Responde BuscarPaciente (resuelve pacienteId=777) y, según `ordenesResp`, el endpoint
-    // de T6: una función (para simular fallo/malformado) o un valor JSON directo (éxito).
-    function planBanner(ordenesResp) {
-      return (url) => {
-        if (String(url).includes("BuscarPaciente")) return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ id: 777 }), text: async () => '{"id":777}' });
-        if (String(url).includes("ObtenerOrdenamientoPorPacienteIdVigente")) {
-          if (typeof ordenesResp === "function") return ordenesResp();
-          return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ordenesResp, text: async () => JSON.stringify(ordenesResp) });
-        }
-        return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}" });
-      };
-    }
-    const FALLO_RED = () => Promise.resolve({ ok: false, status: 500, headers: { get: () => null }, json: async () => null, text: async () => "" });
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró toda la sección de pruebas
+    // directas de "createPymBannerUI / _refrescarBannerPym (T7)": el bloque T7 completo
+    // (`_bannerPymCache`, `_bannerPymEnVuelo`, `BANNER_PYM_TTL_MS`, `_bannerPymInvalidar`,
+    // `_pymYaOrdenadoHoyDesdeElScript`, `_refrescarBannerPym`, `createPymBannerUI`) se borró
+    // del script — quedó sin llamador desde que `tick()` dejó de pintarlo, superado por el
+    // aviso único (checkAvisoUniversal, suite 04). `pymPaquetesDelPaciente` y
+    // `pymCubiertoPorOrdenVigente` siguen vivos (el modal de PyM del panel los sigue usando)
+    // y conservan su cobertura arriba. Ver CHANGELOG.
 
-    t.caso("createPymBannerUI: fuera del módulo HCHealth no crea el banner", () => {
+    t.caso("v15: el banner viene APAGADO de fábrica, y el aviso modal también", () => {
       const c = cargar({ silencioso: true });
-      c.env.win.location.pathname = "/viva/Acceso/";
-      c.api.createPymBannerUI();
-      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+      t.igual(c.api.__S.bannerPym, false, "de fábrica ya no hay franja fija arriba de la historia");
+      t.igual(c.api.__S.avisoPymModal, false, "ni ventana que bloquee: el canal es el recuadro del modal");
+      // v17.6.10 — la clave `recordatorioPym` se retiró: nada en producción la leía
+      // (el canal del recordatorio lo decide hoy avisoPymModal + el chip del dock).
     });
 
-    t.caso("createPymBannerUI: en HCHealth pero sin paciente abierto no crea el banner", () => {
-      const c = cargar({ silencioso: true });
-      c.env.win.location.pathname = "/viva/HCHealth/CitasDelDia";
-      c.env.doc.getElementById = () => null;
-      c.api.createPymBannerUI();
-      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+    t.caso("la migración de v15 apaga el banner en los equipos que YA lo tenían guardado en true", () => {
+      // Sin esta migración el cambio no llegaría a ningún consultorio:
+      // writeJSON guarda el objeto ENTERO de ajustes, así que los veinte equipos
+      // tienen `bannerPym: true` en disco y ese valor le gana al de fábrica.
+      const c = cargar({
+        silencioso: true,
+        localStorage: { vgl_cfg: JSON.stringify({ bannerPym: true, avisoPymModal: true }) },
+      });
+      t.igual(c.api.__S.bannerPym, false, "la migración lo apagó pese al valor guardado");
+      t.igual(c.env.win.localStorage.getItem("vgl_v15_banner"), "1", "y dejó su marca para no repetirse");
     });
 
-    t.caso("createPymBannerUI: paciente sin ninguna actividad PyM indexada no crea el banner (nada que reportar)", () => {
-      const c = cargar({ silencioso: true });
-      mockPacienteBanner(c, "100000001");
-      c.api.__state.pym = new Map();
-      c.api.createPymBannerUI();
-      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"));
+    // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró la prueba "tick: sin la
+    // clave bannerPym tampoco se pinta el banner" — dependía de `_refrescarBannerPym`/
+    // `createPymBannerUI`, eliminadas junto al resto del bloque T7 (ver comentario más
+    // arriba y CHANGELOG). Con las funciones borradas, que el tick no pueda pintar el
+    // banner ya no depende de una guarda: es estructuralmente imposible.
+
+    // =====================================================================
+    // v17.6.13 — AUDITORÍA S+ DEL AGENDAMIENTO (5 hallazgos)
+    //  1. Sin sugerencia clínica NINGÚN turno nace activo (antes, el primero cronológico
+    //     quedaba preseleccionado y un clic a ciegas confirmaba una madrugada).
+    //  2. Los avisos de doble confirmación (antidup/vencimiento) se reinician al cambiar
+    //     de turno o de día (antes, el segundo Confirmar se los saltaba con datos nuevos).
+    //  3. El celular dice la verdad si no se pudo verificar (antes: "cargando…" colgado
+    //     con el SMS tildado, cita creada con celular vacío sin avisar).
+    //  4. Accesibilidad: aria-live en los estados que mutan + aria-current en el stepper.
+    //  5. El cupo desaconsejado se ve usable (opacidad .85) y explica su razón en la
+    //     loseta, no solo en el tooltip.
+    // =====================================================================
+
+    const _mockAgendaComun = (extraFetch) => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const urlsVistas = [];
+      const c = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          urlsVistas.push(u);
+          const extra = extraFetch && extraFetch(u);
+          if (extra) return extra;
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 61, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [
+            { id: 701, horaTexto: "07:00 AM", estado: "ACT" },
+            { id: 702, horaTexto: "10:00 AM", estado: "ACT" },
+          ] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(c);
+      c.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      c.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      return { c, urlsVistas };
+    };
+
+    await t.casoAsync("v17.6.13: sin sugerencia clínica, NINGÚN turno nace activo y el botón explica por qué (v16.9.0)", async () => {
+      const { c } = _mockAgendaComun();
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const activos = [...slots.children].filter((b) => b.className.includes("active"));
+      t.igual(activos.length, 0, "sin perfil que recomiende, no hay preselección de madrugada");
+      t.igual(confirmBtn.disabled, true, "el botón sigue apagado hasta que el médico elija");
+      t.cierto(confirmBtn.textContent.includes("Elija un horario"), "el botón dice POR QUÉ está apagado");
     });
 
-    await t.casoAsync("createPymBannerUI: todas las actividades ya cubiertas por una orden vigente reciente -> NO aparece el banner", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([{ cup: { codigo: "876802" }, estado: "PEN", fechaCreacion: "2026-08-01" }]) });
-      mockPacienteBanner(c, "100000002");
-      c.api.__state.pym = new Map([["100000002", ["Mamografía"]]]);
-      // Z123 (mamografía) no tiene vigenciaDias confirmado -> SIEMPRE pendiente (D4), así
-      // que para esta prueba se le fija una vigencia de prueba y se restaura después,
-      // exactamente igual que la prueba de pymCubiertoPorOrdenVigente en suite_21.
-      const z123 = c.api.__PYM_CATALOG.find((p) => p.cie10 === "Z123");
-      z123.vigenciaDias = 365;
-      try {
-        await c.api._refrescarBannerPym("100000002");
-        c.api.createPymBannerUI();
-        t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "mamografía cubierta por una orden reciente: nada pendiente, sin banner");
-      } finally { delete z123.vigenciaDias; }
+    await t.casoAsync("v17.6.13: con turno clínico recomendado, el sugerido SÍ nace activo y listo para confirmar", async () => {
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [
+          { id: 4, descripcion: "Diabetes", swProgramaEspecial: false },
+        ] } });
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const btnSugerido = [...slots.children].find((b) => (b.innerHTML || "").includes("⭐ SUGERIDO"));
+      t.cierto(!!btnSugerido && btnSugerido.classList.contains("active"), "el sugerido queda preseleccionado");
+      t.igual(confirmBtn.disabled, false, "con sugerencia, el botón ya está listo");
+      t.cierto(confirmBtn.textContent.includes("07:00 AM"), "el botón nombra la hora sugerida");
     });
 
-    await t.casoAsync("createPymBannerUI: con actividades pendientes, el banner aparece con el contador y el botón Ordenar", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      mockPacienteBanner(c, "100000003");
-      c.api.__state.pym = new Map([["100000003", ["VIH"]]]);
-      // Simula que Everest (app-root de Angular) ya tiene contenido propio en el body ANTES
-      // de que el banner se cree — D5: el banner debe EMPUJAR ese contenido (insertarse
-      // ANTES, en flujo normal), nunca aparecer flotando encima ni después.
-      const appRootEverest = c.env.doc.createElement("div");
-      appRootEverest.id = "app-root-simulado-de-everest";
-      c.env.doc.body.appendChild(appRootEverest);
-      await c.api._refrescarBannerPym("100000003");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner, "el banner quedó en el body");
-      t.igual(banner, c.env.doc.body.children[0], "se inserta como PRIMER hijo del body, ANTES del contenido de Everest: lo empuja, no lo tapa (D5)");
-      t.igual(c.env.doc.body.children[1], appRootEverest, "el contenido de Everest queda DESPUÉS del banner, no reemplazado ni cubierto");
-      const contador = banner.children.find((n) => n.className === "vgl-pymb-barra").children.find((n) => n.className === "vgl-pymb-contador");
-      t.igual(contador.textContent, "1");
-      const item = banner.children.find((n) => n.className === "vgl-pymb-lista").children[0];
-      t.cierto(item.children.some((n) => n.className === "vgl-pymb-item-btn" && n.textContent === "Ordenar"));
+    await t.casoAsync("v17.6.13: cambiar de turno reinicia la doble confirmación (el aviso antidup no se puede saltar con datos nuevos)", async () => {
+      const { c, urlsVistas } = _mockAgendaComun();
+      c.api.markCitaAgendadaHoy("555111", "2026-08-23");
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const confirmBtn = modal.querySelector("#vgl-agm-confirm");
+      const btn1 = [...slots.children].find((b) => (b.innerHTML || "").includes("07:00 AM"));
+      const btn2 = [...slots.children].find((b) => (b.innerHTML || "").includes("10:00 AM"));
+      disparar(btn1, "click");
+      disparar(confirmBtn, "click");
+      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "1er confirmar muestra el aviso antidup");
+      t.igual(confirmBtn.dataset.dupOk, "1", "y lo marca en el dataset");
+      disparar(btn2, "click");
+      t.igual(confirmBtn.dataset.dupOk, "", "cambiar de turno reinicia la marca");
+      t.cierto(confirmBtn.textContent.includes("10:00 AM"), "el botón nombra la hora recién elegida");
+      // El anti-doble-clic (v17.6.8) ignora un segundo clic en <700 ms del anterior: se
+      // espera el tiempo real entre los dos confirmar, como en la consulta.
+      await esperar(750);
+      disparar(confirmBtn, "click");
+      t.cierto(confirmBtn.textContent.includes("pulse otra vez"), "el 2º confirmar vuelve a exigir la doble confirmación");
+      t.falso(urlsVistas.some((u) => u.includes("AsignarTurno")), "no se creó ninguna cita por el clic a ciegas");
     });
 
-    await t.casoAsync("createPymBannerUI (D4, LA MUTACIÓN OBLIGATORIA — condición de apagado): con la verificación CAÍDA, el banner se muestra con TODO pendiente y el aviso honesto", async () => {
-      // fetch caído SÍ dispara el respaldo por GM_xmlhttpRequest dentro de pageFetchJson: se
-      // mockea también para que falle rápido (si no, el arnés usa un no-op silencioso que
-      // nunca resuelve la promesa — cuelga la prueba, no la hace fallar).
-      const c = cargar({ silencioso: true, fetch: planBanner(FALLO_RED), gmxhr: (o) => o.onerror(new Error("fallo simulado (T7, prueba de la mutación obligatoria)")) });
-      mockPacienteBanner(c, "100000004");
-      c.api.__state.pym = new Map([["100000004", ["VIH"]]]);
-      await c.api._refrescarBannerPym("100000004");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner, "D4: ante la duda (verificación caída), el banner SE MUESTRA, nunca se apaga en silencio");
-      const aviso = banner.children.find((n) => n.className === "vgl-pymb-aviso");
-      t.cierto(!!aviso, "debe aparecer el texto honesto de que no se pudo verificar");
-      t.cierto(aviso.textContent.includes("No se pudo verificar"));
+    await t.casoAsync("v17.6.13: si Everest no devuelve los datos del paciente, el celular no queda colgado en «cargando…»", async () => {
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson(null);   // red caída -> pageFetchJson devuelve null
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const inpTel = modal.querySelector("#vgl-agm-sms-tel");
+      const chkSms = modal.querySelector("#vgl-agm-sms-chk");
+      const notaSms = modal.querySelector("#vgl-agm-sms-nota");
+      t.cierto(inpTel.placeholder.includes("escríbalo a mano"), "el campo pide el celular a mano en vez de mentir con «cargando…»");
+      t.igual(chkSms.checked, false, "el SMS se desmarca: no se puede enviar un número que no se verificó");
+      t.cierto(notaSms.textContent.includes("no se pudo verificar"), "la nota dice qué pasó");
     });
 
-    await t.casoAsync("createPymBannerUI: etiquetas SIN paquete conocido en PYM_CATALOG (Optometría/Odontología) también cuentan como pendientes", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      mockPacienteBanner(c, "100000005");
-      c.api.__state.pym = new Map([["100000005", ["Remisión a Optometría"]]]);
-      await c.api._refrescarBannerPym("100000005");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner);
-      const item = banner.children.find((n) => n.className === "vgl-pymb-lista").children[0];
-      t.cierto(item.className.includes("vgl-pymb-item-libre"));
-      t.falso(item.children.some((n) => n.className === "vgl-pymb-item-btn"), "sin paquete conocido no hay CUPS que ordenar: sin botón");
+    t.caso("v17.6.13: accesibilidad del modal — aria-live en los 4 estados que mutan y aria-current en el stepper", () => {
+      const { c } = _mockAgendaComun();
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const vivas = (modal.innerHTML.match(/aria-live="polite"/g) || []).length;
+      t.igual(vivas, 4, "pc-est, sugerida, vencaviso y date-info anuncian sus cambios");
+      t.cierto(modal.innerHTML.includes('id="vgl-step-ind-1" role="listitem" aria-current="step"'), "el paso 1 arranca marcado como paso en curso");
+      const ind2 = modal.querySelector("#vgl-step-ind-2");
+      t.noLanza(() => disparar(modal.querySelector("#vgl-step-1-next"), "click"));
+      t.igual(ind2.getAttribute && ind2.getAttribute("aria-current"), "step", "al avanzar, aria-current salta al paso 2");
+      t.igual(modal.querySelector("#vgl-step-ind-1").getAttribute("aria-current"), null, "y el paso 1 deja de ser el actual");
     });
 
-    t.caso("createPymBannerUI: primer tick de un paciente sin caché todavía — no pinta nada hasta que el refresco resuelva", () => {
-      const c = cargar({ silencioso: true });
-      mockPacienteBanner(c, "100000006");
-      c.api.__state.pym = new Map([["100000006", ["VIH"]]]);
-      // Sin refrescar la caché real (sin red mockeada): se inyecta directamente para
-      // aislar esta prueba del ciclo async y probar solo la idempotencia del render.
-      c.api.createPymBannerUI(); // dispara el refresco en vuelo, sin pintar todavía (paciente nuevo en caché)
-      t.falso(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "primer tick: la caché aún no tiene datos de este paciente, no pinta con datos viejos/ajenos");
-    });
-
-    await t.casoAsync("createPymBannerUI: al abrir un paciente DISTINTO, no reutiliza por error los pendientes del paciente ANTERIOR mientras se refresca el nuevo", async () => {
-      // Paciente B necesita una etiqueta que SÍ empareje con PYM_CATALOG (dispara la rama
-      // de _refrescarBannerPym que de verdad consulta la red vía apiAccesoBuscarPaciente):
-      // solo esa rama tiene un await real que deja una ventana de "caché todavía vieja"
-      // para observar — las otras dos ramas (sin etiquetas / sin paquete conocido)
-      // resuelven de forma síncrona y no reproducen el bug real.
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      // Paciente A: etiqueta SIN paquete conocido -> _refrescarBannerPym resuelve sin red
-      // (rama "nada que cruzar con T6"), así que puede quedar realmente en caché sin mocks.
-      mockPacienteBanner(c, "100000009");
-      c.api.__state.pym = new Map([
-        ["100000009", ["Actividad exclusiva del paciente A, nunca debe verse para B"]],
-        ["100000010", ["VIH"]],
-      ]);
-      await c.api._refrescarBannerPym("100000009");
-      c.api.createPymBannerUI();
-      const bannerA = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!bannerA, "el banner de A se pintó primero, con su propio pendiente");
-      // Espía la reconstrucción de contenido (el bucle "while(...) removeChild(...)" que
-      // createPymBannerUI usa para repintar): el DOM falso del arnés no borra de verdad con
-      // remove()/removeChild() (ya documentado en otras pruebas de esta suite), así que
-      // comprobar body.children después no distingue "se devolvió temprano, sin tocar nada"
-      // de "se repintó con datos ajenos" — ambos casos dejan el mismo nodo en el mismo
-      // lugar. Lo que SÍ distingue una rama de la otra es si el código LLEGÓ a reconstruir.
-      let seReconstruyo = false;
-      const removeChildOriginal = bannerA.removeChild.bind(bannerA);
-      bannerA.removeChild = (n) => { seReconstruyo = true; return removeChildOriginal(n); };
-
-      // Cambia de paciente (misma pestaña, el médico pasó al siguiente): la caché sigue
-      // teniendo los datos de A todavía, porque el refresco de B aún no corrió.
-      mockPacienteBanner(c, "100000010");
-      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? bannerA : (id === "anamesis" ? { id: "anamesis" } : null));
-      c.api.createPymBannerUI(); // SIN await: exactamente lo que pasa en un tick real
-      t.falso(seReconstruyo, "bug real que esto previene: con B recién abierto y su refresco aún en vuelo, NO debe repintar el banner reutilizando los datos EN CACHÉ de A");
-    });
-
-    await t.casoAsync("createPymBannerUI: clic en minimizar colapsa el banner y persiste la preferencia (GM_setValue)", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      mockPacienteBanner(c, "100000007");
-      c.api.__state.pym = new Map([["100000007", ["VIH"]]]);
-      await c.api._refrescarBannerPym("100000007");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      const toggle = banner.children.find((n) => n.className === "vgl-pymb-barra").children.find((n) => n.className === "vgl-pymb-toggle");
-      t.falso(banner.className.includes("minimizado"));
-      toggle._listeners.click[0]({ stopPropagation() {} });
-      t.cierto(banner.classList.contains("minimizado"));
-      t.igual(c.env.gm["vgl_banner_pym_minimizado"], "1");
-      toggle._listeners.click[0]({ stopPropagation() {} });
-      t.falso(banner.classList.contains("minimizado"));
-      t.igual(c.env.gm["vgl_banner_pym_minimizado"], "");
-    });
-
-    await t.casoAsync("createPymBannerUI: se autolimpia al salir del módulo HCHealth", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      mockPacienteBanner(c, "100000008");
-      c.api.__state.pym = new Map([["100000008", ["VIH"]]]);
-      await c.api._refrescarBannerPym("100000008");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner);
-      let removido = false;
-      banner.remove = () => { removido = true; };
-      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : null);
-      c.env.win.location.pathname = "/viva/Acceso/";
-      c.api.createPymBannerUI();
-      t.cierto(removido, "el banner se quita del body al salir de HCHealth");
-    });
-
-    // v14.0.0 — El médico ordena DESDE EL SCRIPT y el banner seguía pidiéndole lo mismo
-    // hasta 10 minutos después (BANNER_PYM_TTL_MS), que es justo el comportamiento que T7
-    // venía a eliminar. _bannerPymInvalidar existía desde T7 y NADIE la llamaba.
-    // El observable: con la caché viva, createPymBannerUI repinta desde ella; tras ordenar,
-    // la caché queda vacía y la función se va por su guarda `if (!cacheDelPaciente) return`
-    // en vez de volver a pintar los pendientes ya resueltos.
-    await t.casoAsync("markOrdenesCreadasHoy invalida la caché del banner: deja de insistir con lo que el médico acaba de ordenar", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      mockPacienteBanner(c, "100000020");
-      c.api.__state.pym = new Map([["100000020", ["Tamización de VIH"]]]);
-      await c.api._refrescarBannerPym("100000020");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner, "precondición: con la caché viva el banner se pinta");
-
-      // El médico ordena desde el script.
-      c.api.markOrdenesCreadasHoy("100000020", ["AGR-1"], ["Tamización de VIH"]);
-
-      // El DOM falso no borra de verdad con remove(): se espía la llamada.
-      let removido = false;
-      banner.remove = () => { removido = true; };
-      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : (id === "anamesis" ? { id: "anamesis" } : null));
-      // (a) La INVALIDACIÓN: sin refrescar todavía, el banner no puede seguir sirviendo la
-      // caché vieja. Sin invalidar, createPymBannerUI la daría por vigente durante 10 min.
-      c.api.createPymBannerUI();
-      t.cierto(removido, "sin caché válida, el banner viejo se retira en el acto en vez de repintarse con datos previos a la orden");
-
-      removido = false;
-      // (b) El DESCUENTO: al refrescar de verdad, lo recién ordenado ya no cuenta como
-      // pendiente — aunque Everest todavía no refleje la orden en sus vigentes.
-      await c.api._refrescarBannerPym("100000020");
-      c.api.createPymBannerUI();
-      t.cierto(removido,
-        "tras ordenar, el banner DESAPARECE: la caché se invalida Y el refresco descuenta lo que el médico acaba de ordenar desde el script. Antes seguía insistiendo con la misma actividad hasta 10 min (BANNER_PYM_TTL_MS) — y aun invalidando la caché habría vuelto igual, porque el refresco solo miraba las órdenes vigentes de Everest, que tardan en reflejar una orden recién creada.");
-    });
-
-    // ============ v14.0.0 — RED DE SEGURIDAD DEL BANNER (interruptor + fallback) ============
-    // El invariante que estas 4 pruebas defienden es UNO solo y es clínico, no cosmético:
-    // el médico NUNCA puede quedarse sin ninguna de las dos alertas de PyM. T7 apaga el
-    // aviso modal (checkRecordatorioPym) y lo reemplaza por el banner; si el banner no
-    // llega a pintarse en la página real de Everest — la suposición sobre el contenedor
-    // raíz de Angular que nunca se pudo verificar sin abrir la página — el médico perdería
-    // la alerta EN SILENCIO. Por eso tick() vuelve al aviso modal cuando el banner está
-    // apagado por el interruptor de Ajustes, y también cuando createPymBannerUI() LANZA.
-    //
-    // El observable es directo y no depende de pintar el modal: checkRecordatorioPym marca
-    // avisoMarcarVisto("pymrem|" + key) justo antes de llamar a pymAlert. Si esa marca
-    // aparece, el aviso modal corrió; si no aparece, no corrió.
-    function mockTickPymPendiente(c, doc) {
-      // Paciente abierto en la Historia Clínica, con una actividad PyM pendiente real y
-      // sin órdenes que la cubran — el escenario en el que el médico DEBE ver algo.
-      mockPacienteBanner(c, doc);
-      c.api.__state.pym = new Map([[doc, ["Tamización de VIH"]]]);
-      return "pymrem|" + c.api.normalizeKey(doc);
-    }
-
-    await t.casoAsync("tick (banner ENCENDIDO): pinta el banner y NO dispara el aviso modal — el banner lo reemplaza, no se duplican", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      const uid = mockTickPymPendiente(c, "100000010");
-      c.api.__S.bannerPym = true;
-      await c.api._refrescarBannerPym("100000010");
-      c.api.tick();
-      t.cierto(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "el banner quedó pintado");
-      t.falso(c.api.avisoYaVisto(uid), "con el banner encendido, el aviso modal NO corre: si corriera, el médico vería la franja Y el modal a la vez");
-    });
-
-    await t.casoAsync("tick (banner APAGADO por el interruptor): quita el banner y DEVUELVE el aviso modal — nunca se queda sin ninguno", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      const uid = mockTickPymPendiente(c, "100000011");
-      // Primero con el banner encendido, para que exista de verdad en el DOM.
-      c.api.__S.bannerPym = true;
-      await c.api._refrescarBannerPym("100000011");
-      c.api.createPymBannerUI();
-      const banner = c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner");
-      t.cierto(!!banner, "precondición: el banner existe antes de apagar el interruptor");
-      // El DOM falso del arnés no borra de verdad con remove(): se espía la llamada, mismo
-      // hallazgo ya documentado varias veces en esta suite.
-      let removido = false;
-      banner.remove = () => { removido = true; };
-      c.env.doc.getElementById = (id) => (id === "vgl-pym-banner" ? banner : (id === "anamesis" ? { id: "anamesis" } : null));
-
-      c.api.__S.bannerPym = false;
-      c.api.tick();
-      t.cierto(removido, "al apagar el interruptor, el banner se quita en el acto");
-      t.cierto(c.api.avisoYaVisto(uid), "y el aviso modal de siempre VUELVE en el mismo tick — el médico no se queda sin alerta de PyM");
-    });
-
-    await t.casoAsync("tick (el banner LANZA): se atrapa y cae al aviso modal en el MISMO tick — la alerta clínica no se pierde en silencio", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      const uid = mockTickPymPendiente(c, "100000012");
-      c.api.__S.bannerPym = true;
-      await c.api._refrescarBannerPym("100000012");
-      // Simula el riesgo REAL que no se pudo verificar sin abrir Everest: la inserción del
-      // banner en document.body falla. Da igual la causa (contenedor raíz hostil, DOM
-      // intervenido por Angular): lo que importa es que la alerta no desaparezca.
-      c.env.doc.body.insertBefore = () => { throw new Error("insertBefore rechazado por el contenedor raíz"); };
-      t.noLanza(() => c.api.tick(), "tick NO puede propagar la excepción: rompería el resto del latido (agenda, fraude, labs)");
-      t.cierto(c.api.avisoYaVisto(uid), "con el banner roto, el aviso modal cubre el hueco en el mismo tick");
-    });
-
-    t.caso("S.bannerPym viene ENCENDIDO de fábrica, y solo un false explícito lo apaga (undefined = encendido)", () => {
-      const c = cargar({ silencioso: true });
-      t.igual(c.api.__S.bannerPym, true, "de fábrica el banner está encendido: el rediseño es el comportamiento por defecto");
-    });
-
-    // La guarda de tick() es `S.bannerPym !== false`, no `!S.bannerPym`, y la diferencia
-    // importa de verdad: CUALQUIER instalación anterior a v14 tiene ajustes guardados SIN
-    // esta clave, así que S.bannerPym llega `undefined`. Con `!S.bannerPym` esos médicos
-    // se quedarían en el aviso modal y el rediseño no se estrenaría nunca; con
-    // `!== false` estrenan el banner, y solo un apagado EXPLÍCITO desde Ajustes lo revierte.
-    await t.casoAsync("tick: ajustes viejos SIN la clave bannerPym (undefined) estrenan el banner, no se quedan en el aviso modal", async () => {
-      const c = cargar({ silencioso: true, fetch: planBanner([]) });
-      const uid = mockTickPymPendiente(c, "100000013");
-      delete c.api.__S.bannerPym;   // exactamente lo que trae una instalación previa a v14
-      await c.api._refrescarBannerPym("100000013");
-      c.api.tick();
-      t.cierto(!!c.env.doc.body.children.find((n) => n.id === "vgl-pym-banner"), "sin la clave guardada, el banner igual se pinta");
-      t.falso(c.api.avisoYaVisto(uid), "y no cae al aviso modal: undefined no es un apagado explícito");
+    await t.casoAsync("v17.6.13: el cupo desaconsejado se ve usable (opacidad .85) y la razón es visible en la loseta", async () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/\.vgl-agm-sbtn-adic-no\{opacity:\.85\}/.test(src), "opacidad .85: usable, no parece botón muerto");
+      const { c } = _mockAgendaComun((u) => {
+        if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [
+          { id: 4, descripcion: "Diabetes", swProgramaEspecial: false },
+        ] } });
+        if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [
+          { id: 701, horaTexto: "07:00 AM", estado: "ACT" },
+          { id: 703, horaTexto: "09:30 AM", estado: "ACT" },   // 09:30 = hora ADICIONAL (lista del médico)
+        ] });
+        return null;
+      });
+      await esperar(80);
+      const modal = c.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const btnNoRecomendado = [...slots.children].find((b) => b.className.includes("vgl-agm-sbtn-adic-no"));
+      t.cierto(!!btnNoRecomendado, "el cupo adicional para un diabético lleva la clase de desaconsejado");
+      t.cierto((btnNoRecomendado.innerHTML || "").includes("SOLO SI NO HAY OTRA CITA"), "la razón va visible en la loseta, no solo en el tooltip");
     });
 
   },

@@ -1,0 +1,30 @@
+{
+  "_nota": "FIXTURE SINTETICO. Reproduce la FORMA de la respuesta real de HistoricoMedicamentoHCM (capturada el 21-ago-2026 con GRABADOR v3.4.0, tras corregir el defecto de resBody en null), con datos inventados carácter a carácter. CERO datos de pacientes: el id de consulta es 1, el profesional es un nombre inventado y los fármacos son moléculas del vademécum público. Los códigos M0001/M00021 se repiten A PROPÓSITO de los de everest_medicamentos.json: es el puente código→nombre que mtrMapaFrecuenciasPorNombre cruza.",
+  "_origen_de_la_forma": "GET /apiviva/APIHCHealth/api/Historicos/HistoricoMedicamentoHCM?PacienteId=N",
+  "respuesta": [
+    {
+      "id": 1, "consulta_Id": 100, "codigo": "M0001",
+      "descripcion": "METFORMINA CLORHIDRATO 850 MG TABLETA RECUBIERTA",
+      "dosificacion": "2", "fechaCreacion": "2026-08-10 09:00:00 a. m.",
+      "concentracion": "", "presentacion": "TABLETA RECUBIERTA", "viaAdministracion": "ORAL",
+      "frecuenciaUnidad": "horas", "frecuenciaNumero": 12, "cantidad": 60, "dias": 30, "pf": "No",
+      "profesional": "MEDICO DE PRUEBA SINTETICO", "especialidad": "MEDICINA GENERAL"
+    },
+    {
+      "id": 2, "consulta_Id": 100, "codigo": "M00021",
+      "descripcion": "LOSARTAN POTASICO 50 MG TABLETA",
+      "dosificacion": "1", "fechaCreacion": "2026-08-10 09:00:00 a. m.",
+      "concentracion": "", "presentacion": "TABLETA", "viaAdministracion": "ORAL",
+      "frecuenciaUnidad": "dias", "frecuenciaNumero": 1, "cantidad": 30, "dias": 30, "pf": "No",
+      "profesional": "MEDICO DE PRUEBA SINTETICO", "especialidad": "MEDICINA GENERAL"
+    },
+    {
+      "id": 3, "consulta_Id": 40, "codigo": "M00021",
+      "descripcion": "LOSARTAN POTASICO 50 MG TABLETA",
+      "dosificacion": "1", "fechaCreacion": "2026-03-01 09:00:00 a. m.",
+      "concentracion": "", "presentacion": "TABLETA", "viaAdministracion": "ORAL",
+      "frecuenciaUnidad": "dias", "frecuenciaNumero": 2, "cantidad": 30, "dias": 15, "pf": "No",
+      "profesional": "MEDICO DE PRUEBA SINTETICO", "especialidad": "MEDICINA GENERAL"
+    }
+  ]
+}
