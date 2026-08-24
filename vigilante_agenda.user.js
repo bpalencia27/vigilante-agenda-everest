@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.28
+// @version     17.6.29
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.28";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.29";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2328,7 +2328,12 @@
         // tick de la historia clínica vuelve a buscar los laboratorios del paciente
         // abierto, sin recargar la página ni volver a entrar a la historia.
         if (viva && atheneaSesionViva === false) {
-          lastAutoFetchedDoc = "";
+          // v17.6.29 — AUDITORÍA S+ (barrido total, 24-ago-2026): esto reseteaba
+          // lastAutoFetchedDoc, una guarda que v17.0.3 dejó sin ningún lector (el piso
+          // real es lastAutoFetchedAt/LABS_FETCH_PISO_MS, más abajo) — el reset no hacía
+          // nada, y si el piso de tiempo seguía vigente, el robot NO reintentaba pese a
+          // que este comentario prometía "en el siguiente tick vuelve a buscar".
+          lastAutoFetchedAt = 0;
           console.log("[Vigilante Athenea] sesión restaurada: el robot reintentará los laboratorios del paciente abierto.");
         }
       }
@@ -4072,7 +4077,6 @@
     // =====================================================================
   //  ROBOT AUTOMÁTICO ATHENEA: BUSCA LA CÉDULA DEL PACIENTE AL ABRIR HISTORIA
   // =====================================================================
-  let lastAutoFetchedDoc = "";
   let lastAutoFetchedAt = 0;
   // v17.0.3 — Piso de verdad, sin condicionarlo al docId. Ver comentario completo junto a
   // _labsAvisoTs más abajo: docId puede leerse distinto para EL MISMO paciente entre dos
@@ -4238,7 +4242,6 @@
       vglLog("PATIENT", "AutoFetchTriggered", { section: seccionActiva() });
 
       try { _preconHidratar(docId); } catch (e) {}   // v16.6.0 — si la pre-consulta ya lo trajo, la ficha abre al instante
-      lastAutoFetchedDoc = docId;
       lastAutoFetchedAt = ahora;
       // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retira la cédula (docId) de este
       // rastro: no aporta nada al diagnóstico ("se disparó el pre-fetch") que "algo se
@@ -5235,7 +5238,7 @@ _vglOfrecerDeshacer(btn);
   //  salida: la misma consulta que antes esperaba al clic ahora se
   //  dispara sola, una vez por paciente, apenas se abre su historia —
   //  mismo patrón y mismo piso que ya usa el Robot Athenea
-  //  (lastAutoFetchedDoc/LABS_FETCH_PISO_MS, más arriba), con su misma
+  //  (lastAutoFetchedAt/LABS_FETCH_PISO_MS, más arriba), con su misma
   //  razón de ser: sigue siendo una LECTURA (Athenea/Annar/Citi/función
   //  renal), nunca una escritura en la historia. Costo aceptado a
   //  sabiendas (confirmado con el médico): Athenea se consulta en cada
@@ -6018,7 +6021,7 @@ _vglOfrecerDeshacer(btn);
   // TODA pestaña, SIN condicionar a leader: el observador también corría en todas): la
   // llamada es barata porque createLabInjectorUI es idempotente con su botón (si
   // #vgl-lab-injector ya existe no crea nada) y el robot automático conserva intacta su
-  // semántica de una-vez-por-paciente (la guarda lastAutoFetchedDoc de
+  // semántica de una-vez-por-paciente (la guarda lastAutoFetchedAt de
   // autoFetchAtheneaLabsForActivePatient, que corre ANTES de esa comprobación a
   // propósito: así un cambio de paciente en la misma historia sí re-dispara la búsqueda).
   // Se conserva ESTA única llamada de arranque —reemplazo del bootstrap del observador—
@@ -6908,9 +6911,6 @@ _vglOfrecerDeshacer(btn);
     try { if (_reloj.worker) _reloj.worker.terminate(); } catch (e) {}
     _reloj.worker = null; _reloj.ok = false;
   }
-  function _relojEstadoParaTest() { return { ok: _reloj.ok, motivo: _reloj.motivo, canales: Array.from(_reloj.canales.keys()), locales: Array.from(_reloj.locales.entries()).map(([id, v]) => ({ id, ms: v.ms, enPagina: !!v.timer })) }; }
-  function _relojAjustarParaTest(cambios) { Object.assign(_reloj, cambios || {}); }
-
   // v14.2.12 — ¿Volvió esta pestaña de un DESCARTE de Chrome (Ahorro de memoria)? Mientras
   // estuvo descartada no corrió nada — ni el reloj de segundo plano puede evitarlo. Se
   // registra (conteo anónimo) y, una vez al día, se sugiere la única solución real de ese
@@ -6984,7 +6984,6 @@ _vglOfrecerDeshacer(btn);
   const BEAT_WRITE_MIN_MS = 10000;
   let _ultimoBeatWrite = 0;
   let _ultimoBeatOculta = null;
-  function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
   function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
   function heartbeat() {
     try {
@@ -10345,9 +10344,6 @@ _vglOfrecerDeshacer(btn);
       }, 500);
     }
   }
-  // Lectura de la cola solo para el banco de pruebas (el flush usa setTimeout, que no
-  // corre en el harness). Mismo patrón que _relojEstadoParaTest.
-  function _toastColaParaTest() { return toastQueue.slice(); }
   // Solo Windows. El toast dentro de la página queda como RESPALDO únicamente si Windows
   // no está disponible (permiso no concedido/denegado), para no perder un aviso de fraude.
   function notify(color, title, body, persist, uid) {
@@ -17352,64 +17348,6 @@ _vglOfrecerDeshacer(btn);
     return resumen;
   }
 
-  // El cuerpo del modal a partir de un resumen ya calculado. Función pura de HTML (probada
-  // aparte): clasificación + falla + función renal + entrada a la IA.
-  function mtrRenderRiesgoModalHtml(resumen) {
-    const esc = (v) => escapeHtml(String(v == null ? "" : v));
-    const cabecera = mtrRenderCabeceraRiesgoHtml(resumen);
-    const falla = mtrRenderFallaHtml(resumen);
-    let renalHtml = "";
-    if (resumen && resumen.r) {
-      renalHtml = _renderEstadioRenalHtml(resumen.r);
-    } else if (resumen && resumen.erc) {
-      const e = resumen.erc;
-      const f = resumen.factores || {};
-      const ultCr = (resumen.ultimos && resumen.ultimos.CREATININA && resumen.ultimos.CREATININA.valor);
-      const rAdaptado = {
-        tfg: e.crcl != null ? e.crcl : (e.egfr != null ? e.egfr : "--"),
-        estadio: e.estadioAdministrativo || (e.estadio ? e.estadio.nombre : "G1"),
-        formula: "Cockcroft-Gault",
-        tfgCkdEpi: e.egfr != null ? e.egfr : null,
-        entradas: {
-          creatininaCruda: f.creatinina != null ? f.creatinina : (ultCr != null ? ultCr : "--"),
-          peso: f.pesoKg != null ? f.pesoKg : (f.peso != null ? f.peso : "--"),
-          edad: f.edad != null ? f.edad : "--",
-          sexo: f.sexo || ""
-        }
-      };
-      renalHtml = _renderEstadioRenalHtml(rAdaptado);
-    }
-    const iaActiva = (typeof S !== "undefined" && S.iaRedaccion === true);
-    // v16.5.0 — Decisión del médico (entrevista del modal): "Nota clínica y Análisis y
-    // plan es lo mismo — dejar Análisis y plan, que es el que usa Everest"; Motivo y
-    // Resumen previo se eliminan; Preguntar queda como opción claramente aparte.
-    const modos = [
-      { modo: "enfermedad_actual", etiqueta: "Enfermedad actual", pista: "Borrador de la anamnesis y enfermedad actual para la historia clínica." },
-      { modo: "analisis_plan",     etiqueta: "Análisis y plan",   pista: "La nota clínica completa (con blindaje médico-legal) para la casilla de Everest." },
-      { modo: "recomendaciones",   etiqueta: "Recomendaciones",   pista: "Indicaciones personalizadas para ESTE paciente, escritas como suyas." },
-      { modo: "consulta",          etiqueta: "❓ Preguntar",       pista: "Opcional: responde una duda puntual sobre este paciente usando SOLO sus datos." },
-    ];
-    const botonesIa = modos.map((m) => `<button class="vgl-agm-btn ${m.modo === "enfermedad_actual" ? "pri" : "sec"} vgl-riesgo-ia-btn" data-modo="${m.modo}" title="${esc(m.pista)}"${iaActiva ? "" : " disabled"}>✍ ${esc(m.etiqueta)}</button>`).join("");
-    return `
-      <div class="vgl-agm-sec">
-        <label class="vgl-agm-lbl">🫀 Estratificación de Riesgo cardiovascular (Framingham / Minsalud)${vglTip("Estratificación del riesgo cardiovascular según las Guías de Práctica Clínica colombianas (Framingham calibrado). Fija metas terapéuticas de C-LDL y No-HDL.")}</label>
-        <div class="vgl-rcv-bloque" role="region" aria-label="Riesgo cardiovascular del paciente">
-          ${cabecera}${falla}
-          ${renalHtml ? `<div style="margin-top:10px">${renalHtml}</div>` : ""}
-          <div class="vgl-rcv-pie">Soporte a la decisión clínica. La conducta y formulación médica definitiva es responsabilidad del profesional tratante.</div>
-        </div>
-      </div>
-      <div class="vgl-agm-sec">
-        <label class="vgl-agm-lbl">✍ Redacción Médica Asistida (IA)</label>
-        <div class="vgl-riesgo-ia">
-          <div class="vgl-riesgo-ia-txt">${iaActiva
-            ? "Borrador clínico generado a partir de los antecedentes y paraclínicos para revisión, edición y firma médica. No se envían datos identificadores del paciente."
-            : "La asistencia de redacción médica está apagada en Ajustes. Puede activarla en cualquier momento."}</div>
-          <div class="vgl-riesgo-ia-btns">${botonesIa}</div>
-        </div>
-      </div>`;
-  }
-
   // ================================================================================
   // v15.6.0 — FICHA DEL PACIENTE (la «ficha viva» aprobada por el médico, Propuesta 1)
   // ================================================================================
@@ -18551,13 +18489,6 @@ _vglOfrecerDeshacer(btn);
     }, TABLERO_VIGILANCIA_MS);
   }
 
-  // v16.8.0 — La Ficha ya no es una ventana aparte: es la sección «Resumen» del Panel
-  // del paciente (fusión pedida por el médico). Se conserva el nombre porque hay
-  // llamadores internos y porque el punto de entrada tiene que seguir aterrizando donde
-  // el médico espera: en lo que el asistente leyó y de dónde.
-  async function openFichaPacienteModal(apt) {
-    return openPanelPacienteModal(apt, { origen: "ficha" });
-  }
 
   // =====================================================================
   //  v16.0.0 — EL MÓDULO «RIESGO Y EXÁMENES» (la ventana del tablero)
@@ -18705,116 +18636,11 @@ _vglOfrecerDeshacer(btn);
     } catch (e) { return false; }
   }
 
-  const _vglContextoAvisado = new Set();
-  function _vglAvisoContextoFaltante(apt, estado, espontaneo) {
-    try {
-      const key = String((apt && apt.doc_id) || "") + "|" + todayStamp();
-      if (espontaneo) {
-        if (!key || _vglContextoAvisado.has(key)) return false;
-        _vglContextoAvisado.add(key);
-      }
-      showToast("AZUL", "Riesgo y exámenes", _vglTextoContextoFaltante(estado), false);
-      return true;
-    } catch (e) { return false; }
-  }
-
   // v16.8.0 — «Riesgo y exámenes» dejó de ser una ventana propia: sus dos secciones
   // viven en el Panel del paciente. El nombre se conserva porque el agendamiento y otros
   // caminos internos lo llaman, y aterrizan en la sección de riesgo y función renal.
   async function openTableroModal(apt) {
     return openPanelPacienteModal(apt, { origen: "tablero", seccion: "renal" });
-  }
-
-  async function openRiesgoModal(apt) {
-    if (!apt || !apt.doc_id) { setSummary("El paciente seleccionado no tiene documento legible.", "warn"); return; }
-    // v15.2.0 — Embudo del modal: abrir -> riesgo calculado/sin datos -> completar/abandonar.
-    let _fnCompletado = false;
-    try { uxTrack("fn.riesgo.open"); } catch (e) {}
-    let existing = document.getElementById("vgl-riesgo-modal");
-    if (existing) existing.remove();
-
-    const patientName = apt.nombre || apt.name || "Paciente Everest";
-    const doctorName = (state.activeDoctor && state.activeDoctor.name) || S.medicoNombre || "";
-    const modal = document.createElement("div");
-    modal.id = "vgl-riesgo-modal";
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    modal.setAttribute("aria-labelledby", "vgl-riesgo-title");
-    modal.className = isLight() ? "light" : "";
-
-    let cerrado = false;
-    const vivo = () => !cerrado && modal.isConnected !== false;
-    let xBtn, cancelBtn;
-    const closeMod = () => {
-      cerrado = true;
-      try { if (!_fnCompletado) uxTrack("fn.riesgo.abandon"); } catch (e) {}
-      xBtn?.removeEventListener("click", closeMod);
-      cancelBtn?.removeEventListener("click", closeMod);
-      modal.innerHTML = "";
-      modal.remove();
-    };
-
-    modal.innerHTML = `
-      <div class="vgl-agm-card" style="max-width:640px">
-        <div class="vgl-agm-head">
-          <div style="min-width:0">
-            <div class="vgl-agm-title vgl-agm-kicker" id="vgl-riesgo-title">❤️ Riesgo cardiovascular · Redacción IA</div>
-            <div class="vgl-agm-patient">${escapeHtml(patientName)}</div>
-            <div class="vgl-agm-sub">Documento: <b>${escapeHtml(apt.doc_id)}</b>${doctorName ? ` · Médico: <b>${escapeHtml(doctorName)}</b>` : ""}</div>
-          </div>
-          <button class="vgl-agm-close" id="vgl-riesgo-x" aria-label="Cerrar">✕</button>
-        </div>
-        <div class="vgl-ux-caption">Estratificación clínica integral y asistente de redacción médica en Everest. Para solicitar exámenes use Ordenamiento; para agendar citas, Agendamiento.</div>
-        <div id="vgl-riesgo-cuerpo">
-          <div class="vgl-agm-sec"><div class="vgl-agm-loading">⏳ Analizando antecedentes y paraclínicos del paciente…</div></div>
-        </div>
-        <div class="vgl-agm-foot">
-          <button id="vgl-riesgo-cancel" class="vgl-agm-btn sec">Cerrar</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-    xBtn = modal.querySelector("#vgl-riesgo-x");
-    cancelBtn = modal.querySelector("#vgl-riesgo-cancel");
-    if (xBtn) xBtn.addEventListener("click", closeMod);
-    if (cancelBtn) cancelBtn.addEventListener("click", closeMod);
-    const bgClick = (e) => { if (e.target === modal) closeMod(); };
-    modal.addEventListener("click", bgClick);
-    _activarAccesibilidadModal(modal, closeMod);
-    try { uxTrack("widget.riesgo.abrir"); } catch (e) {}
-
-    // El resumen: de la caché si Laboratorios (o este mismo modal) ya lo calculó; si no,
-    // se calcula aquí y se deja en caché.
-    let resumen = null;
-    try { resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { resumen = null; }
-    if (!resumen) {
-      try { resumen = await mtrCalcularResumenClinico(apt, vivo); } catch (e) { resumen = null; }
-    }
-    if (!vivo()) return;
-    const cuerpo = modal.querySelector("#vgl-riesgo-cuerpo");
-    if (!cuerpo) return;
-    if (!resumen) {
-      // Sin laboratorios no hay riesgo que calcular: se anota aparte porque es el desenlace
-      // que mas dice (si sale mucho, el problema esta en Athenea, no en este modal).
-      _fnCompletado = true;
-      try { uxTrack("fn.riesgo.sin_datos"); uxTrack("fn.riesgo.complete"); } catch (e) {}
-      cuerpo.innerHTML = `<div class="vgl-agm-sec"><div class="vgl-agm-err">No se pudo calcular el riesgo de este paciente ahora (sin respuesta de los laboratorios). Abra 🧪 Laboratorios y vuelva a intentarlo.</div></div>`;
-      return;
-    }
-    _fnCompletado = true;
-    try { uxTrack("fn.riesgo.datos"); uxTrack("fn.riesgo.complete"); } catch (e) {}
-    cuerpo.innerHTML = mtrRenderRiesgoModalHtml(resumen);
-    // Un botón por modo de redacción: abre el panel de IA ya existente en ese modo. El
-    // panel se monta encima de este modal (mismo z-index, orden del documento) y al
-    // cerrarlo se vuelve aquí — igual que "Datos del paciente" se monta sobre el panel.
-    modal.querySelectorAll(".vgl-riesgo-ia-btn").forEach((b) => b.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (b.disabled) return;
-      const modo = b.getAttribute("data-modo") || "enfermedad_actual";
-      try { uxTrack("widget.riesgo.ia." + modo); } catch (e2) {}
-      try { mtrAbrirPanelRedaccion(resumen, { modo }); }
-      catch (e3) { setSummary("No se pudo abrir la redacción IA: " + (e3 && e3.message), "warn"); }
-    }));
   }
 
   // v12.5.4 — Abre el informe (PDF) real de Athenea con un clic: el mismo POST que hace
@@ -23880,7 +23706,7 @@ _vglOfrecerDeshacer(btn);
       // se contesta aquí por el precio de un getElementById por tick. Corre en TODA
       // pestaña (SIN condicionar a leader, igual que corría el observador) y es barata:
       // createLabInjectorUI es idempotente con su botón y el robot automático conserva
-      // su guarda de una-vez-por-paciente (lastAutoFetchedDoc).
+      // su guarda de una-vez-por-paciente (lastAutoFetchedAt).
       if (secc === "historia") {
         createLabInjectorUI(); createExamenFisicoInjectorUI(); createIaInjectorUI(); checkRacGuardia(); /* v15.3.0 — el drenado automático hacia la historia se retiró con el paso que lo alimentaba */
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
@@ -24074,7 +23900,7 @@ _vglOfrecerDeshacer(btn);
         // viva (solo hay que impedir que el timeout deslizante se cumpla), pero cuando
         // está CAÍDA se sondea cada 45 s: así, tras el login manual del médico en la
         // otra pestaña, la restauración se detecta en menos de un minuto y el robot
-        // reanuda solo (ver el reset de lastAutoFetchedDoc en atheneaKeepAlive).
+        // reanuda solo (ver el reset de lastAutoFetchedAt en atheneaKeepAlive).
         if (Date.now() - atheneaKeepAliveAt > (atheneaSesionViva === false ? 45000 : 180000)) {
           atheneaKeepAliveAt = Date.now();
           atheneaKeepAlive();
@@ -25010,8 +24836,6 @@ _vglOfrecerDeshacer(btn);
     // v14.2.0 — Sonda de pestañas: necesita que API.url ya se haya aprendido, así que
     // reintenta cada 10 min con su propio sello de un-intento-por-día.
     const tSonda = setInterval(mtrSondaPestanias, 600000);
-    // v14.2.0 — Listener delegado del botón de redacción IA (una sola vez por página).
-    try { document.addEventListener("click", mtrIaClickDelegado, true); } catch (eIa) {}
     heartbeat();
     tick();
     // vN — chequeo de versión mínima ESCALONADO: antes corría en el mismo instante que
@@ -25951,12 +25775,6 @@ _vglOfrecerDeshacer(btn);
     return mtrIsoDesdeFecha(d);
   }
 
-  function mtrSumarDiasHabiles(iso, dias) {
-    const base = mtrSumarDias(iso, Math.trunc(Number(dias) || 0));
-    if (!base) return null;
-    return mtrAjustarFechaHabil(base);
-  }
-
   // v16.9.0 — DECISIÓN DEL MÉDICO (20-ago): «el control, +7 días de la toma, en TODOS los
   // caminos». La ventana 4-14 dejaba al motor elegir cualquier día de once posibles, y en
   // la práctica producía controles a distinta distancia según por qué camino se llegara
@@ -26110,14 +25928,6 @@ _vglOfrecerDeshacer(btn);
   }
 
   // ---------- lípidos ----------
-
-  // cNoHDL = CT - HDL. null si falta algún insumo (no infiere).
-  function mtrCnoHDL(ct, hdl) {
-    if (mtrEsFalsy(ct) || mtrEsFalsy(hdl)) return null;
-    const a = mtrFloat(ct), b = mtrFloat(hdl);
-    if (a === null || b === null) return null;   // Python lanzaría; aquí, casilla vacía
-    return mtrRound(a - b, 1);
-  }
 
   // Reducción porcentual de LDL respecto al basal. null si falta un insumo.
   // v16.9.0 — DE DÓNDE SALE EL LDL BASAL. Decisión del médico (20-ago): «el más alto del
@@ -29472,11 +29282,6 @@ _vglOfrecerDeshacer(btn);
       };
     }
 
-    const posAdmin = mtrPosEstadio(estadioAdmin);
-    const posClinico = mtrPosEstadio(estadioClinico);
-    // Cuando el clínico es PEOR, las dosis y la remisión lo siguen a él.
-    const estadioParaDosis = (posClinico > posAdmin && posClinico >= 0) ? estadioClinico : (estadioClinico || estadioAdmin);
-
     const remision = mtrRemisionNefrologia(egfr, d.rac, d.egfrPrevio);
     const ira = mtrSospechaIra(egfr, d.egfrPrevio);
 
@@ -29485,7 +29290,6 @@ _vglOfrecerDeshacer(btn);
       egfr: egfr === null ? null : mtrRound(egfr, 1),
       estadioAdministrativo: estadioAdmin,
       estadioClinico: estadioClinico,
-      estadioParaDosis: estadioParaDosis,
       discordancia: discordancia,
       remitirNefrologia: remision.remitir,
       motivosRemision: remision.motivos,
@@ -31953,125 +31757,6 @@ _vglOfrecerDeshacer(btn);
       </div>`;
   }
 
-  // v14.2.8 — Reportado en consultorio en vivo: la clasificación de riesgo cardiovascular
-  // (categoría, meta, Framingham/FINDRISC) y el botón "Redactar con IA" no responden a la
-  // pregunta que trae el modal de Laboratorios ("¿qué dijo el laboratorio?"). El parámetro
-  // `opts.ocultarCabeceraRiesgoEIA` deja fuera solo esas dos piezas; todo lo demás del
-  // recuadro (función renal, exámenes pendientes, uroanálisis, falla terapéutica, fechas) se
-  // sigue mostrando igual que antes. Sin `opts` el recuadro sale completo.
-  // v14.2.11 — A pedido del médico, esas dos piezas tampoco van ya en el modal de Ordenar
-  // (que queda solo para ordenar PyM desde Conducta): viven en su propio modal,
-  // openRiesgoModal. Los dos modales que pintan este recuadro pasan la bandera; el recuadro
-  // completo (sin bandera) lo siguen usando las pruebas y cualquier llamador futuro.
-  function mtrRenderResumenClinicoHtml(r, opts) {
-    if (!r) return "";
-    const ocultarCabeceraRiesgoEIA = !!(opts && opts.ocultarCabeceraRiesgoEIA);
-    const esc = (v) => escapeHtml(String(v == null ? "" : v));
-    const erc = r.erc || {}, plan = r.plan || {};
-
-    // --- 1. Cabecera: riesgo y meta (ver mtrRenderCabeceraRiesgoHtml) ---
-    const cabecera = mtrRenderCabeceraRiesgoHtml(r);
-
-    // --- 2. Función renal: los dos estadios, siempre por separado ---
-    const renal = `
-      <div class="vgl-rcv-renal">
-        <div class="vgl-rcv-tfg">
-          <span title="Rige vigencias, bloqueos y agenda — es la que audita la EPS">Administrativo (Cockcroft-Gault): <b>${esc(erc.estadioAdministrativo || "no evaluable")}</b>${erc.crcl != null ? " · " + esc(erc.crcl) + " mL/min" : ""}</span>
-          <span title="Rige la clasificación renal, el ajuste de dosis y la remisión">Clínico (CKD-EPI): <b>${esc(erc.estadioClinico || "no evaluable")}</b>${erc.egfr != null ? " · " + esc(erc.egfr) + " mL/min/1.73m²" : ""}</span>
-        </div>
-        ${erc.discordancia && erc.discordancia.hayDiscrepancia ? `<div class="vgl-rcv-aviso">⚠ Las dos fórmulas difieren en ${esc(erc.discordancia.diferenciaEstadios)} estadio(s). Suele pasar con peso muy alto o muy bajo: verifique el peso antes de decidir.</div>` : ""}
-        ${erc.remitirNefrologia ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Criterio de remisión a nefrología: ${esc((erc.motivosRemision || []).join(" · "))}</div>` : ""}
-        ${erc.sospechaIra ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Caída importante de la función renal frente a la creatinina anterior: evalúe antes de pedir la rutina.</div>` : ""}
-        ${!erc.datosCompletos && (erc.faltan || []).length ? `<div class="vgl-rcv-falta">Para calcular las dos fórmulas falta: <b>${esc(erc.faltan.join(", "))}</b>.</div>` : ""}
-      </div>`;
-
-    // --- 3. Qué exámenes faltan, con el motivo de cada uno ---
-    const fila = (a, clase) => `<li class="${clase}"><b>${esc(a.nombre)}</b> <span>${esc(a.motivo)}</span></li>`;
-    const faltan = (plan.faltantes || []).map((a) => fila(a, "vgl-rcv-falta-item")).join("");
-    const vencidos = (plan.vencidos || []).map((a) => fila(a, "vgl-rcv-vencido-item")).join("");
-    const bloqueados = (plan.bloqueados || []).map((a) => fila(a, "vgl-rcv-bloq-item")).join("");
-    const nPendientes = (plan.faltantes || []).length + (plan.vencidos || []).length;
-
-    const examenes = `
-      <div class="vgl-rcv-examenes">
-        <div class="vgl-rcv-subtit">${nPendientes ? "🧪 Faltan " + esc(nPendientes) + " examen(es)" : "🧪 No falta ningún examen"}${vglTip("Esta lista la calcula el Vigilante solo, comparando la vigencia de cada examen con el estadio renal y el programa del paciente — Everest no la muestra. Es una sugerencia para revisar, no una orden puesta.")}</div>
-        ${vencidos ? `<ul class="vgl-rcv-lista">${vencidos}</ul>` : ""}
-        ${faltan ? `<ul class="vgl-rcv-lista">${faltan}</ul>` : ""}
-        ${bloqueados ? `<details class="vgl-rcv-det"><summary>${esc(plan.bloqueados.length)} bloqueado(s) por la norma en este estadio</summary><ul class="vgl-rcv-lista">${bloqueados}</ul></details>` : ""}
-      </div>`;
-
-    // --- 4. Las dos fechas ---
-    const ftl = plan.ftl;
-    const control = plan.control;
-    const fechas = ftl ? `
-      <div class="vgl-rcv-fechas">
-        <div class="vgl-rcv-fecha">
-          <div class="vgl-rcv-fecha-rot">Toma de laboratorios</div>
-          <div class="vgl-rcv-fecha-val">${esc(mtrFechaLegible(ftl))}</div>
-          <div class="vgl-rcv-fecha-iso">${esc(ftl)}</div>
-        </div>
-        <div class="vgl-rcv-fecha">
-          <div class="vgl-rcv-fecha-rot">Control sugerido</div>
-          <div class="vgl-rcv-fecha-val">${control ? esc(mtrFechaLegible(control.fecha)) : "—"}</div>
-          <div class="vgl-rcv-fecha-iso">${control ? esc(control.fecha) + (control.esSabado ? " · sábado del médico" : "") : "sin día válido"}</div>
-        </div>
-      </div>
-      <div class="vgl-rcv-porque">${esc(plan.motivoFtl)}${plan.seAdelantoPorDiaNoHabil ? " · adelantada al día hábil anterior para no pasarse del vencimiento" : ""}${control && control.fueraDeVentana ? " · " + esc(control.motivo) : ""}</div>
-      ${plan.anr ? `<div class="vgl-rcv-porque">Ventana renal de ${esc(plan.anr.ventanaDias)} días activa: todo se agrupa en la fecha de la creatinina.</div>` : ""}
-      ${(plan.diferidos || []).length ? `<div class="vgl-rcv-porque">Se dejan para después (todavía tienen vigencia de sobra): ${esc(plan.diferidos.map((a) => a.nombre).join(", "))}.</div>` : ""}
-    ` : `<div class="vgl-rcv-porque">No hay ningún examen que vigilar con el programa y el estadio actuales.</div>`;
-
-    // --- 5. Lo que se ordena para la próxima consulta ---
-    const ordenar = (plan.ordenar || []).map((a) => `<li>${esc(a.nombre)}</li>`).join("");
-    const orden = ordenar ? `
-      <div class="vgl-rcv-orden">
-        <div class="vgl-rcv-subtit">📄 Para la próxima consulta hay que enviarle</div>
-        <ul class="vgl-rcv-lista vgl-rcv-lista-orden">${ordenar}</ul>
-      </div>` : "";
-
-    // --- 6. Uroanálisis (solo si llegaron sus componentes) ---
-    const uro = r.uroanalisis;
-    const uroHtml = uro ? `
-      <div class="vgl-rcv-uro">
-        <div class="vgl-rcv-subtit">🔬 Uroanálisis: <b>${esc(uro.estado)}</b></div>
-        <div class="vgl-rcv-uro-conducta">${esc(uro.conducta)}</div>
-        ${(uro.criterios || []).length ? `<div class="vgl-rcv-meta">Por: ${esc(uro.criterios.join(", "))}.</div>` : ""}
-      </div>` : "";
-
-    // --- 7. Falla terapéutica y recontrol (solo si hay falla; ver mtrRenderFallaHtml) ---
-    const fallaHtml = mtrRenderFallaHtml(r);
-
-    // v14.2.0 — Botón de redacción IA, SOLO si el médico encendió la función en Ajustes y
-    // hay documento para recuperar el resumen de la caché. Tras bandera (S.iaRedaccion),
-    // apagado de fábrica. La clave de Gemini la valida el propio panel.
-    // v14.2.8 — además, nunca en el modal de Laboratorios (ver comentario grande de arriba).
-    // v14.2.11 — ni en el de Ordenar: la entrada a la IA vive en openRiesgoModal.
-    const iaBtn = (!ocultarCabeceraRiesgoEIA && typeof S !== "undefined" && S.iaRedaccion === true && r && r._docId)
-      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">✍ Redactar con IA (enfermedad actual y análisis)</button>`
-      : "";
-
-    return `<div class="vgl-rcv-bloque" role="region" aria-label="Resumen clínico del paciente">
-      ${ocultarCabeceraRiesgoEIA ? "" : cabecera}${renal}${examenes}${uroHtml}${fallaHtml}${fechas}${orden}${iaBtn}
-      <div class="vgl-rcv-pie">Calculado con lo que hay en la historia. No se ordena ni se agenda nada solo: la decisión es suya.</div>
-    </div>`;
-  }
-
-  // v14.2.0 — Listener delegado del botón de redacción IA: el recuadro se re-pinta en dos
-  // modales, así que en vez de cablear cada uno, un único listener a nivel de documento
-  // atiende el clic y abre el panel con el resumen cacheado del paciente del botón.
-  function mtrIaClickDelegado(e) {
-    try {
-      const t = e && e.target;
-      if (!t || typeof t.closest !== "function") return;
-      const btn = t.closest("#vgl-ia-redactar");
-      if (!btn) return;
-      e.stopPropagation();
-      const docId = btn.getAttribute("data-doc");
-      const resumen = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(docId) : null;
-      if (!resumen) { setSummary("Abra Laboratorios de este paciente primero para calcular el resumen.", "warn"); return; }
-      mtrAbrirPanelRedaccion(resumen);
-    } catch (err) {}
-  }
 
   // =====================================================================
   //  v14.2.0 — PANEL DE REDACCIÓN IA (la última milla: UI de revisión)
@@ -33897,24 +33582,6 @@ _vglOfrecerDeshacer(btn);
   // v15.6.0 — invalida la caché del resumen (botón «Recalcular ahora» de la Ficha).
   function mtrCacheResumenBorrar() { _mtrCacheResumen = { docId: "", resumen: null, ts: 0 }; }
 
-  // ---------- GAP 1: qué chip del rango de agendamiento es la fecha sugerida ----------
-  // Dado el rango de días que pinta el modal de agendamiento y la fecha de
-  // control que calculó el motor, devuelve el ítem del rango que le corresponde
-  // (exacto si está, el más cercano por fecha si no), o null. Puro y testeable.
-  function mtrItemSugeridoEnRango(range, controlIso) {
-    const lista = Array.isArray(range) ? range : [];
-    if (!lista.length || !mtrFechaDesdeIso(controlIso)) return null;
-    const exacto = lista.find((it) => it && it.iso === controlIso);
-    if (exacto) return exacto;
-    const objetivo = mtrFechaDesdeIso(controlIso).getTime();
-    let mejor = null, mejorDif = Infinity;
-    for (const it of lista) {
-      if (!it || !mtrFechaDesdeIso(it.iso)) continue;
-      const dif = Math.abs(mtrFechaDesdeIso(it.iso).getTime() - objetivo);
-      if (dif < mejorDif) { mejorDif = dif; mejor = it; }
-    }
-    return mejor;
-  }
 
   // ---------- GAP 2: prioridad de un paquete PyM según la clasificación ----------
   // Solo el paquete RCV exprés (CIE-10 I10X) sube de prioridad, y solo cuando la

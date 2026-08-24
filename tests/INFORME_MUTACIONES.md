@@ -961,3 +961,30 @@ cada una antes de la siguiente), cada corrida dejó rojo con la aserción espera
 confirmó el verde al restaurar. El banco completo al cierre: **1.447 comprobaciones, 0 en
 rojo** (44 suites presentes; +8 casos nuevos entre suite_15/18/39). Con esto se cierra el
 Bloque S1 completo (8/8 hallazgos críticos del barrido total corregidos y verificados).
+
+## v17.6.29 — 24-ago-2026 (Barrido S+ total — Bloque Eliminar: código muerto verificado)
+
+Remoción de 13 funciones/variables sin ningún llamador. Igual que v17.6.10 (mismo criterio
+del proyecto): la mutación que corresponde a una remoción es re-agregar lo eliminado y
+comprobar que NINGUNA prueba cae — que la mutación SOBREVIVA es el resultado esperado y
+la evidencia de que el código en verdad estaba muerto. Antes de retirar cada una se hizo
+grep exhaustivo en `vigilante_agenda.user.js` Y en `tests/*.js` (no solo producción, que es
+lo único que había revisado el barrido automático): 5 candidatos iniciales del barrido
+(`mtrPrincipioEnTexto`, el modelo de grupos de sábado 1-3/2-4 completo, `extractAgrupador`,
+`apiHcValidacionExamenCronicos`/`_base64SinRelleno`) resultaron tener pruebas dedicadas
+reales — SOBREVIVIERON el grep de tests y se descartaron de esta limpieza.
+
+| Función/variable retirada | Verificación | ¿Sobrevivió el banco? |
+|---|---|---|
+| `mtrSumarDiasHabiles`, `mtrCnoHDL` | grep producción+tests: 0 llamadores | SÍ — banco sin cambios (1447/1447) |
+| `_relojEstadoParaTest`, `_relojAjustarParaTest`, `_getUltimoRelevoParaTest` | grep producción+tests: 0 llamadores (se conservó `_setUltimoRelevoParaTest`, que SÍ tiene test) | SÍ |
+| `_vglAvisoContextoFaltante`/`_vglContextoAvisado` | grep producción+tests: 0 llamadores; reemplazada por `_vglTextoContextoFaltante` (viva) | SÍ |
+| `mtrItemSugeridoEnRango` | grep producción+tests: 0 llamadores; duplicado del GAP 1 ya resuelto por `_marcarPlazoSegunSugerida` | SÍ |
+| `openFichaPacienteModal` | grep producción+tests: 0 llamadores (su comentario afirmaba falsamente lo contrario) | SÍ |
+| `openRiesgoModal`, `mtrRenderRiesgoModalHtml`, `mtrRenderResumenClinicoHtml`, `mtrIaClickDelegado` + su registro en `boot()` | grep producción+tests: 0 llamadores reales (solo comentarios/documentación); el botón `#vgl-ia-redactar` que el listener buscaba solo lo pintaba la propia cadena muerta | SÍ |
+| `estadioParaDosis` (propiedad de `calcularEstadioRenal`) + `posAdmin`/`posClinico` | grep producción+tests: 0 lectores; condición tautológica | SÍ |
+| `lastAutoFetchedDoc` (variable, 2 escrituras) | grep producción+tests: nunca leída desde v17.0.3 | SÍ — y se corrigió de paso el reset de sesión de Athenea, que apuntaba a la variable muerta en vez de a `lastAutoFetchedAt` (la guarda real): el robot podía no reintentar tras revivir la sesión |
+
+El banco completo al cierre: **1.447 comprobaciones, 0 en rojo** (mismo número que antes de
+la limpieza — ninguna prueba dependía de este código). 957 → 944 funciones registradas en
+`__VGL__`. ~333 líneas netas retiradas.

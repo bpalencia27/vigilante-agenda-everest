@@ -4,6 +4,21 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.29] — 2026-08-24 (Barrido S+ total — Bloque Eliminar: código muerto verificado, ~333 líneas)
+
+Primer avance del bloque "Eliminar" del barrido total. Cada función se verificó con grep exhaustivo en **producción Y en tests** antes de retirarla (el barrido automático solo había revisado el archivo de producción — 5 candidatos iniciales resultaron tener pruebas dedicadas reales y se descartaron de esta limpieza, quedan para una revisión aparte con más cuidado: `mtrPrincipioEnTexto`, el modelo de grupos de sábado 1-3/2-4 completo, `extractAgrupador`, `apiHcValidacionExamenCronicos`/`_base64SinRelleno`).
+
+### 🗑 Código sin ningún llamador en 34.000 líneas ni en tests, retirado
+- `mtrSumarDiasHabiles`, `mtrCnoHDL`, `_relojEstadoParaTest`, `_relojAjustarParaTest`, `_getUltimoRelevoParaTest`, `_vglAvisoContextoFaltante`/`_vglContextoAvisado`, `mtrItemSugeridoEnRango` (duplicado del GAP 1, ya resuelto por `_marcarPlazoSegunSugerida`).
+- La cadena completa del modal "Riesgo cardiovascular · Redacción IA" (beta cerrada, nunca conectada a un botón real): `openRiesgoModal`, `mtrRenderRiesgoModalHtml`, `mtrRenderResumenClinicoHtml` (~90 líneas cada una), `openFichaPacienteModal` (wrapper cuyo comentario afirmaba falsamente tener llamadores internos), y el listener global `mtrIaClickDelegado` que `boot()` seguía registrando para un botón (`#vgl-ia-redactar`) que solo esa cadena muerta podía pintar.
+- La propiedad `estadioParaDosis` del resultado de `calcularEstadioRenal`: su condición era tautológica (ambas ramas devolvían lo mismo) y no tenía ningún consumidor.
+- La variable `lastAutoFetchedDoc`: se escribía en dos sitios pero nunca se leía desde v17.0.3 (el piso real es `lastAutoFetchedAt`). De paso, el reset al revivir la sesión de Athenea reseteaba la variable muerta en vez de la real — el robot podía NO reintentar tras revivir la sesión, contradiciendo lo que su propio mensaje de consola prometía. Corregido: ahora resetea `lastAutoFetchedAt`.
+
+### 🧹 Comentarios desactualizados corregidos
+- Cuatro comentarios que seguían describiendo `lastAutoFetchedDoc` como "la guarda" ahora nombran la guarda real (`lastAutoFetchedAt`).
+
+---
+
 ## [Versión 17.6.28] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 2/2: 4 bugs críticos, cierra el bloque)
 
 Segunda y última parte del Bloque S1 del barrido exhaustivo (8/8 críticos corregidos).
