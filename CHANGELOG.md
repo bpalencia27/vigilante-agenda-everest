@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.44] — 2026-08-24 (Barrido S+ total — la regla de triglicéridos altos para el LDL ya reconoce comas decimales y desigualdades)
+
+### 🐛 La regla "triglicéridos muy altos" para elegir el LDL correcto ya reconoce el formato real de los informes
+- Cuando el colesterol LDL viene reportado por partida doble (el valor medido directo y el calculado), el asistente decide cuál de los dos usar según los triglicéridos: si están muy altos, la fórmula que calcula el LDL deja de ser confiable y debe preferirse el valor medido directamente. Pero esa comparación leía el número de triglicéridos de forma cruda, sin manejar comas decimales ("436,2", el formato común de los informes) ni desigualdades ("> 400", cuando el laboratorio reporta un valor por fuera de su rango medible) — en esos formatos, la regla nunca se activaba, y silenciosamente se usaba siempre el LDL calculado, aunque no fuera el confiable en ese caso.
+
+---
+
 ## [Versión 17.6.43] — 2026-08-24 (Barrido S+ total — un resultado de laboratorio en 0 ya no se muestra ni se procesa como "sin dato")
 
 ### 🐛 Un resultado de laboratorio en 0 ya no se confunde con "sin dato"

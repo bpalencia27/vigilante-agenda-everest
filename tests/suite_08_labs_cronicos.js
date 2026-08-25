@@ -8,7 +8,8 @@ module.exports = {
     "_resumenClinicoUro", "_esUroComponenteAlterado",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
-    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto"
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
+    "_resolverLdlPorTrigliceridos",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1645,6 +1646,42 @@ module.exports = {
       t.falso(sinDatos.esPatologico);
       t.falso(sinDatos.chips.includes("Límpido") || sinDatos.chips.includes("Nitritos (-)"), "sin aspecto/color/leucocitos/nitritos en el informe, no debe inventarlos");
       t.igual(sinDatos.chips[0], "Sin alteraciones reconocidas");
+    });
+
+    // v17.6.44 — AUDITORÍA S+ (barrido total, 24-ago-2026): _resolverLdlPorTrigliceridos
+    // usaba Number() crudo, que da NaN con coma decimal ("436,2") o desigualdad ("> 400")
+    // — justo los dos formatos que _labNumerico existe para sanear. Con NaN, la regla del
+    // médico (TG>400 invalida Friedewald: usar el LDL directo, no el calculado) quedaba
+    // invertida para cualquier informe de laboratorio con coma decimal.
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG>400 aunque venga con coma decimal", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      // Con Number() crudo, Number("436,2") es NaN -> tgMayor400 siempre false (bug).
+      const tgComaAlto = { resultVal: "436,2" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaAlto), directo,
+        "TG=436,2 (coma decimal) > 400: debe preferir el LDL DIRECTO, no el calculado");
+
+      const tgComaBajo = { resultVal: "180,5" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaBajo), normal,
+        "TG=180,5 (coma decimal), normal: debe preferir el LDL calculado (normal), regla de siempre");
+    });
+
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG fuera de rango con desigualdad ('> 400')", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "110", resultDate: misma };
+      const normal = { resultVal: "102", resultDate: misma };
+      const tgDesigualdad = { resultVal: "> 450" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgDesigualdad), directo,
+        "TG '> 450' (desigualdad del LIS, claramente por encima de 400): debe preferir el LDL directo");
+    });
+
+    t.caso("_resolverLdlPorTrigliceridos: sin triglicéridos legibles, se queda con la regla general (normal)", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, null), normal, "sin dato de TG, no hay razón para preferir el directo");
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, { resultVal: "nota de laboratorio" }), normal, "TG ilegible (ni número ni desigualdad): tratado igual que sin dato");
     });
   }
 };

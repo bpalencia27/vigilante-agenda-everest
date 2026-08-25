@@ -1232,6 +1232,30 @@ restauración final. Dos ocurrencias más del mismo patrón (líneas de diagnós
 `console.log`, sin consecuencia clínica ni de pantalla) se dejaron intactas a propósito,
 fuera del alcance de este hallazgo.
 
+## v17.6.44 — 24-ago-2026 (la regla de triglicéridos altos para el LDL ya reconoce comas decimales y desigualdades)
+
+Banco antes: 1.468 (con las 4 pruebas nuevas, tras corregir un caso límite en la propia
+prueba — ver nota de depuración abajo) · después de restaurar: **1.471**. Hallazgo id=12
+del re-triaje, verificado a mano contra este worktree.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_resolverLdlPorTrigliceridos`** | Vuelve a `Number(trigliceridos.resultVal)`/`Number.isFinite(Number(c.resultVal))` en vez de `_labNumerico` | `suite_08` | *v17.6.44: ... reconoce TG>400 aunque venga con coma decimal* y *... con desigualdad ('> 450')* → ambas caen (esperaban el LDL directo, obtuvieron el calculado) |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo en las DOS pruebas afectadas con el mensaje esperado, y se restauró. El banco
+completo volvió a 1.471/1.471 tras la restauración.
+
+Nota de depuración: el primer intento de la prueba de desigualdad usaba `"> 400"` como
+texto de triglicéridos, esperando que activara la regla — pero `_labNumerico("> 400")`
+descarta el símbolo ">" y devuelve exactamente `400` (no "más de 400"), y la regla exige
+`tg > 400` estricto: `400 > 400` es falso. El texto "> 400" del LIS, tomado literalmente
+como número, cae justo en el borde donde la regla NO se activa — un caso límite genuino,
+no un defecto de `_labNumerico` ni de la regla (la fórmula real solo se invalida
+clínicamente por ENCIMA de 400, no en el borde). Se cambió el valor de prueba a `"> 450"`,
+claramente por encima del umbral, para probar el reconocimiento de la desigualdad sin
+tropezar con esa ambigüedad de frontera.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

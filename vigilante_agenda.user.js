@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.43
+// @version     17.6.44
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.43";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.44";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2882,12 +2882,17 @@
   // panel, la preferida por la regla solo se usa si trae un número; si no lo trae (p. ej.
   // la calculada viene con la nota "TRI MAYOR A 400 mg/dL"), se usa la otra si ella sí lo
   // trae — nunca se prefiere un texto sin número a un número real.
+  // v17.6.44 — AUDITORÍA S+ (barrido total, 24-ago-2026): usaba Number() crudo, que da
+  // NaN con coma decimal ("436,2") o con desigualdad ("> 400") — los dos formatos que
+  // _labNumerico existe precisamente para sanear (ver su comentario, línea ~3522). Con
+  // NaN, tgMayor400 salía SIEMPRE falso: la regla del médico (TG>400 invalida Friedewald,
+  // usar el LDL directo) quedaba invertida justo para los informes con coma decimal.
   function _resolverLdlPorTrigliceridos(directo, normal, trigliceridos) {
       if (!directo || !normal) return directo || normal || null;
       if ((directo.resultDate || null) !== (normal.resultDate || null)) return null; // paneles distintos: decide la regla general
-      const tg = trigliceridos ? Number(trigliceridos.resultVal) : NaN;
-      const tgMayor400 = Number.isFinite(tg) && tg > 400;
-      const esNum = (c) => Number.isFinite(Number(c.resultVal));
+      const tg = trigliceridos ? _labNumerico(trigliceridos.resultVal) : null;
+      const tgMayor400 = tg != null && tg > 400;
+      const esNum = (c) => _labNumerico(c.resultVal) !== null;
       const [preferido, otro] = tgMayor400 ? [directo, normal] : [normal, directo];
       return (esNum(preferido) || !esNum(otro)) ? preferido : otro;
   }
