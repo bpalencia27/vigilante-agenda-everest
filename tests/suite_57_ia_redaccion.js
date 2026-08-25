@@ -501,6 +501,16 @@ module.exports = {
       t.falso(api.mtrRespuestaGemini(null).ok, "nulo");
     });
 
+    // v17.6.34 — AUDITORÍA S+ (barrido total, 24-ago-2026): un error crudo de la API de
+    // Google (en inglés) llegaba tal cual al estado del modal y a los chips de "Generar
+    // todo" — el médico veía texto de desarrollador, no una instrucción clínica útil.
+    t.caso("v17.6.34: un error de la API de Gemini nunca llega crudo (en inglés) al médico", () => {
+      const r = api.mtrRespuestaGemini(JSON.stringify({ error: { message: "Requested entity was not found." } }));
+      t.falso(r.ok, "sigue marcando error");
+      t.falso(/Requested entity|not found/i.test(r.motivo), "el mensaje crudo de Google no debe llegar al motivo visible");
+      t.igual(r.motivo, "la IA rechazó la petición; intente de nuevo", "motivo genérico en español, el único que el médico ve en este caso");
+    });
+
     t.caso("v17.6.11: el contador de palabras del borrador nunca miente ni revienta", () => {
       t.igual(api.mtrContarPalabrasTexto(""), 0, "vacío");
       t.igual(api.mtrContarPalabrasTexto("   "), 0, "solo espacios");

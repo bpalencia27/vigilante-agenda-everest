@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.34] — 2026-08-24 (Barrido S+ total — Bloque Editar: un error de la IA ya no llega en inglés al médico)
+
+### 🐛 Un rechazo de la IA ya no se muestra en el idioma y jerga del proveedor
+- Cuando Gemini rechazaba una petición del Redactor por un motivo que el script no reconocía como cuota agotada, saturación o modelo no disponible (los tres únicos que ya se traducían), el mensaje crudo de la API — en inglés, pensado para desarrolladores — se mostraba tal cual en el estado del panel y en los chips de "Generar todo". Ahora ese caso también muestra una instrucción clara en español; el detalle técnico se conserva solo en el registro de diagnóstico interno.
+
+---
+
 ## [Versión 17.6.33] — 2026-08-24 (Barrido S+ total — Bloque Editar: el celular del paciente ya no queda completo en la consola)
 
 ### 🐛 El número de celular del paciente ya no se registra completo en la consola del navegador

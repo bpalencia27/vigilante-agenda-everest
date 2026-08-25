@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.33
+// @version     17.6.34
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.33";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.34";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30843,7 +30843,16 @@ _vglOfrecerDeshacer(btn);
     let d = raw;
     if (typeof raw === "string") { try { d = JSON.parse(raw); } catch (e) { return { ok: false, texto: "", motivo: "respuesta no-JSON" }; } }
     if (!d || typeof d !== "object") return { ok: false, texto: "", motivo: "respuesta vacía" };
-    if (d.error) return { ok: false, texto: "", motivo: "API: " + (d.error.message || d.error.status || "error") };
+    // v17.6.34 — AUDITORÍA S+ (barrido total, 24-ago-2026): el motivo de error de este
+    // caso llegaba crudo (en inglés, texto de la API de Google) hasta el estado del modal
+    // y los chips de "Generar todo". Los motivos CONOCIDOS (cuota/saturación/no
+    // disponible) ya se traducen después, en el llamador — este es el genérico que
+    // sobrevivía sin traducir. El detalle crudo se conserva solo para diagnóstico.
+    if (d.error) {
+      const detalleCrudo = String(d.error.message || d.error.status || "error");
+      try { vglLog("ERROR", "GeminiApiError", { detalle: detalleCrudo }); } catch (e) {}
+      return { ok: false, texto: "", motivo: "la IA rechazó la petición; intente de nuevo" };
+    }
     if (d.promptFeedback && d.promptFeedback.blockReason) return { ok: false, texto: "", motivo: "bloqueado por el modelo (" + d.promptFeedback.blockReason + ")", blockReason: d.promptFeedback.blockReason };
     const cand = Array.isArray(d.candidates) ? d.candidates[0] : null;
     if (!cand) return { ok: false, texto: "", motivo: "sin respuesta del modelo" };

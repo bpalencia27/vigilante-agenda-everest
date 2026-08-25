@@ -1047,6 +1047,18 @@ Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cad
 de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
 al restaurar. El banco completo volvió a 1.454/1.454 tras la restauración final.
 
+## v17.6.34 — 24-ago-2026 (Barrido S+ total — Bloque Editar: un error de la IA ya no llega en inglés al médico)
+
+Banco antes: 1.455 (con la prueba nueva ya sumada) · después de restaurar: **1.455**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrRespuestaGemini`** | El motivo genérico vuelve a `"API: " + detalleCrudo` (el mensaje crudo de la API, en inglés) | `suite_57` | *v17.6.34: un error de la API de Gemini nunca llega crudo (en inglés) al médico* → *el mensaje crudo de Google no debe llegar al motivo visible (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.455/1.455 tras la restauración.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
