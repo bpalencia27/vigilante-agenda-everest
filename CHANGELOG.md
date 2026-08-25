@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.33] — 2026-08-24 (Barrido S+ total — Bloque Editar: el celular del paciente ya no queda completo en la consola)
+
+### 🐛 El número de celular del paciente ya no se registra completo en la consola del navegador
+- Los tres registros del flujo de envío de SMS (envío automático exitoso, envío automático fallido, reenvío manual) escribían el celular del paciente completo en la consola del navegador. El propósito con el que se agregaron —permitirle al médico comparar, de un vistazo, el número usado contra el que cree haber escrito— se mantiene intacto: ahora se registra enmascarado, mostrando solo los últimos dígitos.
+
+---
+
 ## [Versión 17.6.32] — 2026-08-24 (Barrido S+ total — Bloque Editar: trato de usted, consistente en toda la interfaz)
 
 ### 🧹 Diez avisos que tuteaban al médico ahora tratan de usted, como el resto de la interfaz

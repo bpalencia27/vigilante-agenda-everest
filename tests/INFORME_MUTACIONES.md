@@ -1034,6 +1034,19 @@ Ajustes) tuteaban al médico; se corrigieron los diez a usted y se protegieron c
 la presencia de las 12 formas de usted — mismo patrón que la prueba de SMS de v17.6.28 en
 `suite_15`.
 
+## v17.6.33 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el celular del paciente ya no queda completo en la consola)
+
+Banco antes: 1.454 (con las 2 pruebas nuevas ya sumadas) · después de restaurar: **1.454**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_mtrCelularMascarado`** | El cuerpo vuelve a `return String(cel \|\| "");` (sin enmascarar) | `suite_15` | *v17.6.33: \_mtrCelularMascarado conserva solo los últimos 2 dígitos del celular* → *número real: prefijo + máscara + últimos 2: esperaba "300****67" y obtuvo "3001234567"* |
+| **cableado** | El sitio de `reenviarSmsRecordatorio` vuelve a pasar `cel` crudo en vez de `_mtrCelularMascarado(cel)` | `suite_15` | *v17.6.33: los 3 registros de consola del flujo de SMS ya no exponen el celular completo* → *ya no debe quedar el celular crudo en los otros 2 registros (obtuvo true)* |
+
+Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una antes
+de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
+al restaurar. El banco completo volvió a 1.454/1.454 tras la restauración final.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

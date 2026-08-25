@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.32
+// @version     17.6.33
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.32";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.33";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -16073,6 +16073,16 @@ _vglOfrecerDeshacer(btn);
     };
   }
 
+  // v17.6.33 — AUDITORÍA S+ (barrido total, 24-ago-2026): el celular del paciente NO debe
+  // llegar completo a la consola del navegador (PII). Se enmascara conservando los
+  // últimos 2 dígitos — el propósito diagnóstico original (comparar de un vistazo contra
+  // lo que el médico cree haber escrito) se conserva con esos dígitos.
+  function _mtrCelularMascarado(cel) {
+    const s = String(cel || "");
+    if (s.length <= 2) return s;
+    return s.slice(0, 3) + "****" + s.slice(-2);
+  }
+
   async function apiAccesoAsignarTurno(turnoId, pacienteId, fechaIso, observacion, isPyM, marcacion, programaId, celularSms) {
     if (state.killed) return { error: true, mensaje: "Pausa de seguridad remota activa (Kill-Switch activo): el asistente está en pausa de seguridad para proteger la historia clínica. No se realizaron cambios." };
     const uId = state.activeDoctor.id || S.medicoId || 0;
@@ -16139,8 +16149,8 @@ _vglOfrecerDeshacer(btn);
               // a qué número la mandó. Se deja el celular usado en el propio registro para
               // que la próxima vez se pueda comparar, de un vistazo, contra el que el médico
               // cree haber escrito.
-              if (ok) console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId, "· celular usado:", cel);
-              else console.warn("[Vigilante] EnviarSMS NO entregó el mensaje para el turno", turnoId, "· celular usado:", cel, "→ estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)", errorEnCuerpo ? ("· rechazo: " + String(errorEnCuerpo.mensaje || "").slice(0, 120)) : "");
+              if (ok) console.log("[Vigilante] SMS de recordatorio enviado al turno", turnoId, "· celular usado:", _mtrCelularMascarado(cel));
+              else console.warn("[Vigilante] EnviarSMS NO entregó el mensaje para el turno", turnoId, "· celular usado:", _mtrCelularMascarado(cel), "→ estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)", errorEnCuerpo ? ("· rechazo: " + String(errorEnCuerpo.mensaje || "").slice(0, 120)) : "");
             })
             .catch((e) => console.warn("[Vigilante] falló el envío del SMS:", e));
           ultimoSmsEnviado = cel;
@@ -16534,7 +16544,7 @@ _vglOfrecerDeshacer(btn);
       // v17.0.3 — mismo motivo que en el envío automático: el celular usado queda en el
       // registro para poder comparar, la próxima vez, contra el que el médico cree haber
       // escrito en la casilla.
-      console.log("[Vigilante] EnviarSMS (reenvío) → celular usado:", cel, "· estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)");
+      console.log("[Vigilante] EnviarSMS (reenvío) → celular usado:", _mtrCelularMascarado(cel), "· estado", (r && r.status), "· cuerpo:", cuerpo ? cuerpo.slice(0, 500) : "(sin cuerpo legible)");
       return {
         ok: ok,
         motivo: errorEnCuerpo

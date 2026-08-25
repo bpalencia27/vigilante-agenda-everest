@@ -66,7 +66,7 @@ module.exports = {
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
-    "pymPaquetesDelPaciente",
+    "pymPaquetesDelPaciente", "_mtrCelularMascarado",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -2905,6 +2905,28 @@ module.exports = {
         /Actualícela desde el Menú de Tampermonkey/,
       ];
       ustedes.forEach((re) => t.cierto(re.test(src), `debe quedar en usted: ${re}`));
+    });
+
+    // =================================================================
+    // v17.6.33 — AUDITORÍA S+ (barrido total, 24-ago-2026): el celular del paciente
+    // (PII) se registraba COMPLETO en la consola del navegador en 3 sitios del flujo de
+    // SMS. El propósito diagnóstico declarado (comparar contra lo que el médico cree
+    // haber escrito) solo necesita los últimos dígitos.
+    t.caso("v17.6.33: _mtrCelularMascarado conserva solo los últimos 2 dígitos del celular", () => {
+      t.igual(api._mtrCelularMascarado("3001234567"), "300****67", "número real: prefijo + máscara + últimos 2");
+      t.igual(api._mtrCelularMascarado(""), "", "vacío: no revienta");
+      t.igual(api._mtrCelularMascarado(null), "", "null: no revienta");
+      t.igual(api._mtrCelularMascarado("12"), "12", "número de 2 dígitos o menos: se deja igual, no hay nada que enmascarar");
+    });
+
+    t.caso("v17.6.33: los 3 registros de consola del flujo de SMS ya no exponen el celular completo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/celular usado:", cel\)/.test(src), "ya no debe quedar el celular crudo en el console.log de éxito");
+      t.falso(/celular usado:", cel,/.test(src), "ya no debe quedar el celular crudo en los otros 2 registros");
+      const ocurrencias = (src.match(/celular usado:", _mtrCelularMascarado\(cel\)/g) || []).length;
+      t.igual(ocurrencias, 3, "los 3 sitios (envío automático éxito/fallo y reenvío manual) deben usar la máscara");
     });
 
   },
