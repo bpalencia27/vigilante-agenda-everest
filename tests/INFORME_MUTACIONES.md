@@ -1059,6 +1059,26 @@ Se aplicó sobre el archivo de producción, se corrió el banco completo, se con
 rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 1.455/1.455 tras la restauración.
 
+## v17.6.35 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el contador del Redactor ya no se congela tras la primera generación)
+
+Banco antes: 1.456 (con la prueba nueva ya sumada) · después de restaurar: **1.456**.
+`_pintarMeta` vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es una unidad
+aislable) — se protege por texto fuente, mismo criterio ya establecido en el banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_pintarMeta`** | `escapeHtml(_ultimoModelo)` vuelto a `esc(_ultimoModelo)` (la función inexistente original) | `suite_57` | *v17.6.35: \_pintarMeta usa escapeHtml (el helper real), no el inexistente esc()* → *ya no debe quedar la llamada a esc(), que no existe (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.456/1.456 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba usaba una ventana de recorte
+(`slice`) de 700 caracteres desde el inicio de `_pintarMeta`, pero la llamada real a
+`escapeHtml` está a 785 caracteres — la prueba fallaba por ventana corta, no por el
+código (mismo tipo de error ya documentado en v17.6.28 con `mtrPanelMedicamentosHtml`).
+Ampliada a 1000 caracteres.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

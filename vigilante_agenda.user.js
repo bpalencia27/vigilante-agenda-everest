@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.34
+// @version     17.6.35
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.34";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.35";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31913,8 +31913,13 @@ _vglOfrecerDeshacer(btn);
           if (!meta) return;
           const t = salida.value || "";
           const n = mtrContarPalabrasTexto(t);
+          // v17.6.35 — AUDITORÍA S+ (barrido total, 24-ago-2026): `esc` no existe en
+          // ningún ámbito del userscript (el helper real es `escapeHtml`) — desde la
+          // primera generación (cuando _ultimoModelo deja de estar vacío) esta línea
+          // lanzaba un ReferenceError tragado por el catch, y el contador de
+          // palabras/caracteres dejaba de repintarse para siempre.
           meta.innerHTML = n ? "<b>" + n + "</b> palabra" + (n === 1 ? "" : "s") + " · " + t.length + " caracteres"
-            + (_ultimoModelo ? " · modelo: " + esc(_ultimoModelo) : "") : "";
+            + (_ultimoModelo ? " · modelo: " + escapeHtml(_ultimoModelo) : "") : "";
         } catch (e) {}
       };
       // v17.6.12 — AUTOSIZE del área de salida: crece con el borrador (220px mín.,

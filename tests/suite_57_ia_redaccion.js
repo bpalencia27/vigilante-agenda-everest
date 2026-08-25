@@ -1116,5 +1116,21 @@ module.exports = {
       t.cierto(r && r.constructor && r.constructor.name === "Map", "sin mapa devuelve un Map vacío");
     });
 
+    // v17.6.35 — AUDITORÍA S+ (barrido total, 24-ago-2026): `_pintarMeta` (contador de
+    // palabras/caracteres del borrador) llamaba a `esc(_ultimoModelo)`, una función que no
+    // existe en ningún ámbito del userscript (el helper real es `escapeHtml`). Desde la
+    // primera generación (cuando _ultimoModelo deja de estar vacío) el ReferenceError se
+    // tragaba en el catch y el contador dejaba de repintarse para siempre. `_pintarMeta`
+    // vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es una unidad aislable, con
+    // modal/salida/_ultimoModelo de closure) — se protege por texto fuente, mismo criterio
+    // ya establecido en el banco para la notificación de SMS (v17.6.28) y el tuteo (v17.6.32).
+    t.caso("v17.6.35: _pintarMeta usa escapeHtml (el helper real), no el inexistente esc()", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("const _pintarMeta = () => {");
+      const fn = src.slice(idx, idx + 1000);
+      t.falso(/[^a-zA-Z_]esc\(_ultimoModelo\)/.test(fn), "ya no debe quedar la llamada a esc(), que no existe");
+      t.cierto(/escapeHtml\(_ultimoModelo\)/.test(fn), "debe usar escapeHtml, el helper real del proyecto");
+    });
+
   },
 };

@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.35] — 2026-08-24 (Barrido S+ total — Bloque Editar: el contador del Redactor ya no se congela tras la primera generación)
+
+### 🐛 El contador de palabras y caracteres del borrador ya no deja de actualizarse
+- El Redactor de texto libre con IA llamaba a una función (`esc`) que no existe en ningún punto del script para mostrar el nombre del modelo usado junto al contador de palabras/caracteres. Desde la primera nota generada (en cuanto hay un modelo que mostrar), ese error quedaba silenciado y el contador dejaba de actualizarse para el resto de la sesión — el médico veía siempre el mismo número de palabras aunque siguiera editando. Corregido para usar la función correcta del proyecto.
+
+---
+
 ## [Versión 17.6.34] — 2026-08-24 (Barrido S+ total — Bloque Editar: un error de la IA ya no llega en inglés al médico)
 
 ### 🐛 Un rechazo de la IA ya no se muestra en el idioma y jerga del proveedor
