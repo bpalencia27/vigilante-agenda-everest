@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.41
+// @version     17.6.42
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.41";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.42";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30435,7 +30435,7 @@ _vglOfrecerDeshacer(btn);
   // reescritura no enseña nada bueno. Y mtrRedaccionPrompt usa los ejemplos guardados
   // SIEMPRE que haya al menos uno, sin necesidad de marcar ninguna casilla.
   const MTR_ESTILO_KEY = "vgl_estilo_ejemplos";
-  function mtrEstiloGuardar(texto) {
+  function mtrEstiloGuardar(texto, nombrePaciente) {
     try {
       if (typeof GM_setValue === "undefined") return false;
       // v15.2.0 — Se saneaba SOLO con scrubPII, que no toca nombres propios: un ejemplo
@@ -30444,7 +30444,7 @@ _vglOfrecerDeshacer(btn);
       // mismo saneador completo que el resto del texto libre, al guardar Y al usarse.
       const crudo = String(texto || "");
       const limpio = ((typeof mtrSanearTextoLibreAI === "function")
-        ? mtrSanearTextoLibreAI(crudo)
+        ? mtrSanearTextoLibreAI(crudo, nombrePaciente)
         : ((typeof scrubPII === "function") ? String(scrubPII(crudo)) : crudo)).trim().slice(0, 1200);
       if (limpio.length < 30) return false; // demasiado corto para enseñar estilo
       let arr = []; try { arr = JSON.parse(GM_getValue(MTR_ESTILO_KEY, "[]")) || []; } catch (e) { arr = []; }
@@ -30669,7 +30669,16 @@ _vglOfrecerDeshacer(btn);
     return "[" + p.toUpperCase() + p + "]" + w.slice(1) + "|" + w.toUpperCase();
   }).join("|");
 
-  function mtrSanearTextoLibreAI(texto) {
+  // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el diseño correcto que el
+  // comentario de arriba dejó pendiente. Recibe el nombre REAL del paciente abierto (que
+  // el script ya lee de la agenda) y lo tacha literalmente, por tokens, insensible a
+  // mayúsculas — cubre exactamente el caso que el patrón por forma (mayúscula+minúsculas)
+  // no puede resolver: MAYÚSCULAS SOSTENIDAS, el estilo real de Everest. No adivina cuál
+  // palabra es un nombre; tacha ESTA palabra concreta, la única que sabemos con certeza
+  // que es PII. `\b` no es seguro con letras acentuadas (Á no es \w en JS), así que el
+  // límite de palabra se arma a mano con el alfabeto español.
+  const MTR_LETRA_ES = "A-Za-zÁÉÍÓÚÑÜáéíóúñü";
+  function mtrSanearTextoLibreAI(texto, nombrePaciente) {
     if (!texto) return "";
     // v16.5.0 — conFechas: decisión del médico (entrevista del 20-ago). La cronología es
     // la columna vertebral de la Enfermedad Actual y de la evolución; nombres, cédulas,
@@ -30683,6 +30692,18 @@ _vglOfrecerDeshacer(btn);
       "([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,3})\\b",
       "g");
     s = s.replace(reNombre, (todo, nombre) => todo.slice(0, todo.length - nombre.length) + "[NOMBRE_CENSURADO]");
+    if (nombrePaciente) {
+      try {
+        const tokens = String(nombrePaciente).trim().split(/\s+/).filter((t) => t.length >= 3);
+        if (tokens.length) {
+          const alt = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+          const reTokens = new RegExp(
+            "(?<![" + MTR_LETRA_ES + "])(?:" + alt + ")(?:\\s+(?:" + alt + "))*(?![" + MTR_LETRA_ES + "])",
+            "gi");
+          s = s.replace(reTokens, "[NOMBRE_CENSURADO]");
+        }
+      } catch (e) {}
+    }
     return s;
   }
 
@@ -30790,7 +30811,7 @@ _vglOfrecerDeshacer(btn);
   function mtrRedaccionPrompt(modo, hoja, opts) {
     const o = opts || {};
     const hechos = mtrHojaDeHechosTexto(hoja);
-    const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim()) : "";
+    const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim(), o.nombrePaciente) : "";
     const datosExtra = mtrDatosExtraTexto(o.datosExtra);
     // v17.6.26 — sin checkbox que marcar: el estilo se usa SIEMPRE que haya al menos un
     // ejemplo aprendido (mtrEstiloGuardar sigue siendo automático, ver más abajo).
@@ -30827,7 +30848,7 @@ _vglOfrecerDeshacer(btn);
       system = MTR_RECO_SYS;
       instruccion = "redacta las RECOMENDACIONES de hoy para este paciente siguiendo tus reglas.";
     } else { // "consulta"
-      const preg = mtrSanearTextoLibreAI(String(o.pregunta || "").trim().slice(0, 300));
+      const preg = mtrSanearTextoLibreAI(String(o.pregunta || "").trim().slice(0, 300), o.nombrePaciente);
       instruccion = "responde la siguiente pregunta del médico USANDO ÚNICAMENTE los datos entregados. Si la respuesta no está, dilo claramente ('ese dato no está en la historia disponible'). Pregunta: \"" + preg + "\"";
     }
 
@@ -30846,13 +30867,13 @@ _vglOfrecerDeshacer(btn);
       // medicamento o una orden por la mitad («PARCIAL DE ORINA CON»), y la instrucción
       // le dice al modelo que use SOLO ese bloque: un fragmento colgante puede leerse
       // como una orden real. Se corta por el último separador completo.
-      bloques.push(mtrSanearTextoLibreAI(_mtrRecortarPorItem(String(o.anclaControlAnterior).trim(), 700)));
+      bloques.push(mtrSanearTextoLibreAI(_mtrRecortarPorItem(String(o.anclaControlAnterior).trim(), 700), o.nombrePaciente));
     }
     if (contextoLibre) bloques.push("TEXTO YA REGISTRADO EN LA HISTORIA HOY:\n" + contextoLibre);
     if (datosExtra) bloques.push("DATOS APORTADOS POR EL MÉDICO PARA ESTA NOTA:\n" + datosExtra);
     // v15.6.0 — el campo libre «Indicaciones» del redactor: lo que el médico quiera que la
     // IA tenga en cuenta en ESTE borrador. Pasa por el mismo censor de nombres que todo.
-    const indicaciones = o.indicaciones ? mtrSanearTextoLibreAI(String(o.indicaciones).trim().slice(0, 800)) : "";
+    const indicaciones = o.indicaciones ? mtrSanearTextoLibreAI(String(o.indicaciones).trim().slice(0, 800), o.nombrePaciente) : "";
     if (indicaciones) bloques.push("INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN (síguelas sin inventar datos clínicos que no estén arriba):\n" + indicaciones);
     if (ejemplos) bloques.push(ejemplos);
     bloques.push("Con base únicamente en la información anterior, " + instruccion);
@@ -31474,9 +31495,9 @@ _vglOfrecerDeshacer(btn);
   // por sistemas / examen físico), desidentificado y acotado, para prellenar el modal y dar
   // contexto a la IA. Barato: una consulta al DOM, sin observadores. Cap por longitud para
   // no inflar el prompt ni la RAM.
-  function mtrLeerTextoLibreHistoria(doc) {
+  function mtrLeerTextoLibreHistoria(doc, nombrePaciente) {
     const d = doc || (typeof document !== "undefined" ? document : null);
-    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(String(s || "").trim()) : ((typeof scrubPII === "function") ? String(scrubPII(String(s || ""))).trim() : String(s || "").trim());
+    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(String(s || "").trim(), nombrePaciente) : ((typeof scrubPII === "function") ? String(scrubPII(String(s || ""))).trim() : String(s || "").trim());
     const out = { motivo: "", sintomas: "", combinado: "" };
     if (!d) return out;
     try {
@@ -31881,7 +31902,7 @@ _vglOfrecerDeshacer(btn);
       // para leerse cada vez, no una sola. Ahora es una función, no una foto: cada punto
       // que la necesita (Generar, Generar todo, prellenar «Datos del paciente») la vuelve
       // a leer en el momento exacto del clic.
-      const libreAhora = () => mtrLeerTextoLibreHistoria();
+      const libreAhora = () => mtrLeerTextoLibreHistoria(undefined, resumen._nombrePaciente);
       const modal = document.createElement("div");
       modal.id = "vgl-ia-modal"; modal.className = isLight() ? "light" : "";
       modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
@@ -32160,6 +32181,7 @@ _vglOfrecerDeshacer(btn);
       const _generarPara = async (modoX) => {
         const optsX = {
           estiloEjemplos: mtrEstiloLeer(),
+          nombrePaciente: resumen._nombrePaciente,
           pregunta: scrubPII($("#vgl-ia-pregunta").value),
           indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
           datosExtra: mtrDatosExtraLeer(resumen._docId),
@@ -32237,6 +32259,7 @@ _vglOfrecerDeshacer(btn);
         }
         const opts = {
           estiloEjemplos: mtrEstiloLeer(),
+          nombrePaciente: resumen._nombrePaciente,
           // v14.2.0 (auditoría pre-producción) — esta era la ÚNICA de las cuatro entradas de
           // texto libre del panel de IA que llegaba a Gemini SIN pasar por scrubPII (las
           // otras tres se limpian dentro de sus propias funciones lectoras). El pie del modal
@@ -32332,7 +32355,7 @@ _vglOfrecerDeshacer(btn);
       // estilo: enseñaría justo lo que el médico rechazó. "edicion_leve" tampoco se guarda
       // por ahora — arranque conservador, se puede ampliar si hace falta más variedad.
       const _autoAprenderEstilo = (delta) => {
-        if (delta === "intacta") { try { mtrEstiloGuardar(salida.value); } catch (e) {} }
+        if (delta === "intacta") { try { mtrEstiloGuardar(salida.value, resumen._nombrePaciente); } catch (e) {} }
       };
       btnCop.addEventListener("click", () => {
         try {
@@ -32863,7 +32886,7 @@ _vglOfrecerDeshacer(btn);
       resumen.medicamentosFrecuencia = (typeof mtrLeerFrecuenciasMedicamento === "function")
         ? mtrLeerFrecuenciasMedicamento(pacienteIdLabs) : new Map();
     } catch (e) { resumen.medicamentosFrecuencia = new Map(); }
-    try { resumen._ultimos = ultimos; resumen._hoyIso = hoyIso; resumen._docId = (apt && apt.doc_id) || null; resumen._pacienteIdLabs = pacienteIdLabs || null; } catch (e) {}
+    try { resumen._ultimos = ultimos; resumen._hoyIso = hoyIso; resumen._docId = (apt && apt.doc_id) || null; resumen._pacienteIdLabs = pacienteIdLabs || null; resumen._nombrePaciente = (apt && apt.nombre) || null; } catch (e) {}
     // v16.8.0 — Las series viajan con el resumen (y con su caché) para la sección
     // TENDENCIAS del Panel del paciente. Seis puntos por analito: lo que cabe en una
     // línea legible y suficiente para ver hacia dónde va el paciente.

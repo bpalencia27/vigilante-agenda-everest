@@ -336,6 +336,28 @@ module.exports = {
       // contra el panel real de límites, ver MTR_GEMINI_MODELOS).
       t.cierto(api.mtrModeloGemini("recomendaciones") !== undefined && ["gemini-3.5-flash-lite","gemini-3.1-flash-lite","gemini-3.6-flash","gemini-3.5-flash","gemini-2.5-flash-lite","gemini-3-flash","gemini-3.7-flash"].indexOf(api.mtrModeloGemini("recomendaciones")) >= 0, "lo corto sigue en la rotación");
 
+      // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el diseño pendiente que el
+      // propio comentario de mtrSanearTextoLibreAI dejó documentado desde v15.2.0. Con el
+      // texto entero en MAYÚSCULAS SOSTENIDAS (el estilo real de Everest), el patrón por
+      // forma (mayúscula+minúsculas) no puede distinguir "MARIA" de "HIPERTENSO" — pero si
+      // se le pasa el nombre REAL del paciente abierto, lo tacha literalmente sin adivinar.
+      const sanMayus = api.mtrSanearTextoLibreAI(
+        "PACIENTE MARIA RODRIGUEZ PEREZ REFIERE CEFALEA HOLOCRANEANA Y ES HIPERTENSA CONOCIDA.",
+        "Maria Rodriguez Perez");
+      t.falso(/MARIA/.test(sanMayus), "el nombre de pila, en mayúsculas sostenidas, se tacha");
+      t.falso(/RODRIGUEZ/.test(sanMayus), "el apellido también");
+      t.cierto(/HIPERTENSA/.test(sanMayus), "una palabra clínica real (no parte del nombre) sobrevive intacta");
+      t.cierto(/CEFALEA HOLOCRANEANA/.test(sanMayus), "el resto del texto clínico no se toca");
+      t.igual((sanMayus.match(/\[NOMBRE_CENSURADO\]/g) || []).length, 1, "los 3 tokens contiguos del nombre colapsan en UNA sola marca, no tres");
+
+      t.igual(api.mtrSanearTextoLibreAI("Texto sin nombre de nadie.", ""), "Texto sin nombre de nadie.", "sin nombre de paciente (cadena vacía), no cambia nada");
+      t.igual(api.mtrSanearTextoLibreAI("Control de rutina, sin novedad.", null), "Control de rutina, sin novedad.", "sin nombre de paciente (null), no cambia nada — no revienta");
+
+      // Nombre con tilde: \b de JS no es seguro con letras acentuadas (Á no es \w) — esta
+      // función arma el límite de palabra a mano para el alfabeto español.
+      const sanTilde = api.mtrSanearTextoLibreAI("ÁNGELA GÓMEZ CONSULTA POR CONTROL.", "Ángela Gómez");
+      t.falso(/ÁNGELA/.test(sanTilde), "nombre con tilde en mayúsculas sostenidas: también se tacha");
+
       // 3. Recomendaciones 100% personalizadas, de usted, con alarma personalizada.
       const re2 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), {});
       t.cierto(/REGLA DE ORO/.test(re2.system), "regla de oro: nada que sirva para cualquier paciente");
@@ -1177,6 +1199,20 @@ module.exports = {
       const fn = src.slice(idx - 100, idx + 400);
       t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
       t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
+    });
+
+    // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el nombre real del paciente
+    // (resumen._nombrePaciente, tomado de la cita de la agenda) tiene que LLEGAR a los
+    // 4 sitios que envían texto libre a Gemini para que el censor de mayúsculas
+    // sostenidas (probado arriba de forma aislada) tenga algo que tachar en producción.
+    // Vive dentro del cierre de mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los 4 puntos de envío de texto libre a la IA", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
+      t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
+      const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
+      t.igual(ocurrenciasOpts, 2, "los dos objetos opts (Generar y Generar todo) deben incluir el nombre");
+      t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
     });
 
   },

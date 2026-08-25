@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.42] — 2026-08-24 (Barrido S+ total — el censor de nombres ahora sí cubre las MAYÚSCULAS SOSTENIDAS de Everest)
+
+### 🐛 Un nombre escrito en mayúsculas sostenidas ya no sobrevivía al censor antes de llegar a la IA
+- El texto libre que se envía a la IA pasa por un censor que tacha nombres propios, pero ese censor solo reconocía la forma "Mayúscula inicial + minúsculas" (ej. "Maria Rodriguez") — el estilo real con el que Everest guarda muchas casillas es MAYÚSCULAS SOSTENIDAS ("MARIA RODRIGUEZ"), donde un nombre y una palabra clínica cualquiera son indistinguibles por su forma. Esto ya estaba documentado en el propio código como una limitación conocida, pendiente de una solución de diseño: en vez de adivinar cuál palabra en mayúsculas es el nombre, ahora se le entrega al censor el nombre real del paciente que ya está abierto (que el asistente ya conoce, de la agenda del día) y lo tacha literalmente, en cualquier forma de mayúsculas, antes de que cualquier texto libre salga hacia el proveedor de IA.
+
+---
+
 ## [Versión 17.6.41] — 2026-08-24 (Barrido S+ total — Bloque Editar: la franja de color de los avisos ya no queda invisible)
 
 ### 🐛 La franja de color de cada aviso emergente ya no era invisible

@@ -1182,6 +1182,33 @@ Las tres se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando 
 antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
 verde al restaurar. El banco completo volvió a 1.464/1.464 tras la restauración final.
 
+## v17.6.42 — 24-ago-2026 (el censor de nombres ahora sí cubre las MAYÚSCULAS SOSTENIDAS de Everest)
+
+Banco antes: 1.465 (con la prueba nueva de cableado ya sumada; la de `mtrSanearTextoLibreAI`
+en mayúsculas se agregó DENTRO de un `t.caso` ya existente, así que no suma al total de
+"comprobaciones" que cuenta por `t.caso`, no por aserción individual) · después de
+restaurar: **1.465**.
+
+Contexto: hallazgo id=53 del re-triaje del workflow de 15 agentes, marcado por el propio
+agente como "el hallazgo MÁS crítico de este clúster (fuga real de PII hacia un proveedor
+externo)". Verificado a mano contra este worktree (no el checkout equivocado que auditó
+el workflow): el propio código ya documentaba el diseño correcto desde v15.2.0 como
+"pendiente de decisión del médico" — pasar el nombre real del paciente abierto y tacharlo
+literalmente, en vez de adivinar por la forma de la palabra.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrSanearTextoLibreAI` — núcleo** | Se quita por completo el bloque que tacha los tokens del nombre real | `suite_57` | *(dentro de "v16.5.0 — el rediseño del modal...")* → *el nombre de pila, en mayúsculas sostenidas, se tacha (obtuvo true)* |
+| **cableado — `resumen._nombrePaciente`** | Se quita `resumen._nombrePaciente = (apt && apt.nombre) \|\| null;` | `suite_57` | *v17.6.42: resumen.\_nombrePaciente se arma y llega...* → *el resumen del paciente debe traer su nombre real (obtuvo false)* |
+| **cableado — `mtrEstiloGuardar`** | La llamada vuelve a `mtrEstiloGuardar(salida.value)` sin el nombre | `suite_57` | misma prueba → *el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar (obtuvo false)* |
+
+Las tres se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
+verde al restaurar. El banco completo volvió a 1.465/1.465 tras la restauración final. Los
+otros dos puntos de cableado (`libreAhora()` y los dos objetos `opts` de Generar/Generar
+todo) quedan cubiertos por la misma prueba de fuente pero no se mutaron uno a uno por ser
+idéntico patrón mecánico (pasar una variable ya probada) repetido cuatro veces.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
