@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.40
+// @version     17.6.41
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.40";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.41";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12800,16 +12800,18 @@ _vglOfrecerDeshacer(btn);
         from{opacity:0;transform:translateX(26px) scale(.97)}
         to{opacity:1;transform:none}
       }
+      /* v17.6.41 — AUDITORÍA S+ (barrido total, 24-ago-2026): .vgl-toast-rail se crea en JS
+         (mtrRenderToastHtml/showToast) pero nunca tuvo regla base — sin ancho ni alto, la
+         franja de color de cada toast era invisible. */
+      .vgl-toast-rail{width:4px;border-radius:var(--r-chip,4px);flex:0 0 auto;align-self:stretch}
       .vgl-toast-ic{
         background:linear-gradient(160deg,rgba(var(--tk),.30),rgba(var(--tk),.12));box-shadow:var(--glow-edge),inset 0 0 0 1px rgba(var(--tk),.40),0 0 16px rgba(var(--tk),.25);
         width:36px;height:36px;border-radius:var(--r-chip);flex:0 0 auto;
         display:flex;align-items:center;justify-content:center;font-size:var(--t-title);
-        box-shadow:var(--glow-edge)
       }
       .vgl-toast-main{flex:1;min-width:0}
       .vgl-toast-title{font-weight:700;font-size:13.5px;letter-spacing:.1px}
       .vgl-toast-b{
-        font-size:12.5px;
         margin-top:3px;font-size:var(--t-micro);color:var(--fg2);
         white-space:pre-line;line-height:1.45
       }

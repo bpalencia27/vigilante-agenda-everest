@@ -1162,6 +1162,26 @@ diferencia de otras suites, `suite_15_interfaz_avanzada.js` no importa `fs`/`pat
 nivel de módulo; cada caso que los necesita los requiere localmente (mismo patrón ya
 documentado en v17.6.28). Corregido agregando los `require` locales al caso nuevo.
 
+## v17.6.41 — 24-ago-2026 (Barrido S+ total — Bloque Editar: la franja de color de los avisos ya no queda invisible)
+
+Banco antes: 1.464 (con las 3 pruebas nuevas ya sumadas) · después de restaurar: **1.464**.
+Contexto: un workflow de 15 agentes verificó ~68 hallazgos restantes del barrido, pero
+por un error de directorio de trabajo los agentes auditaron un checkout DISTINTO del
+script (`E:\Vigilante_Agenda\vigilante_agenda.user.js`, rama `claude/v17-6-10-23ago`, NO
+el worktree `pr94-descarga` donde vive todo este trabajo) — sus números de línea y
+fragmentos de código no son de fiar. Cada hallazgo se re-verificó a mano contra el
+archivo real antes de tocar nada; este fue el primero.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`.vgl-toast-rail`** | Se quita la regla base nueva (`width:4px;...`) | `suite_25` | *v17.6.41: .vgl-toast-rail tiene una regla base real...* → *no debe depender solo del inline style de color (obtuvo false)* |
+| **`.vgl-toast-ic`** | Se reintroduce el `box-shadow:var(--glow-edge)` duplicado al final del bloque | `suite_25` | *v17.6.41: .vgl-toast-ic ya no pisa su propio anillo...* → *esperaba 1 y obtuvo 2* |
+| **`.vgl-toast-b`** | Se reintroduce el `font-size:12.5px;` duplicado al inicio del bloque | `suite_25` | *v17.6.41: .vgl-toast-b ya no declara font-size dos veces* → *esperaba 1 y obtuvo 2* |
+
+Las tres se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
+verde al restaurar. El banco completo volvió a 1.464/1.464 tras la restauración final.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

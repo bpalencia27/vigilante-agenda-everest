@@ -855,5 +855,30 @@ module.exports = {
         `--fg3 (${rClaro.toFixed(2)}:1) quedó igual o MÁS contrastado que --fg2 (${rFg2.toFixed(2)}:1): se invirtió la jerarquía de énfasis del panel`);
     });
 
+    // v17.6.41 — AUDITORÍA S+ (barrido total, 24-ago-2026): .vgl-toast-rail se crea en JS
+    // (el <i class="vgl-toast-rail"> de cada toast) pero nunca tuvo regla base de CSS —
+    // sin width/height, la franja de color que distingue el tipo de aviso (rojo/verde/
+    // ámbar/azul) era invisible. De paso, .vgl-toast-ic declaraba box-shadow DOS veces (la
+    // segunda, plana, pisaba el anillo de acento --tk de la primera) y .vgl-toast-b
+    // declaraba font-size DOS veces (la primera, 12.5px fija, era código muerto).
+    t.caso("v17.6.41: .vgl-toast-rail tiene una regla base real (no queda invisible)", () => {
+      t.cierto(/\.vgl-toast-rail\{width:/.test(css), ".vgl-toast-rail debe tener un ancho propio, no depender solo del inline style de color");
+    });
+
+    t.caso("v17.6.41: .vgl-toast-ic ya no pisa su propio anillo de acento con un box-shadow duplicado", () => {
+      const idx = css.indexOf(".vgl-toast-ic{");
+      const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
+      const ocurrencias = (bloque.match(/box-shadow:/g) || []).length;
+      t.igual(ocurrencias, 1, "una sola declaración de box-shadow en .vgl-toast-ic (la que trae el anillo --tk)");
+      t.cierto(/box-shadow:var\(--glow-edge\),inset/.test(bloque), "debe sobrevivir la versión CON el anillo --tk, no la plana");
+    });
+
+    t.caso("v17.6.41: .vgl-toast-b ya no declara font-size dos veces", () => {
+      const idx = css.indexOf(".vgl-toast-b{");
+      const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
+      const ocurrencias = (bloque.match(/font-size:/g) || []).length;
+      t.igual(ocurrencias, 1, "una sola declaración de font-size en .vgl-toast-b");
+    });
+
   }
 };

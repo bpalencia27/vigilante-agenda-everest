@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.41] — 2026-08-24 (Barrido S+ total — Bloque Editar: la franja de color de los avisos ya no queda invisible)
+
+### 🐛 La franja de color de cada aviso emergente ya no era invisible
+- Cada aviso emergente (toast) trae una franja de color a su izquierda para identificar de un vistazo si es rojo, verde, ámbar o azul — pero esa franja nunca tuvo ancho ni alto propios en el CSS, así que era invisible en la práctica. De paso se corrigieron dos declaraciones repetidas en el mismo aviso que se anulaban entre sí sin ningún efecto visible ni beneficio: un doble sombreado alrededor del ícono (el segundo pisaba el anillo de color del primero) y un tamaño de letra duplicado en el cuerpo del mensaje.
+
+---
+
 ## [Versión 17.6.40] — 2026-08-24 (Barrido S+ total — Bloque Editar: el modo oculto ahora esconde todo, sin excepciones)
 
 ### 🐛 El modo oculto (privacidad de pantalla) ya escondía casi todo, ahora esconde todo
