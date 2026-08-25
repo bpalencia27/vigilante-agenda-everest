@@ -204,21 +204,29 @@ module.exports = {
       t.cierto(ea.user.indexOf("JSON DEL MOTOR") < 0, "la enfermedad actual no necesita el JSON");
     });
 
+    // v17.6.26 — datosExtra ahora solo trae los 3 campos de la caja roja de críticos
+    // (categoría de riesgo, TFG, medicamentos); síntomas/adherencia/motivo/etc. viajan por
+    // "Indicaciones" (contextoLibre/indicaciones), no por datosExtra — ver el caso dedicado
+    // a la fusión de "Datos del paciente" más abajo.
     t.caso("los datos aportados por el médico y el texto libre entran al prompt (desidentificados)", () => {
       const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {
         contextoLibre: "Motivo: control. Revisión/examen: refiere cefalea leve.",
-        datosExtra: { sintomas: "disnea de esfuerzo, correo juan@x.com colado", adherencia: "buena", motivo: "" },
+        datosExtra: { medicamentosAportados: "losartán 50 mg, correo juan@x.com colado", tfgAportada: "", categoriaRiesgoConfirmada: "ALTO" },
       });
       t.cierto(/DATOS APORTADOS POR EL MÉDICO/.test(p.user), "bloque de datos aportados");
-      t.cierto(p.user.indexOf("disnea de esfuerzo") >= 0, "incluye el síntoma aportado");
+      t.cierto(p.user.indexOf("losartán 50 mg") >= 0, "incluye el medicamento aportado");
       t.cierto(p.user.indexOf("juan@x.com") < 0, "pero desidentifica lo colado");
       t.cierto(/TEXTO YA REGISTRADO/.test(p.user) && p.user.indexOf("cefalea leve") >= 0, "y el texto ya escrito hoy");
     });
 
-    t.caso("con 'mi estilo' activo, se inyectan los ejemplos (ya desidentificados)", () => {
-      const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), { usarEstilo: true, estiloEjemplos: ["Paciente que acude a control, estable."] });
-      t.cierto(/EMULA EL ESTILO/.test(p.user), "el prompt pide emular el estilo");
+    // v17.6.26 — el estilo ya no depende de un interruptor: se usa SIEMPRE que haya
+    // ejemplos guardados (checkbox "Mi estilo" retirado del panel).
+    t.caso("los ejemplos de estilo se inyectan automáticamente, sin ningún interruptor", () => {
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), { estiloEjemplos: ["Paciente que acude a control, estable."] });
+      t.cierto(/EMULA EL ESTILO/.test(p.user), "el prompt pide emular el estilo con solo pasar los ejemplos");
       t.cierto(p.user.indexOf("acude a control") >= 0, "e incluye el ejemplo");
+      const sinEjemplos = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
+      t.falso(/EMULA EL ESTILO/.test(sinEjemplos.user), "sin ejemplos guardados, no aparece la sección (nada que emular)");
     });
 
     t.caso("guía Gemini 3.x: el contexto va primero y la TAREA al final, anclada a lo anterior", () => {
@@ -327,6 +335,28 @@ module.exports = {
       // v17.4.0 — se suman "gemini-2.5-flash-lite" y "gemini-3-flash" (cotejo 22-ago
       // contra el panel real de límites, ver MTR_GEMINI_MODELOS).
       t.cierto(api.mtrModeloGemini("recomendaciones") !== undefined && ["gemini-3.5-flash-lite","gemini-3.1-flash-lite","gemini-3.6-flash","gemini-3.5-flash","gemini-2.5-flash-lite","gemini-3-flash","gemini-3.7-flash"].indexOf(api.mtrModeloGemini("recomendaciones")) >= 0, "lo corto sigue en la rotación");
+
+      // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el diseño pendiente que el
+      // propio comentario de mtrSanearTextoLibreAI dejó documentado desde v15.2.0. Con el
+      // texto entero en MAYÚSCULAS SOSTENIDAS (el estilo real de Everest), el patrón por
+      // forma (mayúscula+minúsculas) no puede distinguir "MARIA" de "HIPERTENSO" — pero si
+      // se le pasa el nombre REAL del paciente abierto, lo tacha literalmente sin adivinar.
+      const sanMayus = api.mtrSanearTextoLibreAI(
+        "PACIENTE MARIA RODRIGUEZ PEREZ REFIERE CEFALEA HOLOCRANEANA Y ES HIPERTENSA CONOCIDA.",
+        "Maria Rodriguez Perez");
+      t.falso(/MARIA/.test(sanMayus), "el nombre de pila, en mayúsculas sostenidas, se tacha");
+      t.falso(/RODRIGUEZ/.test(sanMayus), "el apellido también");
+      t.cierto(/HIPERTENSA/.test(sanMayus), "una palabra clínica real (no parte del nombre) sobrevive intacta");
+      t.cierto(/CEFALEA HOLOCRANEANA/.test(sanMayus), "el resto del texto clínico no se toca");
+      t.igual((sanMayus.match(/\[NOMBRE_CENSURADO\]/g) || []).length, 1, "los 3 tokens contiguos del nombre colapsan en UNA sola marca, no tres");
+
+      t.igual(api.mtrSanearTextoLibreAI("Texto sin nombre de nadie.", ""), "Texto sin nombre de nadie.", "sin nombre de paciente (cadena vacía), no cambia nada");
+      t.igual(api.mtrSanearTextoLibreAI("Control de rutina, sin novedad.", null), "Control de rutina, sin novedad.", "sin nombre de paciente (null), no cambia nada — no revienta");
+
+      // Nombre con tilde: \b de JS no es seguro con letras acentuadas (Á no es \w) — esta
+      // función arma el límite de palabra a mano para el alfabeto español.
+      const sanTilde = api.mtrSanearTextoLibreAI("ÁNGELA GÓMEZ CONSULTA POR CONTROL.", "Ángela Gómez");
+      t.falso(/ÁNGELA/.test(sanTilde), "nombre con tilde en mayúsculas sostenidas: también se tacha");
 
       // 3. Recomendaciones 100% personalizadas, de usted, con alarma personalizada.
       const re2 = api.mtrRedaccionPrompt("recomendaciones", hojaDemo(api), {});
@@ -491,6 +521,16 @@ module.exports = {
       t.falso(api.mtrRespuestaGemini(JSON.stringify({ candidates: [] })).ok, "sin candidatos");
       t.falso(api.mtrRespuestaGemini("no es json").ok, "no-JSON");
       t.falso(api.mtrRespuestaGemini(null).ok, "nulo");
+    });
+
+    // v17.6.34 — AUDITORÍA S+ (barrido total, 24-ago-2026): un error crudo de la API de
+    // Google (en inglés) llegaba tal cual al estado del modal y a los chips de "Generar
+    // todo" — el médico veía texto de desarrollador, no una instrucción clínica útil.
+    t.caso("v17.6.34: un error de la API de Gemini nunca llega crudo (en inglés) al médico", () => {
+      const r = api.mtrRespuestaGemini(JSON.stringify({ error: { message: "Requested entity was not found." } }));
+      t.falso(r.ok, "sigue marcando error");
+      t.falso(/Requested entity|not found/i.test(r.motivo), "el mensaje crudo de Google no debe llegar al motivo visible");
+      t.igual(r.motivo, "la IA rechazó la petición; intente de nuevo", "motivo genérico en español, el único que el médico ve en este caso");
     });
 
     t.caso("v17.6.11: el contador de palabras del borrador nunca miente ni revienta", () => {
@@ -679,7 +719,53 @@ module.exports = {
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
       const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
       t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
-      t.cierto(/mtrAbrirDatosAdicionales\(resumen\._docId, \{ motivo: _libreAlAbrir\.motivo/.test(src), "el prellenado de «Datos del paciente» también lee fresco, no la foto vieja");
+    });
+
+    // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
+    // selector delegado de los 3 chips de casilla (.vgl-ia-modos [data-modo]) y SÍ recibe la
+    // clase .active al seleccionarlo, pero lleva class="vgl-agm-btn sec" (no vgl-agm-pbtn) y
+    // no existía ninguna regla CSS .active para esa combinación: el clic cambiaba de modo de
+    // verdad (aparecía el campo de pregunta) pero apagaba los 3 chips sin encender nada —
+    // parecía que el clic no había hecho efecto.
+    t.caso("v17.6.24: el botón «Preguntar» tiene una regla CSS .active (antes no existía ninguna)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/\.vgl-agm-btn\.sec\.active\s*\{/.test(src), "existe una regla que targetea .vgl-agm-btn.sec.active");
+      t.cierto(/class="vgl-agm-btn sec"[^>]*id="vgl-ia-btn-preguntar"/.test(src),
+        "el botón Preguntar sigue llevando exactamente las clases que la regla nueva cubre");
+    });
+
+    // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "¿ya auditaste si el cuadro de texto libre
+    // y Datos del paciente no sean algo redundante? deja una sola opción que sirva para
+    // todo". El modal "➕ Datos del paciente" (9 campos tras un botón) y el textarea
+    // "Indicaciones" del panel principal alimentaban el MISMO bloque del prompt — se retira
+    // el modal por completo y "Indicaciones" pasa a cubrir todo. La caja roja de críticos
+    // (_pintarCriticos) se conserva: es un guardián que bloquea la generación, no una
+    // alternativa de captura de texto.
+    t.caso("v17.6.26: «➕ Datos del paciente» se retiró por completo (redundante con Indicaciones)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/function mtrAbrirDatosAdicionales/.test(src), "la función del modal ya no existe");
+      t.falso(/vgl-ia-datos-btn/.test(src), "ni su botón");
+      t.cierto(/Datos e indicaciones para este borrador/.test(src), "«Indicaciones» ahora rotula que cubre también los datos");
+      // La caja roja de críticos, que SÍ debe sobrevivir (bloquea Análisis y plan sin
+      // categoría de riesgo), sigue intacta.
+      t.cierto(/function mtrDatosExtraGuardar/.test(src) && /function mtrDatosExtraLeer/.test(src), "el almacén sigue vivo: lo sigue usando _pintarCriticos");
+    });
+
+    // v17.6.26 — REPORTE DE CAMPO (mismo día): "ya que tendremos guardado automático,
+    // borra el botón de guardar mi estilo y todas esas opciones — ahora será
+    // inteligentemente automático". Se retira el botón manual «💾 Guardar mi estilo» y el
+    // checkbox «Mi estilo»: mtrEstiloGuardar se llama sola cuando el médico acepta un
+    // borrador SIN editarlo (delta "intacta"), y mtrRedaccionPrompt usa los ejemplos
+    // guardados siempre que haya al menos uno, sin marcar nada.
+    t.caso("v17.6.26: el guardado de estilo es automático — sin botón manual ni checkbox", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/vgl-ia-estilo-guardar/.test(src), "el botón «Guardar mi estilo» ya no existe");
+      t.falso(/id="vgl-ia-estilo"/.test(src), "ni el checkbox «Mi estilo»");
+      t.falso(/o\.usarEstilo/.test(src), "mtrRedaccionPrompt ya no depende de un interruptor manual");
+      t.cierto(/const _autoAprenderEstilo = \(delta\) => \{\s*\n\s*if \(delta === "intacta"\)/.test(src),
+        "el aprendizaje automático solo guarda cuando el médico aceptó el borrador TAL CUAL (delta intacta)");
+      const usos = (src.match(/_autoAprenderEstilo\(delta\);/g) || []).length;
+      t.igual(usos, 2, "se llama en los dos caminos de aceptación: Copiar e Insertar/Reemplazar (vía _registrarInsercion)");
     });
 
     // v17.3.0 — Reporte real de consola (21-ago): "Análisis y plan" y "Recomendaciones"
@@ -803,10 +889,13 @@ module.exports = {
       t.igual(c.api.mtrDatosExtraLeer("111"), null, "cambiar de paciente descarta lo anterior (no cruza)");
     });
 
+    // v17.6.26 — REDUCIDO a los 3 campos de la caja roja de críticos (categoría de riesgo,
+    // TFG, medicamentos): los otros 9 vivían en el modal "➕ Datos del paciente", retirado
+    // por redundante con «Indicaciones» (ver test dedicado más abajo).
     t.caso("mtrDatosExtraTexto solo emite lo no vacío y desidentifica", () => {
-      const txt = api.mtrDatosExtraTexto({ sintomas: "disnea, tel 3151234567", adherencia: "", motivo: "control" });
-      t.cierto(/Síntomas .*disnea/.test(txt), "incluye síntomas");
-      t.cierto(txt.indexOf("Adherencia") < 0, "omite lo vacío");
+      const txt = api.mtrDatosExtraTexto({ medicamentosAportados: "losartán, tel 3151234567", tfgAportada: "", categoriaRiesgoConfirmada: "ALTO" });
+      t.cierto(/MEDICAMENTOS.*losartán/.test(txt), "incluye medicamentos");
+      t.cierto(txt.indexOf("TFG") < 0, "omite lo vacío");
       t.cierto(txt.indexOf("3151234567") < 0, "censura el teléfono colado");
     });
 
@@ -1047,6 +1136,83 @@ module.exports = {
       let r;
       t.noLanza(() => { r = api._vglTextoPrevioPodar(null, 200); });
       t.cierto(r && r.constructor && r.constructor.name === "Map", "sin mapa devuelve un Map vacío");
+    });
+
+    // v17.6.35 — AUDITORÍA S+ (barrido total, 24-ago-2026): `_pintarMeta` (contador de
+    // palabras/caracteres del borrador) llamaba a `esc(_ultimoModelo)`, una función que no
+    // existe en ningún ámbito del userscript (el helper real es `escapeHtml`). Desde la
+    // primera generación (cuando _ultimoModelo deja de estar vacío) el ReferenceError se
+    // tragaba en el catch y el contador dejaba de repintarse para siempre. `_pintarMeta`
+    // vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es una unidad aislable, con
+    // modal/salida/_ultimoModelo de closure) — se protege por texto fuente, mismo criterio
+    // ya establecido en el banco para la notificación de SMS (v17.6.28) y el tuteo (v17.6.32).
+    t.caso("v17.6.35: _pintarMeta usa escapeHtml (el helper real), no el inexistente esc()", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("const _pintarMeta = () => {");
+      const fn = src.slice(idx, idx + 1000);
+      t.falso(/[^a-zA-Z_]esc\(_ultimoModelo\)/.test(fn), "ya no debe quedar la llamada a esc(), que no existe");
+      t.cierto(/escapeHtml\(_ultimoModelo\)/.test(fn), "debe usar escapeHtml, el helper real del proyecto");
+    });
+
+    // v17.6.36 — AUDITORÍA S+ (barrido total, 24-ago-2026): esta es la causa raíz del
+    // bug reportado por el médico al comienzo de esta auditoría: "el asistente dice que
+    // hay borrador sin pegar aunque ya lo pegué". El snapshot de cambio de chip creaba
+    // un objeto NUEVO para _borradores[modoAnterior], sin la bandera `insertado` — y
+    // como _casillaHechaYSiguiente() AUTO-AVANZA con chip.click() apenas fija
+    // insertado=true, este mismo handler corría un instante después y la borraba en el
+    // mismo stack. _hayBorradoresSinInsertar() (que dispara el aviso al cerrar) lee
+    // exactamente esa bandera. Vive dentro del cierre de mtrAbrirPanelRedaccion — se
+    // protege por texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.36: el cambio de chip preserva la bandera insertado (no la pisa con un objeto nuevo)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("let modoAnterior = modo;");
+      const fn = src.slice(idx, idx + 1700);
+      t.falso(/_borradores\[modoAnterior\] = \{ texto:/.test(fn), "ya no debe crear un objeto nuevo que pierda las banderas existentes");
+      t.cierto(/_borradores\[modoAnterior\] = Object\.assign\(\{\}, _borradores\[modoAnterior\], \{ texto:/.test(fn), "debe fusionar sobre lo ya guardado, preservando insertado");
+    });
+
+    // v17.6.37 — AUDITORÍA S+ (barrido total, 24-ago-2026): la rama de FALLO de
+    // "Generar" pintaba salida.value/estado/btnIns SIN comprobar que el chip activo
+    // siguiera siendo modoGen (a diferencia de la rama de éxito, que sí lo hace): si el
+    // médico cambiaba de casilla mientras la generación estaba en vuelo y esa
+    // generación fallaba, los hechos de LA CASILLA VIEJA se pintaban sobre la casilla
+    // NUEVA — y el snapshot de cambio de chip (v17.6.36) los guardaba como si fueran
+    // el borrador de esa casilla nueva. Vive dentro del cierre de
+    // mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.37: la rama de fallo de Generar respeta el mismo guardia modoGen === modo que la de éxito", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("La IA no redactó");
+      const fn = src.slice(idx - 400, idx + 500);
+      t.cierto(/_borradores\[modoGen\] = Object\.assign\(\{\}, _borradores\[modoGen\], \{/.test(fn), "el resultado de fallo se guarda bajo SU modo, igual que el de éxito");
+      t.cierto(/if \(modoGen === modo\) \{[\s\S]{0,200}salida\.value = _borradores\[modoGen\]\.texto/.test(fn), "solo pinta la pantalla si el chip activo sigue siendo el que generó");
+    });
+
+    // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
+    // deshabilitaba "Generar" al arrancar, pero "Generar" no hacía lo mismo con
+    // "Generar todo" — dos cadenas de generación podían correr solapadas, y la primera
+    // en terminar rehabilitaba ambos botones a mitad de la cadena del lote de la otra,
+    // rompiendo el candado que v17.6.11 puso a propósito. Vive dentro del cierre de
+    // mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen)');
+      const fn = src.slice(idx - 100, idx + 400);
+      t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
+      t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
+    });
+
+    // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el nombre real del paciente
+    // (resumen._nombrePaciente, tomado de la cita de la agenda) tiene que LLEGAR a los
+    // 4 sitios que envían texto libre a Gemini para que el censor de mayúsculas
+    // sostenidas (probado arriba de forma aislada) tenga algo que tachar en producción.
+    // Vive dentro del cierre de mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los 4 puntos de envío de texto libre a la IA", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
+      t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
+      const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
+      t.igual(ocurrenciasOpts, 2, "los dos objetos opts (Generar y Generar todo) deben incluir el nombre");
+      t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
     });
 
   },

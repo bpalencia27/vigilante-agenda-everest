@@ -57,6 +57,26 @@ module.exports = {
       t.igual(api.pickTodaysFile(files), null);
     });
 
+    // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): TimeLastModified llega en
+    // UTC; comparar su string crudo (startsWith) contra la fecha LOCAL rompía en
+    // Colombia (UTC-5): un archivo modificado entre las 19:00 y las 24:00 hora local ya
+    // cae en el día UTC SIGUIENTE, así que al día siguiente (hora local) ese archivo
+    // pasaba el startsWith y se tomaba como "el de hoy", apagando la re-búsqueda del
+    // archivo real durante toda esa jornada.
+    t.caso("v17.6.39: un archivo modificado anoche (hora local, tarde) NO se confunde con el de hoy, aunque su UTC ya sea de hoy", () => {
+      const c = cargar();
+      // "Ahora": 25-ago-2026, 09:00 hora local (Colombia, UTC-5).
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-25T09:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-25T09:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const files = [
+        // Modificado a las 19:30 hora local del 24-ago (AYER) — en UTC eso ya es
+        // 25-ago 00:30, el día de "ahora". El código viejo comparaba ese string UTC
+        // crudo contra "2026-08-25" (hoy) y coincidía por error.
+        { Name: "ArchivoRandom.xlsx", TimeLastModified: "2026-08-25T00:30:00Z" },
+      ];
+      t.igual(c.api.pickTodaysFile(files), null, "el archivo es de AYER en hora local: no debe tomarse como el de hoy");
+    });
+
     t.caso("xlsViejoDeHoy identifica un .xls antiguo de hoy", () => {
       const c = cargar();
       c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };

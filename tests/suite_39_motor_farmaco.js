@@ -14,7 +14,7 @@
 module.exports = {
   nombre: "Seguridad de dosis renal (motor portado)",
   cubre: [
-    "mtrAvisosDosisRenal", "mtrLeerMedicamentos",
+    "mtrAvisosDosisRenal", "mtrAvisosFarmacologicos", "mtrLeerMedicamentos",
     "mtrMotorEncendido", "mtrDetectarPrincipios", "mtrPrincipioEnTexto",
     "mtrEvaluarDiscrepanciaEstadios", "mtrClasificarEstadioTfg",
     "mtrReglaErcG3aA2", "mtrReglaFurosemida", "mtrAlerta", "mtrAlertaSuave",
@@ -413,6 +413,52 @@ module.exports = {
       t.igual(a.fuente, "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>");
       t.cierto(a.override_llm === true);
       t.cierto(api.mtrAlertaSuave("x", "y", "EVITAR", "m", "f", 10, "HIGH").override_llm === false);
+    });
+
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): mtrAvisosFarmacologicos
+    // apagaba TODO —avisos de dosis Y las interacciones farmacológicas (Triple Whammy
+    // incluido)— cuando faltaba SOLO el Cockcroft-Gault, aunque las interacciones ni
+    // siquiera lo necesitan (solo la lista de medicamentos y, para algunas reglas, la
+    // CKD-EPI). Un Triple Whammy real (IECA/ARA-II + diurético + AINE) se silenciaba en
+    // cualquier paciente sin CG registrado — el panel de Medicamentos decía "Falta la
+    // función renal" y no mostraba ni una sola interacción, con o sin CG de por medio.
+    // =================================================================
+    t.caso("v17.6.28: sin Cockcroft-Gault, las interacciones farmacológicas SÍ se evalúan (antes se silenciaban todas)", () => {
+      // LOSARTAN (ARA-II) + FUROSEMIDA (diurético de asa) + IBUPROFENO (AINE) = Triple Whammy.
+      const meds = ["LOSARTAN 50 MG", "FUROSEMIDA 40 MG", "IBUPROFENO 400 MG"];
+      const r = api.mtrAvisosFarmacologicos({ medicamentos: meds, tfgCkdEpi: null, tfgCockcroftGault: null });
+      t.cierto(r.interacciones.some((x) => x.tipo_interaccion === "TRIPLE_WHAMMY"),
+        "el Triple Whammy se detecta aunque falte el Cockcroft-Gault: " + JSON.stringify(r.interacciones.map((x) => x.tipo_interaccion)));
+      t.igual(r.avisos.length, 0, "los avisos de DOSIS renal sí siguen vacíos: esos de verdad necesitan el Cockcroft-Gault");
+      t.igual(r.motivo, "OK", "algo se halló y se muestra — no es 'sin juicio'");
+    });
+
+    t.caso("v17.6.28: sin CG y sin ningún hallazgo, el motivo sigue diciendo la verdad (no se evaluó la dosis renal)", () => {
+      const r = api.mtrAvisosFarmacologicos({ medicamentos: ["PARACETAMOL 500 MG"], tfgCkdEpi: null, tfgCockcroftGault: null });
+      t.igual(r.motivo, "SIN_FUNCION_RENAL", "sin hallazgos Y sin CG: la vista debe seguir pintando 'no se pudo evaluar', no un falso 'sin hallazgos' en verde");
+      t.cierto(/función renal/i.test(r.legible), "y el texto explica por qué: " + r.legible);
+    });
+
+    t.caso("v17.6.28: sin lista de medicamentos, sigue sin evaluarse nada (comportamiento intacto)", () => {
+      const r = api.mtrAvisosFarmacologicos({});
+      t.igual(r.motivo, "SIN_LISTA_DE_MEDICAMENTOS");
+      t.igual(r.interacciones.length, 0);
+      t.igual(r.avisos.length, 0);
+    });
+
+    // v17.6.28 — el panel de Medicamentos (mtrPanelMedicamentosHtml) nunca pasaba
+    // tfgCockcroftGault a mtrRenderAvisosHtml: el bug de arriba afectaba a TODO paciente
+    // de ese panel, no solo a los que de verdad carecen de CG en Everest. Sin unidad
+    // aislable limpia (mtrPanelMedicamentosHtml construye HTML completo con muchas otras
+    // piezas) — se protege por texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.28: el panel de Medicamentos SÍ pasa tfgCockcroftGault (resumen.erc.crcl) al motor de avisos", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const fn = src.slice(src.indexOf("function mtrPanelMedicamentosHtml(resumen) {"), src.indexOf("function mtrPanelMedicamentosHtml(resumen) {") + 2500);
+      t.cierto(/tfgCockcroftGault:\s*\(resumen && resumen\.erc && resumen\.erc\.crcl/.test(fn),
+        "mtrPanelMedicamentosHtml debe pasar resumen.erc.crcl como tfgCockcroftGault");
     });
   },
 };

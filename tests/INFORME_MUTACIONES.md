@@ -872,3 +872,415 @@ v17.6.22 (mismo día): el médico aceptó el aviso honesto pero pidió la causa 
 se conservan AMBOS (el aviso como red de seguridad, el tope subido como arreglo real). El
 banco completo al cierre: **1.429 comprobaciones, 0 en rojo** (44 suites presentes; 0
 casos nuevos, 2 aserciones existentes actualizadas al nuevo valor).
+
+## v17.6.24-25 — 24-ago-2026 (Redactor IA — Bloque A de la auditoría S+ de 20 bugs: botón «Preguntar» y datos que se perdían)
+
+Primer bloque de una auditoría multi-agente de 20 hallazgos confirmados sobre la
+Redacción Asistida (IA), pedida por el médico tras revisarlos ("hay botones de más").
+Se implementa **por bloques, con pausa de revisión entre cada uno** (pedido explícito del
+médico) — este es el Bloque A, correcciones aisladas sin dependencias.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~13400 (v17.6.24) | Borrada la regla CSS `.vgl-agm-btn.sec.active` completa | NO | Ninguna: *v17.6.24: el botón «Preguntar» tiene una regla CSS .active* (suite_57) Y *Regla G — censo de `!important`* (suite_25, esperaba 349, salió 347) cayeron a rojo. Restaurada de inmediato; ambas suites volvieron a verde. |
+| ~32016 (v17.6.25) | `const datos = Object.assign({}, mtrDatosExtraLeer(docId) \|\| {});` vuelto a `const datos = {};` (el Guardar de «➕ Datos del paciente» vuelve a reemplazar el almacén en vez de fusionar) | NO | Ninguna: *v17.6.25: «Datos del paciente» fusiona con lo ya guardado, no lo reemplaza* (suite_57) cayó a rojo. Restaurada de inmediato; suite_57 volvió a verde. |
+
+Las dos mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El bug de v17.6.24 no tiene una unidad aislable (el toggle
+de `.active` vive dentro del handler delegado de clic del modal de 600 líneas) — se
+protege por texto fuente, mismo criterio ya establecido en este archivo para "uxTrack no
+arrastra texto clínico" y el contexto obsoleto de v17.6.22. El de v17.6.25 igual: el
+handler de Guardar vive dentro de `mtrAbrirDatosAdicionales`, que construye un modal real
+con `document.createElement`/`querySelector` sobre subárboles que el DOM de prueba de
+este arnés no soporta (`elem.querySelector()` siempre devuelve `null`, ver
+`tests/harness.js`) — reconstruir el modal completo para aislar el clic no es viable, así
+que se protege igual por texto fuente. El banco completo al cierre: **1.431
+comprobaciones, 0 en rojo** (44 suites presentes; +2 casos nuevos en suite_57, censo de
+suite_25 ajustado de 347 a 349).
+
+## v17.6.26 — 24-ago-2026 (Redactor IA — se retira «Datos del paciente» por redundante, el estilo se aprende solo, texto interno fuera de pantalla)
+
+Seguimiento inmediato al Bloque A: el médico revisó el resumen y pidió tres cosas más
+antes de seguir con la rotación de modelos. **Esta versión SUPERSEDE el parche de
+v17.6.25**: en vez de arreglar el bug de fusión de `mtrAbrirDatosAdicionales`, se retira
+la función completa (con su bug incluido) por ser una superficie redundante con
+"Indicaciones" — la mutación de v17.6.25 documentada arriba ya no aplica porque el código
+que protegía ya no existe; queda en el historial como evidencia de que el bug era real
+antes de decidir eliminar la superficie en vez de parchearla.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~31970 (v17.6.26) | Reinsertados `function mtrAbrirDatosAdicionales(x){}` y una referencia fantasma a `"vgl-ia-datos-btn"` al final del archivo | NO | Ninguna: *v17.6.26: «➕ Datos del paciente» se retiró por completo* (suite_57) cayó a rojo. Restaurada de inmediato; suite_57 volvió a verde. |
+| ~32473 (v17.6.26) | `_autoAprenderEstilo`: el umbral `delta === "intacta"` mutado a `delta === "reescritura"` (guardaría como ejemplo de estilo justo los textos que el médico tuvo que reescribir) | NO | Ninguna: *v17.6.26: el guardado de estilo es automático* (suite_57) cayó a rojo. Restaurada de inmediato. |
+| ~30827 (v17.6.26) | `mtrRedaccionPrompt`: reinsertado el interruptor `o.usarEstilo &&` en el cálculo de `ejemplos` | NO | Ninguna: DOS pruebas cayeron a rojo: el guardia de código fuente (*v17.6.26: el guardado de estilo es automático*, `t.falso(/o\.usarEstilo/...)`) Y la de comportamiento (*los ejemplos de estilo se inyectan automáticamente, sin ningún interruptor*). Restaurada de inmediato; suite_57 volvió a verde. |
+
+Las tres mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. Los tres textos de interfaz corregidos (aviso de
+privacidad del Redactor, tooltip de "Hoja educativa", dos criterios de clasificación de
+riesgo) son cambios de contenido de texto sin lógica que mutar — se verificaron por
+lectura: ninguno de los tres conserva la referencia a fecha/decisión interna, y el
+contenido clínico (qué se envía a Gemini, por qué el piso de diabetes/edad aplica) quedó
+intacto. El banco completo al cierre: **1.432 comprobaciones, 0 en rojo** (44 suites
+presentes; +2 casos nuevos en suite_57 netos: se agregaron 4 y se retiró 1 obsoleto de
+v17.6.25 más el ajuste de 2 pruebas existentes a las 3 claves restantes de
+`MTR_DATOS_EXTRA_ETIQUETAS`).
+
+## v17.6.27 — 24-ago-2026 (Barrido S+ total — Bloque S1, parte 1/2: 4 bugs críticos)
+
+Primer lote de la auditoría exhaustiva línea por línea de las 33.869 líneas del archivo
+(48 agentes: 14 lectores por segmento + 6 transversales, verificación adversarial de cada
+hallazgo). 8 hallazgos S1 confirmados en total; estos 4 primeros.
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~1517 (v17.6.27) | `_resumenClinicoUro`: la rama sin patología vuelta al literal fijo `chips.push("Límpido", "Leucocitos (-)", "Nitritos (-)")` (se quita la derivación de valores reales) | NO | Ninguna: *v17.6.27: \_resumenClinicoUro NUNCA inventa chips fijos* (suite_08) cayó a rojo. Restaurada de inmediato; suite_08 volvió a verde. |
+| ~4479 (v17.6.27) | `_vglCosecharFactoresVisibles`: `mapa` vuelto a `{}` (se quita la fusión con lo ya archivado) | NO | Ninguna: *v17.6.27: la cosecha de factores por pestaña SE ACUMULA* (suite_32) cayó a rojo. Restaurada de inmediato; suite_32 volvió a verde. |
+| ~3765 (v17.6.27) | `_vigenciaDiasParaAnalito`: `if (typeof v === "number") base = v;` vuelto a `return v;` (reintroduce el retorno temprano que hacía inalcanzable aplicar50) | NO | Ninguna: *v17.6.27: aplicar50 SÍ se aplica cuando hay programa/estadio* (suite_28, caso HTA/LDL numérico) cayó a rojo. Restaurada de inmediato. |
+| ~6362 y ~6374 (v17.6.27) | `_habiaConfigPrevia` movida de vuelta a después de las 4 migraciones anteriores, y la marca `vgl_v1420_estreno` vuelta a depender de `_habiaConfigPrevia` (reintroduce ambas capas del bug) | NO | Ninguna: *v17.6.27: instalación LIMPIA (sin vgl_cfg previo) NO enciende las 4 banderas de estreno* (suite_09) cayó a rojo. Restaurada de inmediato; suite_09 volvió a verde. |
+
+Las cuatro mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo al cierre: **1.439 comprobaciones, 0 en
+rojo** (44 suites presentes; +9 casos nuevos entre suite_08/09/28/32).
+
+## v17.6.28 — 24-ago-2026 (Barrido S+ total — Bloque S1, parte 2/2: 4 bugs críticos, cierra el bloque)
+
+Segunda y última parte del Bloque S1 (8/8 críticos corregidos y verificados).
+
+| Línea | Mutación Aplicada | ¿Sobrevivió? | Aserción Faltante (si sobrevivió) |
+|---|---|---|---|
+| ~19797 (v17.6.28) | `cargarHorasLab`: la guarda `if (!resAgEx \|\| !resAgEx.ok)` mutada a `if (false)` (nunca detecta la falta de respuesta) | NO | Ninguna: *v17.6.28: cargarHorasLab y cargarHorasLabSolo usan gmPostJsonEx* (suite_15) cayó a rojo. Restaurada de inmediato; suite_15 volvió a verde. |
+| ~28481 (v17.6.28) | `mtrAvisosFarmacologicos`: reintroducido `\|\| base.motivo === "SIN_FUNCION_RENAL"` en la guarda de corte temprano (vuelve a silenciar las interacciones sin CG) | NO | Ninguna: *v17.6.28: sin Cockcroft-Gault, las interacciones farmacológicas SÍ se evalúan* (suite_39) cayó a rojo. Restaurada de inmediato; suite_39 volvió a verde. |
+| ~2206 (v17.6.28) | `atheneaCredsSet`: reintroducidas las 4 escrituras en claro (GM y localStorage de `vgl_ath_user`/`vgl_ath_pass`) | NO | Ninguna: *v17.6.28: atheneaCredsSet NO deja ninguna copia en claro* (suite_18) cayó a rojo. Restaurada de inmediato; suite_18 volvió a verde. |
+| ~20774 (v17.6.28) | La notificación de cita creada vuelta a "SMS de recordatorio enviado al X." (afirmación de entrega confirmada) | NO | Ninguna: *v17.6.28: la notificación de cita creada ya NO afirma que el SMS se entregó* (suite_15) cayó a rojo. Restaurada de inmediato. |
+
+Las cuatro mutaciones se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando
+cada una antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo al cierre: **1.447 comprobaciones, 0 en
+rojo** (44 suites presentes; +8 casos nuevos entre suite_15/18/39). Con esto se cierra el
+Bloque S1 completo (8/8 hallazgos críticos del barrido total corregidos y verificados).
+
+## v17.6.29 — 24-ago-2026 (Barrido S+ total — Bloque Eliminar: código muerto verificado)
+
+Remoción de 13 funciones/variables sin ningún llamador. Igual que v17.6.10 (mismo criterio
+del proyecto): la mutación que corresponde a una remoción es re-agregar lo eliminado y
+comprobar que NINGUNA prueba cae — que la mutación SOBREVIVA es el resultado esperado y
+la evidencia de que el código en verdad estaba muerto. Antes de retirar cada una se hizo
+grep exhaustivo en `vigilante_agenda.user.js` Y en `tests/*.js` (no solo producción, que es
+lo único que había revisado el barrido automático): 5 candidatos iniciales del barrido
+(`mtrPrincipioEnTexto`, el modelo de grupos de sábado 1-3/2-4 completo, `extractAgrupador`,
+`apiHcValidacionExamenCronicos`/`_base64SinRelleno`) resultaron tener pruebas dedicadas
+reales — SOBREVIVIERON el grep de tests y se descartaron de esta limpieza.
+
+| Función/variable retirada | Verificación | ¿Sobrevivió el banco? |
+|---|---|---|
+| `mtrSumarDiasHabiles`, `mtrCnoHDL` | grep producción+tests: 0 llamadores | SÍ — banco sin cambios (1447/1447) |
+| `_relojEstadoParaTest`, `_relojAjustarParaTest`, `_getUltimoRelevoParaTest` | grep producción+tests: 0 llamadores (se conservó `_setUltimoRelevoParaTest`, que SÍ tiene test) | SÍ |
+| `_vglAvisoContextoFaltante`/`_vglContextoAvisado` | grep producción+tests: 0 llamadores; reemplazada por `_vglTextoContextoFaltante` (viva) | SÍ |
+| `mtrItemSugeridoEnRango` | grep producción+tests: 0 llamadores; duplicado del GAP 1 ya resuelto por `_marcarPlazoSegunSugerida` | SÍ |
+| `openFichaPacienteModal` | grep producción+tests: 0 llamadores (su comentario afirmaba falsamente lo contrario) | SÍ |
+| `openRiesgoModal`, `mtrRenderRiesgoModalHtml`, `mtrRenderResumenClinicoHtml`, `mtrIaClickDelegado` + su registro en `boot()` | grep producción+tests: 0 llamadores reales (solo comentarios/documentación); el botón `#vgl-ia-redactar` que el listener buscaba solo lo pintaba la propia cadena muerta | SÍ |
+| `estadioParaDosis` (propiedad de `calcularEstadioRenal`) + `posAdmin`/`posClinico` | grep producción+tests: 0 lectores; condición tautológica | SÍ |
+| `lastAutoFetchedDoc` (variable, 2 escrituras) | grep producción+tests: nunca leída desde v17.0.3 | SÍ — y se corrigió de paso el reset de sesión de Athenea, que apuntaba a la variable muerta en vez de a `lastAutoFetchedAt` (la guarda real): el robot podía no reintentar tras revivir la sesión |
+
+El banco completo al cierre: **1.447 comprobaciones, 0 en rojo** (mismo número que antes de
+la limpieza — ninguna prueba dependía de este código). 957 → 944 funciones registradas en
+`__VGL__`. ~333 líneas netas retiradas.
+
+## v17.6.30 — 24-ago-2026 (Barrido S+ total — Bloque Editar, 1/62: negación simple en el cotejo de fuentes)
+
+Banco antes: 1.449 comprobaciones (con las 4 pruebas nuevas ya sumadas antes de la
+mutación) · después de restaurar: **1.450**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrTextoOpinaSobre`** | La lista de negaciones reconocidas vuelve a `/\b(niega\|no refiere\|sin antecedente\|descarta\|no presenta\|no tiene\|nunca ha)\b/` (se quita `no es\|no fue\|no fuma\|no consume\|no padece\|no usa\|no ha`) | `suite_01` | *v17.6.30: mtrTextoOpinaSobre reconoce la negación simple 'no + verbo'…* → *'no fuma' debe negar, no afirmar: esperaba false y obtuvo true* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.450/1.450 tras la restauración.
+
+Nota sobre el primer intento de esta prueba: el caso original usaba "No es diabético…"
+contra el regex real de `diabetes` (`textoSi: /\bdiabet|\bdm2?\b|\bdmid\b|insulinorrequir/i`),
+que no matchea por la tilde de "diabético" (`\bdiabet` exige la `e` sin acento) — un
+defecto distinto, no relacionado con esta negación, y fuera del alcance de este ítem. Se
+cambió el ejemplo de prueba a HTA (`hipertens`, sin tildes en el radical) para no mezclar
+ambos hallazgos; el problema de tildes se corrigió aparte en v17.6.31.
+
+## v17.6.31 — 24-ago-2026 (hallazgo colateral de v17.6.30: tildes en el cotejo de fuentes)
+
+Banco antes: 1.451 comprobaciones (con la prueba nueva ya sumada antes de la mutación) ·
+después de restaurar: **1.451** (sin cambio — la mutación no agrega pruebas, solo prueba
+la ya escrita).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrTextoOpinaSobre`** | El filtro inicial vuelve a `if (!re.test(frase)) continue;` (prueba el patrón contra la frase CRUDA, con tildes, en vez de contra `f`, la versión ya sin tildes) | `suite_01` | *v17.6.31: mtrTextoOpinaSobre reconoce el hecho aunque la frase real lleve tilde y el patrón no* → *'no es diabético' debe negar…: esperaba false y obtuvo null* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.451/1.451 tras la restauración.
+
+## v17.6.32 — 24-ago-2026 (Barrido S+ total — Bloque Editar: trato de usted, consistente en toda la interfaz)
+
+Banco antes: 1.452 (con la prueba nueva ya sumada) · después de restaurar: **1.452**.
+Diez sitios de texto (`avisarSiActualizado`, `chequearAutoUpdateLento`, el aviso de lista
+de prevención demasiado grande, la caída de descarga de SharePoint, los dos "pruebe con
+.csv", `testNotifications` ×2, el tooltip de fuente de laboratorios, y los dos avisos de
+Ajustes) tuteaban al médico; se corrigieron los diez a usted y se protegieron con una
+única prueba de fuente (source-regex) que exige la ausencia de las 12 formas de tuteo Y
+la presencia de las 12 formas de usted — mismo patrón que la prueba de SMS de v17.6.28 en
+`suite_15`.
+
+## v17.6.33 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el celular del paciente ya no queda completo en la consola)
+
+Banco antes: 1.454 (con las 2 pruebas nuevas ya sumadas) · después de restaurar: **1.454**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_mtrCelularMascarado`** | El cuerpo vuelve a `return String(cel \|\| "");` (sin enmascarar) | `suite_15` | *v17.6.33: \_mtrCelularMascarado conserva solo los últimos 2 dígitos del celular* → *número real: prefijo + máscara + últimos 2: esperaba "300****67" y obtuvo "3001234567"* |
+| **cableado** | El sitio de `reenviarSmsRecordatorio` vuelve a pasar `cel` crudo en vez de `_mtrCelularMascarado(cel)` | `suite_15` | *v17.6.33: los 3 registros de consola del flujo de SMS ya no exponen el celular completo* → *ya no debe quedar el celular crudo en los otros 2 registros (obtuvo true)* |
+
+Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una antes
+de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
+al restaurar. El banco completo volvió a 1.454/1.454 tras la restauración final.
+
+## v17.6.34 — 24-ago-2026 (Barrido S+ total — Bloque Editar: un error de la IA ya no llega en inglés al médico)
+
+Banco antes: 1.455 (con la prueba nueva ya sumada) · después de restaurar: **1.455**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrRespuestaGemini`** | El motivo genérico vuelve a `"API: " + detalleCrudo` (el mensaje crudo de la API, en inglés) | `suite_57` | *v17.6.34: un error de la API de Gemini nunca llega crudo (en inglés) al médico* → *el mensaje crudo de Google no debe llegar al motivo visible (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.455/1.455 tras la restauración.
+
+## v17.6.35 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el contador del Redactor ya no se congela tras la primera generación)
+
+Banco antes: 1.456 (con la prueba nueva ya sumada) · después de restaurar: **1.456**.
+`_pintarMeta` vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es una unidad
+aislable) — se protege por texto fuente, mismo criterio ya establecido en el banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_pintarMeta`** | `escapeHtml(_ultimoModelo)` vuelto a `esc(_ultimoModelo)` (la función inexistente original) | `suite_57` | *v17.6.35: \_pintarMeta usa escapeHtml (el helper real), no el inexistente esc()* → *ya no debe quedar la llamada a esc(), que no existe (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.456/1.456 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba usaba una ventana de recorte
+(`slice`) de 700 caracteres desde el inicio de `_pintarMeta`, pero la llamada real a
+`escapeHtml` está a 785 caracteres — la prueba fallaba por ventana corta, no por el
+código (mismo tipo de error ya documentado en v17.6.28 con `mtrPanelMedicamentosHtml`).
+Ampliada a 1000 caracteres.
+
+## v17.6.36 — 24-ago-2026 (se identifica y corrige la causa raíz del aviso falso "hay borrador sin pegar")
+
+Banco antes: 1.457 (con la prueba nueva ya sumada) · después de restaurar: **1.457**.
+Esta es la causa raíz del PRIMER reporte de bug de toda esta auditoría (el que la abrió).
+El snapshot de cambio de chip vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es
+una unidad aislable) — se protege por texto fuente, mismo criterio ya establecido en el
+banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **snapshot de cambio de chip** | `Object.assign({}, _borradores[modoAnterior], {...})` vuelto a `{ texto: ..., original: ..., estado: ... }` (objeto nuevo, sin fusionar) | `suite_57` | *v17.6.36: el cambio de chip preserva la bandera insertado (no la pisa con un objeto nuevo)* → *ya no debe crear un objeto nuevo que pierda las banderas existentes (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.457/1.457 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba usaba una ventana de 900 caracteres
+desde `let modoAnterior = modo;`, pero el bloque real (con el comentario nuevo de la
+versión) llega a 1.445 caracteres antes de la línea del fix — ampliada a 1.700.
+
+## v17.6.37 — 24-ago-2026 (Barrido S+ total — Bloque Editar: un intento fallido de generar ya no pisa la casilla equivocada)
+
+Banco antes: 1.458 (con la prueba nueva ya sumada) · después de restaurar: **1.458**.
+Vive dentro del cierre de `mtrAbrirPanelRedaccion` — se protege por texto fuente.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **guardado por modo** | La rama de fallo vuelve a escribir directo en `salida.value`/`estado.textContent` sin pasar por `_borradores[modoGen]` | `suite_57` | *v17.6.37: la rama de fallo de Generar respeta el mismo guardia modoGen === modo que la de éxito* → *el resultado de fallo se guarda bajo SU modo, igual que el de éxito (obtuvo false)* |
+| **guardia de pintado** | Se quita el `if (modoGen === modo)` alrededor de la pintura en pantalla (vuelve a pintar siempre, sin comprobar el chip activo) | `suite_57` | misma prueba → *solo pinta la pantalla si el chip activo sigue siendo el que generó (obtuvo false)* |
+
+Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una antes
+de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
+al restaurar. El banco completo volvió a 1.458/1.458 tras la restauración final.
+
+## v17.6.38 — 24-ago-2026 (Barrido S+ total — Bloque Editar: "Generar" y "Generar todo" ya no pueden correr al mismo tiempo)
+
+Banco antes: 1.459 (con la prueba nueva ya sumada) · después de restaurar: **1.459**.
+Vive dentro del cierre de `mtrAbrirPanelRedaccion` — se protege por texto fuente.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **candado de Generar → Generar todo** | Se quita `if (btnTodo) btnTodo.disabled = true/false` de ambos lados del `await` en el handler de "Generar" (vuelve a solo deshabilitar btnGen) | `suite_57` | *v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)* → *al arrancar, deshabilita también Generar todo (obtuvo false)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.459/1.459 tras la restauración.
+
+## v17.6.39 — 24-ago-2026 (Barrido S+ total — Bloque Editar: la lista de prevención de hoy ya no se confunde con la de anoche)
+
+Banco antes: 1.460 (con la prueba nueva ya sumada) · después de restaurar: **1.460**.
+Máquina de pruebas confirmada en `America/Bogota` (UTC-5): la prueba reproduce el bug
+real descrito por la auditoría, no una construcción teórica.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`pickTodaysFile`** | La regla 2 vuelve a comparar el string UTC crudo (`f.TimeLastModified.startsWith(todayStr)`) en vez de reducir ambos lados a fecha LOCAL con `todayStamp(new Date(...))` | `suite_03` | *v17.6.39: un archivo modificado anoche (hora local, tarde) NO se confunde con el de hoy, aunque su UTC ya sea de hoy* → *el archivo es de AYER en hora local: no debe tomarse como el de hoy: esperaba null y obtuvo {...}* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.460/1.460 tras la restauración. `todayStamp` gana un parámetro opcional (compatible
+hacia atrás: los 100 llamadores existentes en producción siguen sin argumentos) para
+poder reducir CUALQUIER instante a fecha local, no solo "ahora".
+
+## v17.6.40 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el modo oculto ahora esconde todo, sin excepciones)
+
+Banco antes: 1.461 (con la prueba nueva ya sumada) · después de restaurar: **1.461**.
+Cambio de CSS puro (sin lógica que mutar en el sentido de comportamiento JS) — la
+"mutación" es quitar los 7 selectores nuevos de la regla y confirmar que la prueba de
+fuente cae, igual que cualquier otro cambio de texto/CSS protegido por regex de este banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **regla `body.vgl-modo-oculto`** | Se quitan los 7 selectores nuevos (`#vgl-confirma-modal`, `#vgl-llenar-modal`, `#vgl-min-bar`, `#vgl-deshacer-llenado`, `#vgl-deshacer-lote`, `#vgl-ia-inj-ea`, `#vgl-ia-inj-an`) de la regla `display:none !important` | `suite_15` | *v17.6.40: el modo oculto (privacidad de pantalla) esconde los 7 elementos que faltaban* → *#vgl-confirma-modal debe esconderse en modo oculto (obtuvo false)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.461/1.461 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba falló con "fs is not defined" — a
+diferencia de otras suites, `suite_15_interfaz_avanzada.js` no importa `fs`/`path` a
+nivel de módulo; cada caso que los necesita los requiere localmente (mismo patrón ya
+documentado en v17.6.28). Corregido agregando los `require` locales al caso nuevo.
+
+## v17.6.41 — 24-ago-2026 (Barrido S+ total — Bloque Editar: la franja de color de los avisos ya no queda invisible)
+
+Banco antes: 1.464 (con las 3 pruebas nuevas ya sumadas) · después de restaurar: **1.464**.
+Contexto: un workflow de 15 agentes verificó ~68 hallazgos restantes del barrido, pero
+por un error de directorio de trabajo los agentes auditaron un checkout DISTINTO del
+script (`E:\Vigilante_Agenda\vigilante_agenda.user.js`, rama `claude/v17-6-10-23ago`, NO
+el worktree `pr94-descarga` donde vive todo este trabajo) — sus números de línea y
+fragmentos de código no son de fiar. Cada hallazgo se re-verificó a mano contra el
+archivo real antes de tocar nada; este fue el primero.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`.vgl-toast-rail`** | Se quita la regla base nueva (`width:4px;...`) | `suite_25` | *v17.6.41: .vgl-toast-rail tiene una regla base real...* → *no debe depender solo del inline style de color (obtuvo false)* |
+| **`.vgl-toast-ic`** | Se reintroduce el `box-shadow:var(--glow-edge)` duplicado al final del bloque | `suite_25` | *v17.6.41: .vgl-toast-ic ya no pisa su propio anillo...* → *esperaba 1 y obtuvo 2* |
+| **`.vgl-toast-b`** | Se reintroduce el `font-size:12.5px;` duplicado al inicio del bloque | `suite_25` | *v17.6.41: .vgl-toast-b ya no declara font-size dos veces* → *esperaba 1 y obtuvo 2* |
+
+Las tres se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
+verde al restaurar. El banco completo volvió a 1.464/1.464 tras la restauración final.
+
+## v17.6.42 — 24-ago-2026 (el censor de nombres ahora sí cubre las MAYÚSCULAS SOSTENIDAS de Everest)
+
+Banco antes: 1.465 (con la prueba nueva de cableado ya sumada; la de `mtrSanearTextoLibreAI`
+en mayúsculas se agregó DENTRO de un `t.caso` ya existente, así que no suma al total de
+"comprobaciones" que cuenta por `t.caso`, no por aserción individual) · después de
+restaurar: **1.465**.
+
+Contexto: hallazgo id=53 del re-triaje del workflow de 15 agentes, marcado por el propio
+agente como "el hallazgo MÁS crítico de este clúster (fuga real de PII hacia un proveedor
+externo)". Verificado a mano contra este worktree (no el checkout equivocado que auditó
+el workflow): el propio código ya documentaba el diseño correcto desde v15.2.0 como
+"pendiente de decisión del médico" — pasar el nombre real del paciente abierto y tacharlo
+literalmente, en vez de adivinar por la forma de la palabra.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`mtrSanearTextoLibreAI` — núcleo** | Se quita por completo el bloque que tacha los tokens del nombre real | `suite_57` | *(dentro de "v16.5.0 — el rediseño del modal...")* → *el nombre de pila, en mayúsculas sostenidas, se tacha (obtuvo true)* |
+| **cableado — `resumen._nombrePaciente`** | Se quita `resumen._nombrePaciente = (apt && apt.nombre) \|\| null;` | `suite_57` | *v17.6.42: resumen.\_nombrePaciente se arma y llega...* → *el resumen del paciente debe traer su nombre real (obtuvo false)* |
+| **cableado — `mtrEstiloGuardar`** | La llamada vuelve a `mtrEstiloGuardar(salida.value)` sin el nombre | `suite_57` | misma prueba → *el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar (obtuvo false)* |
+
+Las tres se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el
+verde al restaurar. El banco completo volvió a 1.465/1.465 tras la restauración final. Los
+otros dos puntos de cableado (`libreAhora()` y los dos objetos `opts` de Generar/Generar
+todo) quedan cubiertos por la misma prueba de fuente pero no se mutaron uno a uno por ser
+idéntico patrón mecánico (pasar una variable ya probada) repetido cuatro veces.
+
+## v17.6.43 — 24-ago-2026 (un resultado de laboratorio en 0 ya no se muestra ni se procesa como "sin dato")
+
+Banco antes: 1.465 (con las 3 pruebas nuevas ya sumadas) · después de restaurar: **1.465
+con las 3 nuevas** = 1.468. Hallazgo id=11 del re-triaje, extendido: el mismo patrón de
+bug (`a || b || c`, donde un `0` real cae al siguiente término por ser falsy) se encontró
+en CUATRO sitios, no solo el citado por el hallazgo original — dos de ellos
+(`mtrHallazgosUroDesdeLabs`) con consecuencia clínica real (un hallazgo negativo real se
+perdía en vez de registrarse), verificados a mano contra este worktree.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_agruparUroanalisisParaTabla`** | Vuelve a `c.Resultado \|\| c.resultado \|\| c.valor \|\| "—"` | `suite_15` | *v17.6.43: \_agruparUroanalisisParaTabla conserva un resultado real de 0* → *Hematíes=0 debe sobrevivir como 0, no como '—': esperaba 0 y obtuvo "—"* |
+| **tabla general de Laboratorios** | Vuelve a `lab.Resultado \|\| lab.resultado \|\| lab.valor \|\| lab.Valor \|\| "—"` | `suite_15` | *v17.6.43: la tabla general del modal de Laboratorios conserva...* → *ya no debe quedar el encadenado \|\| crudo (obtuvo true)* |
+| **`mtrHallazgosUroDesdeLabs`** (2 sitios idénticos) | Ambos vuelven a `lab.Resultado \|\| lab.resultado \|\| lab.valor` | `suite_15` | *v17.6.43: mtrHallazgosUroDesdeLabs no pierde un resultado real de 0* → *debe reconocer hallazgos reales, aunque los dos sean 0 (obtuvo false)* |
+
+Las cuatro se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente — los dos sitios de `mtrHallazgosUroDesdeLabs` se mutaron juntos,
+por ser el mismo patrón repetido), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo volvió a 1.468/1.468 tras la
+restauración final. Dos ocurrencias más del mismo patrón (líneas de diagnóstico
+`console.log`, sin consecuencia clínica ni de pantalla) se dejaron intactas a propósito,
+fuera del alcance de este hallazgo.
+
+## v17.6.44 — 24-ago-2026 (la regla de triglicéridos altos para el LDL ya reconoce comas decimales y desigualdades)
+
+Banco antes: 1.468 (con las 4 pruebas nuevas, tras corregir un caso límite en la propia
+prueba — ver nota de depuración abajo) · después de restaurar: **1.471**. Hallazgo id=12
+del re-triaje, verificado a mano contra este worktree.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_resolverLdlPorTrigliceridos`** | Vuelve a `Number(trigliceridos.resultVal)`/`Number.isFinite(Number(c.resultVal))` en vez de `_labNumerico` | `suite_08` | *v17.6.44: ... reconoce TG>400 aunque venga con coma decimal* y *... con desigualdad ('> 450')* → ambas caen (esperaban el LDL directo, obtuvieron el calculado) |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo en las DOS pruebas afectadas con el mensaje esperado, y se restauró. El banco
+completo volvió a 1.471/1.471 tras la restauración.
+
+Nota de depuración: el primer intento de la prueba de desigualdad usaba `"> 400"` como
+texto de triglicéridos, esperando que activara la regla — pero `_labNumerico("> 400")`
+descarta el símbolo ">" y devuelve exactamente `400` (no "más de 400"), y la regla exige
+`tg > 400` estricto: `400 > 400` es falso. El texto "> 400" del LIS, tomado literalmente
+como número, cae justo en el borde donde la regla NO se activa — un caso límite genuino,
+no un defecto de `_labNumerico` ni de la regla (la fórmula real solo se invalida
+clínicamente por ENCIMA de 400, no en el borde). Se cambió el valor de prueba a `"> 450"`,
+claramente por encima del umbral, para probar el reconocimiento de la desigualdad sin
+tropezar con esa ambigüedad de frontera.
+
+## v17.6.45 — 24-ago-2026 (Auto-Labs ya no anuncia como escrito un resultado que el navegador rechazó)
+
+Banco antes: 1.471 (con las 2 pruebas nuevas ya sumadas) · después de restaurar: **1.473**.
+Hallazgo id=13 del re-triaje, extendido a un segundo sitio hermano (el reintento de
+uroanálisis) que el hallazgo original también señalaba.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **camino sérico principal** | Vuelve a `setNgValue(inputEl, resultVal); count++;` (sin comprobar el retorno) | `suite_08` | *v17.6.45: injectLabsIntoCronicos NO cuenta un resultado que el navegador rechazó...* → *esperaba 0 y obtuvo 1* |
+| **reintento de uroanálisis** | Vuelve a `if (actual === "") { setNgValue(el, r.resultVal); escritas++; }` | `suite_08` | *v17.6.45: el reintento de casillas de uroanálisis también comprueba...* → *debe exigir que setNgValue haya devuelto true (obtuvo false)* |
+
+La primera se probó con DOM real (una casilla mock cuyo `value` rechaza cualquier
+asignación, simulando un `type="number"` descartando "1,2"); la segunda —dentro de un
+`setTimeout`, no aislable— se protege por texto fuente. Ambas se aplicaron sobre el
+archivo de producción UNA A LA VEZ (restaurando cada una antes de la siguiente), cada
+corrida dejó rojo con la aserción esperada, y se confirmó el verde al restaurar. El banco
+completo volvió a 1.473/1.473 tras la restauración final.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.452/1.452 tras la restauración. Las otras 9 correcciones no se mutaron una a una por ser
+la misma clase de cambio (texto sin lógica) verificado por la misma prueba en bucle sobre
+las 12 formas; cualquier regresión futura en cualquiera de los 10 sitios hace caer esta
+misma prueba.

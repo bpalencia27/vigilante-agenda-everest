@@ -4,6 +4,203 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.45] — 2026-08-24 (Barrido S+ total — Auto-Labs ya no anuncia como escrito un resultado que el navegador rechazó)
+
+### 🐛 Auto-Labs ya no cuenta como "resultado llevado" uno que el navegador rechazó en silencio
+- Esta protección ya existía desde v16.7.0 (una casilla numérica puede rechazar un valor con coma decimal, quedando vacía sin avisar) pero solo se aplicaba en la ruta de los componentes del uroanálisis. El camino principal — la lista de 13 laboratorios crónicos, que es el grueso de lo que Auto-Labs escribe cada día — seguía sin esta comprobación: si el navegador rechazaba un valor, el asistente igual lo contaba como "resultado llevado" en el aviso verde, aunque la casilla hubiera quedado vacía. Se corrige tanto en el camino principal como en el reintento de las casillas de uroanálisis que a veces tardan en aparecer.
+
+---
+
+## [Versión 17.6.44] — 2026-08-24 (Barrido S+ total — la regla de triglicéridos altos para el LDL ya reconoce comas decimales y desigualdades)
+
+### 🐛 La regla "triglicéridos muy altos" para elegir el LDL correcto ya reconoce el formato real de los informes
+- Cuando el colesterol LDL viene reportado por partida doble (el valor medido directo y el calculado), el asistente decide cuál de los dos usar según los triglicéridos: si están muy altos, la fórmula que calcula el LDL deja de ser confiable y debe preferirse el valor medido directamente. Pero esa comparación leía el número de triglicéridos de forma cruda, sin manejar comas decimales ("436,2", el formato común de los informes) ni desigualdades ("> 400", cuando el laboratorio reporta un valor por fuera de su rango medible) — en esos formatos, la regla nunca se activaba, y silenciosamente se usaba siempre el LDL calculado, aunque no fuera el confiable en ese caso.
+
+---
+
+## [Versión 17.6.43] — 2026-08-24 (Barrido S+ total — un resultado de laboratorio en 0 ya no se muestra ni se procesa como "sin dato")
+
+### 🐛 Un resultado de laboratorio en 0 ya no se confunde con "sin dato"
+- En cuatro sitios del módulo de laboratorios, un resultado numérico real de 0 (por ejemplo, Hematíes=0 o Leucocitos=0 en un uroanálisis — un resultado negativo perfectamente normal) se procesaba como si no existiera ningún resultado, porque el código comparaba el valor con una condición que trata el número 0 igual que "no hay dato". Esto afectaba tanto la tabla del modal de Laboratorios (mostraba "—" en vez de "0") como el motor que detecta hallazgos de uroanálisis (un resultado negativo real podía perderse en silencio en vez de registrarse). Ahora los cuatro sitios distinguen correctamente "no hay resultado" de "el resultado es 0".
+
+---
+
+## [Versión 17.6.42] — 2026-08-24 (Barrido S+ total — el censor de nombres ahora sí cubre las MAYÚSCULAS SOSTENIDAS de Everest)
+
+### 🐛 Un nombre escrito en mayúsculas sostenidas ya no sobrevivía al censor antes de llegar a la IA
+- El texto libre que se envía a la IA pasa por un censor que tacha nombres propios, pero ese censor solo reconocía la forma "Mayúscula inicial + minúsculas" (ej. "Maria Rodriguez") — el estilo real con el que Everest guarda muchas casillas es MAYÚSCULAS SOSTENIDAS ("MARIA RODRIGUEZ"), donde un nombre y una palabra clínica cualquiera son indistinguibles por su forma. Esto ya estaba documentado en el propio código como una limitación conocida, pendiente de una solución de diseño: en vez de adivinar cuál palabra en mayúsculas es el nombre, ahora se le entrega al censor el nombre real del paciente que ya está abierto (que el asistente ya conoce, de la agenda del día) y lo tacha literalmente, en cualquier forma de mayúsculas, antes de que cualquier texto libre salga hacia el proveedor de IA.
+
+---
+
+## [Versión 17.6.41] — 2026-08-24 (Barrido S+ total — Bloque Editar: la franja de color de los avisos ya no queda invisible)
+
+### 🐛 La franja de color de cada aviso emergente ya no era invisible
+- Cada aviso emergente (toast) trae una franja de color a su izquierda para identificar de un vistazo si es rojo, verde, ámbar o azul — pero esa franja nunca tuvo ancho ni alto propios en el CSS, así que era invisible en la práctica. De paso se corrigieron dos declaraciones repetidas en el mismo aviso que se anulaban entre sí sin ningún efecto visible ni beneficio: un doble sombreado alrededor del ícono (el segundo pisaba el anillo de color del primero) y un tamaño de letra duplicado en el cuerpo del mensaje.
+
+---
+
+## [Versión 17.6.40] — 2026-08-24 (Barrido S+ total — Bloque Editar: el modo oculto ahora esconde todo, sin excepciones)
+
+### 🐛 El modo oculto (privacidad de pantalla) ya escondía casi todo, ahora esconde todo
+- El "modo oculto" (el botón que apaga de un vistazo toda la interfaz visible del Vigilante, por ejemplo si alguien más va a mirar la pantalla) dejaba 7 elementos visibles que se agregaron al script después de escribirse esa lista: la confirmación de dos pasos, la ventana de llenado automático, la barra minimizada, y los botones de deshacer y de inyección rápida del Redactor. Ahora los siete quedan cubiertos.
+
+---
+
+## [Versión 17.6.39] — 2026-08-24 (Barrido S+ total — Bloque Editar: la lista de prevención de hoy ya no se confunde con la de anoche)
+
+### 🐛 Un archivo modificado anoche ya no se confunde con el de hoy
+- Al buscar el archivo de la lista de prevención del día en SharePoint, cuando el nombre del archivo no traía la fecha, el asistente comparaba la hora de modificación (que SharePoint entrega en hora universal) contra la fecha del calendario local sin convertirla primero. En Colombia esto tenía un efecto concreto: un archivo modificado entre las 7 de la noche y la medianoche quedaba, al día siguiente, marcado por error como "el de hoy" — y el asistente dejaba de buscar el archivo real durante toda la jornada. Ahora ambas fechas se comparan en la misma hora local.
+
+---
+
+## [Versión 17.6.38] — 2026-08-24 (Barrido S+ total — Bloque Editar: "Generar" y "Generar todo" ya no pueden correr al mismo tiempo)
+
+### 🐛 Ya no se pueden disparar dos generaciones a la vez
+- "Generar todo" ya bloqueaba el botón "Generar" mientras trabajaba, pero "Generar" no hacía lo mismo con "Generar todo": si el médico alcanzaba a pulsar los dos casi al tiempo, las dos cadenas de generación corrían solapadas, y la que terminaba primero volvía a habilitar ambos botones a mitad del trabajo de la otra. Ahora "Generar" también bloquea "Generar todo" mientras está trabajando, cerrando el candado en los dos sentidos.
+
+---
+
+## [Versión 17.6.37] — 2026-08-24 (Barrido S+ total — Bloque Editar: un intento fallido de generar ya no pisa la casilla equivocada)
+
+### 🐛 Un intento de generar que falla ya no pinta la casilla equivocada
+- Si el médico cambiaba de casilla mientras "Generar" seguía trabajando en la anterior y ese intento terminaba fallando, el texto de respaldo (los hechos en bruto, para copiar a mano) se pintaba sobre la casilla NUEVA que el médico tenía abierta en ese momento, no sobre la que en verdad falló — y ese texto ajeno quedaba guardado como si fuera el borrador de la casilla nueva. Ahora el resultado de un intento fallido respeta la misma regla que ya protegía a un intento exitoso: solo se pinta en pantalla si la casilla que lo pidió sigue siendo la que está abierta.
+
+---
+
+## [Versión 17.6.36] — 2026-08-24 (Barrido S+ total — se identifica y corrige la causa raíz del aviso falso "hay borrador sin pegar")
+
+### 🐛 El aviso "hay borradores sin insertar" ya no aparece después de haber insertado
+- Esta es la causa raíz del primer reporte de esta auditoría: el asistente advertía "Hay borradores sin insertar en la historia" al cerrar el Redactor aunque el médico ya hubiera insertado los tres textos. Al insertar una casilla y avanzar automáticamente a la siguiente, el cambio de casilla activa borraba —sin querer— la marca de "ya insertado" que se acababa de fijar un instante antes, porque reconstruía el registro del borrador desde cero en vez de conservar sus datos. Ahora ese registro conserva todo lo que ya tenía al actualizarse.
+
+---
+
+## [Versión 17.6.35] — 2026-08-24 (Barrido S+ total — Bloque Editar: el contador del Redactor ya no se congela tras la primera generación)
+
+### 🐛 El contador de palabras y caracteres del borrador ya no deja de actualizarse
+- El Redactor de texto libre con IA llamaba a una función (`esc`) que no existe en ningún punto del script para mostrar el nombre del modelo usado junto al contador de palabras/caracteres. Desde la primera nota generada (en cuanto hay un modelo que mostrar), ese error quedaba silenciado y el contador dejaba de actualizarse para el resto de la sesión — el médico veía siempre el mismo número de palabras aunque siguiera editando. Corregido para usar la función correcta del proyecto.
+
+---
+
+## [Versión 17.6.34] — 2026-08-24 (Barrido S+ total — Bloque Editar: un error de la IA ya no llega en inglés al médico)
+
+### 🐛 Un rechazo de la IA ya no se muestra en el idioma y jerga del proveedor
+- Cuando Gemini rechazaba una petición del Redactor por un motivo que el script no reconocía como cuota agotada, saturación o modelo no disponible (los tres únicos que ya se traducían), el mensaje crudo de la API — en inglés, pensado para desarrolladores — se mostraba tal cual en el estado del panel y en los chips de "Generar todo". Ahora ese caso también muestra una instrucción clara en español; el detalle técnico se conserva solo en el registro de diagnóstico interno.
+
+---
+
+## [Versión 17.6.33] — 2026-08-24 (Barrido S+ total — Bloque Editar: el celular del paciente ya no queda completo en la consola)
+
+### 🐛 El número de celular del paciente ya no se registra completo en la consola del navegador
+- Los tres registros del flujo de envío de SMS (envío automático exitoso, envío automático fallido, reenvío manual) escribían el celular del paciente completo en la consola del navegador. El propósito con el que se agregaron —permitirle al médico comparar, de un vistazo, el número usado contra el que cree haber escrito— se mantiene intacto: ahora se registra enmascarado, mostrando solo los últimos dígitos.
+
+---
+
+## [Versión 17.6.32] — 2026-08-24 (Barrido S+ total — Bloque Editar: trato de usted, consistente en toda la interfaz)
+
+### 🧹 Diez avisos que tuteaban al médico ahora tratan de usted, como el resto de la interfaz
+- El aviso de actualización disponible, el recordatorio de auto-actualización lenta, el aviso de lista de prevención demasiado grande para guardar, la caída de descarga de SharePoint, los dos mensajes de "pruebe con .csv", la prueba de notificaciones de escritorio (dos avisos), el tooltip de la fuente de laboratorios y los dos avisos de nueva versión disponible en Ajustes tuteaban al médico ("Ya tienes", "Actívalo", "Ábrelo", "cierres") mientras el resto de la interfaz —incluida la notificación de PyM que sale en el mismo flujo— trata siempre de usted. Ahora los diez quedan en usted, sin excepciones.
+
+---
+
+## [Versión 17.6.31] — 2026-08-24 (Barrido S+ total — hallazgo colateral de v17.6.30: tildes en el cotejo de fuentes)
+
+Al probar el fix de v17.6.30 apareció un segundo defecto en la misma función, distinto y
+anterior en la cadena: se corrige aparte para no mezclar dos mutaciones en una versión.
+
+### 🐛 Una frase con tilde ya no se descarta antes de ser leída
+- El cotejo de discrepancias entre fuentes comparaba la palabra clave del hecho (ej. "diabet") contra la frase **con sus tildes originales** — "No es diabético" no calzaba porque la comparación esperaba la sílaba sin acento, y la frase quedaba fuera del análisis por completo, en vez de reconocerse como una negación. Cualquier mención de un hecho con tilde en la sílaba clave ("diabético" es el caso real observado; hipertensión y enfermedad renal ya estaban a salvo) quedaba invisible para este cotejo. Ahora la comparación ignora tildes igual que el resto de la lógica de la función, así que estas frases se reconocen correctamente.
+
+---
+
+## [Versión 17.6.30] — 2026-08-24 (Barrido S+ total — Bloque Editar, 1/62: negación simple en el cotejo de fuentes)
+
+Primer avance del bloque "Editar" del barrido total.
+
+### 🐛 Un "no fuma" en el texto libre ya no se interpreta como que SÍ fuma
+- `mtrTextoOpinaSobre` (usado por el cotejo de discrepancias entre fuentes, `mtrDiscrepanciasDeFuentes`) solo reconocía negaciones largas (`niega`, `no refiere`, `sin antecedente`, `descarta`, `no presenta`, `no tiene`, `nunca ha`). Una negación corta y común en la redacción real ("no fuma", "no es diabético", "no consume alcohol") no calzaba con ninguna, así que la frase caía en la afirmación por defecto de la línea siguiente: el texto libre que NIEGA un hecho terminaba usándose como la fuente que lo AFIRMA. Se amplió la lista de negaciones reconocidas para cubrir el patrón "no + verbo" más frecuente, sin tocar el resto de la lógica (antecedentes familiares siguen sin veredicto, una afirmación limpia sigue ganando sobre cualquier negación previa).
+
+---
+
+## [Versión 17.6.29] — 2026-08-24 (Barrido S+ total — Bloque Eliminar: código muerto verificado, ~333 líneas)
+
+Primer avance del bloque "Eliminar" del barrido total. Cada función se verificó con grep exhaustivo en **producción Y en tests** antes de retirarla (el barrido automático solo había revisado el archivo de producción — 5 candidatos iniciales resultaron tener pruebas dedicadas reales y se descartaron de esta limpieza, quedan para una revisión aparte con más cuidado: `mtrPrincipioEnTexto`, el modelo de grupos de sábado 1-3/2-4 completo, `extractAgrupador`, `apiHcValidacionExamenCronicos`/`_base64SinRelleno`).
+
+### 🗑 Código sin ningún llamador en 34.000 líneas ni en tests, retirado
+- `mtrSumarDiasHabiles`, `mtrCnoHDL`, `_relojEstadoParaTest`, `_relojAjustarParaTest`, `_getUltimoRelevoParaTest`, `_vglAvisoContextoFaltante`/`_vglContextoAvisado`, `mtrItemSugeridoEnRango` (duplicado del GAP 1, ya resuelto por `_marcarPlazoSegunSugerida`).
+- La cadena completa del modal "Riesgo cardiovascular · Redacción IA" (beta cerrada, nunca conectada a un botón real): `openRiesgoModal`, `mtrRenderRiesgoModalHtml`, `mtrRenderResumenClinicoHtml` (~90 líneas cada una), `openFichaPacienteModal` (wrapper cuyo comentario afirmaba falsamente tener llamadores internos), y el listener global `mtrIaClickDelegado` que `boot()` seguía registrando para un botón (`#vgl-ia-redactar`) que solo esa cadena muerta podía pintar.
+- La propiedad `estadioParaDosis` del resultado de `calcularEstadioRenal`: su condición era tautológica (ambas ramas devolvían lo mismo) y no tenía ningún consumidor.
+- La variable `lastAutoFetchedDoc`: se escribía en dos sitios pero nunca se leía desde v17.0.3 (el piso real es `lastAutoFetchedAt`). De paso, el reset al revivir la sesión de Athenea reseteaba la variable muerta en vez de la real — el robot podía NO reintentar tras revivir la sesión, contradiciendo lo que su propio mensaje de consola prometía. Corregido: ahora resetea `lastAutoFetchedAt`.
+
+### 🧹 Comentarios desactualizados corregidos
+- Cuatro comentarios que seguían describiendo `lastAutoFetchedDoc` como "la guarda" ahora nombran la guarda real (`lastAutoFetchedAt`).
+
+---
+
+## [Versión 17.6.28] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 2/2: 4 bugs críticos, cierra el bloque)
+
+Segunda y última parte del Bloque S1 del barrido exhaustivo (8/8 críticos corregidos).
+
+### 🐛 Un timeout de AppCita ya no se presenta como "no hay turnos de laboratorio"
+- `cargarHorasLab` y `cargarHorasLabSolo` usaban `gmPostJson`, que no distingue "AppCita contestó: sin turnos" de "no contestó" (timeout, sin red, 500) — misma clase de bug que la AUDITORÍA #11 ya corrigió en `apiLaboratorioAgendarAuto`, pero seguía viva aquí. Ahora usan `gmPostJsonEx` y avisan honestamente cuando no hubo respuesta, sin tocar el interruptor de la toma.
+
+### 🐛 Las interacciones farmacológicas ya no se silencian por falta de Cockcroft-Gault
+- `mtrAvisosFarmacologicos` apagaba TODO —avisos de dosis Y las interacciones (Triple Whammy incluido)— cuando faltaba solo el Cockcroft-Gault, aunque las interacciones no lo necesitan. Además, el panel de Medicamentos nunca pasaba `tfgCockcroftGault` en absoluto: quedaba permanentemente en "Falta la función renal" para TODO paciente. Los dos huecos, corregidos.
+
+### 🐛 La contraseña institucional de Athenea ya no se guarda en claro
+- `atheneaCredsSet` escribía la credencial compartida en CUATRO sitios EN CLARO (GM y localStorage de los dos orígenes) al lado de la copia ofuscada, anulando la protección documentada. Ahora la copia ofuscada es la única escritura; las claves en claro heredadas de versiones viejas se migran y se borran al leerse.
+
+### 🐛 "SMS enviado" ya no se afirma antes de saberlo
+- La notificación de cita creada decía "SMS de recordatorio enviado al X" en el mismo instante en que se disparaba la petición (fire-and-forget) — un rechazo del proveedor o un fallo de red se anunciaba igual como éxito. El texto ahora dice lo único que se sabe con certeza en ese momento: que se solicitó el envío.
+
+---
+
+## [Versión 17.6.27] — 2026-08-24 (Barrido S+ total — Bloque S1, parte 1/2: 4 bugs críticos)
+
+Primer lote del barrido exhaustivo línea por línea de todo el archivo (33.869 líneas, 48 agentes, verificación adversarial): 8 hallazgos S1 confirmados. Estos 4 primeros.
+
+### 🐛 El uroanálisis ya no inventa resultados en pantalla
+- `_resumenClinicoUro` pintaba SIEMPRE "Límpido · Leucocitos (-) · Nitritos (-)" cuando la heurística no marcaba patológico — literales fijos, no lo que el informe real dice. Un aspecto "TURBIO" (que la heurística no reconoce: no está en su lista de valores negativos ni positivos) salía como "Límpido" fabricado junto al badge "Sin hallazgos patológicos". Ahora los chips citan los valores REALES de aspecto/color/leucocitos/nitritos del informe; si ninguno está presente, un texto neutro que no afirma nada no medido.
+
+### 🐛 Las comorbilidades ya no se pierden al cambiar de pestaña de Everest
+- `_vglCosecharFactoresVisibles` prometía en su propio comentario fusionar lo archivado con lo nuevo, pero arrancaba de un mapa vacío y `_vglCosechaGuardar` fusiona plano — cada pestaña visitada REEMPLAZABA entero el archivo de factores del paciente. Abrir Antecedentes (diabetes/HTA archivados) y pasar a Hábitos borraba diabetes/HTA del archivo, con la compuerta de contexto abierta: riesgo cardiovascular falsamente bajo. Ahora el mapa arranca de lo ya archivado y la pantalla actual se superpone — igual que ya hace `_vglConfirmacionGuardar` con las confirmaciones.
+
+### 🐛 La regla "50% de vigencia fuera de meta" ya llega a los pacientes con programa/estadio
+- `_vigenciaDiasParaAnalito` retornaba la vigencia por tabla de estadio ANTES de evaluar `opts.aplicar50` — la regla de v16.4.0 quedaba inalcanzable justo para los pacientes con contexto clínico completo (el caso principal para el que se escribió: los dos únicos llamadores con `aplicar50:true` siempre pasan también programa/estadio cuando hay resumen en caché). Un LDL fuera de meta con programa HTA salía "vigente" por 180 días completos en vez de acortarse a 90.
+
+### 🐛 Las funciones nuevas ya no se autoencienden en instalaciones limpias
+- La guarda `_habiaConfigPrevia` de la migración "estreno" (v14.2.0, ya blindada una vez en v17.6.8) se leía DESPUÉS de que cuatro migraciones anteriores ya habían escrito `vgl_cfg` — así que en TODA instalación limpia la guarda daba falso positivo y motor/IA/telemetría/reporte se encendían solos. Se captura ahora antes de la primera migración, y además la migración se marca como "ya evaluada" siempre (no solo cuando enciende las banderas), para que un equipo limpio que más tarde genera su primer `vgl_cfg` tampoco dispare la migración fuera de tiempo.
+
+---
+
+## [Versión 17.6.26] — 2026-08-24 (Redactor IA — se elimina la redundancia «Datos del paciente», el estilo se aprende solo, y se limpia texto interno que se colaba a pantalla)
+
+Seguimiento inmediato al Bloque A: el médico revisó el resumen de los cambios y encontró tres cosas más antes de seguir con la rotación de modelos.
+
+### 🗑 «➕ Datos del paciente» se retira por completo — redundante con «Indicaciones»
+- Existían DOS lugares para darle contexto extra a la IA: el textarea "Indicaciones" del panel principal (un cuadro, cero clics) y el modal "➕ Datos del paciente" (botón → abrir → llenar 9 campos → guardar → cerrar). Ambos alimentaban el mismo bloque del prompt. Se retira el modal (`mtrAbrirDatosAdicionales`, su botón y su handler); "Indicaciones" pasa a cubrir también síntomas, adherencia y hábitos en texto libre.
+- La caja roja de datos críticos (categoría de riesgo, TFG, medicamentos — la que bloquea la generación de Análisis y plan si falta algo obligatorio) **no se toca**: es un guardián automático, no una alternativa de captura de texto.
+- `MTR_DATOS_EXTRA_ETIQUETAS` se reduce de 12 a 3 claves (las de la caja roja); las 9 del modal retirado ya no las alimenta nadie.
+
+### 🧠 La memoria de estilo ahora es automática — sin botón, sin checkbox
+- Se retiran el botón "💾 Guardar mi estilo" y el checkbox "Mi estilo": ya no son decisiones manuales del médico. `mtrEstiloGuardar` se llama sola cada vez que el médico acepta un borrador (Copiar o Insertar) SIN editarlo (`mtrCalcularDeltaEdicion === "intacta"`) — un texto que necesitó reescritura no enseña estilo. Y los ejemplos guardados se usan SIEMPRE que haya al menos uno: nada que marcar.
+
+### 🐛 Texto interno filtrado a la pantalla del médico
+- Tres textos visibles en la interfaz citaban fechas y "decisiones" de una conversación de desarrollo interna ("decisión suya del 20-ago", "decisión del 22-ago", "decisión clínica del médico, 20-ago-2026") — lenguaje que solo tiene sentido en el registro de cambios, no en una herramienta que usan médicos que no participaron en esa conversación. Corregido en: el aviso de privacidad del Redactor IA, el tooltip del botón "Hoja educativa", y dos criterios de clasificación de riesgo (piso por diabetes, piso por edad) — el contenido clínico se conserva intacto, solo se retira la referencia a la fecha/decisión.
+
+---
+
+## [Versión 17.6.25] — 2026-08-24 (Redactor IA — Bloque A: botón «Preguntar» y datos del paciente que se perdían)
+
+Primer bloque de la auditoría S+ de 20 bugs sobre la Redacción Asistida (IA), pedida por el médico tras revisar los hallazgos ("hay botones de más", además de los ya conocidos de contexto/rotación/tokens que se atacan en bloques siguientes). Correcciones aisladas, sin dependencias entre sí.
+
+### 🐛 v17.6.24 — El botón «❓ Preguntar sobre este paciente» ahora SÍ se ve seleccionado
+- Comparte el selector delegado de los 3 chips de casilla (`.vgl-ia-modos [data-modo]`) y sí recibía la clase `.active` al hacer clic, pero llevaba `class="vgl-agm-btn sec"` (no `vgl-agm-pbtn`) y no existía ninguna regla CSS `.active` para esa combinación en toda la hoja de estilos: el clic cambiaba de modo de verdad (aparecía el campo de pregunta) pero apagaba los 3 chips sin encender nada — parecía que el clic no había hecho efecto. Nueva regla `.vgl-agm-btn.sec.active`, misma paleta que `.vgl-agm-pbtn.active`. Censo de `!important` de suite_25: 347 → 349 (+2, documentado en el propio test).
+
+### 🐛 v17.6.25 — «➕ Datos del paciente» ya no borra en silencio lo que la caja de críticos había guardado
+- El Guardar de ese formulario armaba `datos` desde cero con solo sus 9 campos y llamaba `mtrDatosExtraGuardar`, que **reemplaza** todo el almacén (no fusiona). Si antes el médico había llenado la caja roja de datos críticos del Análisis y plan (categoría de riesgo, TFG, medicamentos — que sí fusiona con `Object.assign`), esos 3 campos se perdían sin ningún aviso al guardar el formulario general. Ahora el Guardar arranca desde lo ya guardado (leído fresco, no la foto de cuando se abrió el modal) y superpone sus 9 campos encima.
+
+---
+
 ## [Versión 17.6.23] — 2026-08-24 (Redactor IA: se ataca la causa raíz del truncamiento, no solo el aviso)
 
 Corrección sobre v17.6.22: "necesito que siempre salga completo, así no me sirve" — el aviso honesto de borrador incompleto queda como red de seguridad, pero se sube el presupuesto real de tokens.

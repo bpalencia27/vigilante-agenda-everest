@@ -581,8 +581,13 @@ module.exports = {
       // v17.6.18 (reporte de campo, 24-ago-2026: "el cronómetro no le encontré utilidad"
       // — se retira por completo): 350 -> 347. -3 del cronómetro del paciente en sala
       // (.vgl-cd.vgl-cron: background y color + la variante .light), que ya no existe.
+      // v17.6.24 (auditoría S+ del Redactor IA, 24-ago-2026): 347 -> 349. +2 de
+      // .vgl-agm-btn.sec.active (background y box-shadow) — el botón «❓ Preguntar sobre
+      // este paciente» del Redactor IA vive dentro de #vgl-ia-modal (colgado de
+      // document.body, Regla E) y antes NO tenía ninguna regla .active: el clic sí cambiaba
+      // de modo pero no se veía seleccionado, como si el clic no hubiera hecho efecto.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 347, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 347, salió ${importantTotal})`);
+      t.cierto(importantTotal === 349, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 349, salió ${importantTotal})`);
     });
 
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
@@ -848,6 +853,31 @@ module.exports = {
       const rFg2 = ratio(fg2Compuesto, fondoDockClaro);
       t.cierto(rClaro < rFg2,
         `--fg3 (${rClaro.toFixed(2)}:1) quedó igual o MÁS contrastado que --fg2 (${rFg2.toFixed(2)}:1): se invirtió la jerarquía de énfasis del panel`);
+    });
+
+    // v17.6.41 — AUDITORÍA S+ (barrido total, 24-ago-2026): .vgl-toast-rail se crea en JS
+    // (el <i class="vgl-toast-rail"> de cada toast) pero nunca tuvo regla base de CSS —
+    // sin width/height, la franja de color que distingue el tipo de aviso (rojo/verde/
+    // ámbar/azul) era invisible. De paso, .vgl-toast-ic declaraba box-shadow DOS veces (la
+    // segunda, plana, pisaba el anillo de acento --tk de la primera) y .vgl-toast-b
+    // declaraba font-size DOS veces (la primera, 12.5px fija, era código muerto).
+    t.caso("v17.6.41: .vgl-toast-rail tiene una regla base real (no queda invisible)", () => {
+      t.cierto(/\.vgl-toast-rail\{width:/.test(css), ".vgl-toast-rail debe tener un ancho propio, no depender solo del inline style de color");
+    });
+
+    t.caso("v17.6.41: .vgl-toast-ic ya no pisa su propio anillo de acento con un box-shadow duplicado", () => {
+      const idx = css.indexOf(".vgl-toast-ic{");
+      const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
+      const ocurrencias = (bloque.match(/box-shadow:/g) || []).length;
+      t.igual(ocurrencias, 1, "una sola declaración de box-shadow en .vgl-toast-ic (la que trae el anillo --tk)");
+      t.cierto(/box-shadow:var\(--glow-edge\),inset/.test(bloque), "debe sobrevivir la versión CON el anillo --tk, no la plana");
+    });
+
+    t.caso("v17.6.41: .vgl-toast-b ya no declara font-size dos veces", () => {
+      const idx = css.indexOf(".vgl-toast-b{");
+      const bloque = css.slice(idx, css.indexOf("}", idx) + 1);
+      const ocurrencias = (bloque.match(/font-size:/g) || []).length;
+      t.igual(ocurrencias, 1, "una sola declaración de font-size en .vgl-toast-b");
     });
 
   }

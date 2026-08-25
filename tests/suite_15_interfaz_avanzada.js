@@ -66,7 +66,7 @@ module.exports = {
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
-    "pymPaquetesDelPaciente",
+    "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1124,6 +1124,53 @@ module.exports = {
       t.noLanza(() => c.api._agruparUroanalisisParaTabla(null));
       t.noLanza(() => c.api._agruparUroanalisisParaTabla(undefined));
       t.igual(c.api._agruparUroanalisisParaTabla([]).length, 0);
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug de 0-falsy que
+    // _hayComponenteUroReal ya corrigió (Hematíes=0, Leucocitos=0 son resultados REALES
+    // y frecuentes) — este bloque seguía encadenando con ||, así que un 0 real se volvía
+    // "—" (sin dato) dentro del bloque agrupado de Uroanálisis.
+    t.caso("v17.6.43: _agruparUroanalisisParaTabla conserva un resultado real de 0 (no lo vuelve '—')", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: 0, Fecha: "2026-08-03" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: 0, Fecha: "2026-08-03" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      const hem = bloque.__vglGrupoUroComponentes.find((x) => x.nombre === "HEMATIES");
+      const leu = bloque.__vglGrupoUroComponentes.find((x) => x.nombre === "LEUCOCITOS");
+      t.igual(hem.resultado, 0, "Hematíes=0 debe sobrevivir como 0, no como '—'");
+      t.igual(leu.resultado, 0, "Leucocitos=0 debe sobrevivir como 0, no como '—'");
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug, esta vez con
+    // consecuencia clínica: `lab.Resultado || lab.resultado || lab.valor` volvía el 0
+    // real en `undefined` (0 es falsy), y esValorReal(lab, val) —que exige v != null—
+    // rechazaba el hallazgo por completo: un resultado negativo/normal real (SANGRE=0,
+    // BACTERIAS=0) se perdía en silencio en vez de registrarse como hallazgo negativo.
+    t.caso("v17.6.43: mtrHallazgosUroDesdeLabs no pierde un resultado real de 0", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "SANGRE EN ORINA", NombreParametroPadre: "UROANALISIS", Resultado: 0 },
+        { NombreParametro: "BACTERIAS EN ORINA", Resultado: 0 },
+      ];
+      const h = c.api.mtrHallazgosUroDesdeLabs(labs);
+      t.cierto(!!h, "debe reconocer hallazgos reales, aunque los dos sean 0");
+      t.igual(h.sangre, 0, "SANGRE=0 debe registrarse, no perderse");
+      t.igual(h.bacteriuria, 0, "BACTERIAS=0 debe registrarse, no perderse");
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug, esta vez en la
+    // columna "Resultado" de la tabla GENERAL de laboratorios (openLaboratoriosModal,
+    // TODOS los analitos, no solo uroanálisis) — un 0 real se mostraba como "—". Vive
+    // dentro de un cierre profundo (no es una unidad aislable) — se protege por texto
+    // fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.43: la tabla general del modal de Laboratorios conserva un resultado real de 0", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/const resultado = lab\.Resultado \|\| lab\.resultado \|\| lab\.valor \|\| lab\.Valor \|\| "—";/.test(src), "ya no debe quedar el encadenado || crudo");
+      t.cierto(/const resultado = lab\.Resultado != null \? lab\.Resultado : \(lab\.resultado != null \? lab\.resultado : \(lab\.valor != null \? lab\.valor : \(lab\.Valor != null \? lab\.Valor : "—"\)\)\);/.test(src), "debe comparar explícitamente contra null, igual que _hayComponenteUroReal");
     });
 
     // Instancia con red simulada: el puente REAL de 3 pasos (BusquedaPaciente ->
@@ -2821,6 +2868,129 @@ module.exports = {
       const btnNoRecomendado = [...slots.children].find((b) => b.className.includes("vgl-agm-sbtn-adic-no"));
       t.cierto(!!btnNoRecomendado, "el cupo adicional para un diabético lleva la clase de desaconsejado");
       t.cierto((btnNoRecomendado.innerHTML || "").includes("SOLO SI NO HAY OTRA CITA"), "la razón va visible en la loseta, no solo en el tooltip");
+    });
+
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): cargarHorasLab y
+    // cargarHorasLabSolo usaban gmPostJson, que no distingue "AppCita contestó: sin
+    // turnos" de "no contestó" (timeout/red caída/500) — ambos casos se presentaban al
+    // médico como el HECHO verificado "No hay turnos de laboratorio disponibles", y en
+    // cargarHorasLab además desmarcaba/deshabilitaba el interruptor de la toma. Misma
+    // clase de bug que ya corrigió la AUDITORÍA #11 en apiLaboratorioAgendarAuto
+    // (gmPostJsonEx, ~15326) y en las agendas (resAgendas.__sinRespuesta, ~19473). No hay
+    // unidad aislable sin reconstruir el modal completo de agendamiento (>2000 líneas de
+    // closures) — se protege por texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.28: cargarHorasLab y cargarHorasLabSolo usan gmPostJsonEx (distinguen sin-respuesta de sin-turnos)", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const fnCargarHorasLab = src.slice(src.indexOf("async function cargarHorasLab() {"), src.indexOf("async function cargarHorasLab() {") + 2200);
+      t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLab), "cargarHorasLab consulta con gmPostJsonEx, no gmPostJson");
+      t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLab), "y distingue el caso 'no hubo respuesta' antes de mirar la lista de turnos");
+
+      const fnCargarHorasLabSolo = src.slice(src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {"), src.indexOf("async function cargarHorasLabSolo(exigirEleccion) {") + 1600);
+      t.cierto(/await gmPostJsonEx\(urlTurnos/.test(fnCargarHorasLabSolo), "cargarHorasLabSolo también consulta con gmPostJsonEx");
+      t.cierto(/if \(!resAgEx \|\| !resAgEx\.ok\)/.test(fnCargarHorasLabSolo), "y también distingue sin-respuesta de sin-turnos");
+    });
+
+    // =================================================================
+    // v17.6.28 — AUDITORÍA S+ (barrido total, 24-ago-2026): `ultimoSmsEnviado` se fija en
+    // cuanto se DISPARA el fetch de EnviarSMS (fire-and-forget, sin esperar el .then()) y
+    // la notificación de "Cita asignada" que lo muestra es SÍNCRONA justo después — así
+    // que un rechazo del proveedor de SMS o un fallo de red se anunciaba igual como
+    // "SMS de recordatorio enviado al X", una afirmación que en ese momento nadie había
+    // confirmado. Se corrige el verbo a lo único que ahí se sabe con certeza: que la
+    // petición se envió, no que llegó. No hay unidad aislable (vive dentro del cierre
+    // async de creación de cita, con turnoId/celularSms de closure) — se protege por
+    // texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.28: la notificación de cita creada ya NO afirma que el SMS se entregó, solo que se solicitó", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/SMS de recordatorio enviado al \$\{ultimoSmsEnviado\}/.test(src), "ya no debe quedar la afirmación de entrega confirmada");
+      t.cierto(/Se solicitó el envío del SMS de recordatorio al \$\{ultimoSmsEnviado\}/.test(src), "el texto ahora dice lo que de verdad se sabe: que se solicitó");
+    });
+
+    // =================================================================
+    // v17.6.32 — AUDITORÍA S+ (barrido total, 24-ago-2026): 10 textos visibles al médico
+    // usaban tuteo (tú) mientras el resto de la interfaz — y el propio proyecto — trata al
+    // médico de usted de forma consistente ("Pulse", "Verifique", "Escriba"). Mezclar
+    // ambos tratos dentro del mismo flujo (a veces en la misma notificación) lee como
+    // descuido. Se protegen por texto fuente: son cambios de redacción sin lógica que
+    // mutar, mismo criterio que la prueba de SMS de arriba.
+    t.caso("v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const tuteos = [
+        /Ya tienes la última versión/,
+        /Llevas \$\{dias\} días/,
+        /Repórtalo\./,
+        /Ábrelo una vez con tu usuario/,
+        /Navegador sin soporte \.xlsx; usa \.csv/,
+        /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Prueba \.csv/,
+        /Notificaciones BLOQUEADAS:.*recarga\./,
+        /Actívalo en el candado/,
+        /sin que tengas que buscarlos/,
+        /por si necesitas el reporte completo/,
+        /cuando cierres la historia clínica/,
+        /Actualízala desde el Menú de Tampermonkey/,
+      ];
+      tuteos.forEach((re) => t.falso(re.test(src), `no debe quedar tuteo: ${re}`));
+      const ustedes = [
+        /Ya tiene la última versión/,
+        /Lleva \$\{dias\} días/,
+        /Repórtelo\./,
+        /Ábralo una vez con su usuario/,
+        /Navegador sin soporte \.xlsx; use \.csv/,
+        /\(\.xlsx\) \(" \+ err\.message \+ "\)\. Pruebe \.csv/,
+        /Notificaciones BLOQUEADAS:.*recargue\./,
+        /Actívelo en el candado/,
+        /sin que tenga que buscarlos/,
+        /por si necesita el reporte completo/,
+        /cuando cierre la historia clínica/,
+        /Actualícela desde el Menú de Tampermonkey/,
+      ];
+      ustedes.forEach((re) => t.cierto(re.test(src), `debe quedar en usted: ${re}`));
+    });
+
+    // =================================================================
+    // v17.6.33 — AUDITORÍA S+ (barrido total, 24-ago-2026): el celular del paciente
+    // (PII) se registraba COMPLETO en la consola del navegador en 3 sitios del flujo de
+    // SMS. El propósito diagnóstico declarado (comparar contra lo que el médico cree
+    // haber escrito) solo necesita los últimos dígitos.
+    t.caso("v17.6.33: _mtrCelularMascarado conserva solo los últimos 2 dígitos del celular", () => {
+      t.igual(api._mtrCelularMascarado("3001234567"), "300****67", "número real: prefijo + máscara + últimos 2");
+      t.igual(api._mtrCelularMascarado(""), "", "vacío: no revienta");
+      t.igual(api._mtrCelularMascarado(null), "", "null: no revienta");
+      t.igual(api._mtrCelularMascarado("12"), "12", "número de 2 dígitos o menos: se deja igual, no hay nada que enmascarar");
+    });
+
+    t.caso("v17.6.33: los 3 registros de consola del flujo de SMS ya no exponen el celular completo", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/celular usado:", cel\)/.test(src), "ya no debe quedar el celular crudo en el console.log de éxito");
+      t.falso(/celular usado:", cel,/.test(src), "ya no debe quedar el celular crudo en los otros 2 registros");
+      const ocurrencias = (src.match(/celular usado:", _mtrCelularMascarado\(cel\)/g) || []).length;
+      t.igual(ocurrencias, 3, "los 3 sitios (envío automático éxito/fallo y reenvío manual) deben usar la máscara");
+    });
+
+    // v17.6.40 — AUDITORÍA S+ (barrido total, 24-ago-2026): el "modo oculto" (pensado
+    // para ocultar TODO el Vigilante de un vistazo, ej. si alguien más mira la
+    // pantalla) no incluía 7 elementos que cuelgan de document.body y se agregaron
+    // después de escribirse esta lista: #vgl-confirma-modal, #vgl-llenar-modal,
+    // #vgl-min-bar, #vgl-deshacer-llenado, #vgl-deshacer-lote, #vgl-ia-inj-ea,
+    // #vgl-ia-inj-an quedaban visibles con el modo oculto activo.
+    t.caso("v17.6.40: el modo oculto (privacidad de pantalla) esconde los 7 elementos que faltaban", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("body.vgl-modo-oculto #vgl-root");
+      const regla = src.slice(idx, src.indexOf("{display:none !important}", idx));
+      ["vgl-confirma-modal", "vgl-llenar-modal", "vgl-min-bar", "vgl-deshacer-llenado", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
+        t.cierto(regla.includes("body.vgl-modo-oculto #" + id), "#" + id + " debe esconderse en modo oculto");
+      });
     });
 
   },

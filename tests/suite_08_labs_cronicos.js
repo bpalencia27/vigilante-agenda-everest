@@ -5,9 +5,11 @@ module.exports = {
     "injectLabsIntoCronicos", "setNgValue",
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
+    "_resumenClinicoUro", "_esUroComponenteAlterado",
     "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
-    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto"
+    "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
+    "_resolverLdlPorTrigliceridos",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -236,6 +238,44 @@ module.exports = {
       t.igual(res.count, 0);
       t.igual(res.sinCasilla.length, 1);
       t.cierto(res.sinCasilla[0].includes("HEMOGLOBINA GLICOSILADA") || res.sinCasilla[0].includes("HBA1C"));
+    });
+
+    // v17.6.45 — AUDITORÍA S+ (barrido total, 24-ago-2026): AUDITORÍA #6 (v16.7.0) blindó
+    // el conteo de "resultado llevado" contra un rechazo silencioso del navegador (casilla
+    // type=number que descarta un valor con coma) SOLO en la ruta de componentes de
+    // orina — el camino sérico PRINCIPAL (la whitelist de 13 laboratorios) seguía sumando
+    // count++ sin comprobar si setNgValue de verdad escribió algo.
+    t.caso("v17.6.45: injectLabsIntoCronicos NO cuenta un resultado que el navegador rechazó (camino sérico principal)", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      // Casilla que rechaza CUALQUIER valor (simula un input type=number descartando "1,2"
+      // con coma): tras asignarla, value sigue vacío — exactamente lo que setNgValue mide.
+      c.env.doc.getElementById = (id) => {
+        if (id !== "resultadoColesterolTotal") return null;
+        return {
+          id: id, tagName: "INPUT",
+          dispatchEvent: (evt) => { eventsDispatched.push({ id, type: evt.type }); },
+          get value() { return ""; }, set value(v) { /* el navegador rechaza: no queda nada */ },
+        };
+      };
+      try {
+        const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "1,2", Fecha: "2023-01-01" }];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(res.count, 0, "el rechazo del navegador NO debe contar como resultado llevado");
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
+    // v17.6.45 — mismo blindaje en el reintento de las casillas de componente de
+    // uroanálisis (300/900 ms tras marcar SI, cuando Angular tarda en montar el *ngIf):
+    // corre dentro de un setTimeout, no es una unidad aislable — se protege por fuente.
+    t.caso("v17.6.45: el reintento de casillas de uroanálisis también comprueba setNgValue antes de contar 'escritas'", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/if \(actual === ""\) \{ setNgValue\(el, r\.resultVal\); escritas\+\+; \}/.test(src), "ya no debe contar sin comprobar el retorno de setNgValue");
+      t.cierto(/if \(actual === "" && setNgValue\(el, r\.resultVal\)\) escritas\+\+;/.test(src), "debe exigir que setNgValue haya devuelto true");
     });
 
     t.caso("_parseFechaLike: reconoce ISO, dd/mm/aaaa y fecha .NET /Date(ms)/, y descarta lo que no es fecha", () => {
@@ -1608,6 +1648,78 @@ module.exports = {
       const hba1cEnPaquete = i10x.cups.find((x) => x.desc.toUpperCase().includes("GLICOSILADA"));
       t.cierto(!!hba1cEnPaquete, "precondición: el paquete I10X trae HbA1c");
       t.igual(c.api.__CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO.HBA1C, hba1cEnPaquete.codigo, "mismo CUPS en los dos sitios donde HbA1c aparece");
+    });
+
+    // v17.6.27 — AUDITORÍA S+ (barrido total, 24-ago-2026): cuando la heurística de
+    // patológico no marcaba nada, _resumenClinicoUro pintaba SIEMPRE los chips fijos
+    // "Límpido · Leucocitos (-) · Nitritos (-)" — un dato inventado que no reflejaba el
+    // informe real. Un aspecto "TURBIO" (que _esUroComponenteAlterado no reconoce: no está
+    // en su lista de valores negativos ni positivos, y parseFloat da NaN) salía como
+    // "Límpido" fabricado junto al badge "Sin hallazgos patológicos" — justo lo que la
+    // regla de oro #1 del proyecto prohíbe (sin dato real = sin suposición).
+    t.caso("v17.6.27: _resumenClinicoUro NUNCA inventa chips fijos — usa los valores reales del informe", () => {
+      const componente = (nombre, resultado) => ({ nombre, resultado });
+      // Caso A: aspecto realmente alterado ("Turbio") que la heurística de altered no
+      // reconoce (esPatologico queda false) — el chip debe decir la verdad, no "Límpido".
+      const turbio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Turbio"),
+        componente("Color", "Amarillo"),
+      ]);
+      t.falso(turbio.esPatologico, "precondición: la heurística de 'alterado' no reconoce 'turbio'");
+      t.falso(turbio.chips.includes("Límpido"), "jamás debe afirmar 'Límpido' cuando el informe dice 'Turbio'");
+      t.cierto(turbio.chips.some((x) => x.includes("Turbio")), "el chip refleja el aspecto REAL del informe: " + turbio.chips.join(" | "));
+
+      // Caso B: informe realmente limpio — los chips deben venir de los componentes reales
+      // entregados, no de un literal que coincida por casualidad.
+      const limpio = c.api._resumenClinicoUro([
+        componente("Aspecto", "Límpido"),
+        componente("Nitritos", "Negativo"),
+      ]);
+      t.falso(limpio.esPatologico);
+      t.cierto(limpio.chips.some((x) => x.includes("Límpido")) && limpio.chips.some((x) => x.includes("Nitritos")), "los chips citan los componentes reales presentes: " + limpio.chips.join(" | "));
+
+      // Caso C: sin patología y sin ninguno de los 4 componentes que se suelen resumir —
+      // nunca debe fabricar un dato; texto neutro en su lugar.
+      const sinDatos = c.api._resumenClinicoUro([componente("pH", "6.0")]);
+      t.falso(sinDatos.esPatologico);
+      t.falso(sinDatos.chips.includes("Límpido") || sinDatos.chips.includes("Nitritos (-)"), "sin aspecto/color/leucocitos/nitritos en el informe, no debe inventarlos");
+      t.igual(sinDatos.chips[0], "Sin alteraciones reconocidas");
+    });
+
+    // v17.6.44 — AUDITORÍA S+ (barrido total, 24-ago-2026): _resolverLdlPorTrigliceridos
+    // usaba Number() crudo, que da NaN con coma decimal ("436,2") o desigualdad ("> 400")
+    // — justo los dos formatos que _labNumerico existe para sanear. Con NaN, la regla del
+    // médico (TG>400 invalida Friedewald: usar el LDL directo, no el calculado) quedaba
+    // invertida para cualquier informe de laboratorio con coma decimal.
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG>400 aunque venga con coma decimal", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      // Con Number() crudo, Number("436,2") es NaN -> tgMayor400 siempre false (bug).
+      const tgComaAlto = { resultVal: "436,2" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaAlto), directo,
+        "TG=436,2 (coma decimal) > 400: debe preferir el LDL DIRECTO, no el calculado");
+
+      const tgComaBajo = { resultVal: "180,5" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgComaBajo), normal,
+        "TG=180,5 (coma decimal), normal: debe preferir el LDL calculado (normal), regla de siempre");
+    });
+
+    t.caso("v17.6.44: _resolverLdlPorTrigliceridos reconoce TG fuera de rango con desigualdad ('> 400')", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "110", resultDate: misma };
+      const normal = { resultVal: "102", resultDate: misma };
+      const tgDesigualdad = { resultVal: "> 450" };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, tgDesigualdad), directo,
+        "TG '> 450' (desigualdad del LIS, claramente por encima de 400): debe preferir el LDL directo");
+    });
+
+    t.caso("_resolverLdlPorTrigliceridos: sin triglicéridos legibles, se queda con la regla general (normal)", () => {
+      const misma = "2026-08-01";
+      const directo = { resultVal: "95", resultDate: misma };
+      const normal = { resultVal: "88", resultDate: misma };
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, null), normal, "sin dato de TG, no hay razón para preferir el directo");
+      t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, { resultVal: "nota de laboratorio" }), normal, "TG ilegible (ni número ni desigualdad): tratado igual que sin dato");
     });
   }
 };
