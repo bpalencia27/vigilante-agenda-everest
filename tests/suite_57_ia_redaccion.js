@@ -1132,5 +1132,22 @@ module.exports = {
       t.cierto(/escapeHtml\(_ultimoModelo\)/.test(fn), "debe usar escapeHtml, el helper real del proyecto");
     });
 
+    // v17.6.36 — AUDITORÍA S+ (barrido total, 24-ago-2026): esta es la causa raíz del
+    // bug reportado por el médico al comienzo de esta auditoría: "el asistente dice que
+    // hay borrador sin pegar aunque ya lo pegué". El snapshot de cambio de chip creaba
+    // un objeto NUEVO para _borradores[modoAnterior], sin la bandera `insertado` — y
+    // como _casillaHechaYSiguiente() AUTO-AVANZA con chip.click() apenas fija
+    // insertado=true, este mismo handler corría un instante después y la borraba en el
+    // mismo stack. _hayBorradoresSinInsertar() (que dispara el aviso al cerrar) lee
+    // exactamente esa bandera. Vive dentro del cierre de mtrAbrirPanelRedaccion — se
+    // protege por texto fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.36: el cambio de chip preserva la bandera insertado (no la pisa con un objeto nuevo)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("let modoAnterior = modo;");
+      const fn = src.slice(idx, idx + 1700);
+      t.falso(/_borradores\[modoAnterior\] = \{ texto:/.test(fn), "ya no debe crear un objeto nuevo que pierda las banderas existentes");
+      t.cierto(/_borradores\[modoAnterior\] = Object\.assign\(\{\}, _borradores\[modoAnterior\], \{ texto:/.test(fn), "debe fusionar sobre lo ya guardado, preservando insertado");
+    });
+
   },
 };

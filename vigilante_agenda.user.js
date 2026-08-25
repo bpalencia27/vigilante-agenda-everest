@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.35
+// @version     17.6.36
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.35";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.36";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32014,7 +32014,13 @@ _vglOfrecerDeshacer(btn);
         // guarda v14.2.0 (que un texto no caiga en la casilla equivocada) queda MÁS
         // fuerte que antes: la inserción usa siempre el borrador PROPIO del modo activo,
         // guardado bajo su clave — ya no existe un único texto compartido que confundir.
-        _borradores[modoAnterior] = { texto: salida.value, original: textoGeneradoOriginal, estado: estado.textContent };
+        // v17.6.36 — AUDITORÍA S+ (barrido total, 24-ago-2026): este snapshot creaba un
+        // objeto NUEVO en cada cambio de chip, perdiendo la bandera `insertado` que
+        // _casillaHechaYSiguiente() acababa de fijar en TRUE un instante antes (el
+        // auto-avance dispara este mismo click handler sobre el chip siguiente). Se
+        // preservan las banderas ya existentes; solo texto/original/estado se actualizan
+        // con lo que hay ahora mismo en pantalla.
+        _borradores[modoAnterior] = Object.assign({}, _borradores[modoAnterior], { texto: salida.value, original: textoGeneradoOriginal, estado: estado.textContent });
         // v16.7.0 — SE LLAMABA `b` Y MATABA LOS CHIPS. `b` ya era el parámetro del
         // forEach (el botón); declarar `const b` aquí lo sombreaba en TODO el cuerpo de
         // la función, así que la primera línea (`b.classList.add("active")`) caía en la

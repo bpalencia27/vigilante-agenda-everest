@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.36] — 2026-08-24 (Barrido S+ total — se identifica y corrige la causa raíz del aviso falso "hay borrador sin pegar")
+
+### 🐛 El aviso "hay borradores sin insertar" ya no aparece después de haber insertado
+- Esta es la causa raíz del primer reporte de esta auditoría: el asistente advertía "Hay borradores sin insertar en la historia" al cerrar el Redactor aunque el médico ya hubiera insertado los tres textos. Al insertar una casilla y avanzar automáticamente a la siguiente, el cambio de casilla activa borraba —sin querer— la marca de "ya insertado" que se acababa de fijar un instante antes, porque reconstruía el registro del borrador desde cero en vez de conservar sus datos. Ahora ese registro conserva todo lo que ya tenía al actualizarse.
+
+---
+
 ## [Versión 17.6.35] — 2026-08-24 (Barrido S+ total — Bloque Editar: el contador del Redactor ya no se congela tras la primera generación)
 
 ### 🐛 El contador de palabras y caracteres del borrador ya no deja de actualizarse

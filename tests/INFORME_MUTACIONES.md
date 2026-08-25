@@ -1079,6 +1079,26 @@ Nota de depuración: el primer intento de esta prueba usaba una ventana de recor
 código (mismo tipo de error ya documentado en v17.6.28 con `mtrPanelMedicamentosHtml`).
 Ampliada a 1000 caracteres.
 
+## v17.6.36 — 24-ago-2026 (se identifica y corrige la causa raíz del aviso falso "hay borrador sin pegar")
+
+Banco antes: 1.457 (con la prueba nueva ya sumada) · después de restaurar: **1.457**.
+Esta es la causa raíz del PRIMER reporte de bug de toda esta auditoría (el que la abrió).
+El snapshot de cambio de chip vive dentro del cierre de `mtrAbrirPanelRedaccion` (no es
+una unidad aislable) — se protege por texto fuente, mismo criterio ya establecido en el
+banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **snapshot de cambio de chip** | `Object.assign({}, _borradores[modoAnterior], {...})` vuelto a `{ texto: ..., original: ..., estado: ... }` (objeto nuevo, sin fusionar) | `suite_57` | *v17.6.36: el cambio de chip preserva la bandera insertado (no la pisa con un objeto nuevo)* → *ya no debe crear un objeto nuevo que pierda las banderas existentes (obtuvo true)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.457/1.457 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba usaba una ventana de 900 caracteres
+desde `let modoAnterior = modo;`, pero el bloque real (con el comentario nuevo de la
+versión) llega a 1.445 caracteres antes de la línea del fix — ampliada a 1.700.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
