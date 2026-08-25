@@ -240,6 +240,44 @@ module.exports = {
       t.cierto(res.sinCasilla[0].includes("HEMOGLOBINA GLICOSILADA") || res.sinCasilla[0].includes("HBA1C"));
     });
 
+    // v17.6.45 — AUDITORÍA S+ (barrido total, 24-ago-2026): AUDITORÍA #6 (v16.7.0) blindó
+    // el conteo de "resultado llevado" contra un rechazo silencioso del navegador (casilla
+    // type=number que descarta un valor con coma) SOLO en la ruta de componentes de
+    // orina — el camino sérico PRINCIPAL (la whitelist de 13 laboratorios) seguía sumando
+    // count++ sin comprobar si setNgValue de verdad escribió algo.
+    t.caso("v17.6.45: injectLabsIntoCronicos NO cuenta un resultado que el navegador rechazó (camino sérico principal)", () => {
+      mockDOM = { "resultadoColesterolTotal": { value: "" } };
+      const getByIdOriginal = c.env.doc.getElementById;
+      // Casilla que rechaza CUALQUIER valor (simula un input type=number descartando "1,2"
+      // con coma): tras asignarla, value sigue vacío — exactamente lo que setNgValue mide.
+      c.env.doc.getElementById = (id) => {
+        if (id !== "resultadoColesterolTotal") return null;
+        return {
+          id: id, tagName: "INPUT",
+          dispatchEvent: (evt) => { eventsDispatched.push({ id, type: evt.type }); },
+          get value() { return ""; }, set value(v) { /* el navegador rechaza: no queda nada */ },
+        };
+      };
+      try {
+        const labs = [{ codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "1,2", Fecha: "2023-01-01" }];
+        const res = testApi.injectLabsIntoCronicos(labs);
+        t.igual(res.count, 0, "el rechazo del navegador NO debe contar como resultado llevado");
+      } finally {
+        c.env.doc.getElementById = getByIdOriginal;
+      }
+    });
+
+    // v17.6.45 — mismo blindaje en el reintento de las casillas de componente de
+    // uroanálisis (300/900 ms tras marcar SI, cuando Angular tarda en montar el *ngIf):
+    // corre dentro de un setTimeout, no es una unidad aislable — se protege por fuente.
+    t.caso("v17.6.45: el reintento de casillas de uroanálisis también comprueba setNgValue antes de contar 'escritas'", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/if \(actual === ""\) \{ setNgValue\(el, r\.resultVal\); escritas\+\+; \}/.test(src), "ya no debe contar sin comprobar el retorno de setNgValue");
+      t.cierto(/if \(actual === "" && setNgValue\(el, r\.resultVal\)\) escritas\+\+;/.test(src), "debe exigir que setNgValue haya devuelto true");
+    });
+
     t.caso("_parseFechaLike: reconoce ISO, dd/mm/aaaa y fecha .NET /Date(ms)/, y descarta lo que no es fecha", () => {
       t.igual(testApi._parseFechaLike("2026-08-01"), "2026-08-01");
       t.igual(testApi._parseFechaLike("2026-08-01T00:00:00"), "2026-08-01", "corta la parte de hora");

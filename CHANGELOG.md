@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.45] — 2026-08-24 (Barrido S+ total — Auto-Labs ya no anuncia como escrito un resultado que el navegador rechazó)
+
+### 🐛 Auto-Labs ya no cuenta como "resultado llevado" uno que el navegador rechazó en silencio
+- Esta protección ya existía desde v16.7.0 (una casilla numérica puede rechazar un valor con coma decimal, quedando vacía sin avisar) pero solo se aplicaba en la ruta de los componentes del uroanálisis. El camino principal — la lista de 13 laboratorios crónicos, que es el grueso de lo que Auto-Labs escribe cada día — seguía sin esta comprobación: si el navegador rechazaba un valor, el asistente igual lo contaba como "resultado llevado" en el aviso verde, aunque la casilla hubiera quedado vacía. Se corrige tanto en el camino principal como en el reintento de las casillas de uroanálisis que a veces tardan en aparecer.
+
+---
+
 ## [Versión 17.6.44] — 2026-08-24 (Barrido S+ total — la regla de triglicéridos altos para el LDL ya reconoce comas decimales y desigualdades)
 
 ### 🐛 La regla "triglicéridos muy altos" para elegir el LDL correcto ya reconoce el formato real de los informes

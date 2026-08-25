@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.44
+// @version     17.6.45
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.44";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.45";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3303,8 +3303,14 @@
                         + (objecion.unidad ? " " + objecion.unidad : "") + ").");
                       return;
                   }
-                  setNgValue(inputEl, resultVal);
-                  count++;
+                  // v17.6.45 — AUDITORÍA S+ (barrido total, 24-ago-2026): AUDITORÍA #6
+                  // (v16.7.0, ver el comentario de setNgValue) blindó este mismo conteo en
+                  // la ruta de componentes de orina (línea ~3128) pero esta ruta —el
+                  // camino sérico PRINCIPAL, la whitelist de 13 laboratorios— se quedó sin
+                  // el blindaje: un valor que el navegador rechaza (casilla queda vacía)
+                  // seguía contando como "resultado llevado" en el toast verde.
+                  if (setNgValue(inputEl, resultVal)) count++;
+                  else console.warn("[Vigilante] Auto-Labs: " + matched.key + " = " + resultVal + " no quedó escrito en la casilla (rechazado por el navegador).");
                   if (matched.key === "RAC") {
                       // v14.1.5 — la guarda nace con reloj y con cupo (ver checkRacGuardia).
                       _racGuardia = { activa: true, docId: (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "", valor: resultVal, ts: Date.now(), restauraciones: 0 };
@@ -3412,7 +3418,10 @@
                   if (!el) continue;
                   reintentosOrina.delete(marca);
                   const actual = String(el.value == null ? "" : el.value).trim();
-                  if (actual === "") { setNgValue(el, r.resultVal); escritas++; }
+                  // v17.6.45 — mismo blindaje que el camino sérico principal (línea ~3306):
+                  // contar "escritas" sin comprobar si setNgValue quedó de verdad podía
+                  // anunciar más casillas completadas de las que en realidad quedaron.
+                  if (actual === "" && setNgValue(el, r.resultVal)) escritas++;
               }
               if (escritas) console.log("[Vigilante] uroanálisis: " + escritas + " casilla(s) de componente completadas tras reintento (Angular tardó en montarlas después de marcar SI).");
               if (!reintentosOrina.size) return;

@@ -1256,6 +1256,24 @@ clínicamente por ENCIMA de 400, no en el borde). Se cambió el valor de prueba 
 claramente por encima del umbral, para probar el reconocimiento de la desigualdad sin
 tropezar con esa ambigüedad de frontera.
 
+## v17.6.45 — 24-ago-2026 (Auto-Labs ya no anuncia como escrito un resultado que el navegador rechazó)
+
+Banco antes: 1.471 (con las 2 pruebas nuevas ya sumadas) · después de restaurar: **1.473**.
+Hallazgo id=13 del re-triaje, extendido a un segundo sitio hermano (el reintento de
+uroanálisis) que el hallazgo original también señalaba.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **camino sérico principal** | Vuelve a `setNgValue(inputEl, resultVal); count++;` (sin comprobar el retorno) | `suite_08` | *v17.6.45: injectLabsIntoCronicos NO cuenta un resultado que el navegador rechazó...* → *esperaba 0 y obtuvo 1* |
+| **reintento de uroanálisis** | Vuelve a `if (actual === "") { setNgValue(el, r.resultVal); escritas++; }` | `suite_08` | *v17.6.45: el reintento de casillas de uroanálisis también comprueba...* → *debe exigir que setNgValue haya devuelto true (obtuvo false)* |
+
+La primera se probó con DOM real (una casilla mock cuyo `value` rechaza cualquier
+asignación, simulando un `type="number"` descartando "1,2"); la segunda —dentro de un
+`setTimeout`, no aislable— se protege por texto fuente. Ambas se aplicaron sobre el
+archivo de producción UNA A LA VEZ (restaurando cada una antes de la siguiente), cada
+corrida dejó rojo con la aserción esperada, y se confirmó el verde al restaurar. El banco
+completo volvió a 1.473/1.473 tras la restauración final.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
