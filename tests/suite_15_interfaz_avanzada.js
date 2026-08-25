@@ -66,7 +66,7 @@ module.exports = {
     "paintMute", "repaint", "makeDraggable", "setSummary", "render",
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
-    "pymPaquetesDelPaciente", "_mtrCelularMascarado",
+    "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1124,6 +1124,53 @@ module.exports = {
       t.noLanza(() => c.api._agruparUroanalisisParaTabla(null));
       t.noLanza(() => c.api._agruparUroanalisisParaTabla(undefined));
       t.igual(c.api._agruparUroanalisisParaTabla([]).length, 0);
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug de 0-falsy que
+    // _hayComponenteUroReal ya corrigió (Hematíes=0, Leucocitos=0 son resultados REALES
+    // y frecuentes) — este bloque seguía encadenando con ||, así que un 0 real se volvía
+    // "—" (sin dato) dentro del bloque agrupado de Uroanálisis.
+    t.caso("v17.6.43: _agruparUroanalisisParaTabla conserva un resultado real de 0 (no lo vuelve '—')", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: 0, Fecha: "2026-08-03" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: 0, Fecha: "2026-08-03" },
+      ];
+      const bloque = c.api._agruparUroanalisisParaTabla(labs)[0];
+      const hem = bloque.__vglGrupoUroComponentes.find((x) => x.nombre === "HEMATIES");
+      const leu = bloque.__vglGrupoUroComponentes.find((x) => x.nombre === "LEUCOCITOS");
+      t.igual(hem.resultado, 0, "Hematíes=0 debe sobrevivir como 0, no como '—'");
+      t.igual(leu.resultado, 0, "Leucocitos=0 debe sobrevivir como 0, no como '—'");
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug, esta vez con
+    // consecuencia clínica: `lab.Resultado || lab.resultado || lab.valor` volvía el 0
+    // real en `undefined` (0 es falsy), y esValorReal(lab, val) —que exige v != null—
+    // rechazaba el hallazgo por completo: un resultado negativo/normal real (SANGRE=0,
+    // BACTERIAS=0) se perdía en silencio en vez de registrarse como hallazgo negativo.
+    t.caso("v17.6.43: mtrHallazgosUroDesdeLabs no pierde un resultado real de 0", () => {
+      const c = cargar();
+      const labs = [
+        { NombreParametro: "SANGRE EN ORINA", NombreParametroPadre: "UROANALISIS", Resultado: 0 },
+        { NombreParametro: "BACTERIAS EN ORINA", Resultado: 0 },
+      ];
+      const h = c.api.mtrHallazgosUroDesdeLabs(labs);
+      t.cierto(!!h, "debe reconocer hallazgos reales, aunque los dos sean 0");
+      t.igual(h.sangre, 0, "SANGRE=0 debe registrarse, no perderse");
+      t.igual(h.bacteriuria, 0, "BACTERIAS=0 debe registrarse, no perderse");
+    });
+
+    // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug, esta vez en la
+    // columna "Resultado" de la tabla GENERAL de laboratorios (openLaboratoriosModal,
+    // TODOS los analitos, no solo uroanálisis) — un 0 real se mostraba como "—". Vive
+    // dentro de un cierre profundo (no es una unidad aislable) — se protege por texto
+    // fuente, mismo criterio ya establecido en el banco.
+    t.caso("v17.6.43: la tabla general del modal de Laboratorios conserva un resultado real de 0", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/const resultado = lab\.Resultado \|\| lab\.resultado \|\| lab\.valor \|\| lab\.Valor \|\| "—";/.test(src), "ya no debe quedar el encadenado || crudo");
+      t.cierto(/const resultado = lab\.Resultado != null \? lab\.Resultado : \(lab\.resultado != null \? lab\.resultado : \(lab\.valor != null \? lab\.valor : \(lab\.Valor != null \? lab\.Valor : "—"\)\)\);/.test(src), "debe comparar explícitamente contra null, igual que _hayComponenteUroReal");
     });
 
     // Instancia con red simulada: el puente REAL de 3 pasos (BusquedaPaciente ->

@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.43] — 2026-08-24 (Barrido S+ total — un resultado de laboratorio en 0 ya no se muestra ni se procesa como "sin dato")
+
+### 🐛 Un resultado de laboratorio en 0 ya no se confunde con "sin dato"
+- En cuatro sitios del módulo de laboratorios, un resultado numérico real de 0 (por ejemplo, Hematíes=0 o Leucocitos=0 en un uroanálisis — un resultado negativo perfectamente normal) se procesaba como si no existiera ningún resultado, porque el código comparaba el valor con una condición que trata el número 0 igual que "no hay dato". Esto afectaba tanto la tabla del modal de Laboratorios (mostraba "—" en vez de "0") como el motor que detecta hallazgos de uroanálisis (un resultado negativo real podía perderse en silencio en vez de registrarse). Ahora los cuatro sitios distinguen correctamente "no hay resultado" de "el resultado es 0".
+
+---
+
 ## [Versión 17.6.42] — 2026-08-24 (Barrido S+ total — el censor de nombres ahora sí cubre las MAYÚSCULAS SOSTENIDAS de Everest)
 
 ### 🐛 Un nombre escrito en mayúsculas sostenidas ya no sobrevivía al censor antes de llegar a la IA

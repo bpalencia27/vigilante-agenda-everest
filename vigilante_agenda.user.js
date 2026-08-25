@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.42
+// @version     17.6.43
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.42";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.43";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1428,7 +1428,11 @@
       componentes.forEach((c) => {
           const nombre = c.NombreParametro || c.nombre || c.examen || "";
           const clave = _canonNombreLab(nombre);
-          const resultado = c.Resultado || c.resultado || c.valor || "—";
+          // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug de 0-falsy que
+          // _hayComponenteUroReal ya corrigió arriba (Hematíes=0, Leucocitos=0 son
+          // resultados REALES) — este bloque seguía con el || crudo, así que un 0 real se
+          // mostraba como "—" (sin dato) en el bloque agrupado de Uroanálisis.
+          const resultado = c.Resultado != null ? c.Resultado : (c.resultado != null ? c.resultado : (c.valor != null ? c.valor : "—"));
           const fechaInfo = _extractAtheneaFecha(c);
           const resultDate = fechaInfo ? fechaInfo.iso : null;
           const previo = porNombre.get(clave);
@@ -17203,7 +17207,11 @@ _vglOfrecerDeshacer(btn);
       }
 
       const examen = lab.NombreParametro || lab.examen || lab.descripcion || lab.Examen || lab.nombreExamen || lab.nombre || lab.Prueba || "Examen sin nombre";
-      const resultado = lab.Resultado || lab.resultado || lab.valor || lab.Valor || "—";
+      // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): mismo bug de 0-falsy que
+      // _hayComponenteUroReal corrige para uroanálisis (ver línea ~1374) — aquí, en la
+      // tabla GENERAL de laboratorios, un resultado real de 0 (frecuente en varios
+      // analitos) se mostraba como "—" (sin dato) por el encadenado con ||.
+      const resultado = lab.Resultado != null ? lab.Resultado : (lab.resultado != null ? lab.resultado : (lab.valor != null ? lab.valor : (lab.Valor != null ? lab.Valor : "—")));
       const referencia = _labReferenciaDe(lab);
       if (!esGrupoUro && !referencia && !diagReferenciaModalLogged && String(lab.origen || "").includes("Athenea")) {
         diagReferenciaModalLogged = true;
@@ -32974,7 +32982,11 @@ _vglOfrecerDeshacer(btn);
       // nitritos / esterasa / leucocitos: por el matcher de componentes de orina.
       if (typeof _esAnalitoDeOrina === "function" && _esAnalitoDeOrina(lab)) {
         const comp = _matchUroComponente(lab);
-        const val = lab.Resultado || lab.resultado || lab.valor;
+        // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): con el || crudo, un
+        // resultado real de 0 (Leucocitos=0, Hematíes=0) se volvía undefined (0 es
+        // falsy) y esValorReal(lab, val) lo rechazaba como "sin valor" — un hallazgo
+        // real (0, negativo) se perdía silenciosamente en vez de registrarse.
+        const val = lab.Resultado != null ? lab.Resultado : (lab.resultado != null ? lab.resultado : lab.valor);
         if (comp && esValorReal(lab, val)) {
           hayAlguno = true;
           if (comp.key === "NITRITOS") h.nitritos = val;
@@ -33009,7 +33021,11 @@ _vglOfrecerDeshacer(btn);
         ? _canonTexto(lab.NombreParametro || lab.nombre || lab.examen)
         : String(lab.nombre || "").toUpperCase();
       if (/BACTERIA/.test(nombre)) {
-        const val = lab.Resultado || lab.resultado || lab.valor;
+        // v17.6.43 — AUDITORÍA S+ (barrido total, 24-ago-2026): con el || crudo, un
+        // resultado real de 0 (Leucocitos=0, Hematíes=0) se volvía undefined (0 es
+        // falsy) y esValorReal(lab, val) lo rechazaba como "sin valor" — un hallazgo
+        // real (0, negativo) se perdía silenciosamente en vez de registrarse.
+        const val = lab.Resultado != null ? lab.Resultado : (lab.resultado != null ? lab.resultado : lab.valor);
         if (esValorReal(lab, val)) { h.bacteriuria = val; hayAlguno = true; }
       }
     }

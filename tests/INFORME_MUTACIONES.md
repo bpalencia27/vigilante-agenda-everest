@@ -1209,6 +1209,29 @@ otros dos puntos de cableado (`libreAhora()` y los dos objetos `opts` de Generar
 todo) quedan cubiertos por la misma prueba de fuente pero no se mutaron uno a uno por ser
 idéntico patrón mecánico (pasar una variable ya probada) repetido cuatro veces.
 
+## v17.6.43 — 24-ago-2026 (un resultado de laboratorio en 0 ya no se muestra ni se procesa como "sin dato")
+
+Banco antes: 1.465 (con las 3 pruebas nuevas ya sumadas) · después de restaurar: **1.465
+con las 3 nuevas** = 1.468. Hallazgo id=11 del re-triaje, extendido: el mismo patrón de
+bug (`a || b || c`, donde un `0` real cae al siguiente término por ser falsy) se encontró
+en CUATRO sitios, no solo el citado por el hallazgo original — dos de ellos
+(`mtrHallazgosUroDesdeLabs`) con consecuencia clínica real (un hallazgo negativo real se
+perdía en vez de registrarse), verificados a mano contra este worktree.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`_agruparUroanalisisParaTabla`** | Vuelve a `c.Resultado \|\| c.resultado \|\| c.valor \|\| "—"` | `suite_15` | *v17.6.43: \_agruparUroanalisisParaTabla conserva un resultado real de 0* → *Hematíes=0 debe sobrevivir como 0, no como '—': esperaba 0 y obtuvo "—"* |
+| **tabla general de Laboratorios** | Vuelve a `lab.Resultado \|\| lab.resultado \|\| lab.valor \|\| lab.Valor \|\| "—"` | `suite_15` | *v17.6.43: la tabla general del modal de Laboratorios conserva...* → *ya no debe quedar el encadenado \|\| crudo (obtuvo true)* |
+| **`mtrHallazgosUroDesdeLabs`** (2 sitios idénticos) | Ambos vuelven a `lab.Resultado \|\| lab.resultado \|\| lab.valor` | `suite_15` | *v17.6.43: mtrHallazgosUroDesdeLabs no pierde un resultado real de 0* → *debe reconocer hallazgos reales, aunque los dos sean 0 (obtuvo false)* |
+
+Las cuatro se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una
+antes de la siguiente — los dos sitios de `mtrHallazgosUroDesdeLabs` se mutaron juntos,
+por ser el mismo patrón repetido), cada corrida dejó rojo con la aserción esperada, y se
+confirmó el verde al restaurar. El banco completo volvió a 1.468/1.468 tras la
+restauración final. Dos ocurrencias más del mismo patrón (líneas de diagnóstico
+`console.log`, sin consecuencia clínica ni de pantalla) se dejaron intactas a propósito,
+fuera del alcance de este hallazgo.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
