@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.39] — 2026-08-24 (Barrido S+ total — Bloque Editar: la lista de prevención de hoy ya no se confunde con la de anoche)
+
+### 🐛 Un archivo modificado anoche ya no se confunde con el de hoy
+- Al buscar el archivo de la lista de prevención del día en SharePoint, cuando el nombre del archivo no traía la fecha, el asistente comparaba la hora de modificación (que SharePoint entrega en hora universal) contra la fecha del calendario local sin convertirla primero. En Colombia esto tenía un efecto concreto: un archivo modificado entre las 7 de la noche y la medianoche quedaba, al día siguiente, marcado por error como "el de hoy" — y el asistente dejaba de buscar el archivo real durante toda la jornada. Ahora ambas fechas se comparan en la misma hora local.
+
+---
+
 ## [Versión 17.6.38] — 2026-08-24 (Barrido S+ total — Bloque Editar: "Generar" y "Generar todo" ya no pueden correr al mismo tiempo)
 
 ### 🐛 Ya no se pueden disparar dos generaciones a la vez

@@ -1126,6 +1126,22 @@ Se aplicó sobre el archivo de producción, se corrió el banco completo, se con
 rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 1.459/1.459 tras la restauración.
 
+## v17.6.39 — 24-ago-2026 (Barrido S+ total — Bloque Editar: la lista de prevención de hoy ya no se confunde con la de anoche)
+
+Banco antes: 1.460 (con la prueba nueva ya sumada) · después de restaurar: **1.460**.
+Máquina de pruebas confirmada en `America/Bogota` (UTC-5): la prueba reproduce el bug
+real descrito por la auditoría, no una construcción teórica.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **`pickTodaysFile`** | La regla 2 vuelve a comparar el string UTC crudo (`f.TimeLastModified.startsWith(todayStr)`) en vez de reducir ambos lados a fecha LOCAL con `todayStamp(new Date(...))` | `suite_03` | *v17.6.39: un archivo modificado anoche (hora local, tarde) NO se confunde con el de hoy, aunque su UTC ya sea de hoy* → *el archivo es de AYER en hora local: no debe tomarse como el de hoy: esperaba null y obtuvo {...}* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.460/1.460 tras la restauración. `todayStamp` gana un parámetro opcional (compatible
+hacia atrás: los 100 llamadores existentes en producción siguen sin argumentos) para
+poder reducir CUALQUIER instante a fecha local, no solo "ahora".
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.38
+// @version     17.6.39
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.38";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.39";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8765,7 +8765,11 @@ _vglOfrecerDeshacer(btn);
   }
 
   // ================== SharePoint: PyM del día automático ==================
-  function todayStamp() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): parámetro opcional `d` para
+  // poder reducir CUALQUIER instante (no solo "ahora") al mismo formato de fecha LOCAL
+  // — lo usa pickTodaysFile para comparar TimeLastModified (UTC) contra "hoy" con la
+  // misma vara, en vez de comparar el string UTC crudo contra la fecha local.
+  function todayStamp(d) { d = d || new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function spBase() { return "https://" + CONFIG.SP.host + CONFIG.SP.web; }
   // v7.7: encuentra el archivo del PyM de HOY en la carpeta de SharePoint, por su
   // nombre — sin adivinar formatos raros: prueba las variantes de fecha más comunes
@@ -8806,8 +8810,17 @@ _vglOfrecerDeshacer(btn);
     if (matchName) return matchName;
 
     // 2. Si no hay coincidencia por nombre, buscar archivos modificados HOY que NO sean de fechas futuras
+    // v17.6.39 — AUDITORÍA S+ (barrido total, 24-ago-2026): TimeLastModified llega en UTC
+    // (SharePoint); comparar su string crudo contra la fecha LOCAL con startsWith rompía
+    // en Colombia (UTC-5): un archivo modificado entre las 19:00 y las 24:00 hora local
+    // ya cae en el día UTC siguiente, así que el DÍA SIGUIENTE (hora local) ese archivo
+    // pasaba el startsWith y se tomaba como "el de hoy" — apagando la re-búsqueda del
+    // archivo real durante toda la jornada. Ahora ambos lados se reducen a fecha LOCAL.
     const todayStr = todayStamp();
-    const matchMod = xls.find((f) => f.TimeLastModified && f.TimeLastModified.startsWith(todayStr) && !/20\d{6}/.test(f.Name));
+    const matchMod = xls.find((f) => {
+      if (!f.TimeLastModified || /20\d{6}/.test(f.Name)) return false;
+      try { return todayStamp(new Date(f.TimeLastModified)) === todayStr; } catch (e) { return false; }
+    });
     if (matchMod) return matchMod;
 
     return null;
