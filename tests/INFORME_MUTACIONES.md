@@ -1142,6 +1142,26 @@ rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 hacia atrás: los 100 llamadores existentes en producción siguen sin argumentos) para
 poder reducir CUALQUIER instante a fecha local, no solo "ahora".
 
+## v17.6.40 — 24-ago-2026 (Barrido S+ total — Bloque Editar: el modo oculto ahora esconde todo, sin excepciones)
+
+Banco antes: 1.461 (con la prueba nueva ya sumada) · después de restaurar: **1.461**.
+Cambio de CSS puro (sin lógica que mutar en el sentido de comportamiento JS) — la
+"mutación" es quitar los 7 selectores nuevos de la regla y confirmar que la prueba de
+fuente cae, igual que cualquier otro cambio de texto/CSS protegido por regex de este banco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **regla `body.vgl-modo-oculto`** | Se quitan los 7 selectores nuevos (`#vgl-confirma-modal`, `#vgl-llenar-modal`, `#vgl-min-bar`, `#vgl-deshacer-llenado`, `#vgl-deshacer-lote`, `#vgl-ia-inj-ea`, `#vgl-ia-inj-an`) de la regla `display:none !important` | `suite_15` | *v17.6.40: el modo oculto (privacidad de pantalla) esconde los 7 elementos que faltaban* → *#vgl-confirma-modal debe esconderse en modo oculto (obtuvo false)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.461/1.461 tras la restauración.
+
+Nota de depuración: el primer intento de esta prueba falló con "fs is not defined" — a
+diferencia de otras suites, `suite_15_interfaz_avanzada.js` no importa `fs`/`path` a
+nivel de módulo; cada caso que los necesita los requiere localmente (mismo patrón ya
+documentado en v17.6.28). Corregido agregando los `require` locales al caso nuevo.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

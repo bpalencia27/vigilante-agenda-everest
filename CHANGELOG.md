@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.40] — 2026-08-24 (Barrido S+ total — Bloque Editar: el modo oculto ahora esconde todo, sin excepciones)
+
+### 🐛 El modo oculto (privacidad de pantalla) ya escondía casi todo, ahora esconde todo
+- El "modo oculto" (el botón que apaga de un vistazo toda la interfaz visible del Vigilante, por ejemplo si alguien más va a mirar la pantalla) dejaba 7 elementos visibles que se agregaron al script después de escribirse esa lista: la confirmación de dos pasos, la ventana de llenado automático, la barra minimizada, y los botones de deshacer y de inyección rápida del Redactor. Ahora los siete quedan cubiertos.
+
+---
+
 ## [Versión 17.6.39] — 2026-08-24 (Barrido S+ total — Bloque Editar: la lista de prevención de hoy ya no se confunde con la de anoche)
 
 ### 🐛 Un archivo modificado anoche ya no se confunde con el de hoy

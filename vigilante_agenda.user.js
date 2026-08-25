@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.39
+// @version     17.6.40
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.39";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.40";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11759,7 +11759,12 @@ _vglOfrecerDeshacer(btn);
       /* v15.5.0 — MODO OCULTO (pedido del médico): una clase en <body> esconde TODO lo
          visual del Vigilante de un solo golpe — panel, dock, botones de historia, avisos,
          modales — y deja únicamente el puntico de regreso. El script sigue trabajando por
-         debajo (los sonidos críticos de fraude NO se apagan: son seguridad, no decoración). */
+         debajo (los sonidos críticos de fraude NO se apagan: son seguridad, no decoración).
+         v17.6.40 — AUDITORÍA S+ (barrido total, 24-ago-2026): 7 elementos que cuelgan de
+         document.body y se sumaron después de esta lista nunca quedaron incluidos aquí
+         (#vgl-confirma-modal, #vgl-llenar-modal, #vgl-min-bar, #vgl-deshacer-llenado,
+         #vgl-deshacer-lote, #vgl-ia-inj-ea, #vgl-ia-inj-an) — el modo oculto (pensado
+         para ocultar TODO de un vistazo) los dejaba visibles. */
       body.vgl-modo-oculto #vgl-root,body.vgl-modo-oculto #vgl-acciones-dock,body.vgl-modo-oculto #vgl-lab-injector,
       body.vgl-modo-oculto #vgl-examen-normalidad,body.vgl-modo-oculto #vgl-examen-guardar,body.vgl-modo-oculto #vgl-examen-aplicar,
       body.vgl-modo-oculto #vgl-sp,body.vgl-modo-oculto #vgl-dock,body.vgl-modo-oculto #vgl-pym-banner,
@@ -11767,7 +11772,10 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-modal,body.vgl-modo-oculto #vgl-agendar-modal,body.vgl-modo-oculto #vgl-ordenar-modal,
       body.vgl-modo-oculto #vgl-labs-modal,body.vgl-modo-oculto #vgl-labsv-modal,body.vgl-modo-oculto #vgl-ia-modal,
       body.vgl-modo-oculto #vgl-riesgo-modal,body.vgl-modo-oculto #vgl-ficha-modal,body.vgl-modo-oculto #vgl-tablero-modal,body.vgl-modo-oculto #vgl-acomp-burbuja,body.vgl-modo-oculto #vgl-pes-modal,body.vgl-modo-oculto #vgl-panel-modal,
-      body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica{display:none !important}
+      body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica,
+      body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
+      body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
+      body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));

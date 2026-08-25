@@ -2929,5 +2929,22 @@ module.exports = {
       t.igual(ocurrencias, 3, "los 3 sitios (envío automático éxito/fallo y reenvío manual) deben usar la máscara");
     });
 
+    // v17.6.40 — AUDITORÍA S+ (barrido total, 24-ago-2026): el "modo oculto" (pensado
+    // para ocultar TODO el Vigilante de un vistazo, ej. si alguien más mira la
+    // pantalla) no incluía 7 elementos que cuelgan de document.body y se agregaron
+    // después de escribirse esta lista: #vgl-confirma-modal, #vgl-llenar-modal,
+    // #vgl-min-bar, #vgl-deshacer-llenado, #vgl-deshacer-lote, #vgl-ia-inj-ea,
+    // #vgl-ia-inj-an quedaban visibles con el modo oculto activo.
+    t.caso("v17.6.40: el modo oculto (privacidad de pantalla) esconde los 7 elementos que faltaban", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("body.vgl-modo-oculto #vgl-root");
+      const regla = src.slice(idx, src.indexOf("{display:none !important}", idx));
+      ["vgl-confirma-modal", "vgl-llenar-modal", "vgl-min-bar", "vgl-deshacer-llenado", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
+        t.cierto(regla.includes("body.vgl-modo-oculto #" + id), "#" + id + " debe esconderse en modo oculto");
+      });
+    });
+
   },
 };
