@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.38] — 2026-08-24 (Barrido S+ total — Bloque Editar: "Generar" y "Generar todo" ya no pueden correr al mismo tiempo)
+
+### 🐛 Ya no se pueden disparar dos generaciones a la vez
+- "Generar todo" ya bloqueaba el botón "Generar" mientras trabajaba, pero "Generar" no hacía lo mismo con "Generar todo": si el médico alcanzaba a pulsar los dos casi al tiempo, las dos cadenas de generación corrían solapadas, y la que terminaba primero volvía a habilitar ambos botones a mitad del trabajo de la otra. Ahora "Generar" también bloquea "Generar todo" mientras está trabajando, cerrando el candado en los dos sentidos.
+
+---
+
 ## [Versión 17.6.37] — 2026-08-24 (Barrido S+ total — Bloque Editar: un intento fallido de generar ya no pisa la casilla equivocada)
 
 ### 🐛 Un intento de generar que falla ya no pinta la casilla equivocada

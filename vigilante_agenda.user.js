@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.37
+// @version     17.6.38
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.37";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.38";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32234,11 +32234,17 @@ _vglOfrecerDeshacer(btn);
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
-        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
+        // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
+        // deshabilita "Generar" al arrancar (línea de arriba), pero "Generar" no hacía
+        // lo mismo con "Generar todo" — el médico podía disparar las dos cadenas a la
+        // vez, y la que terminara primero llamaba _congelarChips(false) y rehabilitaba
+        // ambos botones A MITAD de la cadena del lote, rompiendo el candado que
+        // v17.6.11 puso a propósito.
+        btnGen.disabled = true; if (btnTodo) btnTodo.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
         const r = await mtrGeminiRedactar(hoja, modoGen, opts);
-        btnGen.disabled = false;
+        btnGen.disabled = false; if (btnTodo) btnTodo.disabled = false;
         _congelarChips(false);
         if (r.ok) {
           let textoFinal = r.texto;

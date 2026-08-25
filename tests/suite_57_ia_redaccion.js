@@ -1165,5 +1165,19 @@ module.exports = {
       t.cierto(/if \(modoGen === modo\) \{[\s\S]{0,200}salida\.value = _borradores\[modoGen\]\.texto/.test(fn), "solo pinta la pantalla si el chip activo sigue siendo el que generó");
     });
 
+    // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
+    // deshabilitaba "Generar" al arrancar, pero "Generar" no hacía lo mismo con
+    // "Generar todo" — dos cadenas de generación podían correr solapadas, y la primera
+    // en terminar rehabilitaba ambos botones a mitad de la cadena del lote de la otra,
+    // rompiendo el candado que v17.6.11 puso a propósito. Vive dentro del cierre de
+    // mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen)');
+      const fn = src.slice(idx - 100, idx + 400);
+      t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
+      t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
+    });
+
   },
 };

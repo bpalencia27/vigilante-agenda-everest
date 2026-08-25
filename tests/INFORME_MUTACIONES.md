@@ -1113,6 +1113,19 @@ Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cad
 de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
 al restaurar. El banco completo volvió a 1.458/1.458 tras la restauración final.
 
+## v17.6.38 — 24-ago-2026 (Barrido S+ total — Bloque Editar: "Generar" y "Generar todo" ya no pueden correr al mismo tiempo)
+
+Banco antes: 1.459 (con la prueba nueva ya sumada) · después de restaurar: **1.459**.
+Vive dentro del cierre de `mtrAbrirPanelRedaccion` — se protege por texto fuente.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **candado de Generar → Generar todo** | Se quita `if (btnTodo) btnTodo.disabled = true/false` de ambos lados del `await` en el handler de "Generar" (vuelve a solo deshabilitar btnGen) | `suite_57` | *v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)* → *al arrancar, deshabilita también Generar todo (obtuvo false)* |
+
+Se aplicó sobre el archivo de producción, se corrió el banco completo, se confirmó el
+rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
+1.459/1.459 tras la restauración.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |
