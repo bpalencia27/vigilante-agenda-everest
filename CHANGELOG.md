@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.37] — 2026-08-24 (Barrido S+ total — Bloque Editar: un intento fallido de generar ya no pisa la casilla equivocada)
+
+### 🐛 Un intento de generar que falla ya no pinta la casilla equivocada
+- Si el médico cambiaba de casilla mientras "Generar" seguía trabajando en la anterior y ese intento terminaba fallando, el texto de respaldo (los hechos en bruto, para copiar a mano) se pintaba sobre la casilla NUEVA que el médico tenía abierta en ese momento, no sobre la que en verdad falló — y ese texto ajeno quedaba guardado como si fuera el borrador de la casilla nueva. Ahora el resultado de un intento fallido respeta la misma regla que ya protegía a un intento exitoso: solo se pinta en pantalla si la casilla que lo pidió sigue siendo la que está abierta.
+
+---
+
 ## [Versión 17.6.36] — 2026-08-24 (Barrido S+ total — se identifica y corrige la causa raíz del aviso falso "hay borrador sin pegar")
 
 ### 🐛 El aviso "hay borradores sin insertar" ya no aparece después de haber insertado

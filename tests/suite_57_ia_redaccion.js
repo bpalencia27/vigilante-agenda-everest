@@ -1149,5 +1149,21 @@ module.exports = {
       t.cierto(/_borradores\[modoAnterior\] = Object\.assign\(\{\}, _borradores\[modoAnterior\], \{ texto:/.test(fn), "debe fusionar sobre lo ya guardado, preservando insertado");
     });
 
+    // v17.6.37 — AUDITORÍA S+ (barrido total, 24-ago-2026): la rama de FALLO de
+    // "Generar" pintaba salida.value/estado/btnIns SIN comprobar que el chip activo
+    // siguiera siendo modoGen (a diferencia de la rama de éxito, que sí lo hace): si el
+    // médico cambiaba de casilla mientras la generación estaba en vuelo y esa
+    // generación fallaba, los hechos de LA CASILLA VIEJA se pintaban sobre la casilla
+    // NUEVA — y el snapshot de cambio de chip (v17.6.36) los guardaba como si fueran
+    // el borrador de esa casilla nueva. Vive dentro del cierre de
+    // mtrAbrirPanelRedaccion — se protege por texto fuente.
+    t.caso("v17.6.37: la rama de fallo de Generar respeta el mismo guardia modoGen === modo que la de éxito", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const idx = src.indexOf("La IA no redactó");
+      const fn = src.slice(idx - 400, idx + 500);
+      t.cierto(/_borradores\[modoGen\] = Object\.assign\(\{\}, _borradores\[modoGen\], \{/.test(fn), "el resultado de fallo se guarda bajo SU modo, igual que el de éxito");
+      t.cierto(/if \(modoGen === modo\) \{[\s\S]{0,200}salida\.value = _borradores\[modoGen\]\.texto/.test(fn), "solo pinta la pantalla si el chip activo sigue siendo el que generó");
+    });
+
   },
 };

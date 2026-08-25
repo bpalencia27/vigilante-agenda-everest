@@ -1099,6 +1099,20 @@ Nota de depuración: el primer intento de esta prueba usaba una ventana de 900 c
 desde `let modoAnterior = modo;`, pero el bloque real (con el comentario nuevo de la
 versión) llega a 1.445 caracteres antes de la línea del fix — ampliada a 1.700.
 
+## v17.6.37 — 24-ago-2026 (Barrido S+ total — Bloque Editar: un intento fallido de generar ya no pisa la casilla equivocada)
+
+Banco antes: 1.458 (con la prueba nueva ya sumada) · después de restaurar: **1.458**.
+Vive dentro del cierre de `mtrAbrirPanelRedaccion` — se protege por texto fuente.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **guardado por modo** | La rama de fallo vuelve a escribir directo en `salida.value`/`estado.textContent` sin pasar por `_borradores[modoGen]` | `suite_57` | *v17.6.37: la rama de fallo de Generar respeta el mismo guardia modoGen === modo que la de éxito* → *el resultado de fallo se guarda bajo SU modo, igual que el de éxito (obtuvo false)* |
+| **guardia de pintado** | Se quita el `if (modoGen === modo)` alrededor de la pintura en pantalla (vuelve a pintar siempre, sin comprobar el chip activo) | `suite_57` | misma prueba → *solo pinta la pantalla si el chip activo sigue siendo el que generó (obtuvo false)* |
+
+Ambas se aplicaron sobre el archivo de producción UNA A LA VEZ (restaurando cada una antes
+de la siguiente), cada corrida dejó rojo con la aserción esperada, y se confirmó el verde
+al restaurar. El banco completo volvió a 1.458/1.458 tras la restauración final.
+
 | # | Qué se rompió a propósito | Suite | Prueba que cayó |
 |---|---|---|---|
 | **`avisarSiActualizado`** (representativa de los 10 — misma prueba cubre las otras 9) | `Ya tiene la última versión` vuelto a `Ya tienes la última versión` | `suite_15` | *v17.6.32: los avisos de actualización, SharePoint y accesibilidad tratan al médico de usted, no de tú* → *no debe quedar tuteo: /Ya tienes la última versión/ (obtuvo true)* |

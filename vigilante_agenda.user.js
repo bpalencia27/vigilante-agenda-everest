@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.36
+// @version     17.6.37
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.36";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.37";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32272,10 +32272,26 @@ _vglOfrecerDeshacer(btn);
           // que nadie pidió, se retira la llamada muerta. El resto del flujo (texto insertado,
           // estado, habilitarPost) ya corría ANTES de esta línea y sigue intacto.
         } else {
-          salida.value = mtrHojaDeHechosTexto(hoja);
-          textoGeneradoOriginal = salida.value;
-          estado.textContent = "La IA no redactó (" + (r.motivo || "desconocido") + "). Le dejo los hechos para copiar a mano.";
-          habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; _pintarMeta(); _autosizeSalida();
+          // v17.6.37 — AUDITORÍA S+ (barrido total, 24-ago-2026): esta rama pintaba
+          // salida/estado/btnIns SIN comprobar que el chip activo siguiera siendo
+          // modoGen — a diferencia de la rama de éxito, que sí lo hace (línea de
+          // arriba). Si el médico cambiaba de casilla mientras la generación estaba en
+          // vuelo y esa generación fallaba, los hechos de LA CASILLA VIEJA se pintaban
+          // sobre la casilla NUEVA que el médico tenía abierta — y el snapshot de
+          // cambio de chip (v17.6.36) los guardaba como si fueran el borrador de esa
+          // casilla nueva. El resultado de fallo también se guarda bajo su propio modo,
+          // igual que ya hace el de éxito.
+          _borradores[modoGen] = Object.assign({}, _borradores[modoGen], {
+            texto: mtrHojaDeHechosTexto(hoja), original: mtrHojaDeHechosTexto(hoja),
+            estado: "La IA no redactó (" + (r.motivo || "desconocido") + "). Le dejo los hechos para copiar a mano.",
+          });
+          if (modoGen === modo) {
+            salida.value = _borradores[modoGen].texto;
+            textoGeneradoOriginal = _borradores[modoGen].original;
+            estado.textContent = _borradores[modoGen].estado;
+            habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; _autosizeSalida();
+          }
+          _pintarMeta();
         }
       });
       salida.addEventListener("input", () => { _pintarCifras(); _pintarMeta(); _autosizeSalida(); });
