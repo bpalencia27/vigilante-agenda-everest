@@ -220,6 +220,34 @@ module.exports = {
       t.cierto(filaPeso.falta, "sin peso real, sigue faltando — «sin dato = sin suposición» sigue vigente");
     });
 
+    t.caso("REGRESIÓN (v17.6.81): sin peso, la fila de filtrado NO se disfraza de Cockcroft-Gault", () => {
+      // Reporte en vivo (26-ago): sin peso, `erc.crcl` es null pero `erc.egfr` (CKD-EPI,
+      // no necesita peso) sí calcula — y la fila anterior pintaba ese número bajo la
+      // etiqueta "Cockcroft-Gault" tal cual, dando la falsa impresión de que el peso SÍ
+      // se había leído. La etiqueta debe decir CKD-EPI y avisar que falta el peso.
+      const r = a.mtrResumenClinico({
+        hoyIso: "2026-08-21", edad: 82, sexo: "F", pesoKg: null, creatinina: 2.26,
+        factores: {}, ultimos: {},
+      });
+      t.igual(r.erc.crcl, null, "sin peso, Cockcroft-Gault real es null");
+      t.cierto(r.erc.egfr != null, "pero CKD-EPI sí calculó (no necesita peso) — la trampa del bug");
+      const filas = a.mtrFichaVivaFilas(r);
+      const filaFiltrado = filas.secciones.flatMap((s) => s.filas)
+        .find((f) => f.etiqueta.indexOf("Filtrado") === 0);
+      t.cierto(!!filaFiltrado, "existe la fila de filtrado");
+      t.falso(filaFiltrado.etiqueta.indexOf("Cockcroft-Gault") === 0, "no encabeza como si fuera Cockcroft-Gault: " + filaFiltrado.etiqueta);
+      t.cierto(filaFiltrado.etiqueta.indexOf("CKD-EPI") >= 0, "dice CKD-EPI: " + filaFiltrado.etiqueta);
+      t.cierto(filaFiltrado.etiqueta.indexOf("falta peso") >= 0, "y explica por qué: " + filaFiltrado.etiqueta);
+      t.falso(filaFiltrado.falta, "el número de CKD-EPI sí se muestra (no se descarta), solo con la etiqueta honesta");
+    });
+
+    t.caso("con peso presente, la fila de filtrado sí se llama Cockcroft-Gault", () => {
+      const filas = a.mtrFichaVivaFilas(resumenBase);
+      const filaFiltrado = filas.secciones.flatMap((s) => s.filas)
+        .find((f) => f.etiqueta.indexOf("Filtrado") === 0);
+      t.igual(filaFiltrado.etiqueta, "Filtrado (Cockcroft-Gault)", "con peso real, la etiqueta original se mantiene");
+    });
+
     t.caso("REGRESIÓN (Fuma o exfumador): mtrPanelResumenAlAbrir reconcilia lo cacheado contra pantalla+archivo AL ABRIR", () => {
       // El defecto: el Panel pintaba el resumen CACHEADO tal cual, y el vigilante de 20 s
       // solo reclasificaba si la pantalla cambiaba DESPUÉS de abrir (comparado contra una

@@ -6,6 +6,44 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.81 — 26-ago-2026 (Cockcroft-Gault disfrazado de CKD-EPI + notas largas entran a la rotación de cuota)
+
+Dos reportes en vivo, la misma tarde.
+
+**1) "No reconoce el peso" — y la fila de filtrado lo disimulaba.** Captura real: "Peso —
+sin dato" arriba, pero "Filtrado (Cockcroft-Gault): 21.1 mL/min" abajo, como si el cálculo
+SÍ hubiera usado el peso. Causa: sin peso, `erc.crcl` (Cockcroft-Gault real) da `null`, pero
+`mtrFichaVivaFilas` caía a `erc.egfr` (CKD-EPI, que NO necesita peso) y lo pintaba bajo la
+MISMA etiqueta "Cockcroft-Gault" — una fórmula disfrazada de otra, justo lo que "sin dato =
+sin suposición" prohíbe. El peso en sí seguía sin leerse del DOM (bug real y distinto, aún
+en investigación con `DIAGNOSTICO_PESO_TENSION_VIVO.js`), pero esta fila ocultaba esa
+ausencia detrás de un número que parecía confirmar lo contrario. Fix: la etiqueta ahora dice
+la verdad — "Filtrado (CKD-EPI — falta peso para Cockcroft-Gault)" cuando no hay CG real.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **etiqueta honesta** | `mtrFichaVivaFilas`: la fila de filtrado vuelve a decir siempre `"Filtrado (Cockcroft-Gault)"` sin condicional | `suite_63` | *REGRESIÓN (v17.6.81): sin peso, la fila de filtrado NO se disfraza de Cockcroft-Gault* → *dice CKD-EPI: Filtrado (Cockcroft-Gault) (obtuvo false)* |
+
+**2) "Sigue apareciendo gemini-3.7-flash".** Decisión original (v16.5.0, 20-ago): Enfermedad
+actual y Análisis y plan siempre usan el modelo más capaz (el de menor cupo diario), aparte
+de la rotación de cuota de las casillas cortas. El médico reportó en vivo, otra vez, que
+"gemini-3.7-flash sigue apareciendo" pese al respaldo de rotación-si-falla (v17.6.69) — el
+PRIMER intento de toda nota larga golpeaba siempre ese mismo modelo, entrevista tras
+entrevista. Confirmado con el médico (26-ago): revertir la excepción — Enfermedad actual y
+Análisis y plan entran ahora a la MISMA rotación de cuota que las casillas cortas, desde el
+primer intento. `MTR_MODOS_NOTA_LARGA` se conserva sin tocar para lo que sigue siendo
+suyo: excluir `thinkingLevel:"minimal"` de las notas largas (eso es del LARGO del texto, no
+de qué modelo lo genera).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **rotación para notas largas** | `mtrModeloGemini` vuelve a devolver el modelo potente fijo para `enfermedad_actual`/`analisis_plan` | `suite_57` | *la nota médico-legal ya no tiene modelo fijo: usa la rotación, igual que sin modo* → *esperaba "gemini-3.5-flash-lite" y obtuvo "gemini-3.7-flash"* |
+
+Las dos mutaciones se aplicaron JUNTAS sobre producción (una por archivo/función, sin
+solaparse), cada una cayó con la aserción exacta esperada, y ambas se restauraron
+verificando `diff` contra una copia intacta tomada antes de mutar. El banco completo volvió
+a 2289/2289 tras la restauración final.
+
 ## v17.6.80 — 26-ago-2026 (la caja de "cifras sin respaldo" marcaba en rojo umbrales reales de dosis renal)
 
 Reporte en vivo con captura: la nota de Análisis y plan citaba textualmente una alerta de

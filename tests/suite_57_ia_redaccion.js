@@ -398,9 +398,13 @@ module.exports = {
       // scrubPII sin la opción sigue tachando fechas: el resto del script no cambia.
       t.cierto(String(api.scrubPII("cita del 12/05/2026")).indexOf("12/05/2026") < 0, "sin la opción, las fechas se siguen censurando (telemetría, logs…)");
 
-      // 2. Modelo por casilla: potente para las notas largas, rotación para lo corto.
-      t.igual(api.mtrModeloGemini("analisis_plan"), "gemini-3.7-flash", "la nota médico-legal va al modelo más capaz");
-      t.igual(api.mtrModeloGemini("enfermedad_actual"), "gemini-3.7-flash", "la enfermedad actual también");
+      // 2. v17.6.81 — REVERTIDO (decisión del médico, en vivo 26-ago): "gemini-3.7-flash
+      //    sigue apareciendo" para las notas largas seguía repitiéndose pese al respaldo
+      //    de rotación-si-falla (v17.6.69) porque el PRIMER intento siempre arrancaba ahí.
+      //    Ahora las notas largas también entran a la rotación de cuota desde el primer
+      //    intento, igual que las casillas cortas — ya no hay tratamiento especial.
+      t.igual(api.mtrModeloGemini("analisis_plan"), api.mtrModeloGemini(), "la nota médico-legal ya no tiene modelo fijo: usa la rotación, igual que sin modo");
+      t.igual(api.mtrModeloGemini("enfermedad_actual"), api.mtrModeloGemini(), "la enfermedad actual también entra a la rotación");
       // v17.3.0 — "gemini-2.5-flash" salió de la lista (404, retirado por Google;
       // reemplazado 1:1 por "gemini-3.6-flash", que la propia API recomienda).
       // v17.4.0 — se suman "gemini-2.5-flash-lite" y "gemini-3-flash" (cotejo 22-ago
@@ -801,12 +805,11 @@ module.exports = {
       const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", {});
       t.falso(r.ok, "no ok");
       t.cierto(/tiempo agotado/i.test(r.motivo), "el motivo explica que fue timeout");
-      // El primer intento usa el modelo POTENTE (que es, a propósito, el ÚLTIMO de la lista
-      // de rotación — ver MTR_MODELO_POTENTE); tras recorrer los demás, la rotación puede
-      // volver a caer en ese mismo modelo al completar la vuelta. Lo que importa es que SÍ
-      // rotó en cada paso (nunca repitió el modelo del intento INMEDIATAMENTE anterior) y
-      // que agotó los `maxIntentos` disponibles antes de rendirse — no una repetición ciega
-      // del primero.
+      // v17.6.81 — desde que las notas largas también entran a la rotación de cuota (ya no
+      // arrancan siempre en el modelo potente), el primer intento puede caer en cualquier
+      // punto de la lista. Lo que importa es que SÍ rotó en cada paso (nunca repitió el
+      // modelo del intento INMEDIATAMENTE anterior) y que agotó los `maxIntentos`
+      // disponibles antes de rendirse — no una repetición ciega del primero.
       for (let i = 1; i < modelos.length; i++) {
         t.cierto(modelos[i] !== modelos[i - 1], "el intento " + i + " no repite el modelo del intento inmediatamente anterior");
       }

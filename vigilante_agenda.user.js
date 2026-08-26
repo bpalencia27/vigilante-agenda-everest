@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.80
+// @version     17.6.81
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.80";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.81";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -17732,7 +17732,18 @@ _vglOfrecerDeshacer(btn);
 
     secciones.push({ titulo: "Función renal", filas: [
       lab("CREATININA", "Creatinina", "mg/dL"),
-      fila("Filtrado (Cockcroft-Gault)", num(erc.crcl != null ? erc.crcl : erc.egfr, "mL/min"), F_CAL),
+      // v17.6.81 — REPORTE EN VIVO (26-ago): "no reconoce el peso" + en la misma
+      // captura, esta fila mostraba un número con la etiqueta "Cockcroft-Gault" que
+      // parecía confirmar que el peso SÍ se había leído. Causa: sin peso, `erc.crcl`
+      // (Cockcroft-Gault, la única fórmula que de verdad usa el peso) da null — pero
+      // esta fila caía al `erc.egfr` (CKD-EPI, que NO necesita peso) y lo pintaba bajo
+      // la MISMA etiqueta de Cockcroft-Gault. El médico veía "21.1 mL/min" y asumía que
+      // el cálculo con peso había funcionado, cuando en realidad era una fórmula
+      // distinta disfrazada de la otra — justo lo que la regla "sin dato = sin
+      // suposición" prohíbe. Ahora la etiqueta dice la verdad: si no hay Cockcroft-Gault
+      // real, se avisa que el número es CKD-EPI y por qué (falta el peso).
+      fila(erc.crcl != null ? "Filtrado (Cockcroft-Gault)" : "Filtrado (CKD-EPI — falta peso para Cockcroft-Gault)",
+        num(erc.crcl != null ? erc.crcl : erc.egfr, "mL/min"), F_CAL),
       fila("Estadio", erc.estadioAdministrativo || null, F_CAL),
     ]});
 
@@ -31176,14 +31187,18 @@ _vglOfrecerDeshacer(btn);
     return 0;
   }
   // v16.5.0 — MODELO POR CASILLA (decisión del médico, entrevista del 20-ago): las notas
-  // largas y médico-legales (Enfermedad Actual y Análisis y plan) van SIEMPRE al modelo
-  // más capaz de la lista; las casillas cortas (Recomendaciones, Ruta Crónicos, Preguntar)
-  // siguen con la rotación de siempre, que reparte cuota y aguanta los picos. Si el
-  // potente falla, mtrGeminiRedactar ya rota al siguiente: el respaldo queda intacto.
-  const MTR_MODELO_POTENTE = MTR_GEMINI_MODELOS[MTR_GEMINI_MODELOS.length - 1];   // el último de la lista es el más capaz
+  // largas y médico-legales (Enfermedad Actual y Análisis y plan) iban SIEMPRE al modelo
+  // más capaz de la lista, aparte de la rotación de cuota de las casillas cortas.
+  // v17.6.81 — REVERTIDO (decisión del médico, en vivo 26-ago): "gemini-3.7-flash sigue
+  // apareciendo" seguía repitiéndose pese al respaldo de rotación-si-falla (v17.6.69) —
+  // el primer intento de toda nota larga golpeaba SIEMPRE el modelo de menor cupo de la
+  // lista, entrevista tras entrevista. El médico prefiere ahora que las notas largas
+  // TAMBIÉN entren a la rotación de cuota desde el primer intento, igual que las
+  // casillas cortas. `MTR_MODOS_NOTA_LARGA` se conserva: sigue marcando qué modos NO
+  // reciben `thinkingLevel:"minimal"` más abajo (son notas largas de todas formas,
+  // rote o no el modelo que las genera) — solo se retira de la ELECCIÓN de modelo.
   const MTR_MODOS_NOTA_LARGA = ["enfermedad_actual", "analisis_plan"];
-  function mtrModeloGemini(modo) {
-    if (modo && MTR_MODOS_NOTA_LARGA.indexOf(modo) >= 0) return MTR_MODELO_POTENTE;
+  function mtrModeloGemini() {
     return MTR_GEMINI_MODELOS[_mtrModeloIdx()];
   }
   function mtrRotarModelo() {
