@@ -13,7 +13,7 @@ module.exports = {
   nombre: "Extracción del DOM de Everest (Suite 14)",
   cubre: [
     "firstMatch", "containerOf", "extractAgenda", "seccionActiva",
-    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth"
+    "extractPacienteAbierto", "captureDoctorInfo", "signatureOf", "_enModuloHCHealth", "_enPaginaExcluidaDeAvisos"
   ],
 
   pruebas(t, api, env, cargar) {
@@ -192,6 +192,32 @@ module.exports = {
       t.falso(c.api._enModuloHCHealth());
       Object.defineProperty(c.env.win.location, "pathname", { get() { throw new Error("roto"); } });
       t.falso(c.api._enModuloHCHealth());
+    });
+
+    // ---------- _enPaginaExcluidaDeAvisos ----------
+    // v17.6.75 — REPORTE EN VIVO (26-ago): el médico nombró tres pantallas puntuales
+    // donde NO quiere que le suene ni le llegue notificación de Windows, aunque el
+    // resto de Everest sí (v14.1.5, invariante que se mantiene en todo lo demás).
+    t.caso("_enPaginaExcluidaDeAvisos: true en las tres rutas que el médico nombró", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/Acceso/";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/OrdenamientoHealth";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/";
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth";   // sin barra final, mismo caso
+      t.cierto(c.api._enPaginaExcluidaDeAvisos());
+    });
+
+    t.caso("_enPaginaExcluidaDeAvisos: false en el módulo clínico y en EverHealth/HCHealth (no es la ruta exacta excluida)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.location.pathname = "/viva/HCHealth/";
+      t.falso(c.api._enPaginaExcluidaDeAvisos());
+      c.env.win.location.pathname = "/viva/EverHealth/HCHealth/";
+      t.falso(c.api._enPaginaExcluidaDeAvisos(), "EverHealth/HCHealth es el módulo clínico real, no la portada EverHealth sola");
+      c.env.win.location.pathname = "/otra/ruta/cualquiera";
+      t.falso(c.api._enPaginaExcluidaDeAvisos());
     });
 
     // ---------- extractPacienteAbierto ----------

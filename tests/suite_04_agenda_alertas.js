@@ -16,6 +16,25 @@ module.exports = {
       t.cierto(c.api.__state.fraudWatch.has(r.key));
     });
 
+    // v17.6.74 — REPORTE EN VIVO (26-ago, captura): "confirmación extemporánea" para un
+    // paciente que el médico jura tuvo en sala a tiempo — "es como si no leyera en tiempo
+    // real la agenda". Causa real: una pestaña de fondo (con el temporizador estrangulado
+    // por el navegador) podía marcar fraudWatch con una lectura suya propia, atrasada, de
+    // "Sin presentarse" pasados los 6 min — y esa marca se comparte a TODAS las pestañas,
+    // sin vía para deshacerla, aunque la pestaña activa ya hubiera visto "En Sala" hace
+    // rato. Ahora solo la pestaña LÍDER puede ORIGINAR la marca.
+    t.caso("v17.6.74: una pestaña NO líder no origina fraudWatch aunque su propia lectura vea Sin presentarse pasada la gracia", () => {
+      const c = cargar();
+      const refDate = new Date("2026-08-10T08:10:00").getTime();
+      const a = { hora_texto: "08:00 AM", estado: "Sin presentarse", nombre: "JUAN", index: 1, doc_id: "123" };
+      c.api.__state.leader = false;   // pestaña de fondo, no la líder
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+
+      const r = c.api.colorAndAlert(a, refDate);
+      t.igual(r.color, "AMBAR", "esta pestaña SÍ pinta AMBAR (es un cálculo instantáneo, sin memoria)");
+      t.falso(c.api.__state.fraudWatch.has(r.key), "pero NO origina la marca compartida — eso solo lo hace la líder");
+    });
+
     t.caso("colorAndAlert: un paciente en fraude que pasa a En Sala dispara ROJO y sonido (una vez)", () => {
       const c = cargar();
       const refDate = new Date("2026-08-10T08:15:00").getTime();
@@ -193,6 +212,30 @@ module.exports = {
       c.api.maybeNotify(a); // already notified same state
       // we just want it not to crash and not to do anything
       t.cierto(c.api.__state.notified.has("123@08:00 AM"));
+    });
+
+    // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00
+    // volvió a notificar a las 9:03. El parpadeo API↔DOM saca la cita de ÁMBAR y la
+    // vuelve a meter; state.notified solo recuerda el ÚLTIMO estado, así que la
+    // re-entrada re-disparaba el aviso. La guarda nueva usa bumpStatCita («una cita, un
+    // color, un conteo»): inasistencia/fraude ya contados = ya avisados, no se repiten.
+    // El termómetro del disparo es la marca de crossTabDup ("vgl_n_full|<uid>"): TODO
+    // canal de aviso pasa por ella y la escribe — si tras el parpadeo la marca NO se
+    // reescribe, ningún canal volvió a sonar.
+    t.caso("v17.6.52: la inasistencia (AMBAR) NO vuelve a avisar tras un parpadeo de estado — es un hecho terminal del día", () => {
+      const c = cargar();
+      c.api.__state.leader = true;
+      const key = "123@06:00 AM";
+      const marca = "vgl_n_full|" + key + "|AMBAR";
+      const base = { hora_texto: "06:00 AM", doc_id: "123", nombre: "PRUEBA", estado: "Sin presentarse", key: key, elapsed: 10 };
+      c.api.__state.notified.set(key, "SEMILLA");             // prev definido: no es la siembra silenciosa
+      c.api.maybeNotify(Object.assign({}, base, { color: "AMBAR" }));
+      t.cierto(!!c.env.storage.getItem(marca), "el PRIMER aviso de inasistencia sí sale (algún canal escribió su marca)");
+      // El parpadeo: la cita "pasa" a otro estado y vuelve a AMBAR horas después.
+      c.env.storage.removeItem(marca);                        // simula que pasaron horas (la marca de 12 s ya no está)
+      c.api.maybeNotify(Object.assign({}, base, { color: "VERDE", estado: "En sala" }));  // sin arrival: solo mueve el estado interno
+      c.api.maybeNotify(Object.assign({}, base, { color: "AMBAR", estado: "Sin presentarse" }));
+      t.falso(!!c.env.storage.getItem(marca), "la SEGUNDA inasistencia de la misma cita NO dispara ningún canal: la marca no se reescribió");
     });
 
     // ---------- v12.4.0: rescate de las guardias originales del VERDE (v8.2.0) ----------
@@ -398,8 +441,11 @@ module.exports = {
       // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
       // pestaña oculta (visible, el canal es el toast). La intención original de esta
       // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      // v17.6.75 — NO puede ser /viva/Acceso/: esa ruta pasó a la lista de excepciones
+      // silenciosas (ver el bloque de pruebas propio más abajo). Cualquier otra pantalla
+      // fuera del módulo clínico sigue con el invariante v14.1.5 intacto.
       c.env.doc.visibilityState = "hidden";
-      c.env.win.location.pathname = "/viva/Acceso/";
+      c.env.win.location.pathname = "/viva/OtraPantalla/";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";
@@ -414,13 +460,37 @@ module.exports = {
       t.cierto(cola[0].ts > 0, "y lleva la hora del hecho, para poder caducarlo si se vacía mucho después");
     });
 
+    // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió, nombrando las tres rutas
+    // exactas, que el aviso NO le suene ahí — a diferencia del resto de Everest, donde
+    // v14.1.5 sigue mandando (prueba anterior). El hecho se sigue contando y el cartel
+    // sigue esperando en cola para cuando vuelva a una pantalla clínica real.
+    t.caso("v17.6.75: en las tres pantallas que el médico nombró, el aviso NO suena — pero el hecho se cuenta y el cartel queda en cola", () => {
+      const c = cargar();
+      c.env.doc.visibilityState = "hidden";
+      let notifCount = 0;
+      c.env.win.Notification = class { constructor() { notifCount++; } };
+      c.env.win.Notification.permission = "granted";
+      const rutas = ["/viva/Acceso/", "/viva/EverHealth/OrdenamientoHealth", "/viva/EverHealth/"];
+      rutas.forEach((ruta, i) => {
+        c.env.win.location.pathname = ruta;
+        const base = { hora_texto: "08:0" + i + " AM", doc_id: "d" + i, key: "d" + i + "@08:0" + i + " AM", nombre: "PRUEBA", elapsed: 1, reason: "" };
+        c.api.maybeNotify({ ...base, estado: "Sin presentarse", color: "AZUL", arrival: false });
+        c.api.maybeNotify({ ...base, estado: "En sala", color: "VERDE", arrival: true });
+      });
+      t.igual(notifCount, 0, "ni una sola notificación de Windows en ninguna de las tres rutas nombradas");
+      t.igual(atiempoHoy(c), 3, "pero el hecho SÍ se cuenta en la auditoría — las tres llegadas quedan registradas");
+      const cola = JSON.parse(c.env.almacen["vgl_avisos_pendientes"] || "[]");
+      t.igual(cola.length, 3, "y el cartel de cada una queda en cola, esperando una pantalla clínica real donde pintarse");
+    });
+
     t.caso("_flushAvisosPendientes: al volver a HCHealth, el aviso en cola SÍ se dispara — una sola vez entre pestañas", () => {
       const c = cargar();
       // v15.4.0 — un aviso = un canal: la notificación del SISTEMA solo sale con la
       // pestaña oculta (visible, el canal es el toast). La intención original de esta
       // prueba se conserva; solo se simula la pestaña oculta para seguir contándola.
+      // v17.6.75 — misma nota que la prueba anterior: /viva/Acceso/ ya no suena.
       c.env.doc.visibilityState = "hidden";
-      c.env.win.location.pathname = "/viva/Acceso/";
+      c.env.win.location.pathname = "/viva/OtraPantalla/";
       let notifCount = 0;
       c.env.win.Notification = class { constructor() { notifCount++; } };
       c.env.win.Notification.permission = "granted";

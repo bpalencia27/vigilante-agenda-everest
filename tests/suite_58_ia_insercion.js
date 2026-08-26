@@ -76,7 +76,8 @@ module.exports = {
       t.falso(api.mtrInsertarSiVacia(vacia, ""), "texto vacío no inserta nada");
     });
 
-    // v17.6.10 — mtrInsertarNota (inserción de nota partida) se retiró: sin llamador
-    // en producción; la inserción vive en mtrInsertarEnCasillaModo/mtrInsertarSiVacia.
+    // mtrInsertarNota (inserción de nota partida, ya sin llamador desde v17.6.10) se
+    // retiró de producción como código muerto confirmado; la inserción en vivo vive en
+    // mtrInsertarEnCasillaModo/mtrInsertarSiVacia, ya cubiertas arriba y en otras suites.
   },
 };

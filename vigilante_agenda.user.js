@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.72
+// @version     17.6.76
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.72";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.75";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9506,6 +9506,24 @@ _vglOfrecerDeshacer(btn);
     } catch (e) { return false; }
   }
 
+  // v17.6.75 — REPORTE EN VIVO (26-ago): el médico pidió explícitamente que el sonido/
+  // notificación de Windows (v14.1.5: "suena esté el médico donde esté") NO le suene en
+  // tres pantallas puntuales que nombró — /viva/Acceso/ (login/administrativo),
+  // /viva/EverHealth/OrdenamientoHealth (Ordenamiento COMO MÓDULO PROPIO, no el que vive
+  // dentro de una historia — ese sigue en _enModuloHCHealth()) y /viva/EverHealth/ a
+  // secas (portada, sin módulo). Confirmado con el médico (dos preguntas, dos
+  // respuestas): el panel Y el sonido siguen igual de amplios que hoy en todo lo demás
+  // (incluida Historia+Ordenamiento-dentro-de-historia) — esto es una excepción puntual
+  // a esas tres pantallas nombradas, no un cambio del alcance general.
+  function _enPaginaExcluidaDeAvisos() {
+    try {
+      const p = location.pathname;
+      return /\/viva\/Acceso(\/|$)/i.test(p)
+        || /\/viva\/EverHealth\/OrdenamientoHealth(\/|$)/i.test(p)
+        || /^\/viva\/EverHealth\/?$/i.test(p);
+    } catch (e) { return false; }
+  }
+
   function seccionActiva() {
     try {
       if (document.getElementById("anamesis")) return "historia";
@@ -9684,7 +9702,27 @@ _vglOfrecerDeshacer(btn);
       else if (state.fraudWatch.has(key)) { color = "ROJO"; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); }
       else color = "VERDE";
     }
-    else if (st.includes("sin presentarse")) { if (elapsed >= grace) { color = "AMBAR"; if (!state.fraudWatch.has(key)) { state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id); } } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL"; }
+    else if (st.includes("sin presentarse")) {
+      if (elapsed >= grace) {
+        color = "AMBAR";
+        // v17.6.74 — REPORTE EN VIVO (26-ago, captura): el aviso de "confirmación
+        // extemporánea" salía para pacientes que el médico juraba haber tenido "en sala"
+        // a tiempo — "es como si el script no leyera en tiempo real la agenda". Causa
+        // real: esta marca (fraudWatch) la podía originar CUALQUIER pestaña abierta, no
+        // solo la líder — y una pestaña oculta tiene su temporizador estrangulado por el
+        // navegador (visible en la consola del propio médico: "la pestaña líder está
+        // oculta y el navegador le estrangula el temporizador"), así que su sondeo puede
+        // quedarse atrasado varios minutos. Esa pestaña atrasada, con una lectura vieja
+        // de "Sin presentarse" que ya superó los 6 min de gracia EN SU RELOJ (no en el
+        // real), marcaba fraudWatch y lo compartía (_fraudeCompartidoGuardar) a todas las
+        // pestañas — sin ninguna vía para deshacer la marca aunque la pestaña activa ya
+        // hubiera visto "En Sala" hace rato. Ahora solo la pestaña LÍDER (la que sondea
+        // sin estrangulamiento, la fuente de verdad del resto del archivo) puede
+        // ORIGINAR la marca; las demás pestañas la siguen pintando si ya existe (leída
+        // vía state.fraudWatch más abajo/arriba), pero nunca la crean por su cuenta.
+        if (state.leader && !state.fraudWatch.has(key)) { state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id); }
+      } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
+    }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
     const stamp = new Date().toLocaleTimeString(), mins = Math.round(elapsed * 10) / 10;
     // v16.2.7 — `visto` es la hora de reloj en que el Vigilante OBSERVÓ este estado.
@@ -10907,6 +10945,14 @@ _vglOfrecerDeshacer(btn);
     // (hay una prueba de conciliación en suite_10 que lo exige).
     const _conto = bumpStatCita(a.color === "ROJO" ? "fraude" : a.color === "AMBAR" ? "inasistencia" : a.color === "VERDE" ? "atiempo" : "ultima", a.key);
     if (_conto && a.color !== "ROJO") logEvent({ t: new Date().toLocaleTimeString(), ev: a.color === "AMBAR" ? "INASISTENCIA" : a.color === "VERDE" ? "INGRESO_A_TIEMPO" : "ULTIMA_LLAMADA", hora: a.hora_texto, doc: a.doc_id, estado: a.estado, min: a.elapsed, nombre: a.nombre });
+    // v17.6.52 — REPORTE EN VIVO (25-ago, captura): la MISMA inasistencia de las 6:00
+    // volvió a notificar a las 9:03. El parpadeo API↔DOM ya documentado en v17.6.21 saca
+    // la cita de ÁMBAR y la vuelve a meter, y state.notified solo recuerda el ÚLTIMO
+    // estado — pero bumpStatCita ya sabe si esta cita+categoría YA se contó hoy («una
+    // cita, un color, un conteo», v17.1.0). Una inasistencia o una confirmación
+    // extemporánea son hechos TERMINALES de la jornada: si ya se contaron, ya se
+    // avisaron — la re-transición actualiza el estado interno pero NO vuelve a sonar.
+    if (!_conto && (a.color === "AMBAR" || a.color === "ROJO")) return;
     const title = `${cfg.icon} ${a.hora_texto} · ${a.estado}`;
     // v16.2.7 — Tercera línea con la hora REAL del hecho. Se dice "Visto" y no
     // "Confirmado" a propósito: el Vigilante consulta la agenda cada pocos segundos, así
@@ -10926,7 +10972,13 @@ _vglOfrecerDeshacer(btn);
     // v14.1.5 — El aviso SIEMPRE suena y sale al sistema operativo, aquí y ahora, esté el
     // médico en el módulo que esté. Lo único que puede quedar esperando es el cartel de
     // dentro de la página, porque ese necesita una pestaña donde pintarse.
+    // v17.6.75 — salvo en las tres pantallas puntuales de _enPaginaExcluidaDeAvisos():
+    // ahí ni tono ni notificación de Windows ni toast — el hecho ya quedó contado y
+    // registrado (bumpStatCita/logEvent, arriba) y el cartel/aviso pendiente sigue
+    // esperando en la cola, así que nada se pierde: solo queda en silencio hasta que el
+    // médico vuelva a una pantalla clínica real.
     if (_enModuloHCHealth()) _dispararAvisoReal(payload);
+    else if (_enPaginaExcluidaDeAvisos()) _encolarAvisoPendiente(payload);
     else if (_dispararAvisoAudible(payload)) _encolarAvisoPendiente(payload);
   }
   function updateBell() {
@@ -18661,6 +18713,10 @@ _vglOfrecerDeshacer(btn);
         const _factoresAlAbrir = mtrLeerFactoresRcvDelDom(apt.doc_id, document) || {};
         const _tAlAbrir = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
         if (_tAlAbrir) { _factoresAlAbrir.paSistolica = _tAlAbrir.pas; _factoresAlAbrir.paDiastolica = _tAlAbrir.pad; }
+        // v17.6.75 — mismo respaldo de DOM que la tensión, para que el peso recién
+        // escrito llegue a Cockcroft-Gault sin tener que cerrar y reabrir el Panel.
+        const _pAlAbrir = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
+        if (_pAlAbrir != null) _factoresAlAbrir.pesoKg = _pAlAbrir;
         const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
         if (_reconciliado) {
           _resumen = _reconciliado;
@@ -18689,6 +18745,8 @@ _vglOfrecerDeshacer(btn);
         const factores = mtrLeerFactoresRcvDelDom(apt.doc_id, document) || {};
         const t = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
         if (t) { factores.paSistolica = t.pas; factores.paDiastolica = t.pad; }
+        const pTick = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
+        if (pTick != null) factores.pesoKg = pTick;
         const nuevo = mtrRecalcularConFactores(_resumen, factores, todayStamp());
         if (!nuevo) return;
         // Lo que el médico acaba de escribir puede abrir la compuerta: se
@@ -18721,11 +18779,16 @@ _vglOfrecerDeshacer(btn);
       const f = mtrLeerFactoresRcvDelDom(docId, document);
       if (!f) return "";
       const t = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
+      // v17.6.75 — el peso no entraba en la firma: escribirlo en Examen físico no
+      // contaba como "algo cambió", así que la vigilancia de 20 s nunca reclasificaba
+      // por eso solo — se quedaba esperando que cambiara alguna otra casilla.
+      const pDom = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
       const partes = Object.keys(f).sort().map((k) => {
         const v = f[k];
         return (v === null || v === undefined || typeof v === "object") ? "" : k + "=" + String(v);
       }).filter(Boolean);
       if (t) partes.push("pas=" + (t.pas == null ? "" : t.pas), "pad=" + (t.pad == null ? "" : t.pad));
+      partes.push("peso=" + (pDom == null ? "" : pDom));
       return partes.join("|");
     } catch (e) { return ""; }
   }
@@ -19523,6 +19586,24 @@ _vglOfrecerDeshacer(btn);
             .map((p) => p && p.descripcion).filter(Boolean);
           
           const resumenClin = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
+          // v17.6.74 — REPORTE EN VIVO (26-ago, captura): paciente con PA 140/100 tomada
+          // HOY salía "🟢 Paciente estable... Sugerido: Final de la jornada". Causa: este
+          // triaje siempre leía `resumenClin.factores.paSistolica/paDiastolica` tal como
+          // quedaron cacheados la última vez que se calculó el resumen (al abrir Laboratorios
+          // o el Panel) — nunca la tensión que el médico acaba de escribir en la casilla de
+          // Signos Vitales de ESTA consulta, a diferencia del Panel del paciente, que sí la
+          // reconcilia en vivo (ver mtrLeerTensionDelDom + mtrPanelResumenAlAbrir más arriba).
+          // Si el médico agenda sin haber abierto el Panel después de tomar la tensión de
+          // hoy, el triaje quedaba ciego a la cifra real. Se lee la tensión EN VIVO del DOM
+          // aquí también, igual que hace el Panel, y se sobreescribe sobre lo cacheado.
+          if (resumenClin) {
+            try {
+              const _tAgm = (typeof mtrLeerTensionDelDom === "function") ? mtrLeerTensionDelDom(document) : null;
+              if (_tAgm && (_tAgm.pas != null || _tAgm.pad != null)) {
+                resumenClin.factores = Object.assign({}, resumenClin.factores || {}, { paSistolica: _tAgm.pas, paDiastolica: _tAgm.pad });
+              }
+            } catch (e) {}
+          }
           // v15.4.0 — Tercer argumento: las etiquetas de programa del paciente (vienen del
           // BuscarPacienteDetallado). Sin ellas, un diabético etiquetado por programa era
           // invisible para el triaje cuando aún no había resumen clínico.
@@ -21886,6 +21967,12 @@ _vglOfrecerDeshacer(btn);
       let agrupadores = [];
       let fallidasCount = 0;
       const actividadesCubiertas = []; // v12.4.0 — etiquetas del Excel cubiertas por las órdenes creadas
+      // v17.6.76 — REPORTE EN VIVO: con 2+ órdenes, los botones de imprimir salían
+      // rotulados con el agrupador crudo del servidor (un id numérico) — el médico no
+      // podía saber cuál botón era VIH y cuál PSA sin abrirlos a ciegas. Cada agrupador
+      // nace de UN pkg concreto en este mismo bucle: se anota aquí para rotular los
+      // botones con pkg.titulo (el mismo texto de la tarjeta que el médico ya reconoce).
+      const _tituloPorAgrupador = new Map();
 
       for (const c of selectedBoxes) {
         const i = parseInt(c.getAttribute("data-idx"), 10);
@@ -21913,6 +22000,7 @@ _vglOfrecerDeshacer(btn);
         if (resOrd && !resOrd.error && agpReal) {
           creadasCount++;
           agrupadores.push(agpReal);
+          if (!_tituloPorAgrupador.has(agpReal)) _tituloPorAgrupador.set(agpReal, pkg.titulo || pkg.cie10 || String(agpReal));
           actividadesCubiertas.push(...(pymPorPaquete.get(pkg) || []));
           if (vivo()) {
             c.checked = false;
@@ -22002,7 +22090,9 @@ _vglOfrecerDeshacer(btn);
           agrupadoresUnicos.forEach((agp) => {
             const printBtn = document.createElement("button");
             printBtn.className = "vgl-agm-btn sec";
-            printBtn.textContent = "🖨️ Orden " + agp;
+            // v17.6.76 — rotulado con la actividad real (VIH, PSA…), no con el id crudo
+            // del agrupador: con eso el médico no podía distinguir un botón de otro.
+            printBtn.textContent = "🖨️ " + (_tituloPorAgrupador.get(agp) || ("Orden " + agp));
             printBtn.addEventListener("click", async () => {
               uxTrack("ordenes.imprimir");
               // v12.6.2 — pestaña en blanco SÍNCRONA en el clic real (evita el bloqueador de
@@ -33114,6 +33204,20 @@ _vglOfrecerDeshacer(btn);
     return mtrLeerCampoNumerico("cinturaPelvica", doc);
   }
 
+  // v17.6.75 — REPORTE EN VIVO (26-ago, captura): "no aparece la TFG y me dice que
+  // falta el peso pero yo ya lo consigné en su respectiva casilla de Everest". Causa
+  // real: a diferencia de la tensión (mtrLeerTensionDelDom) y la cintura
+  // (mtrLeerCinturaDelDom), NUNCA existió un lector de DOM en vivo para el peso — el
+  // Cockcroft-Gault solo recibía `ent.peso` (lo que ya trajera la entrada de Athenea/
+  // API), y un paciente que nunca tuvo un peso guardado por esa vía se quedaba "sin
+  // dato" aunque el médico acabara de escribir 77 kg en la casilla de Examen físico,
+  // delante de sus ojos. Ancla real: id="peso" (tipo number, obligatorio, pestaña
+  // "Examen físico"), confirmada en las capturas del DOM (grounding/mapas/). Mismo
+  // criterio que las otras dos: sin la casilla o sin valor, null — nunca se inventa.
+  function mtrLeerPesoDelDom(doc) {
+    return mtrLeerCampoNumerico("peso", doc);
+  }
+
   // Puente entre lo que el modal de laboratorios YA tiene en la mano y lo que
   // el motor necesita. No pide nada por red: `r` viene de calcularEstadioRenal
   // (que ya pagó sus dos consultas, cacheadas) y `labs` son los resultados que
@@ -33345,6 +33449,10 @@ _vglOfrecerDeshacer(btn);
       } catch (e) { return false; }
     })();
     const ta = _mismoPac ? mtrLeerTensionDelDom() : { pas: null, pad: null };
+    // v17.6.75 — mismo respaldo de DOM que la tensión (ver mtrLeerPesoDelDom): sin esto,
+    // un paciente sin peso guardado en Athenea se queda "sin dato" para Cockcroft-Gault
+    // aunque el médico lo acabe de escribir en Examen físico.
+    const pesoDom = _mismoPac ? mtrLeerPesoDelDom() : null;
     const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labs) ? labs : [], { uroanalisisPorComponentes: true });
     const ultimos = {};
     candidatos.forEach((c, clave) => {
@@ -33398,7 +33506,7 @@ _vglOfrecerDeshacer(btn);
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
       meds: _medsParaMotor,
-      edad: ent.edad, sexo: ent.sexo, pesoKg: ent.peso, creatinina: ent.creatinina,
+      edad: ent.edad, sexo: ent.sexo, pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
       rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
       ldl: val("COLESTEROL_LDL"),
       // v17.6.0 — HALLADO AL CABLEAR EL ÍTEM 3 (meta de HbA1c individual): esta llamada

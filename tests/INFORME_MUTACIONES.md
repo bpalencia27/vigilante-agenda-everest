@@ -6,6 +6,146 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.75 — 26-ago-2026 (dos reportes más en vivo: avisos en tres pantallas puntuales, y la TFG ciega al peso recién escrito)
+
+### 1. El médico nombró tres pantallas donde NO quiere sonido/notificación
+
+Confirmado con dos preguntas puntuales: el panel y el sonido siguen tan amplios como
+hoy en todo lo demás (Citas del día + Historia + Ordenamiento-dentro-de-historia,
+invariante v14.1.5 intacto), pero en `/viva/Acceso/`, `/viva/EverHealth/OrdenamientoHealth`
+y `/viva/EverHealth/` a secas, ni tono ni notificación de Windows ni toast — el hecho se
+sigue contando y el cartel queda en cola para cuando vuelva a una pantalla clínica real.
+Nueva función `_enPaginaExcluidaDeAvisos()`, gemela de `_enModuloHCHealth()`.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **exclusión de avisos** | `maybeNotify`: la rama `else if (_enPaginaExcluidaDeAvisos()) _encolarAvisoPendiente(payload);` se retiró (las tres páginas nombradas vuelven a sonar) | `suite_04` | *v17.6.75: en las tres pantallas que el médico nombró, el aviso NO suena…* → *ni una sola notificación de Windows en ninguna de las tres rutas nombradas: esperaba 0 y obtuvo 3* |
+
+Se aplicó sobre producción, cayeron exactamente las pruebas nuevas de `suite_04` y
+`suite_14` (`_enPaginaExcluidaDeAvisos`), se restauró (verificado con `diff` contra una
+copia intacta) y el banco volvió a verde. Dos pruebas viejas (`maybeNotify v14.1.5...` y
+`_flushAvisosPendientes: al volver a HCHealth...`) usaban `/viva/Acceso/` como ejemplo de
+"cualquier pantalla fuera del módulo" — se migraron a `/viva/OtraPantalla/` porque ese
+ejemplo concreto ahora SÍ tiene un comportamiento distinto (el invariante v14.1.5 general
+sigue vivo, solo cambió para las tres rutas nombradas).
+
+### 2. Cockcroft-Gault nunca tuvo un lector de DOM en vivo para el peso
+
+Reporte en vivo con dos capturas: "no aparece la TFG y me dice que falta el peso pero yo
+ya lo consigné en su respectiva casilla de Everest" (Peso (Kg): 77, con asterisco
+obligatorio, en Examen físico). A diferencia de la tensión (`mtrLeerTensionDelDom`) y la
+cintura (`mtrLeerCinturaDelDom`), nunca existió un `mtrLeerPesoDelDom` — Cockcroft-Gault
+solo recibía `ent.peso` (lo que ya trajera la entrada de Athenea/API), así que un
+paciente sin peso guardado por esa vía se quedaba "sin dato" aunque el médico lo
+acabara de escribir delante de sus ojos. Ancla real confirmada en `grounding/mapas/`:
+`id="peso"` (tipo number, obligatorio, pestaña "Examen físico"). Se agregó el lector y
+se conectó en los mismos tres puntos que ya reconcilian la tensión en vivo:
+`mtrResumenDesdeModalLabs` (la vía principal), la apertura del Panel y su vigilancia de
+20 s (`_tableroFirmaDom` tampoco incluía el peso en su firma — sin eso, escribirlo no
+contaba como "algo cambió" y la vigilancia nunca reclasificaba por esa sola razón).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **lector puro** | `mtrLeerPesoDelDom`: `return mtrLeerCampoNumerico("peso", doc)` se cambió por `return null` | `suite_55` | *mtrLeerPesoDelDom: lee la casilla real id="peso" de Examen físico…* → *el peso recién escrito… esperaba 77 y obtuvo null* |
+
+Se aplicó sobre producción, cayó exactamente la prueba nueva, se restauró (verificado con
+`diff` contra una copia intacta) y el banco volvió a 2267/2267. **Sin mutación propia
+para el cableado en `mtrResumenDesdeModalLabs`/el Panel**: es el mismo caso que el
+triaje de agendamiento de v17.6.74 — el punto de fusión (`ent.peso != null ? ent.peso :
+pesoDom`) es un one-liner que reutiliza EXACTAMENTE el patrón ya probado de la tensión
+(`ent.pas != null ? ent.pas : ta.pas`, misma función, tres líneas más abajo, con su
+propia cobertura en `suite_47`); se verificó leyendo el código de punta a punta y
+confirmando por grep que antes de este cambio no existía ningún respaldo de DOM para
+`pesoKg` en ninguna de las tres rutas. Queda como deuda explícita construir el mock de
+`document.querySelector` a nivel de harness para probar el cableado de punta a punta,
+no solo el lector puro.
+
+## v17.6.74 — 26-ago-2026 (dos reportes en vivo, en plena consulta: triaje ciego a la tensión de hoy, y "extemporáneo" originado por una pestaña de fondo)
+
+### 1. El triaje de agendamiento (franja sugerida) leía la tensión CACHEADA, no la de hoy
+
+Reporte en vivo con captura: paciente con PA 140/100 tomada hoy salía "🟢 Paciente
+estable... Sugerido: Final de la jornada". `_evaluarComplejidadPaciente` en sí estaba
+bien (`paDescontrolada` exige PAS≥160 o PAD≥100 — 140/100 sí debía disparar la insignia),
+pero su único llamador real (`openAgendamientoModal`) lo alimentaba con
+`mtrCacheResumenLeer(apt.doc_id)` sin más — la tensión que traía era la del último
+resumen calculado (al abrir Laboratorios o el Panel), nunca la que el médico ACABA de
+escribir en Signos Vitales de esta consulta si no volvió a abrir el Panel después. El
+Panel del paciente sí reconcilia la tensión en vivo con `mtrLeerTensionDelDom` antes de
+clasificar (ver `openPanelPacienteModal`); el agendamiento no lo hacía. Se agregó la
+misma reconciliación, mismo patrón, antes de llamar a `_evaluarComplejidadPaciente`.
+
+**Sin mutación automatizada propia todavía**: el punto de falla vive dentro del tramo
+asíncrono de `openAgendamientoModal` (tras `await ...BuscarPacienteDetallado`), y las
+suites existentes que abren ese modal (`suite_61`) lo hacen de forma síncrona, inspeccionando
+el banner ANTES de que esa promesa resuelva — no llegan a ejercitar esta línea. Se
+verificó leyendo el código de punta a punta y confirmando por grep que `_evaluarComplejidadPaciente`
+nunca recibía una tensión reconciliada en ningún otro punto de la función. Queda como
+deuda explícita: construir un test async con `pageFetchJson` mockeado para
+`BuscarPacienteDetallado` y una tensión de DOM inyectada, análogo a los de `suite_67`
+para el Panel — no se quiso demorar la entrega de un fix en vivo por escribir esa
+infraestructura de prueba desde cero en plena consulta del médico.
+
+### 2. "Confirmación extemporánea" podía originarla una pestaña de fondo, estrangulada por el navegador
+
+Reporte en vivo: "me salió de nuevo esos avisos de que me confirmaron pacientes
+extemporáneos... es como si el script no leyera en tiempo real la agenda". La marca
+`fraudWatch` (la que convierte un "Sin presentarse" vencido en un ROJO permanente para
+el resto del día, incluso después de "Atendido") la podía originar y compartir CUALQUIER
+pestaña abierta de Everest —el chequeo `if (!state.leader)` de `colorAndAlert` vive
+DESPUÉS del bloque que marca `fraudWatch`, no antes—, y una pestaña de fondo tiene su
+temporizador estrangulado por el navegador (el propio médico lo tenía en su consola:
+"la pestaña líder está oculta y el navegador le estrangula el temporizador"), así que su
+sondeo puede llegar tarde y confirmar "pasados los 6 minutos" con una lectura vieja,
+mientras la pestaña activa ya vio "En Sala" hace rato. La marca se comparte a todas las
+pestañas (`_fraudeCompartidoGuardar`/`_fraudeCompartidoFusionar`) y no existe ninguna vía
+para deshacerla. Ahora solo la pestaña LÍDER puede originar la marca.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **guarda de origen** | `colorAndAlert`: `if (state.leader && !state.fraudWatch.has(key))` se cambió a `if (true && !state.fraudWatch.has(key))` (cualquier pestaña vuelve a poder originar la marca) | `suite_04` | *v17.6.74: una pestaña NO líder no origina fraudWatch…* → *pero NO origina la marca compartida — eso solo lo hace la líder (obtuvo true)* |
+
+Se aplicó sobre producción, cayó exactamente la prueba nueva, se restauró (verificado con
+`diff` contra una copia intacta) y el banco volvió a 2263/2263.
+
+## v17.6.73 — 26-ago-2026 (se restaura la guarda anti-repetición de inasistencia/extemporánea, perdida en el camino entre ramas)
+
+Reporte en vivo del médico (26-ago, en plena consulta): "me salió de nuevo esos avisos
+de que me confirmaron pacientes extemporáneos en otra pestaña de Everest, algo pasó con
+eso. No es normal, antes funcionaba bien". Investigado con el archivo real que el médico
+tiene instalado (`v17.6.65`, aportado en consultorio): la guarda
+`if (!_conto && (a.color === "AMBAR" || a.color === "ROJO")) return;` de `maybeNotify`
+(el fix de v17.6.52 "la inasistencia no vuelve a avisar tras un parpadeo") NUNCA llegó a
+ningún commit compartido — quedó escrita, probada y mutada en un `git stash` local que
+nunca se subió, así que ni la rama que se fusionó como base (`f430d66`) ni la rama de
+donde se recuperaron las 31 suites (`origin/claude/hunks-cluster-remaining-9fjixx`)
+la tenían. Se restauró desde el propio stash (la prueba `t.caso` correspondiente
+sobrevivió intacta ahí también) y se re-verificó con mutación antes de dar el caso por
+cerrado.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **guarda anti-repetición** | `maybeNotify`: `if (!_conto && ...)` se cambió a `if (false && ...)` (la guarda queda inerte) | `suite_04` | *v17.6.52: la inasistencia (AMBAR) NO vuelve a avisar tras un parpadeo de estado…* → *la marca no se reescribió (obtuvo true)* |
+
+Se aplicó sobre producción, cayó exactamente la prueba esperada, se restauró (verificado
+con `diff` contra una copia intacta) y el banco volvió a 2262/2262.
+
+### De regalo, en la misma revisión: una suite recuperada citaba una función ya retirada
+
+Al recuperar las 31 suites de `origin/claude/hunks-cluster-remaining-9fjixx` (fusión ya
+hecha en esa rama con `origin/claude/v17-6-2-22ago`), `tests/suite_58_ia_insercion.js`
+seguía declarando `cubre: [..., "mtrInsertarNota"]` y llamando a `api.mtrInsertarNota(...)`
+directamente en tres casos — pero esa función (nunca tuvo llamador en producción desde
+v17.6.10, según su propio comentario) ya no existe en el archivo actual: se retiró en
+algún commit posterior de esa misma rama sin que la suite se actualizara. El validador de
+cobertura del runner lo trata como error fatal (por diseño, para cazar justo este tipo de
+deriva) — el banco no corría en absoluto hasta corregirlo. Se quitó `mtrInsertarNota` de
+`cubre` y se retiraron los tres casos que la llamaban directamente; `mtrCasillaPorNombre`,
+`mtrCasillaAnalisis` y `mtrInsertarSiVacia` (las tres funciones que sí siguen vivas, ver
+`mtrInsertarEnCasillaModo`) quedan cubiertas igual por los casos restantes de la misma
+suite. No es una mutación de comportamiento propio — es limpieza de un `cubre` desactualizado —
+así que no lleva fila en la tabla de arriba.
+
 ## v17.6.72 — 26-ago-2026 (ítem 2 / auditoría 25-ago 1.15: grupo de lípidos, vigencia = la más corta — decisión del médico)
 
 Colesterol Total, HDL, LDL y Triglicéridos salen de UNA sola muestra de sangre. Antes,

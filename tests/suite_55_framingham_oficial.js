@@ -32,7 +32,7 @@ function refPuntos(d) {
 
 module.exports = {
   nombre: "Framingham oficial predicho, FINDRISC, cobertura del motor y sonda",
-  cubre: ["mtrFraminghamEverest", "mtrSugerirFindrisc", "mtrMedsSinGrupo", "mtrSondaPestanias", "mtrLeerTensionDelDom"],
+  cubre: ["mtrFraminghamEverest", "mtrSugerirFindrisc", "mtrMedsSinGrupo", "mtrSondaPestanias", "mtrLeerTensionDelDom", "mtrLeerPesoDelDom"],
 
   pruebas(t, api, env) {
     t.caso("el catálogo rescatado del HAR sigue teniendo las 114 filas", () => {
@@ -141,6 +141,19 @@ module.exports = {
       t.igual(ruta.pad, null, "la diastólica de Ruta NO está capturada: no se adivina");
       const vacio = api.mtrLeerTensionDelDom(docCon({}));
       t.igual(vacio.pas, null, "sin casillas: null, jamás un valor inventado");
+    });
+
+    // ============ LECTURA DEL PESO (ancla real: id="peso", Examen físico) ============
+    // v17.6.75 — REPORTE EN VIVO: "no aparece la TFG y me dice que falta el peso pero
+    // yo ya lo consigné en su respectiva casilla de Everest". A diferencia de la
+    // tensión, nunca hubo lector de DOM en vivo para el peso.
+    t.caso("mtrLeerPesoDelDom: lee la casilla real id=\"peso\" de Examen físico; sin ella, null", () => {
+      const docCon = (mapa) => ({ querySelector: (sel) => {
+        for (const k of Object.keys(mapa)) if (sel.indexOf(k) >= 0) return { value: mapa[k] };
+        return null;
+      } });
+      t.igual(api.mtrLeerPesoDelDom(docCon({ peso: "77" })), 77, "el peso recién escrito, aunque no se haya guardado en Athenea");
+      t.igual(api.mtrLeerPesoDelDom(docCon({})), null, "sin la casilla: null, nunca un valor inventado");
     });
 
     // ============ SONDA DE PESTAÑAS ============
