@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.55
+// @version     17.6.56
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.55";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.56";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31786,7 +31786,13 @@ _vglOfrecerDeshacer(btn);
       // v17.6.8 — relativizadas (nunca crudas): cuasi-identificadores fuera del prompt.
       ftl_date: mtrRelativizarFechaIso(plan.ftl, (r && r._hoyIso) || todayStamp()) || "",
       control_date: mtrRelativizarFechaIso((plan.control && plan.control.fecha), (r && r._hoyIso) || todayStamp()) || "",
-      order_list: [].concat(claves(plan.faltantes), claves(plan.vencidos)),
+      // v17.6.56 — auditoría 25-ago (1.14): esto armaba order_list como faltantes+vencidos
+      // en vez de usar plan.ordenar (que mtrPlanParaclinicos ya construye bien: incluye lo
+      // cosechado y los pasajeros en estado A, sin bloqueados, deduplicado). La nota
+      // clínica que el médico copia a la historia describía MENOS exámenes de los que el
+      // asistente realmente va a ordenar (verificado: en ERC G4 con lípidos vencidos,
+      // plan.ordenar incluye el HDL cosechado; el order_list viejo no).
+      order_list: claves(plan.ordenar),
       denied_list: claves(plan.bloqueados),
       nota_clinica: { justificacion_riesgo_meta: "", sustento_medicolegal: "" },
       technical_justification: "",

@@ -928,7 +928,11 @@ module.exports = {
         _hoyIso: "2026-08-23",
         programa: "HTA", erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
         riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70 } }, foco: "renal",
-        plan: { ftl: "2026-09-01", control: { fecha: "2026-09-07" }, faltantes: [{ clave: "RAC" }], vencidos: [{ clave: "HBA1C" }] },
+        // v17.6.56 (1.14) — order_list ahora sale de plan.ordenar (lo que el motor de
+        // verdad va a ordenar: faltantes+vencidos de los drivers, MÁS lo cosechado y los
+        // pasajeros en estado A), no de faltantes+vencidos crudos. faltantes/vencidos se
+        // conservan aquí porque otros campos del JSON (no probados en este caso) los usan.
+        plan: { ftl: "2026-09-01", control: { fecha: "2026-09-07" }, faltantes: [{ clave: "RAC" }], vencidos: [{ clave: "HBA1C" }], ordenar: [{ clave: "RAC" }, { clave: "HBA1C" }] },
       };
       const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"] });
       t.igual(j.version, "68", "versión");
@@ -941,6 +945,30 @@ module.exports = {
       t.igual(j.ftl_date, "en 9 días", "FTL se relativiza respecto a hoy (9 días del 23-ago al 1-sep)");
       t.igual(j.control_date, "en 15 días", "control se relativiza igual (15 días al 7-sep)");
       t.igual(j.nota_clinica.justificacion_riesgo_meta, "", "la prosa la escribe el LLM, no el motor");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.14] order_list armaba faltantes+vencidos crudos, sin
+    // pasar por plan.ordenar — que SÍ incluye lo cosechado (un examen vigente que se
+    // adelanta a esta misma toma porque le queda poca vigencia) y los pasajeros en A. Un
+    // cosechado que no está en faltantes NI en vencidos (por definición: si estuviera
+    // vencido no habría nada que cosechar) desaparecía de la nota clínica que el médico
+    // copia a la historia, aunque el asistente SÍ lo fuera a ordenar de verdad.
+    t.caso("mtrJsonV68DesdeResumen (1.14): order_list incluye lo COSECHADO, que faltantes/vencidos por sí solos no traen", () => {
+      const resumen = {
+        _hoyIso: "2026-08-23",
+        programa: "HTA", erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70 } }, foco: "renal",
+        plan: {
+          ftl: "2026-09-01", control: { fecha: "2026-09-07" },
+          faltantes: [{ clave: "RAC" }], vencidos: [],
+          // HDL cosechado: ni faltante ni vencido, pero SÍ va en la orden real.
+          ordenar: [{ clave: "RAC" }, { clave: "COLESTEROL_HDL" }],
+        },
+      };
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: [] });
+      t.cierto(j.order_list.indexOf("RAC") >= 0, "el faltante sigue apareciendo");
+      t.cierto(j.order_list.indexOf("COLESTEROL_HDL") >= 0,
+        "el cosechado (COLESTEROL_HDL) debe aparecer en order_list — bug real: solo faltantes/vencidos, esto no salía");
     });
 
     t.caso("SEGURIDAD: sin TFG ni meta, el JSON v68 emite null (NUNCA 0) para no afirmar 'TFG 0'", () => {

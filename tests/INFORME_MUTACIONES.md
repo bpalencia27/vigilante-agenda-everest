@@ -6,6 +6,26 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.56 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.14: `order_list` del JSON dejaba fuera lo cosechado)
+
+`mtrJsonV68DesdeResumen` (vigilante_agenda.user.js:31789) armaba `order_list` como
+`faltantes+vencidos` en vez de usar `plan.ordenar` (que `mtrPlanParaclinicos` ya construye
+bien: faltantes+vencidos de los drivers, MÁS lo cosechado — un examen vigente que se
+adelanta a esta misma toma porque le queda poca vigencia — y los pasajeros en estado A, sin
+bloqueados, deduplicado). Un cosechado NUNCA aparece en faltantes ni en vencidos (si
+estuviera vencido no habría nada que cosechar), así que la nota clínica que el médico copia
+a la historia describía MENOS exámenes de los que el asistente realmente iba a ordenar. Fix
+de una línea: `order_list: claves(plan.ordenar)`.
+
+- **Test existente actualizado**: `"mtrJsonV68DesdeResumen mapea lo determinista..."` usaba
+  un `plan` sintético sin campo `ordenar` (no representa la forma real que produce
+  `mtrPlanParaclinicos`); se le añadió `ordenar: [...]` para seguir siendo representativo.
+- **Mutación**: se revirtió a `[].concat(claves(plan.faltantes), claves(plan.vencidos))`.
+  El banco pasó de 2217 en verde a 1 roja: *"order_list incluye lo COSECHADO..."* (un
+  cosechado, COLESTEROL_HDL, no aparecía). Restaurado, banco vuelve a 2217 en verde.
+- **Prueba nueva**: `tests/suite_57_ia_redaccion.js` — 1 caso con un cosechado que
+  faltantes/vencidos por sí solos no traen.
+
 ## v17.6.55 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.12: "sin estatina de alta intensidad" se disparaba con el paciente YA en dosis alta)
 
 Mismo patrón exacto que el bug de HbA1c de v17.6.0 (documentado arriba en este mismo
