@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.45
+// @version     17.6.46
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.45";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.46";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4889,6 +4889,22 @@
       + ". Abra esa(s) pestaña(s) una vez y el módulo se activa solo — no hay que guardar nada.";
   }
 
+  // v16.3.0 — el aviso espontáneo (el Vigilante detecta el bloqueo por su cuenta) se
+  // limita a UNA vez por paciente/día para no repicar; si el médico ABRE el módulo a
+  // propósito (espontaneo=false), siempre se le explica por qué está bloqueado.
+  const _vglContextoAvisado = new Set();
+  function _vglAvisoContextoFaltante(apt, estado, espontaneo) {
+    try {
+      const key = String((apt && apt.doc_id) || "") + "|" + todayStamp();
+      if (espontaneo) {
+        if (!key || _vglContextoAvisado.has(key)) return false;
+        _vglContextoAvisado.add(key);
+      }
+      showToast("AZUL", "Riesgo y exámenes", _vglTextoContextoFaltante(estado), false);
+      return true;
+    } catch (e) { return false; }
+  }
+
   // Lo archivado para este paciente, en la misma forma que devuelve mtrLeerRadioSiNo
   // (true / false / null). Null = nunca se ha visto documentado, que NO es "no lo tiene".
   function _vglFactoresArchivados(docId) {
@@ -6938,6 +6954,10 @@ _vglOfrecerDeshacer(btn);
     try { if (_reloj.worker) _reloj.worker.terminate(); } catch (e) {}
     _reloj.worker = null; _reloj.ok = false;
   }
+  // Solo para pruebas: expone/ajusta el estado interno del reloj de segundo plano sin
+  // depender de un Worker real (que el arnés de pruebas no puede levantar).
+  function _relojEstadoParaTest() { return { ok: _reloj.ok, motivo: _reloj.motivo, canales: Array.from(_reloj.canales.keys()), locales: Array.from(_reloj.locales.entries()).map(([id, v]) => ({ id, ms: v.ms, enPagina: !!v.timer })) }; }
+  function _relojAjustarParaTest(cambios) { Object.assign(_reloj, cambios || {}); }
   // v14.2.12 — ¿Volvió esta pestaña de un DESCARTE de Chrome (Ahorro de memoria)? Mientras
   // estuvo descartada no corrió nada — ni el reloj de segundo plano puede evitarlo. Se
   // registra (conteo anónimo) y, una vez al día, se sugiere la única solución real de ese
@@ -7012,6 +7032,7 @@ _vglOfrecerDeshacer(btn);
   let _ultimoBeatWrite = 0;
   let _ultimoBeatOculta = null;
   function _setUltimoRelevoParaTest(v) { _ultimoRelevoVisibilidad = v; }
+  function _getUltimoRelevoParaTest() { return _ultimoRelevoVisibilidad; }
   function heartbeat() {
     try {
       const ahora = Date.now();
@@ -25822,6 +25843,12 @@ _vglOfrecerDeshacer(btn);
     return mtrIsoDesdeFecha(d);
   }
 
+  function mtrSumarDiasHabiles(iso, dias) {
+    const base = mtrSumarDias(iso, Math.trunc(Number(dias) || 0));
+    if (!base) return null;
+    return mtrAjustarFechaHabil(base);
+  }
+
   // NUEVA — la decisión del médico del 5-ago-2026, que el Python todavía NO
   // implementa: la toma de laboratorio que cae en domingo o festivo se ADELANTA
   // al último día hábil, nunca se retrasa. CERO VENCIDOS manda sobre el
@@ -26036,6 +26063,14 @@ _vglOfrecerDeshacer(btn);
     let mejor = previos[0];
     previos.forEach((p) => { if (p.valor > mejor.valor) mejor = p; });
     return { valor: mejor.valor, fecha: mejor.fecha, nPrevios: previos.length };
+  }
+
+  // cNoHDL = CT - HDL. null si falta algún insumo (no infiere).
+  function mtrCnoHDL(ct, hdl) {
+    if (mtrEsFalsy(ct) || mtrEsFalsy(hdl)) return null;
+    const a = mtrFloat(ct), b = mtrFloat(hdl);
+    if (a === null || b === null) return null;   // Python lanzaría; aquí, casilla vacía
+    return mtrRound(a - b, 1);
   }
 
   function mtrReduccionLdlPct(ldlBasal, ldlActual) {
@@ -29349,11 +29384,17 @@ _vglOfrecerDeshacer(btn);
     const remision = mtrRemisionNefrologia(egfr, d.rac, d.egfrPrevio);
     const ira = mtrSospechaIra(egfr, d.egfrPrevio);
 
+    const posAdmin = mtrPosEstadio(estadioAdmin);
+    const posClinico = mtrPosEstadio(estadioClinico);
+    // Cuando el clínico es PEOR, las dosis y la remisión lo siguen a él.
+    const estadioParaDosis = (posClinico > posAdmin && posClinico >= 0) ? estadioClinico : (estadioClinico || estadioAdmin);
+
     return {
       crcl: crcl === null ? null : mtrRound(crcl, 1),
       egfr: egfr === null ? null : mtrRound(egfr, 1),
       estadioAdministrativo: estadioAdmin,
       estadioClinico: estadioClinico,
+      estadioParaDosis: estadioParaDosis,
       discordancia: discordancia,
       remitirNefrologia: remision.remitir,
       motivosRemision: remision.motivos,
@@ -31851,6 +31892,105 @@ _vglOfrecerDeshacer(btn);
       </div>`;
   }
 
+  // Recuadro clínico reutilizable (reemplazo del banner de PyM): función pura de HTML
+  // que arma el bloque de riesgo/función renal/exámenes/uroanálisis/falla/fechas a partir
+  // de un resumen ya calculado. `opts.ocultarCabeceraRiesgoEIA` deja fuera la cabecera de
+  // riesgo y la entrada a la IA (usado por modales que no deben mostrar esas dos piezas).
+  function mtrRenderResumenClinicoHtml(r, opts) {
+    if (!r) return "";
+    const ocultarCabeceraRiesgoEIA = !!(opts && opts.ocultarCabeceraRiesgoEIA);
+    const esc = (v) => escapeHtml(String(v == null ? "" : v));
+    const erc = r.erc || {}, plan = r.plan || {};
+
+    const cabecera = mtrRenderCabeceraRiesgoHtml(r);
+
+    const renal = `
+      <div class="vgl-rcv-renal">
+        <div class="vgl-rcv-tfg">
+          <span title="Rige vigencias, bloqueos y agenda — es la que audita la EPS">Administrativo (Cockcroft-Gault): <b>${esc(erc.estadioAdministrativo || "no evaluable")}</b>${erc.crcl != null ? " · " + esc(erc.crcl) + " mL/min" : ""}</span>
+          <span title="Rige la clasificación renal, el ajuste de dosis y la remisión">Clínico (CKD-EPI): <b>${esc(erc.estadioClinico || "no evaluable")}</b>${erc.egfr != null ? " · " + esc(erc.egfr) + " mL/min/1.73m²" : ""}</span>
+        </div>
+        ${erc.discordancia && erc.discordancia.hayDiscrepancia ? `<div class="vgl-rcv-aviso">⚠ Las dos fórmulas difieren en ${esc(erc.discordancia.diferenciaEstadios)} estadio(s). Suele pasar con peso muy alto o muy bajo: verifique el peso antes de decidir.</div>` : ""}
+        ${erc.remitirNefrologia ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Criterio de remisión a nefrología: ${esc((erc.motivosRemision || []).join(" · "))}</div>` : ""}
+        ${erc.sospechaIra ? `<div class="vgl-rcv-aviso vgl-rcv-aviso-alto">⚠ Caída importante de la función renal frente a la creatinina anterior: evalúe antes de pedir la rutina.</div>` : ""}
+        ${!erc.datosCompletos && (erc.faltan || []).length ? `<div class="vgl-rcv-falta">Para calcular las dos fórmulas falta: <b>${esc(erc.faltan.join(", "))}</b>.</div>` : ""}
+      </div>`;
+
+    const fila = (a, clase) => `<li class="${clase}"><b>${esc(a.nombre)}</b> <span>${esc(a.motivo)}</span></li>`;
+    const faltan = (plan.faltantes || []).map((a) => fila(a, "vgl-rcv-falta-item")).join("");
+    const vencidos = (plan.vencidos || []).map((a) => fila(a, "vgl-rcv-vencido-item")).join("");
+    const bloqueados = (plan.bloqueados || []).map((a) => fila(a, "vgl-rcv-bloq-item")).join("");
+    const nPendientes = (plan.faltantes || []).length + (plan.vencidos || []).length;
+
+    const examenes = `
+      <div class="vgl-rcv-examenes">
+        <div class="vgl-rcv-subtit">${nPendientes ? "🧪 Faltan " + esc(nPendientes) + " examen(es)" : "🧪 No falta ningún examen"}${vglTip("Esta lista la calcula el Vigilante solo, comparando la vigencia de cada examen con el estadio renal y el programa del paciente — Everest no la muestra. Es una sugerencia para revisar, no una orden puesta.")}</div>
+        ${vencidos ? `<ul class="vgl-rcv-lista">${vencidos}</ul>` : ""}
+        ${faltan ? `<ul class="vgl-rcv-lista">${faltan}</ul>` : ""}
+        ${bloqueados ? `<details class="vgl-rcv-det"><summary>${esc(plan.bloqueados.length)} bloqueado(s) por la norma en este estadio</summary><ul class="vgl-rcv-lista">${bloqueados}</ul></details>` : ""}
+      </div>`;
+
+    const ftl = plan.ftl;
+    const control = plan.control;
+    const fechas = ftl ? `
+      <div class="vgl-rcv-fechas">
+        <div class="vgl-rcv-fecha">
+          <div class="vgl-rcv-fecha-rot">Toma de laboratorios</div>
+          <div class="vgl-rcv-fecha-val">${esc(mtrFechaLegible(ftl))}</div>
+          <div class="vgl-rcv-fecha-iso">${esc(ftl)}</div>
+        </div>
+        <div class="vgl-rcv-fecha">
+          <div class="vgl-rcv-fecha-rot">Control sugerido</div>
+          <div class="vgl-rcv-fecha-val">${control ? esc(mtrFechaLegible(control.fecha)) : "—"}</div>
+          <div class="vgl-rcv-fecha-iso">${control ? esc(control.fecha) + (control.esSabado ? " · sábado del médico" : "") : "sin día válido"}</div>
+        </div>
+      </div>
+      <div class="vgl-rcv-porque">${esc(plan.motivoFtl)}${plan.seAdelantoPorDiaNoHabil ? " · adelantada al día hábil anterior para no pasarse del vencimiento" : ""}${control && control.fueraDeVentana ? " · " + esc(control.motivo) : ""}</div>
+      ${plan.anr ? `<div class="vgl-rcv-porque">Ventana renal de ${esc(plan.anr.ventanaDias)} días activa: todo se agrupa en la fecha de la creatinina.</div>` : ""}
+      ${(plan.diferidos || []).length ? `<div class="vgl-rcv-porque">Se dejan para después (todavía tienen vigencia de sobra): ${esc(plan.diferidos.map((a) => a.nombre).join(", "))}.</div>` : ""}
+    ` : `<div class="vgl-rcv-porque">No hay ningún examen que vigilar con el programa y el estadio actuales.</div>`;
+
+    const ordenar = (plan.ordenar || []).map((a) => `<li>${esc(a.nombre)}</li>`).join("");
+    const orden = ordenar ? `
+      <div class="vgl-rcv-orden">
+        <div class="vgl-rcv-subtit">📄 Para la próxima consulta hay que enviarle</div>
+        <ul class="vgl-rcv-lista vgl-rcv-lista-orden">${ordenar}</ul>
+      </div>` : "";
+
+    const uro = r.uroanalisis;
+    const uroHtml = uro ? `
+      <div class="vgl-rcv-uro">
+        <div class="vgl-rcv-subtit">🔬 Uroanálisis: <b>${esc(uro.estado)}</b></div>
+        <div class="vgl-rcv-uro-conducta">${esc(uro.conducta)}</div>
+        ${(uro.criterios || []).length ? `<div class="vgl-rcv-meta">Por: ${esc(uro.criterios.join(", "))}.</div>` : ""}
+      </div>` : "";
+
+    const fallaHtml = mtrRenderFallaHtml(r);
+
+    const iaBtn = (!ocultarCabeceraRiesgoEIA && typeof S !== "undefined" && S.iaRedaccion === true && r && r._docId)
+      ? `<button id="vgl-ia-redactar" class="vgl-agm-btn sec" data-doc="${esc(r._docId)}" style="margin-top:8px">✍ Redactar con IA (enfermedad actual y análisis)</button>`
+      : "";
+
+    return `<div class="vgl-rcv-bloque" role="region" aria-label="Resumen clínico del paciente">
+      ${ocultarCabeceraRiesgoEIA ? "" : cabecera}${renal}${examenes}${uroHtml}${fallaHtml}${fechas}${orden}${iaBtn}
+      <div class="vgl-rcv-pie">Calculado con lo que hay en la historia. No se ordena ni se agenda nada solo: la decisión es suya.</div>
+    </div>`;
+  }
+
+  function mtrIaClickDelegado(e) {
+    try {
+      const t = e && e.target;
+      if (!t || typeof t.closest !== "function") return;
+      const btn = t.closest("#vgl-ia-redactar");
+      if (!btn) return;
+      e.stopPropagation();
+      const docId = btn.getAttribute("data-doc");
+      const resumen = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(docId) : null;
+      if (!resumen) { setSummary("Abra Laboratorios de este paciente primero para calcular el resumen.", "warn"); return; }
+      mtrAbrirPanelRedaccion(resumen);
+    } catch (err) {}
+  }
+
 
   // =====================================================================
   //  v14.2.0 — PANEL DE REDACCIÓN IA (la última milla: UI de revisión)
@@ -33786,7 +33926,26 @@ _vglOfrecerDeshacer(btn);
   // light— igual que cualquier otro overlay del script; además lleva un valor
   // de reserva literal en cada var(...) por si acaso. Todo color lleva
   // !important por la Regla E (el CSS de Everest pisa lo que no lo lleve).
-  
+
+
+  // ---------- GAP 1: qué chip del rango de agendamiento es la fecha sugerida ----------
+  // Dado el rango de días que pinta el modal de agendamiento y la fecha de
+  // control que calculó el motor, devuelve el ítem del rango que le corresponde
+  // (exacto si está, el más cercano por fecha si no), o null. Puro y testeable.
+  function mtrItemSugeridoEnRango(range, controlIso) {
+    const lista = Array.isArray(range) ? range : [];
+    if (!lista.length || !mtrFechaDesdeIso(controlIso)) return null;
+    const exacto = lista.find((it) => it && it.iso === controlIso);
+    if (exacto) return exacto;
+    const objetivo = mtrFechaDesdeIso(controlIso).getTime();
+    let mejor = null, mejorDif = Infinity;
+    for (const it of lista) {
+      if (!it || !mtrFechaDesdeIso(it.iso)) continue;
+      const dif = Math.abs(mtrFechaDesdeIso(it.iso).getTime() - objetivo);
+      if (dif < mejorDif) { mejorDif = dif; mejor = it; }
+    }
+    return mejor;
+  }
 
 })();
 

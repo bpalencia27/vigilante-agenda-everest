@@ -24,7 +24,7 @@ Todos los secretos activos fueron catalogados para su rotación obligatoria e in
 | **SEC-03** | **Google Apps Script Webhook (VersionCheck & Kill-Switch)** | `7e3c9a44`, `eb2cc44c`, `b6d2ffbb`, `142687ee`, `bea69e66`, `206458e7`, `HEAD` | `vigilante_agenda.user.js` (L3914), `TABLERO/VersionCheck.gs` | Activo en HEAD (`versionCheckUrl`) | **MEDIO:** Endpoint público de sondeo de versión y parada remota de emergencia. Aunque solo responde GET, saturación maliciosa podría agotar la cuota diaria de Google Apps Script. | **MONITOREADO / ENDPOINT PÚBLICO SEGURO** |
 | **SEC-04** | **Google Apps Script Webhook (Telemetría de Flota)** | `HEAD`, `dc5d91de`, etc. | `vigilante_agenda.user.js` (L4868), `TABLERO/Codigo.gs` | Activo en HEAD | **MEDIO:** Endpoint de recepción de métricas agregadas. Si se compromete el token, podrían inyectarse registros espurios en la hoja Google Sheets receptora. | **PROTEGIDO / TELEMETRÍA DEFAULT-OFF** |
 | **SEC-05** | **Token de Autenticación Compartido Apps Script** (`vgl-2026`) | `HEAD`, `dc5d91de`, `b6d2ffbb` | `vigilante_agenda.user.js` (L4869), `TABLERO/Codigo.gs` (L109) | Activo en HEAD | **BAJO:** Secreto estático de baja entropía diseñado para descartar peticiones no autorizadas en el Apps Script. | **EN EVALUACIÓN PARA ROTACIÓN ANUAL** |
-| **SEC-06** | **Metadatos Institucionales Azure AD y SharePoint** | `206458e7` | `everest_telemetry_PRO_20260808_1010.json` | Eliminado de HEAD | **MEDIO-BAJO:** Identificador de Tenant de Microsoft Azure (`f1b8aa4b-0c73-4cdf-9251-9b9b0bdcd5a7`), rutas absolutas de OneDrive/SharePoint institucional y nombres reales de personal clínico ("Merly Lorena Rua Quintana"). | **MITIGADO POR ELIMINACIÓN DE ARCHIVO** |
+| **SEC-06** | **Metadatos Institucionales Azure AD y SharePoint** | `206458e7` | `everest_telemetry_PRO_20260808_1010.json` | Eliminado de HEAD | **MEDIO-BAJO:** Identificador de Tenant de Microsoft Azure (`f1b8aa4b-0c73-4cdf-9251-9b9b0bdcd5a7`), rutas absolutas de OneDrive/SharePoint institucional y el nombre real de una persona del personal clínico/administrativo (no reproducido aquí a propósito — este mismo documento no debe repetir el dato que audita). | **MITIGADO POR ELIMINACIÓN DE ARCHIVO — pendiente confirmar purga del historial de git, no solo de HEAD** |
 
 ---
 
@@ -48,3 +48,33 @@ Todos los secretos activos fueron catalogados para su rotación obligatoria e in
 ### 3.4 Manejo Seguro del Historial de Git (Higiene de Repositorio)
 - **Decisión de Ingeniería:** Para evitar divergencias masivas y rotura de referencias en ramas de trabajo paralelas (`claude/pym-agenda-blindaje-v12-4`), se prioriza la **invalidación en origen** de los secretos expuestos en lugar de una reescritura destructiva (`git filter-branch` / `BFG Repo-Cleaner`).
 - Una vez finalizado el ciclo de release y fusionadas todas las ramas a `main`, se podrá programar una purga histórica del árbol si la dirección de seguridad de la IPS lo requiere.
+
+### 3.5 Rotación RECURRENTE de la credencial de Athenea (procedimiento operativo, v17.6.3)
+> Verificación A5 (22-ago-2026): el repositorio `bpalencia27/vigilante-agenda-everest` es **PRIVADO**
+> en GitHub (`private: true`). Buena postura para un copiloto de EHR: aunque el código no
+> contiene PHI, mantenerlo privado limita el radio de exposición de cualquier hallazgo futuro.
+
+La credencial de Athenea es **UNA por sede** (la cuenta institucional de VIVA 1A IPS BELLO; confirmado
+con el equipo el 11-08-2026) y se guarda **una vez por computador** en el almacén de Tampermonkey
+(`GM_setValue("vgl_ath_creds")`), ofuscada con XOR+base64 — anti-vistazo, **NO cifrado**. La
+credencial **nunca vive en el código ni se commitea**; por eso rotarla NO exige tocar ni
+re-publicar el userscript.
+
+**Procedimiento cuando la contraseña institucional cambie:**
+
+1. **Administración central (Athenea):** el administrador cambia la contraseña de la cuenta
+   institucional de consulta médica en el módulo de usuarios de Athenea Soluciones.
+2. **En cada estación (los N computadores de la sede):** Panel del Vigilante → **Ajustes** →
+   **Opciones técnicas** → **Credenciales de Athenea** → guardar la contraseña nueva. El script
+   la escribe ofuscada en `GM_setValue` y limpia la marca de bloqueo (`atheneaLoginBloqueado`).
+3. **Qué hace el script si la credencial fue rechazada:** NO reintenta solo — los intentos
+   repetidos pueden bloquear la cuenta institucional para TODA la sede. Se marca
+   (`atheneaLoginBloqueado`) y se avisa UNA vez para volver a guardarlas.
+4. **Verificación:** al abrir la historia de un paciente, el auto-login de Athenea entra solo y
+   los laboratorios automáticos llegan sin login manual. Si el aviso de credencial rechazada
+   persiste, repetir el paso 2 (p. ej. un equipo que quedó con la contraseña vieja).
+
+**Regla de oro (igual desde v12.5.2):** cualquier persona con acceso técnico al equipo puede
+recuperar la credencial del almacén de Tampermonkey. La rotación periódica de la contraseña en
+Athenea (misma frecuencia que la política de la IPS) es la compensación real — el script solo
+garantiza que el cambio se propague en minutos y sin tocar código.

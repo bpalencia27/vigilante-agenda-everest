@@ -6,6 +6,30 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.46 — 26-ago-2026 (fusión de `claude/v17-6-2-22ago`: recuperación de 31 suites)
+
+Fusión de `origin/claude/v17-6-2-22ago` (v17.6.4b) sobre `claude/hunks-cluster-remaining-9fjixx`
+(v17.6.45) para recuperar 31 suites de prueba del Panel del paciente y el motor RCV/fármaco
+que solo existían en la rama vieja. En `vigilante_agenda.user.js` ganó HEAD (v17.6.45, más
+auditado) en todo conflicto de "misma función, versión más nueva"; el merge de git dejó
+además dos bloques de código completos duplicados sin marcar como conflicto (diff
+mal-alineado entre las dos reorganizaciones del módulo del Panel y del kill-switch), que se
+detectaron y eliminaron aparte.
+
+Se restauraron unas pocas funciones puramente auxiliares que solo existían en la rama vieja
+y que las suites recuperadas necesitan (`mtrCnoHDL`, `mtrSumarDiasHabiles`,
+`mtrItemSugeridoEnRango`, `mtrRenderResumenClinicoHtml`, `_vglAvisoContextoFaltante`,
+`_getUltimoRelevoParaTest`, `_relojEstadoParaTest`/`_relojAjustarParaTest`) — ninguna pisa
+ni cambia una decisión clínica vigente de v17.6.45.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Se reintrodujo la línea `uxTrack("fn.agendar.abandon")` residual dentro del `closeMod` del modal de Laboratorios (el bug de copia-pega que v17.6.20 ya había corregido en HEAD, reintroducido por el merge sin marcar conflicto) | Telemetría de uso del panel (v12.5) | "embudo de Laboratorios: abrir y cerrar ANTES de que lleguen los datos cuenta como abandono" — "cerrar Laboratorios NO contamina el embudo de Agendamiento" |
+
+Banco tras la fusión: **2.204 comprobaciones en verde** (con `TZ=America/Bogota`; el banco
+depende de esa zona horaria para una prueba de v17.6.39), cobertura de funciones públicas
+88.6 % (770/869).
+
 ## v17.6.1 — 22-ago-2026 (remediación tras la auditoría de producción de v17.6.0)
 
 Banco antes (cierre de v17.6.0): 2.266 comprobaciones · después: **2.272** (6 pruebas

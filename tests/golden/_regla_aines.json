@@ -1,0 +1,6728 @@
+{
+ "funcion": "_regla_aines",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "IBUPROFENO 400 MG",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "IBUPROFENO 400 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "naproxeno 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "naproxeno 500",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "DICLOFENACO",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "DICLOFENACO",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "aines",
+    "medicamento_detectado": "acetaminofen 500",
+    "conducta": "CONTRAINDICADA",
+    "mensaje": "AINEs (Ibuprofeno/Naproxeno/Diclofenaco/etc): EVITAR con eGFR < 30 por alto riesgo de nefrotoxicidad.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "acetaminofen 500",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}

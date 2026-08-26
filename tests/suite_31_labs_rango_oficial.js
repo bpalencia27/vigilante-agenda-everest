@@ -204,6 +204,27 @@ module.exports = {
       t.igual(c.api._tablaOficialVigente().length, TABLA.length);
     });
 
+    // =====================================================================
+    // v17.6.0 — RELOJES DE FRESCURA UNIFICADOS A 10 MIN: el de la tabla oficial
+    // bajó de 30 a 10 (aprobado el 22-ago junto con el resto de la lista del
+    // 20-ago) — era el más largo de los cuatro, porque "es configuración de la
+    // IPS, no del paciente", pero podía quedar sirviendo una tabla que el resto
+    // del script ya consideraba vieja según otro reloj. A los 15 minutos, el
+    // reloj VIEJO la seguía sirviendo; el NUEVO ya no. El gancho
+    // __envejecerTablaOficial vive solo en el cargador de pruebas (harness.js ya
+    // declara que no toca el archivo de producción).
+    // =====================================================================
+    t.caso("v17.6.0 — el TTL de la tabla oficial bajó de 30 a 10 min: a los 15 min ya no se sirve (con el reloj viejo sí se habría servido)", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._guardarTablaOficialVista(TABLA), true);
+      t.igual(c.api._tablaOficialVigente().length, TABLA.length, "recién vista: vigente");
+      c.api.__envejecerTablaOficial(9 * 60000 + 30000); // 9m30s atrás: dentro de los 10 min nuevos
+      t.cierto(!!c.api._tablaOficialVigente(), "a los 9m30s sigue vigente con el TTL nuevo");
+      c.api.__envejecerTablaOficial(15 * 60000); // 15 min atrás: dentro de los 30 viejos, fuera de los 10 nuevos
+      t.igual(c.api._tablaOficialVigente(), null,
+        "a los 15 min: con el TTL viejo (30 min) todavía se habría servido; con el nuevo (10 min) ya no");
+    });
+
     t.caso("el oyente no puede romper Everest, y no se instala dos veces", () => {
       // Lo que se prueba aquí no es que capture, sino que sea INOCUO. Es código que corre
       // dentro de la aplicación con la que el médico atiende: si lo rompe, no importa

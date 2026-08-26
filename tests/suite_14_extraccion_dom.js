@@ -270,20 +270,45 @@ module.exports = {
       t.igual(c.api.__state.activeDoctor.id, 0);
     });
 
-    t.caso("captureDoctorInfo: origen fiable fija el id; Digiturno NO es fiable (v12.3.1)", () => {
+    t.caso("captureDoctorInfo: origen fiable fija el id; /api/Turno de Digiturno NO es fiable (v12.3.1)", () => {
       const c = cargar({ silencioso: true });
       c.api.captureDoctorInfo("https://neps.everestintelligent.com/apiviva/APIAcceso/api/ValidarSesion?UsuarioId=515");
       t.igual(c.api.__state.activeDoctor.id, 515);
-      // v12.3.1 — Digiturno se RETIRÓ de la lista blanca a propósito: su "usuarioId" es el
-      // id de OTRO usuario (no necesariamente el médico), y confiar en él fue exactamente
-      // el bug real de identidad de esta sesión (UsuarioId de un médico distinto colándose
-      // como médico activo). Debe IGNORARSE por completo, sin pisar el id ya fijado.
+      // v12.3.1 — el `/api/Turno` de Digiturno lleva un usuarioId que NO es el del médico:
+      // es el del turno/paciente. Debe IGNORARSE por completo, sin pisar el id ya fijado.
       c.api.captureDoctorInfo('https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Turno {"usuarioId": 309}');
-      t.igual(c.api.__state.activeDoctor.id, 515, "Digiturno no fiable: el id de otro usuario NO pisa el ya fijado");
-      // Con el id todavía en cero, Digiturno tampoco debe fijarlo desde cero.
+      t.igual(c.api.__state.activeDoctor.id, 515, "/api/Turno no fiable: el id de otro usuario NO pisa el ya fijado");
+      // Con el id todavía en cero, /api/Turno tampoco debe fijarlo desde cero.
       c.api.__state.activeDoctor.id = 0;
       c.api.captureDoctorInfo('https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Turno {"usuarioId": 309}');
-      t.igual(c.api.__state.activeDoctor.id, 0, "Digiturno no fiable: tampoco fija el id partiendo de cero");
+      t.igual(c.api.__state.activeDoctor.id, 0, "/api/Turno no fiable: tampoco fija el id partiendo de cero");
+    });
+
+    // =====================================================================
+    // v17.6.2 — SNIFFER DE UsuarioId (pedido de Gemini, verificado con la captura real
+    // del 2026-08-10 y las telemetrías del 22-ago): en `ConfirmarTicket` y
+    // `FinalizarTicket` de ApiIntegracionEverestDigiturno el UsuarioId SÍ es el médico en
+    // sesión (515) — es el MISMO id que el propio script usa en apiDigiturnoFinalizarTicket
+    // (state.activeDoctor.id). Antes de esto, un equipo ajeno sin GetUsuarioPerfil ni login
+    // en la red quedaba con el id en 0 y BuscarPaciente con UsuarioId=0 "no encontraba" a
+    // nadie. Estas dos rutas vuelven a la lista blanca (el /api/Turno, NO: ese sigue siendo
+    // de otro usuario). Y como siempre, el raspado no pisa un id ya fijado.
+    // =====================================================================
+    t.caso("captureDoctorInfo: ConfirmarTicket/FinalizarTicket de Digiturno SÍ fijan el id del médico (v17.6.2)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.captureDoctorInfo("https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/ConfirmarTicket?TicketId=123&UsuarioId=515");
+      t.igual(c.api.__state.activeDoctor.id, 515, "ConfirmarTicket: el UsuarioId es el médico en sesión (la captura real)");
+    });
+
+    t.caso("captureDoctorInfo: FinalizarTicket fija el id desde cero, y no pisa uno ya fijado", () => {
+      const c = cargar({ silencioso: true });
+      c.api.captureDoctorInfo("https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?TicketId=0&UsuarioId=515");
+      t.igual(c.api.__state.activeDoctor.id, 515, "FinalizarTicket: fija el id partiendo de cero (equipo ajeno sin GetUsuarioPerfil)");
+      // Un eco de las propias llamadas del Vigilante viaja con OTRO UsuarioId (S.medicoId):
+      // nunca debe pisar el id autoritativo ya resuelto.
+      c.api.__state.activeDoctor.id = 888;
+      c.api.captureDoctorInfo("https://neps.everestintelligent.com/apiviva/ApiIntegracionEverestDigiturno/api/Digiturno/FinalizarTicket?TicketId=0&UsuarioId=777");
+      t.igual(c.api.__state.activeDoctor.id, 888, "un UsuarioId que llega cuando ya hay id fijado NO pisa el existente");
     });
 
     t.caso("captureDoctorInfo: nombre decodificado (+ y %20), corto rechazado, entrada no string no lanza", () => {

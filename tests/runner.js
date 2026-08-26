@@ -208,12 +208,18 @@ async function main() {
 
   // cobertura real de funciones
   const sinCubrir = todas.filter(n => !cubiertas.has(n));
-  const pct = (cubiertas.size / cargado.totalDeclaradas * 100);
+  // v15.6.2 — El porcentaje se mide contra la SUPERFICIE PÚBLICA (las funciones
+  // alcanzables vía api), no contra el conteo crudo de declaraciones: ese conteo
+  // incluye funciones ANIDADAS dentro de otras (inalcanzables una a una desde afuera),
+  // que se prueban a través de sus dueñas. Con el denominador viejo, el 100% era
+  // matemáticamente imposible aunque cada función pública tuviera prueba — el número
+  // mentía hacia abajo. Ambos conteos se siguen imprimiendo.
+  const pct = (cubiertas.size / todas.length * 100);
 
   console.log("");
   console.log(COL.tit + "─".repeat(64) + COL.fin);
   console.log("  comprobaciones : " + COL.ok + tp + " pasan" + COL.fin + (tf ? "  " + COL.mal + tf + " fallan" + COL.fin : ""));
-  console.log("  funciones cubiertas: " + cubiertas.size + " / " + cargado.totalDeclaradas + "  (" + pct.toFixed(1) + "%)");
+  console.log("  funciones cubiertas: " + cubiertas.size + " / " + todas.length + " públicas  (" + pct.toFixed(1) + "%)  ·  " + (cargado.totalDeclaradas - todas.length) + " anidadas se prueban a través de sus dueñas");
   if (sinCubrir.length) {
     console.log("");
     console.log(COL.ama + "  sin cubrir (" + sinCubrir.length + "):" + COL.fin);

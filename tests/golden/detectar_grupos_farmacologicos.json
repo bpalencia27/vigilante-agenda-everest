@@ -1,0 +1,182 @@
+{
+ "funcion": "detectar_grupos_farmacologicos",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    []
+   ],
+   "salida": {}
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 850 MG"
+    ]
+   ],
+   "salida": {
+    "metformina": [
+     "METFORMINA 850 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 850 MG",
+     "LOSARTAN 50 MG",
+     "ATORVASTATINA 40 MG"
+    ]
+   ],
+   "salida": {
+    "metformina": [
+     "METFORMINA 850 MG"
+    ],
+    "ara2": [
+     "LOSARTAN 50 MG"
+    ],
+    "ieca_ara2": [
+     "LOSARTAN 50 MG"
+    ],
+    "estatina": [
+     "ATORVASTATINA 40 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "METFORMINA 1000 MG",
+     "ESPIRONOLACTONA 25 MG",
+     "IBUPROFENO 400 MG"
+    ]
+   ],
+   "salida": {
+    "metformina": [
+     "METFORMINA 1000 MG"
+    ],
+    "espironolactona": [
+     "ESPIRONOLACTONA 25 MG"
+    ],
+    "aines": [
+     "IBUPROFENO 400 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "ENOXAPARINA 40 MG",
+     "RIVAROXABAN 20 MG",
+     "GABAPENTINA 300 MG"
+    ]
+   ],
+   "salida": {
+    "lmwh": [
+     "ENOXAPARINA 40 MG"
+    ],
+    "doac": [
+     "RIVAROXABAN 20 MG"
+    ],
+    "gabapentinoide": [
+     "GABAPENTINA 300 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "HIDROCLOROTIAZIDA 25 MG",
+     "ATENOLOL 50 MG",
+     "ALOPURINOL 300 MG"
+    ]
+   ],
+   "salida": {
+    "tiazida": [
+     "HIDROCLOROTIAZIDA 25 MG"
+    ],
+    "diuretico_tiazida": [
+     "HIDROCLOROTIAZIDA 25 MG"
+    ],
+    "betabloqueador_hidrofilico": [
+     "ATENOLOL 50 MG"
+    ],
+    "betabloqueador": [
+     "ATENOLOL 50 MG"
+    ],
+    "alopurinol": [
+     "ALOPURINOL 300 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "GLIBENCLAMIDA 5 MG",
+     "NITROFURANTOINA 100 MG",
+     "DIGOXINA 0.25 MG"
+    ]
+   ],
+   "salida": {
+    "sulfonilurea": [
+     "GLIBENCLAMIDA 5 MG"
+    ],
+    "nitrofurantoina": [
+     "NITROFURANTOINA 100 MG"
+    ],
+    "digoxina": [
+     "DIGOXINA 0.25 MG"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "INSULINA GLARGINA 20 UI",
+     "INSULINA LISPRO",
+     "CLORURO DE POTASIO"
+    ]
+   ],
+   "salida": {
+    "insulina": [
+     "INSULINA GLARGINA 20 UI",
+     "INSULINA LISPRO"
+    ],
+    "suplemento_k": [
+     "CLORURO DE POTASIO"
+    ]
+   }
+  },
+  {
+   "entrada": [
+    [
+     "acetaminofen 500 mg",
+     "omeprazol 20 mg"
+    ]
+   ],
+   "salida": {}
+  },
+  {
+   "entrada": [
+    [
+     "EMPAGLIFLOZINA 10 MG",
+     "FUROSEMIDA 40 MG",
+     "COLCHICINA 0.5 MG"
+    ]
+   ],
+   "salida": {
+    "sglt2": [
+     "EMPAGLIFLOZINA 10 MG"
+    ],
+    "diuretico_asa": [
+     "FUROSEMIDA 40 MG"
+    ],
+    "colchicina": [
+     "COLCHICINA 0.5 MG"
+    ]
+   }
+  }
+ ]
+}

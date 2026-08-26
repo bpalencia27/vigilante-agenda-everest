@@ -1,9 +1,20 @@
 module.exports = {
   nombre: "Excel, caché y SharePoint",
-  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
+  cubre: ["packPym", "unpackPym", "fetchSpFilesMultiFolder", "loadPymDiario", "pymDiarioMensajeFallo", "savePymCache", "loadPymFromCache", "esLibroValido", "esXlsxCifrado", "todayTokens", "normName", "nameHasToken", "esNombreDeHoy", "pickTodaysFile", "xlsViejoDeHoy"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- todayTokens / normName / nameHasToken / esNombreDeHoy ----------
+    t.caso("todayTokens retorna tokens de fecha con formatos numericos y mes en letras", () => {
+      const c = cargar();
+      c.env.win.Date = class extends Date { static now() { return new Date("2026-08-10T12:00:00").getTime(); } constructor(...args) { if (args.length === 0) super("2026-08-10T12:00:00"); else super(...args); } };
+      c.ctx.Date = c.env.win.Date;
+      const toks = c.api.todayTokens();
+      t.cierto(Array.isArray(toks), "retorna arreglo");
+      t.cierto(toks.includes("20260810"), "incluye formato YYYYMMDD");
+      t.cierto(toks.includes("10082026"), "incluye formato DDMMYYYY");
+      t.cierto(toks.some(t => t.includes("agosto")), "incluye mes en letras");
+    });
+
     t.caso("normName normaliza el nombre del archivo", () => {
       t.igual(api.normName("Agenda_Dia_CMB_20260810.xlsx"), "agendadiacmb20260810xlsx");
       t.igual(api.normName(" 2026-08-10.xls "), "20260810xls");
@@ -237,6 +248,26 @@ module.exports = {
       // Pero como SP.folders tiene un solo item, y primeShareAccess hace algo, al final falla.
       // Si todo funcionó, `fetchCalls.length` será 2 (un intento original + un reintento).
       t.cierto(fetchCalls.length >= 2, "debería reintentar y hacer al menos 2 llamadas");
+    });
+
+    // ===== v16.7.0, auditoría #11: no poder mirar la carpeta NO es «hoy no hay lista» =====
+    t.caso("pymDiarioMensajeFallo: distingue «no pude mirar» de «miré y no está»", () => {
+      const c = cargar();
+      const caido = c.api.pymDiarioMensajeFallo(true, true);
+      t.falso(/Aún no aparece la lista de prevención/.test(caido),
+        "ESTE era el bug: con la carpeta ilegible se afirmaba que el archivo de hoy no estaba subido");
+      t.cierto(/No pude revisar la carpeta/.test(caido), "dice lo único que se sabe");
+      t.cierto(/NO sé si la lista de hoy ya está subida/.test(caido), "y lo dice sin rodeos");
+      t.cierto(/puede no ser lo último/.test(caido),
+        "con la piloto cargada avisa de que lo que el médico está viendo puede estar viejo");
+      t.cierto(/Abrir PyM/.test(c.api.pymDiarioMensajeFallo(true, false)),
+        "y sin nada cargado le da la salida manual");
+
+      const listado = c.api.pymDiarioMensajeFallo(false, true);
+      t.cierto(/Aún no aparece la lista de prevención/.test(listado),
+        "cuando SÍ se pudo listar, el hecho sigue siendo un hecho");
+      t.falso(/conexión con SharePoint falló/.test(listado), "y no se culpa a la red de lo que no fue la red");
+      t.cierto(/base piloto/.test(c.api.pymDiarioMensajeFallo(false, false)), "sin nada cargado, sigue prometiendo la piloto");
     });
 
     await t.casoAsync("fetchSpFilesMultiFolder lista múltiples carpetas hasta hallar el de hoy", async () => {
