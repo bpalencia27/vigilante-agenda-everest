@@ -6,6 +6,31 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## TABLERO/Codigo.gs — 26-ago-2026 (auditoría 25-ago, hallazgo 1.23: el resumen de telemetría podía mostrar la versión/fecha equivocada)
+
+`armarResumen()` (TABLERO/Codigo.gs:260, Google Apps Script — NO forma parte del userscript
+ni de `tests/runner.js`) sobrescribía `f.ultimo`/`f.ver` SIN comparar contra el valor ya
+guardado: el bucle procesa las hojas en orden fijo (`resumen`, `fraude`, `uso`, `error`,
+`entorno`, `prueba` al final), y el resultado dependía de qué hoja se procesó de ÚLTIMA, no
+de la fecha real más reciente. Un equipo que probó la conexión una vez hace semanas (hoja
+`prueba`, la última del arreglo) y desde entonces manda telemetría normal en una versión
+nueva podía aparecer 🔴 ATRASADO de forma falsa, con la versión vieja de esa prueba pisando
+la real. Fix: `f.ultimo`/`f.ver` solo se actualizan cuando la fecha de la fila actual es de
+verdad más reciente que la ya guardada.
+
+- **Sin banco de pruebas para este archivo**: `TABLERO/Codigo.gs` no tiene ninguna suite en
+  `tests/` (es Google Apps Script, acoplado a `SpreadsheetApp`, y no lo carga
+  `tests/runner.js`). No se pudo aplicar la disciplina de mutación verificada dentro del
+  banco. Se verificó el ALGORITMO por separado, con un script de Node desechable que
+  reproduce la lógica pura (sin `SpreadsheetApp`): con dos filas (`resumen` reciente en
+  v17.6.56, `prueba` vieja en v14.2.0, procesada al final) — la versión original (sin
+  comparar) da como resultado `14.2.0` (el bug reproducido); con el fix, da `17.6.56`
+  (correcto). Esto NO sustituye una prueba real en un banco; queda anotado como deuda si
+  algún día se arma un harness para `Codigo.gs`.
+- **1.15 y 1.17** (grupo lipídico, Estado R prioritario) y **1.10/1.13/1.18** (blindaje de
+  Enfermedad Actual, meta LDL individual, fila de divergencias del spec) siguen pendientes
+  — ver las entradas de esta misma sesión para el porqué de cada uno.
+
 ## v17.6.60 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.22: la caja de "datos críticos" podía quedar ilegible por el CSS de Everest)
 
 `_pintarCriticos` (dentro de `#vgl-ia-modal` — la caja roja que bloquea generar la nota sin

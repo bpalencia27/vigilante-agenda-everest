@@ -295,8 +295,17 @@ function armarResumen() {
         fraudesVivo: 0, fraudeAcum: 0, inasistAcum: 0, atiempoAcum: 0, ultimaAcum: 0, uxAcum: 0, errores: 0 });
       f.nReportes++; totalReportes++;
       var cuando = ci.rec >= 0 ? r[ci.rec] : "";
-      if (cuando) { if (!f.primero) f.primero = cuando; f.ultimo = cuando; }
-      if (ci.ver >= 0 && r[ci.ver]) {
+      // v1.1.0 — auditoría 25-ago (1.23): esto sobrescribía f.ultimo/f.ver SIN comparar
+      // contra el valor ya guardado — el resultado dependía de qué hoja se procesó de
+      // ÚLTIMA en el bucle `fuentes` (orden fijo: resumen, fraude, uso, error, entorno,
+      // prueba), no de la fecha real más reciente. Un equipo que probó la conexión una vez
+      // hace semanas (hoja "prueba", la última del arreglo) y desde entonces manda
+      // telemetría normal podía aparecer 🔴 ATRASADO de forma falsa, con la versión vieja
+      // de esa prueba pisando la real. Ahora solo se actualiza cuando la fecha de ESTA fila
+      // es de verdad más reciente que la ya guardada.
+      var esMasReciente = !!cuando && (!f.ultimo || new Date(cuando).getTime() > new Date(f.ultimo).getTime());
+      if (cuando) { if (!f.primero) f.primero = cuando; if (esMasReciente) f.ultimo = cuando; }
+      if (ci.ver >= 0 && r[ci.ver] && (esMasReciente || !f.ver)) {
         f.ver = r[ci.ver];
         // Solo una versión con forma REAL puede convertirse en "la más alta vista": en la
         // Hoja hay valores imposibles ("12.6.2000") que, al ganar la comparación numérica,
