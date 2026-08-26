@@ -6,6 +6,75 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.74 — 26-ago-2026 (Panel del paciente: dos dosis del mismo fármaco aparecían como dos medicamentos — reportado en consultorio, captura real sin PHI)
+
+**El reporte**: en "MEDICAMENTOS DEL PROGRAMA CARDIOVASCULAR" del Panel del paciente
+aparecían LOSARTAN 50mg, ROSUVASTATINA 40mg Y ROSUVASTATINA 20mg — tres renglones.
+Instrucción explícita del médico: "cuando sea ese caso el script solamente debe tomar
+los ÚLTIMOS que fueron prescritos. No poner dos medicamentos iguales pero con diferentes
+dosis." Sin ningún dato de paciente (la captura solo traía la lista de fármacos).
+
+**Dos causas raíz distintas, confirmadas leyendo el código real, arregladas por separado**:
+
+1. `mtrMedicamentosDesdeRespuesta` aplanaba las formulaciones de Everest a texto SIN
+   ordenarlas por fecha — `form.fechaCreacion` se descartaba por completo (su función
+   hermana, `mtrRenglonesMedicamentoDesdeRespuesta`, sí la conserva). Sin fecha, el dedup
+   "primero visto gana" de `mtrMedicamentosRcv` no tenía cómo saber cuál de dos
+   formulaciones del mismo fármaco era la más reciente — sobrevivía la que trajera
+   primero la respuesta de Everest, no la última prescrita.
+2. `_mtrClaveDedupMedicamento` (la clave de dedup ya existente) CONSERVA la dosis A
+   PROPÓSITO — decisión ya documentada desde v17.1.0 (#112/#113): "LOSARTAN 50 MG" y
+   "LOSARTAN 100 MG" deben seguir siendo dos entradas distintas para que
+   `mtrDuplicidadesTerapeuticas` pueda alertar cuando dos concentraciones del mismo
+   principio conviven (comentario explícito ahí: "dos concentraciones distintas del
+   mismo principio siguen alertando igual... revise si uno debía suspenderse al iniciar
+   el otro"). `mtrMedicamentosRcv` (la lista del Panel) usaba esa MISMA clave, así que
+   heredaba ese comportamiento — correcto para la alerta de duplicidad, incorrecto para
+   la lista de "qué toma el paciente ahora".
+
+**El fix, dos partes independientes**:
+- **Parte A**: `mtrMedicamentosDesdeRespuesta` ahora ordena `datos` por `fechaCreacion`
+  DESCENDENTE (más reciente primero) antes de aplanar. Formularios sin fecha (o con
+  fecha ilegible) quedan al final, nunca se inventa una fecha; entre dos sin fecha (o dos
+  con la misma fecha) el orden relativo original se conserva (`sort` estable de JS).
+- **Parte B**: nueva función `_mtrClaveDedupMedicamentoSinDosis`, DISTINTA de
+  `_mtrClaveDedupMedicamento` (que NO se tocó): corta el nombre en la primera cifra
+  numérica y usa solo lo que queda antes, canonizado — "ROSUVASTATINA 40 MG (TABLETA)" y
+  "ROSUVASTATINA 20 MG (TABLETA)" caen en la misma clave ("rosuvastatina"), pero un
+  combo como "AMLODIPINO + LOSARTAN 5/50MG (TABLETA)" sigue distinto de "AMLODIPINO 10
+  MG (TABLETA)" porque el "+" viene antes de cualquier dígito. Se usa SOLO en
+  `mtrMedicamentosRcv` (la lista del Panel), verificada contra el vocabulario real del
+  catálogo (`catalogo_farmacologico_rcv.json`) y los ejemplos de consola citados en el
+  reporte (INDAPAMIDA, GEMFIBROZIL, ENALAPRIL MALEATO, LINAGLIPTINA + METFORMINA,
+  INSULINA GLARGINA...). La frecuencia (Map #114) se sigue buscando con la clave que
+  CONSERVA la dosis (una frecuencia es propia de una concentración concreta, no se debe
+  mezclar entre dosis distintas).
+
+**Decisión documentada, no aplicada a ciegas**: `mtrMedicamentosUnicos` (la pestaña
+"Medicamentos", y la que alimenta `mtrDuplicidadesTerapeuticas`) se dejó INTACTA a
+propósito — cambiarla habría apagado la alerta real de "posible duplicidad terapéutica"
+para el caso exacto que la comparte (dos concentraciones del mismo principio conviviendo
+sin que se sepa si una debía suspenderse). El cambio se limitó a `mtrMedicamentosRcv`,
+que es la única función que alimenta la lista reportada por el médico.
+
+**Mutación verificada** (las dos partes por separado):
+- Se revirtió el ordenamiento por fecha en `mtrMedicamentosDesdeRespuesta`: cayeron
+  EXACTAMENTE las 3 pruebas que dependen de él (2267 pasan / 3 fallan) — las dos
+  unitarias de orden y el escenario real completo. Se restauró y el banco volvió a 2270
+  en verde.
+- Se revirtió `mtrMedicamentosRcv` a la clave CON dosis: cayeron EXACTAMENTE las 3
+  pruebas que dependen del dedup sin dosis (2267 pasan / 3 fallan) — las dos de
+  `mtrMedicamentosRcv` en `tests/suite_64_pestanas_botones.js` y el escenario real
+  completo en `tests/suite_39_motor_farmaco.js`. Se restauró y el banco volvió a 2270 en
+  verde.
+
+Se añadieron 8 pruebas nuevas en total: 3 en `tests/suite_39_motor_farmaco.js`
+(ordenamiento por fecha, formularios sin fecha al final, y el escenario real completo de
+punta a punta) y 5 en `tests/suite_64_pestanas_botones.js` (dedup sin dosis en
+`mtrMedicamentosRcv`, combo vs. componentes sueltos, frecuencia por dosis exacta, la
+clave `_mtrClaveDedupMedicamentoSinDosis` contra el vocabulario real, y una guarda
+explícita de que `_mtrClaveDedupMedicamento` —con dosis— sigue intacta).
+
 ## v17.6.73 — 26-ago-2026 (redacción del banner "Labs primero" — reportado en consultorio: "ni él ni sus compañeros lo entienden bien")
 
 **El reporte**: el médico pegó el texto real del banner cuando el piso de 14 días se

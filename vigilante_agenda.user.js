@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.73
+// @version     17.6.74
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.73";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.74";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -26407,6 +26407,40 @@ _vglOfrecerDeshacer(btn);
     return stripAccents(nombre.toLowerCase()).replace(/\s+/g, " ").trim();
   }
 
+  // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] Clave de dedup
+  // QUE IGNORA LA DOSIS — instrucción explícita del médico, y SOLO para
+  // `mtrMedicamentosRcv` (la lista «Medicamentos del programa cardiovascular» del Panel
+  // del paciente): «cuando sea ese caso el script solamente debe tomar los ÚLTIMOS que
+  // fueron prescritos. No poner dos medicamentos iguales pero con diferentes dosis».
+  // Caso real: ROSUVASTATINA 40 MG y ROSUVASTATINA 20 MG salían como dos renglones
+  // separados en esa lista.
+  //
+  // DELIBERADAMENTE DISTINTA de `_mtrClaveDedupMedicamento` de arriba, que CONSERVA la
+  // dosis A PROPÓSITO (ver su comentario) — esa es la que usa `mtrMedicamentosUnicos`, y
+  // por lo tanto `mtrDuplicidadesTerapeuticas` (el chequeo de «posible duplicidad
+  // terapéutica» del Panel): ahí, dos concentraciones distintas del MISMO principio SÍ
+  // deben seguir alertando («revise si uno debía suspenderse al iniciar el otro» — ver el
+  // comentario explícito en esa función). Colapsar esa clave por dosis apagaría una alerta
+  // de seguridad real. Por eso este cambio es NUEVO Y APARTE, no una edición de la
+  // función de arriba, y por eso `mtrMedicamentosUnicos` NO se toca.
+  //
+  // Se corta el nombre en la PRIMERA cifra numérica y se usa solo lo que queda antes,
+  // canonizado — así "ROSUVASTATINA 40 MG (TABLETA)" y "ROSUVASTATINA 20 MG (TABLETA)"
+  // caen en la misma clave ("rosuvastatina"). Un combo como "AMLODIPINO + LOSARTAN
+  // 5/50MG (TABLETA)" sigue siendo distinto de "AMLODIPINO 10 MG (TABLETA)" porque el
+  // "+" viene ANTES de cualquier dígito — probado contra el vocabulario real del
+  // catálogo (`catalogo_farmacologico_rcv.json`) y ejemplos reales de consola citados en
+  // el reporte (INDAPAMIDA, GEMFIBROZIL, ENALAPRIL MALEATO, LINAGLIPTINA + METFORMINA,
+  // INSULINA GLARGINA...). Sin ningún dígito en el nombre, se usa el nombre completo —
+  // mismo comportamiento que `_mtrClaveDedupMedicamento` en ese caso.
+  function _mtrClaveDedupMedicamentoSinDosis(m) {
+    const nombre = String(m == null ? "" : (typeof m === "string" ? m : (m.nombre || m.descripcion || ""))).trim();
+    if (!nombre) return "";
+    const corte = nombre.search(/\d/);
+    const base = corte >= 0 ? nombre.slice(0, corte) : nombre;
+    return stripAccents(base.toLowerCase()).replace(/\s+/g, " ").trim();
+  }
+
   // v17.1.0 (#113) — Deduplica CONSERVANDO EL ORDEN y el texto original del primer
   // renglón. No filtra por programa: sirve igual para la pestaña Medicamentos (que
   // muestra todo lo que toma el paciente) que para el chequeo de duplicidad (que vigila
@@ -26434,10 +26468,24 @@ _vglOfrecerDeshacer(btn);
       if (!nombre) return;
       const c = mtrClasificarMedicamento(nombre);
       if (!c.esRcv) return;
-      const clave = _mtrClaveDedupMedicamento(nombre);
-      if (vistos.has(clave)) return;
-      vistos.add(clave);
-      const frecuenciaTexto = (frec && frec.get(clave)) || "";
+      // v17.6.74 — [reportado en consultorio, 26-ago-2026] dedup SIN dosis, a propósito
+      // (instrucción del médico): dos concentraciones del MISMO principio activo
+      // (ROSUVASTATINA 40 MG / 20 MG) cuentan como el MISMO medicamento en ESTA lista —
+      // solo se conserva la primera vista. Gracias al orden por fecha ya aplicado en
+      // `mtrMedicamentosDesdeRespuesta`, "la primera vista" es la formulación MÁS
+      // RECIENTE, que es justo "los últimos que fueron prescritos" que pidió el médico.
+      // Distinta A PROPÓSITO de `_mtrClaveDedupMedicamento` (que conserva la dosis) — ver
+      // el comentario grande de `_mtrClaveDedupMedicamentoSinDosis` arriba para por qué
+      // esa otra clave NO se toca (la sigue usando `mtrMedicamentosUnicos`/
+      // `mtrDuplicidadesTerapeuticas`, donde dos dosis distintas SÍ deben seguir alertando).
+      const claveGrupo = _mtrClaveDedupMedicamentoSinDosis(nombre);
+      if (vistos.has(claveGrupo)) return;
+      vistos.add(claveGrupo);
+      // La frecuencia SÍ se busca con la clave que CONSERVA la dosis: es la misma clave
+      // que arma `mtrMapaFrecuenciasPorNombre` (#114), y una frecuencia es propia de UNA
+      // concentración concreta — mezclarla entre dosis distintas sería inventar un dato.
+      const claveFrecuencia = _mtrClaveDedupMedicamento(nombre);
+      const frecuenciaTexto = (frec && frec.get(claveFrecuencia)) || "";
       // v17.6.66 — marcador [DOSIS NO ESPECIFICADA]: solo cuando SÍ se intentó
       // leer la frecuencia (se pasó `frecuencias`, aunque el Map salga vacío) y
       // este fármaco puntual no tiene coincidencia. Si `frecuencias` ni se pasó
@@ -27301,12 +27349,32 @@ _vglOfrecerDeshacer(btn);
   // Devuelve null si la respuesta no tiene la forma esperada — y null NO es lo
   // mismo que lista vacía. Un array vacío es "el paciente no tiene formulaciones
   // en la ventana", que es un resultado real.
+  // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] Se ordena por
+  // `fechaCreacion` DESCENDENTE (más reciente primero) ANTES de aplanar a texto: sin
+  // esto, para cuando `mtrMedicamentosRcv` dedupe "el primero visto gana" (más abajo, ver
+  // su propio comentario), ya no queda ninguna fecha con la que decidir cuál formulación
+  // es la más reciente — el orden que sobrevivía era el que trajera la respuesta de
+  // Everest, no necesariamente el último prescrito. Caso real: Rosuvastatina 40mg y
+  // Rosuvastatina 20mg, de dos formulaciones distintas — sin este orden, cuál de las dos
+  // "gana" el dedup es prácticamente al azar. Formularios sin fecha (o con fecha
+  // ilegible, `mtrFechaIso` -> null) se quedan AL FINAL, después de todos los que sí
+  // tienen fecha — nunca se inventa una fecha para ordenarlos, y entre dos sin fecha (o
+  // dos con la MISMA fecha) el `sort` de JS es estable: conservan su orden relativo
+  // original, no se revuelven al azar.
   function mtrMedicamentosDesdeRespuesta(datos, opciones) {
     if (!Array.isArray(datos)) return null;
     const o = opciones || {};
     const soloEstados = o.estados || null;   // p.ej. ["PENDIENTE"]; null = todos
+    const datosOrdenados = datos.slice().sort((a, b) => {
+      const fa = mtrFechaIso(a && a.fechaCreacion);
+      const fb = mtrFechaIso(b && b.fechaCreacion);
+      if (fa && fb) return fa < fb ? 1 : (fa > fb ? -1 : 0);
+      if (fa && !fb) return -1;
+      if (!fa && fb) return 1;
+      return 0;
+    });
     const fuera = [];
-    for (const form of datos) {
+    for (const form of datosOrdenados) {
       if (!form || typeof form !== "object") continue;
       if (soloEstados && soloEstados.indexOf(String(form.estado || "")) < 0) continue;
       const det = form.detalles;
