@@ -210,6 +210,20 @@ module.exports = {
         "una PA inventada real (190/110, sin dígito pegado) se sigue marcando");
     });
 
+    // v17.6.80 — REPORTE EN VIVO (26-ago, captura): la IA cita textualmente una alerta de
+    // dosis renal ("máximo 1000 mg/día con TFG 30-44...") — el prompt se lo ordena — y la
+    // caja de "cifras sin respaldo" marcaba esos umbrales como inventados, porque el
+    // verificador solo conocía la hoja de hechos, nunca las alertas_dosis (un canal
+    // SEPARADO que también llega a la IA).
+    t.caso("mtrVerificarCifrasIA: un umbral de dosis renal citado textualmente NO se marca cuando se declara como conocido", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "DM2", factores: { edad: 70, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const texto = "AJUSTE DE DOSIS POR FUNCIÓN RENAL: Metformina: dosis maxima 1000 mg/dia con eGFR 30-44 mL/min/1.73m2.";
+      const sinAlertas = api.mtrVerificarCifrasIA(texto, hoja);
+      t.cierto(sinAlertas.length > 0, "sin pasar las alertas conocidas, el umbral se marca (reproduce el reporte)");
+      const conAlertas = api.mtrVerificarCifrasIA(texto, hoja, ["Metformina: dosis maxima 1000 mg/dia con eGFR 30-44 mL/min/1.73m2."]);
+      t.igual(conAlertas.length, 0, "declarando la alerta como conocida, el mismo umbral NO se marca: es una cita legítima, no una invención");
+    });
+
     // [bug real de consultorio, 25-ago] el corte de contexto fijo (24/20 caracteres) partía
     // palabras largas a la mitad ("SE CONTIN" en vez de "SE CONTINÚA").
     t.caso("mtrVerificarCifrasIA: el contexto mostrado nunca corta una palabra a la mitad", () => {

@@ -6,6 +6,25 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.80 — 26-ago-2026 (la caja de "cifras sin respaldo" marcaba en rojo umbrales reales de dosis renal)
+
+Reporte en vivo con captura: la nota de Análisis y plan citaba textualmente una alerta de
+seguridad ("máximo 1000 mg/día con TFG 30-44 mL/min/1.73m2", "renoprotector hasta TFG
+20-25...") y la caja roja de "cifras sin respaldo" marcaba esos umbrales como inventados.
+No lo son: son el mensaje LITERAL de `mtrAvisosDosisRenal` (`alertas_dosis`), que el propio
+prompt de "Análisis y plan" le ordena a la IA citar. `mtrVerificarCifrasIA` solo conocía la
+hoja de hechos — nunca supo que `alertas_dosis` es un SEGUNDO canal que también llega a la
+IA, así que cada número de un umbral clínico legítimo se leía como cifra sin respaldo.
+Se agregó un tercer parámetro opcional (`extraConocido`) con las mismas alertas que la IA
+recibe, calculadas una vez al abrir el panel de redacción.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **fuente extra de conocidas** | `mtrVerificarCifrasIA`: `if (Array.isArray(extraConocido)) for (const t of extraConocido) sumar(t);` se cambió a `if (false && ...)` | `suite_57` | *un umbral de dosis renal citado textualmente NO se marca cuando se declara como conocido* → *esperaba 0 y obtuvo 2* |
+
+Se aplicó sobre producción, cayó exactamente la prueba nueva, se restauró (verificado con
+`diff` contra una copia intacta) y el banco volvió a 2287/2287.
+
 ## v17.6.79 — 26-ago-2026 (fusión con la otra sesión + botones de imprimir orden rotulados por id crudo)
 
 **Nota de orden**: esta rama tuvo dos sesiones trabajando en paralelo el mismo día —

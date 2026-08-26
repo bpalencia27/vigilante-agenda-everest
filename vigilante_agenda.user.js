@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.79
+// @version     17.6.80
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.79";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.80";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31782,7 +31782,17 @@ _vglOfrecerDeshacer(btn);
   // Devuelve [{ numero, contexto }] (contexto = ~44 caracteres alrededor de la cifra).
   // No marca: años (1900–2999 sin unidad), conteos/órdenes (sin unidad de medida) ni las
   // cifras dentro del marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES].
-  function mtrVerificarCifrasIA(borrador, hoja) {
+  // v17.6.80 — REPORTE EN VIVO (26-ago, captura): la caja de "cifras sin respaldo" marcaba
+  // en rojo las dosis/umbrales de las alertas de seguridad renal ("máximo 1000 mg/día con
+  // TFG 30-44 mL/min/1.73m2") como si fueran datos inventados por el modelo. No lo son: son
+  // el mensaje LITERAL de mtrAvisosDosisRenal, que el propio prompt de "Análisis y plan" le
+  // ORDENA a la IA citar textual (alertas_dosis, ver "USA los campos nota_clinica y
+  // alertas_dosis"). El verificador solo conocía la hoja de hechos — nunca supo que este
+  // segundo canal (la lista de alertas) también viaja al modelo, así que cada número de un
+  // umbral clínico legítimo se leía como una cifra sin respaldo. `extraConocido` (opcional)
+  // es el mismo tipo de fuente que `hoja`: texto adicional que la IA SÍ vio, cuyos números
+  // deben contar como conocidos.
+  function mtrVerificarCifrasIA(borrador, hoja, extraConocido) {
     const out = [];
     try {
       const b = String(borrador || "");
@@ -31798,6 +31808,7 @@ _vglOfrecerDeshacer(btn);
         });
       };
       sumar((typeof mtrHojaDeHechosTexto === "function") ? mtrHojaDeHechosTexto(hoja) : "");
+      if (Array.isArray(extraConocido)) for (const t of extraConocido) sumar(t);
       const h = hoja || {};
       sumar(h.demografia && h.demografia.edad);
       const an = h.antropometria || {};
@@ -32894,6 +32905,19 @@ _vglOfrecerDeshacer(btn);
       const modoInicial = (MTR_IA_MODOS.includes(_modoPedido)) ? _modoPedido : "enfermedad_actual";
       const prev = document.getElementById("vgl-ia-modal"); if (prev) prev.remove();
       const hoja = mtrHojaDesdeResumen(resumen);
+      // v17.6.80 — mismos insumos que mtrJsonV68DesdeResumen usa para alertas_dosis (ver su
+      // comentario, más abajo en el archivo): se recalcula aquí, aparte, solo para que el
+      // verificador de cifras sepa qué números legítimos le llegan a la IA por este canal.
+      let _alertasDosisConocidas = [];
+      try {
+        const _erc = resumen.erc || {};
+        _alertasDosisConocidas = (mtrAvisosDosisRenal({
+          medicamentos: Array.isArray(hoja.medicamentos) ? hoja.medicamentos : [],
+          tfgCkdEpi: _erc.egfr, tfgCockcroftGault: _erc.crcl,
+          rac: (resumen.factores && resumen.factores.rac),
+          medicamentosFrecuencia: resumen.medicamentosFrecuencia || undefined,
+        }).avisos || []).map((a) => a && a.mensaje).filter(Boolean);
+      } catch (e) { _alertasDosisConocidas = []; }
       // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "no tiene en cuenta los datos que yo
       // pongo en el cuadro de texto". Causa real: esto se leía UNA sola vez al abrir el
       // panel y se reutilizaba para cada "Generar"/"Generar todo" — si el médico seguía
@@ -33142,7 +33166,7 @@ _vglOfrecerDeshacer(btn);
       const _pintarCifras = () => {
         try {
           let caja = modal.querySelector("#vgl-ia-cifras");
-          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja);
+          const hallazgos = mtrVerificarCifrasIA(salida.value, hoja, _alertasDosisConocidas);
           if (!hallazgos.length) { if (caja) caja.remove(); return; }
           if (!caja) {
             caja = document.createElement("div");
