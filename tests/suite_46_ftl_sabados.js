@@ -113,6 +113,25 @@ module.exports = {
       t.igual(a.fecha, null, "sin fecha");
     });
 
+    // [auditoría 25-ago, hallazgo 1.16] sin fecha, el valor real se descartaba SIEMPRE
+    // (valor:null), aunque el resultado sí hubiera llegado — alcanzable cuando
+    // _extractAtheneaFecha no reconoce el campo de fecha. Consecuencia: se le ordena al
+    // paciente un examen que YA TIENE resultado, sin forma de saberlo desde este objeto.
+    t.caso("un analito CON valor pero SIN fecha no pierde el valor (bug real: se ponía a null)", () => {
+      const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: 1.0 }, ctxErc);
+      t.igual(a.estado, "A", "sigue sin poder afirmarse vigente, sin fecha");
+      t.igual(a.subestado, "sin_historial");
+      t.igual(a.fecha, null, "la fecha sigue sin inventarse");
+      t.igual(a.valor, 1.0, "pero el valor real (1.0) debe conservarse, no perderse");
+      t.cierto(/hay un resultado/.test(a.motivo), "el motivo debe distinguir esto de 'nunca se hizo': " + a.motivo);
+    });
+
+    t.caso("un analito sin fecha NI valor sigue reportando 'no hay ningún resultado registrado'", () => {
+      const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: null }, ctxErc);
+      t.igual(a.valor, null);
+      t.cierto(/no hay ningún resultado registrado/.test(a.motivo), "sin dato real, el motivo original no cambia: " + a.motivo);
+    });
+
     t.caso("un analito vencido dice cuántos días lleva vencido", () => {
       // creatinina G3b = rango [90,121]; estable -> 121 días. 2026-01-01 + 121 = 2026-05-02.
       const a = api.mtrEstadoAnalito("CREATININA", { fecha: "2026-01-01", valor: 1.5 }, ctxErc);

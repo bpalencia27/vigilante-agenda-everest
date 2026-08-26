@@ -101,11 +101,24 @@ module.exports = {
 
     // ================= MTT-CONSOLIDA =================
 
-    t.caso("una falla grave cuyo recontrol cae cerca de la FTL se FUSIONA (un solo viaje)", () => {
-      const graves = [{ analito: "ldl", fecha: "2026-10-05", gravedad: "grave" }];
-      const mtt = api.mtrConsolidarMtt(graves, "2026-09-20");   // 15 días de diferencia
-      t.igual(mtt.fusiones.length, 1, "se fusiona a la FTL maestra");
+    // v17.6.57 (1.19) — la fusión solo puede ser un RETRASO del recontrol (la FTL cae en o
+    // después de su fecha natural): fusionar a una FTL ANTERIOR lo adelantaría, y un
+    // recontrol de LDL adelantado a 2-3 semanas de cambiar la estatina no es interpretable.
+    t.caso("una falla grave cuyo recontrol cae cerca de la FTL, y la FTL es POSTERIOR (retraso), se FUSIONA (un solo viaje)", () => {
+      const graves = [{ analito: "ldl", fecha: "2026-09-20", gravedad: "grave" }];
+      const mtt = api.mtrConsolidarMtt(graves, "2026-10-05");   // FTL 15 días DESPUÉS del recontrol natural
+      t.igual(mtt.fusiones.length, 1, "se fusiona a la FTL maestra (esperar 15 días más es aceptable)");
       t.igual(mtt.dedicadas.length, 0, "y no genera fecha aparte");
+    });
+
+    t.caso("1.19 — una falla grave cuyo recontrol cae DESPUÉS de la FTL nunca se ADELANTA fusionándola", () => {
+      // Caso real de la auditoría: FTL a 14-21 d, recontrol de LDL (tras cambiar estatina)
+      // a 42 d — antes se fusionaba (Math.abs <= 60) y el LDL se adelantaba a 2-3 semanas.
+      const graves = [{ analito: "ldl", fecha: "2026-09-27", gravedad: "grave" }];   // 42 d desde el 16-ago
+      const mtt = api.mtrConsolidarMtt(graves, "2026-08-16");   // FTL a los 14-21 d, ANTES del recontrol natural
+      t.igual(mtt.fusiones.length, 0, "NO debe fusionarse: eso adelantaría el LDL por debajo del piso de 4 semanas");
+      t.igual(mtt.dedicadas.length, 1, "debe quedar como fecha dedicada, respetando su fecha natural (2026-09-27)");
+      t.igual(mtt.dedicadas[0].fecha, "2026-09-27", "sin adelantar ni un día");
     });
 
     t.caso("un recontrol lejano (>60 d de la FTL) se vuelve una 2ª fecha dedicada", () => {

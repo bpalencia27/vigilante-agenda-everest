@@ -6,6 +6,44 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.57 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.16 y 1.19)
+
+**1.16 — un resultado real sin fecha perdía su valor.** `mtrEstadoAnalito` (línea ~30008)
+devolvía `valor: null` siempre que faltaba la fecha, aunque `ultimo.valor` sí trajera un
+resultado real (alcanzable: `_extractAtheneaFecha` puede devolver `null`). Se ordenaba un
+examen que YA TIENE resultado, sin forma de saberlo desde este objeto. Fix: se conserva el
+valor real; el motivo distingue "hay un resultado pero sin fecha" de "no hay ningún
+resultado registrado".
+
+**1.19 — MTT-CONSOLIDA podía adelantar un LDL a 2-3 semanas de cambiar la estatina.**
+`mtrConsolidarMtt` comparaba con `Math.abs()` (bidireccional): un recontrol que cae
+DESPUÉS de la FTL se fusionaba igual que uno que cae ANTES. Con la FTL antes del recontrol
+(caso corriente: FTL a 14-21 d, recontrol de LDL a 42 d tras cambiar la estatina), la
+diferencia entraba en el `<=60` de fusión y el LDL se adelantaba a una toma de 2-3 semanas
+— por debajo del piso de 4 semanas que hace interpretable la respuesta a un cambio de
+estatina. Fix: la fusión solo aplica cuando es un RETRASO del recontrol (la FTL cae en o
+después de su fecha natural) — nunca cuando lo adelantaría.
+
+- **Mutación 1.16**: se revirtió a `valor: null` fijo. 1 roja: *"un analito CON valor pero
+  SIN fecha no pierde el valor"*. Restaurado, banco vuelve a verde.
+- **Mutación 1.19**: se revirtió a `Math.abs()` bidireccional. 1 roja: *"una falla grave
+  cuyo recontrol cae DESPUÉS de la FTL nunca se ADELANTA fusionándola"* (con el caso real
+  de la auditoría, volvía a fusionar en vez de quedar como fecha dedicada). Restaurado,
+  banco vuelve a verde (2220).
+- **Test existente actualizado**: `"una falla grave cuyo recontrol cae cerca de la FTL se
+  FUSIONA"` (suite_49) ejercitaba exactamente el escenario "adelantar" que el bug describe
+  (FTL 15 días ANTES del recontrol) — se cambió a un retraso real (FTL 15 días DESPUÉS)
+  para seguir siendo representativa del comportamiento correcto.
+- **Pruebas nuevas**: `tests/suite_46_ftl_sabados.js` (2 casos, 1.16) y
+  `tests/suite_49_falla_recontrol.js` (1 caso nuevo + 1 actualizado, 1.19).
+- **Nota**: 1.17 (Estado R prioritario del RAC≥30 vencido) y 1.18 (documentar la regla del
+  50% en la tabla de divergencias del spec) quedan pendientes — 1.17 requiere implementar
+  una regla de programación del spec v68 ("piso HOY+21") que no tengo completa y que toca
+  el motor CERO VENCIDOS ya muy afinado; 1.18 requiere el archivo `MOTOR_RCV_V68_SPEC.md`
+  real, que no existe en este repositorio (el médico lo pegó directo en otra conversación).
+- **1.15** (grupo lipídico partido) tampoco se tocó: requiere una decisión de diseño real
+  (cómo debe agruparse CT/HDL/LDL/TG) que la auditoría no especifica.
+
 ## v17.6.56 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.14: `order_list` del JSON dejaba fuera lo cosechado)
 
 `mtrJsonV68DesdeResumen` (vigilante_agenda.user.js:31789) armaba `order_list` como

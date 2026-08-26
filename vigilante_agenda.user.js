@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.56
+// @version     17.6.57
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.56";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.57";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30006,9 +30006,18 @@ _vglOfrecerDeshacer(btn);
     const fueraMeta = mtrFueraDeMeta(clave, valor, c);
     const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta);
     if (!fecha) {
+      // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
+      // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
+      // _extractAtheneaFecha puede devolver null y mtrResumenDesdeModalLabs lo copia tal
+      // cual). Sin fecha no se puede calcular vigencia/vencimiento — sigue sin poderse
+      // afirmar "vigente" — pero descartar un valor real que SÍ llegó hace que quien
+      // consuma este resultado (p.ej. para decidir si reordenar) no tenga forma de saber
+      // que el examen ya se hizo, solo que le falta la fecha.
       return { clave: clave, nombre: nombre, estado: "A", subestado: "sin_historial",
-        vigenciaDias: vigencia, fecha: null, valor: null, vence: null,
-        motivo: "no hay ningún resultado registrado" };
+        vigenciaDias: vigencia, fecha: null, valor: valor, vence: null,
+        motivo: valor !== null
+          ? "hay un resultado (" + valor + ") pero sin fecha registrada: no se puede calcular vigencia"
+          : "no hay ningún resultado registrado" };
     }
     const vence = mtrSumarDias(fecha, vigencia);
     const hoy = c.hoyIso;
@@ -33824,8 +33833,17 @@ _vglOfrecerDeshacer(btn);
     for (const g of graves) {
       const f = mtrFechaDesdeIso(g.fecha);
       if (ftl && f) {
-        const dif = Math.abs(Math.round((f.getTime() - ftl.getTime()) / 86400000));
-        if (dif <= MTR_MTT_FUSION_DIAS) { fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: dif })); continue; }
+        // v17.6.57 — auditoría 25-ago (1.19): esto comparaba con Math.abs (bidireccional):
+        // un recontrol que cae DESPUÉS de la FTL se fusionaba igual que uno que cae ANTES.
+        // Con la FTL antes del recontrol (caso corriente: FTL a 14-21 d, recontrol de LDL a
+        // 42 d tras cambiar la estatina), la diferencia entraba en el <=60 de fusión y el
+        // LDL se adelantaba a una toma de 2-3 semanas — por debajo del piso "nunca antes de
+        // 4 semanas" que la interpretación de un cambio de estatina exige (un LDL a las 2
+        // semanas de la dosis nueva no es interpretable). Solo se fusiona cuando fusionar
+        // es un RETRASO del recontrol (la FTL cae en o después de su fecha natural, hasta
+        // 60 días de espera) — nunca cuando fusionar lo ADELANTARÍA.
+        const dif = Math.round((ftl.getTime() - f.getTime()) / 86400000);
+        if (dif >= 0 && dif <= MTR_MTT_FUSION_DIAS) { fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: dif })); continue; }
       }
       dedicadas.push(Object.assign({}, g));
     }
