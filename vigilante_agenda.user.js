@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.70
+// @version     17.6.71
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.70";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.71";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5369,8 +5369,14 @@ _vglOfrecerDeshacer(btn);
   }
 
   function createAccionesDockUI() {
-    if (!_enModuloHCHealth()) { const fuera = document.getElementById("vgl-acciones-dock"); if (fuera) fuera.remove(); return; }
+    // v17.6.71 — se lee y se comprueba el cruce de pacientes ANTES de cualquier retorno
+    // temprano (módulo distinto, o historia cerrada): son EXACTAMENTE los dos casos
+    // reportados en consultorio ("cerró la historia... navegó a Citas del día") donde el
+    // dock nunca llega a la parte de abajo, pero un panel minimizado de OTRO paciente sí
+    // debe descartarse igual.
     const docId = extractPacienteAbierto();
+    try { _vglMinDescartarDeOtroPaciente(docId); } catch (e) {}
+    if (!_enModuloHCHealth()) { const fuera = document.getElementById("vgl-acciones-dock"); if (fuera) fuera.remove(); return; }
     if (!docId) { const sinPac = document.getElementById("vgl-acciones-dock"); if (sinPac) sinPac.remove(); return; }
 
     let dock = document.getElementById("vgl-acciones-dock");
@@ -10084,6 +10090,33 @@ _vglOfrecerDeshacer(btn);
     try { if (reg && reg.panel && reg.panel.remove) reg.panel.remove(); } catch (e) {}
     vglMinPintarBarra();
     return true;
+  }
+
+  // v17.6.71 — [reportado en consultorio, 26-ago-2026] BLINDAJE CONTRA CRUCE DE
+  // PACIENTES (el riesgo más alto del proyecto, ver CLAUDE.md): un módulo minimizado con
+  // datos de UN paciente (el redactor IA con un borrador de Enfermedad Actual/Análisis y
+  // Plan, el Panel del paciente con su riesgo/TFG/medicamentos...) quedaba VIVO en pantalla
+  // aunque el médico cerrara esa historia o abriera la de otro paciente. Hasta ahora solo
+  // había un AVISO al restaurarlo (v17.0.2, "Ojo: otro paciente") — nunca se descartaba
+  // solo, así que la pastilla minimizada seguía disponible (y potencialmente confusa o
+  // insertable por error) durante los pacientes siguientes.
+  //
+  // Se descarta (vglMinDescartar: borra el nodo del DOM, no solo lo oculta) cualquier
+  // panel minimizado cuyo `docId` PROPIO sea distinto del paciente abierto AHORA MISMO —
+  // incluido "" (ningún paciente abierto: la historia se cerró). Los paneles SIN docId
+  // propio (`reg.docId` falsy) nunca se tocan aquí: solo se descarta lo que se sabe con
+  // certeza que es de OTRO paciente, nunca por duda. Se llama en cada repintado del dock
+  // (createAccionesDockUI), que ya corre en cada tick con el docId recién leído.
+  function _vglMinDescartarDeOtroPaciente(docIdActual) {
+    if (!_vglMinimizados.size) return;
+    const actual = docIdActual ? String(docIdActual) : "";
+    Array.from(_vglMinimizados.keys()).forEach((id) => {
+      const reg = _vglMinimizados.get(id);
+      if (reg && reg.docId && String(reg.docId) !== actual) {
+        try { uxTrack("fn.min.descartar_cruce_paciente"); } catch (e) {}
+        vglMinDescartar(id);
+      }
+    });
   }
 
   function vglMinInyectarBoton(panel) {
@@ -32408,6 +32441,14 @@ _vglOfrecerDeshacer(btn);
       const modal = document.createElement("div");
       modal.id = "vgl-ia-modal"; modal.className = isLight() ? "light" : "";
       modal.setAttribute("role", "dialog"); modal.setAttribute("aria-modal", "true");
+      // v17.6.71 — [reportado en consultorio, 26-ago-2026] BUG REAL: este panel nunca
+      // anotaba de quién era (a diferencia de #vgl-panel-modal, ver línea ~18470), así que
+      // al minimizarlo (vglMinimizarPanel lee panel.dataset.vglDoc) quedaba con docId=null
+      // — invisible para CUALQUIER blindaje contra cruce de pacientes, incluido el aviso
+      // de "otro paciente" que ya existía al restaurar (v17.0.2) y el descarte automático
+      // nuevo de _vglMinDescartarDeOtroPaciente (ver createAccionesDockUI). Mismo patrón
+      // que #vgl-panel-modal: se anota el dueño con el docId que el resumen ya trae.
+      try { modal.dataset.vglDoc = String(resumen._docId || ""); } catch (e) {}
       const hayClave = !!mtrLeerClaveGemini();
       const btnModo = (m, etiqueta) => '<button class="vgl-agm-pbtn' + (m === modoInicial ? ' active' : '') + '" data-modo="' + m + '">' + etiqueta + '</button>';
       modal.innerHTML =

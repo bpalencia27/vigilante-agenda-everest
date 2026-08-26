@@ -6,6 +6,53 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.71 — 26-ago-2026 (ítem 0-E: panel IA minimizado sobrevivía al cambio de paciente — reportado en consultorio)
+
+**El reporte**: el médico minimizó el módulo de Redacción IA mientras atendía a un
+paciente, cerró esa historia (navegó a "Citas del día"), y el módulo SIGUIÓ apareciendo
+minimizado en pantalla — riesgo de contaminación cruzada con el paciente siguiente. Sin
+ningún dato de paciente.
+
+**Causa raíz confirmada leyendo el código real**: el mecanismo de minimizado
+(`_vglMinimizados` Map, `vglMinimizarPanel`/`vglRestaurarPanel`/`vglMinDescartar`) ya
+tenía, desde v17.0.2, un AVISO al restaurar un panel de otro paciente ("Ojo: otro
+paciente") — pero nunca un descarte automático. Peor: el panel de Redacción IA
+(`mtrAbrirPanelRedaccion`, `#vgl-ia-modal`) NUNCA anotaba `modal.dataset.vglDoc` (a
+diferencia de `#vgl-panel-modal`, que sí lo hace desde la misma v17.0.2) — así que al
+minimizarlo, `vglMinimizarPanel` (que lee `panel.dataset.vglDoc` como respaldo) lo
+registraba con `docId: null`. Ni siquiera el aviso de "otro paciente" ya existente
+llegaba a activarse para el módulo específico que reportó el médico: quedaba invisible
+para CUALQUIER blindaje contra cruce de pacientes.
+
+**El fix**: dos partes.
+1. `mtrAbrirPanelRedaccion` ahora anota `modal.dataset.vglDoc = String(resumen._docId ||
+   "")` al construir el panel — mismo patrón que `#vgl-panel-modal` — usando el campo
+   que la propia función ya usa en otros 10+ puntos (`_pacienteSigueAbierto`,
+   `_vglGuardarDeshacer`, etc.).
+2. Nueva función `_vglMinDescartarDeOtroPaciente(docIdActual)`: DESCARTA (borra el nodo
+   del DOM con `vglMinDescartar`, no solo oculta) cualquier panel minimizado cuyo
+   `docId` propio sea distinto del paciente abierto ahora mismo — incluido `""` (ningún
+   paciente abierto). Los paneles SIN docId propio (`reg.docId` falsy) nunca se tocan:
+   solo se descarta lo que se sabe con certeza que es de OTRO paciente, nunca por duda.
+   Se engancha en `createAccionesDockUI` (el mismo punto que ya resuelve QUIÉN está en
+   pantalla, corre en cada tick), ANTES de sus retornos tempranos — así cubre los DOS
+   casos reportados: cambiar de paciente Y cerrar la historia por completo (navegar a
+   "Citas del día", donde `extractPacienteAbierto()` da `""`).
+
+**Mutación verificada** (dos mutaciones independientes, una por cada mitad del fix):
+- Se revirtió `modal.dataset.vglDoc = ...` en `mtrAbrirPanelRedaccion`: cayó
+  EXACTAMENTE la prueba nueva de `tests/suite_59_burbujas_ux.js` que confirma que el
+  docId queda anotado ("obtuvo undefined" donde se esperaba "12345678"). Ninguna otra
+  prueba se vio afectada.
+- Se convirtió `_vglMinDescartarDeOtroPaciente` en un no-op: cayeron EXACTAMENTE las 4
+  pruebas que verifican que SÍ se descarta (3 unitarias en
+  `tests/suite_65_minimizar_modulos.js` + 1 de integración end-to-end en
+  `tests/suite_15_interfaz_avanzada.js` que pasa por el `createAccionesDockUI` real);
+  las pruebas que verifican que NO se descarta (mismo paciente, sin docId propio)
+  siguieron en verde, como corresponde — un no-op también cumple "no descartar".
+En ambos casos se restauró desde el backup y el banco volvió a 2258 pruebas en verde
+(2249 + 1 en suite_59 + 6 en suite_65 + 2 de integración en suite_15).
+
 ## v17.6.70 — 26-ago-2026 (ítem 0-D: sin vía para cancelar/reagendar una cita de control sin laboratorio — reportado en consultorio)
 
 **El reporte**: el médico asignó solo cita de control (sin laboratorio); a última hora la

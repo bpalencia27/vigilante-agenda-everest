@@ -67,6 +67,7 @@ module.exports = {
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
     "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
+    "vglMinimizarPanel", "vglMinBarra", "_vglMinDescartarDeOtroPaciente",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -816,6 +817,65 @@ module.exports = {
       c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : null); // sin "anamesis": sin paciente
       c.api.createAccionesDockUI();
       t.cierto(removido, "el dock se quita del body sin paciente abierto");
+    });
+
+    // v17.6.71 — [reportado en consultorio, 26-ago-2026] BLINDAJE CONTRA CRUCE DE
+    // PACIENTES: integración completa a través del punto real de enganche
+    // (createAccionesDockUI, que corre en cada tick). Antes, un módulo minimizado con
+    // datos del paciente A sobrevivía sin ningún descarte automático al abrir la
+    // historia de otro paciente — ver la cobertura unitaria de _vglMinDescartarDeOtroPaciente
+    // en tests/suite_65_minimizar_modulos.js para el detalle función-por-función; esta
+    // prueba confirma que el DOCK REAL de verdad la invoca en cada repintado.
+    t.caso("createAccionesDockUI: al repintar para OTRO paciente, descarta el panel minimizado del paciente anterior (bug real reportado en consultorio)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "101010101");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock se creó para el paciente A");
+
+      const panelIA = c.env.doc.createElement("div");
+      panelIA.id = "vgl-ia-modal";
+      let removido = false;
+      panelIA.remove = () => { removido = true; };
+      t.cierto(c.api.vglMinimizarPanel(panelIA, "101010101"), "se minimiza el redactor IA del paciente A");
+      // Se toma la barra REAL ya pintada por vglMinimizarPanel (por body.children, igual
+      // que el dock arriba) — llamar a vglMinBarra() de nuevo aquí, sin que
+      // doc.getElementById resuelva "vgl-min-bar", crearía un nodo DISTINTO al pintado.
+      const bar = c.env.doc.body.children.find((n) => n.id === "vgl-min-bar");
+      t.cierto(!!bar, "la barra de minimizados se creó");
+      t.igual(bar.style.display, "flex", "la pastilla de A está en la barra");
+
+      // El médico cierra la historia de A y abre la de B: mismo repintado real del dock.
+      // getElementById debe seguir resolviendo el dock Y la barra ya creados (si no, el
+      // código de producción crearía nodos nuevos en vez de actualizar los reales).
+      mockPacienteDock(c, "202020202");
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "vgl-min-bar" ? bar : (id === "anamesis" ? { id: "anamesis" } : null)));
+      c.api.createAccionesDockUI();
+
+      t.cierto(removido, "el panel minimizado del paciente A se DESCARTA del DOM al repintar para B");
+      t.igual(bar.style.display, "none", "y su pastilla desaparece de la barra");
+    });
+
+    t.caso("createAccionesDockUI: al repintar para el MISMO paciente, el panel minimizado sobrevive (no se descarta lo propio)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "101010101");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+
+      const panelIA = c.env.doc.createElement("div");
+      panelIA.id = "vgl-ia-modal";
+      let removido = false;
+      panelIA.remove = () => { removido = true; };
+      c.api.vglMinimizarPanel(panelIA, "101010101");
+      const bar = c.env.doc.body.children.find((n) => n.id === "vgl-min-bar");
+      t.cierto(!!bar, "la barra de minimizados se creó");
+
+      // Repintado normal (p. ej. el tick periódico) con el MISMO paciente todavía abierto.
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "vgl-min-bar" ? bar : (id === "anamesis" ? { id: "anamesis" } : null)));
+      c.api.createAccionesDockUI();
+
+      t.falso(removido, "el panel del propio paciente A no se toca mientras A sigue siendo el abierto");
+      t.igual(bar.style.display, "flex", "su pastilla sigue disponible");
     });
 
     t.caso("createAccionesDockUI: botón de agendar refleja los 3 estados (nada hecho / falta lab / ambas bloqueadas)", () => {

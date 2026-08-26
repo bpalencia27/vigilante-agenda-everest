@@ -172,6 +172,21 @@ module.exports = {
       t.cierto(html.indexOf("vgl-ia-indicaciones") >= 0, "el campo 'Indicaciones para este borrador' está en el panel");
     });
 
+    // v17.6.71 — [reportado en consultorio, 26-ago-2026] BUG REAL: este panel nunca
+    // anotaba de quién era (a diferencia de #vgl-panel-modal), así que al minimizarlo
+    // quedaba con docId=null — invisible para el blindaje contra cruce de pacientes
+    // (el aviso al restaurar de v17.0.2 y el descarte automático nuevo de
+    // _vglMinDescartarDeOtroPaciente, ver suite 65). Un borrador de Enfermedad
+    // Actual/Análisis y Plan minimizado con datos de un paciente podía sobrevivir,
+    // sin ninguna protección, mientras el médico ya atendía al siguiente.
+    t.caso("mtrAbrirPanelRedaccion: el panel queda marcado con el docId del paciente (resumen._docId), para que el blindaje de minimizado lo reconozca", () => {
+      const doc = env.doc;
+      api.mtrAbrirPanelRedaccion(resumenDemo());
+      const modal = doc.getElementById("vgl-ia-modal");
+      t.cierto(!!modal, "el panel se abrió");
+      t.igual(modal.dataset.vglDoc, "12345678", "el docId del resumen (resumenDemo()._docId) queda anotado en el panel");
+    });
+
     // ---------------------------------------------------------------
     // v17.3.0 — regresión del choque real de consola (21-ago): "Uncaught (in
     // promise) ReferenceError: _frenoMarcaOk is not defined" en CADA generación
