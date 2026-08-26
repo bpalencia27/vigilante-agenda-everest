@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.69
+// @version     17.6.70
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.69";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.70";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6571,7 +6571,24 @@ _vglOfrecerDeshacer(btn);
       // v15.5.0 — Se guarda también citaId (el radicado real de Everest), pacienteId y
       // EPS: son los insumos del endpoint CancelarCita capturado en consultorio. Sin
       // ellos, "anular" solo podía borrar marcas locales.
-      p.citasDetalle[sDoc] = Object.assign({ fechaIso, ts: Date.now() }, extra || {});
+      // v17.6.70 — [reportado en consultorio, 26-ago-2026] BUG REAL: esto REEMPLAZABA el
+      // registro entero en vez de fusionarlo con el que ya hubiera. El flujo real de
+      // agendamiento llama a esta función DOS veces para la MISMA cita: primero con el
+      // `extra` completo (citaId/pacienteId/eps/…, justo tras crear la cita), y
+      // enseguida otra vez vía `vglNotificarCompletado("cita_control", …)` — que NO pasa
+      // `extra` — para invalidar cachés y repintar. Con el reemplazo wholesale, esa
+      // segunda llamada BORRABA el citaId/pacienteId recién guardados, dejando solo
+      // `{fechaIso, ts}`. Como `citaDetalleHoy` exige `d.citaId` para devolver algo
+      // (línea ~16340: "sin radicado no hay recordatorio que reabrir"), el resultado era
+      // que NINGUNA cita creada por este flujo quedaba con recordatorio reabrible — el
+      // botón «🖨 Recordatorio» nunca aparecía (ni el atajo cuando cita+lab ya están
+      // hechos, línea ~5474, ni el compañero de «Agendar labs», línea ~5507) y con él se
+      // iba la única vía para cancelar/reagendar sin salir al Everest original. Ahora se
+      // FUSIONA con lo que ya hubiera para este documento: una llamada posterior sin
+      // `extra` solo actualiza fecha/ts, nunca borra un citaId/pacienteId ya guardados. Al
+      // anular la cita, `_anularCitaMarcasLocales` (línea ~16431) SÍ borra el registro
+      // entero con `delete`, así que no queda dato viejo colgado tras una cancelación real.
+      p.citasDetalle[sDoc] = Object.assign({}, p.citasDetalle[sDoc] || {}, { fechaIso, ts: Date.now() }, extra || {});
       cambio = true;
     }
     if (cambio) { writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint(); }

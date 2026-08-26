@@ -6,6 +6,59 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.70 — 26-ago-2026 (ítem 0-D: sin vía para cancelar/reagendar una cita de control sin laboratorio — reportado en consultorio)
+
+**El reporte**: el médico asignó solo cita de control (sin laboratorio); a última hora la
+paciente pidió cambio de hora; el médico no pudo acceder al módulo de agendamiento del
+script para modificarla/cancelarla — el dock solo lo dejaba entrar a "🧪 Agendar labs".
+Tuvo que usar la web original de Everest. Sin ningún dato de paciente.
+
+**Causa raíz confirmada leyendo el código real** (más profunda que la hipótesis inicial de
+"radicado no guardado en algún camino" — el radicado SÍ se guarda, pero se BORRA
+enseguida): el flujo de creación de cita (dentro de `openAgendamientoModal`, tras un
+agendamiento exitoso) llama a `markCitaAgendadaHoy` DOS VECES para la MISMA cita:
+
+1. Línea ~20759, directo, con el `extra` completo: `{citaId, pacienteId, eps, hora,
+   nombre, …}` — todo lo que el endpoint `CancelarCita` necesita.
+2. Línea ~20788, `vglNotificarCompletado("cita_control", { doc, fechaIso, hora })` —
+   SIN `extra` — disparada inmediatamente después, en el mismo flujo síncrono, para
+   invalidar cachés y repintar el dock.
+
+`markCitaAgendadaHoy` (línea ~6563) hacía `p.citasDetalle[sDoc] = Object.assign({
+fechaIso, ts }, extra || {})` — un REEMPLAZO wholesale, no una fusión. La segunda llamada
+(sin `extra`) borraba TODO lo que la primera acababa de guardar, dejando solo
+`{fechaIso, ts}`. Como `citaDetalleHoy` (línea ~16340) exige `d.citaId` para devolver
+algo ("sin radicado no hay recordatorio que reabrir"), el resultado era que NINGUNA cita
+creada por este flujo — control-solo O control+laboratorio, el bug es el mismo camino
+para ambas — quedaba con recordatorio reabrible. Consecuencia en el dock (línea ~5390):
+con `soloFaltaLab` (control hecho, falta el lab), el compañero "🖨 Recordatorio" (línea
+~5507) nunca aparecía porque su condición exige `citaDetalleHoy(docId)`; con todo ya
+agendado (línea ~5474), el botón principal se quedaba deshabilitado ("✅ Agendado") en vez
+de convertirse en el recordatorio vivo. En ambos casos, la única salida quedaba fuera del
+alcance del script — exactamente lo reportado.
+
+**El fix**: `markCitaAgendadaHoy` ahora FUSIONA con lo que ya hubiera guardado para ese
+documento (`Object.assign({}, p.citasDetalle[sDoc] || {}, { fechaIso, ts }, extra ||
+{})`) en vez de reemplazar. Una llamada posterior sin `extra` solo actualiza fecha/ts,
+nunca borra un citaId/pacienteId ya guardados; una llamada posterior CON `extra` sigue
+pudiendo corregir/actualizar campos normalmente. Se verificó que la cancelación real
+(`_anularCitaMarcasLocales`, línea ~16431) sigue usando `delete p.citasDetalle[sDoc]` —
+borra el registro entero, así que la fusión no deja datos viejos colgados tras una
+cancelación genuina.
+
+**Mutación verificada**: se respaldó el archivo, se revirtió con `python3` la fusión a la
+versión original (reemplazo wholesale). `TZ=America/Bogota node tests/runner.js` puso roja
+EXACTAMENTE la prueba nueva que reproduce el flujo real completo (2248 pasan / 1 falla:
+"tras la notificación posterior, el recordatorio SIGUE siendo reabrible — obtuvo false").
+Ninguna otra prueba se vio afectada, incluida la prueba preexistente de
+`tests/suite_09_ajustes.js` ("una marca vieja sin fechaIso no la borra", un caso distinto
+—sin `fechaIso` en absoluto— que ni siquiera toca esta rama). Se restauró desde el backup
+y el banco volvió a 2249 pruebas en verde. Se añadieron 3 pruebas nuevas a
+`tests/suite_62_cierre_cita.js`: el escenario real completo (crear con extra, notificar
+sin extra, confirmar que el detalle sobrevive), que una llamada posterior SÍ puede seguir
+actualizando campos, y que `_anularCitaMarcasLocales` sigue limpiando el registro entero
+al cancelar (para blindar contra un "fix" ingenuo que dejara datos viejos pegados).
+
 ## v17.6.69 — 26-ago-2026 (ítem 0-C: timeout de red nunca rotaba de modelo Gemini — reportado en consultorio)
 
 **El reporte**: el médico vio "La IA no redactó (tiempo agotado). Le dejo los hechos para

@@ -20,6 +20,7 @@ module.exports = {
   nombre: "v15.9.0 — cierre de cita (imprimir/correo/toma) y aviso de vencimiento",
   cubre: [
     "citaDetalleHoy", "abrirRecordatorioCita", "_cancelarCitaConPregunta",
+    "markCitaAgendadaHoy", "vglNotificarCompletado", "_anularCitaMarcasLocales",
     "mtrAvisoVencimiento", "mtrLabsPrimeroVencimientoInevitable", "_recordatorioLabHtml", "imprimirRecordatorioLab",
     "mtrNotaTomaQuedoHtml", "mtrPegarNotaTomaQuedo", "mtrSedeIdLab",
     "_urlCorreoCita", "_correoValido", "enviarRecordatorioCitaPorCorreo",
@@ -466,6 +467,48 @@ module.exports = {
       t.cierto(!!d2 && d2.citaId === "R-99", "con radicado sí");
       t.igual(d2.hora, "07:00 AM", "y con todo lo que el recordatorio necesita");
       t.igual(c.api.citaDetalleHoy(""), null, "sin documento no lanza");
+    });
+
+    // v17.6.70 — [reportado en consultorio, 26-ago-2026] BUG REAL: el flujo real de
+    // agendamiento (openAgendamientoModal) llama a markCitaAgendadaHoy DOS veces para la
+    // MISMA cita — primero con el `extra` completo (citaId/pacienteId/…), y enseguida
+    // otra vez vía vglNotificarCompletado("cita_control", …), que NO pasa `extra`. Antes
+    // del fix, la segunda llamada REEMPLAZABA el registro entero y borraba el citaId recién
+    // guardado — citaDetalleHoy volvía a null y el médico se quedaba sin ninguna vía para
+    // reabrir el recordatorio (ni para cancelar/reagendar), justo el bug reportado: con
+    // solo la cita de control agendada (sin laboratorio), el dock solo ofrecía «Agendar
+    // labs», sin ningún botón de vuelta.
+    t.caso("markCitaAgendadaHoy + vglNotificarCompletado: la llamada de notificación (SIN extra) que sigue a la de creación (CON extra) no debe borrar el citaId/pacienteId ya guardados (bug real reportado en consultorio)", () => {
+      const c = cargar({ silencioso: true });
+      // 1) igual que openAgendamientoModal línea ~20759: se guarda el detalle completo.
+      c.api.markCitaAgendadaHoy("999888777", "2026-08-26", {
+        citaId: "R-500", pacienteId: "P-500", eps: "EPS X", hora: "08:00 AM",
+        nombre: "N", fechaLegible: "26/08/2026",
+      });
+      t.cierto(!!c.api.citaDetalleHoy("999888777"), "recién creada, el recordatorio SÍ es reabrible");
+      // 2) igual que la línea ~20788: vglNotificarCompletado("cita_control", …) SIN extra,
+      // disparada inmediatamente después en el mismo flujo de creación.
+      c.api.vglNotificarCompletado("cita_control", { doc: "999888777", fechaIso: "2026-08-26", hora: "08:00 AM" });
+      const det = c.api.citaDetalleHoy("999888777");
+      t.cierto(!!det, "tras la notificación posterior, el recordatorio SIGUE siendo reabrible (antes: se perdía)");
+      t.igual(det.citaId, "R-500", "el citaId sobrevive a la segunda llamada");
+      t.igual(det.pacienteId, "P-500", "el pacienteId también sobrevive (lo exige _anularCitaAsignadaReal para poder cancelar)");
+      t.igual(det.eps, "EPS X", "y el resto del detalle guardado no se pierde");
+    });
+
+    t.caso("markCitaAgendadaHoy: una llamada posterior CON extra sigue pudiendo ACTUALIZAR/corregir un campo (fusiona, no ignora lo nuevo)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.markCitaAgendadaHoy("1111", "2026-08-26", { citaId: "R-1", pacienteId: "P-1", hora: "08:00 AM" });
+      c.api.markCitaAgendadaHoy("1111", "2026-08-26", { citaId: "R-1", pacienteId: "P-1", hora: "09:00 AM" });
+      t.igual(c.api.citaDetalleHoy("1111").hora, "09:00 AM", "el extra nuevo sigue ganando sobre el viejo, no se queda pegado al primero");
+    });
+
+    t.caso("_anularCitaMarcasLocales: tras anular, el detalle viejo SÍ se borra (no queda colgado para la próxima cita del mismo paciente)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.markCitaAgendadaHoy("2222", "2026-08-26", { citaId: "R-2", pacienteId: "P-2" });
+      t.cierto(!!c.api.citaDetalleHoy("2222"));
+      c.api._anularCitaMarcasLocales("2222");
+      t.igual(c.api.citaDetalleHoy("2222"), null, "anulada, el registro desaparece del todo — la fusión de arriba no deja basura pegada");
     });
 
     t.caso("abrirRecordatorioCita: sin radicado guardado NO abre un panel vacío", () => {
