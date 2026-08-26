@@ -979,19 +979,23 @@ module.exports = {
       const resumen = {
         _hoyIso: "2026-08-23",
         programa: "HTA", erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
-        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70 } }, foco: "renal",
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70, cnoHdl: 100 } }, foco: "renal",
         // v17.6.56 (1.14) — order_list ahora sale de plan.ordenar (lo que el motor de
         // verdad va a ordenar: faltantes+vencidos de los drivers, MÁS lo cosechado y los
         // pasajeros en estado A), no de faltantes+vencidos crudos. faltantes/vencidos se
         // conservan aquí porque otros campos del JSON (no probados en este caso) los usan.
         plan: { ftl: "2026-09-01", control: { fecha: "2026-09-07" }, faltantes: [{ clave: "RAC" }], vencidos: [{ clave: "HBA1C" }], ordenar: [{ clave: "RAC" }, { clave: "HBA1C" }] },
       };
-      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"] });
+      // v17.6.64 (sección 4) — cno_hdl/cno_hdl_target viajan calculados en el JSON, para
+      // que la IA solo los cite, nunca los invente.
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"], cNoHDL: 160 });
       t.igual(j.version, "68", "versión");
       t.igual(j.cv_risk, "alto", "riesgo");
       t.igual(j.tfg_ckdepi, 52, "TFG clínica");
       t.igual(j.estadio_administrativo, "G3a", "estadio admin");
       t.igual(j.ldl_target, 70, "meta");
+      t.igual(j.cno_hdl, 160, "cNoHDL calculado viaja en el JSON");
+      t.igual(j.cno_hdl_target, 100, "y su meta");
       t.cierto(j.order_list.indexOf("RAC") >= 0 && j.order_list.indexOf("HBA1C") >= 0, "order_list");
       // v17.6.8 — las fechas de agenda se relativizan (cuasi-identificadores): nunca crudas.
       t.igual(j.ftl_date, "en 9 días", "FTL se relativiza respecto a hoy (9 días del 23-ago al 1-sep)");

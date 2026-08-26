@@ -81,6 +81,30 @@ module.exports = {
       t.igual(hoja.labs.length, 2, "labs");
     });
 
+    // [auditoría 25-ago, sección 4] cNoHDL (colesterol no-HDL = CT − HDL) no se calculaba
+    // en ningún lado, pese a que el prompt le pide a la IA "menciona cNoHDL junto al LDL"
+    // — el modelo tenía que inventarlo. mtrCnoHDL ya existía, pura y probada, sin ningún
+    // llamador; se cablea aquí junto con su meta, para que la IA solo lo cite.
+    t.caso("cNoHDL se calcula de CT y HDL, con su meta — nunca lo tiene que inventar la IA", () => {
+      const opts2 = Object.assign({}, opts, {
+        ultimos: Object.assign({}, opts.ultimos, {
+          COLESTEROL_TOTAL: { valor: 200, fecha: "2026-06-10" },
+          COLESTEROL_HDL: { valor: 40, fecha: "2026-06-10" },
+        }),
+      });
+      const hoja = api.mtrHojaDeHechos(resumenConPhi(), opts2);
+      t.igual(hoja.cNoHDL, 160, "200 - 40 = 160");
+      t.igual(hoja.metaCnoHdl, 100, "la meta viaja junto al valor (MTR_METAS_LIPIDICAS.cnoHdl para 'alto')");
+      const texto = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/Colesterol no-HDL: 160 mg\/dL \(meta: <100 mg\/dL\)/.test(texto), "y aparece en el texto que ve la IA: " + texto);
+    });
+
+    t.caso("cNoHDL: sin CT o sin HDL, queda null — nunca se infiere", () => {
+      const hoja = api.mtrHojaDeHechos(resumenConPhi(), opts);   // opts base: sin CT/HDL
+      t.igual(hoja.cNoHDL, null);
+      t.falso(/Colesterol no-HDL/.test(api.mtrHojaDeHechosTexto(hoja)), "sin dato, la línea ni aparece (nunca un hueco a medias)");
+    });
+
     // =====================================================================
     // v17.6.1 — Estas cuatro son las claves REALES que sí escribe el resto del
     // archivo (mtrLeerFactoresRcvDelDom, mtrLeerFactoresRCV): antes de esta prueba,

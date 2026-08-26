@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.63
+// @version     17.6.64
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.63";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.64";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30485,6 +30485,15 @@ _vglOfrecerDeshacer(btn);
         paDiastolica: (typeof f.paDiastolica === "number") ? f.paDiastolica : null,
       },
       metaLdl: (r.meta && r.meta.metas) ? r.meta.metas.ldl : null,
+      // v17.6.64 — auditoría 25-ago (sección 4): cNoHDL (colesterol no-HDL = CT − HDL) NO
+      // se calculaba en ningún lado, pese a que el prompt de Análisis y Plan (línea ~30783)
+      // le pide a la IA "menciona cNoHDL junto al LDL" — el modelo tenía que INVENTARLO o
+      // CALCULARLO él mismo, justo lo que la cabecera del spec prohíbe (delegarle a un LLM
+      // un cálculo determinista). mtrCnoHDL ya existía, pura y probada, sin ningún
+      // llamador. Se cablea aquí junto con su meta (MTR_METAS_LIPIDICAS.cnoHdl), para que
+      // el modelo solo tenga que citar el número, nunca calcularlo.
+      cNoHDL: mtrCnoHDL((ult.COLESTEROL_TOTAL || {}).valor, (ult.COLESTEROL_HDL || {}).valor),
+      metaCnoHdl: (r.meta && r.meta.metas) ? r.meta.metas.cnoHdl : null,
       factores: factores,
       labs: labs,
       medicamentos: meds,
@@ -30523,6 +30532,7 @@ _vglOfrecerDeshacer(btn);
     const rg = h.riesgo || {};
     if (rg.categoria) L.push("Riesgo cardiovascular: " + rg.categoria + (rg.framinghamPuntos != null ? " (Framingham oficial " + rg.framinghamPuntos + " puntos)" : ""));
     if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL");
+    if (h.cNoHDL != null) L.push("Colesterol no-HDL: " + h.cNoHDL + " mg/dL" + (h.metaCnoHdl != null ? " (meta: <" + h.metaCnoHdl + " mg/dL)" : ""));
     const an = h.antropometria || {};
     if (an.paSistolica != null) L.push("Signos vitales: PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg" + (an.imc != null ? " · IMC: " + an.imc : ""));
     if (h.labs && h.labs.length) L.push("Laboratorios y paraclínicos: " + h.labs.map((x) => x.analito + " " + x.valor + (x.hace ? " (" + x.hace + ")" : "")).join("; "));
@@ -31843,6 +31853,10 @@ _vglOfrecerDeshacer(btn);
       remitir_nefrologia: !!erc.remitirNefrologia,
       cv_risk: riesgo.categoria || "",
       ldl_target: meta.ldl != null ? meta.ldl : null,
+      // v17.6.64 (sección 4) — mismo criterio que ldl_target: el número real y su meta
+      // viajan calculados, para que la IA solo los cite (nunca los calcule/invente).
+      cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,
+      cno_hdl_target: meta.cnoHdl != null ? meta.cnoHdl : null,
       status: (r.meta && r.meta.status) || "",
       falla_dispensacion: "NO",
       datos_completos: erc.datosCompletos !== false,

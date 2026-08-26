@@ -6,6 +6,24 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.64 — 26-ago-2026 (auditoría 25-ago, sección 4: cNoHDL cableado — decisión confirmada por el médico)
+
+`mtrCnoHDL(ct, hdl)` (colesterol no-HDL = CT − HDL) ya existía, pura y probada, pero SIN
+NINGÚN llamador — pese a que el prompt de "Análisis y plan" (línea ~30783) le pide
+literalmente a la IA "menciona cNoHDL junto al LDL indicando si está en meta". El modelo
+tenía que inventarlo o calcularlo él mismo — justo lo que la cabecera del spec prohíbe
+(delegarle a un LLM un cálculo determinista). Se cablea en 3 puntos:
+`mtrHojaDeHechos`/`mtrHojaDeHechosTexto` (lo que ve la IA y lo que el recuadro muestra si
+falla) y `mtrJsonV68DesdeResumen` (`cno_hdl`/`cno_hdl_target`) — junto con su meta
+(`MTR_METAS_LIPIDICAS.cnoHdl`, ya existía) para que el modelo solo tenga que citar el
+número, nunca calcularlo.
+
+- **Mutación**: se forzaron `cNoHDL`/`metaCnoHdl` a `null` fijo en `mtrHojaDeHechos`. 1
+  roja: *"cNoHDL se calcula de CT y HDL..."*. Restaurado, banco vuelve a 2228 en verde.
+- **Pruebas nuevas**: `tests/suite_56_hoja_hechos.js` — 2 casos (cálculo real con meta, y
+  null sin inventar cuando falta CT/HDL); `tests/suite_57_ia_redaccion.js` — 2 aserciones
+  nuevas en el test existente del JSON v68.
+
 ## v17.6.63 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.10: construida la segunda capa de blindaje de Enfermedad Actual — decisión confirmada por el médico)
 
 `mtrHechosSinExamenFisico`/`mtrQuitarExamenFisicoIA` (los nombres que citaba la auditoría)
