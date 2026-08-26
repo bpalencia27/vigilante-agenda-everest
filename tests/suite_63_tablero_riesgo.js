@@ -16,6 +16,7 @@ module.exports = {
     "_vglModalConfirmarDatos",     // v16.3.2 — modal del reconciliador
     "mtrTableroClinico", "mtrRecalcularConFactores", "_tableroFirmaDom",
     "_tableroQueCambio", "openTableroModal", "mtrPanelResumenAlAbrir",
+    "mtrJsonV68DesdeResumen", "mtrResumenClinico",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -165,6 +166,50 @@ module.exports = {
       const fechaVieja = (dViejo.vigentes[0] || dViejo.ordenar[0] || {}).fecha;
       const fechaNueva = (dNuevo.vigentes[0] || dNuevo.ordenar[0] || {}).fecha;
       t.igual(fechaNueva, fechaVieja, "las fechas de los resultados se conservan");
+    });
+
+    // v17.6.86 — auditoría v68 (S4: "MEDS: genérico+dosis+frecuencia; falta -> [DOSIS NO
+    // ESPECIFICADA]"). `mtrRecalcularConFactores` copiaba `medicamentos` pero NO el mapa de
+    // frecuencias, así que el marcador que v17.6.66 construyó para impedir que la IA invente
+    // una posología duraba lo que tardara el médico en escribir el peso o la tensión: al
+    // reclasificar, el JSON dejaba de recibir el mapa y emitía los medicamentos sin marcador.
+    // La nota copiada a la historia quedaba sin las frecuencias Y sin la advertencia de que
+    // faltaban — nadie veía que se había perdido.
+    //
+    // Se prueba de PUNTA A PUNTA (resumen -> reclasificar -> JSON) y con la MISMA hoja en las
+    // dos llamadas: si se probara solo que el campo sobrevive, un cambio que lo copiara pero
+    // rompiera el consumo del JSON pasaría inadvertido.
+    t.caso("v17.6.86: el marcador [DOSIS NO ESPECIFICADA] sobrevive a una reclasificación", () => {
+      const base = a.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 62, sexo: "M", pesoKg: 80, creatinina: 1.4,
+        rac: 20, ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85,
+        factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.4 } },
+      });
+      base.medicamentos = ["ATORVASTATINA 80 MG", "LOSARTAN 50 MG"];
+      base.medicamentosFrecuencia = new Map();   // se consultó el histórico y no trajo frecuencias
+      // Hoja FIJA: el único cambio entre las dos llamadas es el resumen.
+      const hoja = { medicamentos: ["ATORVASTATINA 80 MG", "LOSARTAN 50 MG"] };
+      const conMarcador = (res) => a.mtrJsonV68DesdeResumen(res, hoja)
+        .medicamentos_actuales.every((m) => /\[DOSIS NO ESPECIFICADA\]/.test(m));
+
+      t.cierto(conMarcador(base), "el vector es el que debe ser: sin frecuencias, el marcador está");
+      const nuevo = a.mtrRecalcularConFactores(base, { sedentarismo: true }, "2026-08-26");
+      t.cierto(!!(nuevo && nuevo.medicamentosFrecuencia), "el mapa de frecuencias sobrevive a la reclasificación");
+      t.cierto(conMarcador(nuevo), "y el marcador sigue en el JSON que lee la IA");
+    });
+
+    t.caso("v17.6.86: un mapa CON frecuencias tampoco se pierde al reclasificar", () => {
+      const base = a.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 62, sexo: "M", pesoKg: 80, creatinina: 1.4,
+        factores: { hta: true }, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.4 } },
+      });
+      base.medicamentos = ["LOSARTAN 50 MG"];
+      const fr = new Map(); fr.set("losartan", "CADA 12 HORAS");
+      base.medicamentosFrecuencia = fr;
+      const nuevo = a.mtrRecalcularConFactores(base, { sedentarismo: true }, "2026-08-26");
+      t.cierto(!!(nuevo && nuevo.medicamentosFrecuencia && nuevo.medicamentosFrecuencia.get), "sigue siendo un Map");
+      t.igual(nuevo.medicamentosFrecuencia.get("losartan"), "CADA 12 HORAS", "y conserva su contenido");
     });
 
     t.caso("sin resumen previo no se reclasifica nada (no se inventa un paciente)", () => {

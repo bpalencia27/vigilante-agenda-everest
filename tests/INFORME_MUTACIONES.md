@@ -6,6 +6,43 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.86 — 26-ago-2026 (el marcador [DOSIS NO ESPECIFICADA] se apagaba a los 20 segundos)
+
+Primer hueco de la Fase 1 del plan de fidelidad a v68 (S4: *"MEDS: genérico+dosis+frecuencia;
+falta -> [DOSIS NO ESPECIFICADA]"*).
+
+`mtrRecalcularConFactores` copia del resumen viejo al nuevo una lista larga de campos —
+incluido `medicamentos`— pero **no copiaba `medicamentosFrecuencia`**. Consecuencia: el
+marcador que v17.6.66 construyó para impedir que la IA invente una posología duraba lo que
+tardara el médico en escribir el peso o la tensión en el Panel. Al reclasificar,
+`mtrJsonV68DesdeResumen` dejaba de recibir el mapa y emitía los medicamentos **sin** el
+marcador.
+
+Reproducido con el harness usando la MISMA hoja en las dos llamadas, para que el único
+cambio fuera el resumen:
+
+```
+ANTES  : ["ATORVASTATINA 80 MG [DOSIS NO ESPECIFICADA]", "LOSARTAN 50 MG [DOSIS NO ESPECIFICADA]"]
+DESPUÉS: ["ATORVASTATINA 80 MG", "LOSARTAN 50 MG"]
+```
+
+La nota que el médico copia a la historia quedaba sin las frecuencias **y sin la advertencia
+de que faltaban** — el peor de los dos mundos, porque nadie ve que se perdió. Un Map vacío es
+un dato ("se preguntó y no hay frecuencias"), distinto de `undefined` ("no se preguntó"), así
+que la guarda comprueba que sea un Map y no que tenga contenido.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **copia del mapa** | se retiraron las tres líneas que copian `medicamentosFrecuencia` en `mtrRecalcularConFactores` | `suite_63` | *v17.6.86: el marcador [DOSIS NO ESPECIFICADA] sobrevive a una reclasificación* **y** *v17.6.86: un mapa CON frecuencias tampoco se pierde al reclasificar* |
+
+Las pruebas son de **punta a punta** (resumen → reclasificar → JSON) a propósito: probar solo
+que el campo sobrevive dejaría pasar un cambio que lo copiara pero rompiera su consumo en el
+JSON. Es la lección que este informe ya anotó tres versiones seguidas — *probar la pieza no es
+probar que la pieza está conectada*.
+
+Mutación aplicada sobre producción desde copia intacta, caída con las dos aserciones
+esperadas, y restaurada verificando `diff`. Banco en 2310/2310.
+
 ## v17.6.85 — 26-ago-2026 (el sexo del paciente: la cabecera de la historia como respaldo, y la mina de la guarda)
 
 Encargo del médico, literal: *"el script debe buscar la manera de encontrar qué sexo es el

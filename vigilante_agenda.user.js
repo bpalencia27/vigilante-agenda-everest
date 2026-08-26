@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.85
+// @version     17.6.86
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.85";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.86";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -26036,6 +26036,20 @@ _vglOfrecerDeshacer(btn);
       nuevo._embarazo = (r._embarazo !== undefined ? r._embarazo : null);
       if (Array.isArray(r.medicamentos)) nuevo.medicamentos = r.medicamentos.slice();
       else if (r.medicamentos === null) nuevo.medicamentos = null;   // «no se pudo leer» se conserva
+      // v17.6.86 — auditoría v68 (S4, "MEDS: genérico+dosis+frecuencia; falta -> [DOSIS NO
+      // ESPECIFICADA]"). El mapa de frecuencias NO se copiaba, aunque `medicamentos` sí. El
+      // marcador que v17.6.66 construyó para impedir que la IA invente una posología duraba
+      // lo que tardara el médico en escribir el peso o la tensión en el Panel: al
+      // reclasificar, `mtrJsonV68DesdeResumen` dejaba de recibir el mapa y emitía los
+      // medicamentos SIN el marcador. Verificado con el harness, misma hoja en las dos
+      // llamadas: antes ["ATORVASTATINA 80 MG [DOSIS NO ESPECIFICADA]", …], después
+      // ["ATORVASTATINA 80 MG", …]. La nota que el médico copia a la historia quedaba sin
+      // las frecuencias Y sin la advertencia de que faltaban — el peor de los dos mundos,
+      // porque nadie ve que se perdió. Mismo trato que `medicamentos`: un Map vacío es un
+      // dato ("se preguntó y no hay frecuencias"), distinto de `undefined` ("no se preguntó").
+      if (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function") {
+        nuevo.medicamentosFrecuencia = r.medicamentosFrecuencia;
+      }
     } catch (e) {}
     return nuevo;
   }
