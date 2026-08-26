@@ -6,6 +6,65 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.84 — 26-ago-2026 (tres decisiones del médico sobre la auditoría v68: constancia legal, piso de HbA1c y el tercer eje de falla)
+
+Las tres salen de una entrevista al médico el 26-ago sobre los hallazgos abiertos de la
+auditoría v68. Ninguna es interpretación mía: cada una es una respuesta suya.
+
+**1. El prompt pedía una constancia médico-legal que ningún campo respalda** (decisión:
+"Cortar la mención ahora"). La sección de LOGÍSTICA del prompt de Análisis y Plan le pedía
+al modelo redactar la constancia de *"toma previa incumplida por barrera de acceso no
+imputable al profesional"* — pero **ningún campo del JSON le dice si eso ocurrió**: el
+script todavía no persiste si la FTL anterior se cumplió. El modelo solo podía omitirla
+siempre o inventársela, y una constancia inventada tiene consecuencia jurídica sobre un
+paciente que quizá sí fue a tomarse los exámenes. Es el mismo criterio con el que
+`falla_dispensacion` se dejó fija en "NO" (v17.6.78): casilla vacía antes que dato
+inventado, y con más razón cuando el dato es una afirmación jurídica. La constancia por
+falla de dispensación NO se toca: esa sí está atada a un campo real del JSON.
+
+**2. La regla del 50% sacaba la HbA1c por debajo de su propio piso** (decisión: "Sí, piso de
+90 días"). La regla del 50% (v16.2.7) partía la vigencia de cualquier analito fuera de meta
+sin mirar si el resultado seguía siendo interpretable. En ERC G4 la HbA1c vale 120 días, así
+que una HbA1c fuera de meta se volvía a pedir **a los 60** — por debajo del piso de 90 que el
+propio motor ya declara en `MTR_RECONTROL.hba1c.pisoDias`. En G4 la vida del eritrocito ya
+está acortada: repetirla a los 60 días no es interpretable como respuesta al tratamiento,
+gasta un cupo de alto costo y le suma un viaje al paciente. El piso se lee de
+`MTR_RECONTROL` para que viva en un solo sitio y nunca ALARGA una vigencia (si la norma ya da
+menos que el piso, manda la norma).
+
+**3. La glicemia, el tercer eje de falla que v68 exige y que nunca se cableó** (decisión:
+meta de **130 mg/dL**). v68 manda vigilar la falla en tres ejes (LDL/glicemia/HbA1c) y el
+tercero no existía: lo bloqueaba que **no hubiera meta de glicemia en ninguna parte del
+archivo** — y v68 tampoco la da. Con la meta del médico y el umbral único del proyecto
+(meta+15%), la falla arranca en 149,5 mg/dL. Solo aplica a diabéticos, igual que la HbA1c.
+Sin este eje, un diabético con la glicemia disparada y la HbA1c todavía vigente no disparaba
+falla ni recontrol de 2-4 semanas: el descontrol glucémico agudo pasaba entero por debajo del
+radar de S2, porque la HbA1c —lo único que se vigilaba— se mueve en 90-120 días.
+De paso se cerró el medio cableado que habría dejado el eje inerte: `mtrEjesEnFalla` decidía
+el eje metabólico solo por el ESTADO del driver (ausente/vencido) y nunca por la falla
+terapéutica —al contrario que el lipídico, que sí cuenta `meta.falla`—, así que un diabético
+con la glicemia en 260 y todos sus laboratorios frescos disparaba la falla pero no el foco.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **piso de HbA1c** | `mtrAcortarPorFueraDeMeta`: se retiró el `Math.min(vigencia, Math.max(acortada, piso))` | `suite_49` | *v17.6.84: la regla del 50% nunca baja la HbA1c por debajo de su piso de 90 días* |
+| **tercer eje** | la rama `if (c.esDm2 && c.glicemia …)` de `mtrPlanFallas` anulada con `false &&` | `suite_49` | *…la glicemia es el tercer eje de falla, con meta de 130 mg/dL* — y también *…el eje llega cableado desde mtrResumenClinico* |
+| **cableado del eje** | el respaldo `c.ultimos.GLUCOSA` de `mtrResumenClinico` devuelto a `null` (el eje existe pero nadie lo alimenta) | `suite_49` | *…el eje llega cableado desde mtrResumenClinico, no nace muerto* |
+| **constancia legal** | la frase devuelta al prompt de LOGÍSTICA | `suite_57` | *…el prompt NO puede pedir una constancia médico-legal que ningún campo respalda* |
+| **foco metabólico** | `mtrEjesEnFalla`: se quitaron `fallaDe("HbA1c") \|\| fallaDe("Glicemia")` | `suite_48` | *…la falla terapéutica de glicemia/HbA1c enciende el eje metabólico aunque el driver esté vigente* |
+
+Nota honesta sobre la última fila, y es la segunda vez que pasa en dos versiones: **la
+primera prueba que escribí para el foco metabólico NO cazaba la mutación.** Afirmaba
+`foco === "metabólico"` sobre un diabético, y en un diabético el programa rector ya devuelve
+"metabólico" por su cuenta — la aserción pasaba igual con el código roto (el banco quedó en
+2302/2302 con la mutación aplicada). Se reescribió apuntando directamente a
+`mtrEjesEnFalla(...).metabolico` con los drivers en estado vigente, y entonces sí cayó.
+Queda anotado: una aserción sobre el resultado FINAL puede estar siendo satisfecha por un
+camino distinto del que se quiere probar.
+
+Las cinco mutaciones se aplicaron de una en una sobre producción (cada una desde una copia
+intacta), y el archivo se restauró verificando `diff` contra ella. Banco en 2303/2303.
+
 ## v17.6.83 — 26-ago-2026 (auditoría v68 del port, bloque S5: el foco y las banderas de la salida)
 
 Auditoría nueva del `MOTOR_RCV_V68_SPEC.md` contra el código de HOY (la del 25-ago quedó

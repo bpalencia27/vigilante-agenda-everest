@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.83
+// @version     17.6.84
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.83";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.84";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30526,10 +30526,34 @@ _vglOfrecerDeshacer(btn);
 
   // La mitad, nunca menos de 1 día. Se aplica DESPUÉS de colapsar el rango y
   // DESPUÉS del ajuste renal, sobre el número que de verdad se iba a usar.
-  function mtrAcortarPorFueraDeMeta(vigencia, fuera) {
+  //
+  // v17.6.84 — auditoría v68 (S2 "Recontrol: HbA1c mín 90d"), decisión del médico 26-ago
+  // ("Sí, piso de 90 días"): la regla del 50% partía la vigencia de CUALQUIER analito sin
+  // mirar si el resultado seguía siendo interpretable. En ERC G4 la HbA1c vale 120 días, así
+  // que una HbA1c fuera de meta se volvía a pedir a los 60 — por debajo del piso de 90 que el
+  // propio motor ya declara en MTR_RECONTROL.hba1c.pisoDias. En G4 la vida del eritrocito ya
+  // está acortada y la HbA1c es menos fiable: repetirla a los 60 días no es interpretable
+  // como respuesta al tratamiento, gasta un cupo de alto costo y le suma un viaje al
+  // paciente. El piso se lee de MTR_RECONTROL para que viva en UN solo sitio (el mismo del
+  // que sale la fecha de recontrol de la falla terapéutica) y las dos no puedan divergir.
+  // Para el LDL el piso equivalente (28 d) nunca se alcanza con estas vigencias, así que
+  // esta guarda no le cambia nada.
+  // Solo las claves que de verdad pueden acortarse: son las de MTR_CLAVES_CON_META. La
+  // glicemia NO está ahí (mtrFueraDeMeta devuelve null para GLUCOSA), así que no se lista
+  // aquí un piso que nunca se aplicaría — sería código que insinúa un comportamiento que no
+  // existe. Si algún día la glicemia entra en MTR_CLAVES_CON_META, su piso se añade aquí.
+  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl" };
+  function mtrAcortarPorFueraDeMeta(vigencia, fuera, clave) {
     if (fuera !== true) return vigencia;
     if (typeof vigencia !== "number" || !isFinite(vigencia)) return vigencia;
-    return Math.max(1, Math.floor(vigencia / 2));
+    const acortada = Math.max(1, Math.floor(vigencia / 2));
+    const k = MTR_PISO_ACORTAMIENTO[String(clave == null ? "" : clave).trim().toUpperCase()];
+    const ventana = k ? mtrVentanaRecontrol(k) : null;
+    const piso = ventana && typeof ventana.pisoDias === "number" ? ventana.pisoDias : null;
+    // El piso nunca ALARGA por encima de la vigencia normativa: si la norma ya da menos que
+    // el piso, manda la norma (acortar es seguro, estirar una vigencia no lo es).
+    if (piso === null) return acortada;
+    return Math.min(vigencia, Math.max(acortada, piso));
   }
 
   // =====================================================================
@@ -30606,7 +30630,7 @@ _vglOfrecerDeshacer(btn);
     // el siguiente control no puede esperar la vigencia completa, que está pensada para
     // un paciente controlado.
     const fueraMeta = mtrFueraDeMeta(clave, valor, c);
-    const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta);
+    const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
     if (!fecha) {
       // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
       // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
@@ -31444,7 +31468,18 @@ _vglOfrecerDeshacer(btn);
     "===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL (eGFR CKD-EPI y estadio clínico; CrCl como referencia; evolución; RAC como daño de órgano blanco; injuria/progresión como prioritario; remisión si aplica); :: PERFIL LIPÍDICO (CT, HDL, LDL, TG y cNoHDL, en meta o falla, con tendencia; TG≥500 riesgo de pancreatitis); :: METABOLISMO GLUCÍDICO (glicemia y HbA1c si diabetes; si no: 'HEMOGLOBINA GLICOSILADA NO SOLICITADA POR AUSENCIA DE DIAGNÓSTICO DE DIABETES MELLITUS'); :: ANÁLISIS DE METAS.",
     "===== SECCIÓN: PLAN FARMACOLÓGICO Y JUSTIFICACIÓN ===== Si alertas_dosis NO está vacío, ÁBRELA con 'AJUSTE DE DOSIS POR FUNCIÓN RENAL:' y un renglón propio por cada ajuste (medicamento, dosis actual, dosis sugerida, motivo, TFG usada) antes de cualquier otro contenido de la sección — es intencional que tenga sus propios saltos de línea, para que un ajuste de seguridad no se diluya en la prosa. Luego :: ESQUEMA FARMACOLÓGICO (medicamentos con dosis y frecuencia; si un registro es incompleto, anotar que se completará en próximo control); :: JUSTIFICACIÓN DE AJUSTES (el motivo y la TFG de cada ajuste ya listado arriba, sin repetir las cifras; suspensión de metformina por TFG<30; intensidad de estatina si falla; antihipertensivos para metas y protección renal).",
     "===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA (adaptada a las patologías); :: ACTIVIDAD FÍSICA (150 a 300 minutos semanales de intensidad moderada, adaptada); :: EDUCACIÓN (si education_flags true, reflejar que se explicó adherencia, control, riesgo, signos de alarma y autocuidado).",
-    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list uno por línea (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR EL [control_date].', remisión si aplica, constancia si hubo toma previa incumplida por barrera de acceso no imputable al profesional).",
+    // v17.6.84 — auditoría v68 (S3 "LLEGA TARDE SIN LABS"), decisión del médico 26-ago:
+    // aquí se le PEDÍA al modelo la constancia médico-legal "si hubo toma previa incumplida
+    // por barrera de acceso no imputable al profesional" — pero NINGÚN campo del JSON le dice
+    // si eso ocurrió: el script no persiste todavía si la FTL anterior se cumplió. El modelo
+    // solo podía omitirla siempre o inventársela, y una constancia inventada tiene
+    // consecuencia médico-legal sobre un paciente que quizá sí fue a tomarse los exámenes.
+    // Es el mismo criterio con el que `falla_dispensacion` se dejó fija en "NO" (v17.6.78):
+    // casilla vacía antes que dato inventado, y con más razón cuando el dato es una
+    // afirmación jurídica. Se retira la mención; el médico la escribe a mano cuando aplique.
+    // Cuando exista el campo real (`toma_previa_incumplida`), esta cláusula vuelve — atada a
+    // él, nunca al criterio del modelo.
+    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list uno por línea (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR EL [control_date].', remisión si aplica).",
     "===== SECCIÓN: SEGURIDAD DEL PACIENTE ===== :: URGENCIAS (pautas de alarma cardio y cerebrovascular en tono humano: dolor opresivo en pecho, dificultad para respirar, pérdida repentina de fuerza o del habla, alteración de la cara, dolor de cabeza intenso inusual). Añade la alerta médico-legal si falla_dispensacion aplica.",
     "",
     "# EJEMPLO DE FORMA (solo el patrón '::' de UNA sección; el contenido real sale del JSON)",
@@ -32726,6 +32761,17 @@ _vglOfrecerDeshacer(btn);
       grupoSabado: c.grupoSabado || null, hba1cMeta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta), metaHba1c: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta),
       ldl: (meta && meta.metas && c.ldl != null) ? { actual: c.ldl, meta: meta.metas.ldl } : null,
       hba1c: (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null,
+      // v17.6.84 — el tercer eje. La glicemia se toma del ctx si el llamador la trae, y si
+      // no, del último resultado que ya viajaba en `c.ultimos.GLUCOSA` — el mismo sitio del
+      // que sale para el resto del motor. Ese respaldo es lo que evita que este eje nazca
+      // muerto: el patrón de "la función existe pero ningún llamador la alimenta" ya dejó
+      // inertes a `ldlBasal` (v16.9.0), `hba1c` (v17.6.0) y `ldlMetaPrevia` en este archivo.
+      glicemia: (function () {
+        const directa = mtrFloat(c.glicemia);
+        const deUltimos = (c.ultimos && c.ultimos.GLUCOSA) ? mtrFloat(c.ultimos.GLUCOSA.valor) : null;
+        const val = directa !== null ? directa : deUltimos;
+        return val !== null ? { actual: val, meta: (c.metaGlicemia != null ? mtrFloat(c.metaGlicemia) : null) } : null;
+      })(),
     });
     // Bloques de S5 que dependen del resumen ya armado (foco, banderas, TG y
     // uroanálisis). Se calculan aquí para que el recuadro no tenga que pedirlos
@@ -34392,7 +34438,15 @@ _vglOfrecerDeshacer(btn);
     };
     const renal = !!plan.anr || !!erc.sospechaIra || !!erc.remitirNefrologia
       || enFalla("CREATININA") || enFalla("RAC") || enFalla("UROANALISIS");
-    const metabolico = enFalla("HBA1C") || enFalla("GLUCOSA");
+    // v17.6.84 — el eje metabólico solo miraba el ESTADO del driver (ausente/vencido), nunca
+    // la FALLA TERAPÉUTICA — al contrario que el lipídico, que sí cuenta `meta.falla`. Con la
+    // glicemia recién incorporada como tercer eje de falla (decisión del médico, 26-ago), un
+    // diabético con la glicemia en 260 y todos sus laboratorios frescos disparaba la falla
+    // pero NO el foco metabólico: el eje habría nacido medio cableado. `r.fallas` está
+    // disponible aquí desde v17.6.83, que subió su cálculo por encima del foco.
+    const fallasS2 = (r.fallas && Array.isArray(r.fallas.fallas)) ? r.fallas.fallas : [];
+    const fallaDe = (nombre) => fallasS2.some((f) => f && f.analito === nombre);
+    const metabolico = enFalla("HBA1C") || enFalla("GLUCOSA") || fallaDe("HbA1c") || fallaDe("Glicemia");
     const lipidico = enFalla("COLESTEROL_LDL") || enFalla("TRIGLICERIDOS")
       || !!(meta && (meta.falla || meta.fallaGrave));
     return { renal: renal, metabolico: metabolico, lipidico: lipidico };
@@ -34594,6 +34648,16 @@ _vglOfrecerDeshacer(btn);
   // ata el recontrol de glicemia a la HbA1c, no a un número de corte propio.
   const MTR_HBA1C_META_DM2 = 7.0;
 
+  // v17.6.84 — auditoría v68 (S2: "FALLA (LDL/glicemia/HbA1c DM2)"), decisión del médico
+  // del 26-ago. v68 manda vigilar la falla terapéutica en TRES ejes, pero el tercero
+  // —glicemia en ayunas— nunca se cableó, y lo que lo bloqueaba era que NO EXISTÍA una meta
+  // de glicemia en ninguna parte del archivo: v68 tampoco la da. El médico la fija en
+  // 130 mg/dL (meta prepandial habitual en DM2), así que con el umbral único del proyecto
+  // (meta+15%) la falla arranca en 149,5 mg/dL. Solo aplica a diabéticos, igual que la
+  // HbA1c: en un hipertenso sin diabetes una glicemia de 135 no es "falla terapéutica".
+  const MTR_GLICEMIA_META_DM2 = 130;
+  function mtrMetaGlicemiaGeneral() { return MTR_GLICEMIA_META_DM2; }
+
   // v17.6.3 — FLUJO COMPLETO DE LA META DE HbA1c (decisión del médico, 22-ago):
   // la meta GENERAL ahora se configura en Ajustes (S.metaHba1cGeneral, 5–12 %);
   // la meta INDIVIDUAL del paciente (botón ✏️ del Panel, `metaHba1cManual`) gana
@@ -34769,6 +34833,20 @@ _vglOfrecerDeshacer(btn);
       if (f.falla) {
         fallas.push(f);
         if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("hba1c", c.hoyIso, c) || {}));
+      }
+    }
+
+    // Glicemia en ayunas (solo DM2) — v17.6.84, el TERCER eje que v68 exige y que faltaba.
+    // Sin este eje, un diabético con la glicemia disparada y la HbA1c todavía vigente (o
+    // ausente) no disparaba falla, ni recontrol de 2-4 semanas, ni entraba en el foco
+    // metabólico: el descontrol glucémico agudo pasaba entero por debajo del radar de S2,
+    // porque la HbA1c —lo único que se vigilaba— se mueve en 90-120 días.
+    if (c.esDm2 && c.glicemia && c.glicemia.actual != null) {
+      const metaGlic = c.glicemia.meta != null ? c.glicemia.meta : mtrMetaGlicemiaGeneral();
+      const f = mtrEvaluarFalla("Glicemia", c.glicemia.actual, metaGlic, c);
+      if (f.falla) {
+        fallas.push(f);
+        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("glicemia", c.hoyIso, c) || {}));
       }
     }
 

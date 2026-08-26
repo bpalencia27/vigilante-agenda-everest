@@ -300,6 +300,33 @@ module.exports = {
       t.falso(api.mtrEjesEnFalla(racVigente).renal, "un RAC en R pero VIGENTE no es falla");
     });
 
+    // v17.6.84 — el eje metabólico solo miraba el ESTADO del driver (ausente/vencido), nunca
+    // la FALLA TERAPÉUTICA — al contrario que el lipídico, que sí cuenta `meta.falla`. Con la
+    // glicemia recién incorporada como tercer eje de falla, un diabético con la glicemia en
+    // 260 y TODOS sus laboratorios frescos disparaba la falla pero no el foco: el eje habría
+    // nacido medio cableado. Se comprueba contra mtrEjesEnFalla directamente y no a través
+    // del foco, porque en un diabético el programa rector ya devuelve "metabólico" por su
+    // cuenta y la aserción pasaría igual con el código roto.
+    t.caso("v17.6.84: la falla terapéutica de glicemia/HbA1c enciende el eje metabólico aunque el driver esté vigente", () => {
+      const driversVigentes = [{ clave: "GLUCOSA", estado: "D" }, { clave: "HBA1C", estado: "D" }];
+      const conGlicemia = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [{ analito: "Glicemia", gravedad: "grave" }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(conGlicemia).metabolico, "glicemia en falla -> eje metabólico");
+      const conHba1c = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [{ analito: "HbA1c", gravedad: "leve" }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(conHba1c).metabolico, "HbA1c en falla -> eje metabólico");
+      const sinFalla = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [] },
+      });
+      t.falso(api.mtrEjesEnFalla(sinFalla).metabolico,
+        "con los drivers vigentes y sin falla, el eje sigue apagado");
+    });
+
     // ================= EDUCACIÓN =================
 
     t.caso("las alarmas se encienden en muy alto riesgo o cuando hay falla", () => {

@@ -62,6 +62,31 @@ module.exports = {
       t.cierto(/BLINDAJE MÉDICO-LEGAL/i.test(nc.system), "nota: blindaje médico-legal");
     });
 
+    // v17.6.84 — auditoría v68 (S3 "LLEGA TARDE SIN LABS"), decisión del médico del 26-ago
+    // ("Cortar la mención ahora"). El prompt le PEDÍA al modelo redactar la constancia
+    // médico-legal de "toma previa incumplida por barrera de acceso no imputable al
+    // profesional", pero NINGÚN campo del JSON le dice si eso ocurrió: el script todavía no
+    // persiste si la FTL anterior se cumplió. El modelo solo podía omitirla siempre o
+    // inventársela — y una constancia inventada tiene consecuencia jurídica sobre un
+    // paciente que quizá sí fue a tomarse los exámenes. Mismo criterio con el que
+    // `falla_dispensacion` se dejó fija en "NO" (v17.6.78).
+    t.caso("v17.6.84: el prompt NO puede pedir una constancia médico-legal que ningún campo respalda", () => {
+      const nota = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {});
+      const todo = String(nota.system) + "\n" + String(nota.user);
+      t.falso(/toma previa incumplida/i.test(todo),
+        "no se le pide al modelo la constancia de toma previa incumplida");
+      t.falso(/no imputable al (?:profesional|médico)/i.test(todo),
+        "ni la fórmula jurídica de 'no imputable al profesional'");
+      // Lo que SÍ debe seguir pidiéndose en esa misma sección, para probar que el corte fue
+      // quirúrgico y no se llevó por delante la logística entera.
+      t.cierto(/CITA CONTROL DE RIESGO CARDIOVASCULAR/i.test(todo), "la cita de control sigue pidiéndose");
+      t.cierto(/PRÓXIMOS LABORATORIOS/i.test(todo), "y los próximos laboratorios también");
+      // La constancia por falla de dispensación es DISTINTA: esa sí tiene campo en el JSON
+      // (`falla_dispensacion`), aunque hoy salga fija en "NO". No se toca.
+      t.cierto(/falla_dispensacion/.test(todo),
+        "la constancia por falla de dispensación se conserva: está atada a un campo real del JSON");
+    });
+
     // v17.3.0 — AUDITORÍA PEDIDA POR EL MÉDICO (21-ago): un borrador real de Enfermedad
     // Actual traía valores de laboratorio y una clasificación de riesgo — dato que no va
     // en esa sección por convención propia de su historia clínica. Raíz: mtrRedaccionPrompt

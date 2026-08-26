@@ -19,6 +19,7 @@ module.exports = {
     "mtrGravedadFalla", "mtrEvaluarFalla", "mtrVentanaRecontrol", "mtrFechaRecontrol",
     "mtrDosisDeTexto", "mtrEstatinaAltaIntensidad", "mtrInerciaEstatina",
     "mtrConsolidarMtt", "mtrPlanFallas", "mtrTelemetriaResumen",
+    "mtrMetaGlicemiaGeneral", "mtrAcortarPorFueraDeMeta",
   ],
 
   pruebas(t, api) {
@@ -65,6 +66,28 @@ module.exports = {
       t.igual(api.mtrVentanaRecontrol("hba1c").minDias, 90, "HbA1c mínimo 90 días");
       t.igual(api.mtrVentanaRecontrol("glicemia").minDias, 14, "glicemia 2 semanas");
       t.igual(api.mtrVentanaRecontrol("desconocido"), null, "un analito fuera de la lista no inventa ventana");
+    });
+
+    // v17.6.84 — decisión del médico del 26-ago ("Sí, piso de 90 días"). La regla del 50%
+    // (v16.2.7) partía la vigencia de cualquier analito fuera de meta sin mirar si el
+    // resultado seguía siendo interpretable. En ERC G4 la HbA1c vale 120 días, así que una
+    // HbA1c fuera de meta se volvía a pedir a los 60 — por debajo del piso de 90 que el
+    // propio motor declara en MTR_RECONTROL. En G4 la vida del eritrocito ya está acortada:
+    // repetirla a los 60 días no es interpretable como respuesta al tratamiento, gasta un
+    // cupo de alto costo y le suma un viaje al paciente.
+    t.caso("v17.6.84: la regla del 50% nunca baja la HbA1c por debajo de su piso de 90 días", () => {
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "HBA1C"), 90,
+        "ERC G4: 120 días fuera de meta se quedan en 90, no en 60");
+      t.igual(api.mtrAcortarPorFueraDeMeta(180, true, "HBA1C"), 90,
+        "y desde 180 el 50% ya da 90 justo: sin cambio");
+      t.igual(api.mtrAcortarPorFueraDeMeta(60, true, "HBA1C"), 60,
+        "si la NORMA ya da menos que el piso, manda la norma: el piso nunca ALARGA una vigencia");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, false, "HBA1C"), 120,
+        "en meta no se acorta nada");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "COLESTEROL_LDL"), 60,
+        "el LDL no cambia: su piso (28 d) no se alcanza con estas vigencias");
+      t.igual(api.mtrAcortarPorFueraDeMeta(120, true, "TRIGLICERIDOS"), 60,
+        "un analito sin piso declarado conserva el comportamiento de siempre");
     });
 
     t.caso("la fecha de recontrol respeta el piso y cae en día hábil", () => {
@@ -161,6 +184,61 @@ module.exports = {
       const plan = api.mtrPlanFallas({ hoyIso: "2026-08-16", esDm2: true });
       t.igual(plan.fallas.length, 0, "cero fallas");
       t.igual(plan.inercia, null, "y nada de inercia");
+    });
+
+    // ============ EL TERCER EJE: GLICEMIA (v17.6.84) ============
+    // v68 manda vigilar la falla en TRES ejes (LDL/glicemia/HbA1c) y el tercero nunca se
+    // cableó: lo bloqueaba que no existiera meta de glicemia en el archivo — v68 tampoco la
+    // da. El médico la fijó en 130 mg/dL el 26-ago. Sin este eje, un diabético con la
+    // glicemia disparada y la HbA1c todavía vigente no disparaba falla ni recontrol: el
+    // descontrol agudo pasaba por debajo del radar, porque la HbA1c se mueve en 90-120 días.
+    t.caso("v17.6.84: la glicemia es el tercer eje de falla, con meta de 130 mg/dL", () => {
+      t.igual(api.mtrMetaGlicemiaGeneral(), 130, "la meta que fijó el médico");
+      const base = { hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55, esDm2: true };
+      const enMargen = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 140 } }));
+      t.igual(enMargen.fallas.length, 0, "140 está dentro del margen (meta+15% = 149,5)");
+      const leve = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 160 } }));
+      t.igual(leve.fallas.length, 1, "160 sí es falla");
+      t.igual(leve.fallas[0].analito, "Glicemia", "y es del eje de la glicemia");
+      t.igual(leve.fallas[0].gravedad, "leve", "por debajo de meta+30% es leve");
+      const grave = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 260 } }));
+      t.igual(grave.fallas[0].gravedad, "grave", "260 supera la meta en más del 30%");
+      t.cierto(grave.recontroles.length > 0, "y una falla grave programa recontrol");
+    });
+
+    t.caso("v17.6.84: en un no diabético la glicemia NO es falla terapéutica", () => {
+      const noDm2 = api.mtrPlanFallas({
+        hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55,
+        esDm2: false, glicemia: { actual: 260 },
+      });
+      t.igual(noDm2.fallas.filter((f) => f.analito === "Glicemia").length, 0,
+        "en un hipertenso sin diabetes, una glicemia alta no es 'falla del tratamiento'");
+    });
+
+    t.caso("v17.6.84: el eje llega cableado desde mtrResumenClinico, no nace muerto", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 55, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        rac: 10, ct: 150, hdl: 50, ldl: 60, paSistolica: 125, paDiastolica: 78,
+        factores: { hta: true, diabetes: true },
+        ultimos: {
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 50 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 60 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 110 },
+          HBA1C:            { fecha: "2026-08-20", valor: 6.5 },   // EN META y vigente
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+          UROANALISIS:      { fecha: "2026-08-01", valor: 1 },
+          GLUCOSA:          { fecha: "2026-08-20", valor: 260 },
+        },
+        ldl: 60, hba1c: 6.5,
+      });
+      // Este es el escenario que el eje existe para cazar: la HbA1c dice que todo va bien
+      // (está en meta y vigente) y la glicemia dice que no.
+      t.cierto(r.fallas && r.fallas.fallas.some((f) => f.analito === "Glicemia"),
+        "la glicemia del ctx llega hasta mtrPlanFallas sin que el llamador la pase a mano");
+      t.igual(r.foco, "metabólico",
+        "y el foco de la consulta refleja esa falla, no solo el estado del driver");
     });
 
     // ================= TELEMETRÍA (BARRERA ANTI-PHI) =================
