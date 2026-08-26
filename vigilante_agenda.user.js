@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.61
+// @version     17.6.62
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.61";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.62";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -23183,7 +23183,12 @@ _vglOfrecerDeshacer(btn);
     bind("#c-eq", "equipo", (n) => n.value);
     const repBtn = q("#c-repgo"); if (repBtn) repBtn.addEventListener("click", async () => {
       q("#c-repn").textContent = "Probando...";
-      const ok = await repPost({ token: TABLERO.token, equipo: (S.equipo || "").slice(0, 40), ver: VERSION, evento: "prueba", ts: new Date().toISOString(), dia: todayStamp() });
+      // v17.6.62 — auditoría 25-ago (sección 7): usaba (S.equipo||"").slice(0,40) en vez de
+      // _equipoId(), el mismo respaldo de id anónimo que reportar() SIEMPRE usa (genera y
+      // persiste un id tipo "eq-xxxxxx" cuando el médico nunca puso un nombre a mano). Sin
+      // nombre manual, "Probar conexión" mandaba equipo:"" y caía en el balde "sin equipo"
+      // del tablero — un equipo distinto del que sus reportes reales de verdad usan.
+      const ok = await repPost({ token: TABLERO.token, equipo: _equipoId(), ver: VERSION, evento: "prueba", ts: new Date().toISOString(), dia: todayStamp() });
       q("#c-repn").textContent = ok ? "✅ Conexión exitosa — la fila llegó al panel de seguimiento." : "❌ No se pudo — abajo va el diagnóstico del embudo.";
       try { q("#c-repdiag").textContent = repDiagnostico().map((g) => (g.ok ? "✓ " : "✗ ") + g.paso + (g.detalle ? " — " + g.detalle : "")).join("\n"); } catch (e2) {}
     });

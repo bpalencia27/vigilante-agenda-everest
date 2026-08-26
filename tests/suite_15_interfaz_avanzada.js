@@ -268,6 +268,30 @@ module.exports = {
       t.igual(cv.api.__state.sheet, null);
     });
 
+    // [auditoría 25-ago, sección 7] "#c-repgo" (Probar conexión, en Ajustes) mandaba
+    // equipo:(S.equipo||"").slice(0,40) en vez de _equipoId() — el mismo respaldo de id
+    // anónimo que reportar() SIEMPRE usa. Sin nombre manual, el botón mandaba equipo:"" y
+    // caía en el balde "sin equipo" del tablero, distinto del equipo real del consultorio.
+    await t.casoAsync("c-repgo (Probar conexión): manda el mismo _equipoId() que usan los reportes reales, nunca vacío", async () => {
+      const posts = [];
+      const cRep = cargar({
+        silencioso: true,
+        gmxhr: (o) => { posts.push(o); o.onload({ status: 200, responseText: '{"ok":true}' }); },
+      });
+      enriquecerDom(cRep);
+      cRep.api.buildOverlay();
+      cRep.api.toggleSheet("ajustes");
+      cRep.api.renderSettings();
+      const hojaRep = cRep.env.doc.body.children.find((n) => n.id === "vgl-root").querySelector("#vgl-sheet");
+      const btn = hojaRep.querySelector("#c-repgo");
+      t.cierto(!!btn, "el botón 'Probar y diagnosticar' debe existir en Ajustes");
+      await disparar(btn, "click");
+      t.igual(posts.length, 1, "se hizo la petición de prueba");
+      const enviado = JSON.parse(posts[0].data);
+      t.cierto(!!enviado.equipo, "el equipo enviado nunca debe quedar vacío (bug real: se enviaba \"\")");
+      t.igual(enviado.equipo, cRep.api._equipoId(), "debe ser EXACTAMENTE el mismo id que usan los reportes reales");
+    });
+
     // ================= paintMute =================
     t.caso("paintMute: pinta el silencio activo con minutos restantes y vuelve al estado normal", () => {
       const botonMute = cv.env.doc.createElement("button");

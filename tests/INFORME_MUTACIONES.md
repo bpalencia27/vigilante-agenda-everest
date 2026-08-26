@@ -6,6 +6,21 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.62 — 26-ago-2026 (auditoría 25-ago, sección 7: "Probar conexión" no usaba el mismo respaldo de id anónimo)
+
+El botón "Probar y diagnosticar" (`#c-repgo`, en Ajustes) mandaba
+`equipo: (S.equipo||"").slice(0,40)` en vez de `_equipoId()` — el mismo respaldo que
+`reportar()` SIEMPRE usa (genera y persiste un id anónimo tipo `eq-xxxxxx` cuando el médico
+nunca puso un nombre a mano). Sin nombre manual, el botón mandaba `equipo:""` y esa fila de
+prueba caía en el balde "sin equipo" del tablero — un equipo distinto del que los reportes
+reales de ese mismo consultorio usan. Fix de una línea: `equipo: _equipoId()`.
+
+- **Mutación**: se revirtió a `(S.equipo||"").slice(0,40)`. 1 roja: *"c-repgo (Probar
+  conexión): manda el mismo _equipoId()..."* (equipo enviado vacío). Restaurado, banco
+  vuelve a 2223 en verde.
+- **Prueba nueva**: `tests/suite_15_interfaz_avanzada.js` — 1 caso, instancia propia con
+  `gmxhr` mockeado para capturar el payload real enviado al hacer clic en el botón.
+
 ## v17.6.61 — 26-ago-2026 (auditoría 25-ago, sección 6: `GHOST.subscribe` — código muerto confirmado)
 
 `listeners`/`subscribe`/`notify` en `GHOST` formaban un pub-sub que nadie suscribía en todo
