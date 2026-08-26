@@ -6,6 +6,42 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.72 — 26-ago-2026 (ítem 2 / auditoría 25-ago 1.15: grupo de lípidos, vigencia = la más corta — decisión del médico)
+
+Colesterol Total, HDL, LDL y Triglicéridos salen de UNA sola muestra de sangre. Antes,
+`mtrPlanParaclinicos` evaluaba la "cosecha" (si un examen vigente vale la pena adelantar
+a la visita actual) de cada uno de los 4 de forma completamente independiente, contra SU
+PROPIA vigencia individual — así que si, por ejemplo, el colesterol total estaba VENCIDO
+pero el HDL (con una vigencia individual más larga, ver CORRECCIÓN 1 de esta misma
+suite: ERC G4 da 120 días a total/LDL/triglicéridos pero 180 a HDL) todavía tenía margen
+de sobra, el HDL quedaba DIFERIDO a un viaje futuro aparte — obligando al paciente a una
+segunda punción solo para el HDL semanas o meses después.
+
+Decisión del médico: "vigencia del grupo de lípidos = la más corta (Recomendado)" —
+cuando CUALQUIERA de los 4 necesita repetirse pronto según su propia vigencia (faltante,
+vencido, o cosechado por margen), los 4 se ordenan juntos en la misma visita.
+
+**El fix**: en `mtrPlanParaclinicos`, justo después del bucle de cosecha existente, un
+paso nuevo revisa si algún miembro de `MTR_GRUPO_LIPIDOS` (los 4 claves) ya está en
+`faltantes`, `vencidos` o `cosechados` — y si es así, mueve TODOS los demás miembros del
+grupo que sigan en `diferidos` hacia `cosechados` (de donde `ordenar` ya los recoge). Sin
+ningún disparador dentro del grupo, nadie se mueve: el comportamiento previo (cada lípido
+por su propia vigencia) se conserva intacto cuando nadie del grupo lo necesita todavía —
+verificado con una prueba de "no falsos positivos" dedicada.
+
+**Mutación verificada**: se respaldó el archivo, se eliminó con `python3` el bloque
+completo del paso nuevo (dejando `mtrPlanParaclinicos` exactamente como estaba antes).
+`TZ=America/Bogota node tests/runner.js` puso rojas EXACTAMENTE las 2 pruebas que
+verifican el arrastre entre miembros del grupo (2259 pasan / 2 fallan: "el HDL se ordena
+JUNTO..." y "el HDL, con vigencia de sobra por su cuenta, se arrastra igual", ambas con
+"obtuvo false"); la prueba de "sin disparador, nadie se adelanta a la fuerza" siguió en
+verde como corresponde (esa prueba protege la ausencia del efecto, no su presencia). Se
+restauró desde el backup y el banco volvió a 2261 pruebas en verde. Se añadieron 3
+pruebas nuevas en `tests/suite_46_ftl_sabados.js`: colesterol total vencido arrastra a
+los otros 3, ningún disparador no adelanta nada (control negativo), y un lípido
+COSECHADO (no vencido) también arrastra a los demás — las tres formas de "necesitar
+repetirse pronto" (faltante/vencido/cosechado) quedan cubiertas.
+
 ## v17.6.71 — 26-ago-2026 (ítem 0-E: panel IA minimizado sobrevivía al cambio de paciente — reportado en consultorio)
 
 **El reporte**: el médico minimizó el módulo de Redacción IA mientras atendía a un

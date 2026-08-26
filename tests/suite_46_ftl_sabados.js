@@ -257,6 +257,91 @@ module.exports = {
       t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"), "la creatinina que fija la fecha va incluida");
     });
 
+    // =====================================================================
+    // v17.6.72 — auditoría 25-ago (1.15): GRUPO DE LÍPIDOS, vigencia = la más corta
+    // (decisión del médico). Colesterol Total, HDL, LDL y Triglicéridos salen de UNA
+    // sola muestra de sangre: si CUALQUIERA de los 4 ya necesita repetirse en esta
+    // visita, los otros tres SE ORDENAN JUNTOS, aunque su propia vigencia individual
+    // todavía les dé margen — no tiene sentido diferirlos a un viaje aparte cuando el
+    // tubo ya se está tomando hoy por otro lípido del mismo panel.
+    //
+    // ERC G4 es el estadio donde la norma YA distingue vigencias distintas dentro del
+    // grupo (colesterol_total/ldl/trigliceridos = 120 días, hdl = 180 días — ver
+    // CORRECCIÓN 1 más arriba en esta suite), lo que permite construir el escenario
+    // real: un colesterol total VENCIDO (120 días, dato viejo) junto a un HDL reciente
+    // que, por sí solo, con 180 días de vigencia, tendría margen de sobra y quedaría
+    // diferido bajo la regla individual.
+    // =====================================================================
+    t.caso("GRUPO DE LÍPIDOS (1.15): un colesterol total VENCIDO arrastra a HDL/LDL/Triglicéridos aunque individualmente aún tengan margen", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: "G4",
+        esDm2: false, edad: 68, rac: 12,
+        ultimos: {
+          COLESTEROL_TOTAL: { fecha: "2026-01-01", valor: 190 },   // vigencia 120 d: ya vencido
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 45 },      // vigencia 180 d: solísimo, mucho margen
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 90 },      // vigencia 120 d: también con margen
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 120 },      // vigencia 120 d: también con margen
+        },
+      });
+      t.cierto(plan.vencidos.some((a) => a.clave === "COLESTEROL_TOTAL"), "el colesterol total está vencido: dispara el grupo");
+      const claveEnOrdenar = (k) => plan.ordenar.some((a) => a.clave === k);
+      t.cierto(claveEnOrdenar("COLESTEROL_HDL"), "el HDL se ordena JUNTO, aunque su propia vigencia de 180 días le diera margen de sobra");
+      t.cierto(claveEnOrdenar("COLESTEROL_LDL"), "el LDL también");
+      t.cierto(claveEnOrdenar("TRIGLICERIDOS"), "y los triglicéridos también — los 4 en la MISMA visita");
+      t.cierto(plan.cosechados.some((a) => a.clave === "COLESTEROL_HDL"), "el HDL queda como COSECHADO, no como faltante/vencido por su cuenta");
+      t.igual(plan.diferidos.filter((a) => ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"].indexOf(a.clave) >= 0).length, 0,
+        "ningún miembro del grupo de lípidos queda diferido cuando otro del mismo grupo ya dispara la visita");
+    });
+
+    t.caso("GRUPO DE LÍPIDOS (1.15): si NINGÚN lípido individualmente necesita repetirse, el grupo NO se adelanta a la fuerza (sin falsos positivos)", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: "G4",
+        esDm2: false, edad: 68, rac: 12,
+        ultimos: {
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 90 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 120 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 95 },
+          UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+          CREATININA: { fecha: "2026-08-01", valor: 2.0 },
+          RAC: { fecha: "2026-08-01", valor: 12 },
+        },
+      });
+      const claves4 = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"];
+      t.igual(plan.ordenar.filter((a) => claves4.indexOf(a.clave) >= 0).length, 0,
+        "sin ningún disparador dentro del grupo, ninguno de los 4 se adelanta — el grupo respeta la vigencia individual cuando nadie la necesita todavía");
+      t.igual(plan.diferidos.filter((a) => claves4.indexOf(a.clave) >= 0).length, 4, "los 4 quedan diferidos, como antes de esta regla");
+    });
+
+    t.caso("GRUPO DE LÍPIDOS (1.15): un miembro del grupo COSECHADO (no vencido/faltante) también arrastra a los demás", () => {
+      // Mismo mecanismo, pero el disparador es un lípido que está VIGENTE y se cosechó
+      // por su PROPIA vigencia (dentro del margen del 33%), no uno vencido — la regla
+      // debe reaccionar igual ante cualquiera de las tres formas de "necesitar
+      // repetirse pronto": faltante, vencido o cosechado.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: "G4",
+        esDm2: false, edad: 68, rac: 12,
+        ultimos: {
+          // vigencia 120 d; con fecha 2026-04-25 vence ~2026-08-23 — dentro del margen
+          // del 33% de 120 (≈40 días) respecto a un FTL cercano a hoy: se cosecha solo.
+          TRIGLICERIDOS: { fecha: "2026-04-25", valor: 120 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 90 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 95 },
+          UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+          CREATININA: { fecha: "2026-08-01", valor: 2.0 },
+          RAC: { fecha: "2026-08-01", valor: 12 },
+        },
+      });
+      t.cierto(plan.cosechados.some((a) => a.clave === "TRIGLICERIDOS"), "los triglicéridos se cosechan por su propia vigencia (control del escenario)");
+      t.falso(plan.vencidos.some((a) => a.clave === "TRIGLICERIDOS"), "y no están vencidos: el disparador es la cosecha, no el vencimiento");
+      t.cierto(plan.ordenar.some((a) => a.clave === "COLESTEROL_HDL"), "el HDL, con vigencia de sobra por su cuenta, se arrastra igual");
+      t.cierto(plan.ordenar.some((a) => a.clave === "COLESTEROL_LDL"), "el LDL también");
+      t.cierto(plan.ordenar.some((a) => a.clave === "COLESTEROL_TOTAL"), "y el colesterol total también");
+    });
+
     t.caso("los exámenes bloqueados por estadio no entran en la orden", () => {
       const plan = api.mtrPlanParaclinicos(Object.assign({}, ctxErc, {
         estadioAdministrativo: "G1", ultimos: {},

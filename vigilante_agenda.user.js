@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.71
+// @version     17.6.72
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.71";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.72";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30346,6 +30346,28 @@ _vglOfrecerDeshacer(btn);
       if (margen <= 0) { cosechados.push(a); continue; }
       if (margen <= a.vigenciaDias * MTR_COSECHA_MARGEN_PROP) cosechados.push(a);
       else diferidos.push(Object.assign({}, a, { margenDias: margen }));
+    }
+
+    // ---- 1.15 — GRUPO DE LÍPIDOS: vigencia del grupo = LA MÁS CORTA de los 4 ----
+    // Decisión del médico (auditoría 25-ago): Colesterol Total, HDL, LDL y Triglicéridos
+    // salen de UNA sola muestra de sangre. Si CUALQUIERA de los 4 ya necesita repetirse
+    // en ESTA visita —faltante, vencido, o cosechado por su propia vigencia, arriba—, los
+    // demás miembros del grupo que sigan vigentes (D/R, todavía en `diferidos` porque su
+    // propia vigencia individual es más larga) se ORDENAN TAMBIÉN: no tiene sentido
+    // diferirlos a un viaje aparte cuando el tubo ya se está tomando hoy por otro lípido.
+    // "Vigencia del grupo = la más corta" se traduce aquí en el disparador: basta con que
+    // UNO de los 4 esté en su ventana de repetición para que la vigencia efectiva del
+    // GRUPO completo se considere cumplida — el mínimo de las 4 vigencias individuales
+    // manda sobre las otras tres, más largas.
+    const MTR_GRUPO_LIPIDOS = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS"];
+    const _lipYaVaEnEstaVisita = (clave) =>
+      faltantes.some((a) => a.clave === clave) || vencidos.some((a) => a.clave === clave) || cosechados.some((a) => a.clave === clave);
+    if (MTR_GRUPO_LIPIDOS.some(_lipYaVaEnEstaVisita)) {
+      for (let i = diferidos.length - 1; i >= 0; i--) {
+        if (MTR_GRUPO_LIPIDOS.indexOf(diferidos[i].clave) < 0) continue;
+        cosechados.push(diferidos[i]);
+        diferidos.splice(i, 1);
+      }
     }
 
     // ---- QUÉ SE ORDENA ----
