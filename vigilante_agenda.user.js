@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.84
+// @version     17.6.85
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.84";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.85";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4628,7 +4628,7 @@
   // se queda sin el dato — nunca con uno inventado.
   function _vglLeerCabeceraHistoria(doc) {
     const d = doc || (typeof document !== "undefined" ? document : null);
-    const salida = { marcaciones: null, cockcroftGault: null, estadio: null, clasificacionEstadio: null };
+    const salida = { marcaciones: null, cockcroftGault: null, estadio: null, clasificacionEstadio: null, sexo: null };
     if (!d || typeof d.querySelectorAll !== "function") return salida;
     try {
       // Se recorre un número acotado de nodos con texto corto: la cabecera es breve y
@@ -4658,6 +4658,19 @@
       // "Clasificación Estadio: Ligera a moderadamente...".
       salida.estadio = buscar(/(?:^|[^n])\bEstadio\s*:\s*(G?\d\s*[ab]?)\b/i);
       salida.clasificacionEstadio = buscar(/Clasificaci[oó]n\s+Estadio\s*:\s*(.+)$/i);
+      // v17.6.85 — la cabecera imprime "Sexo: MASCULINO" (confirmado por el médico con una
+      // captura, 26-ago). Es la MEJOR fuente del dato: vive en la cabecera que Everest pinta
+      // en TODAS las pestañas, no cuesta una petición de red, y no depende de que haya una
+      // pestaña concreta montada — al contrario que cualquier lector del formulario, que en
+      // esta SPA solo ve la pestaña activa.
+      // Se captura SOLO LA PALABRA, no `(.+)$` como los campos de arriba: en la cabecera real
+      // este campo COMPARTE LÍNEA con el siguiente ("Sexo: MASCULINO, Eps: NUEVA EPS"), así
+      // que un comodín hasta fin de línea se llevaría también el nombre de la EPS.
+      // Comprobado: ese valor sucio SÍ lo reconocería `mtrEsSexoMasculino` (le basta con que
+      // empiece por "MAS"), así que el riesgo no es fallar el reconocimiento — es que el
+      // nombre de la aseguradora acabe viajando dentro del campo `sexo` hasta
+      // `erc.entradas.sexo`, que se muestra y se persiste. Se guarda el dato limpio.
+      salida.sexo = buscar(/\bSexo\s*:\s*([A-Za-zÁÉÍÓÚÑáéíóúñ]+)/i);
       return salida;
     } catch (e) { return salida; }
   }
@@ -30068,7 +30081,17 @@ _vglOfrecerDeshacer(btn);
       // usa la vía legacy (estadioRenalDelPaciente:sexoAusente, línea ~15930): quien
       // consuma este resultado puede avisar "esto sobreestima la TFG" en vez de mostrar el
       // número crudo como si el dato fuera real.
-      sexoAusente: (d.sexo === null || d.sexo === undefined || d.sexo === ""),
+      // v17.6.85 — la guarda solo cazaba la cadena VACÍA, y eso dejaba una mina: un valor
+      // presente pero no reconocible ("0", "1", "2", "Indeterminado", "N/A"…) hacía que
+      // `mtrEsSexoFemenino` diera false, la TFG se calculara COMO HOMBRE, y encima
+      // `sexoAusente` saliera FALSE — el script afirmaba tener el dato. Verificado con el
+      // harness sobre {edad:70, peso:70, creat:1.0}: "0" -> CrCl 68.1 (G2) con
+      // sexoAusente:false, frente a "F" -> 57.8 (G3a). Es PEOR que el caso vacío, porque el
+      // vacío al menos levantaba la bandera. Y es exactamente donde caería una fuente nueva
+      // leída de un <select> de Angular, cuyo `.value` suele ser "0"/"1" — se cambiaría un
+      // fallo silencioso por otro peor. La guarda correcta no es "¿está vacío?" sino
+      // "¿lo reconozco?": si no es ni femenino ni masculino, el sexo NO se tiene.
+      sexoAusente: (!mtrEsSexoFemenino(d.sexo) && !mtrEsSexoMasculino(d.sexo)),
       // v16.0.0 — las entradas viajan con el resultado: el módulo de riesgo reclasifica
       // en vivo con los datos nuevos de pantalla SIN volver a consultar laboratorios.
       entradas: { edad: edad, peso: peso, creatinina: creat, sexo: d.sexo == null ? "" : String(d.sexo) },
@@ -33963,6 +33986,24 @@ _vglOfrecerDeshacer(btn);
     // un paciente sin peso guardado en Athenea se queda "sin dato" para Cockcroft-Gault
     // aunque el médico lo acabe de escribir en Examen físico.
     const pesoDom = _mismoPac ? mtrLeerPesoDelDom() : null;
+    // v17.6.85 — el sexo era el ÚNICO insumo de Cockcroft-Gault/CKD-EPI SIN red de
+    // seguridad: peso y tensión ya tienen respaldo de DOM (arriba), el sexo tenía una sola
+    // fuente (la demografía de la API) y un solo intento. Si esa ficha llegaba con el campo
+    // vacío, AMBAS fórmulas se calculaban como hombre y una mujer subía un estadio
+    // administrativo entero — que es el que rige vigencias, ventana ANR y bloqueos KDIGO.
+    // La cabecera de la historia lo imprime ("Sexo: MASCULINO") y ya la leíamos para otras
+    // cosas: es el respaldo más barato y el más disponible (vive en todas las pestañas).
+    // Solo se usa si el paciente abierto es el mismo, igual que peso y tensión, y solo si el
+    // valor es RECONOCIBLE — un texto que no sea ni femenino ni masculino se descarta en vez
+    // de entrar y hacerse pasar por dato bueno (ver la guarda de mtrEvaluarErc, v17.6.85).
+    const sexoCabecera = (function () {
+      try {
+        if (!_mismoPac || typeof _vglLeerCabeceraHistoria !== "function") return null;
+        const s = (_vglLeerCabeceraHistoria() || {}).sexo;
+        if (!s) return null;
+        return (mtrEsSexoFemenino(s) || mtrEsSexoMasculino(s)) ? s : null;
+      } catch (e) { return null; }
+    })();
     const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labs) ? labs : [], { uroanalisisPorComponentes: true });
     const ultimos = {};
     candidatos.forEach((c, clave) => {
@@ -34016,7 +34057,11 @@ _vglOfrecerDeshacer(btn);
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
       meds: _medsParaMotor,
-      edad: ent.edad, sexo: ent.sexo, pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
+      // v17.6.85 — el sexo de la API manda; la cabecera es el respaldo cuando no llega o
+      // llega en un formato que no reconocemos. Mismo patrón que `pesoDom` de al lado.
+      edad: ent.edad,
+      sexo: ((mtrEsSexoFemenino(ent.sexo) || mtrEsSexoMasculino(ent.sexo)) ? ent.sexo : (sexoCabecera || ent.sexo)),
+      pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
       rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
       ldl: val("COLESTEROL_LDL"),
       // v17.6.0 — HALLADO AL CABLEAR EL ÍTEM 3 (meta de HbA1c individual): esta llamada

@@ -6,6 +6,68 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.85 — 26-ago-2026 (el sexo del paciente: la cabecera de la historia como respaldo, y la mina de la guarda)
+
+Encargo del médico, literal: *"el script debe buscar la manera de encontrar qué sexo es el
+paciente"*. Contexto: el sexo era el **único insumo de Cockcroft-Gault/CKD-EPI sin red de
+seguridad**. El peso y la tensión ya tienen respaldo de DOM (`mtrLeerPesoDelDom`,
+`mtrLeerTensionDelDom`); el sexo tenía una sola fuente —la demografía de la API— y un solo
+intento. Si esa ficha llegaba con el campo vacío, AMBAS fórmulas se calculaban como hombre y
+una mujer subía un estadio administrativo entero: el que rige vigencias, ventana ANR y
+bloqueos de PTH/Fósforo/Albúmina.
+
+**La fuente.** Una investigación del archivo dejó una pregunta sin resolver ("¿imprime la
+cabecera de la historia el sexo? — no pude verificarlo, y sería la mejor fuente de todas").
+El médico la contestó con dos capturas: la cabecera imprime `Sexo: MASCULINO` / `Sexo:
+FEMENINO`. Es la mejor fuente porque vive en la cabecera que Everest pinta en **todas** las
+pestañas, no cuesta una petición de red, y no depende de que haya una pestaña concreta
+montada — al contrario que cualquier lector del formulario, que en esta SPA solo ve la
+pestaña activa. Y `_vglLeerCabeceraHistoria` ya leía esa misma cabecera para otras cosas:
+añadirlo fue una línea, como la investigación había predicho.
+
+Detalle que la captura reveló: el campo **comparte línea** con el siguiente (`Sexo:
+MASCULINO, Eps: NUEVA EPS`), así que se captura solo la palabra y no `(.+)$` como los demás
+campos. Comprobado que el valor sucio SÍ lo reconocería `mtrEsSexoMasculino` (le basta
+empezar por "MAS"), así que el riesgo no era fallar la lectura: era que el nombre de la
+aseguradora viajara dentro del campo `sexo` hasta `erc.entradas.sexo`, que se muestra y se
+persiste.
+
+**La mina que había que desactivar primero.** La guarda `sexoAusente` solo cazaba la cadena
+VACÍA. Verificado con el harness sobre `{edad:70, peso:70, creat:1.0}`: un valor presente
+pero no reconocible —`"0"`, `"1"`, `"2"`, `"Indeterminado"`, `"N/A"`— daba CrCl 68.1 (G2),
+calculado **como hombre**, y encima `sexoAusente:false`: el script afirmaba tener el dato. Es
+**peor que el caso vacío**, que al menos levantaba la bandera. Y es exactamente donde caería
+cualquier fuente nueva leída de un `<select>` de Angular, cuyo `.value` suele ser `"0"`/`"1"`
+— se habría cambiado un fallo silencioso por otro peor. La guarda correcta no es "¿está
+vacío?" sino "¿lo reconozco?".
+
+El respaldo solo se usa si el paciente abierto es el mismo (igual que peso y tensión) y solo
+si el valor es reconocible; el sexo de la API sigue mandando.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **lectura de la cabecera** | `salida.sexo` de `_vglLeerCabeceraHistoria` vuelto a `null` | `suite_32` | *v17.6.85: el sexo se lee de la cabecera de la historia, sin arrastrar la EPS* (y también *…un rótulo de sexo sin valor no inventa un sexo*) |
+| **regex con comodín** | `([A-Za-zÁÉÍÓÚÑáéíóúñ]+)` vuelto a `(.+)$` — arrastra la EPS | `suite_32` | *…sin arrastrar la EPS* → el campo sale `"MASCULINO, Eps: NUEVA EPS"` |
+| **guarda de sexo** | `sexoAusente` vuelto a `sexo === ""` | `suite_32` | *…un sexo presente pero NO reconocible cuenta como ausente, no como hombre* |
+| **cableado del respaldo** | el respaldo cortado en `mtrResumenDesdeModalLabs` (`sexo: ent.sexo`), dejando el lector intacto | `suite_47` | *…sin sexo reconocible en la API, el respaldo de la cabecera lo aporta* |
+
+Nota honesta, y **es la tercera vez en tres versiones**: la última fila **no caía** con las
+pruebas que había escrito. El lector de la cabecera estaba probado a fondo, la guarda
+también, y aun así podía cortarse el cableado entero y el banco seguía en verde
+(2306/2306) — porque nada comprobaba que el lector se CONSULTARA. Es el patrón de "la
+función existe, nadie la cablea" que ya dejó inertes a `ldlBasal` (v16.9.0), `hba1c`
+(v17.6.0) y `ldlMetaPrevia` en este mismo archivo. Se añadieron dos pruebas en `suite_47`
+que ejercitan `mtrResumenDesdeModalLabs` de punta a punta (con la cabecera simulada en el
+`document` del arnés), y entonces sí cayó. **Probar la pieza no es probar que la pieza está
+conectada.**
+
+`_vglLeerCabeceraHistoria` no tenía NINGUNA prueba antes de esta versión (estaba en la lista
+de "sin cubrir" del banco). Las de `suite_32` son las primeras.
+
+Las cuatro mutaciones se aplicaron de una en una desde una copia intacta, y el archivo se
+restauró verificando `diff` contra ella. Banco en 2308/2308. Cero PHI: los textos de cabecera
+de las pruebas reproducen la FORMA real con cifras y nombres inventados.
+
 ## v17.6.84 — 26-ago-2026 (tres decisiones del médico sobre la auditoría v68: constancia legal, piso de HbA1c y el tercer eje de falla)
 
 Las tres salen de una entrevista al médico el 26-ago sobre los hallazgos abiertos de la

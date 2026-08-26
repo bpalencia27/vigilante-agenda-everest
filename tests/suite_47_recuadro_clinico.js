@@ -248,6 +248,42 @@ module.exports = {
       t.igual(r.hba1c.meta, 7.6, "y la meta INDIVIDUAL del paciente (el caso real: 85 años, 7,6 %), no la general");
     });
 
+    // =====================================================================
+    // v17.6.85 — EL RESPALDO DE SEXO DESDE LA CABECERA, CABLEADO DE VERDAD.
+    //
+    // El sexo era el único insumo de Cockcroft-Gault/CKD-EPI SIN red de seguridad: peso y
+    // tensión ya leen del DOM, el sexo tenía una sola fuente y un solo intento. Si la ficha
+    // de la API llegaba con el campo vacío, AMBAS fórmulas se calculaban como hombre y una
+    // mujer subía un estadio administrativo entero — el que rige vigencias, ventana ANR y
+    // bloqueos KDIGO.
+    //
+    // Estas dos pruebas existen porque el lector de la cabecera puede funcionar perfecto y
+    // no consultarse NUNCA: es el patrón de "la función existe, nadie la cablea" que ya dejó
+    // inertes a `ldlBasal`, `hba1c` y `ldlMetaPrevia` en este archivo. Al mutar el cableado
+    // (dejando el lector intacto) el banco seguía en verde: sin estas dos, el respaldo
+    // entero podía desaparecer sin que nada se quejara.
+    // =====================================================================
+    t.caso("v17.6.85: sin sexo reconocible en la API, el respaldo de la cabecera lo aporta", () => {
+      const c = cargar({ silencioso: true });
+      // La cabecera que Everest pinta en TODAS las pestañas. Forma real, datos inventados.
+      c.env.win.document.querySelectorAll = () => [{ textContent: "Sexo: FEMENINO, Eps: ALGUNA EPS" }];
+      const renal = { estadio: null, tfg: null, entradas: { edad: 70, peso: 70, creatinina: 1.0, sexo: "" } };
+      const r = c.api.mtrResumenDesdeModalLabs(renal, [], null, "55510");
+      t.igual(r.erc.entradas.sexo, "FEMENINO", "el sexo entra desde la cabecera");
+      t.falso(r.erc.sexoAusente, "y deja de contarse como ausente");
+      t.igual(r.erc.estadioAdministrativo, "G3a",
+        "con el sexo real sale G3a — NO el G2 que daba calcularla como hombre");
+    });
+
+    t.caso("v17.6.85: el sexo de la API manda; la cabecera es respaldo, no sustituto", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.document.querySelectorAll = () => [{ textContent: "Sexo: FEMENINO, Eps: ALGUNA EPS" }];
+      const renal = { estadio: null, tfg: null, entradas: { edad: 70, peso: 70, creatinina: 1.0, sexo: "M" } };
+      const r = c.api.mtrResumenDesdeModalLabs(renal, [], null, "55511");
+      t.igual(r.erc.entradas.sexo, "M", "la fuente maestra no se pisa con el respaldo");
+      t.igual(r.erc.estadioAdministrativo, "G2", "y el estadio es el que corresponde a ese sexo");
+    });
+
     t.caso("v17.6.0 — sin meta individual guardada, el Panel muestra la meta general (7 %) y no inventa una meta distinta", () => {
       // v17.6.1 — diabetes documentada vía cosecha (mismo mecanismo de "lo ya visto en
       // otras pestañas" de v16.1.0, arriba en esta misma función): sin esto la fila ya

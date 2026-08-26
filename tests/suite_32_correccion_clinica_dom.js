@@ -50,6 +50,7 @@ module.exports = {
     "_ordenesVigentesInvalidar", "_demograficosInvalidar",
     "apiAccesoObtenerDemograficos", "exportAudit",
     "_vglCosecharFactoresVisibles", "_vglCosechaGuardar", "_vglCosechaLeer",
+    "_vglLeerCabeceraHistoria", "mtrEvaluarErc", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -462,6 +463,77 @@ module.exports = {
       t.cierto(fs.existsSync(path.join(fixDir, "dom_everest_cronicos_mujer.html")), "dom_everest_cronicos_mujer.html existe");
       t.cierto(fs.existsSync(path.join(fixDir, "dom_everest_agenda.html")), "dom_everest_agenda.html existe");
       t.cierto(fs.existsSync(path.join(fixDir, "dom_everest_ordenes.html")), "dom_everest_ordenes.html existe");
+    });
+
+    // v17.6.85 — EL SEXO DESDE LA CABECERA DE LA HISTORIA.
+    //
+    // El sexo era el único insumo de Cockcroft-Gault/CKD-EPI SIN red de seguridad: peso y
+    // tensión ya tienen respaldo de DOM, el sexo tenía una sola fuente (la demografía de la
+    // API) y un solo intento. Si llegaba vacío, AMBAS fórmulas se calculaban como hombre y
+    // una mujer subía un estadio administrativo entero — el que rige vigencias, ventana ANR
+    // y bloqueos KDIGO. El médico confirmó con capturas que la cabecera de la historia
+    // imprime "Sexo: MASCULINO"/"Sexo: FEMENINO", y esa cabecera ya se leía para otras cosas.
+    //
+    // Los textos de abajo reproducen la FORMA real de esa cabecera con datos inventados:
+    // cero PHI, como manda CLAUDE.md.
+    const docCabecera = (lineas) => ({
+      querySelectorAll: () => lineas.map((texto) => ({ textContent: texto })),
+      querySelector: () => null,
+    });
+
+    t.caso("v17.6.85: el sexo se lee de la cabecera de la historia, sin arrastrar la EPS", () => {
+      const c = cargar({ silencioso: true });
+      // En la cabecera real el campo COMPARTE LÍNEA con el siguiente.
+      const masc = c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo: MASCULINO, Eps: NUEVA EPS"]));
+      t.igual(masc.sexo, "MASCULINO", "se captura solo la palabra, no el resto de la línea");
+      t.cierto(c.api.mtrEsSexoMasculino(masc.sexo), "y el motor lo reconoce sin traducción");
+      const fem = c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo: FEMENINO, Eps: ALGUNA EPS"]));
+      t.igual(fem.sexo, "FEMENINO", "igual en femenino");
+      t.cierto(c.api.mtrEsSexoFemenino(fem.sexo), "reconocido como femenino");
+      // Por qué importa capturar limpio: el valor sucio SÍ se reconocería (le basta empezar
+      // por "MAS"), así que el riesgo no es fallar el reconocimiento — es que el nombre de la
+      // aseguradora viaje dentro del campo `sexo` hasta `erc.entradas.sexo`, que se muestra.
+      t.cierto(c.api.mtrEsSexoMasculino("MASCULINO, Eps: NUEVA EPS"),
+        "(el valor sucio se reconocería igual: por eso el riesgo es de limpieza, no de lectura)");
+    });
+
+    t.caso("v17.6.85: un rótulo de sexo sin valor no inventa un sexo", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo:", "Eps: ALGUNA EPS"])).sexo, null,
+        "rótulo presente pero vacío -> null, no un supuesto");
+      t.igual(c.api._vglLeerCabeceraHistoria(docCabecera(["Otra cosa cualquiera"])).sexo, null,
+        "sin cabecera legible -> null");
+      // Caso real aportado por el médico: cabecera con los rótulos de TFG vacíos porque
+      // Everest no pudo calcularla. El sexo se sigue leyendo y los vacíos no inventan nada.
+      const parcial = c.api._vglLeerCabeceraHistoria(docCabecera([
+        "Sexo: FEMENINO, Eps: ALGUNA EPS",
+        "Marcaciones: Hipertensión",
+        "Cockcroft - Gault:",
+        "Estadio:",
+      ]));
+      t.igual(parcial.sexo, "FEMENINO", "el sexo se lee aunque Everest no haya calculado la TFG");
+      t.igual(parcial.cockcroftGault, null, "y el rótulo vacío de TFG sigue devolviendo null");
+    });
+
+    t.caso("v17.6.85: un sexo presente pero NO reconocible cuenta como ausente, no como hombre", () => {
+      const c = cargar({ silencioso: true });
+      // La mina: antes la guarda era `sexo === ""`, así que un "0"/"1" de un <select> de
+      // Angular pasaba como dato bueno, se calculaba COMO HOMBRE, y encima sexoAusente salía
+      // false — el script afirmaba tener el dato. Peor que el caso vacío, que al menos
+      // levantaba la bandera.
+      ["", "0", "1", "Indeterminado", "N/A"].forEach((s) => {
+        const r = c.api.mtrEvaluarErc({ edad: 70, sexo: s, pesoKg: 70, creatinina: 1.0 });
+        t.cierto(r.sexoAusente, "sexo " + JSON.stringify(s) + " no es reconocible: sexoAusente");
+      });
+      ["F", "Femenino", "M", "MASCULINO"].forEach((s) => {
+        const r = c.api.mtrEvaluarErc({ edad: 70, sexo: s, pesoKg: 70, creatinina: 1.0 });
+        t.falso(r.sexoAusente, "sexo " + JSON.stringify(s) + " sí se reconoce");
+      });
+      // Y que la diferencia clínica que motivó todo esto sigue siendo real.
+      const mujer = c.api.mtrEvaluarErc({ edad: 70, sexo: "F", pesoKg: 70, creatinina: 1.0 });
+      const sinSexo = c.api.mtrEvaluarErc({ edad: 70, sexo: "0", pesoKg: 70, creatinina: 1.0 });
+      t.igual(mujer.estadioAdministrativo, "G3a", "con sexo femenino: G3a");
+      t.igual(sinSexo.estadioAdministrativo, "G2", "sin sexo reconocible se calcula como hombre: G2");
     });
 
     t.caso("R2.8: Desambiguación HbA1c vs Hemoglobina en formulario de Crónicos", () => {
