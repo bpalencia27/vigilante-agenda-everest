@@ -164,6 +164,30 @@ module.exports = {
       t.cierto(dosis.some((x) => x.numero === "100"), "dosis 100 mg cuando el hechos trae 50: se marca");
     });
 
+    // [bug real de consultorio, 25-ago] re2 partía "Resolución 3280/2018" en "280/201" y
+    // lo marcaba como una PA inventada. La fracción no debe leerse como PA si tiene OTRO
+    // dígito pegado justo antes o justo después (año, radicado, resolución).
+    t.caso("mtrVerificarCifrasIA: una cita legal tipo 'Resolución 3280/2018' no se confunde con una PA", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      t.igual(api.mtrVerificarCifrasIA("Se cumple con la Resolución 3280/2018 del Ministerio.", hoja).length, 0,
+        "3280/2018 es una cita legal, no una fracción de presión arterial: no debe marcarse '280/201'");
+      // pero una PA real (sin dígitos pegados a los lados) sigue detectándose igual que antes
+      const marcadas = api.mtrVerificarCifrasIA("Signos vitales: PA 190/110 mmHg.", hoja);
+      t.cierto(marcadas.some((x) => x.numero === "190") && marcadas.some((x) => x.numero === "110"),
+        "una PA inventada real (190/110, sin dígito pegado) se sigue marcando");
+    });
+
+    // [bug real de consultorio, 25-ago] el corte de contexto fijo (24/20 caracteres) partía
+    // palabras largas a la mitad ("SE CONTIN" en vez de "SE CONTINÚA").
+    t.caso("mtrVerificarCifrasIA: el contexto mostrado nunca corta una palabra a la mitad", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const texto = "El paciente SINTOMATOLOGICAMENTE presenta 45 mg.";
+      const marcadas = api.mtrVerificarCifrasIA(texto, hoja);
+      const fila = marcadas.find((x) => x.numero === "45");
+      t.cierto(!!fila, "45 mg (dosis inventada) se marca: no está en los hechos de la hoja");
+      t.cierto(fila.contexto.includes("SINTOMATOLOGICAMENTE"), "el contexto conserva la palabra completa, no cortada a la mitad ('ATOLOGICAMENTE'): " + fila.contexto);
+    });
+
     t.caso("mtrVerificarCifrasIA: no marca el marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES] ni texto vacío ni conteos sin unidad", () => {
       const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
       t.igual(api.mtrVerificarCifrasIA("#PACIENTE_1010101010_#RCV_CONTROL_2026_08", hoja).length, 0,

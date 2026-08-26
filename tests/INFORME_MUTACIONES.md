@@ -6,6 +6,39 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.48 — 26-ago-2026 (reconstrucción de trabajo perdido: dos bugs de `mtrVerificarCifrasIA`)
+
+Reconstruido a partir de un fragmento de chat de la sesión desconectada (`session_01SY2...`,
+rama `claude/actualizar-rama-vigilante-07ce6f`, nunca pusheada) que el médico pegó. Dos bugs
+reales en `mtrVerificarCifrasIA` (vigilante_agenda.user.js:31063, verificador anti-alucinación
+de cifras de la nota de IA):
+
+1. **`re2` partía una cita legal en una PA falsa**: `(\d{1,3})\s*\/\s*(\d{1,3})` sin blindaje
+   de borde hacía match de "280/201" dentro de "Resolución 3280/2018" — se marcaba como una
+   presión arterial inventada que el modelo nunca escribió. Fix: `(?<!\d)...(?!\d)` exige que
+   la fracción no tenga OTRO dígito pegado justo antes/después (una PA real nunca lo tiene).
+2. **El contexto mostrado cortaba palabras largas a la mitad**: el corte fijo (24 caracteres
+   antes / 20 después del número) no buscaba el espacio más cercano — "SINTOMATOLOGICAMENTE"
+   salía como "ATOLOGICAMENTE". Fix: se extiende el borde (tope +15 caracteres por lado) hasta
+   el siguiente espacio cuando el corte cae a mitad de palabra.
+
+- **Mutación 1**: se revirtió el blindaje de `re2` a la versión sin `(?<!\d)/(?!\d)`. El banco
+  pasó de 2207 en verde a 1 roja: *"una cita legal tipo 'Resolución 3280/2018' no se confunde
+  con una PA"* (esperaba 0 y obtuvo 2). Restaurado, banco vuelve a verde.
+- **Mutación 2**: se revirtió el ensanche de borde al `slice` fijo original. 1 roja: *"el
+  contexto mostrado nunca corta una palabra a la mitad"* (esperaba que incluyera
+  "SINTOMATOLOGICAMENTE", obtuvo "ATOLOGICAMENTE presenta 45 mg."). Restaurado, banco vuelve
+  a verde (2207).
+- **Pruebas nuevas**: `tests/suite_57_ia_redaccion.js` — 2 casos.
+
+**Nota de alcance**: el fragmento de chat también describía un tercer arreglo (`getAtheneaLabsAuto`,
+un reintento automático cuando la precarga de labs devuelve una lista vacía sospechosa) y una
+feature (listado agrupado por fecha de vencimiento con "Sin historial" aparte). No se
+reconstruyeron en esta entrega: el código actual de `getAtheneaLabsAuto`/`_conTope` ya tiene una
+defensa null≠[] y de lectura parcial (`__vglIncompleto`) más sofisticada que la que describe el
+fragmento, y no se pudo confirmar contra qué escenario exacto se probó el fix perdido sin
+inventar el criterio — pendiente de que el médico aporte más contexto o decida el alcance.
+
 ## v17.6.47 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.2: `esMedicoRCVActivo` por sub-cadena)
 
 `esMedicoRCVActivo` (vigilante_agenda.user.js:16110) comparaba con `docName.includes(p)`:

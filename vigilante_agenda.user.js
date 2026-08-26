@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.47
+// @version     17.6.48
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.47";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.48";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31088,15 +31088,30 @@ _vglOfrecerDeshacer(btn);
       //    de presión arterial (NNN/NNN) o número con etiqueta de medida delante.
       const unidades = "(?:mm\\s*hg|mg\\/dL|mg\\/dl|mL\\/min|ml\\/min|mEq|meq|g\\/dL|g\\/dl|mcg|mg|gr|g\\b|%|kgs?|cms?|unidades|años|meses|semanas)";
       const re1 = new RegExp("(\\d+(?:[.,]\\d+)?)\\s*" + unidades, "gi");
-      const re2 = /(\d{1,3})\s*\/\s*(\d{1,3})(?:\s*(?:mm\s*hg|mmHg))?/gi;
+      // v17.6.48 — bug real de consultorio: sin blindaje de borde, "Resolución 3280/2018"
+      // partía en "280/201" (3 dígitos de cada lado, sin exigir que no haya OTRO dígito
+      // pegado antes/después) y se marcaba como una PA inventada que no existe en el
+      // borrador. (?<!\d) y (?!\d) exigen que la fracción NO sea un fragmento de un número
+      // más largo (año, resolución, radicado) — una PA real de verdad nunca tiene un dígito
+      // pegado justo antes del sistólico ni justo después del diastólico.
+      const re2 = /(?<!\d)(\d{1,3})\s*\/\s*(\d{1,3})(?!\d)(?:\s*(?:mm\s*hg|mmHg))?/gi;
       const re3 = /(?:PA|T[AÁ]|IMC|peso|talla|HbA1c|glicemia|glucemia|colesterol|LDL|HDL|creatinina|TFG|Framingham)\s*[:\s]+(?:de\s+)?(\d+(?:[.,]\d+)?)/gi;
       const vistos = new Set();
+      // v17.6.48 — bug real: el corte fijo (24 antes / 20 después) partía palabras largas a
+      // la mitad ("SE CONTIN" en vez de "SE CONTINÚA"), porque no buscaba el espacio más
+      // cercano. Se extiende el borde (tope +15 caracteres por lado) hasta el siguiente
+      // espacio cuando el corte cae a mitad de una palabra — nunca se muestra una palabra
+      // partida.
+      const esNoEspacio = (c) => c !== undefined && !/\s/.test(c);
       const marcar = (numero, inicio) => {
         const v = mtrFloat(numero);
         if (v === null || !isFinite(v)) return;
         const r = Math.round(v * 100) / 100;
         if (conocidas.has(r)) return;
-        const ctx = b.slice(Math.max(0, inicio - 24), inicio + 20).replace(/\s+/g, " ").trim();
+        let a = Math.max(0, inicio - 24), z = Math.min(b.length, inicio + 20);
+        for (let extra = 0; a > 0 && esNoEspacio(b[a - 1]) && esNoEspacio(b[a]) && extra < 15; extra++) a--;
+        for (let extra = 0; z < b.length && esNoEspacio(b[z - 1]) && esNoEspacio(b[z]) && extra < 15; extra++) z++;
+        const ctx = b.slice(a, z).replace(/\s+/g, " ").trim();
         const llave = r + "|" + ctx;
         if (vistos.has(llave)) return;
         vistos.add(llave);
