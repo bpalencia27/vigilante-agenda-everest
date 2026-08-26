@@ -119,6 +119,70 @@ module.exports = {
       t.igual(r, ["METFORMINA 850 MG"]);
     });
 
+    // =====================================================================
+    // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] Parte A del
+    // fix de "solo el último prescrito": mtrMedicamentosDesdeRespuesta ahora ordena las
+    // formulaciones por fechaCreacion DESCENDENTE antes de aplanarlas a texto — sin esto,
+    // el dedup "primero visto gana" de mtrMedicamentosRcv no tenía forma de saber cuál
+    // formulación era la más reciente.
+    // =====================================================================
+    t.caso("mtrMedicamentosDesdeRespuesta (1.15-bis, parte A): ordena las formulaciones por fecha DESCENDENTE antes de aplanar, sin importar el orden de llegada", () => {
+      const formulaciones = (desc, fecha) => ({
+        estado: "PENDIENTE", fechaCreacion: fecha,
+        detalles: [{ descripcion: desc }],
+      });
+      // Llegan en orden ARBITRARIO (no cronológico) — como puede mandarlas Everest.
+      const datos = [
+        formulaciones("ROSUVASTATINA 20 MG (TABLETA)", "2026-03-01T08:00:00.000-05:00"),
+        formulaciones("LOSARTAN 50 mg (TABLETA)", "2026-08-10T09:00:00.000-05:00"),
+        formulaciones("ROSUVASTATINA 40 MG (TABLETA)", "2026-08-15T10:00:00.000-05:00"),
+      ];
+      const l = api.mtrMedicamentosDesdeRespuesta(datos, { estados: ["PENDIENTE"] });
+      t.igual(l, [
+        "ROSUVASTATINA 40 MG (TABLETA)",   // 15-ago: la más reciente, primero
+        "LOSARTAN 50 mg (TABLETA)",        // 10-ago
+        "ROSUVASTATINA 20 MG (TABLETA)",   // 01-mar: la más vieja, al final
+      ], "queda ordenado por fecha real, no por el orden de llegada del array");
+    });
+
+    t.caso("mtrMedicamentosDesdeRespuesta (parte A): las formulaciones SIN fecha (o con fecha ilegible) quedan al final, nunca se inventa una fecha para ordenarlas", () => {
+      const datos = [
+        { estado: "PENDIENTE", fechaCreacion: null, detalles: [{ descripcion: "SIN FECHA A" }] },
+        { estado: "PENDIENTE", fechaCreacion: "2026-08-10T09:00:00.000-05:00", detalles: [{ descripcion: "CON FECHA" }] },
+        { estado: "PENDIENTE", fechaCreacion: "texto-no-parseable", detalles: [{ descripcion: "FECHA ILEGIBLE" }] },
+        { estado: "PENDIENTE", fechaCreacion: null, detalles: [{ descripcion: "SIN FECHA B" }] },
+      ];
+      const l = api.mtrMedicamentosDesdeRespuesta(datos, { estados: ["PENDIENTE"] });
+      t.igual(l[0], "CON FECHA", "la única formulación con fecha real va primero");
+      // Entre las sin fecha, el orden relativo original se conserva (sort estable) —
+      // nunca se revuelven al azar.
+      t.igual(l.slice(1), ["SIN FECHA A", "FECHA ILEGIBLE", "SIN FECHA B"],
+        "las sin fecha (o ilegibles) quedan al final, en su mismo orden relativo de llegada");
+    });
+
+    // El escenario COMPLETO reportado en consultorio: las dos partes juntas
+    // (mtrMedicamentosDesdeRespuesta ordenando + mtrMedicamentosRcv fusionando por
+    // principio activo) deben dejar SOLO la Rosuvastatina más reciente en la lista que
+    // ve el médico en el Panel del paciente.
+    t.caso("ESCENARIO REAL COMPLETO (1.15-bis): Losartan + Rosuvastatina 40mg (reciente) + Rosuvastatina 20mg (vieja) -> el Panel solo muestra Losartan y Rosuvastatina 40mg", () => {
+      const formulaciones = (desc, fecha) => ({
+        estado: "PENDIENTE", fechaCreacion: fecha,
+        detalles: [{ descripcion: desc }],
+      });
+      const datos = [
+        formulaciones("ROSUVASTATINA 20 MG (TABLETA)", "2026-03-01T08:00:00.000-05:00"),
+        formulaciones("LOSARTAN 50 mg (TABLETA)", "2026-08-10T09:00:00.000-05:00"),
+        formulaciones("ROSUVASTATINA 40 MG (TABLETA)", "2026-08-15T10:00:00.000-05:00"),
+      ];
+      const nombresPlanos = api.mtrMedicamentosDesdeRespuesta(datos, { estados: ["PENDIENTE"] });
+      const listaPanel = api.mtrMedicamentosRcv(nombresPlanos);
+      t.igual(listaPanel.length, 2, "Losartan + UNA sola Rosuvastatina — nunca las dos concentraciones a la vez");
+      t.cierto(listaPanel.some((m) => m.nombre === "LOSARTAN 50 mg (TABLETA)"));
+      const rosu = listaPanel.filter((m) => /ROSUVASTATINA/i.test(m.nombre));
+      t.igual(rosu.length, 1);
+      t.igual(rosu[0].nombre, "ROSUVASTATINA 40 MG (TABLETA)", "sobrevive la ÚLTIMA prescrita (15-ago), no la vieja (01-mar)");
+    });
+
     t.caso("los renglones completos conservan dosificación y días para el médico", () => {
       const r = api.mtrRenglonesMedicamentoDesdeRespuesta(FIXTURE, { estados: ["PENDIENTE"] });
       const met = r.filter((x) => x.descripcion.indexOf("METFORMINA") >= 0)[0];

@@ -90,6 +90,35 @@ module.exports = {
       if (conHistorial.length) t.cierto(/Venció el/.test(conHistorial[0].quePasa), "el vencido dice cuándo venció");
     });
 
+    // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido, ahora promovido a Estado R
+    // (ver suite 46 para la lógica), debe mostrarse con un texto que diga VENCIÓ (tiempo
+    // pasado), nunca "vence el [fecha ya pasada]" — mentira de tiempo verbal que la
+    // relabeling a R introduciría sin este caso especial en mtrTableroClinico.
+    t.caso("«qué ordenar»: un RAC≥30 vencido (Estado R) se explica como 'venció', no 'vence' (bug real de tiempo verbal, 1.17)", () => {
+      const plan = a.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: "G3b",
+        esDm2: false, edad: 60, rac: 45,
+        ultimos: {
+          RAC: { fecha: "2026-01-01", valor: 45 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 90 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 120 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 95 },
+          UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+          CREATININA: { fecha: "2026-08-01", valor: 1.2 },
+        },
+      });
+      const resumen = { factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G3b" }, plan: plan };
+      const d = a.mtrTableroClinico(resumen);
+      const rac = d.ordenar.find((x) => x.clave === "RAC");
+      t.cierto(!!rac, "el RAC vencido está en la lista de qué ordenar");
+      t.igual(rac.estado, "R", "estado R, no bloqueado en A");
+      t.cierto(/venci[oó]/i.test(rac.quePasa), "dice VENCIÓ (pasado), no 'vence': " + rac.quePasa);
+      t.falso(/vence el/i.test(rac.quePasa), "nunca 'vence el' con una fecha ya pasada: " + rac.quePasa);
+      t.cierto(/albuminuria/i.test(rac.quePasa), "y sigue mencionando la albuminuria: " + rac.quePasa);
+    });
+
     t.caso("«lo que sigue vigente» va del que vence primero al último, sin repetir lo que ya se va a pedir", () => {
       const d = a.mtrTableroClinico(resumenBase);
       const clavesOrdenar = d.ordenar.map((x) => x.clave);

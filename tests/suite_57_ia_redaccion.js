@@ -1072,6 +1072,70 @@ module.exports = {
         "el cosechado (COLESTEROL_HDL) debe aparecer en order_list — bug real: solo faltantes/vencidos, esto no salía");
     });
 
+    // =====================================================================
+    // v17.6.76 — auditoría 25-ago (ítem 4): el motor ya calcula, en mtrConsolidarMtt
+    // (resumen.fallas.fusiones/.fechasDedicadas, vía mtrPlanFallas), cuándo el recontrol
+    // de una falla terapéutica grave (LDL/HbA1c) se retoma en la misma visita que la FTL
+    // maestra ("fusión") o necesita una visita aparte y prioritaria ("fecha dedicada") —
+    // pero esa información nunca salía en el JSON que lee la IA. Se expone como
+    // order_list_mtt, con fechas relativizadas (mismo criterio que ftl_date/control_date).
+    // =====================================================================
+    t.caso("mtrJsonV68DesdeResumen (ítem 4): order_list_mtt expone las fusiones y fechas dedicadas que mtrConsolidarMtt ya calculó", () => {
+      const resumen = {
+        _hoyIso: "2026-08-16",
+        programa: "DM2", erc: {}, riesgo: { categoria: "alto" }, meta: {},
+        plan: { ftl: "2026-09-01", control: { fecha: "2026-09-08" } },
+        fallas: {
+          fusiones: [{ analito: "ldl", fecha: "2026-09-01", gravedad: "grave", fusionadoAFtl: "2026-09-01", difDias: 0 }],
+          fechasDedicadas: [{ analito: "hba1c", fecha: "2026-10-15", gravedad: "grave", analitos: ["hba1c"] }],
+        },
+      };
+      const j = api.mtrJsonV68DesdeResumen(resumen, {});
+      t.cierto(!!j.order_list_mtt, "el campo existe");
+      t.igual(j.order_list_mtt.fusiones.length, 1);
+      t.igual(j.order_list_mtt.fusiones[0].analito, "ldl");
+      t.igual(j.order_list_mtt.fusiones[0].fecha, "en 16 días", "fecha relativizada, nunca cruda (cuasi-identificador fuera del prompt)");
+      t.igual(j.order_list_mtt.fechas_dedicadas.length, 1);
+      t.igual(j.order_list_mtt.fechas_dedicadas[0].analitos, ["hba1c"]);
+      t.igual(j.order_list_mtt.fechas_dedicadas[0].fecha, "en ~2 meses");
+    });
+
+    t.caso("mtrJsonV68DesdeResumen (ítem 4): fechas dedicadas COLAPSADAS (dos analitos cercanos) llegan con los DOS nombres en analitos, no duplicadas", () => {
+      const resumen = {
+        _hoyIso: "2026-08-16",
+        programa: "DM2", erc: {}, riesgo: {}, meta: {},
+        plan: { ftl: "2026-09-01", control: {} },
+        fallas: {
+          fusiones: [],
+          // mtrConsolidarMtt ya colapsa fechas dedicadas <=7 días entre sí en un solo
+          // registro con `analitos: [...]` — se simula aquí el resultado ya colapsado.
+          fechasDedicadas: [{ analito: "ldl", fecha: "2026-10-01", analitos: ["ldl", "hba1c"] }],
+        },
+      };
+      const j = api.mtrJsonV68DesdeResumen(resumen, {});
+      t.igual(j.order_list_mtt.fechas_dedicadas.length, 1, "un solo registro, no dos");
+      t.igual(j.order_list_mtt.fechas_dedicadas[0].analitos, ["ldl", "hba1c"], "los dos analitos colapsados viajan juntos");
+    });
+
+    t.caso("mtrJsonV68DesdeResumen (ítem 4): CERO INFERENCIA — sin resumen.fallas (o sin recontroles graves), order_list_mtt sale con listas vacías, nunca inventadas", () => {
+      const sinFallas = { _hoyIso: "2026-08-16", programa: "HTA", erc: {}, riesgo: {}, meta: {}, plan: {} };
+      const j1 = api.mtrJsonV68DesdeResumen(sinFallas, {});
+      t.cierto(!!j1.order_list_mtt, "el campo siempre existe (estructura estable)");
+      t.igual(j1.order_list_mtt.fusiones, [], "sin fallas, sin fusiones inventadas");
+      t.igual(j1.order_list_mtt.fechas_dedicadas, [], "ni fechas dedicadas inventadas");
+
+      const conFallasVacias = Object.assign({}, sinFallas, { fallas: { fusiones: [], fechasDedicadas: [] } });
+      const j2 = api.mtrJsonV68DesdeResumen(conFallasVacias, {});
+      t.igual(j2.order_list_mtt.fusiones, []);
+      t.igual(j2.order_list_mtt.fechas_dedicadas, []);
+
+      // fallas presente pero con forma inesperada (defensivo, no debe lanzar).
+      let j3;
+      t.noLanza(() => { j3 = api.mtrJsonV68DesdeResumen(Object.assign({}, sinFallas, { fallas: { fusiones: null, fechasDedicadas: "no-array" } }), {}); });
+      t.igual(j3.order_list_mtt.fusiones, []);
+      t.igual(j3.order_list_mtt.fechas_dedicadas, []);
+    });
+
     t.caso("SEGURIDAD: sin TFG ni meta, el JSON v68 emite null (NUNCA 0) para no afirmar 'TFG 0'", () => {
       // Paciente sin creatinina/peso: mtrEvaluarErc devuelve egfr/crcl null. Un 0 aquí hacía
       // que la IA escribiera 'TFG 0, estadio terminal' o 'meta LDL <0'. Debe ser null.

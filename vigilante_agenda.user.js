@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.76
+// @version     17.6.78
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.75";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.78";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3026,6 +3026,21 @@
   // Sólo se juzga cuando hay las tres cosas: tabla oficial, regla aplicable a ESTE
   // paciente y un número de verdad. Un "> 300" o un "PENDIENTE" no se juzgan (no hay
   // número que comparar) y siguen su camino de siempre.
+  //
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): GAP DE
+  // NORMALIZACIÓN DE UNIDADES. Esta función (y `_labNumerico` en general) SOLO detecta
+  // que un valor está fuera del rango plausible en las unidades esperadas — NUNCA
+  // convierte unidades (µmol/L→mg/dL, mmol/L→mg/dL, etc.). El caso citado arriba
+  // (creatinina en µmol/L, "88" donde se espera "1,0") se BLOQUEA, no se CORRIGE: el
+  // médico ve el aviso de implausibilidad y tiene que convertir y escribir el valor
+  // correcto a mano. Es una decisión deliberada, no una limitación pendiente de
+  // resolver por descuido: convertir automáticamente exigiría primero detectar CON
+  // CERTEZA en qué unidad llegó el valor (el LIS no siempre la declara junto al
+  // número), y una conversión mal disparada sobre un valor que en realidad SÍ estaba en
+  // las unidades correctas sería inventar un número — exactamente lo que la regla de la
+  // casa prohíbe. Bloquear y avisar es la opción segura; convertir con inferencia no lo
+  // es. Si algún día Everest/Athenea empiezan a declarar la unidad de forma fiable junto
+  // a cada resultado, ahí sí habría una base real para automatizar la conversión.
   function _objecionOficialAlValor(labKey, resultValCrudo, opts) {
       const o = opts || {};
       // Basta con comprobar que sea un arreglo: si viene vacío, `_reglasParaLabKey`
@@ -3907,6 +3922,16 @@
   }
   // Cockcroft-Gault usa el peso REAL siempre (decisión clínica ya tomada: es el estadio
   // administrativo) — nunca peso ideal ni ajustado. Centinela 0 = "no evaluable".
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
+  // redondeo a 1 decimal (`Math.round(v*10)/10`) ocurre AQUÍ, sobre la TFG cruda, ANTES
+  // de que `estadioKDIGO()` (más abajo) la clasifique en G1-G5. Un paciente en el borde
+  // exacto de un corte (p.ej. TFG cruda 59.96) puede redondear a 60.0 y caer en G2 en
+  // vez de G3a. Se deja así a propósito, no es un bug pendiente: es la MISMA aritmética
+  // portada del Copiloto RCV ("ya verificada en producción allí", ver el comentario de
+  // arriba) — cambiar el orden (estadificar antes de redondear) sería una decisión
+  // clínica nueva, no una corrección de fidelidad al port. Si algún día se decide que el
+  // corte de estadio debe mirar la TFG SIN redondear, ese es un cambio de norma clínica
+  // que requiere decisión explícita del médico, no un ajuste de este archivo por su cuenta.
   function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
       const edad = Number(edadAnios), peso = Number(pesoKg), creat = Number(creatininaSerica);
       if (!(edad >= 18 && edad <= 120) || !(peso >= 20 && peso <= 300) || !(creat >= 0.1 && creat <= 20)) return 0;
@@ -3915,6 +3940,8 @@
       return Math.round(v * 10) / 10;
   }
   // CKD-EPI 2021 (sin el término de raza, ya retirado). Centinela 0 = "no evaluable".
+  // v17.6.78 — mismo orden de redondeo (antes de estadificar) que cockcroftGault arriba,
+  // por la misma razón — ver su comentario.
   function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
       const edad = Number(edadAnios), creat = Number(creatininaSerica);
       if (!(edad >= 18 && edad <= 120) || !(creat >= 0.1 && creat <= 20)) return 0;
@@ -6156,6 +6183,12 @@ _vglOfrecerDeshacer(btn);
   //  SECOPS Y ESTABILIDAD (VIGILANTE DE AGENDA)
   // =====================================================================
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): un debounce
+  // genérico de propósito general, probado (suite 01), pero sin ningún llamador real en
+  // producción — nada en el script envuelve una función con `debounceVgl(...)`. No se
+  // borra (sin autorización explícita para eliminar código muerto confirmado): queda
+  // disponible como utilidad ya lista si algún futuro handler de eventos frecuentes
+  // (scroll, resize, input) necesita debounce.
   function debounceVgl(func, wait) {
       let timeout;
       return function(...args) {
@@ -8523,6 +8556,12 @@ _vglOfrecerDeshacer(btn);
   // costó un cuadro; esto dice cuánto costó UNA función NUESTRA, que es lo único que
   // podemos arreglar. Es la otra mitad de cualquier RUM serio: observación + tramos
   // propios. Coste medido: ~0,003 ms por llamada (una resta y un uxTrack en tanda).
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): ningún
+  // punto del script de verdad ENVUELVE una función propia con `_rumTramo(nombre, fn)`
+  // — se construyó y se probó (suite 23) como infraestructura lista para instrumentar,
+  // pero nunca se adoptó en ningún llamador real. No se borra (no hay autorización
+  // explícita para eliminar código muerto confirmado): sigue disponible para el día que
+  // se decida medir el costo de una función concreta.
   function _rumTramo(nombre, fn) {
     let t0 = 0;
     try { t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : 0; } catch (e) {}
@@ -15791,6 +15830,16 @@ _vglOfrecerDeshacer(btn);
   // Misma caché por paciente y mismo TTL que las órdenes vigentes: durante una consulta el
   // peso no cambia, y este endpoint se consulta desde un flujo que puede repetirse.
   let _signosVitalesCache = { pacienteId: "", data: null, ts: 0 };
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción — la caché de arriba solo se limpia por vencimiento del
+  // TTL (`ORDENES_VIGENTES_TTL_MS`, ver la lectura más abajo), nunca por invalidación
+  // manual. Mismo patrón exacto que sus hermanas `mtrMedsInvalidar` (línea ~27296) y
+  // `_demograficosInvalidar` (línea ~15966): las tres cachés de este archivo se
+  // construyeron con un helper de invalidación manual "por si acaso", pero ninguna
+  // llegó a engancharse a un evento real (p.ej. cambio de paciente) — el diseño real
+  // terminó apoyándose solo en el TTL. No se borra (sin autorización explícita para
+  // eliminar código muerto confirmado); las pruebas la siguen usando para envejecer la
+  // caché sin esperar minutos reales.
   function _signosVitalesInvalidar() { _signosVitalesCache = { pacienteId: "", data: null, ts: 0 }; }
   // v14.1.8 — Tabla de validación por examen de la propia IPS (rangos + UNIDAD), por cita.
   // Cacheada por citaId con el mismo TTL que las demás: dentro de una consulta la
@@ -15954,6 +16003,13 @@ _vglOfrecerDeshacer(btn);
     return { peso, pas, pad, imc, fechaIso: r.fechaRegistro || "" };
   }
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // ningún llamador real en producción — solo aparece en tests. Todo indica que quedó
+  // SUPERADA por `_signosVitalesDelRegistro` (justo arriba), que extrae el mismo peso
+  // (con la misma guarda `_labNumerico`) además de PAS/PAD/IMC, y que SÍ tiene un
+  // llamador real (línea ~16108). No se borra (sin autorización explícita para
+  // eliminar código muerto confirmado) por si algún camino todavía la necesita solo
+  // para el peso, sin el resto de signos vitales.
   function _pesoDeSignosVitales(arr) {
     if (!Array.isArray(arr) || !arr.length) return null;
     const r = arr[0];
@@ -20499,8 +20555,17 @@ _vglOfrecerDeshacer(btn);
         // CASO REAL: con vencidos manda el primer cupo hábil (CERO VENCIDOS), y el control
         // se cuelga a +7 días. El texto genérico solo aplica cuando el piso NO cedió.
         const _pisoLP = _labsPrimero && _labsPrimero.pisoRelajado;
+        // v17.6.73 — [reportado en consultorio, 26-ago-2026: "ni él ni sus compañeros lo
+        // entienden bien"] La redacción vieja embebía motivoPiso (que YA empezaba con
+        // "adelantada porque...") dentro de una frase que también empezaba con "se
+        // adelanta... porque", así que el mensaje decía literalmente "porque...
+        // (adelantada porque..." — duplicado, más jerga interna del motor ("ventana de
+        // 14–21 días", "piso", "cupo hábil") que un médico sin el contexto del código no
+        // tiene por qué reconocer. motivoPiso ahora es solo la razón (ver más arriba,
+        // ~línea 25915/25927), así que embeba limpio, una sola vez, sin jerga. La rama SIN
+        // piso relajado (el `else`) no se tocó — el médico no la reportó como confusa.
         const notaLP = _pisoLP
-          ? "La toma se adelanta al primer cupo hábil porque la ventana de 14–21 días ya no puede evitar un vencimiento (" + escapeHtml(_labsPrimero.motivoPiso || "exámenes vencidos o por vencer") + "). El control queda a los ~7 días de la toma, y si mueve la toma, el control se recalcula solo — es una sugerencia, no una imposición."
+          ? "Se adelanta la toma al primer cupo disponible porque " + escapeHtml(_labsPrimero.motivoPiso || "hay exámenes vencidos o por vencer") + ". El control queda ~7 días después de la toma, para que el resultado esté listo a tiempo; si mueve la toma, el control se recalcula solo — es una sugerencia, no una imposición."
           : "La toma queda 14–21 días antes y el control ~7 días después, para que ningún resultado llegue vencido a la consulta. Si mueve la toma, el control se recalcula solo (+7 días, hábil siguiente) — es una sugerencia, no una imposición.";
         _bannerSug.innerHTML = `🧪 <b>Labs primero:</b> toma de laboratorios sugerida <b>${escapeHtml(_sugeridaControl.ftl)}</b>`
           + ` → control médico <b>${escapeHtml(_sugeridaControl.iso)}</b>`
@@ -21548,6 +21613,15 @@ _vglOfrecerDeshacer(btn);
   // Recursivo, mismo patrón que extractPatientId: la respuesta de GuardarOrdenamiento
   // ya expone `agrupador` directo o en `.data.agrupador` (ver el manejo de éxito más
   // abajo); este extractor cubre además cualquier variante de mayúsculas o anidación.
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción. El "manejo de éxito más abajo" que el comentario de
+  // arriba anuncia (línea ~21977, `GuardarOrdenResponse`) terminó extrayendo
+  // `resOrd.agrupador || (resOrd.data && resOrd.data.agrupador)` EN LÍNEA, con su propia
+  // expresión — más angosta que este extractor (no cubre `Agrupador`/`Grupo`/`Codigo`
+  // en mayúscula, ni arreglos, ni anidación más profunda que un nivel), en vez de llamar
+  // a esta función que se escribió justamente para ese caso. No se borra (sin
+  // autorización explícita para eliminar código muerto confirmado); las pruebas la
+  // siguen ejercitando por su cuenta.
   function extractAgrupador(res) {
     if (!res) return null;
     if (typeof res === "number" && res > 0) return String(res);
@@ -25638,7 +25712,9 @@ _vglOfrecerDeshacer(btn);
     if (!C) return null;
 
     // El vigilado que vence primero (para nombrarlo en la explicación).
-    const vigilados = (plan.drivers || []).filter((x) => x && (x.estado === "D" || x.estado === "R") && x.vence);
+    // v17.6.75 — excluye un RAC ya vencido (`vencidoBase`, promovido a R): su fecha es
+    // pasada, no un "próximo vencimiento" — mismo trato que el Estado A normal.
+    const vigilados = (plan.drivers || []).filter((x) => x && (x.estado === "D" || x.estado === "R") && x.vence && !x.vencidoBase);
     const primero = vigilados.slice().sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0] || null;
 
     if (deudaYa) {
@@ -25770,6 +25846,11 @@ _vglOfrecerDeshacer(btn);
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
+      // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
+      // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
+      // caía en la rama de abajo y decía "vence el [fecha YA PASADA]", un tiempo verbal
+      // que miente sobre algo que ya pasó. `vencidoBase` es la verdad de terreno.
+      if (a.estado === "R" && a.vencidoBase) return fila(a, "Albuminuria: venció el " + mtrFechaLegible(a.vence) + " — vigilancia estrecha");
       if (a.estado === "R") return fila(a, "Albuminuria: vigilancia estrecha, vence el " + mtrFechaLegible(a.vence));
       return fila(a, a.vence ? "Vence el " + mtrFechaLegible(a.vence) + ": se aprovecha el mismo viaje" : "Se ordena en esta toma");
     });
@@ -25924,7 +26005,14 @@ _vglOfrecerDeshacer(btn);
   // =====================================================================
   function mtrAvisoVencimiento(plan, refLabIso) {
     if (!plan || !mtrFechaDesdeIso(refLabIso)) return null;
-    const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence);
+    // v17.6.75 — auditoría 25-ago (1.17): esta función avisa de exámenes que TODAVÍA no
+    // vencen pero VENCERÍAN antes de la fecha propuesta — un RAC≥30 ya vencido
+    // (`vencidoBase`, ahora en estado R por la promoción de albuminuria) no encaja ahí:
+    // ya está vencido HOY, no "vencería" con la fecha elegida — cualquier fecha futura
+    // "vencería" respecto a él, generando un aviso redundante y confuso sobre algo que el
+    // médico ya sabe (está en la lista de "Ya vencidos"). Mismo trato que el Estado A
+    // normal, que también queda fuera de este filtro.
+    const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
     if (!vigilados.length) return null;
     const vencidosEnEsaFecha = vigilados.filter((a) => a.vence < refLabIso)
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0));
@@ -26002,19 +26090,30 @@ _vglOfrecerDeshacer(btn);
       if (vencidos.length) {
         labMinIso = primerHabilIso;
         pisoRelajado = labMinIso < pisoNormalIso;
-        if (pisoRelajado) motivoPiso = "adelantada porque ya hay examen(es) vencido(s): esperar el piso de 14 días no los recupera";
+        // v17.6.73 — [reportado en consultorio, 26-ago-2026: el médico y sus compañeros
+        // no entendían el mensaje] Antes decía "adelantada porque..." — una mini-frase
+        // pensada para leerse sola, pero notaLP (más abajo, donde el médico de verdad la
+        // lee) la EMBEBÍA dentro de otra oración que ya empezaba con "se adelanta...
+        // porque", duplicando "porque...(adelantada porque..." en el mismo párrafo. Ahora
+        // es solo la RAZÓN, sin verbo propio, para que embeba limpio en notaLP.
+        if (pisoRelajado) motivoPiso = "ya hay examen(es) vencido(s) y esperar 14 días no los recupera";
       } else if (mtrLabsPrimeroVencimientoInevitable(plan, pisoNormalIso)) {
         // Caso 2 — todavía no vence, pero vencerá antes del piso. Se adelanta AL
         // vencimiento, retrocediendo a día hábil (nunca avanzando: adelantar un día es
         // inocuo, atrasarlo es justo lo que rompe CERO VENCIDOS).
-        const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence);
+        // v17.6.75 — mismo trato que arriba: un RAC ya vencido (`vencidoBase`) no es un
+        // "todavía no vence" — no debería llegar nunca a esta rama (el caso 1 ya lo
+        // atrapa vía `vencidos`), pero se excluye igual por consistencia y defensa.
+        const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
         const primero = vigilados.slice().sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0];
         if (primero && primero.vence) {
           const candidato = mtrRetrocederADiaHabil(primero.vence);
           labMinIso = (candidato && candidato > primerHabilIso) ? candidato : primerHabilIso;
           pisoRelajado = labMinIso < pisoNormalIso;
-          if (pisoRelajado) motivoPiso = "adelantada al vencimiento de " + (primero.nombre || primero.clave || "un examen")
-            + " (" + primero.vence + "): el piso de 14 días la habría dejado vencer";
+          // v17.6.73 — mismo criterio que el caso 1: solo la razón, sin "adelantada al...",
+          // para que notaLP la embeba sin duplicar el verbo.
+          if (pisoRelajado) motivoPiso = "el examen " + (primero.nombre || primero.clave || "un examen")
+            + " vence el " + primero.vence + " y esperar 14 días lo dejaría vencer";
         }
       }
       // v16.2.5 — Pedido del médico sobre el aviso de agendamiento: "ahí directamente se
@@ -26372,6 +26471,22 @@ _vglOfrecerDeshacer(btn);
   //  la suite 43 cae, y ese es justo el punto.
   // =====================================================================
 
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
+  // DISCORDANCIA CLÍNICO/ADMINISTRATIVO para DOAC/gabapentinoides/HBPM. La mayoría de
+  // reglas de ajuste renal de este bloque usan MTR_FORMULA_CKDEPI (el "estadio
+  // clínico" del paciente, ver mtrEvaluarErc/ckdEpi2021) — pero tres familias
+  // (mtrReglaDoac, mtrReglaGabapentinoide, mtrReglaLmwh, buscar más abajo) usan
+  // MTR_FORMULA_CG (el "estadio administrativo", CrCl) para SUS propios umbrales de
+  // dosis. No es un descuido ni inconsistencia entre las reglas: las fichas técnicas y
+  // guías de dosificación renal de anticoagulantes directos, gabapentinoides y
+  // heparinas de bajo peso molecular están validadas y publicadas con Cockcroft-Gault
+  // — ese es el estándar histórico de la industria farmacéutica para dosis renal (la
+  // FDA lo exige así en los estudios de registro), mientras CKD-EPI es la fórmula
+  // clínica más moderna y precisa para estadificar función renal en general. El efecto
+  // práctico: el "estadio clínico" (CKD-EPI) que ve el médico en el recuadro de ERC
+  // puede no coincidir exactamente con la TFG que de verdad gatilla un ajuste de dosis
+  // de DOAC/gabapentinoide/HBPM — ese ajuste mira su PROPIA fórmula (CG), fiel a la
+  // ficha técnica de cada fármaco, no al estadio clínico general del paciente.
   const MTR_FORMULA_CG = "Cockcroft-Gault (CrCl)";
   const MTR_FORMULA_CKDEPI = "CKD-EPI 2021 (eGFR)";
   const MTR_SEV_CRITICAL = "CRITICAL";
@@ -26480,6 +26595,40 @@ _vglOfrecerDeshacer(btn);
     return stripAccents(nombre.toLowerCase()).replace(/\s+/g, " ").trim();
   }
 
+  // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] Clave de dedup
+  // QUE IGNORA LA DOSIS — instrucción explícita del médico, y SOLO para
+  // `mtrMedicamentosRcv` (la lista «Medicamentos del programa cardiovascular» del Panel
+  // del paciente): «cuando sea ese caso el script solamente debe tomar los ÚLTIMOS que
+  // fueron prescritos. No poner dos medicamentos iguales pero con diferentes dosis».
+  // Caso real: ROSUVASTATINA 40 MG y ROSUVASTATINA 20 MG salían como dos renglones
+  // separados en esa lista.
+  //
+  // DELIBERADAMENTE DISTINTA de `_mtrClaveDedupMedicamento` de arriba, que CONSERVA la
+  // dosis A PROPÓSITO (ver su comentario) — esa es la que usa `mtrMedicamentosUnicos`, y
+  // por lo tanto `mtrDuplicidadesTerapeuticas` (el chequeo de «posible duplicidad
+  // terapéutica» del Panel): ahí, dos concentraciones distintas del MISMO principio SÍ
+  // deben seguir alertando («revise si uno debía suspenderse al iniciar el otro» — ver el
+  // comentario explícito en esa función). Colapsar esa clave por dosis apagaría una alerta
+  // de seguridad real. Por eso este cambio es NUEVO Y APARTE, no una edición de la
+  // función de arriba, y por eso `mtrMedicamentosUnicos` NO se toca.
+  //
+  // Se corta el nombre en la PRIMERA cifra numérica y se usa solo lo que queda antes,
+  // canonizado — así "ROSUVASTATINA 40 MG (TABLETA)" y "ROSUVASTATINA 20 MG (TABLETA)"
+  // caen en la misma clave ("rosuvastatina"). Un combo como "AMLODIPINO + LOSARTAN
+  // 5/50MG (TABLETA)" sigue siendo distinto de "AMLODIPINO 10 MG (TABLETA)" porque el
+  // "+" viene ANTES de cualquier dígito — probado contra el vocabulario real del
+  // catálogo (`catalogo_farmacologico_rcv.json`) y ejemplos reales de consola citados en
+  // el reporte (INDAPAMIDA, GEMFIBROZIL, ENALAPRIL MALEATO, LINAGLIPTINA + METFORMINA,
+  // INSULINA GLARGINA...). Sin ningún dígito en el nombre, se usa el nombre completo —
+  // mismo comportamiento que `_mtrClaveDedupMedicamento` en ese caso.
+  function _mtrClaveDedupMedicamentoSinDosis(m) {
+    const nombre = String(m == null ? "" : (typeof m === "string" ? m : (m.nombre || m.descripcion || ""))).trim();
+    if (!nombre) return "";
+    const corte = nombre.search(/\d/);
+    const base = corte >= 0 ? nombre.slice(0, corte) : nombre;
+    return stripAccents(base.toLowerCase()).replace(/\s+/g, " ").trim();
+  }
+
   // v17.1.0 (#113) — Deduplica CONSERVANDO EL ORDEN y el texto original del primer
   // renglón. No filtra por programa: sirve igual para la pestaña Medicamentos (que
   // muestra todo lo que toma el paciente) que para el chequeo de duplicidad (que vigila
@@ -26507,10 +26656,24 @@ _vglOfrecerDeshacer(btn);
       if (!nombre) return;
       const c = mtrClasificarMedicamento(nombre);
       if (!c.esRcv) return;
-      const clave = _mtrClaveDedupMedicamento(nombre);
-      if (vistos.has(clave)) return;
-      vistos.add(clave);
-      const frecuenciaTexto = (frec && frec.get(clave)) || "";
+      // v17.6.74 — [reportado en consultorio, 26-ago-2026] dedup SIN dosis, a propósito
+      // (instrucción del médico): dos concentraciones del MISMO principio activo
+      // (ROSUVASTATINA 40 MG / 20 MG) cuentan como el MISMO medicamento en ESTA lista —
+      // solo se conserva la primera vista. Gracias al orden por fecha ya aplicado en
+      // `mtrMedicamentosDesdeRespuesta`, "la primera vista" es la formulación MÁS
+      // RECIENTE, que es justo "los últimos que fueron prescritos" que pidió el médico.
+      // Distinta A PROPÓSITO de `_mtrClaveDedupMedicamento` (que conserva la dosis) — ver
+      // el comentario grande de `_mtrClaveDedupMedicamentoSinDosis` arriba para por qué
+      // esa otra clave NO se toca (la sigue usando `mtrMedicamentosUnicos`/
+      // `mtrDuplicidadesTerapeuticas`, donde dos dosis distintas SÍ deben seguir alertando).
+      const claveGrupo = _mtrClaveDedupMedicamentoSinDosis(nombre);
+      if (vistos.has(claveGrupo)) return;
+      vistos.add(claveGrupo);
+      // La frecuencia SÍ se busca con la clave que CONSERVA la dosis: es la misma clave
+      // que arma `mtrMapaFrecuenciasPorNombre` (#114), y una frecuencia es propia de UNA
+      // concentración concreta — mezclarla entre dosis distintas sería inventar un dato.
+      const claveFrecuencia = _mtrClaveDedupMedicamento(nombre);
+      const frecuenciaTexto = (frec && frec.get(claveFrecuencia)) || "";
       // v17.6.66 — marcador [DOSIS NO ESPECIFICADA]: solo cuando SÍ se intentó
       // leer la frecuencia (se pasó `frecuencias`, aunque el Map salga vacío) y
       // este fármaco puntual no tiene coincidencia. Si `frecuencias` ni se pasó
@@ -27374,12 +27537,32 @@ _vglOfrecerDeshacer(btn);
   // Devuelve null si la respuesta no tiene la forma esperada — y null NO es lo
   // mismo que lista vacía. Un array vacío es "el paciente no tiene formulaciones
   // en la ventana", que es un resultado real.
+  // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] Se ordena por
+  // `fechaCreacion` DESCENDENTE (más reciente primero) ANTES de aplanar a texto: sin
+  // esto, para cuando `mtrMedicamentosRcv` dedupe "el primero visto gana" (más abajo, ver
+  // su propio comentario), ya no queda ninguna fecha con la que decidir cuál formulación
+  // es la más reciente — el orden que sobrevivía era el que trajera la respuesta de
+  // Everest, no necesariamente el último prescrito. Caso real: Rosuvastatina 40mg y
+  // Rosuvastatina 20mg, de dos formulaciones distintas — sin este orden, cuál de las dos
+  // "gana" el dedup es prácticamente al azar. Formularios sin fecha (o con fecha
+  // ilegible, `mtrFechaIso` -> null) se quedan AL FINAL, después de todos los que sí
+  // tienen fecha — nunca se inventa una fecha para ordenarlos, y entre dos sin fecha (o
+  // dos con la MISMA fecha) el `sort` de JS es estable: conservan su orden relativo
+  // original, no se revuelven al azar.
   function mtrMedicamentosDesdeRespuesta(datos, opciones) {
     if (!Array.isArray(datos)) return null;
     const o = opciones || {};
     const soloEstados = o.estados || null;   // p.ej. ["PENDIENTE"]; null = todos
+    const datosOrdenados = datos.slice().sort((a, b) => {
+      const fa = mtrFechaIso(a && a.fechaCreacion);
+      const fb = mtrFechaIso(b && b.fechaCreacion);
+      if (fa && fb) return fa < fb ? 1 : (fa > fb ? -1 : 0);
+      if (fa && !fb) return -1;
+      if (!fa && fb) return 1;
+      return 0;
+    });
     const fuera = [];
-    for (const form of datos) {
+    for (const form of datosOrdenados) {
       if (!form || typeof form !== "object") continue;
       if (soloEstados && soloEstados.indexOf(String(form.estado || "")) < 0) continue;
       const det = form.detalles;
@@ -28052,6 +28235,15 @@ _vglOfrecerDeshacer(btn);
   // dice si el enfoque RCV está dejando pasar fármacos relevantes. Hallazgo que la
   // motiva: la IPS nunca parametrizó su propia bandera swNefrotoxico (0 de 2749), así
   // que este motor es la única red — conviene saber qué fracción de la fórmula ve.
+  // v17.6.77 — auditoría 25-ago (ítem 5): se suma el CATÁLOGO RCV externo (v17.6.4,
+  // `mtrGruposCatalogoRcv`/MTR_CATALOGO_RCV) a la comprobación. Es un tercer sistema de
+  // clasificación que llegó DESPUÉS de esta función (v14.2.0) y nunca se sumó aquí — un
+  // fármaco reconocido SOLO por el catálogo (p.ej. omeprazol, que participa en la
+  // interacción CLOPIDOGREL_IBP pero no está en `mtrDetectarGruposFarmacologicos` ni en
+  // `mtrDetectarGruposAmp`) contaba como "sin grupo" pese a que el motor SÍ lo evalúa —
+  // un falso positivo de cobertura, real desde que existe el catálogo. Se corrige aquí
+  // (no es un criterio nuevo: es completar el mismo criterio — "¿el motor reconoce este
+  // fármaco en ALGUNO de sus sistemas de clasificación?" — con el sistema que faltaba).
   function mtrMedsSinGrupo(medicamentos) {
     const out = { total: 0, sinGrupo: 0 };
     if (!Array.isArray(medicamentos)) return out;
@@ -28060,9 +28252,53 @@ _vglOfrecerDeshacer(btn);
       out.total++;
       const enBase = Object.keys(mtrDetectarGruposFarmacologicos([m])).length > 0;
       const enAmp = enBase ? true : Object.keys(mtrDetectarGruposAmp([m])).length > 0;
-      if (!enBase && !enAmp) out.sinGrupo++;
+      const enCatalogo = (enBase || enAmp) ? true : Object.keys(mtrGruposCatalogoRcv([m])).length > 0;
+      if (!enBase && !enAmp && !enCatalogo) out.sinGrupo++;
     }
     return out;
+  }
+
+  // v17.6.77 — auditoría 25-ago (ítem 5): `mtrMedsSinGrupo` (arriba) alimentaba SOLO
+  // telemetría (`uxTrack("farmaco.cobertura", ...)`, PHI-free A PROPÓSITO — solo
+  // enteros, nunca nombres, ver su comentario). El médico nunca veía CUÁLES fármacos el
+  // motor no reconoce, aunque es justo la señal que le sirve para saber qué medicamento
+  // revisar a mano — un fármaco fuera de todo grupo es un punto ciego real del motor.
+  //
+  // Función NUEVA y SEPARADA (no se toca `mtrMedsSinGrupo`, que sigue intacta para la
+  // telemetría PHI-free): MISMA lógica de detección exacta (enBase/enAmp/enCatalogo, sin
+  // cambiar un carácter del criterio), pero devuelve los NOMBRES en vez de un conteo —
+  // para construir un aviso visible. Esto SOLO debe usarse para pintar en pantalla,
+  // nunca para telemetría (el nombre del medicamento no viaja a uxTrack).
+  function mtrMedsFueraDeGrupoNombres(medicamentos) {
+    const out = [];
+    if (!Array.isArray(medicamentos)) return out;
+    for (const m of medicamentos) {
+      if (!m || !String(m).trim()) continue;
+      const enBase = Object.keys(mtrDetectarGruposFarmacologicos([m])).length > 0;
+      const enAmp = enBase ? true : Object.keys(mtrDetectarGruposAmp([m])).length > 0;
+      const enCatalogo = (enBase || enAmp) ? true : Object.keys(mtrGruposCatalogoRcv([m])).length > 0;
+      if (!enBase && !enAmp && !enCatalogo) out.push(String(m).trim());
+    }
+    return out;
+  }
+
+  // v17.6.77 — Aviso VISIBLE (mismo patrón que el resto del flujo de avisos,
+  // mtrAvisosDosisRenal/mtrEvaluarSeguridadDosisRenal: un objeto listo para
+  // mtrPintarAviso, o null si no hay nada que decir — nunca un aviso vacío). Severidad
+  // INFO a propósito: no es una interacción conocida ni un riesgo cuantificado, es una
+  // declaración honesta de cobertura — "el motor no pudo evaluar esto, revíselo usted".
+  // Nunca sugiere suspender ni ajustar nada: eso sería inventar un juicio clínico sobre
+  // un fármaco que, por definición, el motor no reconoce.
+  function mtrAvisoFueraDeGrupo(medicamentos) {
+    const nombres = mtrMedsFueraDeGrupoNombres(medicamentos);
+    if (!nombres.length) return null;
+    return mtrAlertaInteraccion(nombres, "FUERA_DE_GRUPO", "MONITORIZAR",
+      (nombres.length === 1
+        ? "1 medicamento de la fórmula no cae en ningún grupo farmacológico que este motor reconozca"
+        : nombres.length + " medicamentos de la fórmula no caen en ningún grupo farmacológico que este motor reconozca")
+        + ": no se pudo evaluar interacción ni dosis renal para ellos. Revíselos con su propio criterio.",
+      MTR_SEV_INFO,
+      "Fuera del catálogo de grupos farmacológicos (base + ampliado + catálogo RCV) que el motor reconoce");
   }
 
   // v14.2.0 — Reglas RENALES ampliadas (ficha técnica, Cockcroft-Gault como en el
@@ -28715,15 +28951,34 @@ _vglOfrecerDeshacer(btn);
     const avisosRenales = base.avisos.concat(
       mtrReglasRenalesAmpliadas(meds || [], mtrFloat(c.tfgCockcroftGault)));
 
-    const todo = avisosRenales.concat(inter, interCatalogo).slice().sort((a, b) =>
+    // v17.6.77 — auditoría 25-ago (ítem 5): la detección de "fuera de grupo" ya existía
+    // (mtrMedsSinGrupo, línea ~28067) pero solo alimentaba telemetría. Ahora también se
+    // suma al flujo de avisos que el médico VE, con el mismo patrón que el resto
+    // (mtrAlertaInteraccion, severidad INFO, mismo mtrPintarAviso) — un aviso, no un
+    // conteo aparte, y null (no se agrega nada) si todos los fármacos caen en algún
+    // grupo reconocido.
+    let avisoFueraDeGrupo = null;
+    try { avisoFueraDeGrupo = mtrAvisoFueraDeGrupo(meds || []); } catch (e) { avisoFueraDeGrupo = null; }
+
+    // v17.6.77 — `combinado` (sin el aviso de cobertura) es lo que decide `motivo`/
+    // `legible` más abajo: ese aviso es INDEPENDIENTE de si se pudo o no juzgar la
+    // dosis renal (no depende de tfgCkdEpi/tfgCockcroftGault en absoluto), así que su
+    // sola presencia NO puede convertir un "SIN_FUNCION_RENAL" honesto en un "OK" — eso
+    // ocultaría que la dosis renal de verdad nunca se evaluó. El aviso de cobertura
+    // SIGUE viajando en `todo` (se pinta igual, ver mtrRenderAvisosHtml: solo mira
+    // `todo.length`, nunca `motivo`, para decidir si hay algo que mostrar).
+    const combinado = avisosRenales.concat(inter, interCatalogo);
+    const todo = combinado.concat(avisoFueraDeGrupo ? [avisoFueraDeGrupo] : []).slice().sort((a, b) =>
       (MTR_SEV_ORDEN[a.severidad] === undefined ? 9 : MTR_SEV_ORDEN[a.severidad]) -
       (MTR_SEV_ORDEN[b.severidad] === undefined ? 9 : MTR_SEV_ORDEN[b.severidad]));
 
     // v14.2.0 — Telemetría de cobertura (solo enteros): qué fracción de la fórmula
-    // del paciente cae dentro de algún grupo del motor.
+    // del paciente cae dentro de algún grupo del motor. Se conserva SIN TOCAR: sigue
+    // siendo un conteo PHI-free, independiente del aviso visible de arriba (que usa
+    // mtrMedsFueraDeGrupoNombres, una función distinta, nunca enviada a telemetría).
     try { const cob = mtrMedsSinGrupo(meds || []); if (cob.total) uxTrack("farmaco.cobertura", cob); } catch (e) {}
 
-    const n = todo.length;
+    const n = combinado.length;
     // v17.6.28 — si NO se halló nada (n=0) pero la razón de fondo era SIN_FUNCION_RENAL
     // (no se pudo evaluar dosis por falta de CG), el motivo se conserva: la vista de
     // presentación (mtrRenderAvisosHtml) distingue "no se pudo evaluar" (ámbar,
@@ -28780,6 +29035,8 @@ _vglOfrecerDeshacer(btn);
     METFORMINA_CONTRASTE: "Metformina y contraste",
     BETA_CCB_NODHP: "Bradicardia por combinación",
     SGLT2_SULFONILUREA: "Riesgo de hipoglucemia",
+    // v17.6.77 — auditoría 25-ago (ítem 5): etiqueta del aviso de mtrAvisoFueraDeGrupo.
+    FUERA_DE_GRUPO: "Fuera de grupo reconocido",
   };
 
   function mtrEtiquetaAviso(a) {
@@ -29949,6 +30206,16 @@ _vglOfrecerDeshacer(btn);
     return mtrSabadoMemoriaGuardar(mem);
   }
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción — a diferencia de sus hermanas de este mismo
+  // subsistema (`mtrSabadoRegistrarObservacion`/`mtrSabadoGrupoDeMedico`, ambas SÍ
+  // llamadas en producción, líneas ~19726/19729/30012/33787), esta es la única función
+  // del bloque «sábados» sin ningún punto de entrada real. Es la VÁLVULA MANUAL:
+  // `mtrSabadoGrupoDeMedico` ya sabe respetar `reg.origen === "manual"` cuando existe
+  // (línea ~30090), pero nada en la interfaz llama a esta función para FIJARLO —no hay
+  // botón/ajuste conectado a "corrija usted el grupo del sábado si la deducción
+  // automática se equivocó". No se borra (sin autorización explícita para eliminar
+  // código muerto confirmado); las pruebas la siguen ejercitando por su cuenta.
   function mtrSabadoFijarGrupoManual(medicoId, grupo) {
     const id = String(medicoId == null ? "" : medicoId).trim();
     const g = String(grupo == null ? "" : grupo).trim();
@@ -30300,19 +30567,36 @@ _vglOfrecerDeshacer(btn);
     let subestado = "vigente";
     if (diasParaVencer !== null && diasParaVencer < 0) { estado = "A"; subestado = "vencido"; }
     const racNum = mtrFloat(c.rac);
-    if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA && estado !== "A") {
+    // v17.6.75 — auditoría 25-ago (1.17): antes el guard `estado !== "A"` bloqueaba la
+    // promoción a Estado R cuando el RAC YA estaba vencido — se quedaba como "A" normal,
+    // sin la señal específica de albuminuria (vigilancia estrecha). Decisión del médico:
+    // "usa el mismo piso/techo que el Estado A normal (Recomendado si no tiene el spec a
+    // mano)" — enfoque conservador. Ahora se promueve a R SIEMPRE que haya albuminuria
+    // (vencido o no), pero `vencidoBase` recuerda si YA estaba vencido ANTES de la
+    // promoción, para que `mtrPlanParaclinicos` lo siga tratando con la MISMA urgencia
+    // de un Estado A normal (piso 14/techo 21, en la lista de vencidos, excluido del
+    // cálculo de "próximo vencimiento futuro") — nunca se relaja CERO VENCIDOS solo por
+    // reetiquetarlo a R.
+    const vencidoBase = estado === "A";
+    if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
       estado = "R"; subestado = "albuminuria";
     }
     return {
       clave: clave, nombre: nombre, estado: estado, subestado: subestado,
       vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
       diasParaVencer: diasParaVencer,
+      // v17.6.75 — ver el comentario grande arriba: verdad de terreno de "ya estaba
+      // vencido", independiente de la relabeling a R por albuminuria.
+      vencidoBase: vencidoBase,
       // v16.2.7 — Cuando la vigencia se partió por estar fuera de meta, el motivo lo DICE:
       // si no, el médico ve una fecha más corta sin saber de dónde salió.
       fueraDeMeta: fueraMeta === true,
       vigenciaNormaDias: vigenciaNorma,
-      motivo: (estado === "A"
-        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha)
+      motivo: (vencidoBase
+        // v17.6.75 — un RAC≥30 vencido, ahora promovido a R, sigue diciendo que está
+        // VENCIDO (nunca "vigente hasta" una fecha ya pasada) — la promoción a R es una
+        // prioridad de ATENCIÓN (vigilancia estrecha), no una negación de que venció.
+        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha + " · albuminuria: vigilancia estrecha")
         : ("vigente hasta el " + vence))
         + (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : ""),
     };
@@ -30348,13 +30632,24 @@ _vglOfrecerDeshacer(btn);
     const todos = drivers.concat(pasajeros);
 
     const faltantes = todos.filter((a) => a.estado === "A" && a.subestado === "sin_historial");
-    const vencidos = todos.filter((a) => a.estado === "A" && a.subestado === "vencido");
+    // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora sale como estado "R"
+    // (ver mtrEstadoAnalito), no "A" — pero `vencidoBase` sigue siendo la verdad de
+    // terreno de que YA venció, y esta lista ("Ya vencidos") es justo donde el médico
+    // necesita seguir viéndolo: la relabeling a R es una prioridad de vigilancia
+    // estrecha, no una negación de que venció.
+    const vencidos = todos.filter((a) => (a.estado === "A" && a.subestado === "vencido") || (a.estado === "R" && a.vencidoBase));
     const bloqueados = todos.filter((a) => a.estado === "BLOQ");
     const noAplican = todos.filter((a) => a.estado === "NO_APLICA");
 
     // ---- FTL: el vencimiento más próximo entre los drivers que se vigilan ----
-    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence);
-    const hayEstadoA = drivers.some((a) => a.estado === "A");
+    // v17.6.75 — un RAC≥30 vencido y ya promovido a R (`vencidoBase`) se EXCLUYE de
+    // "próximo vencimiento futuro": su `.vence` es una fecha YA PASADA, y dejarlo
+    // competir aquí como si fuera un vencimiento vigente metería esa fecha pasada en
+    // `ftlCruda` — justo lo que CERO VENCIDOS prohíbe. Mismo trato que el Estado A
+    // normal (que también queda fuera de este filtro): la urgencia se resuelve con
+    // `hayEstadoA` y el piso/techo de abajo, nunca con una fecha ya vencida.
+    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
+    const hayEstadoA = drivers.some((a) => a.estado === "A" || a.vencidoBase);
 
     let ftlCruda = null;
     let motivoFtl = "";
@@ -30401,6 +30696,17 @@ _vglOfrecerDeshacer(btn);
     }
 
     // ---- Agujero Negro Renal: en G3a-G4 la creatinina puede mandar ----
+    // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
+    // VENTANAS ANR ANCLADAS EN "HOY", no en la fecha de la propia creatinina. La ventana
+    // (30/45/60/90 días, según mtrVentanaAnrDias) se mide desde `hoy` — el día en que
+    // este plan se calcula — hasta `creat.vence`, no desde la fecha del último control
+    // de creatinina ni desde su propia vigencia. Efecto práctico: la ventana "se
+    // desplaza" cada vez que el médico vuelve a abrir el plan en un día distinto —no es
+    // una ventana fija ligada al resultado de laboratorio, sino relativa al momento de
+    // la consulta. Es intencional y coherente con el resto de `mtrPlanParaclinicos`
+    // (todo el plan se recalcula fresco en cada visita, nunca se guarda una ventana
+    // "congelada" de una consulta anterior) — pero es una nota real de que "la ventana
+    // ANR" no es una fecha fija en el calendario, cambia según cuándo se mire.
     let anr = null;
     const creat = drivers.find((a) => a.clave === "CREATININA");
     const ventanaAnr = mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false);
@@ -30430,6 +30736,10 @@ _vglOfrecerDeshacer(btn);
     const cosechados = [], diferidos = [];
     for (const a of drivers) {
       if (a.estado !== "D" && a.estado !== "R") continue;
+      // v17.6.75 — un RAC≥30 vencido (`vencidoBase`) ya está en `vencidos` arriba, con
+      // urgencia de Estado A: no se vuelve a evaluar aquí (su `.vence` es una fecha
+      // pasada, no un candidato real de "cosecha por margen futuro").
+      if (a.vencidoBase) continue;
       if (!a.vence || !a.vigenciaDias) continue;
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
@@ -31756,6 +32066,13 @@ _vglOfrecerDeshacer(btn);
     }
     return null;
   }
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción. `mtrInsertarEnCasillaModo` (línea ~32195, la inserción
+  // real del Redactor de texto libre) REIMPLEMENTA la misma comprobación "solo casilla
+  // vacía" línea por línea (`actual !== "" -> no insertar` + `setNgValue`) en vez de
+  // llamar a esta función — las dos existen en paralelo con idéntica lógica, en vez de
+  // una llamando a la otra. No se borra (sin autorización explícita para eliminar
+  // código muerto confirmado); las pruebas la siguen ejercitando por su cuenta.
   function mtrInsertarSiVacia(el, texto) {
     if (!el || !texto || !String(texto).trim()) return false;
     const actual = String(el.value == null ? "" : el.value).trim();
@@ -32144,6 +32461,19 @@ _vglOfrecerDeshacer(btn);
       cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,
       cno_hdl_target: meta.cnoHdl != null ? meta.cnoHdl : null,
       status: (r.meta && r.meta.status) || "",
+      // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
+      // Vigilante NO TIENE forma de saber si la EPS/aseguradora falló en dispensar un
+      // medicamento — esa información no vive en Everest ni en Athenea, solo en lo que
+      // el paciente cuenta en consulta. `falla_dispensacion` queda fija en "NO" a
+      // propósito: inventar "SI" sin evidencia dispararía en el prompt de la IA la
+      // constancia médico-legal de interrupción de tratamiento (ver el bloque de
+      // prompts más abajo, "si falla_dispensacion no es 'NO'...") sobre un paciente que
+      // puede no tener ningún problema real — el peor tipo de dato inventado, porque
+      // además tiene consecuencia médico-legal. Mismo principio de "casilla vacía antes
+      // que dato inventado": aquí la "casilla vacía" segura es el valor fijo que nunca
+      // afirma una falla que nadie confirmó. Si el médico SÍ necesita documentarla,
+      // sigue pudiendo escribirlo a mano en la historia — el motor no lo bloquea, solo
+      // no lo inventa por su cuenta.
       falla_dispensacion: "NO",
       datos_completos: erc.datosCompletos !== false,
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
@@ -32154,6 +32484,10 @@ _vglOfrecerDeshacer(btn);
       // `mtrAvisosDosisRenal` unas líneas arriba) para que el nombre exportado
       // lleve "[DOSIS NO ESPECIFICADA]" cuando el histórico no trajo frecuencia
       // para ese fármaco — la IA no debe inventar una dosis que no está en el JSON.
+      // v17.6.78 — auditoría 25-ago (sección 5): la divergencia "medicamentos_actuales
+      // sin frecuencia" que la auditoría original señaló quedó CERRADA por el fix de
+      // v17.6.66 de arriba (ítem 1 de la lista de trabajo del 26-ago) — ya no es una
+      // divergencia vigente, se documenta el cierre en vez de la divergencia.
       medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : [], r.medicamentosFrecuencia || undefined)
         .map((m) => m.nombre + (m.sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")),
       education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!(r.fallas && r.fallas.hayGrave) || riesgo.categoria === "muy alto" },
@@ -32169,6 +32503,27 @@ _vglOfrecerDeshacer(btn);
       // plan.ordenar incluye el HDL cosechado; el order_list viejo no).
       order_list: claves(plan.ordenar),
       denied_list: claves(plan.bloqueados),
+      // v17.6.76 — auditoría 25-ago (ítem 4): el motor ya calcula, en mtrConsolidarMtt
+      // (vía mtrPlanFallas -> resumen.fallas.fusiones/.fechasDedicadas), cuándo el
+      // recontrol de una falla terapéutica GRAVE (LDL/HbA1c) se RETOMA en la misma
+      // visita que la FTL maestra ("fusión", ≤60 días de espera) o necesita una visita
+      // APARTE y prioritaria ("fecha dedicada", ya colapsada con otras cercanas ≤7 días
+      // entre sí) — pero esa información nunca salía en el JSON que lee la IA, así que
+      // la nota clínica nunca podía mencionar cuándo debía repetirse el LDL/HbA1c tras
+      // ajustar el tratamiento. Fechas relativizadas, igual que ftl_date/control_date:
+      // nunca crudas (cuasi-identificador fuera del prompt). Sin `resumen.fallas` (o sin
+      // fallas graves con recontrol), ambas listas salen vacías — nunca se inventa una
+      // fusión/fecha dedicada que el motor no calculó.
+      order_list_mtt: {
+        fusiones: ((r.fallas && Array.isArray(r.fallas.fusiones)) ? r.fallas.fusiones : []).map((f) => ({
+          analito: (f && f.analito) || "",
+          fecha: mtrRelativizarFechaIso(f && f.fecha, (r && r._hoyIso) || todayStamp()) || "",
+        })),
+        fechas_dedicadas: ((r.fallas && Array.isArray(r.fallas.fechasDedicadas)) ? r.fallas.fechasDedicadas : []).map((d) => ({
+          analitos: (d && Array.isArray(d.analitos) && d.analitos.length) ? d.analitos : ((d && d.analito) ? [d.analito] : []),
+          fecha: mtrRelativizarFechaIso(d && d.fecha, (r && r._hoyIso) || todayStamp()) || "",
+        })),
+      },
       nota_clinica: { justificacion_riesgo_meta: "", sustento_medicolegal: "" },
       technical_justification: "",
     };

@@ -145,6 +145,326 @@ deriva) — el banco no corría en absoluto hasta corregirlo. Se quitó `mtrInse
 `mtrInsertarEnCasillaModo`) quedan cubiertas igual por los casos restantes de la misma
 suite. No es una mutación de comportamiento propio — es limpieza de un `cubre` desactualizado —
 así que no lleva fila en la tabla de arriba.
+## v17.6.78 — 26-ago-2026 (ítems 6 y 7: documentación de divergencias vigentes y código muerto dudoso — solo comentarios, CERO cambio de comportamiento)
+
+Ambos ítems son documentación pura (comentarios en el código), riesgo bajo por diseño —
+sin cambio de comportamiento, por lo que NO aplica mutación verificada (la disciplina de
+CLAUDE.md la exige para "todo cambio de comportamiento"; un comentario no lo es). Se
+confirmó con `TZ=America/Bogota node tests/runner.js` que las 2280 pruebas siguen en
+verde, sin ninguna nueva ni ninguna caída, tras cada tanda de comentarios. Se combinan en
+una sola entrega por ser ambos de la misma naturaleza (documentación, mismo nivel de
+riesgo) — no porque no se hayan verificado por separado.
+
+**Ítem 6 — divergencias de la sección 5, ya vigentes, comentadas junto a su código**:
+- `falla_dispensacion` fijo en "NO" (`mtrJsonV68DesdeResumen`): sin comentario previo;
+  se documenta que el Vigilante no tiene forma de saber si la EPS falló en dispensar, y
+  que inventar "SI" dispararía en el prompt la constancia médico-legal sobre un paciente
+  sin problema real — el peor tipo de dato inventado.
+- Orden de redondeo CKD-EPI/Cockcroft-Gault (`cockcroftGault`/`ckdEpi2021`): se documenta
+  que el redondeo a 1 decimal ocurre ANTES de que `estadioKDIGO()` clasifique el
+  estadio — fiel al port del Copiloto, no un descuido; cambiar el orden sería una
+  decisión clínica nueva.
+- Discordancia clínico/administrativo para DOAC/gabapentinoides/HBPM: se documenta junto
+  a `MTR_FORMULA_CG`/`MTR_FORMULA_CKDEPI` que `mtrReglaDoac`/`mtrReglaGabapentinoide`/
+  `mtrReglaLmwh` usan Cockcroft-Gault (fiel a ficha técnica/estándar FDA de dosis renal)
+  mientras el resto de reglas usa CKD-EPI (el estadio clínico) — el estadio que ve el
+  médico puede no coincidir con la TFG que de verdad gatilla el ajuste de esos 3 grupos.
+- Ventana de 180 días para remisión por progresión / correcciones de IRA por salto
+  KDIGO (`MTR_IRA_VENTANA_DIAS`, `mtrPenultimaCreatinina`, `mtrSospechaIra`): YA estaban
+  extensamente documentadas (comentarios v17.0.0/v17.0.1/v17.0.2 existentes) — se
+  confirmó que cubren ambos consumidores (`mtrSospechaIra` Y el criterio de progresión
+  de `mtrRemisionNefrologia`); no se dupicó comentario, solo se verificó.
+- Gap de normalización de unidades (`_objecionOficialAlValor`/`_labNumerico`): se
+  documenta que el motor SOLO detecta y BLOQUEA valores implausibles (p.ej. creatinina
+  en µmol/L) — nunca los CONVIERTE — por decisión deliberada: convertir exigiría
+  detectar con certeza la unidad de origen, y una conversión mal disparada sería
+  inventar un número.
+- Festivo raro 2026-07-13/2027-07-12: YA estaba documentado como "DIVERGENCIA ABIERTA"
+  con referencia a `docs/MOTOR_PORTADO.md §divergencias` y cubierto por la suite 43 — no
+  se tocó, ya cerrado el círculo de documentación.
+- Ventanas ANR desplazadas (`mtrPlanParaclinicos`, cálculo del Agujero Negro Renal): se
+  documenta que la ventana se ancla en "hoy" (el día en que se calcula el plan), no en
+  la fecha de la propia creatinina — se "desplaza" cada vez que el plan se recalcula en
+  un día distinto. Nota: no se localizó el texto original exacto de la auditoría para
+  esta divergencia; la documentación se basó en lectura directa del código, fiel a la
+  regla de "no documentar a ciegas" — si la intención original era otra, requiere
+  confirmación del médico.
+- `medicamentos_actuales` sin frecuencia: CERRADA por el fix de v17.6.66 (ítem 1 de esta
+  misma lista de trabajo) — se documenta el CIERRE, no la divergencia (ya no es vigente).
+
+**Ítem 7 — código muerto DUDOSO, investigado uno por uno (ningún borrado, solo
+documentación, sin autorización explícita para eliminar)**:
+- `CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO`: SIN caller de producción, pero YA estaba
+  extensamente documentado (comentario existente explica que espera la pieza P6 de
+  estadio-consciencia, todavía sin implementar según ese comentario) — no se agregó
+  comentario nuevo, ya está cubierto.
+- `_rumTramo`: SIN caller de producción (confirmado por grep) — instrumentación propia
+  de RUM (v17.1.0 #149), probada pero nunca adoptada por ningún llamador real.
+- `debounceVgl`: SIN caller de producción — debounce genérico probado, sin ningún
+  handler de eventos que lo use todavía.
+- `_pesoDeSignosVitales`: SIN caller de producción — hallazgo: quedó SUPERADA por
+  `_signosVitalesDelRegistro` (que sí tiene un llamador real, línea ~16108, y extrae el
+  mismo peso además de PAS/PAD/IMC).
+- `_signosVitalesInvalidar`: SIN caller de producción — hallazgo: mismo patrón exacto
+  que sus hermanas `mtrMedsInvalidar` y `_demograficosInvalidar` (tampoco tienen
+  caller): las tres cachés de invalidación manual del archivo terminaron apoyándose
+  solo en TTL, ninguna se enganchó a un evento real.
+- `extractAgrupador`: SIN caller de producción — hallazgo MÁS FUERTE: el propio
+  comentario de la función anuncia que sirve para "el manejo de éxito más abajo" de
+  GuardarOrdenamiento, pero ese manejo de éxito (línea ~21977) terminó con su PROPIA
+  expresión en línea, más angosta, en vez de llamar a esta función escrita
+  específicamente para ese caso.
+- `mtrInsertarSiVacia`: SIN caller de producción — hallazgo: `mtrInsertarEnCasillaModo`
+  (la inserción real del Redactor) reimplementa línea por línea la misma comprobación
+  "solo casilla vacía" en vez de llamar a esta función.
+- `mtrSabadoFijarGrupoManual`: SIN caller de producción — hallazgo: es la ÚNICA función
+  del subsistema «sábados» sin caller (sus hermanas `mtrSabadoRegistrarObservacion`/
+  `mtrSabadoGrupoDeMedico` SÍ están en producción); es la válvula manual que
+  `mtrSabadoGrupoDeMedico` ya sabe RESPETAR (`origen === "manual"`) pero nada en la
+  interfaz llama para FIJARLO — no hay botón conectado.
+
+Todos los 7 candidatos se confirmaron SIN caller real de producción mediante grep
+exhaustivo del archivo completo (no solo del entorno de pruebas). Ninguno se borró.
+
+## v17.6.77 — 26-ago-2026 (ítem 5: aviso visible de fármaco fuera de grupo — decisión del médico: "Sí")
+
+**El hallazgo**: `mtrMedsSinGrupo` (v14.2.0) ya detecta cuántos medicamentos del paciente
+no caen en NINGÚN grupo farmacológico que el motor reconoce, pero solo alimentaba
+telemetría (`uxTrack("farmaco.cobertura", {total, sinGrupo})` — solo enteros, PHI-free
+a propósito) y nunca llegaba a la vista del médico.
+
+**El fix, en tres partes**:
+1. `mtrMedsFueraDeGrupoNombres` — función NUEVA y SEPARADA (NO se toca
+   `mtrMedsSinGrupo`, que sigue intacta, íntegra para telemetría PHI-free): misma
+   lógica de detección exacta, pero devuelve los NOMBRES en vez de un conteo.
+2. `mtrAvisoFueraDeGrupo` — construye un aviso con `mtrAlertaInteraccion` (mismo patrón
+   que el resto del flujo), severidad INFO, conducta MONITORIZAR: nunca sugiere
+   suspender/ajustar nada sobre un fármaco que, por definición, el motor no reconoce.
+   Se suma a `todo` en `mtrAvisosFarmacologicos`, junto a `mtrRenderAvisosHtml`.
+3. **Hallazgo cruzado, corregido en el camino**: al verificar la detección contra
+   fixtures reales (omeprazol + clopidogrel), se descubrió que `mtrMedsSinGrupo` —y por
+   tanto la nueva función— NUNCA miraba `mtrGruposCatalogoRcv` (el catálogo externo
+   v17.6.4, un TERCER sistema de clasificación que llegó DESPUÉS de esta función y
+   nunca se sumó). El omeprazol participa en la interacción CLOPIDOGREL_IBP solo por el
+   catálogo, y contaba como "sin grupo" pese a que el motor SÍ lo evalúa — un falso
+   positivo de cobertura real, no solo teórico. Se corrige en AMBAS funciones (la de
+   telemetría también, porque es el mismo criterio completado, no uno nuevo).
+
+**Cuidado con la semántica de `motivo`/`legible`**: el aviso de cobertura no depende de
+la función renal (ni de `tfgCkdEpi` ni de `tfgCockcroftGault`), así que su sola
+presencia en `todo` NO puede convertir un `motivo: "SIN_FUNCION_RENAL"` honesto en
+`"OK"` — eso ocultaría que la dosis renal de verdad nunca se evaluó (regresión real
+detectada por una prueba preexistente, v17.6.28). `motivo`/`legible` se calculan sobre
+`combinado` (avisos renales + interacciones, SIN el aviso de cobertura); `todo` (lo que
+de verdad se pinta) sí lo incluye — `mtrRenderAvisosHtml` solo mira `todo.length`, nunca
+`motivo`, para decidir si hay algo que mostrar, así que no hay contradicción visible.
+
+**Mutación verificada** (tres mutaciones independientes):
+- Se quitó `avisoFueraDeGrupo` de `todo`: cayó EXACTAMENTE 1 prueba nueva ("ya no se
+  pinta como 'todo limpio'... obtuvo 40" en vez de -1).
+- Se revirtió el chequeo del catálogo en ambas funciones: cayeron EXACTAMENTE 3 pruebas
+  (2 nuevas + la preexistente de `tests/suite_69_catalogo_rcv.js` que ya protegía la
+  identidad `todo.length === avisos.length + interacciones.length`, "esperaba 3 y
+  obtuvo 4" — la misma prueba que reveló el hallazgo cruzado en primer lugar).
+- Se revirtió `n = combinado.length` a `n = todo.length`: cayó EXACTAMENTE la prueba
+  preexistente de v17.6.28 ("esperaba SIN_FUNCION_RENAL y obtuvo OK").
+En los tres casos se restauró desde el backup y el banco volvió a 2280 en verde. Se
+añadieron 5 pruebas nuevas: en `tests/suite_41_motor_vista.js` (el aviso visible con
+ACETAMINOFEN, y que omeprazol-por-catálogo NO se marca fuera de grupo; se cambió
+también el fixture de una prueba preexistente de ACETAMINOFEN a LOSARTAN, porque el
+escenario que protegía —"nada que reportar"— ya no lo cumple ACETAMINOFEN una vez que
+SÍ genera el aviso de cobertura) y en `tests/suite_55_framingham_oficial.js`
+(`mtrMedsSinGrupo` con el fix del catálogo, aislado de la vista).
+
+## v17.6.76 — 26-ago-2026 (ítem 4: fusiones MTT → JSON, campo `order_list_mtt` — decisión del médico: "Sí")
+
+El motor ya calcula, en `mtrConsolidarMtt` (invocado desde `mtrPlanFallas`, guardado en
+`resumen.fallas.fusiones`/`.fechasDedicadas`), cuándo el recontrol de una falla
+terapéutica GRAVE (LDL o HbA1c) se RETOMA en la misma visita que la FTL maestra
+("fusión", cuando cae a ≤60 días de espera) o necesita una visita APARTE y prioritaria
+("fecha dedicada", ya colapsada con otras cercanas ≤7 días entre sí) — pero esa
+información nunca salía en el JSON v68 que lee la IA redactora, así que la nota clínica
+nunca podía mencionar cuándo debía repetirse el LDL/HbA1c tras ajustar el tratamiento.
+
+**El fix**: nuevo campo `order_list_mtt` en `mtrJsonV68DesdeResumen`, con dos listas:
+- `fusiones`: `[{analito, fecha}]` — recontroles que se retoman en la FTL maestra.
+- `fechas_dedicadas`: `[{analitos, fecha}]` — recontroles con visita propia (ya
+  colapsados: `analitos` puede traer más de uno si `mtrConsolidarMtt` los fusionó por
+  caer cerca entre sí).
+
+Las fechas van RELATIVIZADAS (`mtrRelativizarFechaIso`), mismo criterio que
+`ftl_date`/`control_date`: nunca crudas, son cuasi-identificadores que no deben viajar
+al prompt de la IA. Sin `resumen.fallas` (o sin fallas graves con recontrol), ambas
+listas salen vacías — nunca se inventa una fusión/fecha dedicada que el motor no
+calculó (CERO INFERENCIA). Defensivo contra formas inesperadas (`fusiones`/
+`fechasDedicadas` null o no-array): no lanza, cae a lista vacía.
+
+**Mutación verificada**: se respaldó el archivo, se eliminó con `python3` el campo
+`order_list_mtt` completo (dejando `mtrJsonV68DesdeResumen` exactamente como estaba
+antes). `TZ=America/Bogota node tests/runner.js` puso rojas EXACTAMENTE las 3 pruebas
+nuevas (2274 pasan / 3 fallan): la que confirma que el campo existe con datos reales
+("obtuvo false"), la de fechas dedicadas colapsadas (`TypeError: Cannot read properties
+of undefined`, al intentar leer `.fechas_dedicadas` de un campo que ya no existía), y la
+de CERO INFERENCIA con `resumen.fallas` ausente. Ninguna otra prueba se vio afectada. Se
+restauró desde el backup y el banco volvió a 2277 en verde. Se añadieron 3 pruebas
+nuevas en `tests/suite_57_ia_redaccion.js`: el caso con fusión y fecha dedicada reales,
+el caso de fechas dedicadas ya colapsadas con dos analitos, y el caso CERO INFERENCIA
+(sin `fallas`, con `fallas` vacío, y con `fallas` de forma inesperada).
+
+## v17.6.75 — 26-ago-2026 (ítem 3 / auditoría 25-ago 1.17: Estado R prioritario para RAC≥30 vencido — decisión del médico)
+
+Decisión del médico: "usa el mismo piso/techo que el Estado A normal (Recomendado si no
+tiene el spec a mano)" — enfoque conservador, sin inventar un spec nuevo.
+
+**El hallazgo**: en `mtrEstadoAnalito`, el guard `estado !== "A"` bloqueaba la promoción
+a Estado R (vigilancia estrecha por albuminuria) cuando el RAC≥30 YA estaba vencido — se
+quedaba como Estado A normal, perdiendo la señal específica de albuminuria.
+
+**El fix, en tres capas** (verificado que las tres son necesarias, no solo la primera):
+1. Se quita el guard: RAC≥30 se promueve a R SIEMPRE, vencido o no. Se agrega
+   `vencidoBase` (verdad de terreno de si YA estaba vencido antes de la promoción,
+   independiente del label final).
+2. **CRÍTICO** — sin tocar nada más, promover la etiqueta a "R" por sí solo habría sido
+   PELIGROSO: `mtrPlanParaclinicos` calcula `masProximo`/`ftlCruda` a partir de los
+   drivers en estado "D"/"R" con `.vence`, y el `.vence` de un RAC vencido es una fecha
+   YA PASADA. Verificado con el motor real: sin la exclusión de `vencidoBase` en
+   `hayEstadoA`/`conVencimiento`, `plan.ftl` salía en **2026-04-01** para un `hoyIso` de
+   **2026-08-16** — una toma de laboratorios programada 4 MESES EN EL PASADO, violación
+   directa de CERO VENCIDOS. Se excluye `vencidoBase` de `conVencimiento` (no compite
+   como "próximo vencimiento futuro") y se incluye en `hayEstadoA` (sigue disparando el
+   piso de 14/techo de 21 días, exactamente "el mismo piso/techo que el Estado A
+   normal"). Mismo trato aplicado en `mtrAvisoVencimiento` y las dos copias de
+   `vigilados` en `mtrFechaControlAjustada`/`mtrPlanLabsPrimero` (todas comparten el
+   mismo riesgo de fecha pasada).
+3. `plan.vencidos` ahora incluye también los R con `vencidoBase` — así el RAC sigue
+   apareciendo en "Ya vencidos" (chips del banner, nombrado en `mtrFechaControlAjustada`)
+   y en `plan.ordenar`, aunque su `estado` ya no sea literalmente "A". El texto de
+   `mtrTableroClinico` (`quePasa`) y el `motivo` de `mtrEstadoAnalito` se corrigieron
+   para decir "venció" (pasado), nunca "vence el [fecha ya pasada]" — un tiempo verbal
+   que mentiría sobre algo que ya ocurrió.
+
+**Mutación verificada** (tres mutaciones independientes, una por capa):
+- Se restauró el guard `estado !== "A"`: cayeron EXACTAMENTE 2 pruebas (2272 pasan / 2
+  fallan) — la promoción a R y el texto "venció" del tablero.
+- Se revirtieron `hayEstadoA`/`conVencimiento` a no excluir `vencidoBase`: cayó
+  EXACTAMENTE 1 prueba, la de seguridad de fecha ("CERO VENCIDOS... obtuvo false") — y
+  se confirmó a mano que `plan.ftl` volvía a salir en el pasado (2026-04-01).
+- Se revirtió `vencidos` a no incluir los R con `vencidoBase`: cayeron EXACTAMENTE 2
+  pruebas — "el RAC sigue apareciendo en Ya vencidos" y "el RAC vencido está en la lista
+  de qué ordenar".
+En los tres casos se restauró desde el backup y el banco volvió a 2274 en verde. Se
+añadieron 4 pruebas nuevas: 3 en `tests/suite_46_ftl_sabados.js` (promoción a R con
+vencidoBase, RAC<30 sin cambios, y el escenario completo de `mtrPlanParaclinicos` con la
+guarda anti-fecha-pasada) y 1 en `tests/suite_63_tablero_riesgo.js` (el texto "venció",
+no "vence", en el tablero que ve el médico).
+
+## v17.6.74 — 26-ago-2026 (Panel del paciente: dos dosis del mismo fármaco aparecían como dos medicamentos — reportado en consultorio, captura real sin PHI)
+
+**El reporte**: en "MEDICAMENTOS DEL PROGRAMA CARDIOVASCULAR" del Panel del paciente
+aparecían LOSARTAN 50mg, ROSUVASTATINA 40mg Y ROSUVASTATINA 20mg — tres renglones.
+Instrucción explícita del médico: "cuando sea ese caso el script solamente debe tomar
+los ÚLTIMOS que fueron prescritos. No poner dos medicamentos iguales pero con diferentes
+dosis." Sin ningún dato de paciente (la captura solo traía la lista de fármacos).
+
+**Dos causas raíz distintas, confirmadas leyendo el código real, arregladas por separado**:
+
+1. `mtrMedicamentosDesdeRespuesta` aplanaba las formulaciones de Everest a texto SIN
+   ordenarlas por fecha — `form.fechaCreacion` se descartaba por completo (su función
+   hermana, `mtrRenglonesMedicamentoDesdeRespuesta`, sí la conserva). Sin fecha, el dedup
+   "primero visto gana" de `mtrMedicamentosRcv` no tenía cómo saber cuál de dos
+   formulaciones del mismo fármaco era la más reciente — sobrevivía la que trajera
+   primero la respuesta de Everest, no la última prescrita.
+2. `_mtrClaveDedupMedicamento` (la clave de dedup ya existente) CONSERVA la dosis A
+   PROPÓSITO — decisión ya documentada desde v17.1.0 (#112/#113): "LOSARTAN 50 MG" y
+   "LOSARTAN 100 MG" deben seguir siendo dos entradas distintas para que
+   `mtrDuplicidadesTerapeuticas` pueda alertar cuando dos concentraciones del mismo
+   principio conviven (comentario explícito ahí: "dos concentraciones distintas del
+   mismo principio siguen alertando igual... revise si uno debía suspenderse al iniciar
+   el otro"). `mtrMedicamentosRcv` (la lista del Panel) usaba esa MISMA clave, así que
+   heredaba ese comportamiento — correcto para la alerta de duplicidad, incorrecto para
+   la lista de "qué toma el paciente ahora".
+
+**El fix, dos partes independientes**:
+- **Parte A**: `mtrMedicamentosDesdeRespuesta` ahora ordena `datos` por `fechaCreacion`
+  DESCENDENTE (más reciente primero) antes de aplanar. Formularios sin fecha (o con
+  fecha ilegible) quedan al final, nunca se inventa una fecha; entre dos sin fecha (o dos
+  con la misma fecha) el orden relativo original se conserva (`sort` estable de JS).
+- **Parte B**: nueva función `_mtrClaveDedupMedicamentoSinDosis`, DISTINTA de
+  `_mtrClaveDedupMedicamento` (que NO se tocó): corta el nombre en la primera cifra
+  numérica y usa solo lo que queda antes, canonizado — "ROSUVASTATINA 40 MG (TABLETA)" y
+  "ROSUVASTATINA 20 MG (TABLETA)" caen en la misma clave ("rosuvastatina"), pero un
+  combo como "AMLODIPINO + LOSARTAN 5/50MG (TABLETA)" sigue distinto de "AMLODIPINO 10
+  MG (TABLETA)" porque el "+" viene antes de cualquier dígito. Se usa SOLO en
+  `mtrMedicamentosRcv` (la lista del Panel), verificada contra el vocabulario real del
+  catálogo (`catalogo_farmacologico_rcv.json`) y los ejemplos de consola citados en el
+  reporte (INDAPAMIDA, GEMFIBROZIL, ENALAPRIL MALEATO, LINAGLIPTINA + METFORMINA,
+  INSULINA GLARGINA...). La frecuencia (Map #114) se sigue buscando con la clave que
+  CONSERVA la dosis (una frecuencia es propia de una concentración concreta, no se debe
+  mezclar entre dosis distintas).
+
+**Decisión documentada, no aplicada a ciegas**: `mtrMedicamentosUnicos` (la pestaña
+"Medicamentos", y la que alimenta `mtrDuplicidadesTerapeuticas`) se dejó INTACTA a
+propósito — cambiarla habría apagado la alerta real de "posible duplicidad terapéutica"
+para el caso exacto que la comparte (dos concentraciones del mismo principio conviviendo
+sin que se sepa si una debía suspenderse). El cambio se limitó a `mtrMedicamentosRcv`,
+que es la única función que alimenta la lista reportada por el médico.
+
+**Mutación verificada** (las dos partes por separado):
+- Se revirtió el ordenamiento por fecha en `mtrMedicamentosDesdeRespuesta`: cayeron
+  EXACTAMENTE las 3 pruebas que dependen de él (2267 pasan / 3 fallan) — las dos
+  unitarias de orden y el escenario real completo. Se restauró y el banco volvió a 2270
+  en verde.
+- Se revirtió `mtrMedicamentosRcv` a la clave CON dosis: cayeron EXACTAMENTE las 3
+  pruebas que dependen del dedup sin dosis (2267 pasan / 3 fallan) — las dos de
+  `mtrMedicamentosRcv` en `tests/suite_64_pestanas_botones.js` y el escenario real
+  completo en `tests/suite_39_motor_farmaco.js`. Se restauró y el banco volvió a 2270 en
+  verde.
+
+Se añadieron 8 pruebas nuevas en total: 3 en `tests/suite_39_motor_farmaco.js`
+(ordenamiento por fecha, formularios sin fecha al final, y el escenario real completo de
+punta a punta) y 5 en `tests/suite_64_pestanas_botones.js` (dedup sin dosis en
+`mtrMedicamentosRcv`, combo vs. componentes sueltos, frecuencia por dosis exacta, la
+clave `_mtrClaveDedupMedicamentoSinDosis` contra el vocabulario real, y una guarda
+explícita de que `_mtrClaveDedupMedicamento` —con dosis— sigue intacta).
+
+## v17.6.73 — 26-ago-2026 (redacción del banner "Labs primero" — reportado en consultorio: "ni él ni sus compañeros lo entienden bien")
+
+**El reporte**: el médico pegó el texto real del banner cuando el piso de 14 días se
+relaja por exámenes vencidos — mensaje confuso, jerga interna del motor, sin dato de
+paciente.
+
+**Causa raíz confirmada leyendo el código real**: dos problemas en el mismo texto.
+1. `motivoPiso` (armado en `mtrPlanLabsPrimero`, dos ramas) empezaba con su propio verbo
+   — "adelantada porque..." / "adelantada al vencimiento de...: el piso de 14 días la
+   habría dejado vencer" — pensado para leerse como frase independiente.
+2. `notaLP` (armado en `_pintarBannerSugerida`, dentro de `openAgendamientoModal`, que es
+   donde el médico REALMENTE lo lee) EMBEBÍA ese `motivoPiso` dentro de otra frase que
+   YA empezaba con "se adelanta... porque" — el resultado decía literalmente
+   "porque... (adelantada porque...", duplicado, más "ventana de 14–21 días"/"piso"/"cupo
+   hábil": jerga interna sin explicar.
+
+**El fix**: `motivoPiso` pasa a ser SOLO la razón, sin verbo propio —
+`"ya hay examen(es) vencido(s) y esperar 14 días no los recupera"` (caso 1) y
+`"el examen " + nombre + " vence el " + fecha + " y esperar 14 días lo dejaría vencer"`
+(caso 2) — y `notaLP` lo embebe UNA sola vez, sin jerga:
+`"Se adelanta la toma al primer cupo disponible porque " + motivoPiso + ". El control
+queda ~7 días después de la toma..."`. La rama SIN piso relajado (el `else` de `notaLP`)
+no se tocó — el médico no la reportó como confusa.
+
+**Mutación verificada**: se respaldó el archivo, se revirtieron con `python3` las tres
+piezas (los dos `motivoPiso` y el `notaLP`) a la redacción vieja. `TZ=America/Bogota node
+tests/runner.js` puso rojas EXACTAMENTE las 3 pruebas relacionadas con la redacción
+(2259 pasan / 3 fallan): la prueba de texto-fuente nueva en
+`tests/suite_15_interfaz_avanzada.js` (que confirma que `notaLP` no repite la frase
+duplicada ni la jerga) y las dos aserciones de texto exacto reforzadas en
+`tests/suite_24_motor_perfil.js` sobre `mtrPlanLabsPrimero` (los dos casos de
+`motivoPiso`). Las pruebas viejas con regex sueltos (`/ya hay examen\(es\)
+vencido\(s\)/`, `/Glicemia/`) siguieron en verde con la redacción vieja, confirmando que
+sin la aserción exacta nueva esta regresión habría pasado desapercibida — motivo por el
+que se AÑADIERON las aserciones de texto exacto en vez de solo confiar en las regex
+preexistentes. Se restauró desde el backup y el banco volvió a 2262 pruebas en verde
+(2261 + 1 prueba nueva de texto-fuente; las otras dos son fortalecimiento de pruebas ya
+existentes, no pruebas nuevas).
 
 ## v17.6.72 — 26-ago-2026 (ítem 2 / auditoría 25-ago 1.15: grupo de lípidos, vigencia = la más corta — decisión del médico)
 

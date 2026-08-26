@@ -18,7 +18,7 @@ module.exports = {
   cubre: [
     "createIaInjectorUI","_vglPestanaActiva", "_vglEnPestana", "mtrLeerProgramasRutaCronicos",
     "_vglCosechaLeer", "_vglCosechaGuardar", "_vglCosecharDePantalla",
-    "mtrClasificarMedicamento", "mtrMedicamentosRcv",
+    "mtrClasificarMedicamento", "mtrMedicamentosRcv", "_mtrClaveDedupMedicamentoSinDosis", "_mtrClaveDedupMedicamento",
     "_vglBarraPestanasPrincipal", "_vglVisibleDeVerdad",
     // v17.6.2 — desenganche del agendamiento: memoria del resumen en el aviso de «falta documentar»
     "mtrFactoresConMemoria", "mtrFactoresPendientesNavegables"],
@@ -281,6 +281,75 @@ module.exports = {
       t.igual(lista[0].texto, "LOSARTAN 50 mg (TABLETA) — hipertensión", "con su para qué, en el idioma del paciente");
       t.igual(lista[1].para, "colesterol", "y la estatina con el suyo");
       t.igual(lista.filter((m) => /LOSARTAN/i.test(m.nombre)).length, 1, "el repetido de Everest se agrupa una sola vez");
+    });
+
+    // v17.6.74 — [reportado en consultorio, 26-ago-2026, con captura real] "cuando sea
+    // ese caso el script solamente debe tomar los ÚLTIMOS que fueron prescritos. No
+    // poner dos medicamentos iguales pero con diferentes dosis" (instrucción explícita
+    // del médico). Caso real: LOSARTAN 50mg, ROSUVASTATINA 40mg y ROSUVASTATINA 20mg —
+    // las dos últimas debían colapsar en UNA sola (la más reciente), no aparecer las dos.
+    t.caso("mtrMedicamentosRcv (1.15-bis): dos concentraciones del MISMO fármaco cuentan como uno — se conserva la primera vista (la más reciente, con la lista ya ordenada por fecha)", () => {
+      // El orden aquí YA simula la salida de mtrMedicamentosDesdeRespuesta tras ordenar
+      // por fecha descendente (ver suite 39): la formulación más reciente va primero.
+      const lista = a.mtrMedicamentosRcv([
+        "LOSARTAN 50 mg (TABLETA)",
+        "ROSUVASTATINA 40 MG (TABLETA)",   // la más reciente: debe sobrevivir
+        "ROSUVASTATINA 20 MG (TABLETA)",   // la vieja: debe desaparecer
+      ]);
+      t.igual(lista.length, 2, "LOSARTAN + UNA sola ROSUVASTATINA, no tres renglones");
+      const rosu = lista.filter((m) => /ROSUVASTATINA/i.test(m.nombre));
+      t.igual(rosu.length, 1, "solo una rosuvastatina sobrevive");
+      t.cierto(/40 MG/.test(rosu[0].nombre), "y es la de 40 MG — la que llegó primero en la lista (la más reciente)");
+    });
+
+    t.caso("mtrMedicamentosRcv (1.15-bis): un combo NO se fusiona con sus componentes sueltos, aunque compartan principio activo", () => {
+      const lista = a.mtrMedicamentosRcv([
+        "AMLODIPINO 10 MG (TABLETA)",
+        "AMLODIPINO + LOSARTAN 5/50MG (TABLETA)",
+      ]);
+      t.igual(lista.length, 2, "el combo y el amlodipino solo cuentan como DOS medicamentos distintos, no se funden");
+      t.cierto(lista.some((m) => m.nombre === "AMLODIPINO 10 MG (TABLETA)"));
+      t.cierto(lista.some((m) => m.nombre === "AMLODIPINO + LOSARTAN 5/50MG (TABLETA)"));
+    });
+
+    t.caso("mtrMedicamentosRcv (1.15-bis): la frecuencia se sigue buscando POR DOSIS (mezclar frecuencias entre concentraciones distintas sería inventar un dato)", () => {
+      // El mapa de frecuencias usa la clave CON dosis (mtrMapaFrecuenciasPorNombre real):
+      // solo la formulación exacta de 40 MG tiene frecuencia conocida.
+      const frecuencias = new Map([["rosuvastatina 40 mg (tableta)", "cada 24 horas"]]);
+      const lista = a.mtrMedicamentosRcv([
+        "ROSUVASTATINA 40 MG (TABLETA)",
+        "ROSUVASTATINA 20 MG (TABLETA)",
+      ], frecuencias);
+      t.igual(lista.length, 1, "se colapsan en una, como siempre");
+      t.igual(lista[0].frecuenciaTexto, "cada 24 horas", "la frecuencia de la formulación que sobrevivió (40 MG) sí se encuentra");
+    });
+
+    t.caso("_mtrClaveDedupMedicamentoSinDosis: corta en la primera cifra, y sin ninguna cifra usa el nombre completo", () => {
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("ROSUVASTATINA 40 MG (TABLETA)"), "rosuvastatina");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("ROSUVASTATINA 20 MG (TABLETA)"), "rosuvastatina");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("LOSARTAN 50 mg (TABLETA)"), "losartan");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("INDAPAMIDA 1.5 MG (TABLETA DE LIBERACION SOSTENIDA)"), "indapamida");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("GEMFIBROZIL 600 mg (TABLETA)"), "gemfibrozil");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("ENALAPRIL MALEATO 20 mg (TABLETA)"), "enalapril maleato");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("LINAGLIPTINA + METFORMINA 2.5/1000MG (TABLETA)"), "linagliptina + metformina");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("INSULINA GLARGINA 100UI/ML (PEN 3ML )"), "insulina glargina");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("AMLODIPINO + LOSARTAN 5/50MG (TABLETA)"), "amlodipino + losartan",
+        "el combo conserva los DOS nombres: el '+' viene antes que cualquier dígito");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis("TIRAS REACTIVAS PARA GLUCOMETRIA (UNIDAD)"), "tiras reactivas para glucometria (unidad)",
+        "sin ningún dígito, se usa el nombre completo — igual que _mtrClaveDedupMedicamento");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis(""), "");
+      t.igual(a._mtrClaveDedupMedicamentoSinDosis(null), "");
+    });
+
+    // v17.6.74 — GUARDA: _mtrClaveDedupMedicamento (CON dosis) no debe tocarse — la usa
+    // mtrMedicamentosUnicos/mtrDuplicidadesTerapeuticas, donde dos concentraciones
+    // distintas del mismo principio SIGUEN debiendo alertar (decisión ya vigente,
+    // documentada en el comentario de esa función).
+    t.caso("_mtrClaveDedupMedicamento (CON dosis, sin tocar): dos concentraciones distintas siguen siendo claves DISTINTAS", () => {
+      t.falso(
+        a._mtrClaveDedupMedicamento("ROSUVASTATINA 40 MG (TABLETA)") === a._mtrClaveDedupMedicamento("ROSUVASTATINA 20 MG (TABLETA)"),
+        "la clave CON dosis no debe fusionar concentraciones distintas: eso apagaría la alerta de duplicidad terapéutica"
+      );
     });
 
     t.caso("la lista aguanta lo que venga (objetos, vacíos, nulos) sin romperse", () => {
