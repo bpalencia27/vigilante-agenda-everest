@@ -6,6 +6,23 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.47 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.2: `esMedicoRCVActivo` por sub-cadena)
+
+`esMedicoRCVActivo` (vigilante_agenda.user.js:16110) comparaba con `docName.includes(p)`:
+"PINO" es sub-cadena de "OSPINO" y de "ESPINOSA", así que un médico ajeno al programa RCV con
+uno de esos apellidos quedaba forzado a `swIsPyM`/`swProgramaEspecial = true` en el POST real
+de `apiAccesoAsignarTurno` (escribe la cita en Athenea con esos flags mal puestos). Fix: se
+compara por TOKEN completo (`docName.split(/[^A-Z0-9]+/)`), no por sub-cadena — conserva el
+match de "BPALENCIA"/"EESTRADA" como token propio.
+
+- **Mutación**: se restauró temporalmente `docName.includes(p)` (quitando el split por
+  tokens). El banco pasó de 2205 en verde a **1 prueba roja**: "esMedicoRCVActivo: un apellido
+  que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado" (caso "JORGE
+  OSPINO" → obtuvo `true` en vez de `false`). Se restauró el fix y el banco volvió a 2205 en
+  verde.
+- **Prueba nueva**: `tests/suite_15_interfaz_avanzada.js` — 3 casos (OSPINO, ESPINOSA no
+  activan; "DR. PINO" sí sigue activando).
+
 ## v17.6.46 — 26-ago-2026 (fusión de `claude/v17-6-2-22ago`: recuperación de 31 suites)
 
 Fusión de `origin/claude/v17-6-2-22ago` (v17.6.4b) sobre `claude/hunks-cluster-remaining-9fjixx`

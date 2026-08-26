@@ -1530,12 +1530,25 @@ module.exports = {
       t.falso(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "sin la nota de bloqueo");
     });
 
-    t.caso("esMedicoRCVActivo: invocación directa — coincide por sub-cadena, sin distinguir mayúsculas ni tildes", () => {
+    t.caso("esMedicoRCVActivo: invocación directa — coincide por token completo, sin distinguir mayúsculas ni tildes", () => {
       const cH = cargar({ silencioso: true });
       cH.api.__state.activeDoctor.name = "dr. ánGEL estrada";
       t.cierto(cH.api.esMedicoRCVActivo(), "ESTRADA está en RCV_DOCTORS, sin importar tilde/caja");
       cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
       t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en la lista");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.2] "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" —
+    // con match por sub-cadena estos dos médicos, ajenos al programa RCV, quedaban forzados
+    // a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Debe comparar por token.
+    t.caso("esMedicoRCVActivo: un apellido que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado", () => {
+      const cSub = cargar({ silencioso: true });
+      cSub.api.__state.activeDoctor.name = "JORGE OSPINO";
+      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      cSub.api.__state.activeDoctor.name = "LAURA ESPINOSA";
+      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      cSub.api.__state.activeDoctor.name = "DR. PINO";
+      t.cierto(cSub.api.esMedicoRCVActivo(), "PINO como apellido propio (token exacto) sí debe seguir activando el forzado");
     });
 
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {

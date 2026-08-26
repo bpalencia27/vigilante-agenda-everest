@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.46
+// @version     17.6.47
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.46";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.47";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -16107,9 +16107,17 @@ _vglOfrecerDeshacer(btn);
   // checkbox marcado y deshabilitado —honesto sobre que no hay elección— en vez de un
   // control que no hace nada. Ver CHANGELOG.
   const RCV_DOCTORS = ["PALENCIA", "BPALENCIA", "PINO", "MPINO", "ESTRADA", "EESTRADA", "MIJARES", "SMIJARES"];
+  // v17.6.47 — auditoría 25-ago (1.2): `docName.includes(p)` hacía match por SUB-CADENA.
+  // "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" (verificado carácter por carácter) —
+  // un médico ajeno al programa con ese apellido quedaba forzado a swIsPyM/swProgramaEspecial
+  // = true en el POST real que crea la cita en Athenea. Se compara por TOKEN completo
+  // (separado por cualquier carácter que no sea letra/dígito: espacios, puntos, comas),
+  // no por sub-cadena — conserva el match de "BPALENCIA"/"EESTRADA" como token propio
+  // (así aparecen en Everest cuando el nombre trae la inicial pegada al apellido).
   function esMedicoRCVActivo() {
     const docName = stripAccents(String((state.activeDoctor && state.activeDoctor.name) || S.medicoNombre || "").toUpperCase());
-    return RCV_DOCTORS.some((p) => docName.includes(p));
+    const tokens = docName.split(/[^A-Z0-9]+/).filter(Boolean);
+    return RCV_DOCTORS.some((p) => tokens.includes(p));
   }
 
   // v15.8.0 (N4) — VISTA PREVIA DEL SMS. Pura: recibe la plantilla (el texto real
