@@ -6,6 +6,37 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.79 — 26-ago-2026 (fusión con la otra sesión + botones de imprimir orden rotulados por id crudo)
+
+**Nota de orden**: esta rama tuvo dos sesiones trabajando en paralelo el mismo día —
+esta (fixes en vivo #1-6 más abajo, escritos como v17.6.73-76 antes de saberlo) y la de
+`origin/claude/hunks-cluster-remaining-9fjixx` (v17.6.65-78, con su propio historial
+completo intercalado más abajo en este archivo). Al fusionar, las entradas quedaron en
+el orden en que git las concatenó, no estrictamente por número de versión — las
+entradas "v17.6.73/74/75" de abajo son reales y verificadas, solo que el número final
+que terminó llevando el archivo (por la fusión) es este, 17.6.79. El detalle técnico y
+las mutaciones de cada una siguen siendo válidos tal como están escritos.
+
+### Botones de imprimir orden rotulados con el id crudo del agrupador, no con la actividad
+
+Reporte en vivo: con 2+ órdenes PyM generadas a la vez, los botones "🖨️ Orden 483920"
+no dejaban saber cuál era VIH y cuál PSA sin abrirlos a ciegas. Se anota `pkg.titulo`
+(el mismo texto de la tarjeta que el médico ya reconoce al marcar las casillas) por
+agrupador, en el mismo bucle donde `apiOrdenamientoGuardar` ya lo confirma, y se usa
+para rotular cada botón: "🖨️ VIH (Anticuerpos VIH 1 y 2)" en vez de "🖨️ Orden 483920".
+
+**Sin mutación automatizada propia**: el punto de cambio vive dentro del flujo asíncrono
+completo de `openOrdenamientoModal` (búsqueda de paciente → Dx → CUPS →
+`apiOrdenamientoGuardar` por cada actividad seleccionada), sin una suite existente que
+mockee esa cadena completa con múltiples agrupadores distintos — mismo tipo de deuda
+que el triaje de agendamiento y el peso del Panel, documentados abajo. Se verificó
+leyendo el código de punta a punta: `_tituloPorAgrupador` se llena en el mismo punto
+donde `agrupadores.push(agpReal)` ya confirma qué `pkg` generó ESE agrupador exacto, y
+el rótulo del botón cae a `"Orden " + agp` si por algún motivo faltara el título — nunca
+queda un botón sin texto. Queda como deuda explícita el mismo mock de
+`apiOrdenamientoGuardar`/`apiOrdenamientoObtenerDx`/`apiOrdenamientoObtenerCup` con dos
+paquetes distintos, para blindar esto y los demás pasos de ese flujo de una vez.
+
 ## v17.6.75 — 26-ago-2026 (dos reportes más en vivo: avisos en tres pantallas puntuales, y la TFG ciega al peso recién escrito)
 
 ### 1. El médico nombró tres pantallas donde NO quiere sonido/notificación
