@@ -1294,6 +1294,28 @@ module.exports = {
       t.cierto(faltantes.some((f) => f.key === "UROANALISIS"), "un componente PENDIENTE no es evidencia de un examen ya resuelto");
     });
 
+    // [auditoría 25-ago, hallazgo 1.4] _matchUroComponente solo mira el NOMBRE del
+    // analito, sin su padre/panel: "SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización de
+    // colon) casa con el componente SANGRE, y "PROTEINA C REACTIVA" casa con PROTEINURIA.
+    // Sin exigir _esAnalitoDeOrina primero, un SOMF/PCR reciente podía declarar el
+    // uroanálisis "vigente" por su fecha — silenciando el aviso justo cuando el parcial de
+    // orina real SÍ está vencido.
+    t.caso("_analitosRcvVencidos: un SOMF (sangre oculta en heces) o una PCR NO cuentan como componente de uroanálisis", () => {
+      const labsSomf = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "SANGRE OCULTA EN MATERIA FECAL", NombreParametroPadre: "COPROLOGICO", Resultado: "NEGATIVO", Fecha: "2026-08-01" },
+      ];
+      const faltantesSomf = testApi._analitosRcvVencidos(labsSomf, "2026-08-11");
+      t.cierto(faltantesSomf.some((f) => f.key === "UROANALISIS"), "un SOMF no es evidencia de un uroanálisis: sigue faltando");
+
+      const labsPcr = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "PROTEINA C REACTIVA", NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "3.2", Fecha: "2026-08-01" },
+      ];
+      const faltantesPcr = testApi._analitosRcvVencidos(labsPcr, "2026-08-11");
+      t.cierto(faltantesPcr.some((f) => f.key === "UROANALISIS"), "una PCR no es evidencia de un uroanálisis: sigue faltando");
+    });
+
     t.caso("injectLabsIntoCronicos: el respaldo por componentes de _analitosRcvVencidos NO se activa aquí — la casilla de resultado general sigue sin recibir el valor de un componente suelto", () => {
       // Guarda de regresión: _ultimaFechaPorAnalito es compartida por injectLabsIntoCronicos
       // y por _analitosRcvVencidos. El respaldo por componentes (v12.5.15) es SOLO para

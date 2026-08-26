@@ -6,6 +6,23 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.49 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.4: SOMF/PCR colándose como uroanálisis)
+
+`_ultimaFechaPorAnalito` (vigilante_agenda.user.js:2911, con `{uroanalisisPorComponentes:true}`,
+usada por `_analitosRcvVencidos`) era el ÚNICO punto que llamaba `_matchUroComponente(lab)` sin
+exigir primero `_esAnalitoDeOrina(lab)` — a diferencia de `_hayComponenteUroReal` e
+`injectLabsIntoCronicos`, que sí lo exigen. `_matchUroComponente` solo mira el NOMBRE:
+"SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización de colon) casa con el componente SANGRE, y
+"PROTEINA C REACTIVA" casa con PROTEINURIA. Efecto real: un SOMF/PCR reciente podía declarar el
+uroanálisis "vigente" por su fecha, silenciando el aviso justo cuando el parcial de orina real
+SÍ está vencido. Fix de una línea: se añade `_esAnalitoDeOrina(lab) &&` a la condición.
+
+- **Mutación**: se quitó `_esAnalitoDeOrina(lab) &&` de la condición. El banco pasó de 2208 en
+  verde a 1 roja: *"un SOMF (sangre oculta en heces) o una PCR NO cuentan como componente de
+  uroanálisis"* (esperaba que el uroanálisis siguiera faltando y obtuvo `false`, es decir, se
+  dio por vigente). Restaurado, banco vuelve a 2208 en verde.
+- **Prueba nueva**: `tests/suite_08_labs_cronicos.js` — 1 caso (SOMF y PCR, dos analitos).
+
 ## v17.6.48 — 26-ago-2026 (reconstrucción de trabajo perdido: dos bugs de `mtrVerificarCifrasIA`)
 
 Reconstruido a partir de un fragmento de chat de la sesión desconectada (`session_01SY2...`,

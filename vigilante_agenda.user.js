@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.48
+// @version     17.6.49
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.48";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.49";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2908,7 +2908,15 @@
       labsArray.forEach((lab) => {
           let matched = _matchLabInWhitelist(lab);
           let viaComponente = false;
-          if (!matched && uroPorComponentes && _WHITELIST_UROANALISIS && _matchUroComponente(lab)) {
+          // v17.6.49 — auditoría 25-ago (1.4): este era el ÚNICO punto que llamaba
+          // _matchUroComponente(lab) SIN exigir primero _esAnalitoDeOrina(lab) (compárese
+          // _hayComponenteUroReal e injectLabsIntoCronicos, que sí lo exigen). _matchUroComponente
+          // solo mira el NOMBRE del analito: "SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización
+          // de colon) casa con el componente SANGRE, y "PROTEINA C REACTIVA" casa con
+          // PROTEINURIA — sin el filtro de panel, un SOMF/PCR reciente podía declarar el
+          // uroanálisis "vigente" por su fecha, silenciando el aviso de que el parcial de
+          // orina sí está vencido.
+          if (!matched && uroPorComponentes && _WHITELIST_UROANALISIS && _esAnalitoDeOrina(lab) && _matchUroComponente(lab)) {
               matched = _WHITELIST_UROANALISIS;
               viaComponente = true;
           }
