@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.86
+// @version     17.6.87
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.86";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.87";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25922,6 +25922,14 @@ _vglOfrecerDeshacer(btn);
     });
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
+      // v17.6.87 — hay resultado pero sin fecha. Antes caía en la rama de arriba y se le
+      // decía al médico "Nunca se le ha tomado" de un examen que SÍ está hecho y cuyo
+      // resultado puede ser crítico. Se muestra el valor para que lo vea, y se dice por qué
+      // se vuelve a pedir: sin fecha no hay forma de saber si sigue vigente.
+      if (a.subestado === "sin_fecha") {
+        return fila(a, "Hay un resultado (" + (a.valor != null ? a.valor : "sin valor legible")
+          + ") pero sin fecha: no se puede saber si sigue vigente");
+      }
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
       // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
       // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
@@ -30676,7 +30684,18 @@ _vglOfrecerDeshacer(btn);
       // afirmar "vigente" — pero descartar un valor real que SÍ llegó hace que quien
       // consuma este resultado (p.ej. para decidir si reordenar) no tenga forma de saber
       // que el examen ya se hizo, solo que le falta la fecha.
-      return { clave: clave, nombre: nombre, estado: "A", subestado: "sin_historial",
+      // v17.6.87 — el valor se conservaba (arriba) y el `motivo` distinguía el caso, pero el
+      // SUBESTADO seguía siendo "sin_historial" para los dos — y quien pinta la pantalla
+      // decide por el subestado, no por el motivo (mtrTableroClinico, ~:25924). Resultado
+      // verificado con el harness: una glicemia de 260 que SÍ existe pero llegó sin fecha se
+      // le mostraba al médico como "Nunca se le ha tomado". Además de perderse un resultado
+      // alarmante, se reordena un examen ya hecho: viaje y gasto que la misión del motor
+      // ("minimizar desplazamientos sin dejar vencer exámenes") busca evitar precisamente.
+      // Se separan los dos casos en el subestado. Sigue sin poder afirmarse "vigente" —sin
+      // fecha no hay vigencia que calcular—, así que el estado sigue siendo "A" y el examen
+      // se sigue ordenando; lo que cambia es que ya no se afirma una falsedad.
+      return { clave: clave, nombre: nombre, estado: "A",
+        subestado: (valor !== null ? "sin_fecha" : "sin_historial"),
         vigenciaDias: vigencia, fecha: null, valor: valor, vence: null,
         motivo: valor !== null
           ? "hay un resultado (" + valor + ") pero sin fecha registrada: no se puede calcular vigencia"
@@ -30756,7 +30775,12 @@ _vglOfrecerDeshacer(btn);
     const pasajeros = evaluar(MTR_PASAJEROS);
     const todos = drivers.concat(pasajeros);
 
-    const faltantes = todos.filter((a) => a.estado === "A" && a.subestado === "sin_historial");
+    // v17.6.87 — "sin_fecha" (hay resultado pero sin fecha) se suma aquí: es un subestado
+    // NUEVO que antes venía dentro de "sin_historial", así que sin esta línea el examen
+    // dejaría de ordenarse — y sin fecha sigue sin poderse afirmar que esté vigente, que es
+    // justo el motivo por el que hay que volver a pedirlo. Lo que cambia es el texto que lee
+    // el médico (ya no "nunca se le ha tomado"), no la conducta.
+    const faltantes = todos.filter((a) => a.estado === "A" && (a.subestado === "sin_historial" || a.subestado === "sin_fecha"));
     // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora sale como estado "R"
     // (ver mtrEstadoAnalito), no "A" — pero `vencidoBase` sigue siendo la verdad de
     // terreno de que YA venció, y esta lista ("Ya vencidos") es justo donde el médico

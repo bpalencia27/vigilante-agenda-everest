@@ -6,6 +6,49 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.87 — 26-ago-2026 ("Nunca se le ha tomado" sobre un examen que SÍ tiene resultado)
+
+Segundo hueco de la Fase 1 del plan de fidelidad a v68.
+
+v17.6.57 ya había arreglado que un analito con valor pero sin fecha perdiera el valor, y su
+`motivo` distingue el caso ("hay un resultado (260) pero sin fecha registrada"). **No bastaba:**
+el subestado seguía siendo `sin_historial` para los dos casos, y quien pinta la pantalla
+(`mtrTableroClinico`) decide el texto por el **subestado**, no por el motivo.
+
+Reproducido con el harness — glicemia de 260 llegada sin fecha (alcanzable: `_extractAtheneaFecha`
+puede devolver `null` y `mtrResumenDesdeModalLabs` lo copia tal cual):
+
+```
+subestado                       : sin_historial
+motivo                          : hay un resultado (260) pero sin fecha registrada…
+lo que LEE EL MÉDICO en pantalla: "Nunca se le ha tomado"
+```
+
+Además de perderse un resultado alarmante, se reordena un examen ya hecho — viaje y gasto que la
+misión del motor ("minimizar desplazamientos sin dejar vencer exámenes") existe para evitar.
+
+Se separan los dos casos en el subestado (`sin_fecha` / `sin_historial`), se añade la rama de
+texto en el tablero (muestra el valor y explica por qué se vuelve a pedir), y se incluye
+`sin_fecha` en el filtro de `faltantes` para que el examen **se siga ordenando**: sin fecha
+sigue sin poderse afirmar que esté vigente. Lo que cambia es que ya no se afirma una falsedad;
+la conducta es la misma.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **subestado compartido** | `subestado` vuelto a `"sin_historial"` para ambos casos | `suite_46` + `suite_63` | *un analito CON valor pero SIN fecha no pierde el valor* **y** *v17.6.87: un examen CON resultado pero sin fecha no se anuncia como 'nunca se le ha tomado'* |
+| **rama del texto** | la rama `if (a.subestado === "sin_fecha")` del tablero anulada con `false &&` | `suite_63` | *v17.6.87: …no se anuncia como 'nunca se le ha tomado'* |
+| **filtro de faltantes** | `sin_fecha` retirado del filtro (el examen dejaría de ordenarse) | `suite_63` | *v17.6.87: …no se anuncia como 'nunca se le ha tomado'* |
+
+La tercera mutación es la que más importa: si `sin_fecha` sale del filtro, el examen
+**desaparece del plan** y el paciente se queda sin él. La prueba de punta a punta lo caza porque
+comprueba primero que la fila existe, antes de mirar su texto.
+
+Una prueba de v17.6.57 (`suite_46`) fijaba `subestado === "sin_historial"` para este caso: se
+actualizó a `sin_fecha` con el porqué, porque el comportamiento cambió a propósito.
+
+Las tres mutaciones se aplicaron de una en una desde copia intacta y el archivo se restauró
+verificando `diff`. Banco en 2311/2311.
+
 ## v17.6.86 — 26-ago-2026 (el marcador [DOSIS NO ESPECIFICADA] se apagaba a los 20 segundos)
 
 Primer hueco de la Fase 1 del plan de fidelidad a v68 (S4: *"MEDS: genérico+dosis+frecuencia;

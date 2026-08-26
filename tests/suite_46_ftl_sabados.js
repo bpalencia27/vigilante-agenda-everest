@@ -120,7 +120,12 @@ module.exports = {
     t.caso("un analito CON valor pero SIN fecha no pierde el valor (bug real: se ponía a null)", () => {
       const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: 1.0 }, ctxErc);
       t.igual(a.estado, "A", "sigue sin poder afirmarse vigente, sin fecha");
-      t.igual(a.subestado, "sin_historial");
+      // v17.6.87 — este caso ya NO comparte subestado con "nunca se hizo". Conservar el valor
+      // (v17.6.57) no bastaba: quien pinta la pantalla decide por el SUBESTADO, no por el
+      // motivo, así que un examen con resultado real seguía mostrándose como "Nunca se le ha
+      // tomado". Ahora tiene subestado propio; sigue ordenándose igual (ver el filtro de
+      // `faltantes` en mtrPlanParaclinicos), lo que cambia es que no se afirma una falsedad.
+      t.igual(a.subestado, "sin_fecha", "subestado propio: hay resultado, falta la fecha");
       t.igual(a.fecha, null, "la fecha sigue sin inventarse");
       t.igual(a.valor, 1.0, "pero el valor real (1.0) debe conservarse, no perderse");
       t.cierto(/hay un resultado/.test(a.motivo), "el motivo debe distinguir esto de 'nunca se hizo': " + a.motivo);

@@ -120,6 +120,45 @@ module.exports = {
       t.cierto(/albuminuria/i.test(rac.quePasa), "y sigue mencionando la albuminuria: " + rac.quePasa);
     });
 
+    // v17.6.87 — auditoría v68. Un examen con resultado real pero SIN fecha (alcanzable:
+    // `_extractAtheneaFecha` puede devolver null y `mtrResumenDesdeModalLabs` lo copia tal
+    // cual) compartía subestado con "nunca se hizo", y el tablero decide el texto por el
+    // subestado. El médico leía "Nunca se le ha tomado" de una glicemia de 260 que SÍ existe:
+    // además de perderse un resultado alarmante, se reordena un examen ya hecho — viaje y
+    // gasto que la misión del motor busca evitar.
+    //
+    // Se prueba de PUNTA A PUNTA (estado -> plan -> tablero): probar solo el subestado
+    // dejaría pasar un cambio que lo separase pero olvidara la rama del texto, que es lo
+    // único que el médico llega a ver.
+    t.caso("v17.6.87: un examen CON resultado pero sin fecha no se anuncia como 'nunca se le ha tomado'", () => {
+      const plan = a.mtrPlanParaclinicos({
+        hoyIso: "2026-08-26", programa: "DM2", estadioAdministrativo: "G2", esDm2: true, edad: 60,
+        ultimos: {
+          GLUCOSA:          { fecha: null,         valor: 260 },   // resultado sin fecha
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 90 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 120 },
+          UROANALISIS:      { fecha: "2026-08-01", valor: 1 },
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+          HBA1C:            { fecha: "2026-08-01", valor: 6.5 },
+        },
+      });
+      const d = a.mtrTableroClinico({ factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G2" }, plan: plan });
+      const fila = d.ordenar.find((x) => x.clave === "GLUCOSA");
+      t.cierto(!!fila, "se sigue ordenando: sin fecha no se puede afirmar que esté vigente");
+      t.igual(fila.subestado, "sin_fecha", "con subestado propio, no el de 'nunca se hizo'");
+      t.falso(/Nunca se le ha tomado/.test(fila.quePasa),
+        "NO se le dice que nunca se le ha tomado: " + fila.quePasa);
+      t.cierto(/260/.test(fila.quePasa), "se le muestra el resultado que sí existe: " + fila.quePasa);
+      t.cierto(/sin fecha/i.test(fila.quePasa), "y por qué se vuelve a pedir: " + fila.quePasa);
+
+      // El que de verdad nunca se tomó conserva su texto de siempre.
+      const uro = d.ordenar.find((x) => x.clave === "PTH") || d.ordenar.find((x) => x.subestado === "sin_historial");
+      if (uro) t.igual(uro.quePasa, "Nunca se le ha tomado", "el que nunca se hizo sigue diciéndolo");
+    });
+
     t.caso("«lo que sigue vigente» va del que vence primero al último, sin repetir lo que ya se va a pedir", () => {
       const d = a.mtrTableroClinico(resumenBase);
       const clavesOrdenar = d.ordenar.map((x) => x.clave);
