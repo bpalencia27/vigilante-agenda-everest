@@ -126,6 +126,19 @@ module.exports = {
       t.igual(api.mtrMedsSinGrupo(null).sinGrupo, 0, "nulo sin lanzar");
     });
 
+    // v17.6.77 — auditoría 25-ago (ítem 5): hallazgo cruzado al promover esta detección
+    // a un aviso visible — mtrMedsSinGrupo solo miraba mtrDetectarGruposFarmacologicos
+    // (base) y mtrDetectarGruposAmp (ampliado), nunca mtrGruposCatalogoRcv (el catálogo
+    // externo v17.6.4, un TERCER sistema de clasificación que llegó después). Un
+    // fármaco reconocido SOLO por el catálogo (omeprazol, vía la interacción
+    // CLOPIDOGREL_IBP) contaba como "sin grupo" pese a que el motor SÍ lo evalúa — un
+    // falso positivo de cobertura real desde que existe el catálogo, no solo teórico.
+    t.caso("mtrMedsSinGrupo (v17.6.77): un fármaco reconocido SOLO por el catálogo RCV externo NO cuenta como sin grupo", () => {
+      const r = api.mtrMedsSinGrupo(["OMEPRAZOL 20 MG (CAPSULA)"]);
+      t.igual(r.total, 1);
+      t.igual(r.sinGrupo, 0, "el omeprazol SÍ está cubierto — por el catálogo RCV, aunque no por base/ampliado");
+    });
+
     // ============ LECTURA DE LA TENSIÓN ARTERIAL (anclas capturadas) ============
 
     t.caso("lee la TA por las anclas capturadas y prioriza el examen físico sobre Ruta", () => {

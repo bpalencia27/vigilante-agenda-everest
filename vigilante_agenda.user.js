@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.76
+// @version     17.6.77
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.76";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.77";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28064,6 +28064,15 @@ _vglOfrecerDeshacer(btn);
   // dice si el enfoque RCV está dejando pasar fármacos relevantes. Hallazgo que la
   // motiva: la IPS nunca parametrizó su propia bandera swNefrotoxico (0 de 2749), así
   // que este motor es la única red — conviene saber qué fracción de la fórmula ve.
+  // v17.6.77 — auditoría 25-ago (ítem 5): se suma el CATÁLOGO RCV externo (v17.6.4,
+  // `mtrGruposCatalogoRcv`/MTR_CATALOGO_RCV) a la comprobación. Es un tercer sistema de
+  // clasificación que llegó DESPUÉS de esta función (v14.2.0) y nunca se sumó aquí — un
+  // fármaco reconocido SOLO por el catálogo (p.ej. omeprazol, que participa en la
+  // interacción CLOPIDOGREL_IBP pero no está en `mtrDetectarGruposFarmacologicos` ni en
+  // `mtrDetectarGruposAmp`) contaba como "sin grupo" pese a que el motor SÍ lo evalúa —
+  // un falso positivo de cobertura, real desde que existe el catálogo. Se corrige aquí
+  // (no es un criterio nuevo: es completar el mismo criterio — "¿el motor reconoce este
+  // fármaco en ALGUNO de sus sistemas de clasificación?" — con el sistema que faltaba).
   function mtrMedsSinGrupo(medicamentos) {
     const out = { total: 0, sinGrupo: 0 };
     if (!Array.isArray(medicamentos)) return out;
@@ -28072,9 +28081,53 @@ _vglOfrecerDeshacer(btn);
       out.total++;
       const enBase = Object.keys(mtrDetectarGruposFarmacologicos([m])).length > 0;
       const enAmp = enBase ? true : Object.keys(mtrDetectarGruposAmp([m])).length > 0;
-      if (!enBase && !enAmp) out.sinGrupo++;
+      const enCatalogo = (enBase || enAmp) ? true : Object.keys(mtrGruposCatalogoRcv([m])).length > 0;
+      if (!enBase && !enAmp && !enCatalogo) out.sinGrupo++;
     }
     return out;
+  }
+
+  // v17.6.77 — auditoría 25-ago (ítem 5): `mtrMedsSinGrupo` (arriba) alimentaba SOLO
+  // telemetría (`uxTrack("farmaco.cobertura", ...)`, PHI-free A PROPÓSITO — solo
+  // enteros, nunca nombres, ver su comentario). El médico nunca veía CUÁLES fármacos el
+  // motor no reconoce, aunque es justo la señal que le sirve para saber qué medicamento
+  // revisar a mano — un fármaco fuera de todo grupo es un punto ciego real del motor.
+  //
+  // Función NUEVA y SEPARADA (no se toca `mtrMedsSinGrupo`, que sigue intacta para la
+  // telemetría PHI-free): MISMA lógica de detección exacta (enBase/enAmp/enCatalogo, sin
+  // cambiar un carácter del criterio), pero devuelve los NOMBRES en vez de un conteo —
+  // para construir un aviso visible. Esto SOLO debe usarse para pintar en pantalla,
+  // nunca para telemetría (el nombre del medicamento no viaja a uxTrack).
+  function mtrMedsFueraDeGrupoNombres(medicamentos) {
+    const out = [];
+    if (!Array.isArray(medicamentos)) return out;
+    for (const m of medicamentos) {
+      if (!m || !String(m).trim()) continue;
+      const enBase = Object.keys(mtrDetectarGruposFarmacologicos([m])).length > 0;
+      const enAmp = enBase ? true : Object.keys(mtrDetectarGruposAmp([m])).length > 0;
+      const enCatalogo = (enBase || enAmp) ? true : Object.keys(mtrGruposCatalogoRcv([m])).length > 0;
+      if (!enBase && !enAmp && !enCatalogo) out.push(String(m).trim());
+    }
+    return out;
+  }
+
+  // v17.6.77 — Aviso VISIBLE (mismo patrón que el resto del flujo de avisos,
+  // mtrAvisosDosisRenal/mtrEvaluarSeguridadDosisRenal: un objeto listo para
+  // mtrPintarAviso, o null si no hay nada que decir — nunca un aviso vacío). Severidad
+  // INFO a propósito: no es una interacción conocida ni un riesgo cuantificado, es una
+  // declaración honesta de cobertura — "el motor no pudo evaluar esto, revíselo usted".
+  // Nunca sugiere suspender ni ajustar nada: eso sería inventar un juicio clínico sobre
+  // un fármaco que, por definición, el motor no reconoce.
+  function mtrAvisoFueraDeGrupo(medicamentos) {
+    const nombres = mtrMedsFueraDeGrupoNombres(medicamentos);
+    if (!nombres.length) return null;
+    return mtrAlertaInteraccion(nombres, "FUERA_DE_GRUPO", "MONITORIZAR",
+      (nombres.length === 1
+        ? "1 medicamento de la fórmula no cae en ningún grupo farmacológico que este motor reconozca"
+        : nombres.length + " medicamentos de la fórmula no caen en ningún grupo farmacológico que este motor reconozca")
+        + ": no se pudo evaluar interacción ni dosis renal para ellos. Revíselos con su propio criterio.",
+      MTR_SEV_INFO,
+      "Fuera del catálogo de grupos farmacológicos (base + ampliado + catálogo RCV) que el motor reconoce");
   }
 
   // v14.2.0 — Reglas RENALES ampliadas (ficha técnica, Cockcroft-Gault como en el
@@ -28727,15 +28780,34 @@ _vglOfrecerDeshacer(btn);
     const avisosRenales = base.avisos.concat(
       mtrReglasRenalesAmpliadas(meds || [], mtrFloat(c.tfgCockcroftGault)));
 
-    const todo = avisosRenales.concat(inter, interCatalogo).slice().sort((a, b) =>
+    // v17.6.77 — auditoría 25-ago (ítem 5): la detección de "fuera de grupo" ya existía
+    // (mtrMedsSinGrupo, línea ~28067) pero solo alimentaba telemetría. Ahora también se
+    // suma al flujo de avisos que el médico VE, con el mismo patrón que el resto
+    // (mtrAlertaInteraccion, severidad INFO, mismo mtrPintarAviso) — un aviso, no un
+    // conteo aparte, y null (no se agrega nada) si todos los fármacos caen en algún
+    // grupo reconocido.
+    let avisoFueraDeGrupo = null;
+    try { avisoFueraDeGrupo = mtrAvisoFueraDeGrupo(meds || []); } catch (e) { avisoFueraDeGrupo = null; }
+
+    // v17.6.77 — `combinado` (sin el aviso de cobertura) es lo que decide `motivo`/
+    // `legible` más abajo: ese aviso es INDEPENDIENTE de si se pudo o no juzgar la
+    // dosis renal (no depende de tfgCkdEpi/tfgCockcroftGault en absoluto), así que su
+    // sola presencia NO puede convertir un "SIN_FUNCION_RENAL" honesto en un "OK" — eso
+    // ocultaría que la dosis renal de verdad nunca se evaluó. El aviso de cobertura
+    // SIGUE viajando en `todo` (se pinta igual, ver mtrRenderAvisosHtml: solo mira
+    // `todo.length`, nunca `motivo`, para decidir si hay algo que mostrar).
+    const combinado = avisosRenales.concat(inter, interCatalogo);
+    const todo = combinado.concat(avisoFueraDeGrupo ? [avisoFueraDeGrupo] : []).slice().sort((a, b) =>
       (MTR_SEV_ORDEN[a.severidad] === undefined ? 9 : MTR_SEV_ORDEN[a.severidad]) -
       (MTR_SEV_ORDEN[b.severidad] === undefined ? 9 : MTR_SEV_ORDEN[b.severidad]));
 
     // v14.2.0 — Telemetría de cobertura (solo enteros): qué fracción de la fórmula
-    // del paciente cae dentro de algún grupo del motor.
+    // del paciente cae dentro de algún grupo del motor. Se conserva SIN TOCAR: sigue
+    // siendo un conteo PHI-free, independiente del aviso visible de arriba (que usa
+    // mtrMedsFueraDeGrupoNombres, una función distinta, nunca enviada a telemetría).
     try { const cob = mtrMedsSinGrupo(meds || []); if (cob.total) uxTrack("farmaco.cobertura", cob); } catch (e) {}
 
-    const n = todo.length;
+    const n = combinado.length;
     // v17.6.28 — si NO se halló nada (n=0) pero la razón de fondo era SIN_FUNCION_RENAL
     // (no se pudo evaluar dosis por falta de CG), el motivo se conserva: la vista de
     // presentación (mtrRenderAvisosHtml) distingue "no se pudo evaluar" (ámbar,
@@ -28792,6 +28864,8 @@ _vglOfrecerDeshacer(btn);
     METFORMINA_CONTRASTE: "Metformina y contraste",
     BETA_CCB_NODHP: "Bradicardia por combinación",
     SGLT2_SULFONILUREA: "Riesgo de hipoglucemia",
+    // v17.6.77 — auditoría 25-ago (ítem 5): etiqueta del aviso de mtrAvisoFueraDeGrupo.
+    FUERA_DE_GRUPO: "Fuera de grupo reconocido",
   };
 
   function mtrEtiquetaAviso(a) {

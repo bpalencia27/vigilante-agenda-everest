@@ -6,6 +6,56 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.77 — 26-ago-2026 (ítem 5: aviso visible de fármaco fuera de grupo — decisión del médico: "Sí")
+
+**El hallazgo**: `mtrMedsSinGrupo` (v14.2.0) ya detecta cuántos medicamentos del paciente
+no caen en NINGÚN grupo farmacológico que el motor reconoce, pero solo alimentaba
+telemetría (`uxTrack("farmaco.cobertura", {total, sinGrupo})` — solo enteros, PHI-free
+a propósito) y nunca llegaba a la vista del médico.
+
+**El fix, en tres partes**:
+1. `mtrMedsFueraDeGrupoNombres` — función NUEVA y SEPARADA (NO se toca
+   `mtrMedsSinGrupo`, que sigue intacta, íntegra para telemetría PHI-free): misma
+   lógica de detección exacta, pero devuelve los NOMBRES en vez de un conteo.
+2. `mtrAvisoFueraDeGrupo` — construye un aviso con `mtrAlertaInteraccion` (mismo patrón
+   que el resto del flujo), severidad INFO, conducta MONITORIZAR: nunca sugiere
+   suspender/ajustar nada sobre un fármaco que, por definición, el motor no reconoce.
+   Se suma a `todo` en `mtrAvisosFarmacologicos`, junto a `mtrRenderAvisosHtml`.
+3. **Hallazgo cruzado, corregido en el camino**: al verificar la detección contra
+   fixtures reales (omeprazol + clopidogrel), se descubrió que `mtrMedsSinGrupo` —y por
+   tanto la nueva función— NUNCA miraba `mtrGruposCatalogoRcv` (el catálogo externo
+   v17.6.4, un TERCER sistema de clasificación que llegó DESPUÉS de esta función y
+   nunca se sumó). El omeprazol participa en la interacción CLOPIDOGREL_IBP solo por el
+   catálogo, y contaba como "sin grupo" pese a que el motor SÍ lo evalúa — un falso
+   positivo de cobertura real, no solo teórico. Se corrige en AMBAS funciones (la de
+   telemetría también, porque es el mismo criterio completado, no uno nuevo).
+
+**Cuidado con la semántica de `motivo`/`legible`**: el aviso de cobertura no depende de
+la función renal (ni de `tfgCkdEpi` ni de `tfgCockcroftGault`), así que su sola
+presencia en `todo` NO puede convertir un `motivo: "SIN_FUNCION_RENAL"` honesto en
+`"OK"` — eso ocultaría que la dosis renal de verdad nunca se evaluó (regresión real
+detectada por una prueba preexistente, v17.6.28). `motivo`/`legible` se calculan sobre
+`combinado` (avisos renales + interacciones, SIN el aviso de cobertura); `todo` (lo que
+de verdad se pinta) sí lo incluye — `mtrRenderAvisosHtml` solo mira `todo.length`, nunca
+`motivo`, para decidir si hay algo que mostrar, así que no hay contradicción visible.
+
+**Mutación verificada** (tres mutaciones independientes):
+- Se quitó `avisoFueraDeGrupo` de `todo`: cayó EXACTAMENTE 1 prueba nueva ("ya no se
+  pinta como 'todo limpio'... obtuvo 40" en vez de -1).
+- Se revirtió el chequeo del catálogo en ambas funciones: cayeron EXACTAMENTE 3 pruebas
+  (2 nuevas + la preexistente de `tests/suite_69_catalogo_rcv.js` que ya protegía la
+  identidad `todo.length === avisos.length + interacciones.length`, "esperaba 3 y
+  obtuvo 4" — la misma prueba que reveló el hallazgo cruzado en primer lugar).
+- Se revirtió `n = combinado.length` a `n = todo.length`: cayó EXACTAMENTE la prueba
+  preexistente de v17.6.28 ("esperaba SIN_FUNCION_RENAL y obtuvo OK").
+En los tres casos se restauró desde el backup y el banco volvió a 2280 en verde. Se
+añadieron 5 pruebas nuevas: en `tests/suite_41_motor_vista.js` (el aviso visible con
+ACETAMINOFEN, y que omeprazol-por-catálogo NO se marca fuera de grupo; se cambió
+también el fixture de una prueba preexistente de ACETAMINOFEN a LOSARTAN, porque el
+escenario que protegía —"nada que reportar"— ya no lo cumple ACETAMINOFEN una vez que
+SÍ genera el aviso de cobertura) y en `tests/suite_55_framingham_oficial.js`
+(`mtrMedsSinGrupo` con el fix del catálogo, aislado de la vista).
+
 ## v17.6.76 — 26-ago-2026 (ítem 4: fusiones MTT → JSON, campo `order_list_mtt` — decisión del médico: "Sí")
 
 El motor ya calcula, en `mtrConsolidarMtt` (invocado desde `mtrPlanFallas`, guardado en

@@ -12,7 +12,8 @@
 // =====================================================================
 module.exports = {
   nombre: "Vista de avisos farmacológicos",
-  cubre: ["mtrRenderAvisosHtml", "mtrPintarAviso", "mtrEtiquetaAviso"],
+  cubre: ["mtrRenderAvisosHtml", "mtrPintarAviso", "mtrEtiquetaAviso",
+    "mtrMedsSinGrupo", "mtrMedsFueraDeGrupoNombres", "mtrAvisoFueraDeGrupo"],
 
   pruebas(t, api) {
     const S = api.__S;
@@ -98,12 +99,46 @@ module.exports = {
     });
 
     t.caso("con la lista leída y sin hallazgos se pinta distinto", () => {
+      // v17.6.77 — auditoría 25-ago (ítem 5): antes usaba ACETAMINOFEN (fuera de todo
+      // grupo del motor) como fixture de "sin hallazgos" — desde que ese caso SÍ genera
+      // el aviso visible de cobertura (ver más abajo), deja de ser un fixture de "nada
+      // que reportar". Se cambia a LOSARTAN, que el motor sí reconoce y no produce
+      // ningún hallazgo de dosis/interacción con esta función renal — el escenario que
+      // esta prueba de verdad protege.
       const h = conBandera(() => api.mtrRenderAvisosHtml({
-        medicamentos: ["ACETAMINOFEN 500 MG"], tfgCkdEpi: 85, tfgCockcroftGault: 88,
+        medicamentos: ["LOSARTAN 50 MG"], tfgCkdEpi: 85, tfgCockcroftGault: 88,
       }));
       t.cierto(h.indexOf("vgl-mtr-limpio") >= 0);
       t.igual(h.indexOf("vgl-mtr-sinjuicio"), -1,
         "leer y no encontrar nada NO puede pintarse igual que no haber podido leer");
+    });
+
+    // =====================================================================
+    // v17.6.77 — auditoría 25-ago (ítem 5): la detección de "fuera de grupo"
+    // (mtrMedsSinGrupo) ya existía pero solo alimentaba telemetría — el médico nunca
+    // veía CUÁLES fármacos el motor no reconoce. Ahora se suma al flujo de avisos
+    // visible (mtrAvisoFueraDeGrupo), mismo patrón que el resto (severidad INFO).
+    // =====================================================================
+    t.caso("un fármaco fuera de todo grupo reconocido genera un aviso VISIBLE, no solo telemetría", () => {
+      const h = conBandera(() => api.mtrRenderAvisosHtml({
+        medicamentos: ["ACETAMINOFEN 500 MG"], tfgCkdEpi: 85, tfgCockcroftGault: 88,
+      }));
+      t.igual(h.indexOf("vgl-mtr-limpio"), -1, "ya no se pinta como 'todo limpio': SÍ hay algo que decir");
+      t.cierto(h.indexOf("vgl-mtr-info") >= 0, "el aviso se pinta con la clase de severidad INFO");
+      t.cierto(h.indexOf("ACETAMINOFEN") >= 0, "y NOMBRA el fármaco no reconocido — no un conteo mudo");
+      t.cierto(/no cae en ningún grupo farmacológico/i.test(h), "con el mensaje explicando la brecha de cobertura");
+    });
+
+    t.caso("un fármaco reconocido SOLO por el catálogo RCV externo (v17.6.4) NO se marca como fuera de grupo", () => {
+      // Confirma el fix del hallazgo cruzado: mtrMedsSinGrupo (y por tanto el aviso
+      // visible) tenía un hueco real — no miraba mtrGruposCatalogoRcv, el TERCER
+      // sistema de clasificación (llegó después, v17.6.4). El omeprazol participa en la
+      // interacción CLOPIDOGREL_IBP solo por el catálogo — sin el fix, salía marcado
+      // como "no reconocido" pese a que el motor SÍ lo evalúa.
+      const h = conBandera(() => api.mtrRenderAvisosHtml({
+        medicamentos: ["OMEPRAZOL 20 MG", "CLOPIDOGREL 75 MG"], tfgCkdEpi: 85, tfgCockcroftGault: 88,
+      }));
+      t.falso(/OMEPRAZOL[\s\S]*no cae en ningún grupo/i.test(h), "el omeprazol no debe aparecer como fuera de grupo");
     });
 
     t.caso("sin función renal tampoco se pinta 'todo limpio'", () => {
