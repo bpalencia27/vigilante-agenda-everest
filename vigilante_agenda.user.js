@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.49
+// @version     17.6.50
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.49";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.50";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -29416,6 +29416,16 @@ _vglOfrecerDeshacer(btn);
       motivosRemision: remision.motivos,
       sospechaIra: ira,
       datosCompletos: guardaCg && guardaComun,
+      // v17.6.50 — auditoría 25-ago (1.5): con sexo vacío, mtrEsSexoFemenino da false y
+      // AMBAS fórmulas se calculan como hombre (verificado con el harness: {edad:70,
+      // peso:70, creat:1.0, sexo:''} -> CrCl 68.1 = G2; el mismo caso con sexo:'F' -> CrCl
+      // 57.8 = G3a — una mujer sin sexo registrado sube un estadio administrativo entero).
+      // "sexo" ya viaja en `faltan`, pero eso no distingue "no pude calcular nada" de
+      // "calculé un número asumiendo un sexo que no tengo". Mismo campo/convención que ya
+      // usa la vía legacy (estadioRenalDelPaciente:sexoAusente, línea ~15930): quien
+      // consuma este resultado puede avisar "esto sobreestima la TFG" en vez de mostrar el
+      // número crudo como si el dato fuera real.
+      sexoAusente: (d.sexo === null || d.sexo === undefined || d.sexo === ""),
       // v16.0.0 — las entradas viajan con el resultado: el módulo de riesgo reclasifica
       // en vivo con los datos nuevos de pantalla SIN volver a consultar laboratorios.
       entradas: { edad: edad, peso: peso, creatinina: creat, sexo: d.sexo == null ? "" : String(d.sexo) },

@@ -6,6 +6,28 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.50 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.5: sexo ausente sube el estadio renal sin avisar)
+
+`mtrEvaluarErc` (vigilante_agenda.user.js:29358): con sexo vacío, `mtrEsSexoFemenino` da
+`false` y AMBAS fórmulas (Cockcroft-Gault, CKD-EPI) se calculan como si el paciente fuera
+hombre. Verificado con el harness: `{edad:70, peso:70, creat:1.0, sexo:''}` → CrCl 68.1 = G2;
+el mismo caso con `sexo:'F'` → CrCl 57.8 = **G3a**. Una mujer sin sexo registrado sube un
+estadio administrativo entero (cambia vigencias, ventana ANR, bloqueos de PTH/Fósforo/Albúmina)
+sin que nada distinga "calculado con un supuesto" de "calculado con dato real". La vía legacy
+(`estadioRenalDelPaciente`) ya expone `sexoAusente` para esto (línea ~15930, consumida en un
+aviso "esto sobreestima la TFG en un 15 %" en línea 16003) — el motor `mtr*` no lo había
+heredado. Fix: se añade el mismo campo `sexoAusente` al resultado de `mtrEvaluarErc`.
+
+- **Mutación**: se forzó `sexoAusente: false` fijo (ignorando el sexo real). El banco pasó de
+  2209 en verde a 1 roja: *"sexo ausente: el número sale calculado COMO HOMBRE... sexoAusente
+  avisa que es un supuesto"* (esperaba `true` y obtuvo `false`). Restaurado, banco vuelve a
+  2209 en verde.
+- **Prueba nueva**: `tests/suite_45_riesgo_cv.js` — 1 caso (con y sin sexo, mismo paciente).
+- **Alcance de esta entrega**: se expone el campo en el motor (igual que ya existe en la vía
+  legacy); no se conectó todavía a un aviso visible en el panel renal del motor `mtr*` — eso
+  es un cambio de UI más grande (encontrar el consumidor correcto de `mtrResumenClinico` /
+  `mtrPanelRiesgoRenalHtml`) que queda para una entrega aparte si el médico lo pide.
+
 ## v17.6.49 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.4: SOMF/PCR colándose como uroanálisis)
 
 `_ultimaFechaPorAnalito` (vigilante_agenda.user.js:2911, con `{uroanalisisPorComponentes:true}`,

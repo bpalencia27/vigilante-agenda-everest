@@ -436,6 +436,22 @@ module.exports = {
       t.igual(r2.estadioAdministrativo, null, "creatinina 40 queda fuera de la guarda 0.1-20");
     });
 
+    // [auditoría 25-ago, hallazgo 1.5] con sexo vacío, mtrEsSexoFemenino da false y AMBAS
+    // fórmulas se calculan como hombre: una mujer sin sexo registrado sube un estadio
+    // administrativo entero (G2 en vez de G3a) sin que nada distinga "calculado con un
+    // supuesto" de "calculado con dato real". `sexoAusente` expone esa diferencia.
+    t.caso("sexo ausente: el número sale calculado COMO HOMBRE y sube el estadio; sexoAusente avisa que es un supuesto", () => {
+      const sinSexo = api.mtrEvaluarErc({ edad: 70, pesoKg: 70, creatinina: 1.0, sexo: "" });
+      t.igual(sinSexo.crcl, 68.1, "sin sexo, el CrCl se calcula como si fuera hombre");
+      t.igual(sinSexo.estadioAdministrativo, "G2", "y el estadio sale un grado mejor de lo real");
+      t.cierto(sinSexo.sexoAusente, "sexoAusente debe avisar que este número es un supuesto, no un dato real");
+
+      const conF = api.mtrEvaluarErc({ edad: 70, pesoKg: 70, creatinina: 1.0, sexo: "F" });
+      t.igual(conF.crcl, 57.8, "la misma paciente, con sexo real, tiene un CrCl distinto");
+      t.igual(conF.estadioAdministrativo, "G3a", "un estadio administrativo entero más avanzado");
+      t.falso(conF.sexoAusente, "con sexo real, sexoAusente debe ser false");
+    });
+
     t.caso("cuando el estadio clínico es PEOR que el administrativo, las dosis lo siguen a él", () => {
       // Peso alto infla el Cockcroft-Gault: administrativo mejor que el clínico.
       const r = api.mtrEvaluarErc({ edad: 70, sexo: "M", pesoKg: 120, creatinina: 1.9 });
