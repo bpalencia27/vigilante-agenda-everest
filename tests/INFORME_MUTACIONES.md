@@ -6,6 +6,45 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.73 — 26-ago-2026 (redacción del banner "Labs primero" — reportado en consultorio: "ni él ni sus compañeros lo entienden bien")
+
+**El reporte**: el médico pegó el texto real del banner cuando el piso de 14 días se
+relaja por exámenes vencidos — mensaje confuso, jerga interna del motor, sin dato de
+paciente.
+
+**Causa raíz confirmada leyendo el código real**: dos problemas en el mismo texto.
+1. `motivoPiso` (armado en `mtrPlanLabsPrimero`, dos ramas) empezaba con su propio verbo
+   — "adelantada porque..." / "adelantada al vencimiento de...: el piso de 14 días la
+   habría dejado vencer" — pensado para leerse como frase independiente.
+2. `notaLP` (armado en `_pintarBannerSugerida`, dentro de `openAgendamientoModal`, que es
+   donde el médico REALMENTE lo lee) EMBEBÍA ese `motivoPiso` dentro de otra frase que
+   YA empezaba con "se adelanta... porque" — el resultado decía literalmente
+   "porque... (adelantada porque...", duplicado, más "ventana de 14–21 días"/"piso"/"cupo
+   hábil": jerga interna sin explicar.
+
+**El fix**: `motivoPiso` pasa a ser SOLO la razón, sin verbo propio —
+`"ya hay examen(es) vencido(s) y esperar 14 días no los recupera"` (caso 1) y
+`"el examen " + nombre + " vence el " + fecha + " y esperar 14 días lo dejaría vencer"`
+(caso 2) — y `notaLP` lo embebe UNA sola vez, sin jerga:
+`"Se adelanta la toma al primer cupo disponible porque " + motivoPiso + ". El control
+queda ~7 días después de la toma..."`. La rama SIN piso relajado (el `else` de `notaLP`)
+no se tocó — el médico no la reportó como confusa.
+
+**Mutación verificada**: se respaldó el archivo, se revirtieron con `python3` las tres
+piezas (los dos `motivoPiso` y el `notaLP`) a la redacción vieja. `TZ=America/Bogota node
+tests/runner.js` puso rojas EXACTAMENTE las 3 pruebas relacionadas con la redacción
+(2259 pasan / 3 fallan): la prueba de texto-fuente nueva en
+`tests/suite_15_interfaz_avanzada.js` (que confirma que `notaLP` no repite la frase
+duplicada ni la jerga) y las dos aserciones de texto exacto reforzadas en
+`tests/suite_24_motor_perfil.js` sobre `mtrPlanLabsPrimero` (los dos casos de
+`motivoPiso`). Las pruebas viejas con regex sueltos (`/ya hay examen\(es\)
+vencido\(s\)/`, `/Glicemia/`) siguieron en verde con la redacción vieja, confirmando que
+sin la aserción exacta nueva esta regresión habría pasado desapercibida — motivo por el
+que se AÑADIERON las aserciones de texto exacto en vez de solo confiar en las regex
+preexistentes. Se restauró desde el backup y el banco volvió a 2262 pruebas en verde
+(2261 + 1 prueba nueva de texto-fuente; las otras dos son fortalecimiento de pruebas ya
+existentes, no pruebas nuevas).
+
 ## v17.6.72 — 26-ago-2026 (ítem 2 / auditoría 25-ago 1.15: grupo de lípidos, vigencia = la más corta — decisión del médico)
 
 Colesterol Total, HDL, LDL y Triglicéridos salen de UNA sola muestra de sangre. Antes,

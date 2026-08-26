@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.72
+// @version     17.6.73
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.72";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.73";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -20418,8 +20418,17 @@ _vglOfrecerDeshacer(btn);
         // CASO REAL: con vencidos manda el primer cupo hábil (CERO VENCIDOS), y el control
         // se cuelga a +7 días. El texto genérico solo aplica cuando el piso NO cedió.
         const _pisoLP = _labsPrimero && _labsPrimero.pisoRelajado;
+        // v17.6.73 — [reportado en consultorio, 26-ago-2026: "ni él ni sus compañeros lo
+        // entienden bien"] La redacción vieja embebía motivoPiso (que YA empezaba con
+        // "adelantada porque...") dentro de una frase que también empezaba con "se
+        // adelanta... porque", así que el mensaje decía literalmente "porque...
+        // (adelantada porque..." — duplicado, más jerga interna del motor ("ventana de
+        // 14–21 días", "piso", "cupo hábil") que un médico sin el contexto del código no
+        // tiene por qué reconocer. motivoPiso ahora es solo la razón (ver más arriba,
+        // ~línea 25915/25927), así que embeba limpio, una sola vez, sin jerga. La rama SIN
+        // piso relajado (el `else`) no se tocó — el médico no la reportó como confusa.
         const notaLP = _pisoLP
-          ? "La toma se adelanta al primer cupo hábil porque la ventana de 14–21 días ya no puede evitar un vencimiento (" + escapeHtml(_labsPrimero.motivoPiso || "exámenes vencidos o por vencer") + "). El control queda a los ~7 días de la toma, y si mueve la toma, el control se recalcula solo — es una sugerencia, no una imposición."
+          ? "Se adelanta la toma al primer cupo disponible porque " + escapeHtml(_labsPrimero.motivoPiso || "hay exámenes vencidos o por vencer") + ". El control queda ~7 días después de la toma, para que el resultado esté listo a tiempo; si mueve la toma, el control se recalcula solo — es una sugerencia, no una imposición."
           : "La toma queda 14–21 días antes y el control ~7 días después, para que ningún resultado llegue vencido a la consulta. Si mueve la toma, el control se recalcula solo (+7 días, hábil siguiente) — es una sugerencia, no una imposición.";
         _bannerSug.innerHTML = `🧪 <b>Labs primero:</b> toma de laboratorios sugerida <b>${escapeHtml(_sugeridaControl.ftl)}</b>`
           + ` → control médico <b>${escapeHtml(_sugeridaControl.iso)}</b>`
@@ -25912,7 +25921,13 @@ _vglOfrecerDeshacer(btn);
       if (vencidos.length) {
         labMinIso = primerHabilIso;
         pisoRelajado = labMinIso < pisoNormalIso;
-        if (pisoRelajado) motivoPiso = "adelantada porque ya hay examen(es) vencido(s): esperar el piso de 14 días no los recupera";
+        // v17.6.73 — [reportado en consultorio, 26-ago-2026: el médico y sus compañeros
+        // no entendían el mensaje] Antes decía "adelantada porque..." — una mini-frase
+        // pensada para leerse sola, pero notaLP (más abajo, donde el médico de verdad la
+        // lee) la EMBEBÍA dentro de otra oración que ya empezaba con "se adelanta...
+        // porque", duplicando "porque...(adelantada porque..." en el mismo párrafo. Ahora
+        // es solo la RAZÓN, sin verbo propio, para que embeba limpio en notaLP.
+        if (pisoRelajado) motivoPiso = "ya hay examen(es) vencido(s) y esperar 14 días no los recupera";
       } else if (mtrLabsPrimeroVencimientoInevitable(plan, pisoNormalIso)) {
         // Caso 2 — todavía no vence, pero vencerá antes del piso. Se adelanta AL
         // vencimiento, retrocediendo a día hábil (nunca avanzando: adelantar un día es
@@ -25923,8 +25938,10 @@ _vglOfrecerDeshacer(btn);
           const candidato = mtrRetrocederADiaHabil(primero.vence);
           labMinIso = (candidato && candidato > primerHabilIso) ? candidato : primerHabilIso;
           pisoRelajado = labMinIso < pisoNormalIso;
-          if (pisoRelajado) motivoPiso = "adelantada al vencimiento de " + (primero.nombre || primero.clave || "un examen")
-            + " (" + primero.vence + "): el piso de 14 días la habría dejado vencer";
+          // v17.6.73 — mismo criterio que el caso 1: solo la razón, sin "adelantada al...",
+          // para que notaLP la embeba sin duplicar el verbo.
+          if (pisoRelajado) motivoPiso = "el examen " + (primero.nombre || primero.clave || "un examen")
+            + " vence el " + primero.vence + " y esperar 14 días lo dejaría vencer";
         }
       }
       // v16.2.5 — Pedido del médico sobre el aviso de agendamiento: "ahí directamente se

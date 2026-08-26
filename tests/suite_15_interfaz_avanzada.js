@@ -497,6 +497,45 @@ module.exports = {
       t.cierto(bloque.includes("inset 0 0 0 1px rgba(var(--rgb-ambar),.5)"), "conserva el borde interior ámbar original");
     });
 
+    // =====================================================================
+    // v17.6.73 — [reportado en consultorio, 26-ago-2026: "ni él ni sus compañeros lo
+    // entienden bien"] La nota del banner «🧪 Labs primero» (rama con el piso relajado)
+    // embebía `motivoPiso` —que YA empezaba con "adelantada porque..."— dentro de otra
+    // frase que también empezaba con "se adelanta... porque", así que el texto final
+    // decía literalmente "porque... (adelantada porque..." — duplicado, más jerga interna
+    // del motor ("ventana de 14–21 días", "piso", "cupo hábil") ilegible para el médico en
+    // consulta rápida. `_pintarBannerSugerida` vive en el cierre de `openAgendamientoModal`
+    // (no es una unidad aislable) — se protege por texto fuente, mismo criterio ya
+    // establecido en el banco (ver suite 57).
+    // =====================================================================
+    t.caso("notaLP (banner «Labs primero», piso relajado): sin la frase duplicada 'porque...(adelantada porque' ni jerga interna del motor", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      const idx = src.indexOf("const _pisoLP = _labsPrimero && _labsPrimero.pisoRelajado;");
+      t.cierto(idx >= 0, "el bloque de notaLP debe existir");
+      const bloque = src.slice(idx, idx + 1200);
+
+      // motivoPiso (línea ~25915/25927) ya no debe llevar su propio verbo "adelantada":
+      // eso es justo lo que causaba la duplicación al embeberse en notaLP.
+      const iMotivo1 = src.indexOf('motivoPiso = "ya hay examen');
+      t.cierto(iMotivo1 >= 0, "caso 1 (vencidos): motivoPiso debe ser solo la razón");
+      t.falso(/motivoPiso = "adelantada/.test(src), "ningún motivoPiso debe seguir empezando con 'adelantada' (esa era la causa de la duplicación)");
+
+      // notaLP: se extrae SOLO la rama del ternario con piso relajado (hasta el ":" del
+      // else), para no confundir con la rama sin relajar (que no se tocó).
+      const iNotaLP = bloque.indexOf("const notaLP = _pisoLP");
+      t.cierto(iNotaLP >= 0, "debe encontrarse la declaración de notaLP");
+      const iElse = bloque.indexOf('"La toma queda 14', iNotaLP);
+      const ramaRelajada = bloque.slice(iNotaLP, iElse >= 0 ? iElse : iNotaLP + 700);
+      t.falso(/ventana de 14.21 días/.test(ramaRelajada), "ya no debe quedar la jerga 'ventana de 14–21 días'");
+      t.falso(/\(adelantada porque/.test(ramaRelajada), "ya no debe quedar la frase duplicada 'porque...(adelantada porque'");
+      t.cierto(/porque " \+ escapeHtml\(_labsPrimero\.motivoPiso/.test(ramaRelajada), "debe seguir embebiendo el motivo real (motivoPiso), no un texto genérico fijo");
+      t.cierto(/se recalcula solo/.test(ramaRelajada), "conserva la aclaración de que es una sugerencia, no una imposición");
+      t.cierto(/Se adelanta la toma al primer cupo disponible porque/.test(ramaRelajada), "arranca con la frase nueva, sin duplicar 'adelanta...porque' más adelante");
+    });
+
 
     // v14.0.0 (T4) — "chips PyM" salió del nombre y de las aserciones de esta prueba: los
     // chips (y el texto "PyM sin cargar"/"Al día"/"Dato faltante" DENTRO de la tarjeta) se
