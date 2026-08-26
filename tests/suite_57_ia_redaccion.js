@@ -1189,6 +1189,93 @@ module.exports = {
       t.igual(j.datos_completos, false, "y marca datos incompletos");
     });
 
+    // ===== v17.6.89 — el JSON dejaba de decir que la estratificación quedó pendiente =====
+    //
+    // Tres defectos verificados con el harness sobre el mismo paciente (45 años, sin factores
+    // documentados, sin ASCVD, pasos 1-3 no clasifican):
+    //   datos_completos: true   (solo miraba la función renal, no el riesgo)
+    //   cv_risk:         ""     (v68 pide null: "N/A=null")
+    //   status:          ""     SIEMPRE — leía `r.meta.status`, que NO EXISTE
+    //                           (`mtrEvaluarMetaLdl` expone `estado`). Campo muerto.
+    // La IA recibía "paciente evaluado, todo completo" y redactaba en consecuencia, sin la
+    // SOLICITUD de ASCVD que v68 exige.
+    const sinClasificar = () => api.mtrResumenClinico({
+      hoyIso: "2026-08-26", edad: 45, sexo: "M", pesoKg: 70, creatinina: 0.9,
+      factores: {}, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+    });
+
+    t.caso("v17.6.89: si la estratificación no se pudo hacer, el JSON lo DICE (no afirma completitud)", () => {
+      const r = sinClasificar();
+      t.igual(r.riesgo.categoria, null, "el vector es el que debe ser: no se clasificó");
+      t.cierto(r.riesgo.requiereAscvd, "y el motor sabe que le falta el ASCVD");
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.datos_completos, false, "datos_completos NO puede decir true");
+      t.igual(j.cv_risk, null, "cv_risk es null, no cadena vacía (v68: N/A=null)");
+      t.igual(j.status, "PENDIENTE", "status dice PENDIENTE");
+      t.cierto(/ASCVD/.test(j.solicitud), "y trae la SOLICITUD literal: " + j.solicitud);
+    });
+
+    t.caso("v17.6.89: sin TFG la solicitud es la de la TFG, no la del ASCVD", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80,
+        factores: { hta: true }, ultimos: {},
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.status, "PENDIENTE", "sigue siendo PENDIENTE");
+      t.cierto(/TFG/.test(j.solicitud), "pero la solicitud nombra la TFG: " + j.solicitud);
+    });
+
+    t.caso("v17.6.89: en un paciente SÍ clasificado, status refleja la meta y no hay solicitud", () => {
+      const conMeta = (ldl) => {
+        const r = api.mtrResumenClinico({
+          hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+          ct: 200, hdl: 45, ldl: ldl, factores: { hta: true, diabetes: true },
+          ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 }, COLESTEROL_LDL: { fecha: "2026-08-01", valor: ldl } },
+        });
+        return api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      };
+      const fuera = conMeta(190);
+      t.igual(fuera.status, "FUERA DE META", "un LDL disparado se dice así");
+      t.igual(fuera.solicitud, "", "y no se inventa una solicitud que no corresponde");
+      t.igual(fuera.datos_completos, true, "aquí sí están completos");
+      t.cierto(!!fuera.cv_risk, "y hay categoría de riesgo");
+      // Sin LDL con qué juzgar, no se inventa un estado de meta.
+      const sinLdl = api.mtrJsonV68DesdeResumen(api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      }), {});
+      t.igual(sinLdl.status, "", "sin LDL, status vacío: no se inventa un estado de meta");
+    });
+
+    // Las dos guardas de mtrStatusV68 NO son redundantes, aunque en un resumen construido por
+    // mtrResumenClinico se solapen (cuando no clasifica, pone las dos). Este emisor se llama
+    // también con resúmenes armados a mano — esta misma suite lo hace más arriba —, y ahí una
+    // categoría nula puede venir SIN `datosCompletos`. Sin la primera guarda ese paciente
+    // saldría con status "" y la IA lo redactaría como si estuviera estratificado.
+    t.caso("v17.6.89: una categoría nula basta para PENDIENTE, aunque nadie marque datosCompletos", () => {
+      const aMano = { erc: { datosCompletos: true }, riesgo: { categoria: null }, meta: {}, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(aMano, {}).status, "PENDIENTE",
+        "sin categoría no hay nada interpretable: PENDIENTE");
+      const vacia = { erc: { datosCompletos: true }, riesgo: { categoria: "" }, meta: {}, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(vacia, {}).status, "PENDIENTE",
+        "una categoría en blanco tampoco es una categoría");
+      // Y la guarda no se dispara de más: con categoría real manda el estado de la meta.
+      const conCat = { erc: { datosCompletos: true }, riesgo: { categoria: "alto" }, meta: { estado: "en_meta" }, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(conCat, {}).status, "EN META",
+        "con categoría real, el status refleja la meta");
+    });
+
+    // Sin esta regla el campo nace muerto: el JSON diría PENDIENTE y el modelo redactaría
+    // igual, como si el paciente estuviera estratificado.
+    t.caso("v17.6.89: el prompt le enseña al modelo qué hacer con status PENDIENTE", () => {
+      const nota = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {});
+      const todo = String(nota.system) + "\n" + String(nota.user);
+      t.cierto(/PENDIENTE/.test(todo), "el prompt nombra el estado PENDIENTE");
+      t.cierto(/solicitud/i.test(todo), "y el campo `solicitud` que debe copiar");
+      t.cierto(/LITERAL/i.test(todo), "exigiéndole que lo copie literalmente, sin redactarlo él");
+    });
+
     t.caso("mtrJsonV68DesdeResumen SÍ calcula alertas_dosis/alerta_metformina reales (auditoría 2026-08-18: antes quedaban siempre en null/[] sin importar lo que el motor encontrara)", () => {
       const resumen = {
         programa: "HTA",

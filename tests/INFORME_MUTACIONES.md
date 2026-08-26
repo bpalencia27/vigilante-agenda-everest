@@ -6,6 +6,57 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.89 — 26-ago-2026 (el JSON afirmaba datos completos con la estratificación sin hacer)
+
+Cuarto hueco de la Fase 1. Tres defectos en el mismo emisor, todos verificados con el harness
+sobre el mismo paciente (45 años, sin factores documentados, sin ASCVD → los pasos 1-3 no
+clasifican):
+
+| campo | emitía | debía |
+|---|---|---|
+| `datos_completos` | `true` — solo miraba la función renal | `false`: la estratificación no se hizo |
+| `cv_risk` | `""` | `null` (v68: *"N/A=null"*) |
+| `status` | `""` **siempre** | `PENDIENTE` |
+
+El de `status` era el peor: leía `r.meta.status`, **que no existe** — `mtrEvaluarMetaLdl` expone
+`estado`, no `status`. Era un campo muerto del contrato desde que se escribió: salía vacío
+incluso en un paciente perfectamente clasificado y en meta.
+
+Consecuencia: el JSON le decía a la IA *"paciente evaluado, datos completos, sin categoría de
+riesgo"* y el modelo redactaba en consecuencia, **sin** la SOLICITUD de ASCVD que v68 exige
+para dejar constancia de que la clasificación quedó pendiente.
+
+Se separa el cálculo en `mtrStatusV68` (PENDIENTE si no hay categoría o los datos del riesgo
+están incompletos; si no, el estado de la meta con el vocabulario del propio v68 — *"completa
+si LDL<meta Y red>=50; si solo una → FALLA parcial"*) y `mtrSolicitudV68` (el texto literal, con
+variante para cuando lo que falta es la TFG). Sin LDL con qué juzgar, `status` sale `""`: no se
+inventa un estado de meta.
+
+**Y se cablea en el prompt**, que es la mitad que suele faltar: sin una regla que le diga al
+modelo qué hacer con `status: PENDIENTE`, el campo habría nacido muerto — el JSON diría
+PENDIENTE y la nota se redactaría igual.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **datos_completos** | vuelto a mirar solo la función renal | `suite_57` | *v17.6.89: si la estratificación no se pudo hacer, el JSON lo DICE* |
+| **cv_risk** | vuelto a cadena vacía | `suite_57` | *…el JSON lo DICE* |
+| **status** | vuelto al campo muerto `r.meta.status` | `suite_57` | las **tres** pruebas de status |
+| **solicitud** | emitida siempre vacía | `suite_57` | *…el JSON lo DICE* **y** *…sin TFG la solicitud es la de la TFG* |
+| **guarda de categoría nula** | `if (false)` en la primera guarda de `mtrStatusV68` | `suite_57` | *…una categoría nula basta para PENDIENTE, aunque nadie marque datosCompletos* |
+| **regla del prompt** | la instrucción sobre `status: PENDIENTE` desactivada | `suite_57` | *…el prompt le enseña al modelo qué hacer con status PENDIENTE* |
+
+Nota, y van cinco: **la quinta mutación no caía con las pruebas iniciales.** Las dos guardas de
+`mtrStatusV68` se solapan en cualquier resumen construido por `mtrResumenClinico` (cuando no
+clasifica, marca las dos cosas), así que desactivar la primera no cambiaba nada. Pero este
+emisor se llama también con resúmenes armados a mano —esta misma suite lo hace—, y ahí una
+categoría nula puede venir SIN `datosCompletos`: sin la primera guarda ese paciente saldría con
+status `""`. Se añadió una prueba que ataca la función directamente con ese resumen y entonces
+sí cayó. La regla que se repite: **una aserción sobre el resultado final puede estar siendo
+satisfecha por un camino distinto del que se quiere probar.**
+
+Las seis mutaciones se aplicaron de una en una desde copia intacta y el archivo se restauró
+verificando `diff`. Banco en 2319/2319.
+
 ## v17.6.88 — 26-ago-2026 (el urocultivo que el motor calcula y la IA nunca recibe)
 
 Tercer hueco de la Fase 1 (v68 S4 UROANÁLISIS: *"pedir UROCULTIVO+antibiograma"*, *"sin

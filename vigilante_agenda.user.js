@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.88
+// @version     17.6.89
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.88";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.89";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31526,6 +31526,10 @@ _vglOfrecerDeshacer(btn);
     "#PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]",
     "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== párrafo con edad, sexo, programa de riesgo cardiovascular, motivo de consulta y anamnesis según lo anotado; integra la evolución vs el control previo NOMBRANDO el cambio concreto en los campos que sí traiga el JSON o lo anotado (función renal, RAC, perfil lipídico, glicemia/HbA1c si hay diabetes, ajustes farmacológicos) — nunca 'evolución favorable' o 'sin cambios significativos' sin decir en qué; menciona si niega síntomas de alarma, adherencia aparente y estilo de vida si se dispone.",
     "===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS; :: CLASIFICACIÓN DE RIESGO CARDIOVASCULAR (cv_risk); :: JUSTIFICACIÓN CLÍNICA (criterio del paso, edad, estadio clínico, RAC alterado, eventos previos); :: META TERAPÉUTICA DE LDL (menor a ldl_target, y reducción ≥50% del basal si riesgo alto/muy alto); :: FOCO CLÍNICO PRIORITARIO (según priority_focus).",
+    // v17.6.89 — sin esta regla el campo `status` nace muerto: podría emitirse PENDIENTE y el
+    // modelo redactaría igual, como si el paciente estuviera estratificado. Es el mismo
+    // patrón de "la función existe, nadie la cablea" que ya dejó inertes a otros campos.
+    "- Si `status` es 'PENDIENTE', la estratificación de riesgo NO SE PUDO HACER: NO escribas ninguna categoría de riesgo ni meta de LDL (irán en null), di en una frase que la clasificación queda pendiente, y copia LITERALMENTE el texto del campo `solicitud` como última línea de esta sección. Si `status` trae otro valor, no menciones `solicitud` ni escribas nada sobre estratificación pendiente.",
     "===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL (eGFR CKD-EPI y estadio clínico; CrCl como referencia; evolución; RAC como daño de órgano blanco; injuria/progresión como prioritario; remisión si aplica); :: PERFIL LIPÍDICO (CT, HDL, LDL, TG y cNoHDL, en meta o falla, con tendencia; TG≥500 riesgo de pancreatitis); :: METABOLISMO GLUCÍDICO (glicemia y HbA1c si diabetes; si no: 'HEMOGLOBINA GLICOSILADA NO SOLICITADA POR AUSENCIA DE DIAGNÓSTICO DE DIABETES MELLITUS'); :: ANÁLISIS DE METAS.",
     "===== SECCIÓN: PLAN FARMACOLÓGICO Y JUSTIFICACIÓN ===== Si alertas_dosis NO está vacío, ÁBRELA con 'AJUSTE DE DOSIS POR FUNCIÓN RENAL:' y un renglón propio por cada ajuste (medicamento, dosis actual, dosis sugerida, motivo, TFG usada) antes de cualquier otro contenido de la sección — es intencional que tenga sus propios saltos de línea, para que un ajuste de seguridad no se diluya en la prosa. Luego :: ESQUEMA FARMACOLÓGICO (medicamentos con dosis y frecuencia; si un registro es incompleto, anotar que se completará en próximo control); :: JUSTIFICACIÓN DE AJUSTES (el motivo y la TFG de cada ajuste ya listado arriba, sin repetir las cifras; suspensión de metformina por TFG<30; intensidad de estatina si falla; antihipertensivos para metas y protección renal).",
     "===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA (adaptada a las patologías); :: ACTIVIDAD FÍSICA (150 a 300 minutos semanales de intensidad moderada, adaptada); :: EDUCACIÓN (si education_flags true, reflejar que se explicó adherencia, control, riesgo, signos de alarma y autocuidado).",
@@ -32586,6 +32590,47 @@ _vglOfrecerDeshacer(btn);
     } catch (e) { return iso || ""; }
   }
 
+  // v17.6.89 — auditoría v68 (S2/S5): el campo `status` del JSON leía `r.meta.status`, que NO
+  // EXISTE — `mtrEvaluarMetaLdl` expone `estado`, no `status`. Resultado verificado con el
+  // harness: `status` salía SIEMPRE `""`, incluso en un paciente perfectamente clasificado y
+  // en meta. Era un campo muerto del contrato.
+  //
+  // v68 lo usa para dos cosas distintas y esta función las separa:
+  //  - PENDIENTE cuando la estratificación NO SE PUDO HACER (falta el ASCVD, o falta la TFG).
+  //    Es el caso que el spec nombra explícitamente: "status PENDIENTE" + la SOLICITUD.
+  //  - El estado de la meta de LDL cuando sí se clasificó. El vocabulario sale del propio v68
+  //    ("completa si LDL<meta Y red>=50; si solo una -> FALLA parcial").
+  // Sin LDL con qué juzgar se devuelve "" en vez de inventar un estado: casilla vacía antes
+  // que dato inventado.
+  const MTR_STATUS_V68 = {
+    en_meta: "EN META",
+    meta_parcial: "FALLA PARCIAL",
+    fuera_de_meta: "FUERA DE META",
+  };
+  function mtrStatusV68(resumen) {
+    const r = resumen || {};
+    const riesgo = r.riesgo || {}, meta = r.meta || {};
+    // La clasificación manda: si no hay categoría, nada de lo demás es interpretable.
+    if (riesgo.categoria === null || riesgo.categoria === undefined || riesgo.categoria === "") return "PENDIENTE";
+    if (riesgo.datosCompletos === false) return "PENDIENTE";
+    return MTR_STATUS_V68[meta.estado] || "";
+  }
+
+  // v17.6.89 — el texto literal que v68 exige cuando los pasos 1-3 no clasificaron y hace
+  // falta el ASCVD. Va en el JSON para que la IA lo CITE, nunca para que lo redacte por su
+  // cuenta: antes no existía ningún campo y el modelo no tenía cómo saber que la
+  // estratificación había quedado pendiente.
+  function mtrSolicitudV68(resumen) {
+    const riesgo = (resumen && resumen.riesgo) || {};
+    if (riesgo.requiereAscvd === true) {
+      return "SOLICITUD: pasos 1-3 no clasificaron; ingrese ASCVD 10a crudo AHA/ACC";
+    }
+    if (riesgo.motivo === "tfg_requerida") {
+      return "SOLICITUD: falta la TFG (CKD-EPI) para clasificar el riesgo cardiovascular";
+    }
+    return "";
+  }
+
   function mtrJsonV68DesdeResumen(resumen, hoja) {
     const r = resumen || {}, h = hoja || {}, erc = r.erc || {}, riesgo = r.riesgo || {}, plan = r.plan || {};
     const meta = (r.meta && r.meta.metas) || {};
@@ -32629,13 +32674,19 @@ _vglOfrecerDeshacer(btn);
       tfg_ckdepi: erc.egfr != null ? erc.egfr : null,
       estadio_clinico: erc.estadioClinico || "",
       remitir_nefrologia: !!erc.remitirNefrologia,
-      cv_risk: riesgo.categoria || "",
+      // v17.6.89 — v68 dice "N/A=null" y este campo emitía "" cuando no había categoría. Una
+      // cadena vacía es un valor; null dice "no hay dato". La diferencia importa porque el
+      // JSON es lo que la IA trata como fuente de verdad.
+      cv_risk: riesgo.categoria || null,
       ldl_target: meta.ldl != null ? meta.ldl : null,
       // v17.6.64 (sección 4) — mismo criterio que ldl_target: el número real y su meta
       // viajan calculados, para que la IA solo los cite (nunca los calcule/invente).
       cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,
       cno_hdl_target: meta.cnoHdl != null ? meta.cnoHdl : null,
-      status: (r.meta && r.meta.status) || "",
+      status: mtrStatusV68(r),
+      // v17.6.89 — el texto que v68 exige cuando la estratificación quedó pendiente. Vacío
+      // cuando sí se pudo clasificar; nunca se inventa una solicitud que no corresponde.
+      solicitud: mtrSolicitudV68(r),
       // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
       // Vigilante NO TIENE forma de saber si la EPS/aseguradora falló en dispensar un
       // medicamento — esa información no vive en Everest ni en Athenea, solo en lo que
@@ -32650,7 +32701,12 @@ _vglOfrecerDeshacer(btn);
       // sigue pudiendo escribirlo a mano en la historia — el motor no lo bloquea, solo
       // no lo inventa por su cuenta.
       falla_dispensacion: "NO",
-      datos_completos: erc.datosCompletos !== false,
+      // v17.6.89 — esto solo miraba la función renal, así que un paciente cuya
+      // ESTRATIFICACIÓN DE RIESGO no se pudo hacer (faltaba el ASCVD) salía con
+      // `datos_completos: true` y `cv_risk` vacío: la IA redactaba como si estuviera
+      // evaluado. Verificado con el harness. Ahora basta con que falte cualquiera de las dos
+      // para que el campo diga la verdad.
+      datos_completos: (erc.datosCompletos !== false) && (riesgo.datosCompletos !== false),
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
       // v17.6.88 — auditoría v68 (S4 UROANÁLISIS: "pedir UROCULTIVO+antibiograma", "sin
       // antibiótico a ciegas", "la orden nunca queda vacía"). `mtrEvaluarUroanalisis` calcula
