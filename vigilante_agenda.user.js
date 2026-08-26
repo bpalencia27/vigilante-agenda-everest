@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.51
+// @version     17.6.52
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.51";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.52";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3834,7 +3834,6 @@
           const fuera = mtrFueraDeMeta(key, resultValCrudo, opts);
           return fuera === true ? Math.max(1, Math.floor(baseParaRegla / 2)) : baseParaRegla;
       }
-      if (base != null) return base;
       if (key === "RAC") {
           // v12.10.15 — Bug real de auditoría: los LIS suelen reportar valores fuera de
           // rango con desigualdad ("> 300", ">= 30"). Number("> 300") es NaN, así que sin
@@ -3847,9 +3846,19 @@
           // del LIS, el saneo de aquí borraba el signo y devolvía 50 — por encima del
           // umbral de albuminuria (30), así que un dato inválido ACORTABA la vigencia a la
           // mitad. Una sola función, un solo criterio.
+          // v17.6.52 — auditoría 25-ago (1.7): este recorte vivía DESPUÉS de
+          // "if (base != null) return base;" — con contexto clínico (opts.estadio/programa,
+          // el caso normal para _analitosRcvVencidos, el aviso de entrada) `base` siempre
+          // sale no-null desde vigenciaPorEstadio, así que el recorte de RAC≥30 nunca se
+          // alcanzaba. Verificado: RAC 350 en DM2/HTA con contexto → 180 días en vez de 90.
+          // Mismo criterio que ya usa la vía correcta (mtrVigenciaDiasNorma, línea ~29796):
+          // el recorte de albuminuria es un TOPE sobre la base, no una alternativa a ella.
           const n = _labNumerico(resultValCrudo);
-          if (n != null && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) return RCV_VIGENCIA_DIAS / 2;
+          if (n != null && n >= RAC_VIGENCIA_UMBRAL_ALBUMINURIA) {
+              return Math.min((base != null ? base : RCV_VIGENCIA_DIAS), RCV_VIGENCIA_DIAS / 2);
+          }
       }
+      if (base != null) return base;
       return RCV_VIGENCIA_DIAS;
   }
   // v12.10.11 — R1a: las cuatro fórmulas renales puras (TFG por Cockcroft-Gault y por

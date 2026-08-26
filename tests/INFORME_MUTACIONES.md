@@ -6,6 +6,26 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.52 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.7: el recorte de RAC≥30 nunca aplicaba con contexto clínico)
+
+`_vigenciaDiasParaAnalito` (vigilante_agenda.user.js:3804, usada por `_analitosRcvVencidos`
+— el aviso de entrada y el antiduplicado de "Ordenar") calculaba `base` desde
+`vigenciaPorEstadio` cuando el llamador aportaba `opts.estadio`/`opts.programa`, y hacía
+`if (base != null) return base;` **antes** de llegar a la rama que recorta la vigencia de RAC
+a 90 días cuando hay albuminuria franca (≥30 mg/g). Con contexto clínico (el caso normal), esa
+rama nunca se alcanzaba. Verificado: RAC 350 en DM2/HTA con contexto → 180 días en vez de 90;
+un paciente con macroalbuminuria podía quedar declarado "RAC vigente" seis meses en la pantalla
+que el médico ve al entrar. Fix: el recorte de RAC≥30 pasa a ser un TOPE (`Math.min`) sobre
+`base`, no una rama alternativa — mismo criterio que ya usa la vía correcta
+(`mtrVigenciaDiasNorma`, línea ~29796).
+
+- **Mutación**: se revirtió el orden (recorte de RAC después del `if (base != null) return
+  base;`, como estaba). El banco pasó de 2212 en verde a 1 roja: *"el recorte de RAC≥30 se
+  aplica IGUAL con contexto de programa/estadio"* (esperaba 90 y volvió a dar 180 con
+  contexto). Restaurado, banco vuelve a 2212 en verde.
+- **Prueba nueva**: `tests/suite_08_labs_cronicos.js` — 1 caso (HTA, DM2, sin albuminuria, y
+  ERC G4 para confirmar que el tope nunca alarga la vigencia por encima de la base).
+
 ## v17.6.51 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.6: sin peso, el plan ERC desaparece sin avisar por qué)
 
 Consecuencia directa de 1.5: sin peso, `erc.estadioAdministrativo` sale `null`
