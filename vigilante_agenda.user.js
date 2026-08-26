@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.59
+// @version     17.6.60
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.59";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.60";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14422,7 +14422,15 @@ _vglOfrecerDeshacer(btn);
          Especificidad CERO (mismo :where() de siempre): no compite con ningún acento
          nuestro real, solo tapa lo que dependía de herencia y Everest interceptaba. */
       #vgl-riesgo-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
-      #vgl-ia-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
+      /* v17.6.60 — auditoría 25-ago (1.22): _pintarCriticos (la caja roja de "faltan datos
+         que invalidarían la nota", dentro de #vgl-ia-modal) pinta con <div style="..."> sin
+         clase propia — el blindaje de arriba solo cubría span/b/small/label/p, no div, así
+         que una regla de Everest de mayor peso para div{color:X} podía ganar por herencia
+         y dejar ilegible la caja que bloquea generar la nota sin categoría de riesgo.
+         Mismo patrón que el CLAUDE.md ya documenta (bug #2), en un elemento que el censo
+         previo no cubrió — se añade div:not([class]) SOLO a este modal, donde se confirmó
+         el caso. */
+      #vgl-ia-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class]),div:not([class])),
       #vgl-ficha-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-tablero-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),
       #vgl-confirma-modal :where(span:not([class]),b:not([class]),small:not([class]),label:not([class]),p:not([class])),

@@ -6,6 +6,30 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.60 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.22: la caja de "datos críticos" podía quedar ilegible por el CSS de Everest)
+
+`_pintarCriticos` (dentro de `#vgl-ia-modal` — la caja roja que bloquea generar la nota sin
+categoría de riesgo/TFG/medicamentos) pinta con `<div style="...">` SIN clase propia. El
+blindaje tipográfico `:where(...:not([class])){color:inherit}` (especificidad CERO,
+CLAUDE.md) solo cubría `span/b/small/label/p` para `#vgl-ia-modal`, no `div` — exactamente
+el patrón de bug #2 que el CLAUDE.md ya documenta, en un elemento que el censo previo (v17.6.4,
+v14.0.0) no cubrió. Fix: se añade `div:not([class])` a la lista de `#vgl-ia-modal`, siguiendo
+al pie de la letra la "regla práctica" del CLAUDE.md — nunca `#vgl-ia-modal div{color:inherit}`
+a pelo (eso reintroduciría el bug #1, especificidad tipo).
+
+- **Alcance**: se tocó SOLO `#vgl-ia-modal` (donde se confirmó el `<div>` sin clase), no los
+  otros 11 modales que comparten la misma lista — no se verificó que ellos tengan el mismo
+  problema, y `:where()` de especificidad cero no arriesga nada al no tocarlos.
+- **Nota de verificación**: no se corrió la verificación en Chromium contra un CSS "Everest"
+  simulado que el CLAUDE.md recomienda (sin navegador disponible en esta sesión) — el patrón
+  añadido es idéntico, carácter por carácter, al que ya usan las otras 11 líneas de este
+  mismo bloque (`:where(...:not([class])){color:inherit}`), ya validado y en producción.
+- **Mutación**: se quitó `div:not([class])` de la línea de `#vgl-ia-modal`. 1 roja: *"Regla
+  I - #vgl-ia-modal blinda también los `<div>` sin clase propia"*. Restaurado, banco vuelve
+  a 2222 en verde.
+- **Prueba nueva**: `tests/suite_25_cascada_css.js` — Regla I, verifica por texto que la
+  línea de blindaje de `#vgl-ia-modal` incluye `div:not([class])`.
+
 ## v17.6.59 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.21: el dead-man switch no protegía la inserción de notas de IA)
 
 `vglEscrituraPermitida` (línea ~24531) tenía un ÚNICO llamador en todo el archivo
