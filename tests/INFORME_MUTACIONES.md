@@ -6,6 +6,57 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.67 — 26-ago-2026 (ítem 0: uroanálisis "fantasma" — reportado en consultorio EN VIVO, con consola completa pegada por el médico)
+
+**El reporte**: "el auto-labs Athenea no me reconoció el uroanálisis nuevo realizado por
+la paciente, solamente me reconoció uno viejo de enero" (sin ningún dato identificable
+del paciente).
+
+**Causa raíz confirmada leyendo el código real** (no la auditoría vieja):
+`_nuevoReemplazaCandidato(previo, nuevo)` (línea ~2851) decide, para cada analito de
+`WHITELIST_13_LABS`, cuál candidato "gana" cuando hay varias filas. Para UROANALISIS,
+cuando Athenea no manda una fila con el nombre literal del panel (lo normal — manda
+20-30 filas, una por componente: Color, Nitritos, Sangre, Leucocitos...),
+`_ultimaFechaPorAnalito` arma un candidato de "respaldo" por cada componente que
+matchea (`viaComponente: true`). Cada componente de CADA solicitud de orina, de TODAS
+las fechas, compite por el mismo slot `candidatos.get("UROANALISIS")`.
+
+La regla de desempate tenía 3 pasos: (1) fila real gana a respaldo, sin importar
+fecha — correcto, no es el problema; (2) un resultado NUMÉRICO gana a uno que no lo es,
+SIN IMPORTAR LA FECHA; (3) solo si ambos son igual de "numéricos", gana la fecha más
+reciente. El bug: cuando AMBOS candidatos son `viaComponente` (el caso normal de
+uroanálisis), el paso 1 no distingue nada y cae al paso 2 — pero `_labNumerico` (línea
+~3549) trata como "no numérico" cualquier texto con letras no-unidad ("NEGATIVO", la
+respuesta típica de Nitritos/Sangre) Y cualquier rango con guion tipo "0-2" (el regex
+`/-\s*\d/` lo confunde con un negativo). Un conteo limpio sin guion como "5" SÍ pasa
+como numérico. Resultado: si el uroanálisis VIEJO (enero) tenía un componente numérico
+limpio y el NUEVO (agosto) tenía su componente coincidente como "NEGATIVO" o un rango
+"0-2" (ambos no-numéricos), la regla 2 mantenía el candidato de ENERO ganando PARA
+SIEMPRE — la fecha (regla 3) nunca llegaba a evaluarse. Exactamente el síntoma
+reportado.
+
+**El fix**: se agregó un paso 1.5 en `_nuevoReemplazaCandidato`, entre las reglas 1 y 2 —
+cuando AMBOS candidatos son `viaComponente`, "numérico" deja de ser señal de validez (son
+fragmentos cualitativos de paneles posiblemente distintos, y que uno traiga o no un
+número es casi arbitrario); la única señal confiable entre dos respaldos es la fecha, y
+se usa directamente sin pasar por `_labNumerico`. Las reglas 1 (fila real > respaldo) y 2
+(numérico > no-numérico, cuando NINGUNO es `viaComponente` — el caso de analitos séricos
+como RAC/LDL) quedan intactas.
+
+**Mutación verificada**: se respaldó el archivo (`cp` a `/tmp/x2.js`), se removió con
+`python3` el bloque completo del paso 1.5 (dejando la función exactamente como estaba
+antes del fix), y se corrió `TZ=America/Bogota node tests/runner.js`. Cayeron
+EXACTAMENTE las 3 pruebas nuevas relacionadas (2239 pasan / 3 fallan): las dos pruebas
+directas de `_nuevoReemplazaCandidato` con el escenario enero-numérico/agosto-cualitativo
+y con el rango "0-2", y la prueba de integración end-to-end de
+`_ultimaFechaPorAnalito` que reproduce el bug reportado (agosto vs. enero, en ambos
+órdenes de llegada) — sin afectar ninguna otra prueba, incluidas las dos nuevas que
+confirman que las reglas 1 y 2 originales NO se rompieron. Se restauró desde el backup y
+el banco volvió a 2242 pruebas en verde. Se añadieron 6 pruebas nuevas en total a
+`tests/suite_08_labs_cronicos.js` (también se agregó `_nuevoReemplazaCandidato` a la
+lista `cubre` de esa suite — antes no tenía ni una sola prueba propia, pese a ser lógica
+de desempate central para los 13 analitos de la Ruta de Crónicos).
+
 ## v17.6.66 — 26-ago-2026 (auditoría 25-ago, ítem 1: marcador [DOSIS NO ESPECIFICADA] — decisión confirmada por el médico: "Sí, construirlo")
 
 Cuando un medicamento del programa cardiovascular no tiene frecuencia/dosis en el

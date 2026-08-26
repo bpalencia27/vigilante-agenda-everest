@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.66
+// @version     17.6.67
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.66";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.67";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2852,6 +2852,21 @@
       // 1) una fila REAL del panel de orina siempre le gana a un respaldo armado con un
       //    componente suelto (ver el comentario grande de arriba sobre UROANALISIS).
       if (previo.viaComponente !== nuevo.viaComponente) return !!previo.viaComponente;
+      // 1.5) [reportado en consultorio, 26-ago-2026, con consola completa] Cuando AMBOS
+      // candidatos son respaldo por componente (el caso normal de UROANALISIS: Athenea casi
+      // nunca manda una fila del panel completo, manda 20-30 componentes sueltos —
+      // Color, Nitritos, Sangre, Leucocitos...), "es numérico" NO es señal de validez: son
+      // fragmentos cualitativos de paneles posiblemente DISTINTOS (fechas distintas) y que
+      // uno traiga o no un número es casi arbitrario (un conteo limpio "5" pasa como
+      // numérico; "NEGATIVO" o un rango con guion como "0-2" no — ver _labNumerico). Con la
+      // regla 2 de abajo, un componente NUMÉRICO viejo ganaba PARA SIEMPRE contra uno
+      // cualitativo nuevo, sin importar la fecha: el síntoma real fue un uroanálisis de
+      // agosto (nuevo) ignorado a favor de uno de enero (viejo) porque el componente de
+      // enero traía un número limpio y el de agosto traía "NEGATIVO". Entre dos respaldos,
+      // la única señal confiable es la fecha — nunca la numericidad.
+      if (previo.viaComponente && nuevo.viaComponente) {
+          return !!(nuevo.resultDate && (!previo.resultDate || nuevo.resultDate > previo.resultDate));
+      }
       // 2) un resultado NUMÉRICO usable siempre le gana a uno que no lo es.
       // v16.7.0 — AUDITORÍA #4: aquí se juzgaba con Number() crudo, y Number("> 300") es
       // NaN. Consecuencia real: un RAC "> 300" de agosto (macroalbuminuria franca — el

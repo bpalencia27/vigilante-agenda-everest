@@ -6,7 +6,7 @@ module.exports = {
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_resumenClinicoUro", "_esUroComponenteAlterado",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_ultimaFechaPorAnalito", "_nuevoReemplazaCandidato", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
@@ -1088,6 +1088,76 @@ module.exports = {
     t.caso("_ultimaFechaPorAnalito: cadena vacía sigue tratándose como ausente (distinto de 0 numérico)", () => {
       const r = testApi._ultimaFechaPorAnalito([{ codigo: "8779", nombre: "RAC", Resultado: "" }]);
       t.igual(r.candidatos.size, 0);
+    });
+
+    // =====================================================================
+    // v17.6.67 — [reportado en consultorio, 26-ago-2026, con consola completa] "Auto-Labs
+    // no reconoció el uroanálisis nuevo, solo uno viejo". Entre DOS candidatos de respaldo
+    // por componente (viaComponente: true — el caso normal de UROANALISIS, Athenea manda
+    // componentes sueltos, casi nunca una fila del panel completo), la regla 2
+    // ("numérico gana a no-numérico, sin importar fecha") no debía aplicar: es casi
+    // arbitrario que un componente cualitativo de orina traiga o no un número limpio.
+    // Antes del fix, un componente NUMÉRICO viejo ganaba PARA SIEMPRE contra uno
+    // cualitativo (p. ej. "NEGATIVO", o un rango con guion "0-2" — ambos no-numéricos para
+    // _labNumerico) más reciente. Ahora, entre dos respaldos, manda la fecha, siempre.
+    // =====================================================================
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente (UROANALISIS), la FECHA manda aunque el viejo sea 'numérico' y el nuevo no (bug real reportado en consultorio)", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoCualitativo),
+        "el componente nuevo (agosto, NEGATIVO) debe reemplazar al viejo (enero, '5') aunque el viejo sea numérico");
+      // Y la dirección contraria: el nuevo NO debe reemplazar a un candidato ya más reciente.
+      t.falso(testApi._nuevoReemplazaCandidato(nuevoCualitativo, viejoNumerico),
+        "un componente MÁS VIEJO nunca desplaza a uno más reciente, aunque el viejo sea numérico y el reciente no");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente, un rango con guion ('0-2', que _labNumerico rechaza) tampoco bloquea la fecha", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoRango = { viaComponente: true, resultVal: "0-2", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoRango),
+        "'0-2' no es numérico para _labNumerico (el guion lo rechaza), pero sigue siendo el componente más reciente y debe ganar");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos, si el NUEVO es numérico y el viejo no, también gana por fecha (dirección ya cubierta antes, pero confirma que no se rompió)", () => {
+      const viejoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-01-15" };
+      const nuevoNumerico = { viaComponente: true, resultVal: "6", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoCualitativo, nuevoNumerico), "más reciente y numérico: gana, como antes");
+    });
+
+    t.caso("_ultimaFechaPorAnalito (integración end-to-end): el componente de orina de AGOSTO gana sobre el de ENERO, en cualquier orden de llegada (bug real reportado en consultorio)", () => {
+      const enOrden = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+      ], { uroanalisisPorComponentes: true });
+      const candA = enOrden.candidatos.get("UROANALISIS");
+      t.cierto(!!candA, "UROANALISIS entra como candidato vía componente");
+      t.igual(candA.resultDate, "2026-08-20", "gana el componente de agosto, el más reciente");
+      t.igual(candA.resultVal, "NEGATIVO");
+
+      // Orden invertido: el componente viejo llega DESPUÉS del nuevo. No debe desplazarlo.
+      const ordenInvertido = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+      ], { uroanalisisPorComponentes: true });
+      const candB = ordenInvertido.candidatos.get("UROANALISIS");
+      t.igual(candB.resultDate, "2026-08-20", "el orden de llegada no debe importar: sigue ganando agosto");
+      t.igual(candB.resultVal, "NEGATIVO");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: REGLA 1 intacta — una fila REAL del panel siempre le gana a un respaldo por componente, sin importar fecha", () => {
+      const respaldoReciente = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      const filaRealVieja = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-01-01" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
+        "la fila real, aunque más vieja, reemplaza al respaldo por componente");
+      t.falso(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
+        "y un respaldo por componente, aunque más reciente, NUNCA desplaza a una fila real ya asentada");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: REGLA 2 intacta — cuando NINGUNO es viaComponente (analitos séricos normales), numérico usable sigue ganando sin importar fecha", () => {
+      const numericoViejo = { viaComponente: false, resultVal: "> 300", resultDate: "2026-01-01" };
+      const textoReciente = { viaComponente: false, resultVal: "PENDIENTE REVISION", resultDate: "2026-08-20" };
+      t.falso(testApi._nuevoReemplazaCandidato(numericoViejo, textoReciente),
+        "un texto sin número, aunque más reciente, no debe desplazar un número real ya asentado (RAC > 300, ver v16.7.0)");
     });
 
     t.caso("_analitosRcvVencidos: un resultado 0 vigente NO dispara el aviso de faltante (v12.5.7)", () => {
