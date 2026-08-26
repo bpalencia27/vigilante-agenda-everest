@@ -6,6 +6,25 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.59 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.21: el dead-man switch no protegía la inserción de notas de IA)
+
+`vglEscrituraPermitida` (línea ~24531) tenía un ÚNICO llamador en todo el archivo
+(`vglLlenarFactoresEnEverest`, el llenado de antecedentes). El propio mensaje del dead-man
+promete "dejo de escribir en la historia clínica (llenar antecedentes **e insertar
+notas**)" — pero ningún punto de inserción de notas de texto libre generadas por IA
+consultaba el dead-man: con la escritura cortada (40+ días sin contacto con el servidor de
+control), el redactor seguía insertando notas en la historia como si nada. Fix: se añade el
+guardado a `mtrInsertarEnCasillaModo` (la inserción real del redactor, vía
+`MTR_CASILLAS_REDACTOR`), con un motivo explícito (`"deadman"`) distinto de los demás
+motivos de fallo de esa función.
+
+- **Mutación**: se quitó el guardado nuevo. El banco pasó de 2221 en verde a 1 roja: *"con
+  el dead-man switch cortando la escritura, no inserta nada y lo dice"* (insertaba igual).
+  Restaurado, banco vuelve a 2221 en verde.
+- **Prueba nueva**: `tests/suite_57_ia_redaccion.js` — 1 caso, mismo patrón de sellado que
+  ya usa `suite_68_v17_cola.js` para el llenado de antecedentes (`_vglDeadmanSellar` con un
+  sello de 40 días).
+
 ## v17.6.58 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.20: Auto-Labs presentaba un fallo de lectura como hecho clínico)
 
 El botón "🧬 Auto-Labs (Athenea)" (rama final del `onclick`, vigilante_agenda.user.js:~5220)

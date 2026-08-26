@@ -495,6 +495,25 @@ module.exports = {
       t.cierto(!sin.ok && sin.motivo === "sin_casilla" && sin.pestania === "Conducta", "sin casilla: dice dónde buscarla");
     });
 
+    // [auditoría 25-ago, hallazgo 1.21] vglEscrituraPermitida (el dead-man switch) tenía un
+    // ÚNICO llamador en todo el archivo (vglLlenarFactoresEnEverest, el llenado de
+    // antecedentes). Su propio mensaje promete "dejo de escribir en la historia clínica
+    // (llenar antecedentes E INSERTAR NOTAS)" — pero ningún punto de inserción de notas de
+    // IA lo consultaba: con la escritura cortada por el dead-man, el redactor seguía
+    // insertando notas en la historia como si nada.
+    t.caso("mtrInsertarEnCasillaModo: con el dead-man switch cortando la escritura, no inserta nada y lo dice", () => {
+      const c = cargar({ silencioso: true });
+      // Mismo patrón que suite_68 ("el sello del último contacto y la puerta de
+      // escritura"): 40 días sin contacto con el servidor de control corta la escritura.
+      c.api._vglDeadmanSellar(Date.now() - 40 * 86400000);
+      t.falso(c.api.vglEscrituraPermitida(), "confirmación: el dead-man está activo para esta prueba");
+      const caja = { value: "", isConnected: true, dispatchEvent: () => {} };
+      c.env.doc.querySelector = (sel) => (sel === 'textarea[name="MotivoConsulta"]' ? caja : null);
+      const r = c.api.mtrInsertarEnCasillaModo("motivo_consulta", "CONTROL DE HIPERTENSIÓN ARTERIAL.", null);
+      t.cierto(!r.ok && r.motivo === "deadman", "se niega explícitamente por el dead-man, no por 'sin_casilla' ni otro motivo genérico");
+      t.igual(caja.value, "", "cero escritura: la casilla queda intacta (bug real: se insertaba igual)");
+    });
+
     t.caso("mtrInsertarEnCasillaModo: si la historia abierta es de OTRO paciente, se niega sin tocar nada", () => {
       const c = cargar({ silencioso: true });
       c.env.win.location.pathname = "/viva/HCHealth/HistoriaClinica";
