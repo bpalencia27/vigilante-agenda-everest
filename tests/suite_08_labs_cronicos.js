@@ -418,6 +418,27 @@ module.exports = {
       t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA" }), "HEMOGLOBINA a secas es la sérica");
     });
 
+    // v17.6.68 — [informe de laboratorio real y captura de pantalla reales, aportados en
+    // consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel CUANTITATIVO (creatinina en
+    // orina espontánea, microalbuminuria, relación microalbuminuria/creatinina — el
+    // estudio de la RAC) DISTINTO del uroanálisis/parcial de orina cualitativo. Su nombre
+    // contiene "URINARIA", y el patrón amplio /URINAR/ (pensado para "SEDIMENTO
+    // URINARIO"/"CITOQUIMICO URINARIO", sinónimos REALES del parcial) lo confundía con
+    // orina — mezclando dos exámenes de fechas distintas en el mismo bloque "Uroanálisis"
+    // de la tabla de Historial de Paraclínicos (_agruparUroanalisisParaTabla).
+    t.caso("_esAnalitoDeOrina: QUIMICA URINARIA NO es el uroanálisis/parcial de orina (bug real reportado en consultorio, con informe de laboratorio)", () => {
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "creatinina en orina espontánea es de Química Urinaria, no del parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "microalbuminuria de Química Urinaria tampoco es el parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "ni la relación microalbuminuria/creatinina (el estudio de la RAC)");
+      // Los sinónimos REALES del parcial (SEDIMENTO URINARIO, CITOQUIMICO URINARIO) siguen
+      // reconociéndose: la exclusión es específica de "QUIMICA URINARIA", no de /URINAR/ entero.
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "NITRITOS", NombreParametroPadre: "SEDIMENTO URINARIO" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "CITOQUIMICO URINARIO" }));
+    });
+
     t.caso("_matchUroComponente: sinónimos del LIS y exclusión de cocientes (RPC/microalbuminuria NO son la proteinuria del parcial)", () => {
       t.igual(testApi._matchUroComponente({ NombreParametro: "HEMOGLOBINA" }).key, "SANGRE");
       t.igual(testApi._matchUroComponente({ NombreParametro: "ESTERASA LEUCOCITARIA" }).key, "LEUCOCITOS");

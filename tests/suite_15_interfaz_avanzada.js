@@ -1138,6 +1138,36 @@ module.exports = {
       t.igual(bloque.__vglGrupoUroComponentes[0].resultado, "NEGATIVO", "la vieja llegó de última en el arreglo pero sigue siendo la vieja: no debe ganar");
     });
 
+    // v17.6.68 — [informe de laboratorio real y captura de pantalla reales, aportados en
+    // consultorio, 26-ago-2026] BUG REAL: "QUIMICA URINARIA" (creatinina en orina
+    // espontánea, microalbuminuria, relación microalbuminuria/creatinina — el estudio
+    // CUANTITATIVO de la RAC) matcheaba el patrón amplio de _esAnalitoDeOrina (contiene
+    // "URINARIA") y se colaba en el bloque "Uroanálisis" JUNTO con los componentes reales
+    // del parcial, de OTRA fecha. Como el bloque toma la fecha del componente más
+    // reciente, el resultado era un bloque fechado el día de la Química Urinaria (que ni
+    // siquiera es un uroanálisis) pero con el TEXTO de un uroanálisis real más viejo.
+    t.caso("_agruparUroanalisisParaTabla: QUIMICA URINARIA (más reciente) queda FUERA del bloque Uroanálisis; el bloque conserva la fecha y el contenido del uroanálisis REAL, aunque sea más viejo (bug real reportado en consultorio)", () => {
+      const c = cargar();
+      const labs = [
+        // uroanálisis real, componentes del parcial, viejo (enero)
+        { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: "4.20", Fecha: "2026-01-10" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "3.90", Fecha: "2026-01-10" },
+        // Química Urinaria, del día de la consulta (agosto) — NO es un uroanálisis.
+        { NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "85", Fecha: "2026-08-21" },
+        { NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "18", Fecha: "2026-08-21" },
+        { NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "21.2", Fecha: "2026-08-21" },
+      ];
+      const agrupado = c.api._agruparUroanalisisParaTabla(labs);
+      t.igual(agrupado.length, 4, "2 componentes reales se funden en 1 bloque; las 3 filas de Química Urinaria quedan cada una independiente (1+3=4)");
+      const bloque = agrupado.find((l) => Array.isArray(l.__vglGrupoUroComponentes));
+      t.cierto(!!bloque, "sigue habiendo un bloque Uroanálisis, armado SOLO con los componentes reales");
+      t.igual(bloque.__vglGrupoUroComponentes.length, 2, "el bloque trae únicamente HEMATIES y LEUCOCITOS, nunca las filas de Química Urinaria");
+      t.igual(bloque.Fecha, "2026-01-10", "la fecha del bloque es la del uroanálisis REAL (enero), no la de Química Urinaria (agosto) — antes del fix, agosto ganaba y mostraba un examen que no se hizo ese día");
+      const quimUri = agrupado.filter((l) => l.NombreParametroPadre === "QUIMICA URINARIA");
+      t.igual(quimUri.length, 3, "las 3 filas de Química Urinaria se conservan tal cual, sin agrupar y sin desaparecer");
+      t.cierto(quimUri.every((l) => l.NombreParametro !== "Uroanálisis"), "ninguna se disfraza de 'Uroanálisis'");
+    });
+
     t.caso("_agruparUroanalisisParaTabla: sin componentes de orina, la lista sale intacta (ni un bloque de más)", () => {
       const c = cargar();
       const labs = [{ NombreParametro: "CREATININA", Resultado: "1.2" }, { NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];

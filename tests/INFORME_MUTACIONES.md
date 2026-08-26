@@ -6,6 +6,65 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.68 — 26-ago-2026 (ítem 0-B: bloque "Uroanálisis" mezclaba QUIMICA URINARIA — informe de laboratorio real y captura de pantalla reales, aportados en consultorio)
+
+**El caso**: informe de laboratorio real con fecha 21-ago-2026, sección "QUIMICA
+URINARIA" (tres exámenes: creatinina en orina espontánea, microalbuminuria, relación
+microalbuminuria/creatinina — el estudio CUANTITATIVO de la RAC). Ningún
+uroanálisis/parcial de orina fue ordenado ni resultado ese día. La captura del panel del
+médico, sin embargo, mostraba en "Historial de Paraclínicos" una fila fechada ese mismo
+día, etiquetada "Uroanálisis", con hallazgos de sedimento urinario (Hematíes, Hematíes No
+Lisados, Células del Túbulo Renal) que corresponden a OTRO examen de OTRA fecha — un
+uroanálisis real más viejo. Sin ningún dato identificable del paciente, EPS ni médico
+tratante.
+
+**Causa raíz confirmada leyendo el código real**: `_esAnalitoDeOrina(lab)` (línea ~1354)
+decide qué filas "pertenecen a orina" con el regex `/ORINA|URINAR|UROAN/` sobre
+`NombreParametroPadre`. Ese patrón, pensado para sinónimos REALES del parcial
+("SEDIMENTO URINARIO", "CITOQUIMICO URINARIO"), TAMBIÉN matchea "QUIMICA URINARIA" — un
+panel completamente distinto. `_agruparUroanalisisParaTabla` (línea ~1407, arma la fila
+"Uroanálisis" del Historial de Paraclínicos) usa SOLO `_esAnalitoDeOrina` como filtro, sin
+un segundo filtro por componente — así que mete en el MISMO bloque sintético componentes
+reales de un uroanálisis viejo Y los 3 exámenes de Química Urinaria del día de la
+consulta. Como el "representante" del grupo se elige por la fecha MÁS RECIENTE entre TODO
+lo que cae en el filtro, el bloque terminaba fechado el día de la Química Urinaria (la
+actividad "de orina" más reciente) pero con el TEXTO de otro examen real más viejo —
+fecha de hoy, contenido de otro día, etiqueta que dice "Uroanálisis" cuando ese examen no
+se hizo.
+
+Se confirmó que los DEMÁS llamadores de `_esAnalitoDeOrina`
+(`injectLabsIntoCronicos`/`inyectarComponenteOrina`, `mtrHallazgosUroDesdeLabs`) ya
+estaban protegidos: exigen ADEMÁS `_matchUroComponente(lab)` contra los 7 nombres reales
+de componentes del parcial (NITRITOS/GLUCOSURIA/PROTEINURIA/CILINDROS/SANGRE/
+HEMATIES/LEUCOCITOS), y ninguno de los 3 analitos de Química Urinaria matchea esos
+nombres — por eso ese camino (las casillas de la Ruta de Crónicos) nunca se contaminó.
+También se verificó el guard `deOrina` en `_matchLabInWhitelist` (línea ~2592): el fix no
+lo rompe porque el whitelist de CREATININA ya excluye por separado cualquier nombre que
+contenga "ORINA", y ninguna otra entrada del whitelist matchea por nombre a
+"MICROALBUMINURIA"/"CREATININA EN ORINA ESPONTANEA"/"RELACION MICROALBUMINURIA
+CREATININA" antes de llegar a RAC.
+
+**El fix**: en `_esAnalitoDeOrina`, se agregó una exclusión explícita ANTES del patrón
+amplio — `if (/QUIMICA URINARIA/.test(padre)) return false;` — específica de "QUIMICA
+URINARIA" (no de "URINAR" en general), para que "SEDIMENTO URINARIO"/"CITOQUIMICO
+URINARIO" (sinónimos reales del parcial) sigan reconociéndose sin cambios.
+
+**Mutación verificada**: se respaldó el archivo, se removió con `python3` el bloque
+completo de la exclusión (dejando `_esAnalitoDeOrina` exactamente como estaba antes del
+fix). `TZ=America/Bogota node tests/runner.js` puso rojas EXACTAMENTE las 2 pruebas
+nuevas (2242 pasan / 2 fallan): la prueba directa de `_esAnalitoDeOrina` con los 3
+nombres reales de Química Urinaria ("obtuvo true" donde se esperaba `false`), y la
+prueba de integración de `_agruparUroanalisisParaTabla` que reproduce el caso completo
+(esperaba 4 filas —1 bloque real + 3 independientes de Química Urinaria— y obtuvo 1,
+confirmando que sin el fix las 3 filas de Química Urinaria se fundían en el bloque
+"Uroanálisis" junto con los componentes reales). Ninguna otra prueba se vio afectada. Se
+restauró desde el backup y el banco volvió a 2244 pruebas en verde. Se añadieron 2
+pruebas nuevas: una en `tests/suite_08_labs_cronicos.js` (`_esAnalitoDeOrina` directo,
+incluye una comprobación de que los sinónimos reales del parcial —SEDIMENTO
+URINARIO/CITOQUIMICO URINARIO— siguen reconociéndose) y una en
+`tests/suite_15_interfaz_avanzada.js` (`_agruparUroanalisisParaTabla`, el escenario
+completo con fechas y contenidos reales del caso reportado).
+
 ## v17.6.67 — 26-ago-2026 (ítem 0: uroanálisis "fantasma" — reportado en consultorio EN VIVO, con consola completa pegada por el médico)
 
 **El reporte**: "el auto-labs Athenea no me reconoció el uroanálisis nuevo realizado por

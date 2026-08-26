@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.67
+// @version     17.6.68
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.67";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.68";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1353,6 +1353,23 @@
   // hemograma EN SANGRE, y confundirlos escribiría sangre en las casillas de orina.
   function _esAnalitoDeOrina(lab) {
       const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));
+      // [confirmado con informe real de laboratorio y captura de pantalla real, aportados
+      // en consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel DISTINTO (creatinina en
+      // orina espontánea, microalbuminuria, relación microalbuminuria/creatinina — el
+      // estudio CUANTITATIVO de la RAC) que NO es el uroanálisis/parcial de orina
+      // cualitativo. Su nombre contiene "URINARIA", que coincidía con el patrón amplio
+      // /URINAR/ de abajo (pensado para sinónimos REALES del parcial — "SEDIMENTO
+      // URINARIO"/"CITOQUIMICO URINARIO") — mezclando dos exámenes distintos, de fechas
+      // distintas, en un solo bloque "Uroanálisis" (ver _agruparUroanalisisParaTabla): el
+      // bloque terminaba con la fecha de la Química Urinaria (por ser la más reciente
+      // actividad "de orina") pero con el TEXTO/hallazgos de un uroanálisis real más viejo
+      // — un examen que ni siquiera se había hecho ese día, mostrado como si sí. Los demás
+      // llamadores de _esAnalitoDeOrina (injectLabsIntoCronicos, mtrHallazgosUroDesdeLabs)
+      // ya estaban protegidos porque exigen ADEMÁS _matchUroComponente(lab) contra los 7
+      // nombres reales de componentes del parcial — ninguno de los 3 analitos de Química
+      // Urinaria matchea esos nombres. _agruparUroanalisisParaTabla (la tabla de Historial
+      // de Paraclínicos) no tenía ese segundo filtro: por eso ahí sí se colaba.
+      if (/QUIMICA URINARIA/.test(padre)) return false;
       // "URINAR" cubre SEDIMENTO URINARIO / CITOQUIMICO URINARIO (revisión adversarial:
       // "URINARIO" no contiene la subcadena "ORINA" y esos padres se colaban al suero).
       if (/ORINA|URINAR|UROAN/.test(padre)) return true;
