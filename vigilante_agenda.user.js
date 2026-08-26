@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.54
+// @version     17.6.55
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.54";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.55";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -33075,9 +33075,21 @@ _vglOfrecerDeshacer(btn);
     let uroHallazgos = null;
     try { uroHallazgos = mtrHallazgosUroDesdeLabs(labs); } catch (e) { uroHallazgos = null; }
 
+    // v17.6.55 — auditoría 25-ago (1.12/1.13): esta lectura vivía DESPUÉS de la llamada a
+    // mtrResumenClinico (ver más abajo, "resumen.medicamentos = ..."), así que mtrPlanFallas
+    // (que corre DENTRO de mtrResumenClinico y de ahí llama a mtrInerciaEstatina con
+    // c.meds) nunca veía los medicamentos reales del paciente. Efecto: "LDL en falla sin
+    // estatina de alta intensidad" se disparaba SIEMPRE que hay falla de LDL, incluso en un
+    // paciente con atorvastatina 80 mg — una afirmación de hecho falsa que empuja a subir
+    // una dosis ya máxima. Se adelanta la lectura para que mtrResumenClinico (y con él
+    // mtrPlanFallas/mtrInerciaEstatina) reciba los medicamentos reales a tiempo.
+    let _medsParaMotor = null;
+    try { _medsParaMotor = (typeof mtrLeerMedicamentos === "function") ? mtrLeerMedicamentos(pacienteIdLabs) : null; } catch (e) { _medsParaMotor = null; }
+
     const hoyIso = todayStamp();
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
+      meds: _medsParaMotor,
       edad: ent.edad, sexo: ent.sexo, pesoKg: ent.peso, creatinina: ent.creatinina,
       rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
       ldl: val("COLESTEROL_LDL"),
@@ -33140,9 +33152,10 @@ _vglOfrecerDeshacer(btn);
     // la hoja los desidentifica y relativiza las fechas). Con "_" para señalar interno.
     // v15.4.0 — Los medicamentos del motor (lo último ordenado/activo en Everest) viajan
     // con el resumen: el triaje v2 los necesita para insulina y polifarmacia.
+    // v17.6.55 — reutiliza _medsParaMotor (leída arriba, ANTES de mtrResumenClinico, para
+    // que mtrPlanFallas/mtrInerciaEstatina también la vieran) en vez de leer de nuevo.
     try {
-      const _meds = (typeof mtrLeerMedicamentos === "function") ? mtrLeerMedicamentos(pacienteIdLabs) : null;
-      if (Array.isArray(_meds)) resumen.medicamentos = _meds.map((m) => String((m && (m.nombre || m.Nombre || m.medicamento || m.Medicamento || m.descripcion)) || m || "")).filter(Boolean);
+      if (Array.isArray(_medsParaMotor)) resumen.medicamentos = _medsParaMotor.map((m) => String((m && (m.nombre || m.Nombre || m.medicamento || m.Medicamento || m.descripcion)) || m || "")).filter(Boolean);
     } catch (e) {}
     // v17.2.0 (#114) — el mapa nombre→frecuencia de la MISMA lectura, viaja aparte
     // (nunca reemplaza `resumen.medicamentos`, que se queda como nombres crudos:

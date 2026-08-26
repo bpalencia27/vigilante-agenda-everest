@@ -6,6 +6,34 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.55 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.12: "sin estatina de alta intensidad" se disparaba con el paciente YA en dosis alta)
+
+Mismo patrón exacto que el bug de HbA1c de v17.6.0 (documentado arriba en este mismo
+archivo): `mtrResumenDesdeModalLabs` leía los medicamentos reales del paciente
+(`mtrLeerMedicamentos`) **DESPUÉS** de llamar a `mtrResumenClinico`, solo para adjuntarlos
+como `resumen.medicamentos` (para mostrarlos) — pero `mtrPlanFallas` → `mtrInerciaEstatina`
+corren **DENTRO** de `mtrResumenClinico`, así que nunca veían `c.meds`. Efecto: "⚠ LDL en
+falla sin estatina de alta intensidad" se disparaba SIEMPRE que hay falla de LDL, incluso en
+un paciente con atorvastatina 80 mg real — una afirmación de hecho falsa que empuja a subir
+una dosis ya máxima. Fix: se adelanta la lectura de medicamentos a ANTES de la llamada a
+`mtrResumenClinico`, y se pasa como `meds:` en el ctx (reutilizando la misma lectura para
+`resumen.medicamentos`, sin leer dos veces).
+
+- **Nota de alcance**: el hallazgo hermano 1.13 (meta de LDL individual "solo apretar") NO
+  se tocó en esta entrega — a diferencia de 1.12, no es un simple cableado: no existe
+  todavía ningún mecanismo para que el médico fije una meta de LDL individual (el
+  equivalente de `metaHba1cManual` para LDL simplemente no existe, ni botón ni
+  almacenamiento). Construirlo es una funcionalidad clínica nueva, no un bug fix, y queda
+  pendiente de que el médico la pida explícitamente.
+- **Mutación**: se quitó `meds: _medsParaMotor` del ctx (volviendo a la lectura tardía). El
+  banco pasó de 2216 en verde a 1 roja: *"el adaptador ahora SÍ manda los medicamentos
+  reales al motor..."* (con atorvastatina 80 mg real, `inercia` seguía dando `true`).
+  Restaurado, banco vuelve a 2216 en verde.
+- **Prueba nueva**: `tests/suite_47_recuadro_clinico.js` — 1 caso, de punta a punta
+  (`mtrRefrescarMedicamentos` con fixture inline de atorvastatina 80 mg → `mtrResumenDesdeModalLabs`
+  → `resumen.fallas.inercia`), mismo patrón que las pruebas de HbA1c ya existentes en la
+  misma suite.
+
 ## v17.6.54 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.11: ASCVD Colombia mezclaba ecuación masculina con factor femenino)
 
 `mtrClasificarRiesgoCv` (paso 4, vigilante_agenda.user.js:28920): el ASCVD crudo

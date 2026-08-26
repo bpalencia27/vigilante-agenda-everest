@@ -18,7 +18,7 @@ module.exports = {
     "mtrRenderCabeceraRiesgoHtml", "mtrRenderFallaHtml",
   ],
 
-  pruebas(t, api) {
+  async pruebas(t, api, env, cargar) {
     const ctxBase = {
       hoyIso: "2026-08-16",
       edad: 68, sexo: "F", pesoKg: 62, creatinina: 1.6,
@@ -268,6 +268,42 @@ module.exports = {
       const html = api.mtrPanelMetasHtml(api.mtrTableroClinico(r));
       t.cierto(html.indexOf("&lt; 7 %") >= 0, "sin meta individual, el Panel muestra la meta general de 7 %");
       t.falso(html.indexOf("meta individual de este paciente") >= 0, "y no dice 'meta individual' cuando nadie fijó una");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.12] mismo patrón que el bug de HbA1c de arriba (v17.6.0):
+    // mtrResumenDesdeModalLabs leía los medicamentos reales DESPUÉS de llamar a
+    // mtrResumenClinico (solo para adjuntarlos como resumen.medicamentos, para mostrar),
+    // así que mtrPlanFallas -> mtrInerciaEstatina (que corren DENTRO de mtrResumenClinico)
+    // nunca los veían. "LDL en falla sin estatina de alta intensidad" se disparaba SIEMPRE
+    // que hay falla de LDL, incluso en un paciente con atorvastatina 80 mg real.
+    await t.casoAsync("v17.6.55 — el adaptador ahora SÍ manda los medicamentos reales al motor: sin ellos, la inercia de estatina se disparaba con el paciente YA en dosis alta", async () => {
+      const fixMedsAltaIntensidad = {
+        respuesta: [{
+          id: null, tipo: "Medicamento", agrupador: "TEST-ATORVA-80",
+          usuario: { id: 1, consulta_ID: 1, tipoIdentificacion: "CC", identificacion: "00000000", finalidad: null, dx: null, especialidad: "MEDICINA GENERAL", paciente: null },
+          remisor: { id: 1, numero: 1, descripcion: "SEDE DE PRUEBA", codigo: "001" },
+          estado: "PENDIENTE", fechaCreacion: "2026-08-10T14:28:00.000-05:00", fechaVencimiento: null,
+          detalles: [
+            { id: 1, codigo: "M9001", descripcion: "ATORVASTATINA 80 MG TABLETA RECUBIERTA", cantidadMedicamento: "30", cantidadDias: "30", dosificacion: "1", presentacion: "TABLETA RECUBIERTA", pf: false, posfechadoInicial: "2026-08-10T00:00:00.000-05:00", posfechadoFinal: "2026-09-09T00:00:00.000-05:00", url: "" },
+          ],
+          cantMeses: 1, urls: [],
+        }],
+      };
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => ({ ok: true, status: 200, json: async () => fixMedsAltaIntensidad.respuesta, text: async () => JSON.stringify(fixMedsAltaIntensidad.respuesta) }),
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      c.api._vglCosechaGuardar("55503", { programas: { diabetes: true } });   // piso institucional -> categoría "alto", meta LDL 70
+      await c.api.mtrRefrescarMedicamentos(55503);   // llena la caché bajo pacienteIdLabs (55503), la llave real
+      const renal = { estadio: "G2", tfg: 75, entradas: { edad: 60, peso: 70, creatinina: 0.9, sexo: "F", pas: 120, pad: 78 } };
+      const labs = [{ NombreParametro: "COLESTEROL LDL", Resultado: "200", Fecha: "01/08/2026" }];
+      const r = c.api.mtrResumenDesdeModalLabs(renal, labs, { doc_id: "55503" }, 55503);
+      t.cierto(r.fallas && r.fallas.fallas.some((f) => f.analito === "LDL"), "con LDL 200 y meta 70 (categoría alto), la falla de LDL sí se detecta");
+      t.cierto(!!r.fallas.inercia, "con falla de LDL, sí se evalúa la inercia (a diferencia de null cuando no hay falla)");
+      t.falso(r.fallas.inercia.inercia,
+        "con atorvastatina 80 mg REAL ya puesta, inercia debe ser false (bug real: salía true, ignorando la dosis real)");
+      t.igual(r.fallas.inercia.estatina && r.fallas.inercia.estatina.dosis, 80, "y reconoce la dosis real (80 mg) del medicamento leído");
     });
 
     t.caso("el sábado propuesto para el control respeta el grupo del médico", () => {
