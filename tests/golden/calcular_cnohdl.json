@@ -1,0 +1,778 @@
+{
+ "funcion": "calcular_cnohdl",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "lipidos",
+ "vectores": [
+  {
+   "entrada": [
+    null,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    25
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    35
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    40
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    45
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    60
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    90
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    -1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    null,
+    "abc"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    25
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    35
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    40
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    45
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    60
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    90
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    -1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    0,
+    "abc"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    120,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    120,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    120,
+    25
+   ],
+   "salida": 95.0
+  },
+  {
+   "entrada": [
+    120,
+    35
+   ],
+   "salida": 85.0
+  },
+  {
+   "entrada": [
+    120,
+    40
+   ],
+   "salida": 80.0
+  },
+  {
+   "entrada": [
+    120,
+    45
+   ],
+   "salida": 75.0
+  },
+  {
+   "entrada": [
+    120,
+    60
+   ],
+   "salida": 60.0
+  },
+  {
+   "entrada": [
+    120,
+    90
+   ],
+   "salida": 30.0
+  },
+  {
+   "entrada": [
+    120,
+    -1
+   ],
+   "salida": 121.0
+  },
+  {
+   "entrada": [
+    120,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    150,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    150,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    150,
+    25
+   ],
+   "salida": 125.0
+  },
+  {
+   "entrada": [
+    150,
+    35
+   ],
+   "salida": 115.0
+  },
+  {
+   "entrada": [
+    150,
+    40
+   ],
+   "salida": 110.0
+  },
+  {
+   "entrada": [
+    150,
+    45
+   ],
+   "salida": 105.0
+  },
+  {
+   "entrada": [
+    150,
+    60
+   ],
+   "salida": 90.0
+  },
+  {
+   "entrada": [
+    150,
+    90
+   ],
+   "salida": 60.0
+  },
+  {
+   "entrada": [
+    150,
+    -1
+   ],
+   "salida": 151.0
+  },
+  {
+   "entrada": [
+    150,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    180,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    180,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    180,
+    25
+   ],
+   "salida": 155.0
+  },
+  {
+   "entrada": [
+    180,
+    35
+   ],
+   "salida": 145.0
+  },
+  {
+   "entrada": [
+    180,
+    40
+   ],
+   "salida": 140.0
+  },
+  {
+   "entrada": [
+    180,
+    45
+   ],
+   "salida": 135.0
+  },
+  {
+   "entrada": [
+    180,
+    60
+   ],
+   "salida": 120.0
+  },
+  {
+   "entrada": [
+    180,
+    90
+   ],
+   "salida": 90.0
+  },
+  {
+   "entrada": [
+    180,
+    -1
+   ],
+   "salida": 181.0
+  },
+  {
+   "entrada": [
+    180,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    200,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    200,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    200,
+    25
+   ],
+   "salida": 175.0
+  },
+  {
+   "entrada": [
+    200,
+    35
+   ],
+   "salida": 165.0
+  },
+  {
+   "entrada": [
+    200,
+    40
+   ],
+   "salida": 160.0
+  },
+  {
+   "entrada": [
+    200,
+    45
+   ],
+   "salida": 155.0
+  },
+  {
+   "entrada": [
+    200,
+    60
+   ],
+   "salida": 140.0
+  },
+  {
+   "entrada": [
+    200,
+    90
+   ],
+   "salida": 110.0
+  },
+  {
+   "entrada": [
+    200,
+    -1
+   ],
+   "salida": 201.0
+  },
+  {
+   "entrada": [
+    200,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    240,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    240,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    240,
+    25
+   ],
+   "salida": 215.0
+  },
+  {
+   "entrada": [
+    240,
+    35
+   ],
+   "salida": 205.0
+  },
+  {
+   "entrada": [
+    240,
+    40
+   ],
+   "salida": 200.0
+  },
+  {
+   "entrada": [
+    240,
+    45
+   ],
+   "salida": 195.0
+  },
+  {
+   "entrada": [
+    240,
+    60
+   ],
+   "salida": 180.0
+  },
+  {
+   "entrada": [
+    240,
+    90
+   ],
+   "salida": 150.0
+  },
+  {
+   "entrada": [
+    240,
+    -1
+   ],
+   "salida": 241.0
+  },
+  {
+   "entrada": [
+    240,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    300,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    300,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    300,
+    25
+   ],
+   "salida": 275.0
+  },
+  {
+   "entrada": [
+    300,
+    35
+   ],
+   "salida": 265.0
+  },
+  {
+   "entrada": [
+    300,
+    40
+   ],
+   "salida": 260.0
+  },
+  {
+   "entrada": [
+    300,
+    45
+   ],
+   "salida": 255.0
+  },
+  {
+   "entrada": [
+    300,
+    60
+   ],
+   "salida": 240.0
+  },
+  {
+   "entrada": [
+    300,
+    90
+   ],
+   "salida": 210.0
+  },
+  {
+   "entrada": [
+    300,
+    -1
+   ],
+   "salida": 301.0
+  },
+  {
+   "entrada": [
+    300,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    400,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    400,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    400,
+    25
+   ],
+   "salida": 375.0
+  },
+  {
+   "entrada": [
+    400,
+    35
+   ],
+   "salida": 365.0
+  },
+  {
+   "entrada": [
+    400,
+    40
+   ],
+   "salida": 360.0
+  },
+  {
+   "entrada": [
+    400,
+    45
+   ],
+   "salida": 355.0
+  },
+  {
+   "entrada": [
+    400,
+    60
+   ],
+   "salida": 340.0
+  },
+  {
+   "entrada": [
+    400,
+    90
+   ],
+   "salida": 310.0
+  },
+  {
+   "entrada": [
+    400,
+    -1
+   ],
+   "salida": 401.0
+  },
+  {
+   "entrada": [
+    400,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    -5,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    -5,
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    -5,
+    25
+   ],
+   "salida": -30.0
+  },
+  {
+   "entrada": [
+    -5,
+    35
+   ],
+   "salida": -40.0
+  },
+  {
+   "entrada": [
+    -5,
+    40
+   ],
+   "salida": -45.0
+  },
+  {
+   "entrada": [
+    -5,
+    45
+   ],
+   "salida": -50.0
+  },
+  {
+   "entrada": [
+    -5,
+    60
+   ],
+   "salida": -65.0
+  },
+  {
+   "entrada": [
+    -5,
+    90
+   ],
+   "salida": -95.0
+  },
+  {
+   "entrada": [
+    -5,
+    -1
+   ],
+   "salida": -4.0
+  },
+  {
+   "entrada": [
+    -5,
+    "abc"
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "abc",
+    0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "abc",
+    25
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    35
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    40
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    45
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    60
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    90
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    -1
+   ],
+   "lanza": "ValueError"
+  },
+  {
+   "entrada": [
+    "abc",
+    "abc"
+   ],
+   "lanza": "ValueError"
+  }
+ ]
+}

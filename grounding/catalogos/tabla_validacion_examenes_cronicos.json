@@ -1,0 +1,210 @@
+{
+  "_fuente": "GET /apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos?citaId=<base64>",
+  "_capturado": "2026-08-12, consultorio real (captura_rutacronicos_borrado_rac_20260812.json)",
+  "_que_es": "Tabla de validación por examen que la propia IPS publica para la Ruta de Crónicos.",
+  "_advertencia_critica": "Estos son rangos de PLAUSIBILIDAD, no de normalidad clínica. La hemoglobina se declara plausible entre 3 y 30 g/dL: un 3,2 cae DENTRO del rango y es una urgencia transfusional. Contestan '¿este número puede ser un resultado de laboratorio de verdad, o es un dedazo o una unidad equivocada?', NUNCA '¿este paciente está bien?'. Cualquier uso que pinte 'dentro de rango' como 'normal' estaría tranquilizando sobre un valor crítico.",
+  "_nota_codigoExamen": "codigoExamen NO es un CUPS: es el nombre interno del campo en Everest.",
+  "_nota_forma": "`sexo` llega null en una fila y AUSENTE en las otras 27; solo HEMOGLOBINA acota por edad (0-110). `mensajeMinimo`/`mensajeMaximo` no aparecen en la captura real.",
+  "_sin_datos_de_paciente": "Es parametrización de la IPS. No contiene ni un dato personal.",
+  "filas": [
+    {
+      "codigoExamen": "HEMOGLOBINA",
+      "sexo": null,
+      "edadMin": 0,
+      "edadMax": 110,
+      "valorMinimo": 3.0,
+      "valorMaximo": 30.0,
+      "swRequerido": true,
+      "unidad": "g/dL"
+    },
+    {
+      "codigoExamen": "HEMATOCRITO",
+      "valorMinimo": 10.0,
+      "valorMaximo": 80.0,
+      "swRequerido": false,
+      "unidad": "%"
+    },
+    {
+      "codigoExamen": "LEUCOCITOS",
+      "valorMinimo": 300.0,
+      "valorMaximo": 50000.0,
+      "swRequerido": false,
+      "unidad": "/µL"
+    },
+    {
+      "codigoExamen": "PLAQUETAS",
+      "valorMinimo": 5000.0,
+      "valorMaximo": 200000.0,
+      "swRequerido": false,
+      "unidad": "/µL"
+    },
+    {
+      "codigoExamen": "GLUCOSA_SUERO",
+      "valorMinimo": 20.0,
+      "valorMaximo": 1000.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "HBA1C",
+      "valorMinimo": 3.0,
+      "valorMaximo": 25.0,
+      "swRequerido": true,
+      "unidad": "%"
+    },
+    {
+      "codigoExamen": "COLESTEROL_TOTAL",
+      "valorMinimo": 40.0,
+      "valorMaximo": 1000.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "HDL",
+      "valorMinimo": 5.0,
+      "valorMaximo": 150.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "LDL",
+      "valorMinimo": 10.0,
+      "valorMaximo": 600.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "TRIGLICERIDOS",
+      "valorMinimo": 10.0,
+      "valorMaximo": 5000.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "CREATINURIA",
+      "valorMinimo": 10.0,
+      "valorMaximo": 500.0,
+      "swRequerido": true,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "ALBUMINURIA",
+      "valorMinimo": 1.0,
+      "valorMaximo": 400.0,
+      "swRequerido": false,
+      "unidad": "mg/L"
+    },
+    {
+      "codigoExamen": "CREATININA",
+      "valorMinimo": 0.2,
+      "valorMaximo": 20.0,
+      "swRequerido": true,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "MICROALBUMINURIA",
+      "valorMinimo": 1.0,
+      "valorMaximo": 400.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "FOSFORO_SERICO",
+      "valorMinimo": 0.5,
+      "valorMaximo": 20.0,
+      "swRequerido": true,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "ALBUMINA_SERICA",
+      "valorMinimo": 1.0,
+      "valorMaximo": 10.0,
+      "swRequerido": true,
+      "unidad": "g/dL"
+    },
+    {
+      "codigoExamen": "CALCIO_SERICO",
+      "valorMinimo": 4.0,
+      "valorMaximo": 20.0,
+      "swRequerido": true,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "POTASIO_SERICO",
+      "valorMinimo": 2.0,
+      "valorMaximo": 10.0,
+      "swRequerido": true,
+      "unidad": "mmol/L"
+    },
+    {
+      "codigoExamen": "PROTEINURIA_24H",
+      "valorMinimo": 1.0,
+      "valorMaximo": 20000.0,
+      "swRequerido": false,
+      "unidad": "mg/24 horas"
+    },
+    {
+      "codigoExamen": "DEPURACION_CREATININA_24H",
+      "valorMinimo": 2.0,
+      "valorMaximo": 250.0,
+      "swRequerido": false,
+      "unidad": "ml/min"
+    },
+    {
+      "codigoExamen": "NITROGENO_UREICO",
+      "valorMinimo": 1.0,
+      "valorMaximo": 300.0,
+      "swRequerido": false,
+      "unidad": "mg/dL"
+    },
+    {
+      "codigoExamen": "ALT",
+      "valorMinimo": 1.0,
+      "valorMaximo": 15000.0,
+      "swRequerido": false,
+      "unidad": "U/L"
+    },
+    {
+      "codigoExamen": "AST",
+      "valorMinimo": 1.0,
+      "valorMaximo": 10000.0,
+      "swRequerido": false,
+      "unidad": "U/L"
+    },
+    {
+      "codigoExamen": "PTH",
+      "valorMinimo": 1.0,
+      "valorMaximo": 3000.0,
+      "swRequerido": false,
+      "unidad": "pg/ml"
+    },
+    {
+      "codigoExamen": "MICROALBUMINURIA_CREATINURIA",
+      "valorMinimo": 1.0,
+      "valorMaximo": 10000.0,
+      "swRequerido": false,
+      "unidad": "mg/g"
+    },
+    {
+      "codigoExamen": "RELACION_ALBUMINURIA_CREATININA",
+      "valorMinimo": 1.0,
+      "valorMaximo": 20000.0,
+      "swRequerido": false,
+      "unidad": "mg/g"
+    },
+    {
+      "codigoExamen": "SODIO",
+      "valorMinimo": 95.0,
+      "valorMaximo": 200.0,
+      "swRequerido": false,
+      "unidad": "mEq/L"
+    },
+    {
+      "codigoExamen": "ACIDO_URICO",
+      "valorMinimo": 0.5,
+      "valorMaximo": 25.0,
+      "swRequerido": true,
+      "unidad": "mg/dL"
+    }
+  ]
+}

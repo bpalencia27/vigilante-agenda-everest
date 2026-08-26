@@ -1,0 +1,388 @@
+{
+ "funcion": "_regla_insulina_timing",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "basal"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "prandial"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "antes de cada comida"
+   ],
+   "salida": {
+    "principio_activo": "insulina_timing",
+    "medicamento_detectado": "INSULINA GLARGINA",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "INSULINA BASAL (INSULINA GLARGINA) con indicacion preprandial: 'antes de cada comida'. Las basales (Glargina/Detemir/Degludec) se administran 1 vez al dia SUBCUTANEA, NO preprandial. Riesgo: hipoglucemia severa domiciliaria si se reinterpreta como bolus preprandial. Corregir timing.",
+    "formula_tfg": "N/A (validacion de timing)",
+    "valor_tfg": 0.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "en la noche"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "cada 8 horas"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "SOS"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "correccion"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA GLARGINA",
+    "texto raro"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "basal"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "prandial"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "antes de cada comida"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "en la noche"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "cada 8 horas"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "SOS"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "correccion"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina NPH",
+    "texto raro"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "basal"
+   ],
+   "salida": {
+    "principio_activo": "insulina_timing",
+    "medicamento_detectado": "insulina lispro",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "INSULINA BOLUS ULTRARRAPIDA (insulina lispro) con indicacion basal: 'basal'. Los bolus ultrarrapidos (Lispro/Glulisina/Aspart) se administran preprandial con cada comida principal. Riesgo: hiperglucemia postprandial cronica si se administra como basal. Corregir timing.",
+    "formula_tfg": "N/A (validacion de timing)",
+    "valor_tfg": 0.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "prandial"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "antes de cada comida"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "en la noche"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "cada 8 horas"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "SOS"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "correccion"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "insulina lispro",
+    "texto raro"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "basal"
+   ],
+   "salida": {
+    "principio_activo": "insulina_timing",
+    "medicamento_detectado": "INSULINA ASPART",
+    "conducta": "REVISAR_FICHA_TECNICA",
+    "mensaje": "INSULINA BOLUS ULTRARRAPIDA (INSULINA ASPART) con indicacion basal: 'basal'. Los bolus ultrarrapidos (Lispro/Glulisina/Aspart) se administran preprandial con cada comida principal. Riesgo: hiperglucemia postprandial cronica si se administra como basal. Corregir timing.",
+    "formula_tfg": "N/A (validacion de timing)",
+    "valor_tfg": 0.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "prandial"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "antes de cada comida"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "en la noche"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "cada 8 horas"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "SOS"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "correccion"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "INSULINA ASPART",
+    "texto raro"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    ""
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "basal"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "prandial"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "antes de cada comida"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "en la noche"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "cada 8 horas"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "SOS"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "correccion"
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "metformina",
+    "texto raro"
+   ],
+   "salida": null
+  }
+ ]
+}

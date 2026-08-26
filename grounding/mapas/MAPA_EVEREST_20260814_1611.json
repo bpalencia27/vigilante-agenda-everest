@@ -1,0 +1,6137 @@
+{
+  "_nota": "Mapa de Everest. Solo NOMBRES: ni un valor de casilla, ni una celda de tabla, ni un dato de respuesta.",
+  "capturadoEn": "2026-08-14T21:11:06.513Z",
+  "origen": "https://neps.everestintelligent.com",
+  "estadoCapturado": true,
+  "resumen": {
+    "pestanas": 15,
+    "campos": 420,
+    "botones": 119,
+    "tablas": 121,
+    "endpointsDeRed": 13
+  },
+  "red": [
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/Historicos/ObtenerHistoricoSignosVitales",
+      "params": [
+        "PacienteId"
+      ],
+      "claves": [],
+      "vistas": 2
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/Parametrizacion/GetValidacionExamenCronicos",
+      "params": [
+        "citaId"
+      ],
+      "claves": [],
+      "vistas": 2
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/Parametrizacion/ObtenerRetriccionesDiagnostico",
+      "params": [
+        "pacienteId"
+      ],
+      "claves": [],
+      "vistas": 2
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIParametrizacionHealth/apiparametrizacion/ParMedicamento/GetViasAdministracionMedicamentos",
+      "params": [],
+      "claves": [],
+      "vistas": 2
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIParametrizacionHealth/apiparametrizacion/ParMedicamento/GetPresentacionMedicamentos",
+      "params": [],
+      "claves": [],
+      "vistas": 2
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIParametrizacionGeneralHealth/api/ParFinalidadConsultas/GetFinalidadByEspecialidadDx",
+      "params": [
+        "especialidadId",
+        "CodigoDx",
+        "swIsHistoriaProcedimiento"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIParametrizacionGeneralHealth/api/ParCausasExternas/GetCausasByFinalidad",
+      "params": [
+        "especialidadId",
+        "finalidadCodigo"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/Historicos/HistoricoImpresionDiagnosticaAnalisisPlan",
+      "params": [
+        "PacienteId"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/ApiOrdenamientoHealth/api/Combo/ObtenerPaqueteProgramasCupsByCitaId",
+      "params": [
+        "citaID",
+        "paqueteProgramaId"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/Historicos/HistoricoMedicamentoHCM",
+      "params": [
+        "PacienteId"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIMedicoHealth/api/Medico/ObtenerEstadoCita",
+      "params": [
+        "TurnoId"
+      ],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIParametrizacionGeneralHealth/api/ParTipoDocumento",
+      "params": [],
+      "claves": [],
+      "vistas": 1
+    },
+    {
+      "metodo": "GET",
+      "ruta": "/apiviva/APIHCHealth/api/ActividadEducacion/HistoricoActividadEducacion",
+      "params": [
+        "PacienteId"
+      ],
+      "claves": [],
+      "vistas": 1
+    }
+  ],
+  "almacenamiento": {
+    "local": [
+      "vgl_rep_sum",
+      "vgl_n_os|[NUM]@4:40 p. m.|VERDE",
+      "vgl_api_medico",
+      "vgl_n_full|[NUM]@6:20 p. m.|VERDE",
+      "vgl_pos",
+      "vgl_pym_dia",
+      "vgl_n_os|athenea_sesion_caducada|2026-08-14",
+      "vgl_ev_2026-08-11",
+      "vgl_n_full|[NUM]@6:40 p. m.|VERDE",
+      "vgl_n_os|[NUM]@4:40 p. m.|VERDE",
+      "vgl_n_full|[NUM]@4:00 p. m.|AMBAR",
+      "vgl_ev_2026-08-13",
+      "vgl_n_os|[NUM]@4:00 p. m.|MORADO",
+      "currentSede",
+      "vgl_hello",
+      "vgl_n_full|[NUM]@06:20 PM|AMBAR",
+      "vgl_n_os|ℹ Asistente clínico activo — estado inicial de la jornada",
+      "vgl_n_full|[NUM]@06:00 PM|AMBAR",
+      "vgl_n_os|[NUM]@5:30 p. m.|AMBAR",
+      "vgl_n_os|[NUM]@3:40 p. m.|AMBAR",
+      "jwt",
+      "vgl_api_url",
+      "vgl_ux",
+      "vgl_cfg",
+      "vgl_ev_2026-08-12",
+      "vgl_n_full|[NUM]@4:40 p. m.|VERDE",
+      "vgl_n_full|[NUM]@5:30 p. m.|MORADO",
+      "vgl_n_full|[NUM]@5:40 p. m.|VERDE",
+      "vgl_n_os|[NUM]@4:00 p. m.|AMBAR",
+      "vgl_n_full|[NUM]@4:40 p. m.|VERDE",
+      "vgl_n_full|[NUM]@6:00 p. m.|VERDE",
+      "vgl_n_os|verupd|14.0.0",
+      "user",
+      "vgl_proc_today",
+      "vgl_n_os|[NUM]@5:30 p. m.|MORADO",
+      "vgl_n_os|[NUM]@6:40 p. m.|VERDE",
+      "vgl_n_full|[NUM]@5:30 p. m.|AMBAR",
+      "vgl_n_os|[NUM]@5:40 p. m.|VERDE",
+      "vgl_leader_beat",
+      "vgl_avisos_pendientes",
+      "vgl_n_os|[NUM]@6:20 p. m.|VERDE",
+      "vgl_n_os|[NUM]@4:20 p. m.|VERDE",
+      "vgl_equipo_id",
+      "vgl_rep_entorno",
+      "IntegradoConDigiturno",
+      "vgl_ux_pend",
+      "vgl_ev_2026-08-14",
+      "vgl_flight_recorder_logs",
+      "vgl_vistos",
+      "vgl_v73",
+      "currentSedeSelected",
+      "vgl_n_os|[NUM]@06:20 PM|AMBAR",
+      "vgl_n_os|[NUM]@6:00 p. m.|VERDE",
+      "vgl_n_full|[NUM]@3:40 p. m.|AMBAR",
+      "vgl_n_os|athenea_autologin_fallo|2026-08-14",
+      "vgl_n_os|[NUM]@06:00 PM|AMBAR",
+      "vgl_n_full|[NUM]@4:00 p. m.|MORADO",
+      "vgl_n_os|📋 PyM del día cargado",
+      "vgl_stats",
+      "vgl_n_full|[NUM]@4:20 p. m.|VERDE"
+    ],
+    "sesion": [
+      "vgl_upd|14.0.0"
+    ]
+  },
+  "pestanas": [
+    {
+      "pestana": "(pantalla inicial)",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 16,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "",
+          "estado": "[no-capturado]",
+          "placeholder": "Search"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "",
+          "seccion": "",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "select-one",
+          "etiqueta": "Via*",
+          "seccion": "Medicamentos Historial",
+          "estado": "ORAL",
+          "opciones": [
+            "Seleccione",
+            "ORAL",
+            "INTRAMUSCULAR",
+            "ENDOVENOSO",
+            "TOPICO",
+            "PIEL",
+            "INTRAVENOSO",
+            "SUBCUTÁNEA-INTRAMUSCULAR",
+            "INTRAVENOSO-INTRAMUSCULAR",
+            "ORAL-INTRAVENOSO",
+            "ORAL-INTRAVENOSO-INTRAMUSCULAR",
+            "OJOS",
+            "LIQUIDO INTRAVENOSO",
+            "RESPIRACION FIO2",
+            "NEBULIZAR-INHALADOR",
+            "ORAL-INTRAMUSCULAR",
+            "ENDOTRAQUEAL",
+            "NO APLICA",
+            "SUBCUTÁNEA",
+            "INTRAMUSCULAR",
+            "VAGINAL",
+            "RECTAL",
+            "INTRATECAL",
+            "BUCAL",
+            "CUTÁNEA (TÓPICA)",
+            "INHALATORIA",
+            "INTRAARTICULAR",
+            "INTRADÉRMICA (ID)",
+            "NASAL",
+            "ÓTICA"
+          ]
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "*",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "select-one",
+          "etiqueta": "Unidad",
+          "seccion": "Medicamentos Historial",
+          "estado": "Horas",
+          "opciones": [
+            "Seleccione",
+            "Minutos",
+            "Horas",
+            "Días",
+            "Semanas"
+          ]
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Días *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Cantidad *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "textarea",
+          "etiqueta": "Indicaciones *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "seEntregaronMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Medicamentos Historial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "seEntregaronMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Medicamentos Historial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "RecomendacionesMedicas",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Recomendaciones Medicas",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese las recomendaciones"
+        },
+        {
+          "id": "",
+          "name": "segumientoNoPresencial",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Seguimientos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "segumientoNoPresencial",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Seguimientos",
+          "estado": true
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "dropdownBasic1",
+          "texto": "Historial",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Imagenologia",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Laboratorio",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Servicios",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Consulta",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Paquetes",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historial",
+          "seccion": "Medicamentos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Post Fechado",
+          "seccion": "Medicamentos Historial",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Código",
+            "Nombre",
+            "Cantidad",
+            "Nota",
+            "Fecha de consulta",
+            "Acción"
+          ],
+          "filas": 11,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-conducta",
+        "ngb-accordion",
+        "mat-menu",
+        "angular2-multiselect",
+        "c-icon",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+        "Ordenamientos",
+        "Medicamentos Historial",
+        "Medicamentos",
+        "Recomendaciones Medicas",
+        "Seguimientos"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Anamnesis",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 14,
+      "campos": [
+        {
+          "id": "Acompañante.Nombre",
+          "name": "Acompañante.Nombre",
+          "tipo": "text",
+          "etiqueta": "Nombre acompañante",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "Acompañante.tipoDocumento",
+          "name": "Acompañante.tipoDocumento",
+          "tipo": "select-one",
+          "etiqueta": "Tipo documento",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "",
+          "opciones": [
+            "Cédula ciudadanía (CC)",
+            "Tarjeta de identificación (TI)",
+            "Cédula de extranjería (CE)",
+            "Carné diplomático (CD)",
+            "Pasaporte (PA)",
+            "Salvoconducto (SC)",
+            "Permiso Especial de Permanencia (PE)",
+            "Registro Civil (RC)",
+            "Certificado de nacido vivo (CN)",
+            "Adulto sin identificar (AS)",
+            "Menor sin identificar (MS)",
+            "UN (NUIP)",
+            "Permiso temporal de permanencia"
+          ]
+        },
+        {
+          "id": "Acompañante.numeroDocumento",
+          "name": "Acompañante.numeroDocumento",
+          "tipo": "number",
+          "etiqueta": "Número documento",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "Acompañante.Telefono",
+          "name": "Acompañante.Telefono",
+          "tipo": "number",
+          "etiqueta": "Teléfono",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "Acompañante.edad",
+          "name": "Acompañante.edad",
+          "tipo": "number",
+          "etiqueta": "Edad",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "Acompañante.correo",
+          "name": "Acompañante.correo",
+          "tipo": "email",
+          "etiqueta": "Correo electrónico",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "Acompa_ante_Parentesco_Nombre",
+          "name": "Acompañante.Parentesco.Nombre",
+          "tipo": "select-one",
+          "etiqueta": "Parentesco",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "SELECCIONE UNA OPCIÓN",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "CÓNYUGE O COMPAÑERO(A)",
+            "HIJO(A)",
+            "PADRE O MADRE",
+            "ACUDIENTE",
+            "OTRO"
+          ]
+        },
+        {
+          "id": "",
+          "name": "Responsable",
+          "tipo": "text",
+          "etiqueta": "Nombre Responsable",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "",
+          "name": "Acompanante",
+          "tipo": "number",
+          "etiqueta": "Teléfono",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "",
+          "name": "Categoria",
+          "tipo": "select-one",
+          "etiqueta": "Categoría",
+          "seccion": "Acompañante del paciente Último acompañante",
+          "estado": "SELECCIONE UNA OPCIÓN",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "MADRE",
+            "PADRE",
+            "REPRESENTANTE LEGAL",
+            "TUTOR",
+            "CÓNYUGE",
+            "HERMANO",
+            "HIJO"
+          ],
+          "obligatorio": true
+        },
+        {
+          "id": "",
+          "name": "MotivoConsulta",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Motivo Historial",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese el motivo de la consulta",
+          "obligatorio": true
+        },
+        {
+          "id": "",
+          "name": "UltimaEnfermedad",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Motivo Historial",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese la enfermedad actual",
+          "obligatorio": true
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Último acompañante",
+          "seccion": "Acompañante del paciente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historial",
+          "seccion": "Motivo",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Acompañante del paciente Último acompañante"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-atencion-primaria",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Acompañante del paciente Último acompañante",
+        "Acompañante del paciente",
+        "Motivo Historial",
+        "Motivo"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Antecedentes",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 111,
+      "campos": [
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Arritmias",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Arritmias",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionArritmias",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Cancer",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Cancer",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionCancer",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Diabetes",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Diabetes",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionDiabetes",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Hipoglicemia",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Hipoglicemia",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionHipoglicemia",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Internaciones",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Internaciones",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionInternaciones",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Infeccioso",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Infeccioso",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionInfeccioso",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosHormonales",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosHormonales",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionTranstornosHormonales",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosNeuronales",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosNeuronales",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionTranstornosNeuronales",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.pruebaVIH",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.pruebaVIH",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionPruebaVIH",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.pruebaTBC",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.pruebaTBC",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.observacionPruebaTBC",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.EPOC",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.EPOC",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionEPOC",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.artritisReumatoide",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.artritisReumatoide",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionArtritisReumatoide",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Autoinmunes",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Autoinmunes",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionAutoinmunes",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.lepra",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.lepra",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionLepra",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Dislipidemia",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Dislipidemia",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionDislipidemia",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Hipertension",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Hipertension",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionHipertension",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Valvulopatias",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Valvulopatias",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionValvulopatias",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosGastrointestinales",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.TranstornosGastrointestinales",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionTranstornosGastrointestinales",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Otros",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.Otros",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionOtros",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.ecv",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.ecv",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObservacionECV",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadVision",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadVision",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObsEnfermedadVision",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadCerebroVascular",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadCerebroVascular",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObsenfermedadCerebroVascular",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.eventoVascular",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.eventoVascular",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.ObsEventoVascular",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadRenal",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.enfermedadRenal",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.obsenfermedadRenal",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.nuropatia",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.nuropatia",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Patológicos",
+          "estado": false
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.obsnuropatia",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Patológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "QuirurgicoListado",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Quirúrgicos",
+          "estado": "[no-capturado]",
+          "placeholder": "Agregar Antecedente Quirúrgicos"
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.vacectomia",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Quirúrgicos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.vacectomia",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Quirúrgicos",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedentePatologicos.observacionvacectomia",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Quirúrgicos",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedentePatologicos.FechaVacectomia",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Quirúrgicos",
+          "estado": "[no-capturado]",
+          "placeholder": "Año",
+          "deshabilitado": true
+        },
+        {
+          "id": "TraumatologicoListado",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Traumatológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "Agregar Antecedente Traumatologicos"
+        },
+        {
+          "id": "trasfusionesListado",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes de trasfusiones sanguíneas",
+          "estado": "[no-capturado]",
+          "placeholder": "Agregar Antecedentes de trasnfusiones sanguineas"
+        },
+        {
+          "id": "alergicoListado",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Alérgicos",
+          "estado": "[no-capturado]",
+          "placeholder": "Agregar Antecedentes Alergicos"
+        },
+        {
+          "id": "FarmacologicoListado",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Farmacológicos",
+          "estado": "[no-capturado]",
+          "placeholder": "Agregar Antecedentes Farmacologicos"
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Hipertension",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Hipertension",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionHipertension",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Diabetes",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Diabetes",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionDiabetes",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Cardiovasculares",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.Cardiovasculares",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionCardiovasculares",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerMama",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerMama",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionCancerMama",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerProstata",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerProstata",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionCancerProstata",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerColon",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerColon",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionCancerColon",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerPulmon",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.CancerPulmon",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionCancerPulmon",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.OtroTipoCancer",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Antecedentes Familiares",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.OtroTipoCancer",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Antecedentes Familiares",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "AntecedenteFamiliar.ObservacionOtroTipoCancer",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "obligatorio": true,
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "AntecedenteFamiliar.ObservacionOtro",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Antecedentes Familiares",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "Antecedentes Quirúrgicos",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Descripción"
+          ],
+          "filas": 0,
+          "seccion": "Antecedentes Quirúrgicos"
+        },
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Descripción"
+          ],
+          "filas": 0,
+          "seccion": "Antecedentes Traumatológicos"
+        },
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Descripción"
+          ],
+          "filas": 0,
+          "seccion": "Antecedentes de trasfusiones sanguíneas"
+        },
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Descripción"
+          ],
+          "filas": 0,
+          "seccion": "Antecedentes Alérgicos"
+        },
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Descripción"
+          ],
+          "filas": 0,
+          "seccion": "Antecedentes Farmacológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Antecedentes Patológicos"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-antecedentes",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Antecedentes Patológicos",
+        "Antecedentes Quirúrgicos",
+        "Antecedentes Traumatológicos",
+        "Antecedentes de trasfusiones sanguíneas",
+        "Antecedentes Alérgicos",
+        "Antecedentes Farmacológicos",
+        "Antecedentes Familiares"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Hábitos y Gestión de Riesgo",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 52,
+      "campos": [
+        {
+          "id": "alert_message",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Hábitos Saludables",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese cuales son los hábitos saludables que ha tenido el p"
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.consumoAlimentosRicosFibra",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.consumoAlimentosRicosFibra",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.tomaAgua",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.tomaAgua",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.bajoConsumoGrasas",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.bajoConsumoGrasas",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.bajoConsumoSal",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.bajoConsumoSal",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.ejercicioPermanente",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.ejercicioPermanente",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.horasSuenoAdecuadas",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.horasSuenoAdecuadas",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.pesoAdecuadoTalla",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.pesoAdecuadoTalla",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.buenosHabitosAalimenticios",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.buenosHabitosAalimenticios",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.azucarAlta",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.azucarAlta",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.medicamentoAntiHipertensivos",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.medicamentoAntiHipertensivos",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.sustanciasPsicoactivas",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos No Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.sustanciasPsicoactivas",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos No Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.alcohol",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos No Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.alcohol",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos No Saludables",
+          "estado": true
+        },
+        {
+          "id": "alert_message",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Hábitos No Saludables",
+          "estado": "[no-capturado]",
+          "placeholder": "Frecuencia"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Hábitos No Saludables",
+          "estado": "",
+          "opciones": [
+            "Semanal",
+            "Diario",
+            "Mensual"
+          ]
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.estres",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos No Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.estres",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos No Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.sedentarismo",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos No Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.sedentarismo",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos No Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.habitoOtros",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Hábitos No Saludables",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.habitoOtros",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Hábitos No Saludables",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.toceMuchoMayoriaDias ",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Tamizaje para EPOC",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.toceMuchoMayoriaDias ",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Tamizaje para EPOC",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.tieneFlemaMayoriaDias ",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Tamizaje para EPOC",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.tieneFlemaMayoriaDias ",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Tamizaje para EPOC",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.seQuedaSinAliento",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Tamizaje para EPOC",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.seQuedaSinAliento",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Tamizaje para EPOC",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.mayor40Anios ",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Tamizaje para EPOC",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.mayor40Anios ",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Tamizaje para EPOC",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador ",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Tamizaje para EPOC",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "hs.HabitosGestionRiesgo.actualmenteFumaOExfumador ",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Tamizaje para EPOC",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "victimaMaltrato",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Gestión de Riesgo",
+          "estado": "NO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "NO",
+            "SI"
+          ]
+        },
+        {
+          "id": "",
+          "name": "preTestVIH",
+          "tipo": "checkbox",
+          "etiqueta": "Pre-test de VIH",
+          "seccion": "Gestión de Riesgo",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "victimaViolenciaSexual",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Gestión de Riesgo",
+          "estado": "NO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "NO",
+            "SI"
+          ]
+        },
+        {
+          "id": "",
+          "name": "postTestVIH",
+          "tipo": "checkbox",
+          "etiqueta": "Post-test de VIH",
+          "seccion": "Gestión de Riesgo",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "sintomaticoRespiratorio",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Gestión de Riesgo",
+          "estado": "NO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "NO",
+            "SI"
+          ]
+        },
+        {
+          "id": "",
+          "name": "discapacidad",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Gestión de Riesgo",
+          "estado": "SELECCIONE UNA OPCIÓN",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "SIN DISCAPACIDADES",
+            "FÍSICA",
+            "AUDITIVA",
+            "CEGUERA",
+            "SORDOCEGUERA",
+            "INTELECTUAL",
+            "PSICOSOCIAL",
+            "MÚLTIPLE"
+          ]
+        },
+        {
+          "id": "",
+          "name": "sangreoculta",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Gestión de Riesgo",
+          "estado": "",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "No Realizado",
+            "Negativo",
+            "Positivo"
+          ]
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Hábitos Saludables"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-habito-gestion-riesgo",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Hábitos Saludables",
+        "Hábitos No Saludables",
+        "Tamizaje para EPOC",
+        "Gestión de Riesgo"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Revision por sistema y Examen fisico",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 13,
+      "campos": [
+        {
+          "id": "alert_message",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Revisión por sistema",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "sintomasGenerales",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "Síntomas generales:",
+          "seccion": "Revisión por sistema",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "alert_message",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "taSistolicaAcostado",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "taDiastolicaAcostado",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "saturacionOxigeno",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Saturación de oxígeno (%):",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "placeholder": "0.0"
+        },
+        {
+          "id": "peso",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "Talla",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "obligatorio": true
+        },
+        {
+          "id": "IMC",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "perimetroPantorrilla",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Perímetro de pantorrilla (cm):",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]",
+          "placeholder": "0"
+        },
+        {
+          "id": "cinturaPelvica",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Examen físico Historico Cargar",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historico",
+          "seccion": "Examen físico",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Cargar",
+          "seccion": "Examen físico",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Revisión por sistema"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-examen-fisico",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Revisión por sistema",
+        "Examen físico Historico Cargar",
+        "Examen físico"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Ruta Crónicos",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 177,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Síndrome Metabólico",
+          "seccion": "Ingreso a programa",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Hipertensión Arterial",
+          "seccion": "Ingreso a programa",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Diabetes",
+          "seccion": "Ingreso a programa",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Enfermedad Renal Crónica",
+          "seccion": "Ingreso a programa",
+          "estado": false
+        },
+        {
+          "id": "resultadoHemograma",
+          "name": "resultadoHemograma",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultHemograma",
+          "name": "fechaResultHemograma",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoHemoglobina",
+          "name": "resultadoHemoglobina",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultHemoglobina",
+          "name": "fechaResultHemoglobina",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoHematocrito",
+          "name": "resultadoHematocrito",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultHematocrito",
+          "name": "fechaResultHematocrito",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoPlaquetas",
+          "name": "resultadoPlaquetas",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultPlaquetas",
+          "name": "fechaResultPlaquetas",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoLeucocitos",
+          "name": "resultadoLeucocitos",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultLeucocitos",
+          "name": "fechaResultLeucocitos",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoGlicemia",
+          "name": "resultadoGlicemia",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultGlicemia",
+          "name": "fechaResultGlicemia",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoHemoglobina",
+          "name": "resultadoHemoglobina",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "resultadoColesterolTotal",
+          "name": "resultadoColesterolTotal",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultColesterolTotal",
+          "name": "fechaResultColesterolTotal",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoColesterolHDL",
+          "name": "resultadoColesterolHDL",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultColesterolHDL",
+          "name": "fechaResultColesterolHDL",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoColesterolLDL",
+          "name": "resultadoColesterolLDL",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultColesterolLDL",
+          "name": "fechaResultColesterolLDL",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoTrigliceridos",
+          "name": "resultadoTrigliceridos",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultTrigliceridos",
+          "name": "fechaResultTrigliceridos",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoCreatinina",
+          "name": "resultadoCreatinina",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultCreatinina",
+          "name": "fechaResultCreatinina",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoCreatinuria",
+          "name": "resultadoCreatinuria",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultCreatinuria",
+          "name": "fechaResultCreatinuria",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoAlbuminuria",
+          "name": "resultadoAlbuminuria",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultAlbuminuria",
+          "name": "fechaResultAlbuminuria",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoMicroAlbuminuria",
+          "name": "resultadoMicroAlbuminuria",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultMicroAlbuminuria",
+          "name": "fechaResultMicroAlbuminuria",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoFosforo",
+          "name": "resultadoFosforo",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultFosforo",
+          "name": "fechaResultFosforo",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoAlbumina",
+          "name": "resultadoAlbumina",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultAlbumina",
+          "name": "fechaResultAlbumina",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoCalcio",
+          "name": "resultadoCalcio",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultCalcio",
+          "name": "fechaResultCalcio",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoPotasio",
+          "name": "resultadoPotasio",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultPotasio",
+          "name": "fechaResultPotasio",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoProteina24H",
+          "name": "resultadoProteina24H",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultProteina24H",
+          "name": "fechaResultProteina24H",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoDepuracionCreatininaEnOrina24H",
+          "name": "resultadoDepuracionCreatininaEnOrina24H",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultDepuracionCreatininaEnOrina24H",
+          "name": "fechaResulDepuracionCreatininaEnOrina24H",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoNitrogenoUreicoSangre",
+          "name": "resultadoNitrogenoUreicoSangre",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultNitrogenoUreicoSangre",
+          "name": "fechaResultNitrogenoUreicoSangre",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoHemoclasificacion",
+          "name": "resultadoHemoclasificacion",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultHemoclasificacion",
+          "name": "fechaResultHemoclasificacion",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoElectrocardiograma",
+          "name": "resultadoElectrocardiograma",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultElectrocardiograma",
+          "name": "fechaResultElectrocardiograma",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoEcografiaRenal",
+          "name": "resultadoEcografiaRenal",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultEcografiaRenal",
+          "name": "fechaResultEcografiaRenal",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoALT",
+          "name": "resultadoALT",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultALT",
+          "name": "fechaResultALT",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoAST",
+          "name": "resultadoAST",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultAST",
+          "name": "fechaResultAST",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoPTH",
+          "name": "resultadoPTH",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultPTH",
+          "name": "fechaResultPTH",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoMicroAlbuminuriaCreatinuria",
+          "name": "resultadoMicroAlbuminuriaCreatinuria",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultMicroAlbuminuriaCreatinuria",
+          "name": "fechaResultMicroAlbuminuriaCreatinuria",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoRelacionAlbuminaCreatinina",
+          "name": "resultadoRelacionAlbuminaCreatinina",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultRelacionAlbuminaCreatinina",
+          "name": "fechaResultRelacionAlbuminaCreatinina",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoDeSodio",
+          "name": "resultadoDeSodio",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultadoDeSodio",
+          "name": "fechaResultadoDeSodio",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "resultadoAcidoUrico",
+          "name": "resultadoAcidoUrico",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]",
+          "placeholder": "Resultado"
+        },
+        {
+          "id": "fechaResultAcidoUrico",
+          "name": "fechaResultAcidoUrico",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "resultadoPrograma.swUroanalisis",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "resultadoPrograma.swUroanalisis",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Datos y exámenes del programaHistorial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsIECA",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Patologías Relacionadas",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsIECA",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Patologías Relacionadas",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsARAII",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Patologías Relacionadas",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsARAII",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Patologías Relacionadas",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsTerapiaNoDialiticaEstadioRenal5",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Patologías Relacionadas",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsTerapiaNoDialiticaEstadioRenal5",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Patologías Relacionadas",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsTransplanteRenal",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Patologías Relacionadas",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsTransplanteRenal",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Patologías Relacionadas",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsHemodialisisAntecedentes",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Patologías Relacionadas",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "antecedentesRelacionados.EsHemodialisisAntecedentes",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Patologías Relacionadas",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.bajaAutoestima",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.bajaAutoestima",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ansiedad",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ansiedad",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.depresion",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.depresion",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.tristeza",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.tristeza",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.estres",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.estres",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.palpitaciones",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.palpitaciones",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.deportes",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.deportes",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.suenoInquieto",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.suenoInquieto",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.reflujo",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.reflujo",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.calculosRenales",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.calculosRenales",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.incontinenciaUrinaria",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.incontinenciaUrinaria",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.dificultadMiccion",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.dificultadMiccion",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.disfuncionErectil",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.disfuncionErectil",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ronca",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ronca",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.cansancio",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.cansancio",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.somnoliencia",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.somnoliencia",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.artralgias",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.artralgias",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.sarpullidos",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.sarpullidos",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ulcerasMiembrosInferiores",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Clínica del paciente",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "clinicaPaciente.ulcerasMiembrosInferiores",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Clínica del paciente",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "monitoreoProgramaPrenatalMadre.indiceMasaCorporal",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Obesidad",
+          "estado": "[no-capturado]",
+          "placeholder": "No Refiere",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "monitoreoProgramaPrenatalMadre.clasificacionIMCEG",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Obesidad",
+          "estado": "BAJO PESO: MENOS DE 18.5",
+          "opciones": [
+            "BAJO PESO: MENOS DE 18.5",
+            "PESO NORMAL: ENTRE 18.5 Y 24.9",
+            "SOBREPESO: ENTRE 25 Y 29.9",
+            "OBESIDAD CLASE I: ENTRE 30 Y 34.9",
+            "OBESIDAD CLASE II: ENTRE 35 Y 39.9",
+            "OBESIDAD CLASE III: MAS DE 40"
+          ],
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "Sex_radio",
+          "tipo": "radio",
+          "etiqueta": "Mujer",
+          "seccion": "Datos Referencia",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "Sex_radio",
+          "tipo": "radio",
+          "etiqueta": "Hombre",
+          "seccion": "Datos Referencia",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "Age_param",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "Serum_creatinine_param",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "estadio",
+          "name": "tfgCockcroft",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "estadio",
+          "name": "estadioApellido",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "estadio",
+          "name": "tfgMdrd",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "estadio",
+          "name": "tfgMdrCdk",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "diagnostico",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "",
+          "opciones": [
+            "No presenta ERC",
+            "Si presenta ERC",
+            "Indeterminado",
+            "Paciente no estudiado para ERC en el periodo de reporte"
+          ]
+        },
+        {
+          "id": "",
+          "name": "escalaKFREE.edad",
+          "tipo": "number",
+          "etiqueta": "Edad (años)",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "placeholder": "Edad"
+        },
+        {
+          "id": "",
+          "name": "escalaKFREE.sexo",
+          "tipo": "select-one",
+          "etiqueta": "Sexo",
+          "seccion": "Datos Referencia",
+          "estado": "Masculino",
+          "opciones": [
+            "Masculino",
+            "Femenino"
+          ]
+        },
+        {
+          "id": "",
+          "name": "escalaKFREE.tfg",
+          "tipo": "number",
+          "etiqueta": "TFG (ml/min/1.73m²)",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "placeholder": "TFG"
+        },
+        {
+          "id": "",
+          "name": "escalaKFREE.albuminaCreatinina",
+          "tipo": "number",
+          "etiqueta": "Relación albuminuria/Creatinina en orina (mg/g)",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "placeholder": "mg/g"
+        },
+        {
+          "id": "seguimientoPrograma",
+          "name": "seguimientoPrograma",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "rcv",
+          "name": "rcv",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "BAJO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "BAJO",
+            "MODERADO",
+            "ALTO"
+          ]
+        },
+        {
+          "id": "",
+          "name": "edad",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "colesterolTotal",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "colesterolHDL",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "fumador",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "sistolica",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]",
+          "deshabilitado": true
+        },
+        {
+          "id": "",
+          "name": "tratamiento",
+          "tipo": "radio",
+          "etiqueta": "Si",
+          "seccion": "Datos Referencia",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "tratamiento",
+          "tipo": "radio",
+          "etiqueta": "No",
+          "seccion": "Datos Referencia",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "rcvFramigham",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "nivelRiesgo",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Datos Referencia",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "olvidoTomarMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Test De Morisky-Green",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "olvidoTomarMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Test De Morisky-Green",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "tomaMedicamentoHoraIndicada",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Test De Morisky-Green",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "tomaMedicamentoHoraIndicada",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Test De Morisky-Green",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "sienteBienDejaTomarMedicacion",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Test De Morisky-Green",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "sienteBienDejaTomarMedicacion",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Test De Morisky-Green",
+          "estado": true
+        },
+        {
+          "id": "",
+          "name": "sienteMalDejaTomarMedicacion",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Test De Morisky-Green",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "sienteMalDejaTomarMedicacion",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Test De Morisky-Green",
+          "estado": true
+        },
+        {
+          "id": "comentariosFinales",
+          "name": "comentariosFinales",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Análisis, Comentarios y recomendaciones de seguimiento",
+          "estado": "[no-capturado]",
+          "placeholder": "Observación"
+        },
+        {
+          "id": "conducta",
+          "name": "conducta",
+          "tipo": "select-one",
+          "etiqueta": "Conducta*",
+          "seccion": "Plan de cuidados",
+          "estado": "Seleccione una opción",
+          "opciones": [
+            "Seleccione una opción",
+            "Control",
+            "Alta"
+          ]
+        },
+        {
+          "id": "proximaConsulta",
+          "name": "proximaConsulta",
+          "tipo": "select-one",
+          "etiqueta": "Próxima consulta*",
+          "seccion": "Plan de cuidados",
+          "estado": "Seleccione una opción",
+          "opciones": [
+            "Seleccione una opción",
+            "1 mes",
+            "2 meses",
+            "3 meses",
+            "4 meses",
+            "5 meses",
+            "6 meses",
+            "7 meses",
+            "8 meses",
+            "9 meses",
+            "10 meses",
+            "11 meses",
+            "12 meses",
+            "Alta"
+          ]
+        },
+        {
+          "id": "",
+          "name": "estadio5desistimiento",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "estadio5desistimiento",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "requiereDialitica",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "requiereDialitica",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Ruta PyM (Juventud, Adultez o Vejez) desde los 18 años",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Ruta PyM (Juventud, Adultez o Vejez) desde los 18 años",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "RENALSER",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "RENALSER",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "PSMH",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "PSMH",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Vive Saludable (obesidad)",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Vive Saludable (obesidad)",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Ser Resiliente",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Ser Resiliente",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "CuidarSer",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "CuidarSer",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Mujer sana",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Mujer sana",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Ser Joven (18-24 años)",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Ser Joven (18-24 años)",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Amarte (Artritis)",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Amarte (Artritis)",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Ser Vihda",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Ser Vihda",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Cancer",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Cancer",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "PAI (adulto)",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "PAI (adulto)",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Salud Bucal",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Salud Bucal",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Respira",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Respira",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Salud mental",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Salud mental",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "Sostenerte",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Sostenerte",
+          "seccion": "Plan de cuidados",
+          "estado": false
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historial",
+          "seccion": "Datos y exámenes del programa",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Calcular Test",
+          "seccion": "Tasa De Filtración Glomerular",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ingreso a programa"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-pes",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Ingreso a programa",
+        "Datos y exámenes del programaHistorial",
+        "Datos y exámenes del programa",
+        "Patologías Relacionadas",
+        "Clínica del paciente",
+        "Obesidad",
+        "Clasificación del riego por patología al finalizar la valoración",
+        "Datos Referencia",
+        "Tasa De Filtración Glomerular",
+        "Escala de KFREE",
+        "Seguimiento al programa",
+        "CALCULO FRAMINGHAM",
+        "Test De Morisky-Green",
+        "Escala de Glawsglow",
+        "Clasificación de Edmonton",
+        "Análisis, Comentarios y recomendaciones de seguimiento",
+        "Plan de cuidados"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Paraclínicos",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 4,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "date",
+          "etiqueta": "",
+          "seccion": "ResultadosLaboratorios ExternosHistorico",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "",
+          "estado": "[no-capturado]",
+          "placeholder": "Search"
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Laboratorios Externos",
+          "seccion": "Resultados",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historico",
+          "seccion": "Resultados",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "ResultadosLaboratorios ExternosHistorico",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Código",
+            "Nombre",
+            "Analito",
+            "Fecha Resultado",
+            "Resultado",
+            "Observación"
+          ],
+          "filas": 0,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ResultadosLaboratorios ExternosHistorico"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-paraclinicos",
+        "ngb-accordion",
+        "angular2-multiselect",
+        "c-icon",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "ResultadosLaboratorios ExternosHistorico",
+        "Resultados"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Impresión Diagnostica",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 11,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Análisis y Plan Historial",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese la descripción del análisis y plan"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "",
+          "estado": "[no-capturado]",
+          "placeholder": "Search"
+        },
+        {
+          "id": "",
+          "name": "pr",
+          "tipo": "checkbox",
+          "etiqueta": "",
+          "seccion": "Diagnóstico",
+          "estado": true
+        },
+        {
+          "id": "DiagnosticoPrincipal_TipoDiagnosticoPpal_Nombre",
+          "name": "TipoDiagnosticoPpal",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Diagnóstico",
+          "estado": "CONFIRMADO REPETIDO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "CONFIRMADO NUEVO",
+            "CONFIRMADO REPETIDO",
+            "IMPRESION DIAGNOSTICA"
+          ],
+          "obligatorio": true
+        },
+        {
+          "id": "DiagnosticoPrincipal_FinalidadConsulta_Nombre",
+          "name": "FinalidadConsulta",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Diagnóstico",
+          "estado": "TRATAMIENTO",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "DIAGNOSTICO",
+            "TRATAMIENTO",
+            "REHABILITACION",
+            "PALIACION",
+            "OTRA"
+          ],
+          "obligatorio": true
+        },
+        {
+          "id": "DiagnosticoPrincipal_CausaExterna_Nombre",
+          "name": "CausaExterna",
+          "tipo": "select-one",
+          "etiqueta": "",
+          "seccion": "Diagnóstico",
+          "estado": "ENFERMEDAD GENERAL",
+          "opciones": [
+            "SELECCIONE UNA OPCIÓN",
+            "OTRO TIPO DE ACCIDENTE",
+            "EVENTO ADVERSO EN SALUD",
+            "ENFERMEDAD GENERAL",
+            "OTRA VÍCTIMA DE CONFLICTO ARMADO COLOMBIANO"
+          ],
+          "obligatorio": true
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "¿Requiere incapacidad?",
+          "seccion": "IncapacidadHistorial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Certificado Aislamiento COVID-19?",
+          "seccion": "CERTIFICADOS",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "Certificado de alta COVID-19?",
+          "seccion": "CERTIFICADOS",
+          "estado": false
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historial",
+          "seccion": "Análisis y Plan",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "Diagnóstico",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "¿Principal?",
+            "Código",
+            "Descripción"
+          ],
+          "filas": 7,
+          "seccion": "Diagnóstico"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Análisis y Plan Historial"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-impresion-diagnostica",
+        "ngb-accordion",
+        "angular2-multiselect",
+        "c-icon",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Análisis y Plan Historial",
+        "Análisis y Plan",
+        "Diagnóstico",
+        "IncapacidadHistorial",
+        "Incapacidad",
+        "CERTIFICADOS"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Conducta",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 15,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "",
+          "estado": "[no-capturado]",
+          "placeholder": "Search"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "",
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "select-one",
+          "etiqueta": "Via*",
+          "seccion": "Medicamentos Historial",
+          "estado": "ORAL",
+          "opciones": [
+            "Seleccione",
+            "ORAL",
+            "INTRAMUSCULAR",
+            "ENDOVENOSO",
+            "TOPICO",
+            "PIEL",
+            "INTRAVENOSO",
+            "SUBCUTÁNEA-INTRAMUSCULAR",
+            "INTRAVENOSO-INTRAMUSCULAR",
+            "ORAL-INTRAVENOSO",
+            "ORAL-INTRAVENOSO-INTRAMUSCULAR",
+            "OJOS",
+            "LIQUIDO INTRAVENOSO",
+            "RESPIRACION FIO2",
+            "NEBULIZAR-INHALADOR",
+            "ORAL-INTRAMUSCULAR",
+            "ENDOTRAQUEAL",
+            "NO APLICA",
+            "SUBCUTÁNEA",
+            "INTRAMUSCULAR",
+            "VAGINAL",
+            "RECTAL",
+            "INTRATECAL",
+            "BUCAL",
+            "CUTÁNEA (TÓPICA)",
+            "INHALATORIA",
+            "INTRAARTICULAR",
+            "INTRADÉRMICA (ID)",
+            "NASAL",
+            "ÓTICA"
+          ]
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "*",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "select-one",
+          "etiqueta": "Unidad",
+          "seccion": "Medicamentos Historial",
+          "estado": "Horas",
+          "opciones": [
+            "Seleccione",
+            "Minutos",
+            "Horas",
+            "Días",
+            "Semanas"
+          ]
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Días *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "number",
+          "etiqueta": "Cantidad *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "",
+          "tipo": "textarea",
+          "etiqueta": "Indicaciones *",
+          "seccion": "Medicamentos Historial",
+          "estado": "[no-capturado]"
+        },
+        {
+          "id": "",
+          "name": "seEntregaronMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Medicamentos Historial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "seEntregaronMedicamentos",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Medicamentos Historial",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "RecomendacionesMedicas",
+          "tipo": "textarea",
+          "etiqueta": "",
+          "seccion": "Recomendaciones Medicas",
+          "estado": "[no-capturado]",
+          "placeholder": "Ingrese las recomendaciones"
+        },
+        {
+          "id": "",
+          "name": "segumientoNoPresencial",
+          "tipo": "radio",
+          "etiqueta": "SI",
+          "seccion": "Seguimientos",
+          "estado": false
+        },
+        {
+          "id": "",
+          "name": "segumientoNoPresencial",
+          "tipo": "radio",
+          "etiqueta": "NO",
+          "seccion": "Seguimientos",
+          "estado": true
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "dropdownBasic1",
+          "texto": "Historial",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Imagenologia",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Laboratorio",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Servicios",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Consulta",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Paquetes",
+          "seccion": "Ordenamientos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Historial",
+          "seccion": "Medicamentos",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Post Fechado",
+          "seccion": "Medicamentos Historial",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "@*FarmacologicoTabla*@",
+          "encabezados": [
+            "Código",
+            "Nombre",
+            "Cantidad",
+            "Nota",
+            "Fecha de consulta",
+            "Acción"
+          ],
+          "filas": 11,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-conducta",
+        "ngb-accordion",
+        "mat-menu",
+        "angular2-multiselect",
+        "c-icon",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Ordenamientos HistorialImagenologia LaboratorioServiciosConsultaPaquetes",
+        "Ordenamientos",
+        "Medicamentos Historial",
+        "Medicamentos",
+        "Recomendaciones Medicas",
+        "Seguimientos"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Actividad de Educación",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 4,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "Escribe 3 o más caracteres",
+          "estado": "[no-capturado]",
+          "placeholder": "Escribe 3 o más caracteres"
+        },
+        {
+          "id": "",
+          "name": "observacion",
+          "tipo": "text",
+          "etiqueta": "Observación",
+          "seccion": "Escribe 3 o más caracteres",
+          "estado": "[no-capturado]",
+          "placeholder": "Observación",
+          "obligatorio": true
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Agregar",
+          "seccion": "Escribe 3 o más caracteres",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "Fecha",
+            "Codigo",
+            "Descripción",
+            "Observacion",
+            "Profesional"
+          ],
+          "filas": 0,
+          "seccion": "Escribe 3 o más caracteres"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "Fecha",
+            "Codigo",
+            "Descripción",
+            "Observacion",
+            "Profesional"
+          ],
+          "filas": 0,
+          "seccion": "HISTORICO DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "ACTIVIDAD DE EDUCACIÓN"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-actividad-educacion",
+        "ngb-accordion",
+        "angular2-multiselect",
+        "c-icon",
+        "c-templaterenderer",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "ACTIVIDAD DE EDUCACIÓN",
+        "Escribe 3 o más caracteres",
+        "HISTORICO DE EDUCACIÓN"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Configuración Programa",
+      "url": "/viva/HCHealth/",
+      "totalCampos": 3,
+      "campos": [
+        {
+          "id": "",
+          "name": "",
+          "tipo": "checkbox",
+          "etiqueta": "",
+          "seccion": "Finalización de Programa",
+          "estado": false
+        },
+        {
+          "id": "vgl-q",
+          "name": "",
+          "tipo": "text",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]",
+          "placeholder": "🔍 Buscar paciente por nombre o cédula…"
+        },
+        {
+          "id": "vgl-file",
+          "name": "",
+          "tipo": "file",
+          "etiqueta": "",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "estado": "[no-capturado]"
+        }
+      ],
+      "botones": [
+        {
+          "id": "",
+          "texto": "▼",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "Informacion del Paciente",
+          "seccion": "[PACIENTE]",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-lab-injector",
+          "texto": "🧬 Auto-Labs (Athenea)",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "vgl-examen-normalidad",
+          "texto": "🩺 Normalidad fija",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "▶",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🗓️",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "📋",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        },
+        {
+          "id": "",
+          "texto": "🧪",
+          "seccion": "📋 Prevención (PyM) pendiente",
+          "deshabilitado": false
+        }
+      ],
+      "tablas": [
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        },
+        {
+          "id": "",
+          "encabezados": [
+            "x"
+          ],
+          "filas": 1,
+          "seccion": "Finalización de Programa"
+        }
+      ],
+      "componentes": [
+        "app-root",
+        "app-barra-lateral",
+        "mat-sidenav-container",
+        "mat-sidenav",
+        "mat-sidenav-content",
+        "mat-toolbar",
+        "router-outlet",
+        "app-index",
+        "app-datos-paciente",
+        "ngb-tabset",
+        "app-configuracion-pyp",
+        "ngb-accordion",
+        "app-odontograma-visualizacion",
+        "app-indicadores",
+        "google-chart"
+      ],
+      "titulos": [
+        "Finalización de Programa"
+      ],
+      "rutas": [
+        "https://neps.everestintelligent.com/viva/EverHealth/"
+      ]
+    },
+    {
+      "pestana": "Ordenamientos HistorialImagenologia LaboratorioServiciosCons",
+      "error": "no se volvió a encontrar"
+    },
+    {
+      "pestana": "Medicamentos Historial",
+      "error": "no se volvió a encontrar"
+    },
+    {
+      "pestana": "Recomendaciones Medicas",
+      "error": "no se volvió a encontrar"
+    },
+    {
+      "pestana": "Seguimientos",
+      "error": "no se volvió a encontrar"
+    }
+  ],
+  "_saneado": {
+    "por": "tools/sanear_mapa.js",
+    "motivo": "El capturador guardaba en botones[].seccion el título de la sección que contiene cada botón, y en la historia clínica ese título ES la cabecera del paciente. Se detectó al auditar los mapas antes de publicarlos como material de grounding.",
+    "sustituciones": {
+      "nombresDePersona": 11,
+      "correos": 0,
+      "telefonos": 0,
+      "numerosLargos": 0
+    }
+  }
+}

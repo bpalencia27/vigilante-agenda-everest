@@ -590,6 +590,18 @@ module.exports = {
       t.cierto(importantTotal === 349, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 349, salió ${importantTotal})`);
     });
 
+    // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
+    // Redactor IA) pinta con <div style="..."> SIN clase propia dentro de #vgl-ia-modal. El
+    // blindaje tipográfico (:where(...:not([class]))) solo cubría span/b/small/label/p, no
+    // div — una regla de Everest de mayor peso para div{color:X} podía ganar por herencia y
+    // dejar ilegible la caja que bloquea generar la nota sin categoría de riesgo.
+    t.caso("Regla I - #vgl-ia-modal blinda también los <div> sin clase propia (1.22)", () => {
+      const linea = (css.split("\n")).find((l) => l.includes("#vgl-ia-modal :where("));
+      t.cierto(!!linea, "debe existir la regla de blindaje tipográfico para #vgl-ia-modal");
+      t.cierto(!!linea && linea.includes("div:not([class])"),
+        "debe incluir div:not([class]) — _pintarCriticos pinta con <div style=\"...\"> sin clase propia: " + linea);
+    });
+
     t.caso("Regla H - los tokens de escala tipográfica siguen declarados en ambas listas, sin cambiar de valor", () => {
       const declaracion = /--t-micro:12px;--t-body:14px;--t-lead:16px;/g;
       const usos = css.match(declaracion) || [];

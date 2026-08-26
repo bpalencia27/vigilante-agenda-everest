@@ -1,0 +1,7208 @@
+{
+ "funcion": "_regla_arbieca",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 50.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 59.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    60.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 60.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    61.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 61.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    89.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 89.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    90.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 90.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "LOSARTAN 50 MG",
+    120.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "LOSARTAN 50 MG",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 120.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 50.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 59.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    60.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 60.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    61.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 61.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    89.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 89.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    90.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 90.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "enalapril 10",
+    120.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "enalapril 10",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 120.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 50.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 59.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    60.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 60.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    61.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 61.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    89.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 89.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    90.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 90.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "TELMISARTAN 40",
+    120.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "TELMISARTAN 40",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 120.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "IECA/ARA-II (Telmisartán/Losartán/Enalapril): vigilar potasio sérico y creatinina. Ajustar a dosis máxima recomendada con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    30.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 30.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    31.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 31.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    44.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 44.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    45.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 45.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    46.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 46.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    50.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 50.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    59.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 59.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    60.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 60.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    61.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 61.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    89.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 89.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    90.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 90.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "amlodipino 5",
+    120.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "ieca_ara2",
+    "medicamento_detectado": "amlodipino 5",
+    "conducta": "SUSPENDER",
+    "mensaje": "IECA/ARA-II: suspender o reducir dosis por hiperkalemia severa (K+ 6.0 mEq/L > 5.5 mEq/L).",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 120.0,
+    "severidad": "CRITICAL",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  }
+ ]
+}

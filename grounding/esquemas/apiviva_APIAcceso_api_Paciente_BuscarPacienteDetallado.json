@@ -1,0 +1,254 @@
+{
+  "metodo": "GET",
+  "ruta": "/apiviva/APIAcceso/api/Paciente/BuscarPacienteDetallado",
+  "parametros": [
+    "idPaciente"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ],
+  "esquemaRespuesta": {
+    "error": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "mensaje": "null",
+    "data": {
+      "id": {
+        "tipo": "number",
+        "ejemplo": 80856
+      },
+      "primer_Apellido": "string(11 car) [OCULTO]",
+      "segundo_Apellido": "string(11 car) [OCULTO]",
+      "primerApellido": "string(11 car) [OCULTO]",
+      "segundoApellido": "string(11 car) [OCULTO]",
+      "nombre": "string(11 car) [OCULTO]",
+      "nombreCompleto": "string(11 car) [OCULTO]",
+      "tipo_Identificacion": "string(11 car)",
+      "identificacion": "string(11 car) [OCULTO]",
+      "fecha_Nacimiento": "string(11 car) [OCULTO]",
+      "edad": {
+        "tipo": "number",
+        "ejemplo": 82
+      },
+      "edadAnos": {
+        "tipo": "number",
+        "ejemplo": 82
+      },
+      "edadMeses": {
+        "tipo": "number",
+        "ejemplo": 991
+      },
+      "edadSemanas": {
+        "tipo": "number",
+        "ejemplo": 3964
+      },
+      "edadDias": {
+        "tipo": "number",
+        "ejemplo": 30132
+      },
+      "isPac": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "sexo": "string(1 car)",
+      "genero_Id": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "genero": "string(0 car)",
+      "orientacion_Id": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "orientacion": "string(0 car)",
+      "estadoCivil_Id": "null",
+      "estadoCivil": "string(0 car)",
+      "municipioResidenciad_Id": "null",
+      "municipioResidenciad": "string(0 car)",
+      "nivelSisben": "string(2 car)",
+      "direccion": "string(11 car) [OCULTO]",
+      "telefono": "null [OCULTO]",
+      "celular": "string(11 car) [OCULTO]",
+      "correo": "string(11 car) [OCULTO]",
+      "escolaridad_Id": "null",
+      "escolaridad": "string(0 car)",
+      "ocupacion": "string(0 car)",
+      "ocupacion_Id": "null",
+      "eps": {
+        "id": {
+          "tipo": "number",
+          "ejemplo": 2
+        },
+        "nombre": "string(11 car) [OCULTO]",
+        "epsCiudades": "null"
+      },
+      "religion_Id": "null",
+      "religion": "string(0 car)",
+      "etnia_Id": "null",
+      "etnia": "string(0 car)",
+      "desplazado": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "familiasAccion": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "riesgo_Segmentacion": "null",
+      "riesgo_Enfermedad": "null",
+      "riesgo_Atencion": "null",
+      "sw_Tratamiento_Datos": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "sw_Acepto_Contacto": {
+        "tipo": "boolean",
+        "ejemplo": true
+      },
+      "tipoPlan": {
+        "tipo": "string(12 car)",
+        "ejemplo": "BENEFICIARIO"
+      },
+      "regimen": "string(12 car)",
+      "rango": "string(1 car)",
+      "estado": {
+        "tipo": "string(3 car)",
+        "ejemplo": "ACT"
+      },
+      "cuotaMod": {
+        "tipo": "number",
+        "ejemplo": 5000
+      },
+      "exentoPago": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "municipioNacimiento_Id": "null",
+      "municipioNacimiento": "string(11 car)",
+      "estrato_Id": "null",
+      "estrato": "string(0 car)",
+      "discapacidad_Id": "null",
+      "discapacidad": "string(0 car)",
+      "swAcepto": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "salario": "null",
+      "medicoCabecera": "null",
+      "swGrupoFamiliar": {
+        "tipo": "boolean",
+        "ejemplo": false
+      },
+      "cuotaModeradora": {
+        "tipo": "number",
+        "ejemplo": 0
+      },
+      "contratos": {
+        "tipo": "array",
+        "elementos": 0
+      },
+      "sedes": {
+        "tipo": "array",
+        "elementos": 12,
+        "de": {
+          "id": {
+            "tipo": "number",
+            "ejemplo": 12
+          },
+          "nombre": "null [OCULTO]",
+          "ciudadID": {
+            "tipo": "number",
+            "ejemplo": 0
+          },
+          "ciudadNombre": "null",
+          "estado": "null",
+          "swFactura": {
+            "tipo": "boolean",
+            "ejemplo": false
+          },
+          "direccion": "string(11 car) [OCULTO]",
+          "telefono": "string(11 car) [OCULTO]",
+          "loginApp": "null",
+          "swImprimirRecibo": {
+            "tipo": "boolean",
+            "ejemplo": false
+          },
+          "swEnviarRecibo": {
+            "tipo": "boolean",
+            "ejemplo": false
+          }
+        }
+      },
+      "programasPaciente": {
+        "tipo": "array",
+        "elementos": 3,
+        "de": {
+          "id": {
+            "tipo": "number",
+            "ejemplo": 184216
+          },
+          "descripcion": "string(15 car)",
+          "edad_Inicial": "null",
+          "edad_Final": "null",
+          "sexo": "null",
+          "sw_Enfermeria": {
+            "tipo": "boolean",
+            "ejemplo": false
+          },
+          "sw_Morbilidad": {
+            "tipo": "boolean",
+            "ejemplo": false
+          },
+          "estado": "null",
+          "fechaCreacion": "string(fecha)",
+          "swProgramaEspecial": {
+            "tipo": "boolean",
+            "ejemplo": true
+          }
+        }
+      },
+      "listParentesco": "null",
+      "cohorte": "null",
+      "discapacidadNeps": "null",
+      "puntosReferenciaResidencia": {
+        "tipo": "array",
+        "elementos": 0
+      },
+      "puntosReferenciaUbicacionHabitual": {
+        "tipo": "array",
+        "elementos": 0
+      },
+      "mediosTransporte": {
+        "tipo": "array",
+        "elementos": 0
+      },
+      "ubicacionesBOT": {
+        "tipo": "array",
+        "elementos": 0
+      },
+      "reside": "null",
+      "barrio": "null",
+      "departamentoResidencia": "null",
+      "departamentoResidencia_Id": "null",
+      "nombreLugarUbica": "null",
+      "municipioUbica": "null",
+      "direccionUbica": "null [OCULTO]",
+      "departamentoUbica": "null",
+      "barrioVeredaUbica": "null",
+      "nombreEdificioUrbanizacion": "null"
+    },
+    "imprimir": {
+      "tipo": "boolean",
+      "ejemplo": false
+    },
+    "valor": {
+      "tipo": "number",
+      "ejemplo": 0
+    },
+    "link": "null"
+  }
+}

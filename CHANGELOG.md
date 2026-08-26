@@ -4,6 +4,13 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.6.46] — 2026-08-26 (Fusión: se recuperan ~31 suites de prueba de `claude/v17-6-2-22ago`)
+
+### 🧪 Recuperación de suites del Panel del paciente y del motor RCV/fármaco
+- Se fusiona `origin/claude/v17-6-2-22ago` (v17.6.4b) sobre esta rama para recuperar suites de prueba que existían solo en aquella rama y cubren el Panel del paciente y el motor RCV/fármaco. En todo conflicto de código de producción gana la versión más reciente y auditada de esta rama (v17.6.45): ninguna decisión clínica vigente (piso diabético/edad ALTO, control +7d, FTL a día hábil anterior, techo de ventana Estado A=21 días, apnea del sueño nunca true, ERC como programa rector solo fuera de G1/G2) se pierde en la fusión.
+
+---
+
 ## [Versión 17.6.45] — 2026-08-24 (Barrido S+ total — Auto-Labs ya no anuncia como escrito un resultado que el navegador rechazó)
 
 ### 🐛 Auto-Labs ya no cuenta como "resultado llevado" uno que el navegador rechazó en silencio

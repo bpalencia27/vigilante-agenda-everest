@@ -15,7 +15,11 @@ const crypto = require("crypto");
 
 module.exports = {
   nombre: "Seguridad, PHI, XSS e Integridad (M1)",
-  cubre: ["scrubPII", "sanitizePII", "escapeHtml", "verificarIntegridadArranque"],
+  cubre: [
+    "scrubPII", "sanitizePII", "escapeHtml", "verificarIntegridadArranque",
+    "_sanearMensajeError", "mtrSanearTextoLibreAI", "mtrClasificarEstadioTfg",
+    "openLaboratoriosModal", "vglExportLogs"
+  ],
 
   async pruebas(t, api, env, cargar) {
     const RUTA_USERSCRIPT = path.join(__dirname, "..", "vigilante_agenda.user.js");
@@ -40,6 +44,33 @@ module.exports = {
 
       // Números cortos (< 6 dígitos) como horas o códigos se conservan
       t.igual(c.api.scrubPII("Código 12345 y valor 99999"), "Código 12345 y valor 99999");
+    });
+
+    t.caso("scrubPII: censura fechas en múltiples formatos (ISO, guión, punto, texto en español)", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Nacido el 12-04-1980 en Bogotá"), "Nacido el [FECHA_CENSURADA] en Bogotá");
+      t.igual(c.api.scrubPII("Fecha de control: 1980-04-12"), "Fecha de control: [FECHA_CENSURADA]");
+      t.igual(c.api.scrubPII("Ingreso el 12.04.1980"), "Ingreso el [FECHA_CENSURADA]");
+      t.igual(c.api.scrubPII("Nació el 12 de abril de 1980"), "Nació el [FECHA_CENSURADA]");
+      t.igual(c.api.scrubPII("Nacimiento: 15 agosto 1975"), "Nacimiento: [FECHA_CENSURADA]");
+    });
+
+    t.caso("scrubPII: censura direcciones sin símbolo numeral (#)", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Vive en Carrera 7 No. 32-10"), "Vive en [DIR_CENSURADA]");
+      t.igual(c.api.scrubPII("Dirección: Calle 100 Número 15-20"), "Dirección: [DIR_CENSURADA]");
+      t.igual(c.api.scrubPII("Ubicación Mz 4 Casa 12"), "Ubicación [DIR_CENSURADA]");
+      t.igual(c.api.scrubPII("Reside en Vereda La Palma 12-3"), "Reside en [DIR_CENSURADA]");
+    });
+
+    t.caso("scrubPII: censura cédulas de 5 dígitos y documentos PPT de 11 dígitos", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.scrubPII("Paciente con Cédula 54321 en sala"), "Paciente con Cédula [CENSURADO] en sala");
+      t.igual(c.api.scrubPII("Extranjero con PPT 10000000001"), "Extranjero con PPT [CENSURADO]");
+      t.igual(c.api.scrubPII("doc_10000000001"), "doc_[CENSURADO]");
     });
 
     t.caso("scrubPII: censura celulares colombianos (300-350) con diversos formatos", () => {
@@ -116,6 +147,76 @@ module.exports = {
       t.igual(c.api.sanitizePII(texto), c.api.scrubPII(texto));
     });
 
+    t.caso("_sanearMensajeError: neutraliza cédulas con puntos, guiones, espacios y secuencias de 5-12 dígitos", () => {
+      const c = cargar({ silencioso: true });
+
+      t.falso(c.api._sanearMensajeError("Fallo con CC 79.246.813").includes("79.246.813"));
+      t.falso(c.api._sanearMensajeError("Error en 43-040-508").includes("43-040-508"));
+      t.falso(c.api._sanearMensajeError("Error en 79 246 813").includes("79 246 813"));
+      t.falso(c.api._sanearMensajeError("Fallo paciente 54321").includes("54321"));
+      t.falso(c.api._sanearMensajeError("Fallo PPT 10000000001").includes("10000000001"));
+    });
+
+    t.caso("mtrSanearTextoLibreAI: censura nombres de pacientes precedidos por tratamientos clínicos y honoríficos", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.mtrSanearTextoLibreAI("Paciente Maria Perez refiere dolor"), "Paciente [NOMBRE_CENSURADO] refiere dolor");
+      t.igual(c.api.mtrSanearTextoLibreAI("Don Carlos Gomez asiste a control"), "Don [NOMBRE_CENSURADO] asiste a control");
+      t.igual(c.api.mtrSanearTextoLibreAI("Doña Ana Ruiz refiere cefalea"), "Doña [NOMBRE_CENSURADO] refiere cefalea");
+      t.igual(c.api.mtrSanearTextoLibreAI("Acompañada por su hijo Carlos Rodriguez"), "Acompañada por su hijo [NOMBRE_CENSURADO]");
+      t.igual(c.api.mtrSanearTextoLibreAI("¿Cuál fue la última creatinina de Don Pedro?"), "¿Cuál fue la última creatinina de Don [NOMBRE_CENSURADO]?");
+    });
+
+    t.caso("mtrClasificarEstadioTfg: devuelve vacío ante NaN, 0, números negativos o entradas inválidas", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.api.mtrClasificarEstadioTfg(NaN), "");
+      t.igual(c.api.mtrClasificarEstadioTfg(0), "");
+      t.igual(c.api.mtrClasificarEstadioTfg(-10), "");
+      t.igual(c.api.mtrClasificarEstadioTfg("invalido"), "");
+      t.igual(c.api.mtrClasificarEstadioTfg(null), "");
+      t.igual(c.api.mtrClasificarEstadioTfg(undefined), "");
+
+      // Valores válidos
+      t.igual(c.api.mtrClasificarEstadioTfg(95), "G1");
+      t.igual(c.api.mtrClasificarEstadioTfg(75), "G2");
+      t.igual(c.api.mtrClasificarEstadioTfg(50), "G3a");
+      t.igual(c.api.mtrClasificarEstadioTfg(35), "G3b");
+      t.igual(c.api.mtrClasificarEstadioTfg(20), "G4");
+      t.igual(c.api.mtrClasificarEstadioTfg(10), "G5");
+    });
+
+    t.caso("openLaboratoriosModal: codifica y escapa doc_id en atheneaUrl evitando inyección de atributos", async () => {
+      const c = cargar({ silencioso: true });
+      const apt = {
+        doc_id: '123456" onclick="alert(1)',
+        nombre: "Paciente Prueba"
+      };
+
+      await c.api.openLaboratoriosModal(apt);
+      const modal = c.env.doc.getElementById("vgl-labs-modal");
+      t.cierto(!!modal, "el modal de laboratorios se abrió");
+      const html = modal.innerHTML;
+
+      t.falso(html.includes('" onclick="alert(1)"'), "no inyecta atributos en <a>");
+      t.cierto(html.includes("123456%22%20onclick%3D%22alert(1)"), "el payload viaja codificado en URI");
+    });
+
+    t.caso("Credenciales y Telemetría: no existen contraseñas en claro en localStorage ni URL con doc en exportación", () => {
+      const c = cargar({ silencioso: true });
+
+      t.igual(c.env.storage.getItem("vgl_ath_pass"), null, "prohibido vgl_ath_pass en localStorage");
+      t.igual(c.env.storage.getItem("vgl_ath_user"), null, "prohibido vgl_ath_user en localStorage");
+
+      // Simular ubicación con cédula
+      c.env.win.location.href = "https://neps.everestintelligent.com/viva/HCHealth/#doc=12345678";
+      c.env.win.location.hash = "#doc=12345678";
+
+      c.api.vglExportLogs();
+      const creados = c.env.doc._nodos.filter((n) => n.download && n.download.startsWith("BITACORA_VIGILANTE_REAL_"));
+      t.cierto(creados.length > 0, "generó archivo de exportación");
+    });
+
     // ===================================================================
     //  2. AUDITORÍA DOM Y PREVENCIÓN DE XSS (R1.2)
     // ===================================================================
@@ -147,6 +248,7 @@ module.exports = {
 
       // uxTrack con Default-Off no debe escribir en localStorage
       c.api.uxTrack("accion.prueba");
+      c.api._uxVolcarBuffer();
       t.igual(c.env.storage.getItem("vgl_ux"), null, "No debe registrar métricas con telemetría apagada");
     });
 

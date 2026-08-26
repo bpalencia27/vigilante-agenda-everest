@@ -6,6 +6,504 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.65 — 26-ago-2026 (auditoría 25-ago, sección 4: síndrome metabólico — decisión confirmada por el médico)
+
+Nueva función pura `mtrSindromeMetabolico(f)`: evalúa los 5 criterios estándar IDF
+(ajustados a Latinoamérica) — cintura >90cm hombre / >80cm mujer, triglicéridos ≥150,
+HDL <40 hombre / <50 mujer, PA ≥130/85 o ya en tratamiento antihipertensivo, glicemia en
+ayunas ≥100 o diabetes ya diagnosticada — y cuenta cuántos se cumplen. `enAntihipertensivos`
+y `diabetes` son los mismos flags booleanos ya usados en la clasificación de riesgo ASCVD,
+reutilizados como atajo (sin cifra cruda necesaria si ya hay tratamiento/diagnóstico). La
+cintura se lee de la casilla real de Everest `cinturaPelvica` (confirmada contra
+`grounding/mapas/MAPA_EVEREST_*.json`) vía el nuevo wrapper `mtrLeerCinturaDelDom(doc)`.
+
+CERO INFERENCIA en el resultado: `cumple` es un tri-estado `true | false | null`, nunca
+un booleano que fuerce una respuesta. `evaluables` cuenta cuántos de los 5 criterios
+tenían dato; `faltan = 5 - evaluables`. `cumple` es `true` si `count >= 3`; es `false`
+solo si NI SIQUIERA el mejor caso posible (`count + faltan`) puede llegar a 3 — es decir,
+que aunque los datos faltantes resultaran todos positivos, seguiría sin cumplir; en
+cualquier otro caso (el mejor caso SÍ podría llegar a 3, pero no hay dato suficiente para
+confirmarlo) queda `null`, nunca se asume "no cumple" solo porque falte información.
+
+**Mutación verificada**: la primera versión de la fórmula tenía un bug de límite —
+`cumple = (count>=3) ? true : (faltan===0 ? false : null)` — que devolvía `null` en vez
+de `false` cuando, aunque faltaran datos, el mejor caso posible ya no alcanzaba a 3 (p.
+ej. cintura y HDL negativos, 3 criterios sin dato, pero el mejor caso 0+3 SÍ podría llegar
+a 3 en ese ejemplo — el caso de prueba real usa 4 evaluados/0 cumplidos + 1 sin dato, mejor
+caso 0+1=1). Al aplicar esa mutación al código real (revirtiendo a la fórmula rota vía
+`cp`/`python3`), la prueba nueva
+`"mtrSindromeMetabolico: aunque falten datos, si ni el mejor caso llega a 3, cumple=false
+(no null)"` (suite 45) se puso roja (2233 pasan / 1 falla), confirmando que SÍ prueba el
+límite. Se restauró la fórmula correcta
+`cumple = (count>=3) ? true : ((count+faltan)<3 ? false : null)` y el banco volvió a verde
+(2234 pasan). Se añadieron 6 pruebas nuevas para `mtrSindromeMetabolico` en total (umbral
+3-de-5, cortes por sexo, atajos de tratamiento/diagnóstico, el caso `null` no-concluyente,
+el caso sin ningún dato, y este límite de `false` con datos incompletos).
+
+## v17.6.64 — 26-ago-2026 (auditoría 25-ago, sección 4: cNoHDL cableado — decisión confirmada por el médico)
+
+`mtrCnoHDL(ct, hdl)` (colesterol no-HDL = CT − HDL) ya existía, pura y probada, pero SIN
+NINGÚN llamador — pese a que el prompt de "Análisis y plan" (línea ~30783) le pide
+literalmente a la IA "menciona cNoHDL junto al LDL indicando si está en meta". El modelo
+tenía que inventarlo o calcularlo él mismo — justo lo que la cabecera del spec prohíbe
+(delegarle a un LLM un cálculo determinista). Se cablea en 3 puntos:
+`mtrHojaDeHechos`/`mtrHojaDeHechosTexto` (lo que ve la IA y lo que el recuadro muestra si
+falla) y `mtrJsonV68DesdeResumen` (`cno_hdl`/`cno_hdl_target`) — junto con su meta
+(`MTR_METAS_LIPIDICAS.cnoHdl`, ya existía) para que el modelo solo tenga que citar el
+número, nunca calcularlo.
+
+- **Mutación**: se forzaron `cNoHDL`/`metaCnoHdl` a `null` fijo en `mtrHojaDeHechos`. 1
+  roja: *"cNoHDL se calcula de CT y HDL..."*. Restaurado, banco vuelve a 2228 en verde.
+- **Pruebas nuevas**: `tests/suite_56_hoja_hechos.js` — 2 casos (cálculo real con meta, y
+  null sin inventar cuando falta CT/HDL); `tests/suite_57_ia_redaccion.js` — 2 aserciones
+  nuevas en el test existente del JSON v68.
+
+## v17.6.63 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.10: construida la segunda capa de blindaje de Enfermedad Actual — decisión confirmada por el médico)
+
+`mtrHechosSinExamenFisico`/`mtrQuitarExamenFisicoIA` (los nombres que citaba la auditoría)
+NO existen en este código — es funcionalidad nueva, no un arreglo de código existente. El
+médico confirmó construirla (entrevista de esta sesión). MTR_EA_SYS ya prohíbe en el PROMPT
+que la Enfermedad Actual traiga TFG/riesgo cardiovascular/meta LDL/laboratorios/signos
+vitales (esos van en Análisis y Plan) — pero un prompt es una instrucción, no una garantía.
+Se construye `mtrQuitarDatosProhibidosEA`: quita del borrador cualquier línea que empiece
+EXACTAMENTE con uno de los 5 prefijos que `mtrHojaDeHechosTexto` usa para esos datos
+("Signos vitales:", "Laboratorios y paraclínicos:", "Función renal:", "Riesgo
+cardiovascular:", "Meta LDL:") — nunca por contener la palabra en cualquier parte de la
+prosa. Se cablea en el conector, junto al saneador de `analisis_plan` que ya existía, solo
+para el modo `enfermedad_actual`.
+
+- **Mutación**: se redujo la lista a solo 2 de los 5 prefijos (los que la auditoría decía
+  que YA estaban cubiertos en la versión perdida). 1 roja: *"quita las 5 líneas
+  prohibidas..."*. Restaurado, banco vuelve a 2226 en verde.
+- **Pruebas nuevas**: `tests/suite_57_ia_redaccion.js` — 3 casos (las 5 líneas se quitan
+  conservando el resto; una mención de la palabra dentro de la prosa NO se filtra —solo el
+  prefijo exacto de línea—; texto vacío/null no lanza).
+
+## v17.6.62 — 26-ago-2026 (auditoría 25-ago, sección 7: "Probar conexión" no usaba el mismo respaldo de id anónimo)
+
+El botón "Probar y diagnosticar" (`#c-repgo`, en Ajustes) mandaba
+`equipo: (S.equipo||"").slice(0,40)` en vez de `_equipoId()` — el mismo respaldo que
+`reportar()` SIEMPRE usa (genera y persiste un id anónimo tipo `eq-xxxxxx` cuando el médico
+nunca puso un nombre a mano). Sin nombre manual, el botón mandaba `equipo:""` y esa fila de
+prueba caía en el balde "sin equipo" del tablero — un equipo distinto del que los reportes
+reales de ese mismo consultorio usan. Fix de una línea: `equipo: _equipoId()`.
+
+- **Mutación**: se revirtió a `(S.equipo||"").slice(0,40)`. 1 roja: *"c-repgo (Probar
+  conexión): manda el mismo _equipoId()..."* (equipo enviado vacío). Restaurado, banco
+  vuelve a 2223 en verde.
+- **Prueba nueva**: `tests/suite_15_interfaz_avanzada.js` — 1 caso, instancia propia con
+  `gmxhr` mockeado para capturar el payload real enviado al hacer clic en el botón.
+
+## v17.6.61 — 26-ago-2026 (auditoría 25-ago, sección 6: `GHOST.subscribe` — código muerto confirmado)
+
+`listeners`/`subscribe`/`notify` en `GHOST` formaban un pub-sub que nadie suscribía en todo
+el archivo (`GHOST.subscribe(`: 0 llamadores, confirmado con grep). `notify()` corría en
+CADA `set` del Proxy `state` — miles de veces por sesión — iterando un `Set` eternamente
+vacío: un no-op perpetuo en un camino caliente. Se retiran los tres (y su única llamada,
+dentro del `set` trap del Proxy `state`).
+
+- **No es un cambio de comportamiento**: por construcción, `notify()` nunca pudo tener
+  efecto observable (su único consumidor posible, `subscribe`, nunca se llamó en ningún
+  punto del archivo) — no aplica el ciclo de mutación roja/verde de siempre, porque no hay
+  ninguna prueba cuyo resultado pudiera depender de este código. Se verificó en su lugar que
+  `node tests/runner.js` sigue en verde (2222) tras el retiro, y que no queda ninguna
+  referencia colgante (`grep GHOST.subscribe/listeners/notify` → 0 resultados fuera del
+  comentario que documenta el retiro).
+- **No tocado**: `mtrChipResumenTexto` (también listado como "muerto confirmado" en la
+  auditoría) NO se retiró — su propio comentario dice "si esto desaparece, la alerta
+  clínica desapareció", lo que sugiere que podría ser una función que un refactor anterior
+  desconectó por accidente (una regresión real), no código genuinamente muerto. Retirarla
+  sin que el médico confirme cuál de las dos cosas es cerraría la puerta a recuperar una
+  alerta clínica si de verdad se perdió. Queda señalada, no tocada.
+
+## TABLERO/Codigo.gs — 26-ago-2026 (auditoría 25-ago, hallazgo 1.23: el resumen de telemetría podía mostrar la versión/fecha equivocada)
+
+`armarResumen()` (TABLERO/Codigo.gs:260, Google Apps Script — NO forma parte del userscript
+ni de `tests/runner.js`) sobrescribía `f.ultimo`/`f.ver` SIN comparar contra el valor ya
+guardado: el bucle procesa las hojas en orden fijo (`resumen`, `fraude`, `uso`, `error`,
+`entorno`, `prueba` al final), y el resultado dependía de qué hoja se procesó de ÚLTIMA, no
+de la fecha real más reciente. Un equipo que probó la conexión una vez hace semanas (hoja
+`prueba`, la última del arreglo) y desde entonces manda telemetría normal en una versión
+nueva podía aparecer 🔴 ATRASADO de forma falsa, con la versión vieja de esa prueba pisando
+la real. Fix: `f.ultimo`/`f.ver` solo se actualizan cuando la fecha de la fila actual es de
+verdad más reciente que la ya guardada.
+
+- **Sin banco de pruebas para este archivo**: `TABLERO/Codigo.gs` no tiene ninguna suite en
+  `tests/` (es Google Apps Script, acoplado a `SpreadsheetApp`, y no lo carga
+  `tests/runner.js`). No se pudo aplicar la disciplina de mutación verificada dentro del
+  banco. Se verificó el ALGORITMO por separado, con un script de Node desechable que
+  reproduce la lógica pura (sin `SpreadsheetApp`): con dos filas (`resumen` reciente en
+  v17.6.56, `prueba` vieja en v14.2.0, procesada al final) — la versión original (sin
+  comparar) da como resultado `14.2.0` (el bug reproducido); con el fix, da `17.6.56`
+  (correcto). Esto NO sustituye una prueba real en un banco; queda anotado como deuda si
+  algún día se arma un harness para `Codigo.gs`.
+- **1.15 y 1.17** (grupo lipídico, Estado R prioritario) y **1.10/1.13/1.18** (blindaje de
+  Enfermedad Actual, meta LDL individual, fila de divergencias del spec) siguen pendientes
+  — ver las entradas de esta misma sesión para el porqué de cada uno.
+
+## v17.6.60 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.22: la caja de "datos críticos" podía quedar ilegible por el CSS de Everest)
+
+`_pintarCriticos` (dentro de `#vgl-ia-modal` — la caja roja que bloquea generar la nota sin
+categoría de riesgo/TFG/medicamentos) pinta con `<div style="...">` SIN clase propia. El
+blindaje tipográfico `:where(...:not([class])){color:inherit}` (especificidad CERO,
+CLAUDE.md) solo cubría `span/b/small/label/p` para `#vgl-ia-modal`, no `div` — exactamente
+el patrón de bug #2 que el CLAUDE.md ya documenta, en un elemento que el censo previo (v17.6.4,
+v14.0.0) no cubrió. Fix: se añade `div:not([class])` a la lista de `#vgl-ia-modal`, siguiendo
+al pie de la letra la "regla práctica" del CLAUDE.md — nunca `#vgl-ia-modal div{color:inherit}`
+a pelo (eso reintroduciría el bug #1, especificidad tipo).
+
+- **Alcance**: se tocó SOLO `#vgl-ia-modal` (donde se confirmó el `<div>` sin clase), no los
+  otros 11 modales que comparten la misma lista — no se verificó que ellos tengan el mismo
+  problema, y `:where()` de especificidad cero no arriesga nada al no tocarlos.
+- **Nota de verificación**: no se corrió la verificación en Chromium contra un CSS "Everest"
+  simulado que el CLAUDE.md recomienda (sin navegador disponible en esta sesión) — el patrón
+  añadido es idéntico, carácter por carácter, al que ya usan las otras 11 líneas de este
+  mismo bloque (`:where(...:not([class])){color:inherit}`), ya validado y en producción.
+- **Mutación**: se quitó `div:not([class])` de la línea de `#vgl-ia-modal`. 1 roja: *"Regla
+  I - #vgl-ia-modal blinda también los `<div>` sin clase propia"*. Restaurado, banco vuelve
+  a 2222 en verde.
+- **Prueba nueva**: `tests/suite_25_cascada_css.js` — Regla I, verifica por texto que la
+  línea de blindaje de `#vgl-ia-modal` incluye `div:not([class])`.
+
+## v17.6.59 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.21: el dead-man switch no protegía la inserción de notas de IA)
+
+`vglEscrituraPermitida` (línea ~24531) tenía un ÚNICO llamador en todo el archivo
+(`vglLlenarFactoresEnEverest`, el llenado de antecedentes). El propio mensaje del dead-man
+promete "dejo de escribir en la historia clínica (llenar antecedentes **e insertar
+notas**)" — pero ningún punto de inserción de notas de texto libre generadas por IA
+consultaba el dead-man: con la escritura cortada (40+ días sin contacto con el servidor de
+control), el redactor seguía insertando notas en la historia como si nada. Fix: se añade el
+guardado a `mtrInsertarEnCasillaModo` (la inserción real del redactor, vía
+`MTR_CASILLAS_REDACTOR`), con un motivo explícito (`"deadman"`) distinto de los demás
+motivos de fallo de esa función.
+
+- **Mutación**: se quitó el guardado nuevo. El banco pasó de 2221 en verde a 1 roja: *"con
+  el dead-man switch cortando la escritura, no inserta nada y lo dice"* (insertaba igual).
+  Restaurado, banco vuelve a 2221 en verde.
+- **Prueba nueva**: `tests/suite_57_ia_redaccion.js` — 1 caso, mismo patrón de sellado que
+  ya usa `suite_68_v17_cola.js` para el llenado de antecedentes (`_vglDeadmanSellar` con un
+  sello de 40 días).
+
+## v17.6.58 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.20: Auto-Labs presentaba un fallo de lectura como hecho clínico)
+
+El botón "🧬 Auto-Labs (Athenea)" (rama final del `onclick`, vigilante_agenda.user.js:~5220)
+alcanzaba el mismo mensaje "Athenea no tiene laboratorios registrados" tanto con
+`labs===[]` (Athenea SÍ respondió: el paciente de verdad no tiene resultados) como con
+`labs===null` (`getAtheneaLabsAuto` NO PUDO leer — timeout, 500, red — contrato v16.2.8). Un
+fallo de lectura se presentaba como un hecho clínico verificado. Fix: rama nueva para
+`labs === null` con un mensaje honesto ("no se pudo leer... no es que no tenga
+laboratorios"), antes de la rama que ahora SOLO cubre el `[]` real.
+
+- **Test existente corregido**: `"createLabInjectorUI: sin solicitud resoluble..."`
+  (suite_15) ya ejercitaba exactamente `labs===null` (verificado con el harness — su
+  comentario decía "acaba en []", que era incorrecto) pero su aserción era una OR de tres
+  mensajes posibles, así que toleraba el bug sin detectarlo. Se corrigió el comentario y se
+  volvió una aserción exacta.
+- **Mutación**: se forzó la nueva rama a `else if (false)` (inalcanzable). El banco pasó de
+  2220 en verde a 1 roja: el test corregido esperaba "No se pudo leer Athenea" y el botón
+  volvía a mostrar el mensaje genérico de "sin laboratorios". Restaurado, banco vuelve a
+  2220 en verde.
+
+## v17.6.57 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.16 y 1.19)
+
+**1.16 — un resultado real sin fecha perdía su valor.** `mtrEstadoAnalito` (línea ~30008)
+devolvía `valor: null` siempre que faltaba la fecha, aunque `ultimo.valor` sí trajera un
+resultado real (alcanzable: `_extractAtheneaFecha` puede devolver `null`). Se ordenaba un
+examen que YA TIENE resultado, sin forma de saberlo desde este objeto. Fix: se conserva el
+valor real; el motivo distingue "hay un resultado pero sin fecha" de "no hay ningún
+resultado registrado".
+
+**1.19 — MTT-CONSOLIDA podía adelantar un LDL a 2-3 semanas de cambiar la estatina.**
+`mtrConsolidarMtt` comparaba con `Math.abs()` (bidireccional): un recontrol que cae
+DESPUÉS de la FTL se fusionaba igual que uno que cae ANTES. Con la FTL antes del recontrol
+(caso corriente: FTL a 14-21 d, recontrol de LDL a 42 d tras cambiar la estatina), la
+diferencia entraba en el `<=60` de fusión y el LDL se adelantaba a una toma de 2-3 semanas
+— por debajo del piso de 4 semanas que hace interpretable la respuesta a un cambio de
+estatina. Fix: la fusión solo aplica cuando es un RETRASO del recontrol (la FTL cae en o
+después de su fecha natural) — nunca cuando lo adelantaría.
+
+- **Mutación 1.16**: se revirtió a `valor: null` fijo. 1 roja: *"un analito CON valor pero
+  SIN fecha no pierde el valor"*. Restaurado, banco vuelve a verde.
+- **Mutación 1.19**: se revirtió a `Math.abs()` bidireccional. 1 roja: *"una falla grave
+  cuyo recontrol cae DESPUÉS de la FTL nunca se ADELANTA fusionándola"* (con el caso real
+  de la auditoría, volvía a fusionar en vez de quedar como fecha dedicada). Restaurado,
+  banco vuelve a verde (2220).
+- **Test existente actualizado**: `"una falla grave cuyo recontrol cae cerca de la FTL se
+  FUSIONA"` (suite_49) ejercitaba exactamente el escenario "adelantar" que el bug describe
+  (FTL 15 días ANTES del recontrol) — se cambió a un retraso real (FTL 15 días DESPUÉS)
+  para seguir siendo representativa del comportamiento correcto.
+- **Pruebas nuevas**: `tests/suite_46_ftl_sabados.js` (2 casos, 1.16) y
+  `tests/suite_49_falla_recontrol.js` (1 caso nuevo + 1 actualizado, 1.19).
+- **Nota**: 1.17 (Estado R prioritario del RAC≥30 vencido) y 1.18 (documentar la regla del
+  50% en la tabla de divergencias del spec) quedan pendientes — 1.17 requiere implementar
+  una regla de programación del spec v68 ("piso HOY+21") que no tengo completa y que toca
+  el motor CERO VENCIDOS ya muy afinado; 1.18 requiere el archivo `MOTOR_RCV_V68_SPEC.md`
+  real, que no existe en este repositorio (el médico lo pegó directo en otra conversación).
+- **1.15** (grupo lipídico partido) tampoco se tocó: requiere una decisión de diseño real
+  (cómo debe agruparse CT/HDL/LDL/TG) que la auditoría no especifica.
+
+## v17.6.56 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.14: `order_list` del JSON dejaba fuera lo cosechado)
+
+`mtrJsonV68DesdeResumen` (vigilante_agenda.user.js:31789) armaba `order_list` como
+`faltantes+vencidos` en vez de usar `plan.ordenar` (que `mtrPlanParaclinicos` ya construye
+bien: faltantes+vencidos de los drivers, MÁS lo cosechado — un examen vigente que se
+adelanta a esta misma toma porque le queda poca vigencia — y los pasajeros en estado A, sin
+bloqueados, deduplicado). Un cosechado NUNCA aparece en faltantes ni en vencidos (si
+estuviera vencido no habría nada que cosechar), así que la nota clínica que el médico copia
+a la historia describía MENOS exámenes de los que el asistente realmente iba a ordenar. Fix
+de una línea: `order_list: claves(plan.ordenar)`.
+
+- **Test existente actualizado**: `"mtrJsonV68DesdeResumen mapea lo determinista..."` usaba
+  un `plan` sintético sin campo `ordenar` (no representa la forma real que produce
+  `mtrPlanParaclinicos`); se le añadió `ordenar: [...]` para seguir siendo representativo.
+- **Mutación**: se revirtió a `[].concat(claves(plan.faltantes), claves(plan.vencidos))`.
+  El banco pasó de 2217 en verde a 1 roja: *"order_list incluye lo COSECHADO..."* (un
+  cosechado, COLESTEROL_HDL, no aparecía). Restaurado, banco vuelve a 2217 en verde.
+- **Prueba nueva**: `tests/suite_57_ia_redaccion.js` — 1 caso con un cosechado que
+  faltantes/vencidos por sí solos no traen.
+
+## v17.6.55 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.12: "sin estatina de alta intensidad" se disparaba con el paciente YA en dosis alta)
+
+Mismo patrón exacto que el bug de HbA1c de v17.6.0 (documentado arriba en este mismo
+archivo): `mtrResumenDesdeModalLabs` leía los medicamentos reales del paciente
+(`mtrLeerMedicamentos`) **DESPUÉS** de llamar a `mtrResumenClinico`, solo para adjuntarlos
+como `resumen.medicamentos` (para mostrarlos) — pero `mtrPlanFallas` → `mtrInerciaEstatina`
+corren **DENTRO** de `mtrResumenClinico`, así que nunca veían `c.meds`. Efecto: "⚠ LDL en
+falla sin estatina de alta intensidad" se disparaba SIEMPRE que hay falla de LDL, incluso en
+un paciente con atorvastatina 80 mg real — una afirmación de hecho falsa que empuja a subir
+una dosis ya máxima. Fix: se adelanta la lectura de medicamentos a ANTES de la llamada a
+`mtrResumenClinico`, y se pasa como `meds:` en el ctx (reutilizando la misma lectura para
+`resumen.medicamentos`, sin leer dos veces).
+
+- **Nota de alcance**: el hallazgo hermano 1.13 (meta de LDL individual "solo apretar") NO
+  se tocó en esta entrega — a diferencia de 1.12, no es un simple cableado: no existe
+  todavía ningún mecanismo para que el médico fije una meta de LDL individual (el
+  equivalente de `metaHba1cManual` para LDL simplemente no existe, ni botón ni
+  almacenamiento). Construirlo es una funcionalidad clínica nueva, no un bug fix, y queda
+  pendiente de que el médico la pida explícitamente.
+- **Mutación**: se quitó `meds: _medsParaMotor` del ctx (volviendo a la lectura tardía). El
+  banco pasó de 2216 en verde a 1 roja: *"el adaptador ahora SÍ manda los medicamentos
+  reales al motor..."* (con atorvastatina 80 mg real, `inercia` seguía dando `true`).
+  Restaurado, banco vuelve a 2216 en verde.
+- **Prueba nueva**: `tests/suite_47_recuadro_clinico.js` — 1 caso, de punta a punta
+  (`mtrRefrescarMedicamentos` con fixture inline de atorvastatina 80 mg → `mtrResumenDesdeModalLabs`
+  → `resumen.fallas.inercia`), mismo patrón que las pruebas de HbA1c ya existentes en la
+  misma suite.
+
+## v17.6.54 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.11: ASCVD Colombia mezclaba ecuación masculina con factor femenino)
+
+`mtrClasificarRiesgoCv` (paso 4, vigilante_agenda.user.js:28920): el ASCVD crudo
+(`mtrAscvdPceCrudo`) elige ecuación con `mtrEsSexoFemenino(sexo)` — femenina si es cierto,
+MASCULINA en cualquier otro caso (su rama `else`, que cubre sexo ausente). El factor de
+ajuste Colombia elegía con `mtrEsSexoMasculino(sexo)` — una función DISTINTA que, con sexo
+ausente, TAMBIÉN da `false` (ninguna de las dos funciones exige que el dato exista para
+devolver `false`). Resultado: con sexo ausente, el crudo salía calculado con la ecuación
+MASCULINA pero el factor aplicado era el FEMENINO (0.54 en vez de 0.28) — casi el doble de
+riesgo ajustado, puede saltar de BAJO a MODERADO o de MODERADO a ALTO. Fix: el factor se
+elige con la MISMA función (`mtrEsSexoFemenino`) que decidió la ecuación — queda siempre
+pareado con la que de verdad se usó, sin inventar un "sexo por defecto" nuevo.
+
+- **Mutación**: se revirtió el factor a `mtrEsSexoMasculino(x.sexo) ? 0.28 : 0.54`. El
+  banco pasó de 2215 en verde a 1 roja: *"PASO 4 — con sexo AUSENTE, el factor de ajuste
+  debe parear con la ecuación realmente usada"* (sin sexo daba un % distinto al de
+  "Hombre", pese a usar la misma ecuación). Restaurado, banco vuelve a 2215 en verde.
+- **Prueba nueva**: `tests/suite_45_riesgo_cv.js` — 1 caso (sin sexo == Hombre; Mujer sí
+  distinto de Hombre, para no romper el caso real de ajuste por sexo).
+
+## v17.6.53 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.8 y 1.9: dos elecciones manuales del médico que una recarga borraba)
+
+Mismo módulo (`openAgendamientoModal`, sección de toma de laboratorios), mismo patrón de
+bug: una recarga del panel de laboratorio "olvidaba" una elección que el médico ya había
+hecho a mano, por no tener un flag equivalente a `_controlElegidoManual`/
+`_celularSmsEditadoManual` (que sí protegen la fecha de control y el celular del SMS).
+
+**1.8 — el interruptor "Agendar también la Toma de Muestras" se apagaba solo.**
+`cargarHorasLab` (línea ~19790) ponía `checked=false` al INICIO de cada recarga (cambio
+de chip de día, cambio de especialidad) y solo lo re-marcaba si era el default de
+labs-primero Y el médico nunca lo había tocado (`!labChk.dataset.tocado`). Si el médico lo
+marcaba a mano en modo normal, la siguiente recarga lo apagaba y NUNCA lo volvía a marcar
+— al confirmar se creaba solo la cita de control, sin la toma que el médico pidió. Fix: se
+guarda el ÚLTIMO VALOR elegido a mano (`_labChkEditadoManual`/`_labChkValorManual`), no
+solo si "ya lo tocó".
+
+**1.9 — la fecha de TOMA elegida a mano se descartaba en cada cambio de fecha de control.**
+`renderLabDayChips` (línea ~19821) reasignaba el centro (y `selectedLabDateInfo`) al ítem
+central de la sugerencia SIN comprobar si el médico ya había elegido otra fecha de toma con
+un clic — a diferencia de `_controlElegidoManual`, que sí protege la fecha de control.
+`cargarHoras`, que corre en cada cambio de fecha de control, vuelve a llamar a
+`renderLabDayChips` con una sugerencia recién calculada, descartando la elección. Un
+segundo punto del MISMO bug: `cargarHoras` también pisaba directamente el texto de
+`#vgl-lab-date-lbl` con la fecha recién sugerida, sin pasar por `renderLabDayChips` — el
+chip activo podía quedar bien pero la etiqueta visible mostraba otra fecha. Fix: nuevo flag
+`_labFechaTomaElegidaManual`, consultado en los dos puntos.
+
+- **Mutación 1.8**: se revirtió a `dataset.tocado`/`_chkPorDefecto` puro (sin los nuevos
+  flags). El banco pasó de 2214 en verde a 1 roja: *"el interruptor de Toma de Muestras
+  marcado A MANO sobrevive a un cambio de día de laboratorio"*. Restaurado, banco vuelve a
+  2214 en verde.
+- **Mutación 1.9**: se revirtieron los dos puntos (centro de `renderLabDayChips` y el texto
+  de `cargarHoras`) a la versión sin flag. El banco pasó de 2214 en verde a 1 roja: *"la
+  fecha de TOMA elegida a mano sobrevive a un cambio de fecha de control"* (esperaba
+  "15/09/2026..." y volvió a dar "09/09/2026...", la fecha recién recalculada).
+  Restaurado, banco vuelve a 2214 en verde.
+- **Pruebas nuevas**: `tests/suite_15_interfaz_avanzada.js` — 2 casos, ambos con el modal
+  completo de agendamiento montado en el DOM simulado (mismo patrón que el resto de la
+  suite: `_mockAgendaComun`-style fetch/gmxhr, clics reales vía `disparar`).
+
+## v17.6.52 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.7: el recorte de RAC≥30 nunca aplicaba con contexto clínico)
+
+`_vigenciaDiasParaAnalito` (vigilante_agenda.user.js:3804, usada por `_analitosRcvVencidos`
+— el aviso de entrada y el antiduplicado de "Ordenar") calculaba `base` desde
+`vigenciaPorEstadio` cuando el llamador aportaba `opts.estadio`/`opts.programa`, y hacía
+`if (base != null) return base;` **antes** de llegar a la rama que recorta la vigencia de RAC
+a 90 días cuando hay albuminuria franca (≥30 mg/g). Con contexto clínico (el caso normal), esa
+rama nunca se alcanzaba. Verificado: RAC 350 en DM2/HTA con contexto → 180 días en vez de 90;
+un paciente con macroalbuminuria podía quedar declarado "RAC vigente" seis meses en la pantalla
+que el médico ve al entrar. Fix: el recorte de RAC≥30 pasa a ser un TOPE (`Math.min`) sobre
+`base`, no una rama alternativa — mismo criterio que ya usa la vía correcta
+(`mtrVigenciaDiasNorma`, línea ~29796).
+
+- **Mutación**: se revirtió el orden (recorte de RAC después del `if (base != null) return
+  base;`, como estaba). El banco pasó de 2212 en verde a 1 roja: *"el recorte de RAC≥30 se
+  aplica IGUAL con contexto de programa/estadio"* (esperaba 90 y volvió a dar 180 con
+  contexto). Restaurado, banco vuelve a 2212 en verde.
+- **Prueba nueva**: `tests/suite_08_labs_cronicos.js` — 1 caso (HTA, DM2, sin albuminuria, y
+  ERC G4 para confirmar que el tope nunca alarga la vigencia por encima de la base).
+
+## v17.6.51 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.6: sin peso, el plan ERC desaparece sin avisar por qué)
+
+Consecuencia directa de 1.5: sin peso, `erc.estadioAdministrativo` sale `null`
+(`mtrEvaluarErc` exige peso para Cockcroft-Gault), y `mtrVigenciaDias("ERC", ...)` devuelve
+`null` para los 9 drivers de ERC → todos `NO_APLICA` → `mtrPlanParaclinicos` (línea ~30059)
+devolvía el mensaje genérico "no hay ningún examen que vigilar con este programa y estadio".
+Verificado con el harness (ERC, edad 70, creat 1.6, sin peso): plan vacío, cero exámenes
+pendientes — al médico se le presentaba como "no hay nada que vigilar" en vez de "falta el
+peso". No pasa en HTA/DM2 puros (esas tablas no usan estadio). Fix: `mtrPlanParaclinicos`
+recibe una bandera `pesoFaltaParaEstadio` (calculada por `mtrResumenClinico` desde
+`erc.faltan`) y, cuando aplica, cambia el mensaje a uno que dice la verdad.
+
+- **Mutación**: se revirtió el cambio en `mtrPlanParaclinicos` (vuelta al mensaje genérico
+  fijo, sin la bandera). El banco pasó de 2211 en verde a 1 roja: *"ERC sin peso: el plan
+  avisa que FALTA EL PESO, no que 'no hay nada que vigilar'"* (esperaba que el motivo
+  mencionara "falta el peso" y seguía diciendo "no hay ningún examen que vigilar").
+  Restaurado, banco vuelve a 2211 en verde.
+- **Pruebas nuevas**: `tests/suite_46_ftl_sabados.js` — 2 casos (con la bandera, y sin ella
+  para confirmar que el comportamiento previo no cambia). Verificado también de punta a
+  punta vía `mtrResumenClinico` con el harness (edad 70, sexo F, sin peso, creat 1.6, ERC).
+
+## v17.6.50 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.5: sexo ausente sube el estadio renal sin avisar)
+
+`mtrEvaluarErc` (vigilante_agenda.user.js:29358): con sexo vacío, `mtrEsSexoFemenino` da
+`false` y AMBAS fórmulas (Cockcroft-Gault, CKD-EPI) se calculan como si el paciente fuera
+hombre. Verificado con el harness: `{edad:70, peso:70, creat:1.0, sexo:''}` → CrCl 68.1 = G2;
+el mismo caso con `sexo:'F'` → CrCl 57.8 = **G3a**. Una mujer sin sexo registrado sube un
+estadio administrativo entero (cambia vigencias, ventana ANR, bloqueos de PTH/Fósforo/Albúmina)
+sin que nada distinga "calculado con un supuesto" de "calculado con dato real". La vía legacy
+(`estadioRenalDelPaciente`) ya expone `sexoAusente` para esto (línea ~15930, consumida en un
+aviso "esto sobreestima la TFG en un 15 %" en línea 16003) — el motor `mtr*` no lo había
+heredado. Fix: se añade el mismo campo `sexoAusente` al resultado de `mtrEvaluarErc`.
+
+- **Mutación**: se forzó `sexoAusente: false` fijo (ignorando el sexo real). El banco pasó de
+  2209 en verde a 1 roja: *"sexo ausente: el número sale calculado COMO HOMBRE... sexoAusente
+  avisa que es un supuesto"* (esperaba `true` y obtuvo `false`). Restaurado, banco vuelve a
+  2209 en verde.
+- **Prueba nueva**: `tests/suite_45_riesgo_cv.js` — 1 caso (con y sin sexo, mismo paciente).
+- **Alcance de esta entrega**: se expone el campo en el motor (igual que ya existe en la vía
+  legacy); no se conectó todavía a un aviso visible en el panel renal del motor `mtr*` — eso
+  es un cambio de UI más grande (encontrar el consumidor correcto de `mtrResumenClinico` /
+  `mtrPanelRiesgoRenalHtml`) que queda para una entrega aparte si el médico lo pide.
+
+## v17.6.49 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.4: SOMF/PCR colándose como uroanálisis)
+
+`_ultimaFechaPorAnalito` (vigilante_agenda.user.js:2911, con `{uroanalisisPorComponentes:true}`,
+usada por `_analitosRcvVencidos`) era el ÚNICO punto que llamaba `_matchUroComponente(lab)` sin
+exigir primero `_esAnalitoDeOrina(lab)` — a diferencia de `_hayComponenteUroReal` e
+`injectLabsIntoCronicos`, que sí lo exigen. `_matchUroComponente` solo mira el NOMBRE:
+"SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización de colon) casa con el componente SANGRE, y
+"PROTEINA C REACTIVA" casa con PROTEINURIA. Efecto real: un SOMF/PCR reciente podía declarar el
+uroanálisis "vigente" por su fecha, silenciando el aviso justo cuando el parcial de orina real
+SÍ está vencido. Fix de una línea: se añade `_esAnalitoDeOrina(lab) &&` a la condición.
+
+- **Mutación**: se quitó `_esAnalitoDeOrina(lab) &&` de la condición. El banco pasó de 2208 en
+  verde a 1 roja: *"un SOMF (sangre oculta en heces) o una PCR NO cuentan como componente de
+  uroanálisis"* (esperaba que el uroanálisis siguiera faltando y obtuvo `false`, es decir, se
+  dio por vigente). Restaurado, banco vuelve a 2208 en verde.
+- **Prueba nueva**: `tests/suite_08_labs_cronicos.js` — 1 caso (SOMF y PCR, dos analitos).
+
+## v17.6.48 — 26-ago-2026 (reconstrucción de trabajo perdido: dos bugs de `mtrVerificarCifrasIA`)
+
+Reconstruido a partir de un fragmento de chat de la sesión desconectada (`session_01SY2...`,
+rama `claude/actualizar-rama-vigilante-07ce6f`, nunca pusheada) que el médico pegó. Dos bugs
+reales en `mtrVerificarCifrasIA` (vigilante_agenda.user.js:31063, verificador anti-alucinación
+de cifras de la nota de IA):
+
+1. **`re2` partía una cita legal en una PA falsa**: `(\d{1,3})\s*\/\s*(\d{1,3})` sin blindaje
+   de borde hacía match de "280/201" dentro de "Resolución 3280/2018" — se marcaba como una
+   presión arterial inventada que el modelo nunca escribió. Fix: `(?<!\d)...(?!\d)` exige que
+   la fracción no tenga OTRO dígito pegado justo antes/después (una PA real nunca lo tiene).
+2. **El contexto mostrado cortaba palabras largas a la mitad**: el corte fijo (24 caracteres
+   antes / 20 después del número) no buscaba el espacio más cercano — "SINTOMATOLOGICAMENTE"
+   salía como "ATOLOGICAMENTE". Fix: se extiende el borde (tope +15 caracteres por lado) hasta
+   el siguiente espacio cuando el corte cae a mitad de palabra.
+
+- **Mutación 1**: se revirtió el blindaje de `re2` a la versión sin `(?<!\d)/(?!\d)`. El banco
+  pasó de 2207 en verde a 1 roja: *"una cita legal tipo 'Resolución 3280/2018' no se confunde
+  con una PA"* (esperaba 0 y obtuvo 2). Restaurado, banco vuelve a verde.
+- **Mutación 2**: se revirtió el ensanche de borde al `slice` fijo original. 1 roja: *"el
+  contexto mostrado nunca corta una palabra a la mitad"* (esperaba que incluyera
+  "SINTOMATOLOGICAMENTE", obtuvo "ATOLOGICAMENTE presenta 45 mg."). Restaurado, banco vuelve
+  a verde (2207).
+- **Pruebas nuevas**: `tests/suite_57_ia_redaccion.js` — 2 casos.
+
+**Nota de alcance**: el fragmento de chat también describía un tercer arreglo (`getAtheneaLabsAuto`,
+un reintento automático cuando la precarga de labs devuelve una lista vacía sospechosa) y una
+feature (listado agrupado por fecha de vencimiento con "Sin historial" aparte). No se
+reconstruyeron en esta entrega: el código actual de `getAtheneaLabsAuto`/`_conTope` ya tiene una
+defensa null≠[] y de lectura parcial (`__vglIncompleto`) más sofisticada que la que describe el
+fragmento, y no se pudo confirmar contra qué escenario exacto se probó el fix perdido sin
+inventar el criterio — pendiente de que el médico aporte más contexto o decida el alcance.
+
+## v17.6.47 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.2: `esMedicoRCVActivo` por sub-cadena)
+
+`esMedicoRCVActivo` (vigilante_agenda.user.js:16110) comparaba con `docName.includes(p)`:
+"PINO" es sub-cadena de "OSPINO" y de "ESPINOSA", así que un médico ajeno al programa RCV con
+uno de esos apellidos quedaba forzado a `swIsPyM`/`swProgramaEspecial = true` en el POST real
+de `apiAccesoAsignarTurno` (escribe la cita en Athenea con esos flags mal puestos). Fix: se
+compara por TOKEN completo (`docName.split(/[^A-Z0-9]+/)`), no por sub-cadena — conserva el
+match de "BPALENCIA"/"EESTRADA" como token propio.
+
+- **Mutación**: se restauró temporalmente `docName.includes(p)` (quitando el split por
+  tokens). El banco pasó de 2205 en verde a **1 prueba roja**: "esMedicoRCVActivo: un apellido
+  que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado" (caso "JORGE
+  OSPINO" → obtuvo `true` en vez de `false`). Se restauró el fix y el banco volvió a 2205 en
+  verde.
+- **Prueba nueva**: `tests/suite_15_interfaz_avanzada.js` — 3 casos (OSPINO, ESPINOSA no
+  activan; "DR. PINO" sí sigue activando).
+
+## v17.6.46 — 26-ago-2026 (fusión de `claude/v17-6-2-22ago`: recuperación de 31 suites)
+
+Fusión de `origin/claude/v17-6-2-22ago` (v17.6.4b) sobre `claude/hunks-cluster-remaining-9fjixx`
+(v17.6.45) para recuperar 31 suites de prueba del Panel del paciente y el motor RCV/fármaco
+que solo existían en la rama vieja. En `vigilante_agenda.user.js` ganó HEAD (v17.6.45, más
+auditado) en todo conflicto de "misma función, versión más nueva"; el merge de git dejó
+además dos bloques de código completos duplicados sin marcar como conflicto (diff
+mal-alineado entre las dos reorganizaciones del módulo del Panel y del kill-switch), que se
+detectaron y eliminaron aparte.
+
+Se restauraron unas pocas funciones puramente auxiliares que solo existían en la rama vieja
+y que las suites recuperadas necesitan (`mtrCnoHDL`, `mtrSumarDiasHabiles`,
+`mtrItemSugeridoEnRango`, `mtrRenderResumenClinicoHtml`, `_vglAvisoContextoFaltante`,
+`_getUltimoRelevoParaTest`, `_relojEstadoParaTest`/`_relojAjustarParaTest`) — ninguna pisa
+ni cambia una decisión clínica vigente de v17.6.45.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Se reintrodujo la línea `uxTrack("fn.agendar.abandon")` residual dentro del `closeMod` del modal de Laboratorios (el bug de copia-pega que v17.6.20 ya había corregido en HEAD, reintroducido por el merge sin marcar conflicto) | Telemetría de uso del panel (v12.5) | "embudo de Laboratorios: abrir y cerrar ANTES de que lleguen los datos cuenta como abandono" — "cerrar Laboratorios NO contamina el embudo de Agendamiento" |
+
+Banco tras la fusión: **2.204 comprobaciones en verde** (con `TZ=America/Bogota`; el banco
+depende de esa zona horaria para una prueba de v17.6.39), cobertura de funciones públicas
+88.6 % (770/869).
+
 ## v17.6.1 — 22-ago-2026 (remediación tras la auditoría de producción de v17.6.0)
 
 Banco antes (cierre de v17.6.0): 2.266 comprobaciones · después: **2.272** (6 pruebas

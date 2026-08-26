@@ -1,0 +1,20 @@
+{
+  "metodo": "POST",
+  "ruta": "/apiviva/APIAcceso/api/Acceso/BuscarCitasDisponibles",
+  "parametros": [
+    "PacienteId",
+    "EspecialidadId",
+    "FechaDeseada",
+    "ProgramaId",
+    "PuntoAtencionId",
+    "PerfilCodigo",
+    "swParticular",
+    "presupuestoId"
+  ],
+  "estadosVistos": [
+    200
+  ],
+  "observadoEn": [
+    "captura_agendamiento_oficial_20260810.json"
+  ]
+}

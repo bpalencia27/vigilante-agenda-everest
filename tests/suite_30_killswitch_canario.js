@@ -35,6 +35,43 @@ module.exports = {
       t.igual(c.env.win.GM_info.script.version, verHeader, "GM_info.script.version extrae dinámicamente @version");
     });
 
+    // =====================================================================
+    // v15.x — GUARDIA ESTRUCTURAL DEL KILL-SWITCH.
+    // emergencyTeardown() solo puede cancelar lo que este registrado en state.timers.
+    // Se colaron TRES setInterval de boot() sin referencia (los dos del PyM y la sonda de
+    // pestañas): con el kill-switch tirado, la interfaz desaparecia y el cartel decia
+    // "Pausa de seguridad remota activa" mientras la pestaña seguia consultando SharePoint
+    // y desempacando el libro de PyM cada 10 min. Esta prueba lee el fuente y exige que
+    // TODO setInterval de boot() quede guardado en una constante que llegue a state.timers,
+    // para que el proximo que se agregue no se escape en silencio.
+    // =====================================================================
+    t.caso("R5.1-bis: todo setInterval creado en boot() queda registrado en state.timers (si no, el kill-switch no lo apaga)", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      const iBoot = src.indexOf("\n  function boot() {");
+      t.cierto(iBoot > 0, "se localiza boot() en el fuente");
+      const cuerpo = src.slice(iBoot);
+
+      // Todo lo que llega a state.timers, en cualquiera de los push de boot().
+      const registrados = new Set();
+      const rePush = /state\.timers\.push\(([^)]*)\)/g;
+      let mp;
+      while ((mp = rePush.exec(cuerpo))) {
+        mp[1].split(",").forEach((n) => { const t2 = n.trim(); if (t2) registrados.add(t2); });
+      }
+      t.cierto(registrados.size > 0, "boot() registra temporizadores en state.timers");
+
+      // Cada setInterval de boot(): o se guarda en una const registrada, o es una fuga.
+      const fugas = [];
+      const reInt = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*setInterval\(|(\bsetInterval\()/g;
+      let mi;
+      while ((mi = reInt.exec(cuerpo))) {
+        const linea = cuerpo.slice(0, mi.index).split("\n").length;
+        if (mi[1]) { if (!registrados.has(mi[1])) fugas.push(mi[1] + " (boot+" + linea + ")"); }
+        else { fugas.push("setInterval anonimo (boot+" + linea + ")"); }
+      }
+      t.igual(fugas, [], "ningun setInterval de boot() puede quedar fuera de state.timers; sueltos: " + fugas.join(" | "));
+    });
+
     t.caso("emergencyTeardown: desmantela DOM, limpia temporizadores y persiste estado de apagado", () => {
       const c = cargar({ silencioso: true });
       const doc = c.env.doc;

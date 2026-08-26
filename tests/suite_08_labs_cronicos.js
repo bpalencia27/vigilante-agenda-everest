@@ -1208,6 +1208,25 @@ module.exports = {
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "45,5"), 90, "también reconoce coma decimal (formato de Athenea)");
     });
 
+    // [auditoría 25-ago, hallazgo 1.7] con contexto clínico (opts.programa/estadio, el
+    // caso normal del aviso de entrada y del antiduplicado de "Ordenar"), `base` siempre
+    // sale no-null desde vigenciaPorEstadio — el recorte de RAC≥30 vivía DESPUÉS del
+    // "if (base != null) return base;" y nunca se alcanzaba: un RAC 350 en DM2/HTA salía
+    // "vigente" 180 días en vez de 90. El recorte debe ser un TOPE sobre la base
+    // (Math.min), no una rama alternativa a ella — mismo criterio que ya usa la vía
+    // correcta (mtrVigenciaDiasNorma).
+    t.caso("_vigenciaDiasParaAnalito: el recorte de RAC≥30 se aplica IGUAL con contexto de programa/estadio (antes solo sin contexto)", () => {
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "HTA" }), 90,
+        "con contexto DM2/HTA, un RAC franco (350) debe acortar a 90 días, no quedarse en los 180 de la tabla");
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "DM2" }), 90);
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "10", { programa: "HTA" }), 180,
+        "con contexto pero SIN albuminuria franca, la base normal (180) no cambia");
+      // ERC G4: la base por estadio ya es 120 (más corta que 180) — el recorte de RAC no
+      // debe ALARGARLA a 90 si 90 fuera mayor que la base; en este caso 90 < 120, así que
+      // sigue ganando el menor de los dos (90), nunca por encima de la base.
+      t.igual(testApi._vigenciaDiasParaAnalito("RAC", "350", { programa: "ERC", estadio: "G4" }), 90);
+    });
+
     t.caso("_vigenciaDiasParaAnalito: analitos distintos de RAC, y un valor no numérico, conservan 180 días", () => {
       t.igual(testApi._vigenciaDiasParaAnalito("COLESTEROL_TOTAL", "999"), 180, "el umbral es exclusivo de RAC");
       t.igual(testApi._vigenciaDiasParaAnalito("RAC", "no-numerico"), 180, "sin poder leer el valor, nunca se acorta por prudencia");
@@ -1292,6 +1311,28 @@ module.exports = {
       ];
       const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
       t.cierto(faltantes.some((f) => f.key === "UROANALISIS"), "un componente PENDIENTE no es evidencia de un examen ya resuelto");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.4] _matchUroComponente solo mira el NOMBRE del
+    // analito, sin su padre/panel: "SANGRE OCULTA EN MATERIA FECAL" (SOMF, tamización de
+    // colon) casa con el componente SANGRE, y "PROTEINA C REACTIVA" casa con PROTEINURIA.
+    // Sin exigir _esAnalitoDeOrina primero, un SOMF/PCR reciente podía declarar el
+    // uroanálisis "vigente" por su fecha — silenciando el aviso justo cuando el parcial de
+    // orina real SÍ está vencido.
+    t.caso("_analitosRcvVencidos: un SOMF (sangre oculta en heces) o una PCR NO cuentan como componente de uroanálisis", () => {
+      const labsSomf = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "SANGRE OCULTA EN MATERIA FECAL", NombreParametroPadre: "COPROLOGICO", Resultado: "NEGATIVO", Fecha: "2026-08-01" },
+      ];
+      const faltantesSomf = testApi._analitosRcvVencidos(labsSomf, "2026-08-11");
+      t.cierto(faltantesSomf.some((f) => f.key === "UROANALISIS"), "un SOMF no es evidencia de un uroanálisis: sigue faltando");
+
+      const labsPcr = [
+        ...LABS_RCV_AL_DIA.filter((l) => l.nombre !== "UROANALISIS"),
+        { NombreParametro: "PROTEINA C REACTIVA", NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "3.2", Fecha: "2026-08-01" },
+      ];
+      const faltantesPcr = testApi._analitosRcvVencidos(labsPcr, "2026-08-11");
+      t.cierto(faltantesPcr.some((f) => f.key === "UROANALISIS"), "una PCR no es evidencia de un uroanálisis: sigue faltando");
     });
 
     t.caso("injectLabsIntoCronicos: el respaldo por componentes de _analitosRcvVencidos NO se activa aquí — la casilla de resultado general sigue sin recibir el valor de un componente suelto", () => {

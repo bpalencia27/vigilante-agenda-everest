@@ -268,6 +268,30 @@ module.exports = {
       t.igual(cv.api.__state.sheet, null);
     });
 
+    // [auditoría 25-ago, sección 7] "#c-repgo" (Probar conexión, en Ajustes) mandaba
+    // equipo:(S.equipo||"").slice(0,40) en vez de _equipoId() — el mismo respaldo de id
+    // anónimo que reportar() SIEMPRE usa. Sin nombre manual, el botón mandaba equipo:"" y
+    // caía en el balde "sin equipo" del tablero, distinto del equipo real del consultorio.
+    await t.casoAsync("c-repgo (Probar conexión): manda el mismo _equipoId() que usan los reportes reales, nunca vacío", async () => {
+      const posts = [];
+      const cRep = cargar({
+        silencioso: true,
+        gmxhr: (o) => { posts.push(o); o.onload({ status: 200, responseText: '{"ok":true}' }); },
+      });
+      enriquecerDom(cRep);
+      cRep.api.buildOverlay();
+      cRep.api.toggleSheet("ajustes");
+      cRep.api.renderSettings();
+      const hojaRep = cRep.env.doc.body.children.find((n) => n.id === "vgl-root").querySelector("#vgl-sheet");
+      const btn = hojaRep.querySelector("#c-repgo");
+      t.cierto(!!btn, "el botón 'Probar y diagnosticar' debe existir en Ajustes");
+      await disparar(btn, "click");
+      t.igual(posts.length, 1, "se hizo la petición de prueba");
+      const enviado = JSON.parse(posts[0].data);
+      t.cierto(!!enviado.equipo, "el equipo enviado nunca debe quedar vacío (bug real: se enviaba \"\")");
+      t.igual(enviado.equipo, cRep.api._equipoId(), "debe ser EXACTAMENTE el mismo id que usan los reportes reales");
+    });
+
     // ================= paintMute =================
     t.caso("paintMute: pinta el silencio activo con minutos restantes y vuelve al estado normal", () => {
       const botonMute = cv.env.doc.createElement("button");
@@ -676,13 +700,15 @@ module.exports = {
       t.igual(cLab.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
     });
 
-    await t.casoAsync("createLabInjectorUI: sin solicitud resoluble el botón explica el fallo, no escribe nada y restaura su rótulo", async () => {
+    await t.casoAsync("createLabInjectorUI: sin token CSRF, getAtheneaLabsAuto da null (fallo de lectura) — el botón lo dice, no inventa 'sin laboratorios'", async () => {
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       // El paciente SÍ se resuelve en la historia clínica (#anamesis + cédula en un
       // .text-muted, el mismo patrón que usa extractPacienteAbierto), pero Athenea no
       // devuelve token CSRF en el paso 1: getAtheneaSolicitudesAuto corta ahí y
-      // getAtheneaLabsAuto acaba en [] — la rama real de "sin solicitud resoluble",
-      // no la de "no se pudo determinar el paciente".
+      // getAtheneaLabsAuto da NULL (fallo de lectura, contrato v16.2.8 — verificado con el
+      // harness, no []). Antes de v17.6.58 (1.20) esto caía en la rama final y mostraba
+      // "Athenea no tiene laboratorios registrados", afirmando ausencia de datos cuando en
+      // realidad la lectura falló.
       cLab.env.doc.getElementById = (id) => {
         if (id === "vgl-lab-injector") return btn;
         if (id === "anamesis") return {};
@@ -694,7 +720,8 @@ module.exports = {
       // detalle va al toast. Lo observable aquí es el rótulo del botón y su restauración.
       await btn.onclick();
       t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
-      t.cierto(btn.innerHTML.includes("❌") || btn.innerHTML.includes("Sin resultados") || btn.innerHTML.includes("Inicie sesión"), "el botón explica que no se pudo diligenciar");
+      t.cierto(btn.innerHTML.includes("No se pudo leer Athenea"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
+      t.falso(btn.innerHTML.includes("Sin resultados"), "un fallo de lectura no debe presentarse como 'sin resultados' (bug real: se confundían)");
       await esperar(20);
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });
@@ -1530,12 +1557,25 @@ module.exports = {
       t.falso(modal.innerHTML.includes("Todas las citas de este médico se registran como RCV"), "sin la nota de bloqueo");
     });
 
-    t.caso("esMedicoRCVActivo: invocación directa — coincide por sub-cadena, sin distinguir mayúsculas ni tildes", () => {
+    t.caso("esMedicoRCVActivo: invocación directa — coincide por token completo, sin distinguir mayúsculas ni tildes", () => {
       const cH = cargar({ silencioso: true });
       cH.api.__state.activeDoctor.name = "dr. ánGEL estrada";
       t.cierto(cH.api.esMedicoRCVActivo(), "ESTRADA está en RCV_DOCTORS, sin importar tilde/caja");
       cH.api.__state.activeDoctor.name = "ANA MARIA PEREZ";
       t.falso(cH.api.esMedicoRCVActivo(), "PEREZ no está en la lista");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.2] "PINO" es sub-cadena de "OSPINO" y de "ESPINOSA" —
+    // con match por sub-cadena estos dos médicos, ajenos al programa RCV, quedaban forzados
+    // a swIsPyM/swProgramaEspecial=true en el POST real de Athenea. Debe comparar por token.
+    t.caso("esMedicoRCVActivo: un apellido que CONTIENE a un médico RCV como sub-cadena no debe activar el forzado", () => {
+      const cSub = cargar({ silencioso: true });
+      cSub.api.__state.activeDoctor.name = "JORGE OSPINO";
+      t.falso(cSub.api.esMedicoRCVActivo(), "OSPINO contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      cSub.api.__state.activeDoctor.name = "LAURA ESPINOSA";
+      t.falso(cSub.api.esMedicoRCVActivo(), "ESPINOSA contiene 'PINO' como sub-cadena, pero no es un médico de la lista");
+      cSub.api.__state.activeDoctor.name = "DR. PINO";
+      t.cierto(cSub.api.esMedicoRCVActivo(), "PINO como apellido propio (token exacto) sí debe seguir activando el forzado");
     });
 
     await t.casoAsync("openAgendamientoModal: si Everest no halla al paciente, lo dice en los horarios", async () => {
@@ -1627,6 +1667,110 @@ module.exports = {
       t.igual(confirmar.disabled, false);
       t.cierto(confirmar.textContent.includes("(08:00 AM)"));
       t.cierto(botonTurno.classList.contains("active"));
+    });
+
+    // [auditoría 25-ago, hallazgo 1.8] cargarHorasLab() desmarcaba el interruptor "Agendar
+    // también la Toma de Muestras" al INICIO de cada recarga, y solo lo volvía a marcar si
+    // era el default de labs-primero (no aplica aquí) Y el médico nunca lo había tocado. Si
+    // el médico lo marcaba a mano, la siguiente recarga (cambiar de chip de día) lo apagaba
+    // y no lo volvía a marcar — al confirmar se creaba solo la cita de control, sin la toma.
+    await t.casoAsync("openAgendamientoModal: el interruptor de Toma de Muestras marcado A MANO sobrevive a un cambio de día de laboratorio", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cLab = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        // Cualquier fecha de toma tiene el mismo turno disponible, para que el cambio de
+        // chip de día siga dejando el interruptor HABILITADO (turnosConHora.length > 0) —
+        // lo único que debe cambiar es si queda marcado o no.
+        gmxhr: (o) => {
+          if (o.url.includes("ObtenerTurnosPorFecha")) {
+            o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "06:30:00" }] }) });
+          } else if (o.onerror) { o.onerror("url no simulada"); }
+        },
+      });
+      enriquecerDom(cLab);
+      cLab.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cLab.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(60);
+      const modal = cLab.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const labChk = modal.querySelector("#vgl-agm-lab-chk");
+      t.igual(labChk.disabled, false, "con turnos disponibles, el interruptor queda habilitado");
+      t.igual(labChk.checked, false, "modo normal (no labs-primero): nace desmarcado");
+      // El médico lo marca A MANO.
+      labChk.checked = true;
+      disparar(labChk, "change");
+      // Cambia el chip de día de laboratorio (dispara renderLabDayChips -> cargarHorasLab,
+      // la misma recarga que antes lo desmarcaba sin piedad).
+      const chipsCont = modal.querySelector("#vgl-lab-day-chips");
+      const otroChip = [...chipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!otroChip, "debe haber al menos otro día de laboratorio para elegir");
+      disparar(otroChip, "click");
+      await esperar(60);
+      t.cierto(labChk.checked, "tras la recarga, la elección MANUAL del médico debe sobrevivir (bug real: se apagaba)");
+      t.igual(labChk.disabled, false, "y sigue habilitado (el nuevo día también tiene turnos)");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.9] renderLabDayChips reasignaba el centro (y con él
+    // selectedLabDateInfo) al ítem central de la sugerencia SIN comprobar si el médico ya
+    // había elegido otra fecha de toma con un clic. cargarHoras() —que corre en cada
+    // cambio de fecha de CONTROL— vuelve a llamar a renderLabDayChips con una sugerencia
+    // recién calculada, descartando en silencio la elección manual de la toma.
+    await t.casoAsync("openAgendamientoModal: la fecha de TOMA elegida a mano sobrevive a un cambio de fecha de control", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cLab2 = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => {
+          if (o.url.includes("ObtenerTurnosPorFecha")) {
+            o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "06:30:00" }] }) });
+          } else if (o.onerror) { o.onerror("url no simulada"); }
+        },
+      });
+      enriquecerDom(cLab2);
+      cLab2.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cLab2.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(60);
+      const modal = cLab2.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const labLbl = modal.querySelector("#vgl-lab-date-lbl");
+      // El médico elige a mano una fecha de toma DISTINTA a la sugerida (el chip central).
+      const labChipsCont = modal.querySelector("#vgl-lab-day-chips");
+      const chipManual = [...labChipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!chipManual, "debe haber al menos otro día de laboratorio para elegir a mano");
+      disparar(chipManual, "click");
+      await esperar(30);
+      const fechaElegidaTexto = labLbl.textContent;
+      t.cierto(!!fechaElegidaTexto, "la etiqueta de fecha de toma se actualizó con la elección manual");
+      // Ahora el médico cambia la fecha de CONTROL (dispara cargarHoras -> renderLabDayChips
+      // con una sugerencia de toma RECALCULADA — el momento exacto en que antes se perdía).
+      const dayChipsCont = modal.querySelector("#vgl-day-chips");
+      const otroDiaControl = [...dayChipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!otroDiaControl, "debe haber al menos otro día de control para elegir");
+      disparar(otroDiaControl, "click");
+      await esperar(60);
+      t.igual(labLbl.textContent, fechaElegidaTexto,
+        "tras cambiar la fecha de control, la fecha de TOMA elegida a mano no debe cambiar (bug real: se recalculaba)");
     });
 
     // [v14.2.0 — backlog §3] La misma llamada a BuscarPacienteDetallado que ya arma el

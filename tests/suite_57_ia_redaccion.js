@@ -29,7 +29,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrEstadoBorrador", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrEstadoBorrador", "mtrLimpiarNotaIA", "mtrQuitarDatosProhibidosEA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -140,6 +140,39 @@ module.exports = {
       t.cierto(/:: PATOLOGÍAS ACTIVAS: HTA/.test(limpio) && /:: META TERAPÉUTICA DE LDL: MENOR A 70/.test(limpio), "ítems '::' intactos");
     });
 
+    // [auditoría 25-ago, hallazgo 1.10] MTR_EA_SYS ya prohíbe en el prompt que la
+    // Enfermedad Actual traiga TFG/riesgo cardiovascular/meta LDL/laboratorios/signos
+    // vitales (esos van en Análisis y Plan) — pero eso es una instrucción, no una
+    // garantía: el modelo puede copiar textual una línea de la hoja de hechos.
+    // mtrQuitarDatosProhibidosEA es la segunda capa: quita esas líneas del borrador.
+    t.caso("mtrQuitarDatosProhibidosEA: quita las 5 líneas prohibidas de Enfermedad Actual, conserva el resto intacto", () => {
+      const sucio = "EL PACIENTE REFIERE CONTROL DE RUTINA, ASINTOMÁTICO.\n"
+        + "Función renal: TFG (CKD-EPI 2021) 52 mL/min/1.73m2\n"
+        + "Riesgo cardiovascular: alto (Framingham oficial 12 puntos)\n"
+        + "Meta LDL: <70 mg/dL\n"
+        + "Signos vitales: PA 128/82 mmHg · IMC: 27\n"
+        + "Laboratorios y paraclínicos: LDL 118 (hace 2 meses)\n"
+        + "AL EXAMEN FÍSICO SE ENCUENTRA ESTABLE, SIN SIGNOS DE ALARMA.";
+      const limpio = api.mtrQuitarDatosProhibidosEA(sucio);
+      t.falso(/Función renal:/.test(limpio), "TFG fuera");
+      t.falso(/Riesgo cardiovascular:/.test(limpio), "categoría de riesgo fuera");
+      t.falso(/Meta LDL:/.test(limpio), "meta LDL fuera");
+      t.falso(/Signos vitales:/.test(limpio), "signos vitales fuera");
+      t.falso(/Laboratorios y paraclínicos:/.test(limpio), "laboratorios fuera");
+      t.cierto(/CONTROL DE RUTINA, ASINTOMÁTICO/.test(limpio), "la semiotecnia real del médico sí sobrevive");
+      t.cierto(/AL EXAMEN FÍSICO SE ENCUENTRA ESTABLE/.test(limpio), "y la línea siguiente también");
+    });
+
+    t.caso("mtrQuitarDatosProhibidosEA: no toca una línea que solo MENCIONA la palabra dentro de la prosa (no es el prefijo exacto)", () => {
+      const texto = "SE EXPLICÓ AL PACIENTE SU RIESGO CARDIOVASCULAR Y LA IMPORTANCIA DE LA META LDL INDICADA POR SU MÉDICO.";
+      t.igual(api.mtrQuitarDatosProhibidosEA(texto), texto, "solo se filtra por el PREFIJO exacto de la línea, no por contener la palabra en cualquier parte");
+    });
+
+    t.caso("mtrQuitarDatosProhibidosEA: texto vacío o null no lanza", () => {
+      t.igual(api.mtrQuitarDatosProhibidosEA(""), "");
+      t.igual(api.mtrQuitarDatosProhibidosEA(null), "");
+    });
+
     // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE CIFRAS anti-alucinación.
     // Todo número de medida del borrador debe existir en los hechos que se le dieron a la
     // IA; si no está, el modelo lo inventó o lo calculó y se marca. El caso que motivó
@@ -162,6 +195,30 @@ module.exports = {
       t.cierto(marcadas.some((x) => x.numero === "130"), "LDL 130 cuando el hechos trae 118: se marca (dato inventado o de otra fecha)");
       const dosis = api.mtrVerificarCifrasIA("Losartán 100 mg.", hoja);
       t.cierto(dosis.some((x) => x.numero === "100"), "dosis 100 mg cuando el hechos trae 50: se marca");
+    });
+
+    // [bug real de consultorio, 25-ago] re2 partía "Resolución 3280/2018" en "280/201" y
+    // lo marcaba como una PA inventada. La fracción no debe leerse como PA si tiene OTRO
+    // dígito pegado justo antes o justo después (año, radicado, resolución).
+    t.caso("mtrVerificarCifrasIA: una cita legal tipo 'Resolución 3280/2018' no se confunde con una PA", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      t.igual(api.mtrVerificarCifrasIA("Se cumple con la Resolución 3280/2018 del Ministerio.", hoja).length, 0,
+        "3280/2018 es una cita legal, no una fracción de presión arterial: no debe marcarse '280/201'");
+      // pero una PA real (sin dígitos pegados a los lados) sigue detectándose igual que antes
+      const marcadas = api.mtrVerificarCifrasIA("Signos vitales: PA 190/110 mmHg.", hoja);
+      t.cierto(marcadas.some((x) => x.numero === "190") && marcadas.some((x) => x.numero === "110"),
+        "una PA inventada real (190/110, sin dígito pegado) se sigue marcando");
+    });
+
+    // [bug real de consultorio, 25-ago] el corte de contexto fijo (24/20 caracteres) partía
+    // palabras largas a la mitad ("SE CONTIN" en vez de "SE CONTINÚA").
+    t.caso("mtrVerificarCifrasIA: el contexto mostrado nunca corta una palabra a la mitad", () => {
+      const hoja = api.mtrHojaDeHechos({ programa: "HTA", factores: { edad: 61, sexo: "F" }, riesgo: { categoria: "alto" } }, { hoyIso: "2026-08-17" });
+      const texto = "El paciente SINTOMATOLOGICAMENTE presenta 45 mg.";
+      const marcadas = api.mtrVerificarCifrasIA(texto, hoja);
+      const fila = marcadas.find((x) => x.numero === "45");
+      t.cierto(!!fila, "45 mg (dosis inventada) se marca: no está en los hechos de la hoja");
+      t.cierto(fila.contexto.includes("SINTOMATOLOGICAMENTE"), "el contexto conserva la palabra completa, no cortada a la mitad ('ATOLOGICAMENTE'): " + fila.contexto);
     });
 
     t.caso("mtrVerificarCifrasIA: no marca el marcador #PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES] ni texto vacío ni conteos sin unidad", () => {
@@ -469,6 +526,25 @@ module.exports = {
       t.igual(caja.value, "CONTROL DE HIPERTENSIÓN ARTERIAL.", "la casilla quedó intacta");
       const sin = c.api.mtrInsertarEnCasillaModo("recomendaciones", "TEXTO", null);
       t.cierto(!sin.ok && sin.motivo === "sin_casilla" && sin.pestania === "Conducta", "sin casilla: dice dónde buscarla");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.21] vglEscrituraPermitida (el dead-man switch) tenía un
+    // ÚNICO llamador en todo el archivo (vglLlenarFactoresEnEverest, el llenado de
+    // antecedentes). Su propio mensaje promete "dejo de escribir en la historia clínica
+    // (llenar antecedentes E INSERTAR NOTAS)" — pero ningún punto de inserción de notas de
+    // IA lo consultaba: con la escritura cortada por el dead-man, el redactor seguía
+    // insertando notas en la historia como si nada.
+    t.caso("mtrInsertarEnCasillaModo: con el dead-man switch cortando la escritura, no inserta nada y lo dice", () => {
+      const c = cargar({ silencioso: true });
+      // Mismo patrón que suite_68 ("el sello del último contacto y la puerta de
+      // escritura"): 40 días sin contacto con el servidor de control corta la escritura.
+      c.api._vglDeadmanSellar(Date.now() - 40 * 86400000);
+      t.falso(c.api.vglEscrituraPermitida(), "confirmación: el dead-man está activo para esta prueba");
+      const caja = { value: "", isConnected: true, dispatchEvent: () => {} };
+      c.env.doc.querySelector = (sel) => (sel === 'textarea[name="MotivoConsulta"]' ? caja : null);
+      const r = c.api.mtrInsertarEnCasillaModo("motivo_consulta", "CONTROL DE HIPERTENSIÓN ARTERIAL.", null);
+      t.cierto(!r.ok && r.motivo === "deadman", "se niega explícitamente por el dead-man, no por 'sin_casilla' ni otro motivo genérico");
+      t.igual(caja.value, "", "cero escritura: la casilla queda intacta (bug real: se insertaba igual)");
     });
 
     t.caso("mtrInsertarEnCasillaModo: si la historia abierta es de OTRO paciente, se niega sin tocar nada", () => {
@@ -903,20 +979,52 @@ module.exports = {
       const resumen = {
         _hoyIso: "2026-08-23",
         programa: "HTA", erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
-        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70 } }, foco: "renal",
-        plan: { ftl: "2026-09-01", control: { fecha: "2026-09-07" }, faltantes: [{ clave: "RAC" }], vencidos: [{ clave: "HBA1C" }] },
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70, cnoHdl: 100 } }, foco: "renal",
+        // v17.6.56 (1.14) — order_list ahora sale de plan.ordenar (lo que el motor de
+        // verdad va a ordenar: faltantes+vencidos de los drivers, MÁS lo cosechado y los
+        // pasajeros en estado A), no de faltantes+vencidos crudos. faltantes/vencidos se
+        // conservan aquí porque otros campos del JSON (no probados en este caso) los usan.
+        plan: { ftl: "2026-09-01", control: { fecha: "2026-09-07" }, faltantes: [{ clave: "RAC" }], vencidos: [{ clave: "HBA1C" }], ordenar: [{ clave: "RAC" }, { clave: "HBA1C" }] },
       };
-      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"] });
+      // v17.6.64 (sección 4) — cno_hdl/cno_hdl_target viajan calculados en el JSON, para
+      // que la IA solo los cite, nunca los invente.
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"], cNoHDL: 160 });
       t.igual(j.version, "68", "versión");
       t.igual(j.cv_risk, "alto", "riesgo");
       t.igual(j.tfg_ckdepi, 52, "TFG clínica");
       t.igual(j.estadio_administrativo, "G3a", "estadio admin");
       t.igual(j.ldl_target, 70, "meta");
+      t.igual(j.cno_hdl, 160, "cNoHDL calculado viaja en el JSON");
+      t.igual(j.cno_hdl_target, 100, "y su meta");
       t.cierto(j.order_list.indexOf("RAC") >= 0 && j.order_list.indexOf("HBA1C") >= 0, "order_list");
       // v17.6.8 — las fechas de agenda se relativizan (cuasi-identificadores): nunca crudas.
       t.igual(j.ftl_date, "en 9 días", "FTL se relativiza respecto a hoy (9 días del 23-ago al 1-sep)");
       t.igual(j.control_date, "en 15 días", "control se relativiza igual (15 días al 7-sep)");
       t.igual(j.nota_clinica.justificacion_riesgo_meta, "", "la prosa la escribe el LLM, no el motor");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.14] order_list armaba faltantes+vencidos crudos, sin
+    // pasar por plan.ordenar — que SÍ incluye lo cosechado (un examen vigente que se
+    // adelanta a esta misma toma porque le queda poca vigencia) y los pasajeros en A. Un
+    // cosechado que no está en faltantes NI en vencidos (por definición: si estuviera
+    // vencido no habría nada que cosechar) desaparecía de la nota clínica que el médico
+    // copia a la historia, aunque el asistente SÍ lo fuera a ordenar de verdad.
+    t.caso("mtrJsonV68DesdeResumen (1.14): order_list incluye lo COSECHADO, que faltantes/vencidos por sí solos no traen", () => {
+      const resumen = {
+        _hoyIso: "2026-08-23",
+        programa: "HTA", erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70 } }, foco: "renal",
+        plan: {
+          ftl: "2026-09-01", control: { fecha: "2026-09-07" },
+          faltantes: [{ clave: "RAC" }], vencidos: [],
+          // HDL cosechado: ni faltante ni vencido, pero SÍ va en la orden real.
+          ordenar: [{ clave: "RAC" }, { clave: "COLESTEROL_HDL" }],
+        },
+      };
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: [] });
+      t.cierto(j.order_list.indexOf("RAC") >= 0, "el faltante sigue apareciendo");
+      t.cierto(j.order_list.indexOf("COLESTEROL_HDL") >= 0,
+        "el cosechado (COLESTEROL_HDL) debe aparecer en order_list — bug real: solo faltantes/vencidos, esto no salía");
     });
 
     t.caso("SEGURIDAD: sin TFG ni meta, el JSON v68 emite null (NUNCA 0) para no afirmar 'TFG 0'", () => {

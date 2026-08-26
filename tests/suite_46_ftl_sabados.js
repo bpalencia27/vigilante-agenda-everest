@@ -113,6 +113,25 @@ module.exports = {
       t.igual(a.fecha, null, "sin fecha");
     });
 
+    // [auditoría 25-ago, hallazgo 1.16] sin fecha, el valor real se descartaba SIEMPRE
+    // (valor:null), aunque el resultado sí hubiera llegado — alcanzable cuando
+    // _extractAtheneaFecha no reconoce el campo de fecha. Consecuencia: se le ordena al
+    // paciente un examen que YA TIENE resultado, sin forma de saberlo desde este objeto.
+    t.caso("un analito CON valor pero SIN fecha no pierde el valor (bug real: se ponía a null)", () => {
+      const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: 1.0 }, ctxErc);
+      t.igual(a.estado, "A", "sigue sin poder afirmarse vigente, sin fecha");
+      t.igual(a.subestado, "sin_historial");
+      t.igual(a.fecha, null, "la fecha sigue sin inventarse");
+      t.igual(a.valor, 1.0, "pero el valor real (1.0) debe conservarse, no perderse");
+      t.cierto(/hay un resultado/.test(a.motivo), "el motivo debe distinguir esto de 'nunca se hizo': " + a.motivo);
+    });
+
+    t.caso("un analito sin fecha NI valor sigue reportando 'no hay ningún resultado registrado'", () => {
+      const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: null }, ctxErc);
+      t.igual(a.valor, null);
+      t.cierto(/no hay ningún resultado registrado/.test(a.motivo), "sin dato real, el motivo original no cambia: " + a.motivo);
+    });
+
     t.caso("un analito vencido dice cuántos días lleva vencido", () => {
       // creatinina G3b = rango [90,121]; estable -> 121 días. 2026-01-01 + 121 = 2026-05-02.
       const a = api.mtrEstadoAnalito("CREATININA", { fecha: "2026-01-01", valor: 1.5 }, ctxErc);
@@ -136,6 +155,30 @@ module.exports = {
     });
 
     // ============ FECHA DE TOMA DE LABORATORIOS ============
+
+    // [auditoría 25-ago, hallazgo 1.6] sin peso, mtrEvaluarErc no puede calcular el
+    // estadio administrativo (null) y mtrVigenciaDias("ERC",...) devuelve null para los 9
+    // drivers -> todos NO_APLICA -> el plan se presentaba como "no hay nada que vigilar"
+    // cuando la verdad es que falta el peso para saberlo.
+    t.caso("ERC sin peso: el plan avisa que FALTA EL PESO, no que 'no hay nada que vigilar'", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: null,
+        esDm2: true, edad: 68, rac: 12, ultimos: {},
+        pesoFaltaParaEstadio: true,
+      });
+      t.igual(plan.ftl, null, "sin estadio no se puede fijar una toma");
+      t.cierto(/falta el peso/i.test(plan.motivoFtl), "el motivo debe decir explícitamente que falta el peso, dijo: " + plan.motivoFtl);
+      t.falso(/no hay ningún examen que vigilar/i.test(plan.motivoFtl), "no debe sonar a que no hay nada pendiente");
+    });
+
+    t.caso("ERC sin estadio pero SIN la bandera pesoFaltaParaEstadio: sigue el mensaje genérico de siempre", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: null,
+        esDm2: true, edad: 68, rac: 12, ultimos: {},
+      });
+      t.igual(plan.motivoFtl, "no hay ningún examen que vigilar con este programa y estadio",
+        "sin la bandera explícita, el comportamiento previo no cambia");
+    });
 
     t.caso("CERO VENCIDOS — la toma va al vencimiento más próximo, nunca después", () => {
       const plan = api.mtrPlanParaclinicos(Object.assign({}, ctxErc, {

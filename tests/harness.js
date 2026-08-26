@@ -92,6 +92,8 @@ function crearEntorno(opciones) {
   };
   const gm = {};
   const doc = crearDom();
+  let _intervalSeq = 0;
+  const _intervalos = new Map();
 
   const win = {
     location: { href: "https://neps.everestintelligent.com/viva/EverHealth/HCHealth", hostname: "neps.everestintelligent.com", origin: "https://neps.everestintelligent.com", pathname: "/viva/EverHealth/HCHealth", search: "", hash: "" },
@@ -105,7 +107,14 @@ function crearEntorno(opciones) {
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     addEventListener() {}, removeEventListener() {},
     setTimeout: (f, ms) => setTimeout(() => { try { f(); } catch (e) {} }, Math.min(ms || 0, 1)),
-    clearTimeout, setInterval: () => 0, clearInterval: () => {},
+    clearTimeout,
+    // Los intervalos NO disparan (igual que siempre: antes era `setInterval: () => 0`),
+    // pero ahora devuelven un identificador REAL y se llevan en un registro. Sin esto no
+    // se podia probar nada del reloj de segundo plano ni de state.timers: con un 0 de
+    // vuelta, `if (loc.timer)` daba falso siempre y las pruebas no podian distinguir
+    // "se creo un temporizador de pagina" de "no se creo ninguno".
+    setInterval: (f, ms) => { const id = ++_intervalSeq; _intervalos.set(id, { f, ms, vivo: true }); return id; },
+    clearInterval: (id) => { const r = _intervalos.get(id); if (r) r.vivo = false; },
     requestIdleCallback: () => 0,
     fetch: o.fetch || (async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } })),
     XMLHttpRequest: function () { this.open = () => {}; this.send = () => {}; this.addEventListener = () => {}; },
@@ -125,7 +134,7 @@ function crearEntorno(opciones) {
     crypto: o.crypto || (typeof crypto !== "undefined" && crypto.subtle ? crypto : { subtle: { digest: async (alg, buf) => { const h = require("crypto").createHash("sha256").update(Buffer.from(buf)).digest(); return h.buffer.slice(h.byteOffset, h.byteOffset + h.byteLength); } } }),
     console: o.silencioso ? { log() {}, warn() {}, error() {}, info() {} } : console,
     DecompressionStream: undefined,
-    Worker: undefined,
+    Worker: o.Worker,          // inyectable: sin el, el reloj cae al de la pagina (ruta por defecto)
     MutationObserver: function () { this.observe = () => {}; this.disconnect = () => {}; },
     // Un navegador real SIEMPRE tiene Event; el userscript lo usa sin guarda (setNgValue y
     // el autologin de Athenea hacen `new Event('input',…)`). Sin esto, cualquier prueba que
@@ -177,7 +186,7 @@ function crearEntorno(opciones) {
       catch (e) { /* el stub jamás propaga */ }
     }, 0);
   });
-  return { win, storage, gm, doc, almacen };
+  return { win, storage, gm, doc, almacen, intervalos: _intervalos };
 }
 
 // Detecta `const/let NOMBRE = ... =>` contando paréntesis en vez de con una sola

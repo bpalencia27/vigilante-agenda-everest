@@ -1,0 +1,3368 @@
+{
+ "funcion": "_regla_alopurinol",
+ "modulo": "motor_deterministic.py",
+ "sha256_origen": "a082b8fb892cc42f6dab5c5d2273bdb365201b81d5c9a3ce2be725c61a3e6c0d",
+ "bloque": "farmaco",
+ "vectores": [
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "ALOPURINOL 300 MG",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "ALOPURINOL 300 MG",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    5.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 5.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    10.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 10.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    14.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 14.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    15.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 15.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    16.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 16.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    20.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 20.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    25.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 25.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    null
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    3.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    4.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    5.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    5.1
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    5.5
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    29.0,
+    6.0
+   ],
+   "salida": {
+    "principio_activo": "alopurinol",
+    "medicamento_detectado": "colchicina 0.5",
+    "conducta": "CAP_DOSIS",
+    "mensaje": "Alopurinol: máximo 100 mg/día con eGFR < 30 mL/min/1.73m2.",
+    "formula_tfg": "CKD-EPI 2021 (eGFR)",
+    "valor_tfg": 29.0,
+    "severidad": "HIGH",
+    "fuente": "SYS_MOTOR_RCV <SEGURIDAD_DOSIS_RENAL>",
+    "override_llm": true
+   }
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    30.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    31.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    44.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    45.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    46.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    50.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    59.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    60.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    61.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    89.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    90.0,
+    6.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    null
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    3.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    4.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    5.0
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    5.1
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    5.5
+   ],
+   "salida": null
+  },
+  {
+   "entrada": [
+    "colchicina 0.5",
+    120.0,
+    6.0
+   ],
+   "salida": null
+  }
+ ]
+}
