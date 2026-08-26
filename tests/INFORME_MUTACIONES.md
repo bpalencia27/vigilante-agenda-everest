@@ -6,6 +6,52 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.69 — 26-ago-2026 (ítem 0-C: timeout de red nunca rotaba de modelo Gemini — reportado en consultorio)
+
+**El reporte**: el médico vio "La IA no redactó (tiempo agotado). Le dejo los hechos para
+copiar a mano." y notó que `gemini-3.7-flash` seguía apareciendo, sin rotar a
+`gemini-3.5-flash-lite`/`gemini-3.1-flash-lite` como esperaba. Sin ningún dato de
+paciente.
+
+**Aclaración**: `gemini-3.7-flash` sigue correctamente en `MTR_GEMINI_MODELOS` — es
+`MTR_MODELO_POTENTE` (el último de la lista, el más capaz), usado A PROPÓSITO como primer
+intento de las dos notas largas (`enfermedad_actual`, `analisis_plan`, decisión del
+médico del 20-ago). Eso no se tocó.
+
+**Causa raíz confirmada leyendo el código real**: `mtrGeminiRedactar` (línea ~31417) SÍ
+tiene rotación automática, pero solo dentro de `onload`, para respuestas HTTP con status
+reconocido (`_mereceRotar`: 429 cuota, 503 sobrecarga, 400/404/500/502/504 no-disponible).
+El handler `ontimeout` (línea ~31545, disparado por `GM_xmlhttpRequest` con
+`timeout: 25000`) resolvía como fallo DE INMEDIATO — `resolve({ ok:false, texto:"",
+motivo:"tiempo agotado" })` — sin rotar ni reintentar, a diferencia de `onload`. El
+comentario de `MTR_MODELO_POTENTE` promete "si el potente falla, mtrGeminiRedactar ya
+rota al siguiente: el respaldo queda intacto", pero esa promesa nunca se cumplió para un
+timeout de red — exactamente el escenario reportado (el primer intento de una nota larga
+usa siempre el modelo potente, el más grande/lento de la lista).
+
+**El fix**: mismo patrón que `onload` — en `ontimeout`, si `intentos < maxIntentos - 1`,
+rota (`intentos++; mtrRotarModelo()`) y reintenta (`intentar()`); solo resuelve como
+fallo cuando ya se agotaron todos los modelos, con un motivo más preciso ("tiempo agotado
+en todos los modelos").
+
+**Mutación verificada**: se respaldó el archivo, se revirtió con `python3` el `ontimeout`
+nuevo a la versión original (resuelve sin rotar). `TZ=America/Bogota node tests/runner.js`
+puso rojas EXACTAMENTE las 2 pruebas nuevas (2244 pasan / 2 fallan): la que confirma que
+un timeout en el primer modelo rota al segundo y logra responder `ok:true`
+("obtuvo false"), y la que confirma que se agotan los 7 modelos antes de rendirse
+("esperaba 7 y obtuvo 1" — sin el fix, el primer timeout ya resolvía el fallo). Ninguna
+otra prueba se vio afectada. Se restauró desde el backup y el banco volvió a 2246 pruebas
+en verde. Se añadieron 2 pruebas nuevas a `tests/suite_57_ia_redaccion.js` (mismo patrón
+que las pruebas ya existentes de rotación por 429/503, usando el mock `gmxhr` del arnés
+para disparar `ontimeout` sin depender de temporizadores reales).
+
+**Nota de diseño no bloqueante**: cada intento sigue con `timeout: 25000` fijo, así que en
+el peor caso (los 7 modelos truenan por timeout) el médico esperaría hasta ~175 s antes
+del mensaje de fallo — más que el peor caso anterior (que cortaba en el primer timeout).
+Se deja así a propósito: es el mismo comportamiento ya aceptado para la rotación por
+429/503/400, y no hay evidencia de campo que pida acortar el timeout de los reintentos —
+no se inventa ese ajuste sin un reporte que lo respalde.
+
 ## v17.6.68 — 26-ago-2026 (ítem 0-B: bloque "Uroanálisis" mezclaba QUIMICA URINARIA — informe de laboratorio real y captura de pantalla reales, aportados en consultorio)
 
 **El caso**: informe de laboratorio real con fecha 21-ago-2026, sección "QUIMICA

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.68
+// @version     17.6.69
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.68";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.69";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31542,7 +31542,26 @@ _vglOfrecerDeshacer(btn);
               resolve(r);
             },
             onerror: () => { _tel("ia.fallo"); _tel("ia.fallo.red"); resolve({ ok: false, texto: "", motivo: "error de red (¿proxy de la IPS bloquea Gemini?)" }); },
-            ontimeout: () => { _tel("ia.fallo"); _tel("ia.fallo.timeout"); resolve({ ok: false, texto: "", motivo: "tiempo agotado" }); },
+            // v17.6.69 — [reportado en consultorio, 26-ago-2026] BUG REAL: la rotación de
+            // modelo (mtrRotarModelo/intentar, ver el bloque `_mereceRotar` de `onload` arriba)
+            // solo se disparaba para respuestas HTTP con status reconocido (429/503/400/404/
+            // 500/502/504). Un TIMEOUT de red (`GM_xmlhttpRequest` con `timeout: 25000`) nunca
+            // pasa por `onload` — cae aquí directo — y este handler resolvía como fallo de
+            // inmediato, sin rotar ni reintentar, rompiendo la promesa del comentario de
+            // MTR_MODELO_POTENTE ("si el potente falla, mtrGeminiRedactar ya rota al
+            // siguiente"). El primer intento de una nota larga usa SIEMPRE el modelo potente
+            // (el más grande/lento de la lista) — un timeout suyo es justo el escenario que el
+            // médico reportó: "gemini-3.7-flash sigue apareciendo y no rotaba a
+            // 3.5-flash-lite/3.1-flash-lite". Mismo patrón que `onload`: rota y reintenta
+            // mientras queden modelos; solo resuelve como fallo cuando ya se agotaron todos.
+            ontimeout: () => {
+              _tel("ia.fallo"); _tel("ia.fallo.timeout");
+              if (intentos < maxIntentos - 1) {
+                _tel("ia.timeout.rota");
+                intentos++; mtrRotarModelo(); intentar(); return;
+              }
+              resolve({ ok: false, texto: "", motivo: "tiempo agotado en todos los modelos" });
+            },
           });
         };
         intentar();

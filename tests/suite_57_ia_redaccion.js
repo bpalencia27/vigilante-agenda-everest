@@ -757,6 +757,51 @@ module.exports = {
       t.falso(/cuota/i.test(r.motivo), "y NO dice cuota agotada: es un motivo distinto");
     });
 
+    // v17.6.69 — REPORTE DE CAMPO (26-ago-2026): "gemini-3.7-flash sigue apareciendo, no
+    // rota" — la rotación de `onload` (429/503/etc., pruebas de arriba) NUNCA se disparaba
+    // ante un TIMEOUT de red, porque `ontimeout` resolvía como fallo de inmediato sin pasar
+    // por `_mereceRotar`. El primer intento de una nota larga usa siempre el modelo
+    // POTENTE (el más grande/lento): un timeout suyo dejaba al médico sin nota, sin haber
+    // tocado ninguno de los modelos de respaldo.
+    await t.casoAsync("el conector ROTA de modelo ante un TIMEOUT de red, igual que ante 429/503 (bug real reportado en consultorio)", async () => {
+      const modelos = [];
+      const c = cargar({ silencioso: true, gmxhr: (opts) => {
+        const m = /models\/([^:]+):/.exec(opts.url || ""); modelos.push(m ? m[1] : "?");
+        if (modelos.length < 2) setTimeout(() => opts.ontimeout(), 0);
+        else setTimeout(() => opts.onload({ status: 200, responseText: respGemini("nota redactada tras rotar por timeout") }), 0);
+      }});
+      c.api.mtrGuardarClaveGemini("X");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "analisis_plan", {});
+      t.cierto(r.ok && /rotar por timeout/.test(r.texto), "tras rotar por timeout, entrega el texto");
+      t.igual(modelos.length, 2, "un timeout + un éxito = dos intentos");
+      t.cierto(modelos[0] !== modelos[1], "cambió de modelo (el potente truena, el reintento usa el siguiente de la rotación)");
+    });
+
+    await t.casoAsync("si TODOS los modelos truenan por timeout, informa 'tiempo agotado en todos los modelos' sin lanzar", async () => {
+      const modelos = [];
+      const c = cargar({ silencioso: true, gmxhr: (opts) => {
+        const m = /models\/([^:]+):/.exec(opts.url || ""); modelos.push(m ? m[1] : "?");
+        setTimeout(() => opts.ontimeout(), 0);
+      }});
+      c.api.mtrGuardarClaveGemini("X");
+      const r = await c.api.mtrGeminiRedactar(hojaDemo(c.api), "enfermedad_actual", {});
+      t.falso(r.ok, "no ok");
+      t.cierto(/tiempo agotado/i.test(r.motivo), "el motivo explica que fue timeout");
+      // El primer intento usa el modelo POTENTE (que es, a propósito, el ÚLTIMO de la lista
+      // de rotación — ver MTR_MODELO_POTENTE); tras recorrer los demás, la rotación puede
+      // volver a caer en ese mismo modelo al completar la vuelta. Lo que importa es que SÍ
+      // rotó en cada paso (nunca repitió el modelo del intento INMEDIATAMENTE anterior) y
+      // que agotó los `maxIntentos` disponibles antes de rendirse — no una repetición ciega
+      // del primero.
+      for (let i = 1; i < modelos.length; i++) {
+        t.cierto(modelos[i] !== modelos[i - 1], "el intento " + i + " no repite el modelo del intento inmediatamente anterior");
+      }
+      // 7 modelos en MTR_GEMINI_MODELOS (ver "la rotación avanza..." arriba, ya hardcodeado
+      // igual en esa prueba): maxIntentos = MTR_GEMINI_MODELOS.length.
+      t.igual(modelos.length, 7, "se agotaron TODOS los modelos de la rotación antes de rendirse");
+      t.cierto(modelos.length >= 2, "agotó más de un modelo antes de rendirse");
+    });
+
     // v17.6.22 — REPORTE DE CAMPO (24-ago-2026): "los resultados a veces aparecen
     // cortados incompletos". mtrRespuestaGemini trata MAX_TOKENS como éxito A PROPÓSITO
     // (texto parcial es mejor que nada), pero antes de esta versión NADA en el camino le
