@@ -6,6 +6,53 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.75 — 26-ago-2026 (ítem 3 / auditoría 25-ago 1.17: Estado R prioritario para RAC≥30 vencido — decisión del médico)
+
+Decisión del médico: "usa el mismo piso/techo que el Estado A normal (Recomendado si no
+tiene el spec a mano)" — enfoque conservador, sin inventar un spec nuevo.
+
+**El hallazgo**: en `mtrEstadoAnalito`, el guard `estado !== "A"` bloqueaba la promoción
+a Estado R (vigilancia estrecha por albuminuria) cuando el RAC≥30 YA estaba vencido — se
+quedaba como Estado A normal, perdiendo la señal específica de albuminuria.
+
+**El fix, en tres capas** (verificado que las tres son necesarias, no solo la primera):
+1. Se quita el guard: RAC≥30 se promueve a R SIEMPRE, vencido o no. Se agrega
+   `vencidoBase` (verdad de terreno de si YA estaba vencido antes de la promoción,
+   independiente del label final).
+2. **CRÍTICO** — sin tocar nada más, promover la etiqueta a "R" por sí solo habría sido
+   PELIGROSO: `mtrPlanParaclinicos` calcula `masProximo`/`ftlCruda` a partir de los
+   drivers en estado "D"/"R" con `.vence`, y el `.vence` de un RAC vencido es una fecha
+   YA PASADA. Verificado con el motor real: sin la exclusión de `vencidoBase` en
+   `hayEstadoA`/`conVencimiento`, `plan.ftl` salía en **2026-04-01** para un `hoyIso` de
+   **2026-08-16** — una toma de laboratorios programada 4 MESES EN EL PASADO, violación
+   directa de CERO VENCIDOS. Se excluye `vencidoBase` de `conVencimiento` (no compite
+   como "próximo vencimiento futuro") y se incluye en `hayEstadoA` (sigue disparando el
+   piso de 14/techo de 21 días, exactamente "el mismo piso/techo que el Estado A
+   normal"). Mismo trato aplicado en `mtrAvisoVencimiento` y las dos copias de
+   `vigilados` en `mtrFechaControlAjustada`/`mtrPlanLabsPrimero` (todas comparten el
+   mismo riesgo de fecha pasada).
+3. `plan.vencidos` ahora incluye también los R con `vencidoBase` — así el RAC sigue
+   apareciendo en "Ya vencidos" (chips del banner, nombrado en `mtrFechaControlAjustada`)
+   y en `plan.ordenar`, aunque su `estado` ya no sea literalmente "A". El texto de
+   `mtrTableroClinico` (`quePasa`) y el `motivo` de `mtrEstadoAnalito` se corrigieron
+   para decir "venció" (pasado), nunca "vence el [fecha ya pasada]" — un tiempo verbal
+   que mentiría sobre algo que ya ocurrió.
+
+**Mutación verificada** (tres mutaciones independientes, una por capa):
+- Se restauró el guard `estado !== "A"`: cayeron EXACTAMENTE 2 pruebas (2272 pasan / 2
+  fallan) — la promoción a R y el texto "venció" del tablero.
+- Se revirtieron `hayEstadoA`/`conVencimiento` a no excluir `vencidoBase`: cayó
+  EXACTAMENTE 1 prueba, la de seguridad de fecha ("CERO VENCIDOS... obtuvo false") — y
+  se confirmó a mano que `plan.ftl` volvía a salir en el pasado (2026-04-01).
+- Se revirtió `vencidos` a no incluir los R con `vencidoBase`: cayeron EXACTAMENTE 2
+  pruebas — "el RAC sigue apareciendo en Ya vencidos" y "el RAC vencido está en la lista
+  de qué ordenar".
+En los tres casos se restauró desde el backup y el banco volvió a 2274 en verde. Se
+añadieron 4 pruebas nuevas: 3 en `tests/suite_46_ftl_sabados.js` (promoción a R con
+vencidoBase, RAC<30 sin cambios, y el escenario completo de `mtrPlanParaclinicos` con la
+guarda anti-fecha-pasada) y 1 en `tests/suite_63_tablero_riesgo.js` (el texto "venció",
+no "vence", en el tablero que ve el médico).
+
 ## v17.6.74 — 26-ago-2026 (Panel del paciente: dos dosis del mismo fármaco aparecían como dos medicamentos — reportado en consultorio, captura real sin PHI)
 
 **El reporte**: en "MEDICAMENTOS DEL PROGRAMA CARDIOVASCULAR" del Panel del paciente

@@ -152,6 +152,60 @@ module.exports = {
       const a = api.mtrEstadoAnalito("RAC", { fecha: "2026-07-01", valor: 45 }, ctx);
       t.igual(a.estado, "R", "estado R por albuminuria");
       t.igual(a.vigenciaDias, 90, "y con la vigencia de 90 días");
+      t.falso(a.vencidoBase, "todavía vigente: no venció antes de la promoción");
+    });
+
+    // =====================================================================
+    // v17.6.75 — auditoría 25-ago (1.17): ESTADO R PRIORITARIO PARA RAC≥30 VENCIDO.
+    // Antes, el guard `estado !== "A"` bloqueaba la promoción a R cuando el RAC YA
+    // estaba vencido — se quedaba en "A" normal, sin la señal de albuminuria. Decisión
+    // del médico: "usa el mismo piso/techo que el Estado A normal" — se promueve a R
+    // SIEMPRE (vencido o no), pero el motor sigue tratando un RAC vencido-y-promovido
+    // con la MISMA urgencia que un Estado A normal (piso 14/techo 21, en "vencidos"),
+    // nunca dejando que su fecha YA PASADA se cuele como un "próximo vencimiento".
+    // =====================================================================
+    t.caso("RAC≥30 VENCIDO: ya no queda bloqueado en Estado A — se promueve a R, con vencidoBase=true", () => {
+      // vigencia 90 días (albuminuria): 2026-01-01 + 90 = 2026-04-01, ya vencido para hoyIso 2026-08-16.
+      const ctx = Object.assign({}, ctxErc, { rac: 45 });
+      const a = api.mtrEstadoAnalito("RAC", { fecha: "2026-01-01", valor: 45 }, ctx);
+      t.igual(a.estado, "R", "promovido a R, no bloqueado en A");
+      t.igual(a.subestado, "albuminuria");
+      t.cierto(a.vencidoBase, "pero la verdad de terreno de que YA venció se conserva");
+      t.cierto(a.diasParaVencer < 0, "los días para vencer siguen siendo negativos");
+      t.cierto(/vencido hace \d+ día/.test(a.motivo), "el motivo sigue diciendo VENCIDO (nunca 'vigente hasta' una fecha pasada): " + a.motivo);
+      t.cierto(/albuminuria/i.test(a.motivo), "y menciona la albuminuria: " + a.motivo);
+    });
+
+    t.caso("un RAC vencido SIN albuminuria (RAC<30) no se toca: sigue como Estado A normal", () => {
+      const ctx = Object.assign({}, ctxErc, { rac: 12 });
+      const a = api.mtrEstadoAnalito("RAC", { fecha: "2026-01-01", valor: 12 }, ctx);
+      t.igual(a.estado, "A", "sin albuminuria, nunca se promueve a R");
+      t.igual(a.subestado, "vencido");
+      t.cierto(a.vencidoBase, "y vencidoBase coincide con estado A, como siempre");
+    });
+
+    t.caso("mtrPlanParaclinicos: un RAC≥30 vencido (único disparador) programa la toma con el piso de 14–21 días — NUNCA una fecha ya pasada", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: "G3b",
+        esDm2: false, edad: 60, rac: 45,
+        ultimos: {
+          RAC: { fecha: "2026-01-01", valor: 45 },   // vencido hace 137 días
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL: { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL: { fecha: "2026-08-01", valor: 90 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 120 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 95 },
+          UROANALISIS: { fecha: "2026-08-01", valor: 1 },
+          CREATININA: { fecha: "2026-08-01", valor: 1.2 },
+        },
+      });
+      t.cierto(!!plan.ftl, "hay fecha de toma");
+      t.cierto(plan.ftl > "2026-08-16", "CERO VENCIDOS: la toma NUNCA cae en el pasado, aunque el RAC ya vencido tenga un .vence de hace meses");
+      t.cierto(plan.ftl >= "2026-08-17" && plan.ftl <= "2026-09-06",
+        "cae dentro de la ventana 14–21 días desde hoy (piso/techo de Estado A normal), no antes: " + plan.ftl);
+      t.cierto(plan.vencidos.some((a) => a.clave === "RAC"), "el RAC sigue apareciendo en 'Ya vencidos', aunque su estado ahora sea R");
+      t.cierto(plan.ordenar.some((a) => a.clave === "RAC"), "y se ordena en esta misma visita");
+      t.falso(plan.diferidos.some((a) => a.clave === "RAC"), "nunca queda diferido a un viaje futuro");
     });
 
     // ============ FECHA DE TOMA DE LABORATORIOS ============

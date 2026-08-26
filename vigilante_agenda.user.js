@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.74
+// @version     17.6.75
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.74";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.75";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25557,7 +25557,9 @@ _vglOfrecerDeshacer(btn);
     if (!C) return null;
 
     // El vigilado que vence primero (para nombrarlo en la explicación).
-    const vigilados = (plan.drivers || []).filter((x) => x && (x.estado === "D" || x.estado === "R") && x.vence);
+    // v17.6.75 — excluye un RAC ya vencido (`vencidoBase`, promovido a R): su fecha es
+    // pasada, no un "próximo vencimiento" — mismo trato que el Estado A normal.
+    const vigilados = (plan.drivers || []).filter((x) => x && (x.estado === "D" || x.estado === "R") && x.vence && !x.vencidoBase);
     const primero = vigilados.slice().sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0] || null;
 
     if (deudaYa) {
@@ -25689,6 +25691,11 @@ _vglOfrecerDeshacer(btn);
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
+      // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
+      // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
+      // caía en la rama de abajo y decía "vence el [fecha YA PASADA]", un tiempo verbal
+      // que miente sobre algo que ya pasó. `vencidoBase` es la verdad de terreno.
+      if (a.estado === "R" && a.vencidoBase) return fila(a, "Albuminuria: venció el " + mtrFechaLegible(a.vence) + " — vigilancia estrecha");
       if (a.estado === "R") return fila(a, "Albuminuria: vigilancia estrecha, vence el " + mtrFechaLegible(a.vence));
       return fila(a, a.vence ? "Vence el " + mtrFechaLegible(a.vence) + ": se aprovecha el mismo viaje" : "Se ordena en esta toma");
     });
@@ -25843,7 +25850,14 @@ _vglOfrecerDeshacer(btn);
   // =====================================================================
   function mtrAvisoVencimiento(plan, refLabIso) {
     if (!plan || !mtrFechaDesdeIso(refLabIso)) return null;
-    const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence);
+    // v17.6.75 — auditoría 25-ago (1.17): esta función avisa de exámenes que TODAVÍA no
+    // vencen pero VENCERÍAN antes de la fecha propuesta — un RAC≥30 ya vencido
+    // (`vencidoBase`, ahora en estado R por la promoción de albuminuria) no encaja ahí:
+    // ya está vencido HOY, no "vencería" con la fecha elegida — cualquier fecha futura
+    // "vencería" respecto a él, generando un aviso redundante y confuso sobre algo que el
+    // médico ya sabe (está en la lista de "Ya vencidos"). Mismo trato que el Estado A
+    // normal, que también queda fuera de este filtro.
+    const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
     if (!vigilados.length) return null;
     const vencidosEnEsaFecha = vigilados.filter((a) => a.vence < refLabIso)
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0));
@@ -25932,7 +25946,10 @@ _vglOfrecerDeshacer(btn);
         // Caso 2 — todavía no vence, pero vencerá antes del piso. Se adelanta AL
         // vencimiento, retrocediendo a día hábil (nunca avanzando: adelantar un día es
         // inocuo, atrasarlo es justo lo que rompe CERO VENCIDOS).
-        const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence);
+        // v17.6.75 — mismo trato que arriba: un RAC ya vencido (`vencidoBase`) no es un
+        // "todavía no vence" — no debería llegar nunca a esta rama (el caso 1 ya lo
+        // atrapa vía `vencidos`), pero se excluye igual por consistencia y defensa.
+        const vigilados = (plan.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
         const primero = vigilados.slice().sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0];
         if (primero && primero.vence) {
           const candidato = mtrRetrocederADiaHabil(primero.vence);
@@ -30295,19 +30312,36 @@ _vglOfrecerDeshacer(btn);
     let subestado = "vigente";
     if (diasParaVencer !== null && diasParaVencer < 0) { estado = "A"; subestado = "vencido"; }
     const racNum = mtrFloat(c.rac);
-    if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA && estado !== "A") {
+    // v17.6.75 — auditoría 25-ago (1.17): antes el guard `estado !== "A"` bloqueaba la
+    // promoción a Estado R cuando el RAC YA estaba vencido — se quedaba como "A" normal,
+    // sin la señal específica de albuminuria (vigilancia estrecha). Decisión del médico:
+    // "usa el mismo piso/techo que el Estado A normal (Recomendado si no tiene el spec a
+    // mano)" — enfoque conservador. Ahora se promueve a R SIEMPRE que haya albuminuria
+    // (vencido o no), pero `vencidoBase` recuerda si YA estaba vencido ANTES de la
+    // promoción, para que `mtrPlanParaclinicos` lo siga tratando con la MISMA urgencia
+    // de un Estado A normal (piso 14/techo 21, en la lista de vencidos, excluido del
+    // cálculo de "próximo vencimiento futuro") — nunca se relaja CERO VENCIDOS solo por
+    // reetiquetarlo a R.
+    const vencidoBase = estado === "A";
+    if (clave === "RAC" && racNum !== null && racNum >= MTR_RAC_QUE_ACORTA_VIGENCIA) {
       estado = "R"; subestado = "albuminuria";
     }
     return {
       clave: clave, nombre: nombre, estado: estado, subestado: subestado,
       vigenciaDias: vigencia, fecha: fecha, valor: valor, vence: vence,
       diasParaVencer: diasParaVencer,
+      // v17.6.75 — ver el comentario grande arriba: verdad de terreno de "ya estaba
+      // vencido", independiente de la relabeling a R por albuminuria.
+      vencidoBase: vencidoBase,
       // v16.2.7 — Cuando la vigencia se partió por estar fuera de meta, el motivo lo DICE:
       // si no, el médico ve una fecha más corta sin saber de dónde salió.
       fueraDeMeta: fueraMeta === true,
       vigenciaNormaDias: vigenciaNorma,
-      motivo: (estado === "A"
-        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha)
+      motivo: (vencidoBase
+        // v17.6.75 — un RAC≥30 vencido, ahora promovido a R, sigue diciendo que está
+        // VENCIDO (nunca "vigente hasta" una fecha ya pasada) — la promoción a R es una
+        // prioridad de ATENCIÓN (vigilancia estrecha), no una negación de que venció.
+        ? ("vencido hace " + Math.abs(diasParaVencer) + " día(s) — resultado del " + fecha + " · albuminuria: vigilancia estrecha")
         : ("vigente hasta el " + vence))
         + (fueraMeta === true ? " · fuera de meta: se repite a la mitad (" + vigencia + " d en vez de " + vigenciaNorma + ")" : ""),
     };
@@ -30343,13 +30377,24 @@ _vglOfrecerDeshacer(btn);
     const todos = drivers.concat(pasajeros);
 
     const faltantes = todos.filter((a) => a.estado === "A" && a.subestado === "sin_historial");
-    const vencidos = todos.filter((a) => a.estado === "A" && a.subestado === "vencido");
+    // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora sale como estado "R"
+    // (ver mtrEstadoAnalito), no "A" — pero `vencidoBase` sigue siendo la verdad de
+    // terreno de que YA venció, y esta lista ("Ya vencidos") es justo donde el médico
+    // necesita seguir viéndolo: la relabeling a R es una prioridad de vigilancia
+    // estrecha, no una negación de que venció.
+    const vencidos = todos.filter((a) => (a.estado === "A" && a.subestado === "vencido") || (a.estado === "R" && a.vencidoBase));
     const bloqueados = todos.filter((a) => a.estado === "BLOQ");
     const noAplican = todos.filter((a) => a.estado === "NO_APLICA");
 
     // ---- FTL: el vencimiento más próximo entre los drivers que se vigilan ----
-    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence);
-    const hayEstadoA = drivers.some((a) => a.estado === "A");
+    // v17.6.75 — un RAC≥30 vencido y ya promovido a R (`vencidoBase`) se EXCLUYE de
+    // "próximo vencimiento futuro": su `.vence` es una fecha YA PASADA, y dejarlo
+    // competir aquí como si fuera un vencimiento vigente metería esa fecha pasada en
+    // `ftlCruda` — justo lo que CERO VENCIDOS prohíbe. Mismo trato que el Estado A
+    // normal (que también queda fuera de este filtro): la urgencia se resuelve con
+    // `hayEstadoA` y el piso/techo de abajo, nunca con una fecha ya vencida.
+    const conVencimiento = drivers.filter((a) => (a.estado === "D" || a.estado === "R") && a.vence && !a.vencidoBase);
+    const hayEstadoA = drivers.some((a) => a.estado === "A" || a.vencidoBase);
 
     let ftlCruda = null;
     let motivoFtl = "";
@@ -30425,6 +30470,10 @@ _vglOfrecerDeshacer(btn);
     const cosechados = [], diferidos = [];
     for (const a of drivers) {
       if (a.estado !== "D" && a.estado !== "R") continue;
+      // v17.6.75 — un RAC≥30 vencido (`vencidoBase`) ya está en `vencidos` arriba, con
+      // urgencia de Estado A: no se vuelve a evaluar aquí (su `.vence` es una fecha
+      // pasada, no un candidato real de "cosecha por margen futuro").
+      if (a.vencidoBase) continue;
       if (!a.vence || !a.vigenciaDias) continue;
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
