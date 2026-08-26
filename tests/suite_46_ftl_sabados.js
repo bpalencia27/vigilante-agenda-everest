@@ -137,6 +137,30 @@ module.exports = {
 
     // ============ FECHA DE TOMA DE LABORATORIOS ============
 
+    // [auditoría 25-ago, hallazgo 1.6] sin peso, mtrEvaluarErc no puede calcular el
+    // estadio administrativo (null) y mtrVigenciaDias("ERC",...) devuelve null para los 9
+    // drivers -> todos NO_APLICA -> el plan se presentaba como "no hay nada que vigilar"
+    // cuando la verdad es que falta el peso para saberlo.
+    t.caso("ERC sin peso: el plan avisa que FALTA EL PESO, no que 'no hay nada que vigilar'", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: null,
+        esDm2: true, edad: 68, rac: 12, ultimos: {},
+        pesoFaltaParaEstadio: true,
+      });
+      t.igual(plan.ftl, null, "sin estadio no se puede fijar una toma");
+      t.cierto(/falta el peso/i.test(plan.motivoFtl), "el motivo debe decir explícitamente que falta el peso, dijo: " + plan.motivoFtl);
+      t.falso(/no hay ningún examen que vigilar/i.test(plan.motivoFtl), "no debe sonar a que no hay nada pendiente");
+    });
+
+    t.caso("ERC sin estadio pero SIN la bandera pesoFaltaParaEstadio: sigue el mensaje genérico de siempre", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "ERC", estadioAdministrativo: null,
+        esDm2: true, edad: 68, rac: 12, ultimos: {},
+      });
+      t.igual(plan.motivoFtl, "no hay ningún examen que vigilar con este programa y estadio",
+        "sin la bandera explícita, el comportamiento previo no cambia");
+    });
+
     t.caso("CERO VENCIDOS — la toma va al vencimiento más próximo, nunca después", () => {
       const plan = api.mtrPlanParaclinicos(Object.assign({}, ctxErc, {
         ultimos: {

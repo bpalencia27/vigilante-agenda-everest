@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.50
+// @version     17.6.51
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.50";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.51";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30052,11 +30052,20 @@ _vglOfrecerDeshacer(btn);
       ftlCruda = masProximo.vence;
       motivoFtl = "en el vencimiento más próximo (" + masProximo.nombre + ")";
     } else {
+      // v17.6.51 — auditoría 25-ago (1.6): consecuencia directa de 1.5. Sin peso,
+      // erc.estadioAdministrativo sale null (mtrEvaluarErc exige peso para
+      // Cockcroft-Gault) y mtrVigenciaDias("ERC", ...) devuelve null para los 9 drivers
+      // -> todos NO_APLICA -> este mismo mensaje genérico. Al médico se le presentaba
+      // como "no hay nada que vigilar" cuando la verdad es "falta el peso para saberlo".
+      // No pasa en HTA/DM2 puros (esas tablas no usan estadio).
+      const motivo = (c.programa === "ERC" && !c.estadioAdministrativo && c.pesoFaltaParaEstadio)
+        ? "no se puede armar el plan de exámenes de ERC: falta el peso para calcular el estadio renal (Cockcroft-Gault) — no es que no haya nada pendiente"
+        : "no hay ningún examen que vigilar con este programa y estadio";
       return {
         hoy: hoy, drivers: drivers, pasajeros: pasajeros,
         faltantes: faltantes, vencidos: vencidos, bloqueados: bloqueados, noAplican: noAplican,
         ftl: null, control: null, ordenar: [], cosechados: [], diferidos: [],
-        motivoFtl: "no hay ningún examen que vigilar con este programa y estadio",
+        motivoFtl: motivo,
       };
     }
 
@@ -31802,6 +31811,9 @@ _vglOfrecerDeshacer(btn);
       funcionRenalInestable: erc.sospechaIra,
       ultimos: c.ultimos || {},
       grupoSabado: c.grupoSabado || null,
+      // v17.6.51 (1.6) — ver el comentario en mtrPlanParaclinicos: distingue "sin peso no
+      // puedo saber el estadio" de "de verdad no hay nada que vigilar".
+      pesoFaltaParaEstadio: !erc.estadioAdministrativo && Array.isArray(erc.faltan) && erc.faltan.indexOf("peso") >= 0,
     });
 
     const resumen = { erc: erc, riesgo: riesgo, meta: meta, programa: programa, plan: plan, factores: factores };

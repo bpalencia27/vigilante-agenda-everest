@@ -6,6 +6,27 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.51 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.6: sin peso, el plan ERC desaparece sin avisar por qué)
+
+Consecuencia directa de 1.5: sin peso, `erc.estadioAdministrativo` sale `null`
+(`mtrEvaluarErc` exige peso para Cockcroft-Gault), y `mtrVigenciaDias("ERC", ...)` devuelve
+`null` para los 9 drivers de ERC → todos `NO_APLICA` → `mtrPlanParaclinicos` (línea ~30059)
+devolvía el mensaje genérico "no hay ningún examen que vigilar con este programa y estadio".
+Verificado con el harness (ERC, edad 70, creat 1.6, sin peso): plan vacío, cero exámenes
+pendientes — al médico se le presentaba como "no hay nada que vigilar" en vez de "falta el
+peso". No pasa en HTA/DM2 puros (esas tablas no usan estadio). Fix: `mtrPlanParaclinicos`
+recibe una bandera `pesoFaltaParaEstadio` (calculada por `mtrResumenClinico` desde
+`erc.faltan`) y, cuando aplica, cambia el mensaje a uno que dice la verdad.
+
+- **Mutación**: se revirtió el cambio en `mtrPlanParaclinicos` (vuelta al mensaje genérico
+  fijo, sin la bandera). El banco pasó de 2211 en verde a 1 roja: *"ERC sin peso: el plan
+  avisa que FALTA EL PESO, no que 'no hay nada que vigilar'"* (esperaba que el motivo
+  mencionara "falta el peso" y seguía diciendo "no hay ningún examen que vigilar").
+  Restaurado, banco vuelve a 2211 en verde.
+- **Pruebas nuevas**: `tests/suite_46_ftl_sabados.js` — 2 casos (con la bandera, y sin ella
+  para confirmar que el comportamiento previo no cambia). Verificado también de punta a
+  punta vía `mtrResumenClinico` con el harness (edad 70, sexo F, sin peso, creat 1.6, ERC).
+
 ## v17.6.50 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.5: sexo ausente sube el estadio renal sin avisar)
 
 `mtrEvaluarErc` (vigilante_agenda.user.js:29358): con sexo vacío, `mtrEsSexoFemenino` da
