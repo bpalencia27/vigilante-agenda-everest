@@ -6,6 +6,26 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.54 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.11: ASCVD Colombia mezclaba ecuación masculina con factor femenino)
+
+`mtrClasificarRiesgoCv` (paso 4, vigilante_agenda.user.js:28920): el ASCVD crudo
+(`mtrAscvdPceCrudo`) elige ecuación con `mtrEsSexoFemenino(sexo)` — femenina si es cierto,
+MASCULINA en cualquier otro caso (su rama `else`, que cubre sexo ausente). El factor de
+ajuste Colombia elegía con `mtrEsSexoMasculino(sexo)` — una función DISTINTA que, con sexo
+ausente, TAMBIÉN da `false` (ninguna de las dos funciones exige que el dato exista para
+devolver `false`). Resultado: con sexo ausente, el crudo salía calculado con la ecuación
+MASCULINA pero el factor aplicado era el FEMENINO (0.54 en vez de 0.28) — casi el doble de
+riesgo ajustado, puede saltar de BAJO a MODERADO o de MODERADO a ALTO. Fix: el factor se
+elige con la MISMA función (`mtrEsSexoFemenino`) que decidió la ecuación — queda siempre
+pareado con la que de verdad se usó, sin inventar un "sexo por defecto" nuevo.
+
+- **Mutación**: se revirtió el factor a `mtrEsSexoMasculino(x.sexo) ? 0.28 : 0.54`. El
+  banco pasó de 2215 en verde a 1 roja: *"PASO 4 — con sexo AUSENTE, el factor de ajuste
+  debe parear con la ecuación realmente usada"* (sin sexo daba un % distinto al de
+  "Hombre", pese a usar la misma ecuación). Restaurado, banco vuelve a 2215 en verde.
+- **Prueba nueva**: `tests/suite_45_riesgo_cv.js` — 1 caso (sin sexo == Hombre; Mujer sí
+  distinto de Hombre, para no romper el caso real de ajuste por sexo).
+
 ## v17.6.53 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.8 y 1.9: dos elecciones manuales del médico que una recarga borraba)
 
 Mismo módulo (`openAgendamientoModal`, sección de toma de laboratorios), mismo patrón de

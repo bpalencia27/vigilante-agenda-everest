@@ -305,6 +305,26 @@ module.exports = {
       t.igual(m.categoria, "alto", "27% ajustado -> alto");
     });
 
+    // [auditoría 25-ago, hallazgo 1.11] mtrAscvdPceCrudo elige ecuación con
+    // mtrEsSexoFemenino(sexo) — femenina si es cierto, MASCULINA en cualquier otro caso
+    // (incluido sexo ausente). El factor de ajuste Colombia elegía con
+    // mtrEsSexoMasculino(sexo) — una función DISTINTA que, con sexo ausente, TAMBIÉN da
+    // false. El crudo salía calculado con la ecuación masculina pero el factor aplicado
+    // era el FEMENINO (0.54 en vez de 0.28): casi el doble de riesgo ajustado.
+    t.caso("PASO 4 — con sexo AUSENTE, el factor de ajuste debe parear con la ecuación realmente usada (la masculina)", () => {
+      // Mismo paciente, calculado desde cero (sin ascvd10yCrudo fijo) para que el crudo
+      // salga de mtrAscvdPceCrudo — que con sexo ausente usa su rama masculina (else).
+      const base = { egfrCkdepi: 90, edad: 55, ct: 240, hdl: 40, paSistolica: 140 };
+      const sinSexo = api.mtrClasificarRiesgoCv(base);
+      const conHombre = api.mtrClasificarRiesgoCv(Object.assign({}, base, { sexo: "Hombre" }));
+      t.igual(sinSexo.ascvdAjustadoPct, conHombre.ascvdAjustadoPct,
+        "sexo ausente debe dar EXACTAMENTE el mismo % que 'Hombre' (misma ecuación, mismo factor) — antes salía casi el doble");
+      t.igual(sinSexo.categoria, conHombre.categoria, "y por tanto la misma categoría de riesgo");
+      // Con sexo femenino real, sí debe usar el factor de mujer (0.54), distinto del de hombre.
+      const conMujer = api.mtrClasificarRiesgoCv(Object.assign({}, base, { sexo: "Mujer" }));
+      t.cierto(conMujer.ascvdAjustadoPct !== conHombre.ascvdAjustadoPct, "una mujer real sí debe dar un ajuste distinto al de un hombre");
+    });
+
     t.caso("sin TFG no se inventa categoría: se dice qué falta y no se lanza", () => {
       let r = null;
       t.noLanza(() => { r = api.mtrClasificarRiesgoCv({ edad: 60, sexo: "M" }); }, "no debe tumbar la consulta");

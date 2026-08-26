@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.53
+// @version     17.6.54
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.53";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.54";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28907,7 +28907,18 @@ _vglOfrecerDeshacer(btn);
         criterios: ["Los pasos 1 a 3 no clasifican y falta la escala ASCVD (edad, colesterol total, HDL y presión sistólica)"],
       });
     }
-    const factor = mtrEsSexoMasculino(x.sexo) ? 0.28 : 0.54;
+    // v17.6.54 — auditoría 25-ago (1.11): el ASCVD crudo (mtrAscvdPceCrudo, arriba) elige
+    // ecuación con `mtrEsSexoFemenino(sexo)` — femenina si es cierto, MASCULINA en
+    // cualquier otro caso (incluido sexo ausente, su rama `else`). El factor de ajuste
+    // Colombia elegía con `mtrEsSexoMasculino(sexo)` — una función DISTINTA que, con sexo
+    // ausente, TAMBIÉN da false (ninguna de las dos exige que el dato exista para ser
+    // "no-femenino"/"no-masculino"). Resultado: con sexo ausente, el crudo salía calculado
+    // con la ecuación masculina pero el factor aplicado era el FEMENINO (0.54 en vez de
+    // 0.28) — casi el doble de riesgo ajustado, puede saltar de BAJO a MODERADO o de
+    // MODERADO a ALTO. Se usa la MISMA función (mtrEsSexoFemenino) que decidió la
+    // ecuación, para que el factor SIEMPRE quede pareado con la ecuación que de verdad se
+    // usó — sin inventar un "sexo por defecto" nuevo, solo consistencia interna.
+    const factor = mtrEsSexoFemenino(x.sexo) ? 0.54 : 0.28;
     const ajustado = mtrRound(crudo * factor, 2);
     let categoria;
     if (ajustado > 20) categoria = "alto";
