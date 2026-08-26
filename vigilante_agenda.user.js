@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.82
+// @version     17.6.83
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.82";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.83";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32569,7 +32569,13 @@ _vglOfrecerDeshacer(btn);
       // divergencia vigente, se documenta el cierre en vez de la divergencia.
       medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : [], r.medicamentosFrecuencia || undefined)
         .map((m) => m.nombre + (m.sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")),
-      education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!(r.fallas && r.fallas.hayGrave) || riesgo.categoria === "muy alto" },
+      // v17.6.83 — auditoría v68 (S5): `alarmas` se recalculaba aquí con una fórmula PROPIA
+      // (`fallas.hayGrave || muy alto`) distinta de la de mtrEducationFlags (`meta.falla`,
+      // solo lípidos) que alimenta la hoja educativa impresa. Las dos se contradecían sobre
+      // el mismo paciente en la misma consulta (verificado: DM2 con HbA1c 11% y LDL en meta
+      // -> hoja `false`, JSON `true`). Ahora se consume la bandera ya calculada: una sola
+      // fuente, imposible que vuelvan a divergir.
+      education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!ef.alarmas },
       priority_focus: r.foco || "",
       // v17.6.8 — relativizadas (nunca crudas): cuasi-identificadores fuera del prompt.
       ftl_date: mtrRelativizarFechaIso(plan.ftl, (r && r._hoyIso) || todayStamp()) || "",
@@ -32694,6 +32700,33 @@ _vglOfrecerDeshacer(btn);
     // las dos lean exactamente la misma meta (individual si el médico la fijó, general
     // si no).
     resumen.hba1c = (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null;
+    // Falla terapéutica y recontrol (S2). La meta de LDL sale de la
+    // clasificación; la de HbA1c es la estándar de DM2 salvo que el médico la
+    // pase por c.hba1cMeta. Si no hay LDL ni HbA1c, mtrPlanFallas no encuentra
+    // nada y devuelve listas vacías — no inventa fallas.
+    //
+    // v17.6.83 — auditoría v68 (S5, `education_flags`): este bloque se calculaba DESPUÉS de
+    // `resumen.foco`/`resumen.educationFlags`, así que las banderas no podían verlo y tenían
+    // que apañarse con `meta.falla`, que solo conoce el eje LIPÍDICO. El JSON que lee la IA,
+    // en cambio, sí miraba `r.fallas.hayGrave`. Dos fórmulas distintas para la misma bandera
+    // = dos verdades sobre el mismo paciente. Verificado con el harness (DM2, HbA1c 11% en
+    // falla GRAVE, LDL 60 en meta): la HOJA EDUCATIVA IMPRESA salía con `alarmas:false` (sin
+    // la sección de signos de alarma) mientras el JSON de la IA decía `alarmas:true`. Se
+    // sube el cálculo aquí para que haya UNA sola fuente; el orden es seguro porque
+    // mtrPlanFallas solo necesita `riesgo`, `erc`, `plan.ftl`, `meta.metas` y `factores`,
+    // todos ya construidos por encima de esta línea.
+    resumen.fallas = mtrPlanFallas({
+      hoyIso: c.hoyIso,
+      categoriaRiesgo: riesgo.categoria, egfr: erc.egfr, edad: c.edad,
+      ftlMaestra: plan.ftl, meds: c.meds, esDm2: !!factores.diabetes,
+      // v16.4.0 — una sola clave para la meta de HbA1c: `metaHba1c`. Antes convivían
+      // `hba1cMeta` (aquí) y `metaHba1c` (la regla del 50%), y aunque alguien cableara
+      // una, la otra seguía en 7,0. El campo editable por paciente llega en la próxima
+      // versión; esta unificación es su cimiento.
+      grupoSabado: c.grupoSabado || null, hba1cMeta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta), metaHba1c: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta),
+      ldl: (meta && meta.metas && c.ldl != null) ? { actual: c.ldl, meta: meta.metas.ldl } : null,
+      hba1c: (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null,
+    });
     // Bloques de S5 que dependen del resumen ya armado (foco, banderas, TG y
     // uroanálisis). Se calculan aquí para que el recuadro no tenga que pedirlos
     // aparte y para que las pruebas los vean por la misma puerta.
@@ -32721,22 +32754,6 @@ _vglOfrecerDeshacer(btn);
     // El uroanálisis solo se evalúa si llegaron sus componentes (nitritos,
     // esterasa, etc.); si no, no se inventa nada.
     resumen.uroanalisis = c.uroHallazgos ? mtrEvaluarUroanalisis(c.uroHallazgos, c.uroSintomas, c.embarazo) : null;
-    // Falla terapéutica y recontrol (S2). La meta de LDL sale de la
-    // clasificación; la de HbA1c es la estándar de DM2 salvo que el médico la
-    // pase por c.hba1cMeta. Si no hay LDL ni HbA1c, mtrPlanFallas no encuentra
-    // nada y devuelve listas vacías — no inventa fallas.
-    resumen.fallas = mtrPlanFallas({
-      hoyIso: c.hoyIso,
-      categoriaRiesgo: riesgo.categoria, egfr: erc.egfr, edad: c.edad,
-      ftlMaestra: plan.ftl, meds: c.meds, esDm2: !!factores.diabetes,
-      // v16.4.0 — una sola clave para la meta de HbA1c: `metaHba1c`. Antes convivían
-      // `hba1cMeta` (aquí) y `metaHba1c` (la regla del 50%), y aunque alguien cableara
-      // una, la otra seguía en 7,0. El campo editable por paciente llega en la próxima
-      // versión; esta unificación es su cimiento.
-      grupoSabado: c.grupoSabado || null, hba1cMeta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta), metaHba1c: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta),
-      ldl: (meta && meta.metas && c.ldl != null) ? { actual: c.ldl, meta: meta.metas.ldl } : null,
-      hba1c: (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null,
-    });
     return resumen;
   }
 
@@ -34358,10 +34375,20 @@ _vglOfrecerDeshacer(btn);
   function mtrEjesEnFalla(resumen) {
     const r = resumen || {};
     const erc = r.erc || {}, plan = r.plan || {}, meta = r.meta || {};
+    // v17.6.83 — auditoría v68 (S5, `priority_focus`): esto era `a.estado === "A"` a secas,
+    // y desde v17.6.75 un RAC≥30 VENCIDO ya no sale como "A": sale como "R" (vigilancia
+    // estrecha) con `vencidoBase` a true. Resultado verificado con el harness: paciente HTA,
+    // RAC 45 tomado hace 138 días, resto de laboratorios frescos y LDL en meta -> el eje
+    // renal quedaba en `false` y el foco de la consulta salía "lipídico". Ese foco viaja al
+    // JSON (`priority_focus`) que lee la IA, así que la nota clínica que el médico copia a la
+    // historia declaraba el foco equivocado y el daño renal quedaba relegado en el texto —
+    // justo en el paciente que v17.6.75 acababa de promover a recontrol prioritario.
+    // Se usa LA MISMA condición que la lista "Ya vencidos" de mtrPlanParaclinicos (:30704),
+    // para que las dos lecturas de "está vencido" no puedan volver a contradecirse.
     const enFalla = (clave) => {
       const drivers = (plan.drivers || []);
       const a = drivers.find((x) => x.clave === clave);
-      return !!a && a.estado === "A";   // ausente o vencido
+      return !!a && (a.estado === "A" || (a.estado === "R" && !!a.vencidoBase));   // ausente o vencido
     };
     const renal = !!plan.anr || !!erc.sospechaIra || !!erc.remitirNefrologia
       || enFalla("CREATININA") || enFalla("RAC") || enFalla("UROANALISIS");
@@ -34396,7 +34423,17 @@ _vglOfrecerDeshacer(btn);
   function mtrEducationFlags(resumen) {
     const r = resumen || {};
     const riesgo = r.riesgo || {}, meta = r.meta || {};
-    const hayFalla = !!(meta && (meta.falla || meta.fallaGrave));
+    // v17.6.83 — auditoría v68 (S5): `hayFalla` solo miraba `meta.falla`/`meta.fallaGrave`,
+    // que son del eje LIPÍDICO exclusivamente. Un diabético con HbA1c en 11% (falla GRAVE
+    // del eje metabólico) y el LDL en meta salía con `alarmas:false` y se iba de la consulta
+    // con la hoja educativa impresa SIN la sección de signos de alarma cardiovasculares —
+    // mientras el JSON que lee la IA, con su propia fórmula, decía lo contrario. Ahora esta
+    // función es la ÚNICA fuente (el JSON la consume, ya no recalcula) y mira los TRES ejes
+    // vía `r.fallas`, que v68 define como "FALLA" sin distinguir de qué analito viene.
+    // Se cuentan tanto graves como leves: v68 dice "alarmas=true si MUY ALTO o FALLA", y
+    // ante la duda educar de más es inocuo — omitir los signos de alarma no lo es.
+    const fallas = r.fallas || {};
+    const hayFalla = !!(meta && (meta.falla || meta.fallaGrave)) || !!fallas.hayGrave || !!fallas.hayLeve;
     const programaRcv = ["ERC", "DM2", "HTA"].indexOf(r.programa) >= 0;
     return {
       alarmas: riesgo.categoria === "muy alto" || hayFalla,

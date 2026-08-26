@@ -6,6 +6,67 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.83 — 26-ago-2026 (auditoría v68 del port, bloque S5: el foco y las banderas de la salida)
+
+Auditoría nueva del `MOTOR_RCV_V68_SPEC.md` contra el código de HOY (la del 25-ago quedó
+desactualizada: esta rama lleva 17 versiones de arreglos encima). 114 cláusulas verificadas
+una por una con el harness y con una pasada de refutación adversarial por bloque. Dos
+hallazgos del bloque S5 se reprodujeron ejecutando el motor, y son los que cierra esta
+versión. Ambos son de FIDELIDAD al spec, no divergencias: v68 dice una cosa y el port hacía
+otra sin que nadie lo hubiera decidido.
+
+**1. El foco de la consulta ignoraba el RAC vencido.** `mtrEjesEnFalla` decidía "este eje
+está en falla" con `a.estado === "A"` a secas. Pero desde v17.6.75 un RAC≥30 VENCIDO ya no
+sale como "A": sale como **"R"** (vigilancia estrecha) con `vencidoBase`. Verificado con el
+harness — paciente HTA, RAC 45 tomado hace 138 días, resto de laboratorios frescos y LDL en
+meta: el eje renal salía `false` y el foco de la consulta salía **"lipídico"**. Ese foco
+viaja al JSON (`priority_focus`) que lee la IA, así que la nota clínica que el médico copia
+a la historia declaraba el foco equivocado — y precisamente en el paciente que v17.6.75
+acababa de promover a recontrol prioritario. Se adopta la MISMA condición que ya usa la
+lista "Ya vencidos" de `mtrPlanParaclinicos` (:30704), para que las dos lecturas de "está
+vencido" no puedan volver a contradecirse. Un Estado R que aún NO ha vencido sigue sin
+encender el eje: si no, todo paciente con albuminuria tendría foco renal permanente.
+
+**2. `education_flags.alarmas` tenía DOS fórmulas que se contradecían.** La hoja educativa
+que se IMPRIME y se le entrega al paciente salía de `mtrEducationFlags`, que miraba
+`meta.falla`/`meta.fallaGrave` — del eje **lipídico** exclusivamente. El JSON que lee la IA
+tenía su propia fórmula (`fallas.hayGrave || muy alto`). Verificado con el harness —
+diabético con **HbA1c en 11 %** (falla grave del eje metabólico) y el LDL en meta: la hoja
+impresa decía `alarmas:false` (se iba **sin la sección de signos de alarma**) mientras el
+JSON decía `alarmas:true`. Dos verdades sobre el mismo paciente en la misma consulta. Causa
+de fondo: `resumen.fallas` se calculaba DESPUÉS de `resumen.educationFlags`, así que las
+banderas no podían verlo aunque quisieran. Se sube el cálculo (seguro: `mtrPlanFallas` solo
+necesita `riesgo`, `erc`, `plan.ftl`, `meta.metas` y `factores`, todos ya construidos), se
+hace de `mtrEducationFlags` la ÚNICA fuente mirando los tres ejes, y el JSON pasa a
+consumirla en vez de recalcularla. Se cuentan graves y leves: v68 dice "alarmas=true si MUY
+ALTO o FALLA" sin distinguir gravedad, y ante la duda educar de más es inocuo — omitir los
+signos de alarma no lo es.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **eje renal ciego al Estado R** | `mtrEjesEnFalla`: la condición vuelta a `a.estado === "A"` a secas | `suite_48` | *v17.6.83: un RAC≥30 vencido (Estado R) enciende el eje renal…* → *RAC vencido en Estado R -> eje renal (obtuvo false)* |
+| **banderas solo del eje lipídico** | `mtrEducationFlags`: `hayFalla` vuelto a `meta.falla \|\| meta.fallaGrave` | `suite_48` | *…la falla de CUALQUIER eje enciende las alarmas* → *HbA1c en falla grave con el LDL en meta -> alarmas (obtuvo false)* — y además cayó la invariante hoja/JSON |
+| **el JSON recalcula por su cuenta** | `education_flags.alarmas` del JSON vuelto a `fallas.hayGrave \|\| muy alto` | `suite_48` | *…la hoja impresa y el JSON de la IA nunca discrepan* → *con falla LEVE, hoja y JSON siguen diciendo lo mismo: esperaba true y obtuvo false* |
+| **orden de cálculo** | el bloque `resumen.fallas = mtrPlanFallas({…})` devuelto a su posición original (después de las banderas) | `suite_48` | *…la hoja impresa y el JSON de la IA nunca discrepan* → *y con una falla grave, lo que dicen es que SÍ (obtuvo false)* |
+
+Nota honesta sobre la tercera fila: **la primera versión de la prueba NO cazaba esa
+mutación**. El vector end-to-end usaba una falla GRAVE, y con falla grave las dos fórmulas
+viejas coinciden por casualidad — el banco seguía en verde con el código roto. Se añadió un
+segundo vector con falla **LEVE**, que es justo donde divergen, y entonces sí cayó. Queda
+anotado porque es exactamente el susto que esta disciplina existe para evitar.
+
+Las cuatro mutaciones se aplicaron de una en una sobre producción, cada una cayó con la
+aserción exacta esperada, y todas se restauraron verificando `diff` contra una copia intacta
+tomada antes de mutar. El banco volvió a 2297/2297 tras la restauración final.
+
+**Hallazgo NO arreglado, a propósito:** tres agentes de la auditoría (bloques S2, S3 y S5)
+reportaron que las fusiones MTT no entran en `plan.ordenar`/`order_list`, y es cierto a
+nivel de código (nada las añade). Pero al intentar reproducir la consecuencia clínica que
+describían —el paciente viaja y no le sacan el analito del recontrol— **no se logró con
+vectores realistas**: en los casos donde la fusión ocurre, la regla de Cosecha ya arrastra
+ese analito a la orden. No se empuja un arreglo para un daño que no se ha podido demostrar;
+queda anotado para consultarlo con el médico.
+
 ## v17.6.82 — 26-ago-2026 ("no aparece mi nombre donde dice Médico" — caché de identidad por login)
 
 Reporte en vivo con captura: en "Programación de cita" el campo "Médico:" salía vacío, y el

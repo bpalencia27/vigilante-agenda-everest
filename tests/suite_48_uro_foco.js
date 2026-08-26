@@ -280,6 +280,26 @@ module.exports = {
       t.cierto(ejes.lipidico, "falla de meta -> eje lipídico");
     });
 
+    // v17.6.83 — auditoría v68 (S5, priority_focus). Desde v17.6.75 un RAC≥30 VENCIDO ya
+    // no sale como estado "A": sale como "R" (vigilancia estrecha) con `vencidoBase`. El
+    // eje renal solo miraba "A", así que el paciente cuyo problema REAL es la albuminuria
+    // salía de la consulta con el foco puesto en LÍPIDOS — y ese foco viaja al JSON
+    // (`priority_focus`) que lee la IA, así que la nota clínica declaraba el foco
+    // equivocado justo en el paciente que v17.6.75 acababa de promover a prioritario.
+    t.caso("v17.6.83: un RAC≥30 vencido (Estado R) enciende el eje renal, no solo el Estado A", () => {
+      const racVencido = resumen({
+        plan: { anr: null, drivers: [{ clave: "RAC", estado: "R", vencidoBase: true }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(racVencido).renal, "RAC vencido en Estado R -> eje renal");
+      t.igual(api.mtrPriorityFocus(racVencido), "renal", "y el foco de la consulta es renal");
+      // Un Estado R que todavía NO ha vencido es vigilancia estrecha, no falla: si esto
+      // encendiera el eje, TODO paciente con albuminuria tendría foco renal permanente.
+      const racVigente = resumen({
+        plan: { anr: null, drivers: [{ clave: "RAC", estado: "R", vencidoBase: false }] },
+      });
+      t.falso(api.mtrEjesEnFalla(racVigente).renal, "un RAC en R pero VIGENTE no es falla");
+    });
+
     // ================= EDUCACIÓN =================
 
     t.caso("las alarmas se encienden en muy alto riesgo o cuando hay falla", () => {
@@ -289,6 +309,81 @@ module.exports = {
         "falla -> alarmas");
       t.falso(api.mtrEducationFlags({ riesgo: { categoria: "moderado" }, meta: { falla: false }, programa: "HTA" }).alarmas,
         "sin nada de eso, no");
+    });
+
+    // v17.6.83 — auditoría v68 (S5, education_flags). `alarmas` solo miraba
+    // `meta.falla`/`meta.fallaGrave`, que son del eje LIPÍDICO exclusivamente. Un
+    // diabético con HbA1c en 11% (falla GRAVE del eje metabólico) y el LDL en meta se iba
+    // de la consulta con la hoja educativa impresa SIN la sección de signos de alarma.
+    t.caso("v17.6.83: la falla de CUALQUIER eje enciende las alarmas, no solo la de lípidos", () => {
+      const base = { riesgo: { categoria: "alto" }, meta: { falla: false, fallaGrave: false }, programa: "DM2" };
+      t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: true, hayLeve: false } })).alarmas,
+        "HbA1c en falla grave con el LDL en meta -> alarmas");
+      t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: false, hayLeve: true } })).alarmas,
+        "una falla leve también es FALLA para v68 — educar de más es inocuo, omitir no");
+      t.falso(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: false, hayLeve: false } })).alarmas,
+        "sin falla en ningún eje, no se encienden");
+    });
+
+    // La invariante que de verdad importa: la hoja educativa que se IMPRIME y el JSON que
+    // lee la IA salen del mismo resumen y no pueden contradecirse. Antes de v17.6.83 cada
+    // uno tenía su propia fórmula y sobre este mismo paciente decían cosas opuestas.
+    t.caso("v17.6.83: la hoja impresa y el JSON de la IA nunca discrepan en 'alarmas'", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26",
+        edad: 55, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        rac: 10, ct: 150, hdl: 50, ldl: 60, paSistolica: 125, paDiastolica: 78,
+        factores: { hta: false, diabetes: true },
+        ultimos: {
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 50 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 60 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 110 },
+          GLUCOSA:          { fecha: "2026-08-01", valor: 210 },
+          HBA1C:            { fecha: "2026-08-01", valor: 11 },
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+        },
+        ldl: 60, hba1c: 11,
+      });
+      t.cierto(r.fallas && r.fallas.hayGrave, "el vector es el que debe ser: HbA1c en falla grave");
+      t.falso(!!(r.meta && (r.meta.falla || r.meta.fallaGrave)), "y el LDL SÍ está en meta");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(!!json.education_flags.alarmas, !!r.educationFlags.alarmas,
+        "hoja impresa y JSON de la IA dicen lo mismo");
+      t.cierto(r.educationFlags.alarmas, "y con una falla grave, lo que dicen es que SÍ");
+      t.cierto(api.mtrEducacionFlagsTexto(r.educationFlags).indexOf("reforzar signos de alarma") >= 0,
+        "la hoja que se le entrega al paciente lleva los signos de alarma");
+
+      // El caso que de verdad separa las dos fórmulas viejas: una falla LEVE. La del JSON
+      // solo miraba `hayGrave`, así que aquí habría dicho `false` mientras la hoja decía
+      // `true`. Con una falla grave las dos coincidían por casualidad y la divergencia
+      // pasaba inadvertida — por eso este vector, y no el de arriba, es el que vigila que
+      // nadie vuelva a meter una segunda fórmula en el JSON.
+      const leve = api.mtrResumenClinico({
+        hoyIso: "2026-08-26",
+        edad: 55, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        rac: 10, ct: 150, hdl: 50, ldl: 60, paSistolica: 125, paDiastolica: 78,
+        factores: { hta: false, diabetes: true },
+        ultimos: {
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 50 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 60 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 110 },
+          GLUCOSA:          { fecha: "2026-08-01", valor: 150 },
+          HBA1C:            { fecha: "2026-08-01", valor: 8.5 },   // >7.0+15%, por debajo de +30%
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+        },
+        ldl: 60, hba1c: 8.5,
+      });
+      t.cierto(leve.fallas && leve.fallas.hayLeve && !leve.fallas.hayGrave,
+        "el vector es el que debe ser: falla LEVE, no grave");
+      t.falso(leve.riesgo.categoria === "muy alto", "y el riesgo no es 'muy alto'");
+      const jsonLeve = api.mtrJsonV68DesdeResumen(leve, api.mtrHojaDesdeResumen(leve));
+      t.igual(!!jsonLeve.education_flags.alarmas, !!leve.educationFlags.alarmas,
+        "con falla LEVE, hoja y JSON siguen diciendo lo mismo");
+      t.cierto(leve.educationFlags.alarmas, "y una falla leve también es FALLA para v68");
     });
 
     t.caso("dieta y actividad se encienden cuando el programa incluye RCV", () => {
