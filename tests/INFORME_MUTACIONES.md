@@ -6,6 +6,41 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.76 — 26-ago-2026 (ítem 4: fusiones MTT → JSON, campo `order_list_mtt` — decisión del médico: "Sí")
+
+El motor ya calcula, en `mtrConsolidarMtt` (invocado desde `mtrPlanFallas`, guardado en
+`resumen.fallas.fusiones`/`.fechasDedicadas`), cuándo el recontrol de una falla
+terapéutica GRAVE (LDL o HbA1c) se RETOMA en la misma visita que la FTL maestra
+("fusión", cuando cae a ≤60 días de espera) o necesita una visita APARTE y prioritaria
+("fecha dedicada", ya colapsada con otras cercanas ≤7 días entre sí) — pero esa
+información nunca salía en el JSON v68 que lee la IA redactora, así que la nota clínica
+nunca podía mencionar cuándo debía repetirse el LDL/HbA1c tras ajustar el tratamiento.
+
+**El fix**: nuevo campo `order_list_mtt` en `mtrJsonV68DesdeResumen`, con dos listas:
+- `fusiones`: `[{analito, fecha}]` — recontroles que se retoman en la FTL maestra.
+- `fechas_dedicadas`: `[{analitos, fecha}]` — recontroles con visita propia (ya
+  colapsados: `analitos` puede traer más de uno si `mtrConsolidarMtt` los fusionó por
+  caer cerca entre sí).
+
+Las fechas van RELATIVIZADAS (`mtrRelativizarFechaIso`), mismo criterio que
+`ftl_date`/`control_date`: nunca crudas, son cuasi-identificadores que no deben viajar
+al prompt de la IA. Sin `resumen.fallas` (o sin fallas graves con recontrol), ambas
+listas salen vacías — nunca se inventa una fusión/fecha dedicada que el motor no
+calculó (CERO INFERENCIA). Defensivo contra formas inesperadas (`fusiones`/
+`fechasDedicadas` null o no-array): no lanza, cae a lista vacía.
+
+**Mutación verificada**: se respaldó el archivo, se eliminó con `python3` el campo
+`order_list_mtt` completo (dejando `mtrJsonV68DesdeResumen` exactamente como estaba
+antes). `TZ=America/Bogota node tests/runner.js` puso rojas EXACTAMENTE las 3 pruebas
+nuevas (2274 pasan / 3 fallan): la que confirma que el campo existe con datos reales
+("obtuvo false"), la de fechas dedicadas colapsadas (`TypeError: Cannot read properties
+of undefined`, al intentar leer `.fechas_dedicadas` de un campo que ya no existía), y la
+de CERO INFERENCIA con `resumen.fallas` ausente. Ninguna otra prueba se vio afectada. Se
+restauró desde el backup y el banco volvió a 2277 en verde. Se añadieron 3 pruebas
+nuevas en `tests/suite_57_ia_redaccion.js`: el caso con fusión y fecha dedicada reales,
+el caso de fechas dedicadas ya colapsadas con dos analitos, y el caso CERO INFERENCIA
+(sin `fallas`, con `fallas` vacío, y con `fallas` de forma inesperada).
+
 ## v17.6.75 — 26-ago-2026 (ítem 3 / auditoría 25-ago 1.17: Estado R prioritario para RAC≥30 vencido — decisión del médico)
 
 Decisión del médico: "usa el mismo piso/techo que el Estado A normal (Recomendado si no

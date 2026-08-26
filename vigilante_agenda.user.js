@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.75
+// @version     17.6.76
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.75";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.76";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32213,6 +32213,27 @@ _vglOfrecerDeshacer(btn);
       // plan.ordenar incluye el HDL cosechado; el order_list viejo no).
       order_list: claves(plan.ordenar),
       denied_list: claves(plan.bloqueados),
+      // v17.6.76 — auditoría 25-ago (ítem 4): el motor ya calcula, en mtrConsolidarMtt
+      // (vía mtrPlanFallas -> resumen.fallas.fusiones/.fechasDedicadas), cuándo el
+      // recontrol de una falla terapéutica GRAVE (LDL/HbA1c) se RETOMA en la misma
+      // visita que la FTL maestra ("fusión", ≤60 días de espera) o necesita una visita
+      // APARTE y prioritaria ("fecha dedicada", ya colapsada con otras cercanas ≤7 días
+      // entre sí) — pero esa información nunca salía en el JSON que lee la IA, así que
+      // la nota clínica nunca podía mencionar cuándo debía repetirse el LDL/HbA1c tras
+      // ajustar el tratamiento. Fechas relativizadas, igual que ftl_date/control_date:
+      // nunca crudas (cuasi-identificador fuera del prompt). Sin `resumen.fallas` (o sin
+      // fallas graves con recontrol), ambas listas salen vacías — nunca se inventa una
+      // fusión/fecha dedicada que el motor no calculó.
+      order_list_mtt: {
+        fusiones: ((r.fallas && Array.isArray(r.fallas.fusiones)) ? r.fallas.fusiones : []).map((f) => ({
+          analito: (f && f.analito) || "",
+          fecha: mtrRelativizarFechaIso(f && f.fecha, (r && r._hoyIso) || todayStamp()) || "",
+        })),
+        fechas_dedicadas: ((r.fallas && Array.isArray(r.fallas.fechasDedicadas)) ? r.fallas.fechasDedicadas : []).map((d) => ({
+          analitos: (d && Array.isArray(d.analitos) && d.analitos.length) ? d.analitos : ((d && d.analito) ? [d.analito] : []),
+          fecha: mtrRelativizarFechaIso(d && d.fecha, (r && r._hoyIso) || todayStamp()) || "",
+        })),
+      },
       nota_clinica: { justificacion_riesgo_meta: "", sustento_medicolegal: "" },
       technical_justification: "",
     };
