@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.89
+// @version     17.6.90
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.89";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.90";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -33009,6 +33009,36 @@ _vglOfrecerDeshacer(btn);
   // que arma el bloque de riesgo/función renal/exámenes/uroanálisis/falla/fechas a partir
   // de un resumen ya calculado. `opts.ocultarCabeceraRiesgoEIA` deja fuera la cabecera de
   // riesgo y la entrada a la IA (usado por modales que no deben mostrar esas dos piezas).
+  // v17.6.90 — auditoría v68 (S3, ANR). La línea del "agujero negro renal" se pintaba SIEMPRE
+  // que existiera `plan.anr`, diciendo "todo se agrupa en la fecha de la creatinina". Pero el
+  // ANR solo mueve la fecha de toma si la creatinina es la que vence PRIMERO; si otro examen
+  // vence antes, el ANR se marca igual y no agrupa nada.
+  //
+  // Verificado con el harness (ERC G3b, creatinina que vence el 19-oct dentro de la ventana,
+  // lípidos que vencen el 28-sep): la toma queda el 9-sep y la creatinina sale **DIFERIDA** —
+  // no entra en esa orden. La pantalla afirmaba que todo se agrupaba mientras el paciente, tal
+  // como estaba el plan, habría tenido que volver una segunda vez justo por la creatinina.
+  //
+  // Es el peor tipo de error de este proyecto: no una casilla vacía, sino un dato que
+  // CONTRADICE el plan que el médico va a firmar, y sobre el que puede apoyarse para no
+  // revisar la lista. Este helper describe lo que de verdad pasó. (La agrupación real —que el
+  // ANR agrupe de hecho— es un cambio de fechas y va aparte, con su propia entrega.)
+  function mtrTextoAnr(plan) {
+    const p = plan || {};
+    if (!p.anr) return "";
+    const vence = p.anr.vence;
+    const enLaToma = (p.ordenar || []).some((a) => a && a.clave === "CREATININA");
+    const fecha = (typeof mtrFechaLegible === "function" && vence) ? mtrFechaLegible(vence) : vence;
+    if (vence && p.ftl === vence) {
+      return "La creatinina vence el " + fecha + " y es la que manda: los exámenes se agrupan ese día.";
+    }
+    if (enLaToma) {
+      return "La creatinina vence el " + fecha + " y se adelanta a esta misma toma: un solo viaje.";
+    }
+    return "Ojo: la creatinina vence el " + fecha + " y NO entra en esta toma. Tal como está el plan, "
+      + "el paciente tendría que volver una segunda vez solo por ella.";
+  }
+
   function mtrRenderResumenClinicoHtml(r, opts) {
     if (!r) return "";
     const ocultarCabeceraRiesgoEIA = !!(opts && opts.ocultarCabeceraRiesgoEIA);
@@ -33059,7 +33089,7 @@ _vglOfrecerDeshacer(btn);
         </div>
       </div>
       <div class="vgl-rcv-porque">${esc(plan.motivoFtl)}${plan.seAdelantoPorDiaNoHabil ? " · adelantada al día hábil anterior para no pasarse del vencimiento" : ""}${control && control.fueraDeVentana ? " · " + esc(control.motivo) : ""}</div>
-      ${plan.anr ? `<div class="vgl-rcv-porque">Ventana renal de ${esc(plan.anr.ventanaDias)} días activa: todo se agrupa en la fecha de la creatinina.</div>` : ""}
+      ${plan.anr ? `<div class="vgl-rcv-porque">${esc(mtrTextoAnr(plan))}</div>` : ""}
       ${(plan.diferidos || []).length ? `<div class="vgl-rcv-porque">Se dejan para después (todavía tienen vigencia de sobra): ${esc(plan.diferidos.map((a) => a.nombre).join(", "))}.</div>` : ""}
     ` : `<div class="vgl-rcv-porque">No hay ningún examen que vigilar con el programa y el estadio actuales.</div>`;
 

@@ -15,7 +15,7 @@ module.exports = {
   cubre: [
     "mtrResumenClinico", "mtrRenderResumenClinicoHtml", "mtrChipResumenTexto",
     "mtrClaseCategoria", "mtrFechaLegible", "mtrResumenDesdeModalLabs",
-    "mtrRenderCabeceraRiesgoHtml", "mtrRenderFallaHtml",
+    "mtrRenderCabeceraRiesgoHtml", "mtrRenderFallaHtml", "mtrTextoAnr",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -35,6 +35,74 @@ module.exports = {
       },
       grupoSabado: "1-3",
     };
+
+    // ===== v17.6.90 — el ANR afirmaba una agrupación que no ocurría =====
+    //
+    // La línea del "agujero negro renal" se pintaba SIEMPRE que existiera `plan.anr`, diciendo
+    // "todo se agrupa en la fecha de la creatinina". Pero el ANR solo mueve la fecha de toma
+    // si la creatinina es la que vence PRIMERO; si otro examen vence antes, el ANR se marca
+    // igual y no agrupa nada. Es el peor tipo de error de este proyecto: no una casilla vacía,
+    // sino un dato que CONTRADICE el plan que el médico va a firmar y sobre el que puede
+    // apoyarse para no revisar la lista.
+    //
+    // Las cuatro ramas se prueban contra la función pura; el caso que de verdad hacía daño se
+    // prueba además de punta a punta, sobre el HTML que el médico ve.
+    t.caso("v17.6.90: el texto del ANR describe lo que de verdad pasó, no lo que debería pasar", () => {
+      const conCreat = (extra) => Object.assign({
+        anr: { ventanaDias: 60, vence: "2026-10-19" }, ftl: "2026-09-09", ordenar: [],
+      }, extra || {});
+
+      // 1. La creatinina manda: la fecha de toma ES su vencimiento.
+      const manda = api.mtrTextoAnr(conCreat({ ftl: "2026-10-19", ordenar: [{ clave: "CREATININA" }] }));
+      t.cierto(/es la que manda/.test(manda), "dice que manda ella: " + manda);
+      t.cierto(/se agrupan ese día/.test(manda), "y que todo se agrupa ahí");
+
+      // 2. Manda otro examen, pero la creatinina se adelanta a esa misma toma: un solo viaje.
+      const cosechada = api.mtrTextoAnr(conCreat({ ordenar: [{ clave: "CREATININA" }, { clave: "GLUCOSA" }] }));
+      t.cierto(/se adelanta a esta misma toma/.test(cosechada), "dice que se adelanta: " + cosechada);
+      t.cierto(/un solo viaje/.test(cosechada), "y que es un solo viaje");
+
+      // 3. EL CASO QUE HACÍA DAÑO: manda otro y la creatinina NO entra en la toma.
+      const diferida = api.mtrTextoAnr(conCreat({ ordenar: [{ clave: "GLUCOSA" }] }));
+      t.cierto(/NO entra en esta toma/.test(diferida), "avisa de que no entra: " + diferida);
+      t.cierto(/volver una segunda vez/.test(diferida), "y de que el paciente tendría que volver");
+      t.falso(/se agrupan|un solo viaje/.test(diferida), "y NO afirma agrupación de ninguna forma");
+
+      // 4. Sin ANR no se dice nada.
+      t.igual(api.mtrTextoAnr({ anr: null, ftl: "2026-09-01", ordenar: [] }), "", "sin ANR, sin línea");
+      t.igual(api.mtrTextoAnr(null), "", "sin plan tampoco revienta");
+    });
+
+    t.caso("v17.6.90: en pantalla, un ANR que no agrupó NO dice que agrupó", () => {
+      // ERC G3b: la creatinina vence el 19-oct (dentro de la ventana de 60 días) pero los
+      // lípidos están vencidos y fuerzan la toma al 9-sep. Verificado: la creatinina sale
+      // DIFERIDA — el paciente tendría que volver por ella.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-26", programa: "ERC", estadioAdministrativo: "G3b",
+        categoriaRiesgo: "alto", esDm2: false, edad: 68, rac: 12,
+        ultimos: {
+          CREATININA:       { fecha: "2026-06-20", valor: 1.7 },
+          COLESTEROL_TOTAL: { fecha: "2026-04-01", valor: 190 },
+          COLESTEROL_HDL:   { fecha: "2026-04-01", valor: 45 },
+          COLESTEROL_LDL:   { fecha: "2026-04-01", valor: 90 },
+          TRIGLICERIDOS:    { fecha: "2026-04-01", valor: 120 },
+          GLUCOSA:          { fecha: "2026-08-01", valor: 95 },
+          UROANALISIS:      { fecha: "2026-08-01", valor: 1 },
+          RAC:              { fecha: "2026-08-01", valor: 12 },
+        },
+      });
+      t.cierto(!!plan.anr, "el vector es el que debe ser: el ANR está activo");
+      t.falso(plan.ftl === plan.anr.vence, "y la toma NO cae en el vencimiento de la creatinina");
+      t.falso((plan.ordenar || []).some((x) => x.clave === "CREATININA"),
+        "la creatinina queda fuera de esta toma");
+
+      const html = api.mtrRenderResumenClinicoHtml({
+        factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G3b" }, plan: plan, meta: {},
+      });
+      t.falso(/todo se agrupa en la fecha de la creatinina/.test(html),
+        "la pantalla ya NO afirma una agrupación que no ocurrió");
+      t.cierto(/NO entra en esta toma/.test(html), "y avisa de que la creatinina se queda fuera");
+    });
 
     t.caso("el resumen junta riesgo, función renal y plan sin que falte ninguna pieza", () => {
       const r = api.mtrResumenClinico(ctxBase);

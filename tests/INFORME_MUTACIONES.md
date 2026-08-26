@@ -6,6 +6,55 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.90 — 26-ago-2026 (el ANR afirmaba en pantalla una agrupación que no ocurría)
+
+Quinto y último hueco de la Fase 1 (v68 S3, ANR / "agujero negro renal").
+
+La línea del recuadro se pintaba **siempre** que existiera `plan.anr`, diciendo *"Ventana renal
+de N días activa: todo se agrupa en la fecha de la creatinina"*. Pero el ANR solo mueve la fecha
+de toma si la creatinina es la que vence PRIMERO (`if (creat.vence < ftlCruda)`); si otro examen
+vence antes, `anr` se marca igual y **no agrupa nada**.
+
+Reproducido con el harness — ERC G3b, creatinina que vence el 19-oct dentro de la ventana de 60
+días, lípidos vencidos que fuerzan la toma al 9-sep:
+
+```
+FTL elegida : 2026-09-09          creatinina vence: 2026-10-19
+se ordenan  : lípidos, hemoglobina, PTH, fósforo, albúmina
+se difieren : glucosa, uroanálisis, CREATININA, RAC
+pantalla    : "todo se agrupa en la fecha de la creatinina"   <-- FALSO
+```
+
+La creatinina sale **DIFERIDA**: no entra en esa orden. El paciente iría el 9-sep por los
+lípidos y tendría que **volver una segunda vez** justo por la creatinina — que es exactamente el
+viaje que el ANR existe para evitar. Y el médico lee en pantalla que todo está agrupado, sobre
+un plan que va a firmar.
+
+Es el peor tipo de error de este proyecto: no una casilla vacía, sino un dato que **contradice**
+el plan y sobre el que el médico puede apoyarse para no revisar la lista.
+
+Se extrae `mtrTextoAnr(plan)`, que describe lo que de verdad pasó en tres ramas: la creatinina
+manda (se agrupa ahí), se adelanta a la toma (un solo viaje), o **no entra** (aviso explícito de
+que el paciente tendría que volver). Sin ANR devuelve cadena vacía.
+
+**Esto NO arregla la agrupación**, solo deja de mentir sobre ella. Que el ANR agrupe de verdad
+cambia fechas de toma de pacientes reales y va en su propia entrega (Fase 3 del plan).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **texto viejo** | la pantalla devuelta a la línea que siempre afirma agrupación | `suite_47` | *v17.6.90: en pantalla, un ANR que no agrupó NO dice que agrupó* |
+| **ciego a la orden** | `enLaToma` cableado a `true` en `mtrTextoAnr` | `suite_47` | las **dos** pruebas |
+| **ciego a quién manda** | `if (false)` en la rama de "la creatinina manda" | `suite_47` | *…describe lo que de verdad pasó* |
+| **aviso ablandado** | el aviso de segundo viaje sustituido por "se agrupan en esta toma" | `suite_47` | las **dos** pruebas |
+
+Las cuatro mutaciones cayeron a la primera — sin el tropiezo de las cuatro versiones
+anteriores. La diferencia: las ramas se probaron **una por una contra la función pura** y además
+de punta a punta sobre el HTML, en vez de fiarse de un solo vector end-to-end. La rama del
+"se adelanta a esta misma toma" se verificó con un plan sintético: no logré construir un vector
+realista que la produjera, y se anota para no aparentar una cobertura que no tiene.
+
+Aplicadas de una en una desde copia intacta, restaurado con `diff`. Banco en 2321/2321.
+
 ## v17.6.89 — 26-ago-2026 (el JSON afirmaba datos completos con la estratificación sin hacer)
 
 Cuarto hueco de la Fase 1. Tres defectos en el mismo emisor, todos verificados con el harness
