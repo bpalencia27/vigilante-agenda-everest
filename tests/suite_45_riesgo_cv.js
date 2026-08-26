@@ -64,7 +64,7 @@ function traducir(entradaPy) {
 module.exports = {
   nombre: "Riesgo CV (4 pasos) y función renal unificada",
   cubre: [
-    "mtrClasificarRiesgoCv", "mtrContarFrMayores", "mtrContarPotenciadores",
+    "mtrClasificarRiesgoCv", "mtrContarFrMayores", "mtrContarPotenciadores", "mtrSindromeMetabolico",
     "mtrCriteriosPaso1", "mtrCriteriosPaso2", "mtrAscvdPceCrudo",
     "mtrAscvdFueraDeRangoEtario", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
     "mtrMetasLipidicas", "mtrEvaluarMetaLdl", "mtrLdlBasalDeSerie", "_isoAMs",
@@ -286,6 +286,65 @@ module.exports = {
     t.caso("la disfunción eréctil solo cuenta como factor de riesgo en hombre", () => {
       t.igual(api.mtrContarFrMayores({ edad: 50, sexo: "M", disfuncionErectil: true }).conteo, 1, "hombre: cuenta");
       t.igual(api.mtrContarFrMayores({ edad: 50, sexo: "F", disfuncionErectil: true }).conteo, 0, "mujer: no cuenta");
+    });
+
+    // [auditoría 25-ago, sección 4, decisión confirmada por el médico] síndrome
+    // metabólico (≥3 de 5) no tenía ningún cálculo real — solo un campo homónimo de
+    // membresía manual a un programa de Everest. Criterios IDF Latinoamérica.
+    t.caso("mtrSindromeMetabolico: 3 de 5 criterios cumplidos -> cumple=true", () => {
+      const r = api.mtrSindromeMetabolico({
+        sexo: "M", cinturaCm: 95, trigliceridos: 180, hdl: 45, paSistolica: 120, paDiastolica: 78, glicemia: 90,
+      });
+      t.igual(r.count, 2, "cintura (95>90) y triglicéridos (180>=150): 2 criterios");
+      t.igual(r.cumple, false, "con los 5 evaluados y solo 2, no cumple (concluyente)");
+      const r2 = api.mtrSindromeMetabolico({
+        sexo: "M", cinturaCm: 95, trigliceridos: 180, hdl: 35, paSistolica: 120, paDiastolica: 78, glicemia: 90,
+      });
+      t.igual(r2.count, 3, "+ HDL bajo (35<40 en hombre) = 3");
+      t.igual(r2.cumple, true, "3 de 5: cumple");
+      t.cierto(r2.criterios.some((c) => c.includes("cintura")) && r2.criterios.some((c) => c.includes("triglic")) && r2.criterios.some((c) => c.includes("HDL")));
+    });
+
+    t.caso("mtrSindromeMetabolico: los cortes de cintura y HDL son distintos por sexo", () => {
+      // Mujer: cintura >80 (no >90), HDL <50 (no <40).
+      const mujer = api.mtrSindromeMetabolico({ sexo: "F", cinturaCm: 85, hdl: 45 });
+      t.igual(mujer.count, 2, "85>80 (cintura) y 45<50 (HDL): ambos cuentan en mujer");
+      const hombreMismosValores = api.mtrSindromeMetabolico({ sexo: "M", cinturaCm: 85, hdl: 45 });
+      t.igual(hombreMismosValores.count, 0, "los MISMOS valores (85 cm, HDL 45) no cuentan en hombre (cortes 90/40)");
+    });
+
+    t.caso("mtrSindromeMetabolico: PA y glicemia también cuentan si ya está en tratamiento/diagnosticado, sin la cifra cruda", () => {
+      const r = api.mtrSindromeMetabolico({ sexo: "M", enAntihipertensivos: true, diabetes: true });
+      t.igual(r.count, 2, "tratamiento antihipertensivo + diabetes ya diagnosticada cuentan igual que las cifras");
+    });
+
+    t.caso("mtrSindromeMetabolico: CERO INFERENCIA — con datos insuficientes para saber si llega a 3, cumple queda null (no false)", () => {
+      // Solo cintura evaluable (positiva) de los 5; los otros 4 sin dato -> con 1 y hasta
+      // 4 más posibles, SÍ podría llegar a 3: no se puede afirmar que no cumple.
+      const r = api.mtrSindromeMetabolico({ sexo: "M", cinturaCm: 95 });
+      t.igual(r.count, 1);
+      t.igual(r.evaluables, 1, "solo 1 de los 5 criterios tenía dato para evaluarse");
+      t.igual(r.cumple, null, "1 de 1 evaluado, pero con 4 sin dato que SÍ podrían sumar: no concluyente");
+    });
+
+    t.caso("mtrSindromeMetabolico: sin ningún dato, cumple=null y count=0 (nunca se inventa)", () => {
+      const r = api.mtrSindromeMetabolico(null);
+      t.igual(r.count, 0);
+      t.igual(r.evaluables, 0);
+      t.igual(r.cumple, null, "cero datos no es lo mismo que 'no cumple': es 'no se sabe'");
+    });
+
+    t.caso("mtrSindromeMetabolico: aunque falten datos, si ni el mejor caso llega a 3, cumple=false (no null)", () => {
+      // Cintura y HDL negativos (2 evaluados, ninguno cumple); TG/PA/glicemia sin dato (3 sin evaluar).
+      // Mejor caso posible: 0 + 3 = 3... así que con 3 sin evaluar SÍ podría llegar a 3. Bajamos a solo
+      // 1 sin evaluar para que el mejor caso posible (2+1=3) sea el límite, y a 0 evaluados sin cumplir
+      // más 1 sin dato para que el mejor caso (0+1=1) definitivamente no llegue a 3.
+      const r = api.mtrSindromeMetabolico({
+        sexo: "M", cinturaCm: 80, hdl: 55, trigliceridos: 100, enAntihipertensivos: false, paSistolica: 100, paDiastolica: 70,
+      });
+      t.igual(r.count, 0, "ningún criterio de los 4 evaluados (cintura, HDL, TG, PA) se cumple");
+      t.igual(r.evaluables, 4, "solo glicemia queda sin dato");
+      t.igual(r.cumple, false, "mejor caso posible es 0+1=1 < 3: sí se puede afirmar que NO cumple, aunque falte 1 dato");
     });
 
     t.caso("PASO 3 — tres potenciadores suben a ALTO; uno o dos dejan MODERADO", () => {

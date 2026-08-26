@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.64
+// @version     17.6.65
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.64";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.65";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -28776,6 +28776,71 @@ _vglOfrecerDeshacer(btn);
     return { conteo: fr.length, lista: fr };
   }
 
+  // v17.6.65 — auditoría 25-ago (sección 4), decisión confirmada por el médico: síndrome
+  // metabólico (≥3 de 5 criterios) no tenía NINGÚN cálculo clínico real. El campo homónimo
+  // `x.prediabetesSdMetabolico` (arriba, en mtrContarFrMayores) es la membresía MANUAL a
+  // un programa de Everest — no este cálculo — y ni siquiera se lee desde aquí.
+  // Criterios IDF ajustados a Latinoamérica (≥3 de 5, cualquier combinación):
+  //   1. Cintura: >90 cm hombre, >80 cm mujer.
+  //   2. Triglicéridos: ≥150 mg/dL.
+  //   3. HDL bajo: <40 mg/dL hombre, <50 mg/dL mujer.
+  //   4. Presión arterial: ≥130/85 mmHg, O ya en tratamiento antihipertensivo (mismo flag
+  //      `enAntihipertensivos` que ya usa el paso 4 de ASCVD — un paciente controlado con
+  //      medicación no debe salir "sin criterio" solo porque el fármaco le bajó la cifra).
+  //   5. Glicemia en ayunas: ≥100 mg/dL, O diabetes ya diagnosticada (mismo criterio: la
+  //      diabetes ya es, por definición, glicemia alterada).
+  // CERO INFERENCIA: un criterio sin el dato correspondiente no cuenta ni a favor ni en
+  // contra — no se completa la lista de 5 inventando el que falte. `evaluables` dice
+  // cuántos de los 5 SÍ se pudieron juzgar; `cumple` solo es `true`/`false` cuando el
+  // conteo ya es concluyente pase lo que pase con los que faltan (≥3 cumplidos siempre da
+  // true; con TODOS evaluados y <3, da false); si falta algún criterio Y el conteo aún
+  // podría llegar a 3 con lo que falta, `cumple` queda `null` — "no se puede afirmar
+  // todavía", nunca un false disfrazado.
+  function mtrSindromeMetabolico(f) {
+    const x = f || {};
+    const criterios = [];
+    let evaluables = 0;
+    const esF = mtrEsSexoFemenino(x.sexo), esM = mtrEsSexoMasculino(x.sexo);
+
+    const cintura = mtrFloat(x.cinturaCm);
+    if (cintura !== null && (esF || esM)) {
+      evaluables++;
+      if ((esM && cintura > 90) || (esF && cintura > 80)) criterios.push("cintura elevada (" + cintura + " cm)");
+    }
+    const tg = mtrFloat(x.trigliceridos);
+    if (tg !== null) {
+      evaluables++;
+      if (tg >= 150) criterios.push("triglicéridos ≥150 (" + tg + " mg/dL)");
+    }
+    const hdl = mtrFloat(x.hdl);
+    if (hdl !== null && (esF || esM)) {
+      evaluables++;
+      if ((esM && hdl < 40) || (esF && hdl < 50)) criterios.push("HDL bajo (" + hdl + " mg/dL)");
+    }
+    const pas = mtrFloat(x.paSistolica), pad = mtrFloat(x.paDiastolica);
+    if (x.enAntihipertensivos || pas !== null || pad !== null) {
+      evaluables++;
+      if (x.enAntihipertensivos || (pas !== null && pas >= 130) || (pad !== null && pad >= 85)) {
+        criterios.push(x.enAntihipertensivos && !(pas >= 130 || pad >= 85) ? "en tratamiento antihipertensivo" : "PA ≥130/85");
+      }
+    }
+    const gli = mtrFloat(x.glicemia);
+    if (x.diabetes || gli !== null) {
+      evaluables++;
+      if (x.diabetes || (gli !== null && gli >= 100)) {
+        criterios.push(x.diabetes && !(gli >= 100) ? "diabetes ya diagnosticada" : "glicemia en ayunas ≥100");
+      }
+    }
+
+    const count = criterios.length;
+    const faltan = 5 - evaluables;
+    // "cumple" es concluyente en dos casos: ya hay 3 (true), o ni AUNQUE los que faltan
+    // fueran todos positivos se llegaría a 3 (false, sea cual sea faltan). Cualquier otro
+    // caso (los que faltan SÍ podrían empujarlo a 3) queda sin decidir: null.
+    const cumple = (count >= 3) ? true : ((count + faltan) < 3 ? false : null);
+    return { criterios: criterios, count: count, evaluables: evaluables, cumple: cumple };
+  }
+
   // ---------- POTENCIADORES (PASO 3) ----------
   function mtrContarPotenciadores(f, conteoFr) {
     const x = f || {};
@@ -32894,6 +32959,15 @@ _vglOfrecerDeshacer(btn);
     const pad = mtrLeerCampoNumerico("taDiastolicaAcostado", doc);
     if (pas !== null || pad !== null) return { pas: pas, pad: pad };
     return { pas: mtrLeerCampoNumerico("sistolica", doc), pad: null };
+  }
+
+  // v17.6.65 — auditoría 25-ago (sección 4): circunferencia de cintura, para
+  // mtrSindromeMetabolico. Ancla real: id="cinturaPelvica" (tipo number, pestaña
+  // "Examen físico"), confirmada en las capturas del DOM (grounding/mapas/). Mismo
+  // criterio que mtrLeerTensionDelDom: sin la casilla o sin valor, null — nunca se
+  // inventa la cintura.
+  function mtrLeerCinturaDelDom(doc) {
+    return mtrLeerCampoNumerico("cinturaPelvica", doc);
   }
 
   // Puente entre lo que el modal de laboratorios YA tiene en la mano y lo que

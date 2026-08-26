@@ -6,6 +6,40 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.65 — 26-ago-2026 (auditoría 25-ago, sección 4: síndrome metabólico — decisión confirmada por el médico)
+
+Nueva función pura `mtrSindromeMetabolico(f)`: evalúa los 5 criterios estándar IDF
+(ajustados a Latinoamérica) — cintura >90cm hombre / >80cm mujer, triglicéridos ≥150,
+HDL <40 hombre / <50 mujer, PA ≥130/85 o ya en tratamiento antihipertensivo, glicemia en
+ayunas ≥100 o diabetes ya diagnosticada — y cuenta cuántos se cumplen. `enAntihipertensivos`
+y `diabetes` son los mismos flags booleanos ya usados en la clasificación de riesgo ASCVD,
+reutilizados como atajo (sin cifra cruda necesaria si ya hay tratamiento/diagnóstico). La
+cintura se lee de la casilla real de Everest `cinturaPelvica` (confirmada contra
+`grounding/mapas/MAPA_EVEREST_*.json`) vía el nuevo wrapper `mtrLeerCinturaDelDom(doc)`.
+
+CERO INFERENCIA en el resultado: `cumple` es un tri-estado `true | false | null`, nunca
+un booleano que fuerce una respuesta. `evaluables` cuenta cuántos de los 5 criterios
+tenían dato; `faltan = 5 - evaluables`. `cumple` es `true` si `count >= 3`; es `false`
+solo si NI SIQUIERA el mejor caso posible (`count + faltan`) puede llegar a 3 — es decir,
+que aunque los datos faltantes resultaran todos positivos, seguiría sin cumplir; en
+cualquier otro caso (el mejor caso SÍ podría llegar a 3, pero no hay dato suficiente para
+confirmarlo) queda `null`, nunca se asume "no cumple" solo porque falte información.
+
+**Mutación verificada**: la primera versión de la fórmula tenía un bug de límite —
+`cumple = (count>=3) ? true : (faltan===0 ? false : null)` — que devolvía `null` en vez
+de `false` cuando, aunque faltaran datos, el mejor caso posible ya no alcanzaba a 3 (p.
+ej. cintura y HDL negativos, 3 criterios sin dato, pero el mejor caso 0+3 SÍ podría llegar
+a 3 en ese ejemplo — el caso de prueba real usa 4 evaluados/0 cumplidos + 1 sin dato, mejor
+caso 0+1=1). Al aplicar esa mutación al código real (revirtiendo a la fórmula rota vía
+`cp`/`python3`), la prueba nueva
+`"mtrSindromeMetabolico: aunque falten datos, si ni el mejor caso llega a 3, cumple=false
+(no null)"` (suite 45) se puso roja (2233 pasan / 1 falla), confirmando que SÍ prueba el
+límite. Se restauró la fórmula correcta
+`cumple = (count>=3) ? true : ((count+faltan)<3 ? false : null)` y el banco volvió a verde
+(2234 pasan). Se añadieron 6 pruebas nuevas para `mtrSindromeMetabolico` en total (umbral
+3-de-5, cortes por sexo, atajos de tratamiento/diagnóstico, el caso `null` no-concluyente,
+el caso sin ningún dato, y este límite de `false` con datos incompletos).
+
 ## v17.6.64 — 26-ago-2026 (auditoría 25-ago, sección 4: cNoHDL cableado — decisión confirmada por el médico)
 
 `mtrCnoHDL(ct, hdl)` (colesterol no-HDL = CT − HDL) ya existía, pura y probada, pero SIN
