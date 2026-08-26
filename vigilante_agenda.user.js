@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.62
+// @version     17.6.63
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.62";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.63";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31165,6 +31165,28 @@ _vglOfrecerDeshacer(btn);
     return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  // v17.6.63 — auditoría 25-ago (1.10): SEGUNDA CAPA para Enfermedad Actual. MTR_EA_SYS ya
+  // prohíbe en el prompt que la IA escriba TFG, riesgo cardiovascular, meta de LDL,
+  // laboratorios o signos vitales dentro de la Enfermedad Actual (esos van en Análisis y
+  // Plan) — pero un prompt es una instrucción, no una garantía: el modelo puede seguir
+  // copiando textual una línea de la hoja de hechos en vez de redactar semiotecnia. Esta
+  // función quita cualquier línea del borrador que empiece EXACTAMENTE con uno de los 5
+  // prefijos que mtrHojaDeHechosTexto usa para esos datos (los mismos 5 bloques que
+  // MTR_EA_SYS prohíbe por su nombre) — no toca ninguna otra línea, y solo aplica al modo
+  // "enfermedad_actual" (en "analisis_plan" esas mismas líneas son contenido correcto).
+  const MTR_EA_PREFIJOS_PROHIBIDOS = [
+    "Signos vitales:", "Laboratorios y paraclínicos:", "Función renal:",
+    "Riesgo cardiovascular:", "Meta LDL:",
+  ];
+  function mtrQuitarDatosProhibidosEA(texto) {
+    if (!texto) return "";
+    const lineas = String(texto).split("\n").filter((linea) => {
+      const l = linea.trim();
+      return !MTR_EA_PREFIJOS_PROHIBIDOS.some((pref) => l.indexOf(pref) === 0);
+    });
+    return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE COHERENCIA DE CIFRAS.
   // Anti-alucinación de números: toda cifra de medida que el borrador de la IA contenga
   // debe existir en los hechos que se le entregaron (la hoja). Si una cifra no está en
@@ -31389,6 +31411,11 @@ _vglOfrecerDeshacer(btn);
                 // Análisis y plan. Solo decora; nunca toca el contenido clínico.
                 if (modo === "analisis_plan") {
                   try { r.texto = mtrLimpiarNotaIA(r.texto); } catch (e) {}
+                }
+                // v17.6.63 (1.10) — segunda capa para Enfermedad Actual: MTR_EA_SYS ya lo
+                // prohíbe en el prompt, esto lo garantiza en el código.
+                if (modo === "enfermedad_actual") {
+                  try { r.texto = mtrQuitarDatosProhibidosEA(r.texto); } catch (e) {}
                 }
                 _tel("ia.ok");
                 const sMod = uxClaveLimpia(modelo).toLowerCase();

@@ -6,6 +6,27 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.63 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.10: construida la segunda capa de blindaje de Enfermedad Actual — decisión confirmada por el médico)
+
+`mtrHechosSinExamenFisico`/`mtrQuitarExamenFisicoIA` (los nombres que citaba la auditoría)
+NO existen en este código — es funcionalidad nueva, no un arreglo de código existente. El
+médico confirmó construirla (entrevista de esta sesión). MTR_EA_SYS ya prohíbe en el PROMPT
+que la Enfermedad Actual traiga TFG/riesgo cardiovascular/meta LDL/laboratorios/signos
+vitales (esos van en Análisis y Plan) — pero un prompt es una instrucción, no una garantía.
+Se construye `mtrQuitarDatosProhibidosEA`: quita del borrador cualquier línea que empiece
+EXACTAMENTE con uno de los 5 prefijos que `mtrHojaDeHechosTexto` usa para esos datos
+("Signos vitales:", "Laboratorios y paraclínicos:", "Función renal:", "Riesgo
+cardiovascular:", "Meta LDL:") — nunca por contener la palabra en cualquier parte de la
+prosa. Se cablea en el conector, junto al saneador de `analisis_plan` que ya existía, solo
+para el modo `enfermedad_actual`.
+
+- **Mutación**: se redujo la lista a solo 2 de los 5 prefijos (los que la auditoría decía
+  que YA estaban cubiertos en la versión perdida). 1 roja: *"quita las 5 líneas
+  prohibidas..."*. Restaurado, banco vuelve a 2226 en verde.
+- **Pruebas nuevas**: `tests/suite_57_ia_redaccion.js` — 3 casos (las 5 líneas se quitan
+  conservando el resto; una mención de la palabra dentro de la prosa NO se filtra —solo el
+  prefijo exacto de línea—; texto vacío/null no lanza).
+
 ## v17.6.62 — 26-ago-2026 (auditoría 25-ago, sección 7: "Probar conexión" no usaba el mismo respaldo de id anónimo)
 
 El botón "Probar y diagnosticar" (`#c-repgo`, en Ajustes) mandaba

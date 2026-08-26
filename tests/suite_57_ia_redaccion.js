@@ -29,7 +29,7 @@ function respGemini(texto) {
 module.exports = {
   nombre: "Redacción IA: prompts, parser, conector y estilo",
   cubre: [
-    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrEstadoBorrador", "mtrLimpiarNotaIA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
+    "mtrRedaccionPrompt", "mtrRespuestaGemini", "mtrEstadoBorrador", "mtrLimpiarNotaIA", "mtrQuitarDatosProhibidosEA", "mtrVerificarCifrasIA", "mtrContarPalabrasTexto", "_vglTextoPrevioPodar",
     "mtrGeminiRedactar", "mtrEstiloGuardar", "mtrEstiloLeer",
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
@@ -138,6 +138,39 @@ module.exports = {
       t.cierto(/^#PACIENTE_\[ID\]_#RCV_CONTROL_\[AÑO_MES\]$/m.test(limpio), "el marcador [ID]/[AÑO_MES] sobrevive (lo reemplaza el equipo del médico)");
       t.cierto(/===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA =====/.test(limpio), "cabecera intacta");
       t.cierto(/:: PATOLOGÍAS ACTIVAS: HTA/.test(limpio) && /:: META TERAPÉUTICA DE LDL: MENOR A 70/.test(limpio), "ítems '::' intactos");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.10] MTR_EA_SYS ya prohíbe en el prompt que la
+    // Enfermedad Actual traiga TFG/riesgo cardiovascular/meta LDL/laboratorios/signos
+    // vitales (esos van en Análisis y Plan) — pero eso es una instrucción, no una
+    // garantía: el modelo puede copiar textual una línea de la hoja de hechos.
+    // mtrQuitarDatosProhibidosEA es la segunda capa: quita esas líneas del borrador.
+    t.caso("mtrQuitarDatosProhibidosEA: quita las 5 líneas prohibidas de Enfermedad Actual, conserva el resto intacto", () => {
+      const sucio = "EL PACIENTE REFIERE CONTROL DE RUTINA, ASINTOMÁTICO.\n"
+        + "Función renal: TFG (CKD-EPI 2021) 52 mL/min/1.73m2\n"
+        + "Riesgo cardiovascular: alto (Framingham oficial 12 puntos)\n"
+        + "Meta LDL: <70 mg/dL\n"
+        + "Signos vitales: PA 128/82 mmHg · IMC: 27\n"
+        + "Laboratorios y paraclínicos: LDL 118 (hace 2 meses)\n"
+        + "AL EXAMEN FÍSICO SE ENCUENTRA ESTABLE, SIN SIGNOS DE ALARMA.";
+      const limpio = api.mtrQuitarDatosProhibidosEA(sucio);
+      t.falso(/Función renal:/.test(limpio), "TFG fuera");
+      t.falso(/Riesgo cardiovascular:/.test(limpio), "categoría de riesgo fuera");
+      t.falso(/Meta LDL:/.test(limpio), "meta LDL fuera");
+      t.falso(/Signos vitales:/.test(limpio), "signos vitales fuera");
+      t.falso(/Laboratorios y paraclínicos:/.test(limpio), "laboratorios fuera");
+      t.cierto(/CONTROL DE RUTINA, ASINTOMÁTICO/.test(limpio), "la semiotecnia real del médico sí sobrevive");
+      t.cierto(/AL EXAMEN FÍSICO SE ENCUENTRA ESTABLE/.test(limpio), "y la línea siguiente también");
+    });
+
+    t.caso("mtrQuitarDatosProhibidosEA: no toca una línea que solo MENCIONA la palabra dentro de la prosa (no es el prefijo exacto)", () => {
+      const texto = "SE EXPLICÓ AL PACIENTE SU RIESGO CARDIOVASCULAR Y LA IMPORTANCIA DE LA META LDL INDICADA POR SU MÉDICO.";
+      t.igual(api.mtrQuitarDatosProhibidosEA(texto), texto, "solo se filtra por el PREFIJO exacto de la línea, no por contener la palabra en cualquier parte");
+    });
+
+    t.caso("mtrQuitarDatosProhibidosEA: texto vacío o null no lanza", () => {
+      t.igual(api.mtrQuitarDatosProhibidosEA(""), "");
+      t.igual(api.mtrQuitarDatosProhibidosEA(null), "");
     });
 
     // v17.6.3 — A2 (decisión del médico, 22-ago): VERIFICADOR DE CIFRAS anti-alucinación.
