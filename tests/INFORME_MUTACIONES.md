@@ -6,6 +6,28 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.61 — 26-ago-2026 (auditoría 25-ago, sección 6: `GHOST.subscribe` — código muerto confirmado)
+
+`listeners`/`subscribe`/`notify` en `GHOST` formaban un pub-sub que nadie suscribía en todo
+el archivo (`GHOST.subscribe(`: 0 llamadores, confirmado con grep). `notify()` corría en
+CADA `set` del Proxy `state` — miles de veces por sesión — iterando un `Set` eternamente
+vacío: un no-op perpetuo en un camino caliente. Se retiran los tres (y su única llamada,
+dentro del `set` trap del Proxy `state`).
+
+- **No es un cambio de comportamiento**: por construcción, `notify()` nunca pudo tener
+  efecto observable (su único consumidor posible, `subscribe`, nunca se llamó en ningún
+  punto del archivo) — no aplica el ciclo de mutación roja/verde de siempre, porque no hay
+  ninguna prueba cuyo resultado pudiera depender de este código. Se verificó en su lugar que
+  `node tests/runner.js` sigue en verde (2222) tras el retiro, y que no queda ninguna
+  referencia colgante (`grep GHOST.subscribe/listeners/notify` → 0 resultados fuera del
+  comentario que documenta el retiro).
+- **No tocado**: `mtrChipResumenTexto` (también listado como "muerto confirmado" en la
+  auditoría) NO se retiró — su propio comentario dice "si esto desaparece, la alerta
+  clínica desapareció", lo que sugiere que podría ser una función que un refactor anterior
+  desconectó por accidente (una regresión real), no código genuinamente muerto. Retirarla
+  sin que el médico confirme cuál de las dos cosas es cerraría la puerta a recuperar una
+  alerta clínica si de verdad se perdió. Queda señalada, no tocada.
+
 ## TABLERO/Codigo.gs — 26-ago-2026 (auditoría 25-ago, hallazgo 1.23: el resumen de telemetría podía mostrar la versión/fecha equivocada)
 
 `armarResumen()` (TABLERO/Codigo.gs:260, Google Apps Script — NO forma parte del userscript

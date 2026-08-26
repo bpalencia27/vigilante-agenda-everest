@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.60
+// @version     17.6.61
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.60";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.61";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6793,12 +6793,13 @@ _vglOfrecerDeshacer(btn);
   }
   const DOC_EXACT = ["IDENTIFICACION", "DOCUMENTO", "CEDULA", "NUMERO_DOCUMENTO", "NRO_DOCUMENTO", "NUMERO_IDENTIFICACION"];
 
+  // v17.6.61 — auditoría 25-ago (sección 6, código muerto confirmado): listeners/subscribe/
+  // notify formaban un pub-sub que nadie suscribía en todo el archivo (GHOST.subscribe: 0
+  // llamadores). notify() corría en CADA set del Proxy `state` de abajo —miles de veces por
+  // sesión— iterando un Set eternamente vacío: un no-op perpetuo en un camino caliente.
   const GHOST = {
     promises: new Map(),
     hoverTimers: new Map(), // v8.1.0: Timer tracking para Debounce
-    listeners: new Set(),
-    subscribe(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); },
-    notify(prop, val) { this.listeners.forEach(fn => { try { fn(prop, val); } catch(e){} }); }
   };
 
   const rawState = {
@@ -6858,7 +6859,6 @@ _vglOfrecerDeshacer(btn);
   const state = new Proxy(rawState, {
     set(target, prop, val) {
       target[prop] = val;
-      GHOST.notify(prop, val);
       return true;
     }
   });
