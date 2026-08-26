@@ -676,13 +676,15 @@ module.exports = {
       t.igual(cLab.env.doc.body.children.length, antes + 1, "la segunda llamada no añade otro botón");
     });
 
-    await t.casoAsync("createLabInjectorUI: sin solicitud resoluble el botón explica el fallo, no escribe nada y restaura su rótulo", async () => {
+    await t.casoAsync("createLabInjectorUI: sin token CSRF, getAtheneaLabsAuto da null (fallo de lectura) — el botón lo dice, no inventa 'sin laboratorios'", async () => {
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       // El paciente SÍ se resuelve en la historia clínica (#anamesis + cédula en un
       // .text-muted, el mismo patrón que usa extractPacienteAbierto), pero Athenea no
       // devuelve token CSRF en el paso 1: getAtheneaSolicitudesAuto corta ahí y
-      // getAtheneaLabsAuto acaba en [] — la rama real de "sin solicitud resoluble",
-      // no la de "no se pudo determinar el paciente".
+      // getAtheneaLabsAuto da NULL (fallo de lectura, contrato v16.2.8 — verificado con el
+      // harness, no []). Antes de v17.6.58 (1.20) esto caía en la rama final y mostraba
+      // "Athenea no tiene laboratorios registrados", afirmando ausencia de datos cuando en
+      // realidad la lectura falló.
       cLab.env.doc.getElementById = (id) => {
         if (id === "vgl-lab-injector") return btn;
         if (id === "anamesis") return {};
@@ -694,7 +696,8 @@ module.exports = {
       // detalle va al toast. Lo observable aquí es el rótulo del botón y su restauración.
       await btn.onclick();
       t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
-      t.cierto(btn.innerHTML.includes("❌") || btn.innerHTML.includes("Sin resultados") || btn.innerHTML.includes("Inicie sesión"), "el botón explica que no se pudo diligenciar");
+      t.cierto(btn.innerHTML.includes("No se pudo leer Athenea"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
+      t.falso(btn.innerHTML.includes("Sin resultados"), "un fallo de lectura no debe presentarse como 'sin resultados' (bug real: se confundían)");
       await esperar(20);
       t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
     });

@@ -6,6 +6,26 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.58 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.20: Auto-Labs presentaba un fallo de lectura como hecho clínico)
+
+El botón "🧬 Auto-Labs (Athenea)" (rama final del `onclick`, vigilante_agenda.user.js:~5220)
+alcanzaba el mismo mensaje "Athenea no tiene laboratorios registrados" tanto con
+`labs===[]` (Athenea SÍ respondió: el paciente de verdad no tiene resultados) como con
+`labs===null` (`getAtheneaLabsAuto` NO PUDO leer — timeout, 500, red — contrato v16.2.8). Un
+fallo de lectura se presentaba como un hecho clínico verificado. Fix: rama nueva para
+`labs === null` con un mensaje honesto ("no se pudo leer... no es que no tenga
+laboratorios"), antes de la rama que ahora SOLO cubre el `[]` real.
+
+- **Test existente corregido**: `"createLabInjectorUI: sin solicitud resoluble..."`
+  (suite_15) ya ejercitaba exactamente `labs===null` (verificado con el harness — su
+  comentario decía "acaba en []", que era incorrecto) pero su aserción era una OR de tres
+  mensajes posibles, así que toleraba el bug sin detectarlo. Se corrigió el comentario y se
+  volvió una aserción exacta.
+- **Mutación**: se forzó la nueva rama a `else if (false)` (inalcanzable). El banco pasó de
+  2220 en verde a 1 roja: el test corregido esperaba "No se pudo leer Athenea" y el botón
+  volvía a mostrar el mensaje genérico de "sin laboratorios". Restaurado, banco vuelve a
+  2220 en verde.
+
 ## v17.6.57 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.16 y 1.19)
 
 **1.16 — un resultado real sin fecha perdía su valor.** `mtrEstadoAnalito` (línea ~30008)

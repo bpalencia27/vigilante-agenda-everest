@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.57
+// @version     17.6.58
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.57";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.58";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5217,12 +5217,25 @@ _vglOfrecerDeshacer(btn);
                       showToast("AMBAR", "Auto-Labs", "La sesión de Athenea no está activa en este navegador — por eso no aparecen los laboratorios. Se abrió la página de Athenea en otra pestaña: inicie sesión y, al volver aquí, el asistente reintenta solo en menos de un minuto.", false);
                       try { window.open("https://medicosviva1a.atheneasoluciones.com/Account/Login", "_blank"); } catch (e) {}
                   }
+              } else if (labs === null) {
+                  // v17.6.58 — auditoría 25-ago (1.20): esta rama se alcanzaba tanto con
+                  // labs===[] (Athenea SÍ respondió: el paciente de verdad no tiene
+                  // laboratorios) como con labs===null (getAtheneaLabsAuto NO PUDO leer —
+                  // timeout, 500, red — contrato establecido desde v16.2.8), y mostraba el
+                  // MISMO mensaje "Athenea no tiene laboratorios registrados" en los dos
+                  // casos. Un fallo de lectura se presentaba como un hecho clínico
+                  // verificado. Se distingue: null es "no pude leer, reintente", nunca
+                  // "no tiene".
+                  _vglFeedbackBoton(btn, "❌ No se pudo leer Athenea", "ambar", "🧬 Auto-Labs (Athenea)");
+                  showToast("AMBAR", "Auto-Labs", "No se pudo leer el portal de Athenea para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
                   // historia clínica los resultados de CUALQUIER otro paciente, sin
                   // comprobación de identidad. Este mensaje cubre tanto "no se encontró
                   // el paciente en Athenea" como "se encontró pero sin resultados": en
                   // ambos casos no se diligenció nada y hay que revisar a mano.
+                  // v17.6.58 — labs===null ya se separó arriba: aquí SOLO llega labs===[]
+                  // real (Athenea sí respondió, el paciente de verdad no tiene resultados).
                   _vglFeedbackBoton(btn, "Sin resultados en Athenea para este paciente", "ambar", "🧬 Auto-Labs (Athenea)");
                   showToast("AMBAR", "Auto-Labs", "Athenea no tiene laboratorios registrados para la cédula " + docId + " en el último año.", false);
               }
