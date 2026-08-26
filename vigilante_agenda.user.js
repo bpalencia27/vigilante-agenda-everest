@@ -23178,20 +23178,38 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  const _fuzzyRows = [
+    new Uint16Array(512),
+    new Uint16Array(512),
+    new Uint16Array(512)
+  ];
+  let _fuzzyLastQ = null;
+  let _fuzzyLastQTokens = null;
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    let queryTokens;
+    if (q === _fuzzyLastQ && _fuzzyLastQTokens) {
+      queryTokens = _fuzzyLastQTokens;
+    } else {
+      queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _fuzzyLastQ = q;
+      _fuzzyLastQTokens = queryTokens;
+    }
+
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = _fuzzyRows[0];
+    let currRow = _fuzzyRows[1];
+    let prevPrevRow = _fuzzyRows[2];
 
-    for (const qToken of queryTokens) {
+    for (let idxQ = 0; idxQ < queryTokens.length; idxQ++) {
+      const qToken = queryTokens[idxQ];
       let tokenMatched = false;
       const m = qToken.length;
       const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
 
-      for (const tToken of textTokens) {
+      for (let idxT = 0; idxT < textTokens.length; idxT++) {
+        const tToken = textTokens[idxT];
         if (tToken.includes(qToken)) {
           tokenMatched = true;
           break;
@@ -23200,33 +23218,49 @@ _vglOfrecerDeshacer(btn);
 
         const n = tToken.length;
 
-        // initialize 1st row
+        if (n >= prevRow.length) {
+            const newLen = Math.max(n + 1, prevRow.length * 2);
+            prevRow = _fuzzyRows[0] = new Uint16Array(newLen);
+            currRow = _fuzzyRows[1] = new Uint16Array(newLen);
+            prevPrevRow = _fuzzyRows[2] = new Uint16Array(newLen);
+        }
+
         for (let j = 0; j <= n; j++) {
           prevRow[j] = j;
         }
 
         for (let i = 1; i <= m; i++) {
           currRow[0] = i;
+          const qChar1 = qToken[i - 1];
+          const qChar2 = i > 1 ? qToken[i - 2] : null;
+
           for (let j = 1; j <= n; j++) {
-            const cost = qToken[i - 1] === tToken[j - 1] ? 0 : 1;
-            currRow[j] = Math.min(
-              prevRow[j] + 1,
-              currRow[j - 1] + 1,
-              prevRow[j - 1] + cost
-            );
-            if (i > 1 && j > 1 && qToken[i - 1] === tToken[j - 2] && qToken[i - 2] === tToken[j - 1]) {
-              currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
+            const cost = qChar1 === tToken[j - 1] ? 0 : 1;
+
+            let minVal = prevRow[j] + 1;
+            const val2 = currRow[j - 1] + 1;
+            if (val2 < minVal) minVal = val2;
+            const val3 = prevRow[j - 1] + cost;
+            if (val3 < minVal) minVal = val3;
+
+            currRow[j] = minVal;
+
+            if (i > 1 && j > 1 && qChar1 === tToken[j - 2] && qChar2 === tToken[j - 1]) {
+               const val4 = prevPrevRow[j - 2] + cost;
+               if (val4 < currRow[j]) currRow[j] = val4;
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+
+          const tmp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = tmp;
         }
 
-        let minCost = Infinity;
-        for (let j = Math.max(0, m - maxErrors); j <= Math.min(n, m + maxErrors); j++) {
+        let minCost = 999999;
+        const jStart = Math.max(0, m - maxErrors);
+        const jEnd = Math.min(n, m + maxErrors);
+        for (let j = jStart; j <= jEnd; j++) {
           if (prevRow[j] < minCost) minCost = prevRow[j];
         }
         if (minCost <= maxErrors) {
