@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.77
+// @version     17.6.78
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.77";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.78";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3026,6 +3026,21 @@
   // Sólo se juzga cuando hay las tres cosas: tabla oficial, regla aplicable a ESTE
   // paciente y un número de verdad. Un "> 300" o un "PENDIENTE" no se juzgan (no hay
   // número que comparar) y siguen su camino de siempre.
+  //
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): GAP DE
+  // NORMALIZACIÓN DE UNIDADES. Esta función (y `_labNumerico` en general) SOLO detecta
+  // que un valor está fuera del rango plausible en las unidades esperadas — NUNCA
+  // convierte unidades (µmol/L→mg/dL, mmol/L→mg/dL, etc.). El caso citado arriba
+  // (creatinina en µmol/L, "88" donde se espera "1,0") se BLOQUEA, no se CORRIGE: el
+  // médico ve el aviso de implausibilidad y tiene que convertir y escribir el valor
+  // correcto a mano. Es una decisión deliberada, no una limitación pendiente de
+  // resolver por descuido: convertir automáticamente exigiría primero detectar CON
+  // CERTEZA en qué unidad llegó el valor (el LIS no siempre la declara junto al
+  // número), y una conversión mal disparada sobre un valor que en realidad SÍ estaba en
+  // las unidades correctas sería inventar un número — exactamente lo que la regla de la
+  // casa prohíbe. Bloquear y avisar es la opción segura; convertir con inferencia no lo
+  // es. Si algún día Everest/Athenea empiezan a declarar la unidad de forma fiable junto
+  // a cada resultado, ahí sí habría una base real para automatizar la conversión.
   function _objecionOficialAlValor(labKey, resultValCrudo, opts) {
       const o = opts || {};
       // Basta con comprobar que sea un arreglo: si viene vacío, `_reglasParaLabKey`
@@ -3907,6 +3922,16 @@
   }
   // Cockcroft-Gault usa el peso REAL siempre (decisión clínica ya tomada: es el estadio
   // administrativo) — nunca peso ideal ni ajustado. Centinela 0 = "no evaluable".
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
+  // redondeo a 1 decimal (`Math.round(v*10)/10`) ocurre AQUÍ, sobre la TFG cruda, ANTES
+  // de que `estadioKDIGO()` (más abajo) la clasifique en G1-G5. Un paciente en el borde
+  // exacto de un corte (p.ej. TFG cruda 59.96) puede redondear a 60.0 y caer en G2 en
+  // vez de G3a. Se deja así a propósito, no es un bug pendiente: es la MISMA aritmética
+  // portada del Copiloto RCV ("ya verificada en producción allí", ver el comentario de
+  // arriba) — cambiar el orden (estadificar antes de redondear) sería una decisión
+  // clínica nueva, no una corrección de fidelidad al port. Si algún día se decide que el
+  // corte de estadio debe mirar la TFG SIN redondear, ese es un cambio de norma clínica
+  // que requiere decisión explícita del médico, no un ajuste de este archivo por su cuenta.
   function cockcroftGault(edadAnios, pesoKg, creatininaSerica, sexo) {
       const edad = Number(edadAnios), peso = Number(pesoKg), creat = Number(creatininaSerica);
       if (!(edad >= 18 && edad <= 120) || !(peso >= 20 && peso <= 300) || !(creat >= 0.1 && creat <= 20)) return 0;
@@ -3915,6 +3940,8 @@
       return Math.round(v * 10) / 10;
   }
   // CKD-EPI 2021 (sin el término de raza, ya retirado). Centinela 0 = "no evaluable".
+  // v17.6.78 — mismo orden de redondeo (antes de estadificar) que cockcroftGault arriba,
+  // por la misma razón — ver su comentario.
   function ckdEpi2021(edadAnios, creatininaSerica, sexo) {
       const edad = Number(edadAnios), creat = Number(creatininaSerica);
       if (!(edad >= 18 && edad <= 120) || !(creat >= 0.1 && creat <= 20)) return 0;
@@ -6156,6 +6183,12 @@ _vglOfrecerDeshacer(btn);
   //  SECOPS Y ESTABILIDAD (VIGILANTE DE AGENDA)
   // =====================================================================
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): un debounce
+  // genérico de propósito general, probado (suite 01), pero sin ningún llamador real en
+  // producción — nada en el script envuelve una función con `debounceVgl(...)`. No se
+  // borra (sin autorización explícita para eliminar código muerto confirmado): queda
+  // disponible como utilidad ya lista si algún futuro handler de eventos frecuentes
+  // (scroll, resize, input) necesita debounce.
   function debounceVgl(func, wait) {
       let timeout;
       return function(...args) {
@@ -8523,6 +8556,12 @@ _vglOfrecerDeshacer(btn);
   // costó un cuadro; esto dice cuánto costó UNA función NUESTRA, que es lo único que
   // podemos arreglar. Es la otra mitad de cualquier RUM serio: observación + tramos
   // propios. Coste medido: ~0,003 ms por llamada (una resta y un uxTrack en tanda).
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): ningún
+  // punto del script de verdad ENVUELVE una función propia con `_rumTramo(nombre, fn)`
+  // — se construyó y se probó (suite 23) como infraestructura lista para instrumentar,
+  // pero nunca se adoptó en ningún llamador real. No se borra (no hay autorización
+  // explícita para eliminar código muerto confirmado): sigue disponible para el día que
+  // se decida medir el costo de una función concreta.
   function _rumTramo(nombre, fn) {
     let t0 = 0;
     try { t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : 0; } catch (e) {}
@@ -15739,6 +15778,16 @@ _vglOfrecerDeshacer(btn);
   // Misma caché por paciente y mismo TTL que las órdenes vigentes: durante una consulta el
   // peso no cambia, y este endpoint se consulta desde un flujo que puede repetirse.
   let _signosVitalesCache = { pacienteId: "", data: null, ts: 0 };
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción — la caché de arriba solo se limpia por vencimiento del
+  // TTL (`ORDENES_VIGENTES_TTL_MS`, ver la lectura más abajo), nunca por invalidación
+  // manual. Mismo patrón exacto que sus hermanas `mtrMedsInvalidar` (línea ~27296) y
+  // `_demograficosInvalidar` (línea ~15966): las tres cachés de este archivo se
+  // construyeron con un helper de invalidación manual "por si acaso", pero ninguna
+  // llegó a engancharse a un evento real (p.ej. cambio de paciente) — el diseño real
+  // terminó apoyándose solo en el TTL. No se borra (sin autorización explícita para
+  // eliminar código muerto confirmado); las pruebas la siguen usando para envejecer la
+  // caché sin esperar minutos reales.
   function _signosVitalesInvalidar() { _signosVitalesCache = { pacienteId: "", data: null, ts: 0 }; }
   // v14.1.8 — Tabla de validación por examen de la propia IPS (rangos + UNIDAD), por cita.
   // Cacheada por citaId con el mismo TTL que las demás: dentro de una consulta la
@@ -15902,6 +15951,13 @@ _vglOfrecerDeshacer(btn);
     return { peso, pas, pad, imc, fechaIso: r.fechaRegistro || "" };
   }
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // ningún llamador real en producción — solo aparece en tests. Todo indica que quedó
+  // SUPERADA por `_signosVitalesDelRegistro` (justo arriba), que extrae el mismo peso
+  // (con la misma guarda `_labNumerico`) además de PAS/PAD/IMC, y que SÍ tiene un
+  // llamador real (línea ~16108). No se borra (sin autorización explícita para
+  // eliminar código muerto confirmado) por si algún camino todavía la necesita solo
+  // para el peso, sin el resto de signos vitales.
   function _pesoDeSignosVitales(arr) {
     if (!Array.isArray(arr) || !arr.length) return null;
     const r = arr[0];
@@ -21476,6 +21532,15 @@ _vglOfrecerDeshacer(btn);
   // Recursivo, mismo patrón que extractPatientId: la respuesta de GuardarOrdenamiento
   // ya expone `agrupador` directo o en `.data.agrupador` (ver el manejo de éxito más
   // abajo); este extractor cubre además cualquier variante de mayúsculas o anidación.
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción. El "manejo de éxito más abajo" que el comentario de
+  // arriba anuncia (línea ~21977, `GuardarOrdenResponse`) terminó extrayendo
+  // `resOrd.agrupador || (resOrd.data && resOrd.data.agrupador)` EN LÍNEA, con su propia
+  // expresión — más angosta que este extractor (no cubre `Agrupador`/`Grupo`/`Codigo`
+  // en mayúscula, ni arreglos, ni anidación más profunda que un nivel), en vez de llamar
+  // a esta función que se escribió justamente para ese caso. No se borra (sin
+  // autorización explícita para eliminar código muerto confirmado); las pruebas la
+  // siguen ejercitando por su cuenta.
   function extractAgrupador(res) {
     if (!res) return null;
     if (typeof res === "number" && res > 0) return String(res);
@@ -26316,6 +26381,22 @@ _vglOfrecerDeshacer(btn);
   //  la suite 43 cae, y ese es justo el punto.
   // =====================================================================
 
+  // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
+  // DISCORDANCIA CLÍNICO/ADMINISTRATIVO para DOAC/gabapentinoides/HBPM. La mayoría de
+  // reglas de ajuste renal de este bloque usan MTR_FORMULA_CKDEPI (el "estadio
+  // clínico" del paciente, ver mtrEvaluarErc/ckdEpi2021) — pero tres familias
+  // (mtrReglaDoac, mtrReglaGabapentinoide, mtrReglaLmwh, buscar más abajo) usan
+  // MTR_FORMULA_CG (el "estadio administrativo", CrCl) para SUS propios umbrales de
+  // dosis. No es un descuido ni inconsistencia entre las reglas: las fichas técnicas y
+  // guías de dosificación renal de anticoagulantes directos, gabapentinoides y
+  // heparinas de bajo peso molecular están validadas y publicadas con Cockcroft-Gault
+  // — ese es el estándar histórico de la industria farmacéutica para dosis renal (la
+  // FDA lo exige así en los estudios de registro), mientras CKD-EPI es la fórmula
+  // clínica más moderna y precisa para estadificar función renal en general. El efecto
+  // práctico: el "estadio clínico" (CKD-EPI) que ve el médico en el recuadro de ERC
+  // puede no coincidir exactamente con la TFG que de verdad gatilla un ajuste de dosis
+  // de DOAC/gabapentinoide/HBPM — ese ajuste mira su PROPIA fórmula (CG), fiel a la
+  // ficha técnica de cada fármaco, no al estadio clínico general del paciente.
   const MTR_FORMULA_CG = "Cockcroft-Gault (CrCl)";
   const MTR_FORMULA_CKDEPI = "CKD-EPI 2021 (eGFR)";
   const MTR_SEV_CRITICAL = "CRITICAL";
@@ -30035,6 +30116,16 @@ _vglOfrecerDeshacer(btn);
     return mtrSabadoMemoriaGuardar(mem);
   }
 
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción — a diferencia de sus hermanas de este mismo
+  // subsistema (`mtrSabadoRegistrarObservacion`/`mtrSabadoGrupoDeMedico`, ambas SÍ
+  // llamadas en producción, líneas ~19726/19729/30012/33787), esta es la única función
+  // del bloque «sábados» sin ningún punto de entrada real. Es la VÁLVULA MANUAL:
+  // `mtrSabadoGrupoDeMedico` ya sabe respetar `reg.origen === "manual"` cuando existe
+  // (línea ~30090), pero nada en la interfaz llama a esta función para FIJARLO —no hay
+  // botón/ajuste conectado a "corrija usted el grupo del sábado si la deducción
+  // automática se equivocó". No se borra (sin autorización explícita para eliminar
+  // código muerto confirmado); las pruebas la siguen ejercitando por su cuenta.
   function mtrSabadoFijarGrupoManual(medicoId, grupo) {
     const id = String(medicoId == null ? "" : medicoId).trim();
     const g = String(grupo == null ? "" : grupo).trim();
@@ -30515,6 +30606,17 @@ _vglOfrecerDeshacer(btn);
     }
 
     // ---- Agujero Negro Renal: en G3a-G4 la creatinina puede mandar ----
+    // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
+    // VENTANAS ANR ANCLADAS EN "HOY", no en la fecha de la propia creatinina. La ventana
+    // (30/45/60/90 días, según mtrVentanaAnrDias) se mide desde `hoy` — el día en que
+    // este plan se calcula — hasta `creat.vence`, no desde la fecha del último control
+    // de creatinina ni desde su propia vigencia. Efecto práctico: la ventana "se
+    // desplaza" cada vez que el médico vuelve a abrir el plan en un día distinto —no es
+    // una ventana fija ligada al resultado de laboratorio, sino relativa al momento de
+    // la consulta. Es intencional y coherente con el resto de `mtrPlanParaclinicos`
+    // (todo el plan se recalcula fresco en cada visita, nunca se guarda una ventana
+    // "congelada" de una consulta anterior) — pero es una nota real de que "la ventana
+    // ANR" no es una fecha fija en el calendario, cambia según cuándo se mire.
     let anr = null;
     const creat = drivers.find((a) => a.clave === "CREATININA");
     const ventanaAnr = mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false);
@@ -31874,6 +31976,13 @@ _vglOfrecerDeshacer(btn);
     }
     return null;
   }
+  // v17.6.78 — auditoría 25-ago (sección 6, código muerto DUDOSO, confirmado): sin
+  // llamador real en producción. `mtrInsertarEnCasillaModo` (línea ~32195, la inserción
+  // real del Redactor de texto libre) REIMPLEMENTA la misma comprobación "solo casilla
+  // vacía" línea por línea (`actual !== "" -> no insertar` + `setNgValue`) en vez de
+  // llamar a esta función — las dos existen en paralelo con idéntica lógica, en vez de
+  // una llamando a la otra. No se borra (sin autorización explícita para eliminar
+  // código muerto confirmado); las pruebas la siguen ejercitando por su cuenta.
   function mtrInsertarSiVacia(el, texto) {
     if (!el || !texto || !String(texto).trim()) return false;
     const actual = String(el.value == null ? "" : el.value).trim();
@@ -32262,6 +32371,19 @@ _vglOfrecerDeshacer(btn);
       cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,
       cno_hdl_target: meta.cnoHdl != null ? meta.cnoHdl : null,
       status: (r.meta && r.meta.status) || "",
+      // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
+      // Vigilante NO TIENE forma de saber si la EPS/aseguradora falló en dispensar un
+      // medicamento — esa información no vive en Everest ni en Athenea, solo en lo que
+      // el paciente cuenta en consulta. `falla_dispensacion` queda fija en "NO" a
+      // propósito: inventar "SI" sin evidencia dispararía en el prompt de la IA la
+      // constancia médico-legal de interrupción de tratamiento (ver el bloque de
+      // prompts más abajo, "si falla_dispensacion no es 'NO'...") sobre un paciente que
+      // puede no tener ningún problema real — el peor tipo de dato inventado, porque
+      // además tiene consecuencia médico-legal. Mismo principio de "casilla vacía antes
+      // que dato inventado": aquí la "casilla vacía" segura es el valor fijo que nunca
+      // afirma una falla que nadie confirmó. Si el médico SÍ necesita documentarla,
+      // sigue pudiendo escribirlo a mano en la historia — el motor no lo bloquea, solo
+      // no lo inventa por su cuenta.
       falla_dispensacion: "NO",
       datos_completos: erc.datosCompletos !== false,
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
@@ -32272,6 +32394,10 @@ _vglOfrecerDeshacer(btn);
       // `mtrAvisosDosisRenal` unas líneas arriba) para que el nombre exportado
       // lleve "[DOSIS NO ESPECIFICADA]" cuando el histórico no trajo frecuencia
       // para ese fármaco — la IA no debe inventar una dosis que no está en el JSON.
+      // v17.6.78 — auditoría 25-ago (sección 5): la divergencia "medicamentos_actuales
+      // sin frecuencia" que la auditoría original señaló quedó CERRADA por el fix de
+      // v17.6.66 de arriba (ítem 1 de la lista de trabajo del 26-ago) — ya no es una
+      // divergencia vigente, se documenta el cierre en vez de la divergencia.
       medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : [], r.medicamentosFrecuencia || undefined)
         .map((m) => m.nombre + (m.sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")),
       education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!(r.fallas && r.fallas.hayGrave) || riesgo.categoria === "muy alto" },

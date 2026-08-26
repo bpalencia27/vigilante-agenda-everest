@@ -6,6 +6,87 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.78 — 26-ago-2026 (ítems 6 y 7: documentación de divergencias vigentes y código muerto dudoso — solo comentarios, CERO cambio de comportamiento)
+
+Ambos ítems son documentación pura (comentarios en el código), riesgo bajo por diseño —
+sin cambio de comportamiento, por lo que NO aplica mutación verificada (la disciplina de
+CLAUDE.md la exige para "todo cambio de comportamiento"; un comentario no lo es). Se
+confirmó con `TZ=America/Bogota node tests/runner.js` que las 2280 pruebas siguen en
+verde, sin ninguna nueva ni ninguna caída, tras cada tanda de comentarios. Se combinan en
+una sola entrega por ser ambos de la misma naturaleza (documentación, mismo nivel de
+riesgo) — no porque no se hayan verificado por separado.
+
+**Ítem 6 — divergencias de la sección 5, ya vigentes, comentadas junto a su código**:
+- `falla_dispensacion` fijo en "NO" (`mtrJsonV68DesdeResumen`): sin comentario previo;
+  se documenta que el Vigilante no tiene forma de saber si la EPS falló en dispensar, y
+  que inventar "SI" dispararía en el prompt la constancia médico-legal sobre un paciente
+  sin problema real — el peor tipo de dato inventado.
+- Orden de redondeo CKD-EPI/Cockcroft-Gault (`cockcroftGault`/`ckdEpi2021`): se documenta
+  que el redondeo a 1 decimal ocurre ANTES de que `estadioKDIGO()` clasifique el
+  estadio — fiel al port del Copiloto, no un descuido; cambiar el orden sería una
+  decisión clínica nueva.
+- Discordancia clínico/administrativo para DOAC/gabapentinoides/HBPM: se documenta junto
+  a `MTR_FORMULA_CG`/`MTR_FORMULA_CKDEPI` que `mtrReglaDoac`/`mtrReglaGabapentinoide`/
+  `mtrReglaLmwh` usan Cockcroft-Gault (fiel a ficha técnica/estándar FDA de dosis renal)
+  mientras el resto de reglas usa CKD-EPI (el estadio clínico) — el estadio que ve el
+  médico puede no coincidir con la TFG que de verdad gatilla el ajuste de esos 3 grupos.
+- Ventana de 180 días para remisión por progresión / correcciones de IRA por salto
+  KDIGO (`MTR_IRA_VENTANA_DIAS`, `mtrPenultimaCreatinina`, `mtrSospechaIra`): YA estaban
+  extensamente documentadas (comentarios v17.0.0/v17.0.1/v17.0.2 existentes) — se
+  confirmó que cubren ambos consumidores (`mtrSospechaIra` Y el criterio de progresión
+  de `mtrRemisionNefrologia`); no se dupicó comentario, solo se verificó.
+- Gap de normalización de unidades (`_objecionOficialAlValor`/`_labNumerico`): se
+  documenta que el motor SOLO detecta y BLOQUEA valores implausibles (p.ej. creatinina
+  en µmol/L) — nunca los CONVIERTE — por decisión deliberada: convertir exigiría
+  detectar con certeza la unidad de origen, y una conversión mal disparada sería
+  inventar un número.
+- Festivo raro 2026-07-13/2027-07-12: YA estaba documentado como "DIVERGENCIA ABIERTA"
+  con referencia a `docs/MOTOR_PORTADO.md §divergencias` y cubierto por la suite 43 — no
+  se tocó, ya cerrado el círculo de documentación.
+- Ventanas ANR desplazadas (`mtrPlanParaclinicos`, cálculo del Agujero Negro Renal): se
+  documenta que la ventana se ancla en "hoy" (el día en que se calcula el plan), no en
+  la fecha de la propia creatinina — se "desplaza" cada vez que el plan se recalcula en
+  un día distinto. Nota: no se localizó el texto original exacto de la auditoría para
+  esta divergencia; la documentación se basó en lectura directa del código, fiel a la
+  regla de "no documentar a ciegas" — si la intención original era otra, requiere
+  confirmación del médico.
+- `medicamentos_actuales` sin frecuencia: CERRADA por el fix de v17.6.66 (ítem 1 de esta
+  misma lista de trabajo) — se documenta el CIERRE, no la divergencia (ya no es vigente).
+
+**Ítem 7 — código muerto DUDOSO, investigado uno por uno (ningún borrado, solo
+documentación, sin autorización explícita para eliminar)**:
+- `CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO`: SIN caller de producción, pero YA estaba
+  extensamente documentado (comentario existente explica que espera la pieza P6 de
+  estadio-consciencia, todavía sin implementar según ese comentario) — no se agregó
+  comentario nuevo, ya está cubierto.
+- `_rumTramo`: SIN caller de producción (confirmado por grep) — instrumentación propia
+  de RUM (v17.1.0 #149), probada pero nunca adoptada por ningún llamador real.
+- `debounceVgl`: SIN caller de producción — debounce genérico probado, sin ningún
+  handler de eventos que lo use todavía.
+- `_pesoDeSignosVitales`: SIN caller de producción — hallazgo: quedó SUPERADA por
+  `_signosVitalesDelRegistro` (que sí tiene un llamador real, línea ~16108, y extrae el
+  mismo peso además de PAS/PAD/IMC).
+- `_signosVitalesInvalidar`: SIN caller de producción — hallazgo: mismo patrón exacto
+  que sus hermanas `mtrMedsInvalidar` y `_demograficosInvalidar` (tampoco tienen
+  caller): las tres cachés de invalidación manual del archivo terminaron apoyándose
+  solo en TTL, ninguna se enganchó a un evento real.
+- `extractAgrupador`: SIN caller de producción — hallazgo MÁS FUERTE: el propio
+  comentario de la función anuncia que sirve para "el manejo de éxito más abajo" de
+  GuardarOrdenamiento, pero ese manejo de éxito (línea ~21977) terminó con su PROPIA
+  expresión en línea, más angosta, en vez de llamar a esta función escrita
+  específicamente para ese caso.
+- `mtrInsertarSiVacia`: SIN caller de producción — hallazgo: `mtrInsertarEnCasillaModo`
+  (la inserción real del Redactor) reimplementa línea por línea la misma comprobación
+  "solo casilla vacía" en vez de llamar a esta función.
+- `mtrSabadoFijarGrupoManual`: SIN caller de producción — hallazgo: es la ÚNICA función
+  del subsistema «sábados» sin caller (sus hermanas `mtrSabadoRegistrarObservacion`/
+  `mtrSabadoGrupoDeMedico` SÍ están en producción); es la válvula manual que
+  `mtrSabadoGrupoDeMedico` ya sabe RESPETAR (`origen === "manual"`) pero nada en la
+  interfaz llama para FIJARLO — no hay botón conectado.
+
+Todos los 7 candidatos se confirmaron SIN caller real de producción mediante grep
+exhaustivo del archivo completo (no solo del entorno de pruebas). Ninguno se borró.
+
 ## v17.6.77 — 26-ago-2026 (ítem 5: aviso visible de fármaco fuera de grupo — decisión del médico: "Sí")
 
 **El hallazgo**: `mtrMedsSinGrupo` (v14.2.0) ya detecta cuántos medicamentos del paciente
