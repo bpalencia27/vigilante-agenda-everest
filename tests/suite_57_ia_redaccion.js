@@ -1054,6 +1054,26 @@ module.exports = {
       t.cierto(j.alertas_dosis.some((m) => /ibuprofeno/i.test(m) || /AINE/i.test(m)), "también aparece el aviso del ibuprofeno (AINE) con esta función renal");
     });
 
+    t.caso("mtrJsonV68DesdeResumen: medicamentos_actuales marca [DOSIS NO ESPECIFICADA] cuando el histórico no trae frecuencia para ese fármaco (item 1, v17.6.66)", () => {
+      const resumen = {
+        programa: "HTA",
+        erc: { crcl: 80, egfr: 80, datosCompletos: true }, riesgo: {}, meta: {}, plan: {},
+        // solo ENALAPRIL tiene frecuencia en el histórico; LOSARTAN no.
+        medicamentosFrecuencia: new Map([["enalapril 20 mg", "cada 12 horas"]]),
+      };
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["ENALAPRIL 20 MG", "LOSARTAN 50 MG"] });
+      const enalapril = j.medicamentos_actuales.find((m) => /ENALAPRIL/i.test(m));
+      const losartan = j.medicamentos_actuales.find((m) => /LOSARTAN/i.test(m));
+      t.cierto(enalapril && !/DOSIS NO ESPECIFICADA/.test(enalapril), "ENALAPRIL sí tiene frecuencia: no se marca");
+      t.cierto(losartan && /\[DOSIS NO ESPECIFICADA\]/.test(losartan), "LOSARTAN sin frecuencia en el histórico: se marca visiblemente, CERO INFERENCIA");
+    });
+
+    t.caso("mtrJsonV68DesdeResumen: sin `medicamentosFrecuencia` en absoluto (no se preguntó), medicamentos_actuales no marca nada (no es lo mismo 'sin dato' que 'no se preguntó')", () => {
+      const resumen = { programa: "HTA", erc: { crcl: 80, egfr: 80, datosCompletos: true }, riesgo: {}, meta: {}, plan: {} };
+      const j = api.mtrJsonV68DesdeResumen(resumen, { medicamentos: ["LOSARTAN 50 MG"] });
+      t.cierto(j.medicamentos_actuales.every((m) => !/DOSIS NO ESPECIFICADA/.test(m)), "sin mapa de frecuencias, ningún marcador (evita ruido cuando ni se intentó leer)");
+    });
+
     t.caso("mtrJsonV68DesdeResumen: sin medicamentos que juzgar, alertas_dosis/alerta_metformina quedan vacíos sin lanzar (no inventa avisos)", () => {
       const resumen = { programa: "HTA", erc: { crcl: 80, egfr: 80, datosCompletos: true }, riesgo: {}, meta: {}, plan: {} };
       let j;

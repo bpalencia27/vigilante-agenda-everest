@@ -6,6 +6,47 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.66 — 26-ago-2026 (auditoría 25-ago, ítem 1: marcador [DOSIS NO ESPECIFICADA] — decisión confirmada por el médico: "Sí, construirlo")
+
+Cuando un medicamento del programa cardiovascular no tiene frecuencia/dosis en el
+histórico de Everest (`mtrMapaFrecuenciasPorNombre`, alimentado por
+`mtrLeerFrecuenciasMedicamento`), ahora se marca visiblemente con
+`[DOSIS NO ESPECIFICADA]` en vez de aparecer indistinguible de un medicamento cuya
+frecuencia simplemente no se mostró. CERO INFERENCIA: no se inventa una dosis, solo se
+hace visible que falta.
+
+Dos puntos de salida tocados:
+1. `mtrMedicamentosRcv(lista, frecuencias)` — ahora agrega `sinFrecuenciaEspecificada`
+   (booleano) a cada renglón devuelto, y `.texto` incluye `" [DOSIS NO ESPECIFICADA]"`
+   cuando aplica. Esto alimenta directamente la Ficha viva (línea ~17577,
+   `medsRcv.slice(0,14).map(m => m.texto)`), que es donde el médico ve la lista en vivo.
+2. `mtrJsonV68DesdeResumen` — `medicamentos_actuales` ahora pasa
+   `r.medicamentosFrecuencia` a `mtrMedicamentosRcv` (antes se llamaba sin ese argumento,
+   perdiendo el dato) y agrega el mismo sufijo al nombre exportado, para que la IA que
+   redacta la nota clínica no trate un medicamento sin frecuencia como si tuviera una
+   omitida a propósito.
+
+Detalle de diseño clave (para no generar ruido falso): el marcador solo aparece cuando
+`frecuencias` SÍ se pasó (aunque el Map resultante esté vacío) y no hubo coincidencia
+para ese fármaco puntual. Si `frecuencias` no se pasó en absoluto (p. ej. el reconciliador
+de fuentes en la línea ~18358, que solo necesita nombres), no se marca nada — "no se
+preguntó" no es lo mismo que "se preguntó y no hay dato".
+
+**Mutación verificada**: se respaldó el archivo (`cp vigilante_agenda.user.js /tmp/x.js`),
+se revirtieron con `python3` las dos líneas que arman el marcador —
+`texto: nombre + (frecuenciaTexto ? " (" + frecuenciaTexto + ")" : "") + " — " + c.para`
+(sin la rama `[DOSIS NO ESPECIFICADA]`) y `medicamentos_actuales: ...map((m) => m.nombre)`
+(sin pasar `r.medicamentosFrecuencia` ni el sufijo) — dejando el resto del motor intacto.
+Con esa mutación, `TZ=America/Bogota node tests/runner.js` puso roja EXACTAMENTE la
+prueba nueva `"mtrJsonV68DesdeResumen: medicamentos_actuales marca [DOSIS NO
+ESPECIFICADA]..."` (2235 pasan / 1 falla: "LOSARTAN sin frecuencia en el histórico: se
+marca visiblemente, CERO INFERENCIA (obtuvo false)"), sin afectar ninguna otra prueba. Se
+restauró desde el backup y el banco volvió a 2236 pruebas en verde (se añadieron 2 pruebas
+nuevas en `tests/suite_57_ia_redaccion.js`: una confirma el marcador cuando el histórico
+no trae frecuencia para un fármaco puntual, la otra confirma que SIN pasar
+`medicamentosFrecuencia` en absoluto no se marca nada, evitando ruido cuando ni se
+intentó leer el dato).
+
 ## v17.6.65 — 26-ago-2026 (auditoría 25-ago, sección 4: síndrome metabólico — decisión confirmada por el médico)
 
 Nueva función pura `mtrSindromeMetabolico(f)`: evalúa los 5 criterios estándar IDF

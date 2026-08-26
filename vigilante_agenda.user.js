@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.65
+// @version     17.6.66
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.65";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.66";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -26339,9 +26339,17 @@ _vglOfrecerDeshacer(btn);
       if (vistos.has(clave)) return;
       vistos.add(clave);
       const frecuenciaTexto = (frec && frec.get(clave)) || "";
+      // v17.6.66 — marcador [DOSIS NO ESPECIFICADA]: solo cuando SÍ se intentó
+      // leer la frecuencia (se pasó `frecuencias`, aunque el Map salga vacío) y
+      // este fármaco puntual no tiene coincidencia. Si `frecuencias` ni se pasó
+      // (llamadas que no piden ese dato, ver #113/reconciliador), no se marca —
+      // eso no es "sin dato", es "no se preguntó". CERO INFERENCIA: nunca se
+      // inventa una dosis/frecuencia, solo se hace visible que falta.
+      const sinFrecuenciaEspecificada = !!frec && !frecuenciaTexto;
       salida.push({
         nombre: nombre, para: c.para, frecuenciaTexto: frecuenciaTexto,
-        texto: nombre + (frecuenciaTexto ? " (" + frecuenciaTexto + ")" : "") + " — " + c.para,
+        sinFrecuenciaEspecificada: sinFrecuenciaEspecificada,
+        texto: nombre + (frecuenciaTexto ? " (" + frecuenciaTexto + ")" : (sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")) + " — " + c.para,
       });
     });
     return salida;
@@ -31929,7 +31937,12 @@ _vglOfrecerDeshacer(btn);
       alerta_metformina: alertaMetformina,
       alertas_dosis: alertasDosis,
       // v16.1.0 — solo los del programa cardiovascular (orden del médico).
-      medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : []).map((m) => m.nombre),
+      // v17.6.66 — se pasa `r.medicamentosFrecuencia` (el mismo mapa que ya usa
+      // `mtrAvisosDosisRenal` unas líneas arriba) para que el nombre exportado
+      // lleve "[DOSIS NO ESPECIFICADA]" cuando el histórico no trajo frecuencia
+      // para ese fármaco — la IA no debe inventar una dosis que no está en el JSON.
+      medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : [], r.medicamentosFrecuencia || undefined)
+        .map((m) => m.nombre + (m.sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")),
       education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!(r.fallas && r.fallas.hayGrave) || riesgo.categoria === "muy alto" },
       priority_focus: r.foco || "",
       // v17.6.8 — relativizadas (nunca crudas): cuasi-identificadores fuera del prompt.
