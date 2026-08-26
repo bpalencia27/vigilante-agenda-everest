@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.81
+// @version     17.6.82
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.81";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.82";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14836,6 +14836,44 @@ _vglOfrecerDeshacer(btn);
     } catch (e) {}
   }
 
+  // v17.6.81 — REPORTE EN VIVO (26-ago): "no aparece mi nombre donde dice Médico" → sin
+  // nombre, `_agendasPropias` no encuentra nada y la agenda del día sale vacía. Causa REAL
+  // (no versión vieja: `resolverMedicoPorPerfil` no cambia desde v12.3.2, verificado con
+  // `git log -S`): el único camino que da id+nombre — GetUsuarioPerfil — es justo el
+  // endpoint que Everest viene devolviendo 503 toda la sesión (confirmado en las capturas
+  // de consola de este mismo día, docenas de veces, en TODAS las páginas). `identidadDesde
+  // Cliente` ya lee el login del localStorage/cookie SIN red, pero el id y el nombre siguen
+  // yendo por esa misma puerta caída a propósito (comentario de v12.3.2: nunca confiar en
+  // el login por sí solo — en un equipo COMPARTIDO entre médicos, el localStorage de la
+  // sesión anterior no puede firmar nada sin que el backend lo valide). El médico pidió que
+  // vuelva a ser automático, como antes — la solución que no debilita esa garantía: cachear
+  // (por LOGIN exacto, con vencimiento) la última identidad que el backend SÍ validó, para
+  // no depender de que GetUsuarioPerfil responda en cada carga de página. Si el equipo
+  // cambia de médico, el login cambia, la caché no tiene ese login, y se exige validación
+  // fresca — la garantía de v12.3.2 queda intacta.
+  const MTR_IDENTIDAD_MEDICO_KEY = "vgl_identidad_medico_cache";
+  const MTR_IDENTIDAD_MEDICO_TTL_MS = 12 * 60 * 60 * 1000;   // 12 h: cubre un turno largo, vence entre días
+  function _identidadMedicoCacheLeer(login) {
+    try {
+      if (typeof GM_getValue === "undefined" || !login) return null;
+      const mapa = GM_getValue(MTR_IDENTIDAD_MEDICO_KEY, null);
+      const entry = mapa && typeof mapa === "object" ? mapa[String(login).toLowerCase()] : null;
+      if (!entry || !(entry.id > 0) || !entry.name) return null;
+      if (Date.now() - (entry.ts || 0) > MTR_IDENTIDAD_MEDICO_TTL_MS) return null;
+      return { id: entry.id, name: entry.name };
+    } catch (e) { return null; }
+  }
+  function _identidadMedicoCacheGuardar(login, id, name) {
+    try {
+      if (typeof GM_setValue === "undefined" || typeof GM_getValue === "undefined") return;
+      if (!login || !(id > 0) || !name) return;
+      const mapa = GM_getValue(MTR_IDENTIDAD_MEDICO_KEY, null);
+      const nuevo = mapa && typeof mapa === "object" ? mapa : {};
+      nuevo[String(login).toLowerCase()] = { id: id, name: name, ts: Date.now() };
+      GM_setValue(MTR_IDENTIDAD_MEDICO_KEY, nuevo);
+    } catch (e) {}
+  }
+
   // Consulta (una sola vez por login) la ficha del usuario en sesión para fijar el médico
   // activo. Es de SOLO LECTURA y no bloquea nada: si falla, el panel sigue avisando de que
   // no identificó la agenda propia y el médico puede escribir su nombre en Ajustes.
@@ -14844,6 +14882,20 @@ _vglOfrecerDeshacer(btn);
   let idRetryAt = 0;     // v12.3.1 — sello del último reintento de identidad desde tick()
   async function resolverMedicoPorPerfil(login) {
     if (!login || perfilPedido === login) return;
+    // v17.6.81 — se fija YA MISMO con lo último que el backend validó para ESTE login
+    // (nunca con el de otro), mientras la llamada de abajo confirma o corrige en cuanto
+    // Everest vuelva a responder. Sin esto, un solo 503 dejaba "Médico:" vacío hasta el
+    // próximo reintento de 30 s — o toda la sesión, si el endpoint sigue caído.
+    if (!state.activeDoctor.id) {
+      const cache = _identidadMedicoCacheLeer(login);
+      if (cache) {
+        invalidarApiSiCambioMedico(cache.id);
+        state.activeDoctor.id = cache.id;
+        state.activeDoctor.name = cache.name;
+        state.lastSignature = "";
+        console.log("[Vigilante] médico en sesión (de caché, validado antes; confirmando con Everest):", cache.name, "· id", cache.id);
+      }
+    }
     perfilPedido = login;
     try {
       const r = await pageFetchJson(`/apiviva/APIAcceso/api/ParametrizacionLista/GetUsuarioPerfil/${encodeURIComponent(login)}`);
@@ -14856,6 +14908,7 @@ _vglOfrecerDeshacer(btn);
       if (nombre.length > 3) state.activeDoctor.name = nombre;
       invalidarApiSiCambioMedico(id);   // v12.3.6 — antes de fijar el id nuevo, purgar el de otro médico
       state.activeDoctor.id = id;
+      if (nombre.length > 3) _identidadMedicoCacheGuardar(login, id, nombre);
       console.log("[Vigilante] médico en sesión:", state.activeDoctor.name, "· id", state.activeDoctor.id);
       state.lastSignature = "";   // que el panel se repinte ya con la identidad resuelta
     } catch (e) { perfilPedido = ""; console.warn("[Vigilante] no se pudo resolver el perfil del médico:", e); }

@@ -6,6 +6,46 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.82 — 26-ago-2026 ("no aparece mi nombre donde dice Médico" — caché de identidad por login)
+
+Reporte en vivo con captura: en "Programación de cita" el campo "Médico:" salía vacío, y el
+médico sospechó (correctamente, aunque la causa raíz no era la que él imaginó) que por eso
+no le salían sus agendas — `_agendasPropias` filtra los cupos del día por el NOMBRE del
+médico, así que con `doctorName === ""` ningún cupo hace match y la lista sale vacía.
+
+Investigado con `git log -S` sobre `resolverMedicoPorPerfil`/`captureDoctorInfo`/
+`identidadDesdeCliente`: ninguna de las tres cambia desde v12.3.1/v12.3.2 — no es una
+regresión de esta versión. La causa real: las TRES vías de identidad (URL sniffing, login
+publicado por Everest, localStorage/cookie del cliente) convergen todas en UNA sola llamada
+de red — `GET GetUsuarioPerfil/<login>` —, y ese endpoint estuvo devolviendo 503 durante
+TODA la sesión (confirmado en capturas de consola repetidas, en páginas distintas, a lo
+largo de horas). Es deliberado por diseño (v12.3.2): en un equipo COMPARTIDO entre varios
+médicos, el login leído del localStorage NUNCA se acepta sin que el backend lo valide —
+de lo contrario, la sesión rancia de un médico anterior podría firmar citas/órdenes a
+nombre de otro. Confirmado en vivo: el médico reportó "ya me reconoció" minutos después,
+sin ningún cambio de código — Everest se recuperó solo.
+
+Mejora pedida por el médico ("quiero que sea automático como antes, blíndalo más"): una
+caché por LOGIN EXACTO (no "el último que pasó por este equipo") de la última identidad que
+el backend SÍ validó, con vencimiento de 12 h. Con caché, `resolverMedicoPorPerfil` fija
+`state.activeDoctor` de inmediato (síncrono, antes de esperar la red) mientras la llamada a
+Everest confirma o corrige en segundo plano — así una caída del endpoint ya no deja "Médico:"
+vacío durante toda la sesión. La garantía de v12.3.2 queda intacta: el login de un médico
+DISTINTO simplemente no tiene entrada en la caché y exige validación fresca, igual que
+siempre.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **lectura de caché** | `_identidadMedicoCacheLeer` vuelto a `return null;` sin condición | `suite_19` | *CON caché para ESE login, fija id+nombre de inmediato aunque GetUsuarioPerfil siga caído* → *de caché, de inmediato: esperaba 515 y obtuvo 0* |
+| **escritura de caché** | la llamada a `_identidadMedicoCacheGuardar(...)` tras un 200 exitoso se comentó | `suite_19` | *al validar por red con éxito, guarda en caché para la próxima carga de página* → *quedó una entrada de caché para ese login (obtuvo false)* |
+
+Las dos mutaciones se aplicaron una a la vez sobre producción, cada una cayó con la
+aserción exacta esperada, y ambas se restauraron verificando `diff` contra una copia
+intacta tomada antes de mutar. El banco completo volvió a 2294/2294 tras la restauración
+final. Las pruebas nuevas también cubren, sin necesidad de mutación adicional (ya
+verificado por construcción del propio caso): que una caché de OTRO login (equipo
+compartido) NUNCA se usa, y que una entrada de más de 12 h se trata como si no existiera.
+
 ## v17.6.81 — 26-ago-2026 (Cockcroft-Gault disfrazado de CKD-EPI + notas largas entran a la rotación de cuota)
 
 Dos reportes en vivo, la misma tarde.
