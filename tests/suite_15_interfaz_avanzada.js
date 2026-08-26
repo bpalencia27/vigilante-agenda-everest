@@ -1642,6 +1642,110 @@ module.exports = {
       t.cierto(botonTurno.classList.contains("active"));
     });
 
+    // [auditoría 25-ago, hallazgo 1.8] cargarHorasLab() desmarcaba el interruptor "Agendar
+    // también la Toma de Muestras" al INICIO de cada recarga, y solo lo volvía a marcar si
+    // era el default de labs-primero (no aplica aquí) Y el médico nunca lo había tocado. Si
+    // el médico lo marcaba a mano, la siguiente recarga (cambiar de chip de día) lo apagaba
+    // y no lo volvía a marcar — al confirmar se creaba solo la cita de control, sin la toma.
+    await t.casoAsync("openAgendamientoModal: el interruptor de Toma de Muestras marcado A MANO sobrevive a un cambio de día de laboratorio", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cLab = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        // Cualquier fecha de toma tiene el mismo turno disponible, para que el cambio de
+        // chip de día siga dejando el interruptor HABILITADO (turnosConHora.length > 0) —
+        // lo único que debe cambiar es si queda marcado o no.
+        gmxhr: (o) => {
+          if (o.url.includes("ObtenerTurnosPorFecha")) {
+            o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "06:30:00" }] }) });
+          } else if (o.onerror) { o.onerror("url no simulada"); }
+        },
+      });
+      enriquecerDom(cLab);
+      cLab.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cLab.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(60);
+      const modal = cLab.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const labChk = modal.querySelector("#vgl-agm-lab-chk");
+      t.igual(labChk.disabled, false, "con turnos disponibles, el interruptor queda habilitado");
+      t.igual(labChk.checked, false, "modo normal (no labs-primero): nace desmarcado");
+      // El médico lo marca A MANO.
+      labChk.checked = true;
+      disparar(labChk, "change");
+      // Cambia el chip de día de laboratorio (dispara renderLabDayChips -> cargarHorasLab,
+      // la misma recarga que antes lo desmarcaba sin piedad).
+      const chipsCont = modal.querySelector("#vgl-lab-day-chips");
+      const otroChip = [...chipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!otroChip, "debe haber al menos otro día de laboratorio para elegir");
+      disparar(otroChip, "click");
+      await esperar(60);
+      t.cierto(labChk.checked, "tras la recarga, la elección MANUAL del médico debe sobrevivir (bug real: se apagaba)");
+      t.igual(labChk.disabled, false, "y sigue habilitado (el nuevo día también tiene turnos)");
+    });
+
+    // [auditoría 25-ago, hallazgo 1.9] renderLabDayChips reasignaba el centro (y con él
+    // selectedLabDateInfo) al ítem central de la sugerencia SIN comprobar si el médico ya
+    // había elegido otra fecha de toma con un clic. cargarHoras() —que corre en cada
+    // cambio de fecha de CONTROL— vuelve a llamar a renderLabDayChips con una sugerencia
+    // recién calculada, descartando en silencio la elección manual de la toma.
+    await t.casoAsync("openAgendamientoModal: la fecha de TOMA elegida a mano sobrevive a un cambio de fecha de control", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cLab2 = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            return respuestaJson({ agendas: [{ agendaId: 55, medico: "ANA MARIA PEREZ", fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 900, horaTexto: "08:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => {
+          if (o.url.includes("ObtenerTurnosPorFecha")) {
+            o.onload({ status: 200, responseText: JSON.stringify({ turnos: [{ hora: "06:30:00" }] }) });
+          } else if (o.onerror) { o.onerror("url no simulada"); }
+        },
+      });
+      enriquecerDom(cLab2);
+      cLab2.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cLab2.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(60);
+      const modal = cLab2.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const labLbl = modal.querySelector("#vgl-lab-date-lbl");
+      // El médico elige a mano una fecha de toma DISTINTA a la sugerida (el chip central).
+      const labChipsCont = modal.querySelector("#vgl-lab-day-chips");
+      const chipManual = [...labChipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!chipManual, "debe haber al menos otro día de laboratorio para elegir a mano");
+      disparar(chipManual, "click");
+      await esperar(30);
+      const fechaElegidaTexto = labLbl.textContent;
+      t.cierto(!!fechaElegidaTexto, "la etiqueta de fecha de toma se actualizó con la elección manual");
+      // Ahora el médico cambia la fecha de CONTROL (dispara cargarHoras -> renderLabDayChips
+      // con una sugerencia de toma RECALCULADA — el momento exacto en que antes se perdía).
+      const dayChipsCont = modal.querySelector("#vgl-day-chips");
+      const otroDiaControl = [...dayChipsCont.children].find((b) => !b.className.includes("active"));
+      t.cierto(!!otroDiaControl, "debe haber al menos otro día de control para elegir");
+      disparar(otroDiaControl, "click");
+      await esperar(60);
+      t.igual(labLbl.textContent, fechaElegidaTexto,
+        "tras cambiar la fecha de control, la fecha de TOMA elegida a mano no debe cambiar (bug real: se recalculaba)");
+    });
+
     // [v14.2.0 — backlog §3] La misma llamada a BuscarPacienteDetallado que ya arma el
     // selector de programas ahora también alimenta perfilAdicionalCache, para que el panel
     // principal pueda mostrar el chip sin pedirle nada nuevo a Everest.

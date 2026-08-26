@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.52
+// @version     17.6.53
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.52";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.53";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -19047,6 +19047,13 @@ _vglOfrecerDeshacer(btn);
     let modoManualFecha = false;
     let selectedDateInfo = null;
     let selectedLabDateInfo = null;
+    // v17.6.53 — auditoría 25-ago (1.9): mismo patrón que _controlElegidoManual (protege
+    // la fecha de CONTROL), pero para la fecha de TOMA. Sin este flag, renderLabDayChips
+    // reasignaba el centro (y por tanto selectedLabDateInfo) al ítem central de la
+    // sugerencia SIN comprobar si el médico ya había elegido otra fecha de toma con un
+    // clic — cada cambio de fecha de control (que vuelve a llamar a renderLabDayChips con
+    // una sugerencia nueva) descartaba en silencio esa elección manual.
+    let _labFechaTomaElegidaManual = false;
     let diaRangeActual = [];
     let diaBotonesPorIso = new Map();
     let pacienteIdAcceso = null;
@@ -19327,6 +19334,15 @@ _vglOfrecerDeshacer(btn);
 
     let _cargarHorasToken = 0;
     let _cargarHorasLabToken = 0;
+    // v17.6.53 — auditoría 25-ago (1.8): mismo patrón que _celularSmsEditadoManual
+    // (v17.0.3). cargarHorasLab() desmarca el interruptor "Agendar también la Toma de
+    // Muestras" al INICIO de cada recarga (cambio de chip de día, cambio de especialidad)
+    // y solo lo volvía a marcar si era el default de labs-primero Y el médico nunca lo
+    // había tocado. Si el médico lo marcó a mano en modo normal, la siguiente recarga lo
+    // apagaba y NUNCA lo volvía a marcar: al confirmar se creaba solo la cita de control,
+    // sin la toma que el médico pidió. Se guarda el ÚLTIMO VALOR elegido a mano, no solo
+    // que "ya lo tocó", para poder restaurarlo en cada recarga.
+    let _labChkEditadoManual = false, _labChkValorManual = false;
     async function cargarHoras() {
       if (!selectedDateInfo) return;
       const token = ++_cargarHorasToken;
@@ -19344,7 +19360,14 @@ _vglOfrecerDeshacer(btn);
       dateInfoEl.innerHTML = `Servicio: <b>${escapeHtml(selectedEspName)}</b> · Fecha deseada: <b>${escapeHtml(selectedDateInfo.fmt)}</b> <span style="color:var(--c-verde)">(${escapeHtml(selectedDateInfo.lbl)})</span>`;
       const suggestedLab = calcBusinessDaysBefore(selectedDateInfo.iso, 5);
       const labLbl = modal.querySelector("#vgl-lab-date-lbl");
-      if (labLbl) labLbl.textContent = `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
+      // v17.6.53 (1.9) — mismo bug, segundo punto: esta etiqueta se pisaba con la fecha
+      // RECIÉN sugerida sin pasar por renderLabDayChips (que sí respeta la elección
+      // manual) — el chip activo quedaba bien pero el texto visible mostraba otra fecha.
+      if (labLbl) {
+        labLbl.textContent = (_labFechaTomaElegidaManual && selectedLabDateInfo)
+          ? `${selectedLabDateInfo.fmt} (${selectedLabDateInfo.lbl})`
+          : `${suggestedLab.fmt} (${suggestedLab.dayLbl})`;
+      }
 
       renderLabDayChips(suggestedLab.iso);
       try { _pintarAvisoVencimiento(); } catch (e) {}   // v15.9.0 — al elegir el día
@@ -19785,8 +19808,11 @@ _vglOfrecerDeshacer(btn);
               return `<option value="${escapeHtml(hRaw)}">${escapeHtml(hFmt)}</option>`;
             }).join("");
             if (labChk) { labChk.disabled = false;
-        if (_chkPorDefecto && !labChk.dataset.tocado) labChk.checked = true;
-        labChk.addEventListener("change", () => { labChk.dataset.tocado = "1"; }, { once: true }); }
+        // v17.6.53 (1.8) — si el médico ya eligió a mano (en CUALQUIER recarga anterior),
+        // esa elección manda siempre, por encima del default de labs-primero. Sin
+        // elección previa, se comporta como antes: marcado si labs-primero, si no vacío.
+        labChk.checked = _labChkEditadoManual ? _labChkValorManual : _chkPorDefecto;
+        labChk.addEventListener("change", () => { _labChkEditadoManual = true; _labChkValorManual = labChk.checked; }, { once: true }); }
           } else {
             labTimeSel.innerHTML = `<option value="">⛔ No hay turnos de laboratorio disponibles para el ${escapeHtml(selectedLabDateInfo.fmt)}. Elija otro día arriba.</option>`;
             if (labChk) { labChk.checked = false; labChk.disabled = true; }
@@ -19802,7 +19828,11 @@ _vglOfrecerDeshacer(btn);
     function renderLabDayChips(centerIso) {
       const labChipsEl = modal.querySelector("#vgl-lab-day-chips");
       if (!labChipsEl) return;
-      const range = calcDateRangeAroundIso(centerIso, 3);
+      // v17.6.53 (1.9) — si el médico ya eligió la fecha de toma a mano, esa elección
+      // manda sobre cualquier centro recalculado (ver el comentario de
+      // _labFechaTomaElegidaManual, arriba).
+      const centro = (_labFechaTomaElegidaManual && selectedLabDateInfo) ? selectedLabDateInfo.iso : centerIso;
+      const range = calcDateRangeAroundIso(centro, 3);
       labChipsEl.innerHTML = "";
       const labLblEl = modal.querySelector("#vgl-lab-date-lbl");
 
@@ -19815,6 +19845,7 @@ _vglOfrecerDeshacer(btn);
           labChipsEl.querySelectorAll(".vgl-agm-pbtn").forEach((b) => b.classList.remove("active"));
           btn.classList.add("active");
           selectedLabDateInfo = item;
+          _labFechaTomaElegidaManual = true;   // v17.6.53 (1.9) — esta elección ya no se pisa
           _labsAfinarToken++;   // v17.0.3 — el médico ya eligió día de toma: no se le pisa después
           if (labLblEl) labLblEl.textContent = `${item.fmt} (${item.lbl})`;
           cargarHorasLab();

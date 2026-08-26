@@ -6,6 +6,46 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.53 — 26-ago-2026 (auditoría 25-ago, hallazgos 1.8 y 1.9: dos elecciones manuales del médico que una recarga borraba)
+
+Mismo módulo (`openAgendamientoModal`, sección de toma de laboratorios), mismo patrón de
+bug: una recarga del panel de laboratorio "olvidaba" una elección que el médico ya había
+hecho a mano, por no tener un flag equivalente a `_controlElegidoManual`/
+`_celularSmsEditadoManual` (que sí protegen la fecha de control y el celular del SMS).
+
+**1.8 — el interruptor "Agendar también la Toma de Muestras" se apagaba solo.**
+`cargarHorasLab` (línea ~19790) ponía `checked=false` al INICIO de cada recarga (cambio
+de chip de día, cambio de especialidad) y solo lo re-marcaba si era el default de
+labs-primero Y el médico nunca lo había tocado (`!labChk.dataset.tocado`). Si el médico lo
+marcaba a mano en modo normal, la siguiente recarga lo apagaba y NUNCA lo volvía a marcar
+— al confirmar se creaba solo la cita de control, sin la toma que el médico pidió. Fix: se
+guarda el ÚLTIMO VALOR elegido a mano (`_labChkEditadoManual`/`_labChkValorManual`), no
+solo si "ya lo tocó".
+
+**1.9 — la fecha de TOMA elegida a mano se descartaba en cada cambio de fecha de control.**
+`renderLabDayChips` (línea ~19821) reasignaba el centro (y `selectedLabDateInfo`) al ítem
+central de la sugerencia SIN comprobar si el médico ya había elegido otra fecha de toma con
+un clic — a diferencia de `_controlElegidoManual`, que sí protege la fecha de control.
+`cargarHoras`, que corre en cada cambio de fecha de control, vuelve a llamar a
+`renderLabDayChips` con una sugerencia recién calculada, descartando la elección. Un
+segundo punto del MISMO bug: `cargarHoras` también pisaba directamente el texto de
+`#vgl-lab-date-lbl` con la fecha recién sugerida, sin pasar por `renderLabDayChips` — el
+chip activo podía quedar bien pero la etiqueta visible mostraba otra fecha. Fix: nuevo flag
+`_labFechaTomaElegidaManual`, consultado en los dos puntos.
+
+- **Mutación 1.8**: se revirtió a `dataset.tocado`/`_chkPorDefecto` puro (sin los nuevos
+  flags). El banco pasó de 2214 en verde a 1 roja: *"el interruptor de Toma de Muestras
+  marcado A MANO sobrevive a un cambio de día de laboratorio"*. Restaurado, banco vuelve a
+  2214 en verde.
+- **Mutación 1.9**: se revirtieron los dos puntos (centro de `renderLabDayChips` y el texto
+  de `cargarHoras`) a la versión sin flag. El banco pasó de 2214 en verde a 1 roja: *"la
+  fecha de TOMA elegida a mano sobrevive a un cambio de fecha de control"* (esperaba
+  "15/09/2026..." y volvió a dar "09/09/2026...", la fecha recién recalculada).
+  Restaurado, banco vuelve a 2214 en verde.
+- **Pruebas nuevas**: `tests/suite_15_interfaz_avanzada.js` — 2 casos, ambos con el modal
+  completo de agendamiento montado en el DOM simulado (mismo patrón que el resto de la
+  suite: `_mockAgendaComun`-style fetch/gmxhr, clics reales vía `disparar`).
+
 ## v17.6.52 — 26-ago-2026 (auditoría 25-ago, hallazgo 1.7: el recorte de RAC≥30 nunca aplicaba con contexto clínico)
 
 `_vigenciaDiasParaAnalito` (vigilante_agenda.user.js:3804, usada por `_analitosRcvVencidos`
