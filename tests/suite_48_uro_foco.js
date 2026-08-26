@@ -230,6 +230,82 @@ module.exports = {
       t.cierto(api.mtrEvaluarUroanalisis({ nitritos: "POSITIVO" }, true, false).sugestivo, "'POSITIVO' cuenta");
     });
 
+    // ============ LA ORDEN DEL UROANÁLISIS LLEGA A LA IA (v17.6.88) ============
+    //
+    // `mtrEvaluarUroanalisis` calcula la orden concreta de cada estado, pero ese array NO
+    // viajaba al JSON: la IA recibía solo `itu_estado` y tenía que DEDUCIR el urocultivo a
+    // partir de él — justo la inferencia que el resto del prompt le prohíbe, así que o lo
+    // omitía o se lo inventaba. Va en campo PROPIO y no dentro de `order_list`, que lleva
+    // CLAVES de analito que sus lectores cruzan con el catálogo de CUPS.
+    t.caso("v17.6.88: la orden del uroanálisis viaja al JSON que lee la IA", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 58, sexo: "F", pesoKg: 65, creatinina: 0.9,
+        rac: 12, ct: 190, hdl: 50, ldl: 100, paSistolica: 130, paDiastolica: 82,
+        factores: { hta: true },
+        ultimos: {
+          CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+          UROANALISIS: { fecha: "2026-08-20", valor: 1 },
+        },
+        uroHallazgos: { nitritos: "POSITIVO", esterasa: "++", leucocitos: "20-30" },
+        uroSintomas: true,
+      });
+      t.igual(r.uroanalisis.estado, "PROBABLE ITU", "el vector es el que debe ser");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.cierto(Array.isArray(json.orden_uroanalisis), "el campo existe y es una lista");
+      t.cierto(json.orden_uroanalisis.some((o) => /urocultivo/i.test(o)),
+        "y lleva el urocultivo: " + JSON.stringify(json.orden_uroanalisis));
+      t.cierto(json.orden_uroanalisis.some((o) => /antibiograma/i.test(o)), "con su antibiograma");
+      // No se contamina `order_list`, que lleva claves de analito para cruzar con los CUPS.
+      t.falso(json.order_list.some((k) => /urocultivo/i.test(k)),
+        "order_list sigue llevando solo claves de analito: " + JSON.stringify(json.order_list));
+
+      // Y en la PANTALLA la orden se ve como una acción propia, no solo enterrada dentro de
+      // la frase de la conducta: el médico que recorre la lista de qué pedir tiene que
+      // encontrarla ahí. (Sin esta comprobación, la línea del render se puede borrar entera
+      // y el banco seguiría verde — comprobado con una mutación.)
+      const html = api.mtrRenderResumenClinicoHtml(r);
+      t.cierto(/Qué ordenar por este hallazgo/.test(html),
+        "el recuadro enseña qué ordenar por el uroanálisis, como línea propia");
+      t.cierto(/Qué ordenar por este hallazgo:[^<]*Urocultivo/.test(html),
+        "y esa línea nombra el urocultivo");
+    });
+
+    t.caso("v17.6.88: sin uroanálisis evaluado no se inventa ninguna orden", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 58, sexo: "F", pesoKg: 65, creatinina: 0.9,
+        factores: { hta: true }, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      });
+      t.igual(r.uroanalisis, null, "sin hallazgos de orina el motor no evalúa nada");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(JSON.stringify(json.orden_uroanalisis), "[]", "y el campo sale vacío, no inventado");
+    });
+
+    // v68 S4: "Orden nunca vacía". Los cinco estados tienen que decir algo — incluso el
+    // negativo, donde lo que corresponde es el control de rutina, y el ambiguo, donde lo que
+    // corresponde es confirmar los síntomas ANTES de pedir el urocultivo.
+    t.caso("v17.6.88: los cinco estados del uroanálisis traen orden, ninguno la deja vacía", () => {
+      const sugestivo = { nitritos: "POSITIVO", esterasa: "++", leucocitos: "20-30" };
+      const limpio = { nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const casos = [
+        ["PROBABLE ITU", sugestivo, true, false],
+        ["BACTERIURIA ASINTOMÁTICA", sugestivo, false, false],
+        ["REQUIERE SÍNTOMAS", sugestivo, null, false],
+        ["BACTERIURIA EN EMBARAZO", sugestivo, null, true],
+        ["SIN HALLAZGOS", limpio, null, false],
+      ];
+      casos.forEach(([esperado, hallazgos, sintomas, embarazo]) => {
+        const u = api.mtrEvaluarUroanalisis(hallazgos, sintomas, embarazo);
+        t.igual(u.estado, esperado, "estado esperado para el caso " + esperado);
+        t.cierto(Array.isArray(u.orden) && u.orden.length > 0 && String(u.orden[0]).trim().length > 0,
+          "la orden nunca queda vacía en " + esperado + ": " + JSON.stringify(u.orden));
+      });
+      // Y las dos que SÍ deben pedir urocultivo lo piden; las otras tres no.
+      t.cierto(api.mtrEvaluarUroanalisis(sugestivo, true, false).orden.some((o) => /urocultivo/i.test(o)),
+        "con síntomas se pide urocultivo");
+      t.falso(api.mtrEvaluarUroanalisis(sugestivo, false, false).orden.some((o) => /^urocultivo$/i.test(o)),
+        "sin síntomas NO se pide urocultivo: la norma prohíbe tratar la bacteriuria asintomática");
+    });
+
     // ================= FOCO CLÍNICO =================
 
     const resumen = (over) => Object.assign({

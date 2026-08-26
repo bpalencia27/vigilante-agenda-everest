@@ -6,6 +6,44 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.88 — 26-ago-2026 (el urocultivo que el motor calcula y la IA nunca recibe)
+
+Tercer hueco de la Fase 1 (v68 S4 UROANÁLISIS: *"pedir UROCULTIVO+antibiograma"*, *"sin
+antibiótico a ciegas"*, *"la orden nunca queda vacía"*).
+
+**Corrección a la auditoría, que exageraba el hallazgo:** decía que el urocultivo no se
+enseñaba "en ninguna pantalla". Falso — la frase de la conducta ya decía *"pida urocultivo con
+antibiograma"*. El hueco real es más estrecho y está en el otro lado: **el JSON que lee la IA
+no lo llevaba**. Verificado con el harness (nitritos + síntomas): `uroanalisis.orden` traía
+`["Urocultivo","Antibiograma"]` y la cadena "urocultivo" no aparecía por ninguna parte del
+JSON emitido — la IA recibía solo `itu_estado: "PROBABLE ITU"` y tenía que DEDUCIR el
+urocultivo, que es justo la inferencia que el resto del prompt le prohíbe. O lo omitía, o se
+lo inventaba.
+
+Se añade `orden_uroanalisis` como campo PROPIO del JSON — no dentro de `order_list`, que lleva
+CLAVES de analito que sus lectores cruzan con el catálogo de CUPS y que se rompería con nombres
+libres. Y en la pantalla la orden pasa a verse como línea propia, no solo enterrada dentro de
+la frase de la conducta.
+
+De paso queda anclada la cláusula *"la orden nunca queda vacía"*: los cinco estados devuelven
+algo, incluido el negativo (control de rutina) y el ambiguo (confirmar síntomas ANTES de pedir
+el urocultivo). Y que la bacteriuria asintomática **no** pide urocultivo: la norma prohíbe
+tratarla.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **campo ausente** | se borró la línea `orden_uroanalisis` del JSON | `suite_48` | *v17.6.88: la orden del uroanálisis viaja al JSON que lee la IA* **y** *…sin uroanálisis evaluado no se inventa ninguna orden* |
+| **campo siempre vacío** | `orden_uroanalisis: []` fijo (existe pero no lleva nada) | `suite_48` | *v17.6.88: la orden del uroanálisis viaja al JSON…* |
+| **línea de pantalla** | se borró la línea "Qué ordenar por este hallazgo" del render | `suite_48` | *v17.6.88: la orden del uroanálisis viaja al JSON…* |
+
+Nota, y van cuatro veces: **la tercera mutación NO caía con las pruebas iniciales.** Se podía
+borrar entera la línea de la pantalla y el banco seguía en 2314/2314, porque las pruebas solo
+miraban el JSON. Se añadieron dos aserciones sobre el HTML renderizado y entonces sí cayó.
+Cada vez que este arreglo toca DOS costuras, hay que probar las dos por separado.
+
+Las tres mutaciones se aplicaron de una en una desde copia intacta, y el archivo se restauró
+verificando `diff`. Banco en 2314/2314.
+
 ## v17.6.87 — 26-ago-2026 ("Nunca se le ha tomado" sobre un examen que SÍ tiene resultado)
 
 Segundo hueco de la Fase 1 del plan de fidelidad a v68.
@@ -2371,8 +2409,11 @@ Aplicada sobre el archivo de producción, corrida `suite_25`, confirmado el rojo
 mensaje exacto, y restaurada antes de seguir. El banco completo volvió a verde tras la
 restauración.
 | **no-show no suma (v17.6.7)** | _noShowRegistrar: e.total = (e.total || 0) + 1 mutado a + 0 (el historial de inasistencias nunca crece) | suite_31 | *v17.6.7: adherencia registra el no-show sin duplicar* ("el primer no-show queda con total 1: esperaba 1 y obtuvo 0") |
-| **festivos sin delegación (v17.6.8)** | esFestivo: eturn mtrEsFestivoCO(...) mutado a eturn false para años fuera de la tabla (2028 queda ciego y el agendamiento citaría en festivo) | suite_69 | *v17.6.8: esFestivo delega al motor calculado* ("1-ene-2028 debe ser festivo (obtuvo false)") |
-| **toasts sin agrupar (v17.6.9)** | _agruparToasts: se antepone eturn (lista||[]).slice() (los avisos del mismo paciente vuelven a apilarse) | suite_42 | *v17.6.9: _agruparToasts combina avisos del mismo paciente* ("debe quedar en una sola tarjeta") |
+| **festivos sin delegación (v17.6.8)** | esFestivo: 
+eturn mtrEsFestivoCO(...) mutado a 
+eturn false para años fuera de la tabla (2028 queda ciego y el agendamiento citaría en festivo) | suite_69 | *v17.6.8: esFestivo delega al motor calculado* ("1-ene-2028 debe ser festivo (obtuvo false)") |
+| **toasts sin agrupar (v17.6.9)** | _agruparToasts: se antepone 
+eturn (lista||[]).slice() (los avisos del mismo paciente vuelven a apilarse) | suite_42 | *v17.6.9: _agruparToasts combina avisos del mismo paciente* ("debe quedar en una sola tarjeta") |
 
 ## v17.6.10 — 23-ago-2026 (limpieza final: dead code y claves de Ajustes muertas)
 

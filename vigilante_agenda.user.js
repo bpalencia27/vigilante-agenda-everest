@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.87
+// @version     17.6.88
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.87";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.88";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32652,6 +32652,20 @@ _vglOfrecerDeshacer(btn);
       falla_dispensacion: "NO",
       datos_completos: erc.datosCompletos !== false,
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
+      // v17.6.88 — auditoría v68 (S4 UROANÁLISIS: "pedir UROCULTIVO+antibiograma", "sin
+      // antibiótico a ciegas", "la orden nunca queda vacía"). `mtrEvaluarUroanalisis` calcula
+      // la orden concreta que corresponde a cada estado —["Urocultivo","Antibiograma"] en
+      // ITU probable y en bacteriuria del embarazo— y ese array NO viajaba al JSON: la IA
+      // recibía solo `itu_estado` y tenía que DEDUCIR el urocultivo a partir de él. Deducir
+      // es exactamente lo que el resto del prompt le prohíbe, así que o lo omitía o se lo
+      // inventaba. Verificado con el harness (nitritos + síntomas): `orden` traía
+      // ["Urocultivo","Antibiograma"] y la cadena "urocultivo" no aparecía por ninguna parte
+      // del JSON emitido.
+      // Va en campo PROPIO y no dentro de `order_list`: esa lista lleva CLAVES de analito
+      // (COLESTEROL_LDL, RAC…) que sus lectores usan para cruzar con el catálogo de CUPS;
+      // meterle nombres libres la rompería. Vacío si no hay uroanálisis evaluado — nunca se
+      // inventa una orden que el motor no calculó.
+      orden_uroanalisis: (r.uroanalisis && Array.isArray(r.uroanalisis.orden)) ? r.uroanalisis.orden.slice() : [],
       alerta_metformina: alertaMetformina,
       alertas_dosis: alertasDosis,
       // v16.1.0 — solo los del programa cardiovascular (orden del médico).
@@ -33006,6 +33020,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-rcv-subtit">🔬 Uroanálisis: <b>${esc(uro.estado)}</b></div>
         <div class="vgl-rcv-uro-conducta">${esc(uro.conducta)}</div>
         ${(uro.criterios || []).length ? `<div class="vgl-rcv-meta">Por: ${esc(uro.criterios.join(", "))}.</div>` : ""}
+        ${(uro.orden || []).length ? `<div class="vgl-rcv-meta">Qué ordenar por este hallazgo: ${esc(uro.orden.join(" + "))}.</div>` : ""}
       </div>` : "";
 
     const fallaHtml = mtrRenderFallaHtml(r);
