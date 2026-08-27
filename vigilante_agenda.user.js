@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.8.2
+// @version     17.9.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.9.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25928,6 +25928,11 @@ _vglOfrecerDeshacer(btn);
   }
   function boot() {
     try { _vglRestaurarDeEspejo(); } catch (e) {}   // v16.5.1 — antes de leer nada: si el navegador perdió el resumen, vuelve del espejo
+    // v17.9.0 — la escucha de la historia clínica, lo antes posible: si el médico guarda
+    // antes de que el widget termine de montarse, ese guardado no se pierde. Va en su
+    // try/catch porque NADA de esto puede impedir el arranque, y la propia función no
+    // modifica ninguna petición: lee el cuerpo y devuelve el control intacto.
+    try { mtrHcEnganchar(); } catch (e) {}
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
     try { _festivosAvisarSiVencida(); } catch (e) {}
@@ -32170,6 +32175,10 @@ _vglOfrecerDeshacer(btn);
       // falla. Ver mtrEducacionFlagsTexto() y el mismo defecto en mtrJsonV68DesdeResumen.
       educacion: mtrEducacionFlagsTexto(r.educationFlags),
       labsTexto: labsTexto,
+      // v17.9.0 — la historia clínica tal como Everest la guarda, por secciones. Es lo que
+      // el médico escribió de verdad, no la lectura parcial de la pestaña que estuviera
+      // abierta. Ver mtrHechosDesdeHcEverest: llega ya desidentificado.
+      hcEverest: (o.hcEverest && o.hcEverest.secciones) ? o.hcEverest : null,
       // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
       // toda esa información sirve de grounding para redactar una excelente nota clínica».
       // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
@@ -32269,6 +32278,13 @@ _vglOfrecerDeshacer(btn);
         + (pl.motivoFtl ? " (" + pl.motivoFtl + ")" : ""));
     }
     if (pl.anr) L.push("Agujero negro renal ACTIVO: la creatinina vence el " + pl.anr.vence + ", dentro de la ventana de " + pl.anr.ventanaDias + " días, y por eso se adelanta a esta misma toma.");
+    // v17.9.0 — al final a propósito: es el bloque más largo y el que menos se resume. Va
+    // después de lo calculado por el motor para que, si algo hay que recortar por longitud,
+    // se recorte esto y no las cifras que el modelo tiene prohibido inventar.
+    if (h.hcEverest) {
+      const bloque = mtrHcTextoParaHoja(h.hcEverest);
+      if (bloque) L.push("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---\n" + bloque);
+    }
     if (h.foco) L.push("Foco de la consulta: " + h.foco);
     if (h.educacion && h.educacion.length) L.push("Educación indicada: " + h.educacion.join("; "));
     return L.join("\n");
@@ -34212,7 +34228,16 @@ _vglOfrecerDeshacer(btn);
     // hoja para que la redacción con IA (Conducta/Análisis y plan) la vea también.
     let medsFrecuencia = new Map();
     try { medsFrecuencia = mtrLeerFrecuenciasMedicamento(resumen && resumen._pacienteIdLabs) || new Map(); } catch (e) { medsFrecuencia = new Map(); }
-    return mtrHojaDeHechos(resumen, { ultimos: (resumen && resumen._ultimos) || {}, hoyIso: (resumen && resumen._hoyIso) || todayStamp(), medicamentos: meds, medicamentosFrecuencia: medsFrecuencia });
+    // v17.9.0 — ENCARGO DEL MÉDICO: «que nuestro JSON también guarde todo lo mismo que
+    // guarda Everest». Lo capturado al guardar la historia (secciones completas: 109
+    // antecedentes patológicos, 39 de examen físico, hábitos, familiares, revisión por
+    // sistemas) viaja con la hoja, ya desidentificado desde el momento de capturarlo.
+    let hcEverest = null;
+    try { hcEverest = mtrHcLeer(resumen && resumen._docId); } catch (e) { hcEverest = null; }
+    return mtrHojaDeHechos(resumen, {
+      ultimos: (resumen && resumen._ultimos) || {}, hoyIso: (resumen && resumen._hoyIso) || todayStamp(),
+      medicamentos: meds, medicamentosFrecuencia: medsFrecuencia, hcEverest: hcEverest,
+    });
   }
 
   // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "¿ya auditaste si el cuadro de texto libre
@@ -35862,6 +35887,292 @@ _vglOfrecerDeshacer(btn);
     // consulta va de lípidos cuando lo que pasa es que no hay datos. Sin programa y sin
     // ejes, no hay con qué decidir: null. Quien lo pinte tiene que saber callarse.
     return null;
+  }
+
+  // =====================================================================
+  //  v17.9.0 — LO QUE EVEREST GUARDA, PARA QUE LA IA LO VEA
+  //  ------------------------------------------------------------------
+  //  ENCARGO DEL MÉDICO (27-ago-2026): «necesito que nuestro JSON también guarde todo lo
+  //  mismo que guarda Everest, nos servirá para que la IA tenga todo el contexto
+  //  (grounding) necesario para buenas redacciones».
+  //
+  //  Hasta aquí el asistente leía 25 casillas del DOM (MTR_CAMPOS_FACTORES) — las de la
+  //  pestaña que el médico tuviera abierta. Everest, al guardar, manda 111 campos, y solo
+  //  en antecedentes patológicos hay 109 marcaciones. La distancia entre lo que el
+  //  asistente ve y lo que el médico escribió era desconocida hasta que él corrió
+  //  DIAGNOSTICO_GUARDADO_HC.js. El mapa completo está en MAPA_GUARDADO_HC.md.
+  //
+  //  POR QUÉ SE DETECTA POR FORMA Y NO POR URL. La ruta capturada es
+  //  `/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad`, pero atarse a ella sería
+  //  atarse a una cadena que Everest puede cambiar sin avisar — y este proyecto ya se llevó
+  //  ese susto en v12.3.30 (cuatro nombres supuestos, ninguno existía). Se reconoce el
+  //  paquete por sus SECCIONES, que son el contrato clínico y no cambian con una
+  //  reestructuración de rutas.
+  //
+  //  LO QUE NO SE TOCA, NUNCA. `datosUsuario` (91 campos: nombre, apellidos, cédula,
+  //  celular, correo, dirección) y `acompanante` no entran aquí ni desidentificados. No es
+  //  que se limpien: es que no se leen. Una lista blanca de secciones es la única barrera
+  //  que no se degrada cuando alguien añade un campo nuevo al otro lado.
+  // =====================================================================
+
+  // Las secciones clínicas que SÍ se leen. Todo lo demás del paquete se ignora.
+  const MTR_HC_SECCIONES = [
+    "antecedentePatologicos", "antecedenteFamiliar", "habitosGestionRiesgo",
+    "examenFisico", "revisionSistema", "antecedenteGinecoObstetrico",
+  ];
+  // Texto libre de la consulta. Va aparte porque necesita saneo distinto (scrubPII) y
+  // porque son, literalmente, las casillas que el redactor con IA escribe.
+  const MTR_HC_TEXTOS = {
+    motivo: "Motivo de consulta",
+    ultimaEnfermedad: "Enfermedad actual",
+    analisisYplan: "Análisis y plan",
+    recomendacionesMedicas: "Recomendaciones",
+  };
+
+  // ¿Este objeto es el paquete de historia clínica de Everest? Se exige más de una sección
+  // conocida: con una sola, cualquier respuesta suelta del portal podría colarse.
+  function mtrEsPayloadHcEverest(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+    let n = 0;
+    for (const s of MTR_HC_SECCIONES) {
+      if (obj[s] && typeof obj[s] === "object" && !Array.isArray(obj[s])) n++;
+    }
+    return n >= 2;
+  }
+
+  // Un valor de sección tal como lo manda Everest. No se sabe QUÉ valores admite cada campo
+  // (el diagnóstico capturó la forma, no el significado), así que no se interpreta ninguno:
+  // los booleanos y números pasan tal cual y el texto se sanea. Interpretar sin saber sería
+  // exactamente el error que MAPA_GUARDADO_HC.md advierte que no hay que repetir.
+  function mtrHcValorLimpio(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t) return null;                       // vacío es vacío: no viaja
+      const limpio = (typeof scrubPII === "function") ? scrubPII(t, { conFechas: true }) : t;
+      return String(limpio).slice(0, 300);
+    }
+    return null;                                  // objetos y listas anidadas: fuera
+  }
+
+  // =====================================================================
+  //  v17.9.0 — TACHAR EL NOMBRE CON EL NOMBRE, Y LUEGO TIRARLO
+  //  ------------------------------------------------------------------
+  //  La prueba de barrera (suite_31) cazó una fuga REAL en el primer intento: `scrubPII`
+  //  sabe reconocer correos, teléfonos, direcciones, fechas y cédulas —todos tienen forma—
+  //  pero NO puede reconocer un nombre propio: «MARTHA» es una palabra como cualquier otra.
+  //  Y el médico escribe el nombre del paciente a mano en la enfermedad actual.
+  //
+  //  La salida está en el propio paquete: Everest manda `datosUsuario` con el nombre, los
+  //  apellidos, la cédula y el celular. Se leen SOLO para construir la lista de tachaduras,
+  //  se aplican al texto libre, y se descartan sin guardarse en ninguna parte. Es la única
+  //  forma de tachar un nombre con garantía: conociéndolo.
+  //
+  //  Se exigen 3 caracteres para evitar tachar partículas («DE», «LA») que aparecerían por
+  //  todo el texto clínico.
+  // =====================================================================
+  function mtrHcTachaduras(payload) {
+    const fuera = [];
+    try {
+      const d = (payload && payload.datosUsuario) || {};
+      const campos = ["nombre", "primer_Apellido", "segundo_Apellido", "primerApellido",
+                      "segundoApellido", "nombreCompleto", "identificacion", "celular", "telefono", "correo"];
+      for (const c of campos) {
+        const v = d[c];
+        if (typeof v !== "string") continue;
+        for (const parte of v.split(/\s+/)) {
+          const t = parte.trim();
+          if (t.length >= 3) fuera.push(t);
+        }
+      }
+    } catch (e) {}
+    // Las más largas primero: si no, tachar «MARTHA» dejaría a medias «MARTHA LUCIA».
+    return [...new Set(fuera)].sort((a, b) => b.length - a.length);
+  }
+
+  function mtrHcTachar(texto, tachaduras) {
+    let t = String(texto == null ? "" : texto);
+    for (const x of (tachaduras || [])) {
+      if (!x) continue;
+      const esc = String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      t = t.replace(new RegExp(esc, "gi"), "[CENSURADO]");
+    }
+    return t;
+  }
+
+  // Extrae las secciones clínicas del paquete de Everest, desidentificadas y sin huecos.
+  // Un campo sin valor NO viaja: la regla de la casa, aplicada al grounding — un `false`
+  // explícito es información, un vacío no lo es y no se convierte en «no tiene».
+  function mtrHechosDesdeHcEverest(payload) {
+    if (!mtrEsPayloadHcEverest(payload)) return null;
+    const salida = { secciones: {}, textos: {}, medicamentos: [], diagnosticos: [] };
+    let totalCampos = 0;
+
+    for (const sec of MTR_HC_SECCIONES) {
+      const bloque = payload[sec];
+      if (!bloque || typeof bloque !== "object" || Array.isArray(bloque)) continue;
+      const limpio = {};
+      for (const k of Object.keys(bloque)) {
+        const v = mtrHcValorLimpio(bloque[k]);
+        if (v === null) continue;
+        limpio[k] = v;
+        totalCampos++;
+      }
+      if (Object.keys(limpio).length) salida.secciones[sec] = limpio;
+    }
+
+    // Medicamentos: solo la descripción (nombre y dosis). El resto del objeto es plomería.
+    if (Array.isArray(payload.farmacologicos)) {
+      salida.medicamentos = payload.farmacologicos
+        .map((m) => mtrHcValorLimpio(m && m.descripcion))
+        .filter(Boolean).slice(0, 40);
+    }
+    // Diagnósticos: código CIE-10 y descripción. Nunca `nombreBusqueda` ni ids internos.
+    if (Array.isArray(payload.diagnosticos)) {
+      salida.diagnosticos = payload.diagnosticos.map((x) => {
+        const cod = mtrHcValorLimpio(x && x.codigo);
+        const des = mtrHcValorLimpio(x && x.descripcion);
+        return (cod || des) ? { codigo: cod, descripcion: des } : null;
+      }).filter(Boolean).slice(0, 20);
+    }
+
+    // El texto libre es donde el médico escribe el nombre a mano. Se tacha con la identidad
+    // que trae el propio paquete (ver mtrHcTachaduras) ANTES de pasar por scrubPII, y esa
+    // identidad no se guarda en ningún sitio.
+    const tachaduras = mtrHcTachaduras(payload);
+    for (const k of Object.keys(MTR_HC_TEXTOS)) {
+      const crudo = payload[k];
+      const v = mtrHcValorLimpio(typeof crudo === "string" ? mtrHcTachar(crudo, tachaduras) : crudo);
+      if (v) { salida.textos[k] = v; totalCampos++; }
+    }
+    // Y las observaciones dentro de las secciones, por el mismo motivo.
+    for (const sec of Object.keys(salida.secciones)) {
+      const b = salida.secciones[sec];
+      for (const k of Object.keys(b)) {
+        if (typeof b[k] === "string") b[k] = mtrHcTachar(b[k], tachaduras);
+      }
+    }
+    salida.medicamentos = salida.medicamentos.map((m) => mtrHcTachar(m, tachaduras));
+    salida.diagnosticos = salida.diagnosticos.map((d) => ({
+      codigo: d.codigo, descripcion: d.descripcion ? mtrHcTachar(d.descripcion, tachaduras) : d.descripcion,
+    }));
+
+    salida._campos = totalCampos;
+    return totalCampos ? salida : null;
+  }
+
+  // Aplana lo anterior a texto etiquetado para la hoja de hechos. Solo lo que consta.
+  function mtrHcTextoParaHoja(hechos) {
+    if (!hechos || !hechos.secciones) return "";
+    const L = [];
+    const rotulo = {
+      antecedentePatologicos: "Antecedentes patológicos marcados en la historia",
+      antecedenteFamiliar: "Antecedentes familiares",
+      habitosGestionRiesgo: "Hábitos y gestión de riesgo",
+      examenFisico: "Examen físico (lo registrado en Everest)",
+      revisionSistema: "Revisión por sistemas",
+      antecedenteGinecoObstetrico: "Antecedentes ginecoobstétricos",
+    };
+    for (const sec of MTR_HC_SECCIONES) {
+      const b = hechos.secciones[sec];
+      if (!b) continue;
+      // Los `false` explícitos importan tanto como los `true`: «marcado que NO» es un
+      // hecho documentado, y esconderlo dejaría a la IA sin saber si se preguntó.
+      const partes = Object.keys(b).map((k) => k + ": " + (b[k] === true ? "sí" : b[k] === false ? "no" : b[k]));
+      if (partes.length) L.push(rotulo[sec] + ": " + partes.join(" · "));
+    }
+    if (hechos.diagnosticos && hechos.diagnosticos.length) {
+      L.push("Diagnósticos de esta consulta: " + hechos.diagnosticos
+        .map((d) => [d.codigo, d.descripcion].filter(Boolean).join(" ")).join("; "));
+    }
+    if (hechos.medicamentos && hechos.medicamentos.length) {
+      L.push("Medicamentos registrados en la historia: " + hechos.medicamentos.join("; "));
+    }
+    for (const k of Object.keys(MTR_HC_TEXTOS)) {
+      if (hechos.textos && hechos.textos[k]) L.push(MTR_HC_TEXTOS[k] + " (lo que ya está escrito): " + hechos.textos[k]);
+    }
+    return L.join("\n");
+  }
+
+  // =====================================================================
+  //  v17.9.0 — LA ESCUCHA. Se engancha una sola vez y solo mira.
+  //  ------------------------------------------------------------------
+  //  Reglas que se cumplen aquí, y por qué cada una:
+  //
+  //  · NO MODIFICA NADA. Se lee el cuerpo del envío y se devuelve el control intacto. Si
+  //    cualquier cosa falla dentro, Everest ni se entera: todo va en try/catch y la llamada
+  //    original se hace igual. El médico está guardando una historia clínica; este código
+  //    no puede ser el motivo de que no se guarde.
+  //  · SE DESIDENTIFICA ANTES DE ALMACENAR, no antes de enviar. La barrera va lo más cerca
+  //    posible de la fuente: lo que nunca se guardó no se puede filtrar después por
+  //    descuido de otro. `datosUsuario` y `acompanante` no se leen siquiera.
+  //  · SE GUARDA POR PACIENTE, con la misma poda por edad y cantidad que el resto de la
+  //    cosecha (_vglCosechaGuardar).
+  //
+  //  LO QUE ESTO NO RESUELVE, y hay que decirlo: Everest manda este paquete cuando el médico
+  //  pulsa GUARDAR, que normalmente es al FINAL de la consulta — después de redactar. Así
+  //  que lo capturado sirve de grounding para la consulta SIGUIENTE, y para la actual solo
+  //  si él guarda a mitad. Que sirva también para la actual exige leer lo que Everest CARGA
+  //  al abrir el paciente, y ese endpoint todavía no está capturado. Por eso la detección
+  //  es por forma: el día que se capture una carga, este mismo código la reconocerá sin
+  //  tocar una línea.
+  // =====================================================================
+  const VGL_HC_CLAVE = "hcEverest";
+  let _vglHcEnganchado = false;
+
+  // Guarda los hechos de la historia para un paciente. Puro salvo por el almacén.
+  function mtrHcGuardar(docId, payload) {
+    try {
+      const hechos = mtrHechosDesdeHcEverest(payload);
+      if (!hechos) return null;
+      const id = String(docId || "");
+      if (!id) return null;
+      _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: Object.assign({}, hechos, { ts: Date.now() }) });
+      try { uxTrack("hc.capturado", { campos: hechos._campos }); } catch (e) {}
+      return hechos;
+    } catch (e) { return null; }
+  }
+
+  function mtrHcLeer(docId) {
+    try {
+      const c = _vglCosechaLeer(docId);
+      return (c && c[VGL_HC_CLAVE]) || null;
+    } catch (e) { return null; }
+  }
+
+  function mtrHcEnganchar() {
+    if (_vglHcEnganchado) return false;
+    _vglHcEnganchado = true;
+    const mirar = (cuerpo) => {
+      try {
+        if (!cuerpo || typeof cuerpo !== "string" || cuerpo.length < 200) return;
+        if (cuerpo.indexOf("antecedentePatologicos") < 0) return;   // criba barata primero
+        let datos = null;
+        try { datos = JSON.parse(cuerpo); } catch (e) { return; }
+        if (!mtrEsPayloadHcEverest(datos)) return;
+        // La cédula del paciente ABIERTO ahora mismo, con el mismo lector que usa el resto del
+        // script (extractPacienteAbierto). Si el DOM no la deja leer no se guarda nada: atribuir
+        // una historia al paciente equivocado es el riesgo más alto que ha tenido este proyecto
+        // (v14.1.5), y aquí se aplica la misma regla — sin cédula legible, no se escribe.
+        const id = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
+        if (id) mtrHcGuardar(id, datos);
+      } catch (e) {}
+    };
+    try {
+      const XHRsend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (cuerpo) {
+        try { mirar(cuerpo); } catch (e) {}
+        return XHRsend.apply(this, arguments);
+      };
+      const fetchOriginal = window.fetch;
+      window.fetch = function (entrada, opciones) {
+        try { mirar(opciones && opciones.body); } catch (e) {}
+        return fetchOriginal.apply(this, arguments);
+      };
+    } catch (e) { return false; }
+    return true;
   }
 
   // ---------- BANDERAS DE EDUCACIÓN (education_flags de S5) ----------

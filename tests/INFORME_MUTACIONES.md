@@ -6,6 +6,72 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.9.0 — 27-ago-2026 (la IA recibe lo que Everest guarda, no lo que asomaba por la pestaña)
+
+**Encargo del médico:** *«necesito que nuestro JSON también guarde todo lo mismo que guarda
+Everest, nos servirá para que la IA tenga todo el contexto (grounding) necesario para buenas
+redacciones»*. Desbloqueado porque él corrió `DIAGNOSTICO_GUARDADO_HC.js` (mapa completo en
+`MAPA_GUARDADO_HC.md`).
+
+| | |
+|---|---|
+| Lo que el asistente leía | **25 casillas** del DOM, y solo de la pestaña abierta |
+| Lo que Everest guarda | **111 campos**: 109 antecedentes patológicos, 39 de examen físico, 33 hábitos, 25 familiares, 20 revisión por sistemas |
+
+### Se reconoce por FORMA, no por la ruta
+
+La ruta capturada es `/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad`, pero atarse a
+esa cadena sería atarse a algo que Everest puede cambiar sin avisar — el susto de v12.3.30
+(cuatro nombres supuestos, ninguno existía). Se reconoce por sus **secciones**, que son el
+contrato clínico. Beneficio colateral: el día que se capture el endpoint que **carga** la
+historia al abrir el paciente, este mismo código lo reconocerá sin tocar una línea.
+
+### LA BARRERA, y la fuga que cazó su propia prueba
+
+`datosUsuario` (91 campos: nombre, apellidos, cédula, celular, correo, dirección) y
+`acompanante` **no se leen**. No es que se limpien: no entran. Una **lista blanca de
+secciones** no se degrada cuando alguien añade un campo nuevo al otro lado; un filtro de
+campos sí.
+
+**Pero la primera versión filtraba igual, y la prueba de barrera lo cazó.** `scrubPII` sabe
+reconocer correos, teléfonos, direcciones, fechas y cédulas —todos tienen forma— pero **no
+puede reconocer un nombre propio**: «MARTHA» es una palabra como cualquier otra. Y el médico
+escribe el nombre del paciente a mano en la enfermedad actual.
+
+La salida estaba en el propio paquete: se lee `datosUsuario` **solo** para construir la lista
+de tachaduras, se aplica al texto libre, y se descarta sin guardarse. *Tachar un nombre con
+garantía exige conocerlo.* Verificado de punta a punta con un texto que lleva nombre, apellido
+y cédula pegados: sale «[CENSURADO] [CENSURADO] [CENSURADO], CC [CENSURADO], refiere cefalea
+occipital de 3 días» — lo clínico entero, la identidad ninguna.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Meter `datosUsuario` en la lista blanca | *BARRERA — nada que identifique al paciente sale del paquete* |
+| 2 | Dejar de tachar el nombre en el texto libre | la misma |
+| 3 | Que baste UNA sección para dar el paquete por bueno | *se reconoce por FORMA, no por la ruta de Everest* |
+| 4 | Que un campo vacío viaje como si fuera un dato | *entra TODO lo clínico, y un «no» documentado vale tanto como un «sí»* |
+
+### Dos decisiones que conviene tener escritas
+
+- **Un `false` explícito SÍ viaja; un vacío NO.** «Marcado que no tiene infarto» es un hecho
+  documentado y el modelo necesita saber que se preguntó. Un campo vacío no es «no tiene», y
+  convertirlo en eso sería inventar.
+- **No se interpreta ningún valor.** El diagnóstico capturó la **forma**, no el
+  **significado**: no se sabe qué admite cada campo. Los booleanos y números pasan tal cual y
+  el texto se sanea. Interpretar sin saber es justo lo que `MAPA_GUARDADO_HC.md` advierte.
+
+### Lo que esto NO resuelve, y hay que decirlo
+
+Everest manda este paquete cuando el médico pulsa **Guardar**, que normalmente es al FINAL de
+la consulta — después de redactar. Así que lo capturado sirve de grounding para la consulta
+**siguiente**, y para la actual solo si él guarda a mitad. Que sirva también para la actual
+exige leer lo que Everest **carga** al abrir el paciente, y ese endpoint todavía no está
+capturado. **No se ha simulado ni supuesto: está pendiente de un diagnóstico.**
+
+Banco completo en **2.421/2.421** con `TZ=America/Bogota`.
+
+---
+
 ## v17.8.2 — 27-ago-2026 (reportado en consulta: Auto-Labs escribía un uroanálisis viejo)
 
 **El reporte, textual:** *«otra vez el problema de que el botón Auto-Labs Athenea no está

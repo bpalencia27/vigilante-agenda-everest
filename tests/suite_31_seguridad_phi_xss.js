@@ -290,5 +290,92 @@ module.exports = {
       t.igual(res.status, "ok");
       t.igual(res.sha256, expectedHash);
     });
+
+    // =================================================================
+    //  v17.9.0 — LA BARRERA. Lo que Everest guarda entra; lo que identifica al paciente NO.
+    //
+    //  El paquete real de Everest lleva `datosUsuario` con 91 campos: nombre, apellidos,
+    //  cédula, celular, correo, dirección, fecha de nacimiento. Esta suite existe para que
+    //  ninguno de esos campos pueda llegar nunca a un modelo de lenguaje.
+    //
+    //  La barrera es una LISTA BLANCA de secciones, no un filtro de campos: un filtro se
+    //  degrada en cuanto alguien añade un campo nuevo al otro lado; una lista blanca no.
+    //  La forma de abajo es la REAL, capturada en consulta el 27-ago-2026 (los VALORES son
+    //  inventados para la prueba — el diagnóstico nunca los guardó).
+    // =================================================================
+    const _hcEverestFalso = () => ({
+      // --- LO QUE NUNCA PUEDE SALIR ---
+      datosUsuario: {
+        nombre: "NOMBREPRUEBA", primer_Apellido: "APELLIDOUNO", segundo_Apellido: "APELLIDODOS",
+        identificacion: "80123456", celular: "3001234567", correo: "prueba@ejemplo.com",
+        direccion: "Calle 100 #15-20", fecha_Nacimiento: "1958-03-14T00:00:00",
+      },
+      acompanante: { parentesco: "HIJA", categoria: "FAMILIAR" },
+      citaId: "9988776655",
+      // --- LO QUE SÍ APORTA CONTEXTO CLÍNICO ---
+      antecedentePatologicos: {
+        hipertension: true, diabetes: true, infartoMiocardio: false,
+        retinopatiaDiabetica: true, epoc: false, otros: "",
+        observacionHipertension: "Diagnosticada hace 12 años",
+      },
+      habitosGestionRiesgo: { sedentarismo: true, alcohol: false, indiceTabaquico: 0 },
+      examenFisico: { peso: 78.5, talla: 1.62, imc: 29.9, circunferenciaAbdominal: 98, presionSistolica: 148 },
+      antecedenteFamiliar: { cardiovasculares: true, diabetes: true },
+      farmacologicos: [{ descripcion: "LOSARTAN 50 MG TABLETA", esEliminable: true }],
+      diagnosticos: [{ codigo: "I10X", descripcion: "HIPERTENSION ESENCIAL", nombreBusqueda: "NOMBREPRUEBA I10X", id: 4471 }],
+      motivo: "Control de hipertensión",
+      ultimaEnfermedad: "Paciente NOMBREPRUEBA APELLIDOUNO, CC 80123456, tel 3001234567, refiere cefalea.",
+    });
+
+    t.caso("v17.9.0 BARRERA — nada que identifique al paciente sale del paquete de Everest", () => {
+      const h = api.mtrHechosDesdeHcEverest(_hcEverestFalso());
+      t.cierto(!!h, "el paquete se reconoce y se extrae");
+      const todo = JSON.stringify(h);
+      for (const dato of ["NOMBREPRUEBA", "APELLIDOUNO", "APELLIDODOS", "80123456",
+                          "3001234567", "prueba@ejemplo.com", "Calle 100", "1958-03-14", "9988776655"]) {
+        t.falso(todo.indexOf(dato) >= 0, "«" + dato + "» NO puede aparecer en lo que se guarda");
+      }
+      t.igual(h.secciones.datosUsuario, undefined, "`datosUsuario` no se lee: no está en la lista blanca");
+      t.igual(h.secciones.acompanante, undefined, "ni el acompañante");
+      // El texto libre SÍ entra, pero saneado: es donde el médico escribe el nombre a mano.
+      t.cierto(!!h.textos.ultimaEnfermedad, "la enfermedad actual sí aporta contexto y entra");
+      t.falso(/NOMBREPRUEBA|80123456|3001234567/.test(h.textos.ultimaEnfermedad),
+        "pero pasa por scrubPII: nombre, cédula y teléfono se tachan aunque los escriba a mano");
+      t.cierto(/cefalea/.test(h.textos.ultimaEnfermedad), "y lo clínico se conserva entero");
+      // El diagnóstico lleva código y descripción; `nombreBusqueda` traía el nombre pegado.
+      t.igual(h.diagnosticos[0].codigo, "I10X", "el CIE-10 entra");
+      t.falso(todo.indexOf("nombreBusqueda") >= 0, "y `nombreBusqueda` no se lee: llevaba el nombre dentro");
+    });
+
+    t.caso("v17.9.0 — entra TODO lo clínico, y un «no» documentado vale tanto como un «sí»", () => {
+      const h = api.mtrHechosDesdeHcEverest(_hcEverestFalso());
+      const ap = h.secciones.antecedentePatologicos;
+      t.igual(ap.hipertension, true, "lo marcado que sí");
+      t.igual(ap.infartoMiocardio, false,
+        "y lo marcado que NO: es un hecho documentado, esconderlo dejaría a la IA sin saber si se preguntó");
+      t.igual(ap.otros, undefined, "un campo vacío NO viaja: vacío no es «no tiene»");
+      t.igual(h.secciones.examenFisico.circunferenciaAbdominal, 98,
+        "la cintura, que el asistente antes solo podía leer si el médico tenía esa pestaña abierta");
+      t.igual(h.secciones.antecedenteFamiliar.cardiovasculares, true, "los antecedentes familiares");
+      t.igual(h.medicamentos[0], "LOSARTAN 50 MG TABLETA", "los medicamentos, por su descripción");
+
+      const texto = api.mtrHcTextoParaHoja(h);
+      t.cierto(/retinopatiaDiabetica: sí/.test(texto), "el texto para el modelo lleva lo marcado");
+      t.cierto(/infartoMiocardio: no/.test(texto), "y lo descartado, con todas sus letras");
+    });
+
+    t.caso("v17.9.0 — se reconoce por FORMA, no por la ruta de Everest", () => {
+      // Atarse a `/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad` sería atarse a una
+      // cadena que Everest puede cambiar sin avisar. Este proyecto ya se llevó ese susto en
+      // v12.3.30 (cuatro nombres supuestos, ninguno existía).
+      t.cierto(api.mtrEsPayloadHcEverest(_hcEverestFalso()), "el paquete real se reconoce");
+      t.falso(api.mtrEsPayloadHcEverest({ antecedentePatologicos: { hipertension: true } }),
+        "con UNA sola sección no basta: cualquier respuesta suelta del portal podría colarse");
+      t.falso(api.mtrEsPayloadHcEverest(null), "sin nada, no");
+      t.falso(api.mtrEsPayloadHcEverest([{ antecedentePatologicos: {}, examenFisico: {} }]),
+        "una lista tampoco: el paquete es un objeto");
+      t.igual(api.mtrHechosDesdeHcEverest({ hola: 1 }), null, "lo que no es el paquete devuelve null, no un objeto vacío");
+    });
+
   }
 };
