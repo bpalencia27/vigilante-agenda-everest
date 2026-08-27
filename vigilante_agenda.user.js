@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.13.0
+// @version     17.14.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.13.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.14.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13014,6 +13014,16 @@ _vglOfrecerDeshacer(btn);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
       }
+      /* v17.14.0 — enjambre UX #2: #vgl-sum es una línea única con text-overflow:ellipsis,
+         y por ahí salen advertencias con la instrucción DENTRO del texto («Notificaciones
+         BLOQUEADAS: clic en el candado → Notificaciones → Permitir, y recargue»). La parte
+         que dice qué hacer es justo la que la elipsis se comía. En estado normal sigue
+         siendo una línea (la barra no puede crecer con cada resumen); solo cuando lleva
+         una advertencia o un error se le permite envolver hasta 3 renglones. */
+      #vgl-sum.warn,#vgl-sum.error{
+        white-space:normal;overflow:hidden;text-overflow:clip;
+        display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
+      }
       #vgl-sum.warn{color:var(--c-ambar)}
       #vgl-sum.error{color:var(--c-rojo)}
       #vgl-root:not(.light) #vgl-sum.warn{color:var(--c-ambar)}
@@ -14264,6 +14274,14 @@ _vglOfrecerDeshacer(btn);
       .vgl-conf-tit{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;margin-bottom:4px}
       .vgl-conf-fuentes{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
       .vgl-conf-porque{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.45;margin-top:4px}
+      /* v17.14.0 — #vgl-confirma-modal se pega a document.body: NO hereda ninguna
+         protección de #vgl-root, así que este color lleva !important o el CSS de Everest
+         (SPA ajena, especificidad desconocida) puede ganarle. Regla de CLAUDE.md. */
+      .vgl-conf-desfase{
+        font-size:var(--t-micro);font-weight:700;color:var(--c-ambar) !important;line-height:1.45;
+        margin:2px 0 6px;padding:5px 8px;border-radius:var(--r-chip);
+        background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.35);
+      }
       .vgl-conf-btns{display:flex;gap:8px;align-items:center;margin-top:8px}
       .vgl-conf-hecho{font-size:var(--t-micro);font-weight:700;color:var(--c-verde) !important}
       .vgl-postcita-sep{height:1px;background:var(--edge);margin:12px 0 10px}
@@ -19602,14 +19620,23 @@ _vglOfrecerDeshacer(btn);
       const _textoEnContra = (d) => "En contra: " + _dicen(d.niegan);
       // Si la respuesta que él dio antes ya no coincide con lo que hay escrito en la
       // historia de hoy, el cuadro lo dice en lugar de callárselo: manda la historia.
-      const _textoPorque = (d) => (d.desfasada
-        ? "Usted ya respondió esto antes, y la historia de hoy dice lo contrario — mandan las casillas de la historia. Importa porque " + d.porQue + "."
-        : "Importa porque " + d.porQue + ".");
+      const _textoPorque = (d) => "Importa porque " + d.porQue + ".";
+      // v17.14.0 — enjambre UX #69: el aviso de que su respuesta anterior ya no coincide
+      // con la historia de hoy viajaba PEGADO al «Importa porque…», en la última línea del
+      // ítem, con la misma letra pequeña y el mismo gris de la nota rutinaria. El caso
+      // excepcional se veía idéntico al caso normal, y era justo el que el médico tiene
+      // que leer: le está diciendo que lo que confirmó antes quedó desactualizado.
+      // Ahora sale ARRIBA del ítem, con acento ámbar y su propia línea; cuando no aplica,
+      // el elemento queda vacío y no ocupa nada.
+      const _textoDesfase = (d) => (d.desfasada
+        ? "⚠ Usted ya respondió esto antes, y la historia de hoy dice lo contrario — mandan las casillas de la historia."
+        : "");
 
       const filas = discrepancias.map((d) => {
         return `
           <div class="vgl-conf-item" data-clave="${escapeHtml(d.clave)}">
             <div class="vgl-conf-tit">${escapeHtml(d.etiqueta)}</div>
+            <div class="vgl-conf-desfase${d.desfasada ? "" : " vgl-d-none"}" id="vgl-conf-df-${escapeHtml(d.clave)}" role="alert">${escapeHtml(_textoDesfase(d))}</div>
             <div class="vgl-conf-fuentes" id="vgl-conf-af-${escapeHtml(d.clave)}">${escapeHtml(_textoAfavor(d))}</div>
             <div class="vgl-conf-fuentes" id="vgl-conf-ne-${escapeHtml(d.clave)}">${escapeHtml(_textoEnContra(d))}</div>
             <div class="vgl-conf-porque" id="vgl-conf-pq-${escapeHtml(d.clave)}">${escapeHtml(_textoPorque(d))}</div>
@@ -19713,9 +19740,13 @@ _vglOfrecerDeshacer(btn);
               const af = modal.querySelector("#vgl-conf-af-" + d.clave);
               const ne = modal.querySelector("#vgl-conf-ne-" + d.clave);
               const pq = modal.querySelector("#vgl-conf-pq-" + d.clave);
+              const df = modal.querySelector("#vgl-conf-df-" + d.clave);
               if (af) af.textContent = _textoAfavor(d);
               if (ne) ne.textContent = _textoEnContra(d);
               if (pq) pq.textContent = _textoPorque(d);
+              // El desfase puede APARECER o DESAPARECER en el repaso de 20 s: si solo se
+              // escribiera el texto, un aviso que dejó de aplicar se quedaría en pantalla.
+              if (df) { df.textContent = _textoDesfase(d); df.classList.toggle("vgl-d-none", !d.desfasada); }
             }
           } catch (e) {}
         }, TABLERO_VIGILANCIA_MS);
@@ -34747,8 +34778,14 @@ _vglOfrecerDeshacer(btn);
           if (!caja) {
             caja = document.createElement("div");
             caja.id = "vgl-ia-cifras";
-            caja.style.cssText = "margin:0 0 8px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
-            salida.parentNode.insertBefore(caja, salida.nextSibling);
+            caja.style.cssText = "margin:0 0 8px;scroll-margin-top:12px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
+            // v17.14.0 — enjambre UX #53: la caja iba DESPUÉS del área de texto
+            // (salida.nextSibling). Una nota de Análisis y Plan ocupa varias pantallas, así
+            // que el aviso de que la IA pudo INVENTAR una cifra quedaba por debajo del
+            // pliegue — el médico podía leer el borrador entero y firmarlo sin verlo nunca.
+            // Es el aviso más grave del módulo: va antes del texto, pegado al encabezado,
+            // donde no hay forma de no verlo.
+            salida.parentNode.insertBefore(caja, salida);
           }
           caja.innerHTML = '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
             + hallazgos.map((x) => '<div style="margin:4px 0"><b style="color:#c00">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");

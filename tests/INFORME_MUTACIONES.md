@@ -4491,3 +4491,26 @@ médico fue explícito el 27-ago: *«el usuario final no debe saber sobre esos t
 todo lo demás solamente es conmigo el programador»*. La prueba fijaba jerga, no una regla.
 Ahora exige el hecho clínico dicho en llano («Vigilancia de la función renal:») **y además**
 que el apodo no viaje — que es lo que de verdad había que proteger y nadie comprobaba.
+
+---
+
+## v17.14.0 — Tanda 3 del enjambre: tres avisos que existían y no se leían
+
+Los tres hallazgos que quedaban de la Tanda 3 son la misma clase de defecto: el aviso está
+escrito, es correcto, y aun así el médico no lo ve. Uno por quedar debajo del pliegue, otro
+por quedar cortado por una elipsis, el tercero por vestirse igual que la nota rutinaria que
+lo rodea. Un aviso que no se lee no es un aviso.
+
+Banco en verde tras la restauración final: **2.444/2.444**. El color nuevo se verificó además
+en Chromium real (`tools/verificar_color_chromium.js`) contra el «Everest agresivo» que exige
+CLAUDE.md — `div,span,p,b,small,label{color:#111827 !important}` — y sobrevive.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 8 | La caja «⚠ Cifras sin respaldo» volvió a montarse DESPUÉS del área de texto (`salida.nextSibling`), donde una nota larga la deja fuera de pantalla | `suite_70` | *REGLA D1 (#53) — el aviso de cifras inventadas va ARRIBA del borrador, no debajo* |
+| 9 | `#vgl-sum.warn/.error` volvió a `text-overflow:ellipsis`, truncando la instrucción que vive al final del aviso | `suite_70` | *REGLA D2 (#2) — una advertencia de la barra de estado no puede quedar truncada* |
+| 10 | El aviso de que la respuesta guardada quedó desactualizada volvió a pegarse dentro de «Importa porque…», sin elemento ni acento propios | `suite_63` | *v17.14.0 — el aviso de que su respuesta quedó desactualizada NO vive en el pie* |
+
+El contador de `!important` de `suite_25` (Regla G) subió de 378 a 379: es exactamente el
+`color` de `.vgl-conf-desfase`, que la Regla E **exige** por colgar de `document.body` fuera
+de `#vgl-root`. Se actualizó el esperado con esa razón escrita, no en silencio.

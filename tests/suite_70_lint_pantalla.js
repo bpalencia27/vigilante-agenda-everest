@@ -300,5 +300,43 @@ module.exports = {
         "y blindada: este modal cuelga de document.body, fuera de #vgl-root");
     });
 
+    // =================================================================
+    //  REGLA D — un aviso de seguridad no puede quedar donde no se lee
+    //
+    //  HALLAZGOS #53 y #2 de la auditoría. Los dos son la misma clase de
+    //  defecto: el aviso existe, está bien redactado, y aun así el médico no
+    //  lo ve — uno por quedar debajo del pliegue, el otro por quedar cortado
+    //  por una elipsis. Un aviso que no se lee no es un aviso.
+    // =================================================================
+
+    t.caso("REGLA D1 (#53) — el aviso de cifras inventadas va ARRIBA del borrador, no debajo", () => {
+      // Una nota de Análisis y Plan ocupa varias pantallas. Con la caja insertada después
+      // del área de texto, el médico podía leer el borrador entero y firmarlo sin haber
+      // visto nunca que la IA pudo INVENTAR una de esas cifras.
+      const i = src.indexOf('caja.id = "vgl-ia-cifras"');
+      t.cierto(i > 0, "la caja de cifras sin respaldo existe");
+      const bloque = src.slice(i, i + 1400);
+      t.cierto(/insertBefore\(caja, salida\)/.test(bloque),
+        "se monta ANTES del área de texto: es el aviso más grave del módulo");
+      t.falso(/insertBefore\(caja, salida\.nextSibling\)/.test(bloque),
+        "y no después, donde quedaba por debajo del pliegue");
+    });
+
+    t.caso("REGLA D2 (#2) — una advertencia de la barra de estado no puede quedar truncada", () => {
+      // #vgl-sum es una línea única con text-overflow:ellipsis, y por ahí salen avisos que
+      // llevan la instrucción DENTRO del texto («…clic en el candado → Notificaciones →
+      // Permitir, y recargue»): justo la parte que la elipsis se comía.
+      const base = src.match(/#vgl-sum\{[^}]*\}/);
+      t.cierto(!!base && /text-overflow:ellipsis/.test(base[0]),
+        "en estado normal sigue siendo una línea: la barra no puede crecer con cada resumen");
+      const warn = src.match(/#vgl-sum\.warn,#vgl-sum\.error\{[^}]*\}/);
+      t.cierto(!!warn, "pero .warn/.error tienen su propia regla");
+      t.cierto(/white-space:normal/.test(warn[0]), "que permite envolver el texto");
+      t.cierto(/line-clamp:3/.test(warn[0]), "con un tope de renglones, para no tapar la lista");
+      // Y la prueba de que hace falta: hay avisos cuya instrucción vive al final.
+      t.cierto(/Notificaciones BLOQUEADAS/.test(src) && /y recargue/.test(src),
+        "existen avisos con el qué-hacer al final de la frase");
+    });
+
   },
 };

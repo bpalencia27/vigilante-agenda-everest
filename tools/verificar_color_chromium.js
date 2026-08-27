@@ -30,6 +30,9 @@ const CASOS = [
   { id: "vgl-labs-modal",    cls: "vgl-labs-val",   que: "valor de laboratorio", token: "--fg" },
   { id: "vgl-labs-modal",    cls: "vgl-labs-patient", que: "nombre del paciente", token: "--fg" },
   { id: "vgl-agendar-modal", cls: "vgl-agm-patient", que: "paciente en agendar", token: "--fg" },
+  // v17.14.0 — el aviso de desfase del reconciliador (#69 del enjambre). Cuelga de
+  // document.body como los demás, así que su color tiene que sobrevivir al Everest agresivo.
+  { id: "vgl-confirma-modal", cls: "vgl-conf-desfase", que: "aviso: su respuesta anterior quedó desactualizada", token: "--c-ambar" },
 ];
 const BANDERAS = [
   { cls: "agpend", que: "🗓️ SIN TERMINAR", debeSer: "--c-ambar" },

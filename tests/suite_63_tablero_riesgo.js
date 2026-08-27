@@ -498,6 +498,44 @@ module.exports = {
       t.falso(!!d.body.children.find((n) => n.id === "vgl-confirma-modal" && n.isConnected !== false && n.parentElement), "no se vuelve a preguntar lo ya confirmado");
     });
 
+    // v17.14.0 — enjambre UX #69. El aviso de que la respuesta guardada del médico ya no
+    // coincide con la historia de hoy iba PEGADO al final de «Importa porque…», en la
+    // última línea del ítem, con la misma letra pequeña y el mismo gris de la nota
+    // rutinaria: el caso excepcional se veía idéntico al normal. Y era justo el que él
+    // tiene que leer — le dice que lo que confirmó antes quedó desactualizado.
+    t.caso("v17.14.0 — el aviso de que su respuesta quedó desactualizada NO vive en el pie", () => {
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+      const disc = (desfasada) => [{
+        clave: "hipertension", etiqueta: "Hipertensión arterial", porQue: "cambia la tabla de vigencias",
+        afirman: [{ fuente: "Historia", detalle: "casilla marcada" }],
+        niegan: [{ fuente: "PyM", detalle: "no figura" }],
+        desfasada: desfasada,
+      }];
+      const html = (desfasada) => {
+        const previo = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+        if (previo) previo.remove();
+        c.api._vglModalConfirmarDatos({ doc_id: "12345678" }, disc(desfasada), null);
+        const m = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+        return m ? String(m.innerHTML) : "";
+      };
+      const conDesfase = html(true);
+      t.cierto(conDesfase.indexOf("vgl-conf-desfase") >= 0, "el aviso tiene elemento y clase propios");
+      t.cierto(conDesfase.indexOf("ya respondió esto antes") >= 0, "y dice lo que hay que decir");
+      // Lo que de verdad se corrigió: el aviso va ANTES de las fuentes y del «Importa
+      // porque…», no al final del ítem.
+      t.cierto(conDesfase.indexOf("vgl-conf-desfase") < conDesfase.indexOf("vgl-conf-fuentes"),
+        "y sale ARRIBA del ítem, no en el pie");
+      const pq = conDesfase.slice(conDesfase.indexOf("vgl-conf-porque"));
+      t.falso(pq.indexOf("ya respondió esto antes") >= 0,
+        "la nota rutinaria deja de cargar el aviso excepcional: eran indistinguibles");
+      const sinDesfase = html(false);
+      t.cierto(sinDesfase.indexOf("vgl-d-none") >= 0, "sin desfase, el elemento queda oculto");
+      t.falso(sinDesfase.indexOf("ya respondió esto antes") >= 0, "y sin texto que no aplica");
+      const previo = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+      if (previo) previo.remove();
+    });
+
     t.caso("_vglModalConfirmarDatos responde por la puerta compartida (humo)", () => {
       t.noLanza(() => {
         const ok = api._vglModalConfirmarDatos({ doc_id: "" }, [], null);
