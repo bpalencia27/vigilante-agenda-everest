@@ -1226,10 +1226,12 @@ module.exports = {
     });
 
     t.caso("v17.6.89: en un paciente SÍ clasificado, status refleja la meta y no hay solicitud", () => {
+      // v17.6.94 — el tiempo de evolución de la diabetes va explícito: sin él la
+      // clasificación es provisional y SÍ lleva solicitud (se prueba justo debajo).
       const conMeta = (ldl) => {
         const r = api.mtrResumenClinico({
           hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
-          ct: 200, hdl: 45, ldl: ldl, factores: { hta: true, diabetes: true },
+          ct: 200, hdl: 45, ldl: ldl, factores: { hta: true, diabetes: true, dmAnios: 12 },
           ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 }, COLESTEROL_LDL: { fecha: "2026-08-01", valor: ldl } },
         });
         return api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
@@ -1242,10 +1244,25 @@ module.exports = {
       // Sin LDL con qué juzgar, no se inventa un estado de meta.
       const sinLdl = api.mtrJsonV68DesdeResumen(api.mtrResumenClinico({
         hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
-        factores: { hta: true, diabetes: true },
+        factores: { hta: true, diabetes: true, dmAnios: 12 },
         ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
       }), {});
       t.igual(sinLdl.status, "", "sin LDL, status vacío: no se inventa un estado de meta");
+    });
+
+    t.caso("v17.6.94: el diabético sin tiempo de evolución sale con categoría Y con solicitud", () => {
+      // El piso provisional NO deja la categoría en blanco —sin categoría no hay meta de
+      // LDL, y sin meta no hay falla ni órdenes— pero tampoco se calla lo que falta.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        ct: 200, hdl: 45, ldl: 190, factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 }, COLESTEROL_LDL: { fecha: "2026-08-01", valor: 190 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.cv_risk, "alto", "la categoría se emite igual, no se deja al paciente sin meta");
+      t.cierto(/años el paciente tiene diabetes/.test(j.solicitud || ""),
+        "y se pide el dato que la haría definitiva (obtuvo: " + JSON.stringify(j.solicitud) + ")");
+      t.cierto(r.riesgo.dmAniosRequerido === true, "el resumen lo marca como provisional");
     });
 
     // Las dos guardas de mtrStatusV68 NO son redundantes, aunque en un resumen construido por

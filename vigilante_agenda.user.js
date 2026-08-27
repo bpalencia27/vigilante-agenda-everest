@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.93
+// @version     17.6.94
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.93";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.94";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -18051,6 +18051,11 @@ _vglOfrecerDeshacer(btn);
     // salía en la cabecera del recuadro clínico. Aquí van las dos, con el valor actual al
     // lado, porque «¿está en meta?» es la pregunta que se hace en la consulta.
     const metasHtml = mtrPanelMetasHtml(d);
+    // v17.6.94 — TIEMPO DE EVOLUCIÓN DE LA DIABETES. Everest no tiene dónde guardarlo y el
+    // consenso lo usa en dos de sus cuatro pasos, así que sin esta fila el motor clasifica
+    // a ciegas y lo tapa con un piso. Solo aparece en el diabético: preguntárselo a quien
+    // no tiene diabetes es ruido.
+    const dmHtml = mtrPanelDmAniosHtml(d);
     // v17.0.0 — Sospecha de injuria renal: la caída de la TFG contra el control ANTERIOR.
     // Hasta v16.9 el dato previo no llegaba nunca y esta alerta no podía dispararse.
     const ira = (d.renal && d.renal.sospechaIra)
@@ -18060,11 +18065,59 @@ _vglOfrecerDeshacer(btn);
       : "";
 
     return '<div class="vgl-agm-sec">' + riesgoHtml + '</div>'
+      + dmHtml
       + metasHtml
       + '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">Función renal</span>'
       + '<div class="vgl-tab-tfgs">' + cel(d.renal.cg) + cel(d.renal.ckd) + '</div>'
       + ira + disc + faltanRenal + remitir
+      + '</div>';
+  }
+
+  // v17.6.94 — La fila de «desde cuándo es diabético». Pura: recibe lo ya calculado.
+  // Dos formas, y la diferencia importa: cuando el dato ESTÁ, es una línea tranquila que
+  // se puede corregir; cuando FALTA, dice qué está pasando con la clasificación mientras
+  // tanto, en vez de dejar al médico creyendo que el ALTO que ve es el definitivo.
+  // No se usa ninguna clase de color nueva: todo lo que pinta aquí ya existe en la hoja
+  // (regla de CLAUDE.md para lo que vive fuera de #vgl-root).
+  function mtrPanelDmAniosHtml(d) {
+    if (!d || !d.esDm2) return "";
+    const anios = (typeof d.dmAnios === "number" && isFinite(d.dmAnios)) ? d.dmAnios : null;
+    const boton = '<button type="button" class="vgl-agm-btn sec" data-accion="editar-dm-anios">'
+      + (anios === null ? "Registrar" : "Cambiar") + '</button>';
+    if (anios === null) {
+      // Dos textos distintos a propósito. `dmAniosRequerido` es true SOLO cuando la falta de
+      // este dato está cambiando la clasificación ahora mismo (el piso provisional entró en
+      // juego). Si el paciente ya quedó clasificado por otra vía —daño de órgano blanco, ECV
+      // establecida, tres factores mayores—, el dato no cambia nada y decirle «dejo el riesgo
+      // en ALTO como mínimo» sería FALSO: está en MUY ALTO por el paso 1. Es exactamente la
+      // clase de frase que este proyecto no puede permitirse.
+      const urge = d.dmAniosRequerido === true;
+      return '<div class="vgl-agm-sec" id="vgl-dm-anios-fila">'
+        + '<span class="vgl-agm-lbl">Diabetes</span>'
+        + (urge
+            ? '<div class="vgl-tab-nota vgl-tab-falta">Falta un dato: <b>¿hace cuántos años tiene diabetes?</b> '
+              + 'Mientras no conste, dejo el riesgo en ALTO como mínimo, que es lo prudente — pero puede no ser '
+              + 'la categoría que le corresponde. Everest no tiene casilla para esto; se guarda aquí, para este paciente.</div>'
+            : '<div class="vgl-tab-nota">No consta <b>hace cuántos años tiene diabetes</b>. En este paciente no cambia '
+              + 'la clasificación —ya quedó fijada por otro criterio—, pero conviene registrarlo: en el próximo control '
+              + 'puede ser lo que decida la categoría. Everest no tiene casilla para esto; se guarda aquí, para este paciente.</div>')
+        + '<div class="vgl-meta-fila">' + boton + '</div>'
+        + '</div>';
+    }
+    const larga = anios >= MTR_DM_LARGA_DURACION_ANIOS;
+    return '<div class="vgl-agm-sec" id="vgl-dm-anios-fila">'
+      + '<span class="vgl-agm-lbl">Diabetes</span>'
+      + '<div class="vgl-meta-fila">'
+      + '<span class="vgl-meta-rot">Desde hace</span>'
+      + '<span class="vgl-meta-act">' + escapeHtml(String(anios)) + (anios === 1 ? " año" : " años") + '</span>'
+      + boton
+      + '</div>'
+      + '<div class="vgl-tab-mini">'
+      + (larga
+          ? "De " + MTR_DM_LARGA_DURACION_ANIOS + " años en adelante cuenta como diabetes de larga evolución, y eso sube el riesgo por sí solo."
+          : "Se usa para clasificar el riesgo. De " + MTR_DM_LARGA_DURACION_ANIOS + " años en adelante contaría como diabetes de larga evolución.")
+      + '</div>'
       + '</div>';
   }
 
@@ -18862,6 +18915,51 @@ _vglOfrecerDeshacer(btn);
           if (!vivo()) return;
           _firma = _tableroFirmaDom(apt.doc_id);
           pintar("Meta de HbA1c actualizada.");
+        });
+      });
+
+      // v17.6.94 — AÑOS DE EVOLUCIÓN DE LA DIABETES. Mismo patrón exacto que el botón de
+      // arriba: el control solo existe si mtrPanelDmAniosHtml pintó la fila (paciente
+      // diabético); en cualquier otra sección el selector no encuentra nada y no hace nada.
+      const bEditarDmAnios = cuerpo.querySelector('[data-accion="editar-dm-anios"]');
+      if (bEditarDmAnios) bEditarDmAnios.addEventListener("click", () => {
+        const fila = cuerpo.querySelector("#vgl-dm-anios-fila");
+        if (!fila) return;
+        const actual = (_resumen && _resumen.factores && mtrFloat(_resumen.factores.dmAnios) !== null)
+          ? mtrFloat(_resumen.factores.dmAnios) : "";
+        fila.innerHTML = '<span class="vgl-agm-lbl">Diabetes</span>'
+          + '<div class="vgl-meta-fila">'
+          + '<span class="vgl-meta-rot">Desde hace</span>'
+          + '<input type="number" step="1" min="0" max="80" class="vgl-meta-input" id="vgl-dm-anios-input" value="'
+          + escapeHtml(String(actual)) + '" style="width:64px">'
+          + '<span class="vgl-meta-rot">años</span>'
+          + '<button type="button" class="vgl-agm-btn sec" id="vgl-dm-anios-guardar">Guardar</button>'
+          + '<button type="button" class="vgl-agm-btn sec" id="vgl-dm-anios-cancelar">Cancelar</button>'
+          + '</div>'
+          + '<div class="vgl-tab-mini">Un número aproximado sirve: lo que se usa son los tramos (menos de 10 años, más de 10, '
+          + MTR_DM_LARGA_DURACION_ANIOS + ' o más). Si no lo sabe, deje el campo como está y cancele — prefiero no tener el dato '
+          + 'a tener uno inventado.</div>'
+          + '<div class="vgl-tab-mini" id="vgl-dm-anios-error"></div>';
+        const inp = fila.querySelector("#vgl-dm-anios-input");
+        if (inp && inp.focus) inp.focus();
+        const errEl = fila.querySelector("#vgl-dm-anios-error");
+        const cancelar = fila.querySelector("#vgl-dm-anios-cancelar");
+        if (cancelar) cancelar.addEventListener("click", () => pintar(""));
+        const guardar = fila.querySelector("#vgl-dm-anios-guardar");
+        if (guardar) guardar.addEventListener("click", async () => {
+          const v = mtrFloat(inp && inp.value);
+          if (v === null || !(v >= 0 && v <= 80)) {
+            if (errEl) errEl.textContent = "⚠ Escriba los años como un número entre 0 y 80.";
+            return;
+          }
+          guardar.disabled = true; guardar.textContent = "Guardando…";
+          try { _vglCosechaGuardar(apt.doc_id, { dmAniosManual: { v: Math.round(v), ts: Date.now() } }); } catch (e) {}
+          try { uxTrack("fn.panel.dmAniosManual"); } catch (e) {}
+          try { mtrCacheResumenBorrar(); } catch (e) {}
+          try { _resumen = await mtrCalcularResumenClinico(apt, vivo, { fresco: true }); } catch (e) {}
+          if (!vivo()) return;
+          _firma = _tableroFirmaDom(apt.doc_id);
+          pintar("Tiempo de evolución de la diabetes registrado; el riesgo se volvió a clasificar con él.");
         });
       });
     };
@@ -25990,6 +26088,11 @@ _vglOfrecerDeshacer(btn);
       // `f.diabetes` vivía en esta función, sin salir de aquí. Mismo campo y misma
       // fórmula que ya usan esDm2 en mtrResumenClinico/mtrFueraDeMeta.
       esDm2: !!f.diabetes,
+      // v17.6.94 — el tiempo de evolución de la diabetes, y si la clasificación lo está
+      // esperando. Mismo motivo que `esDm2`: el Panel no puede pintar la fila —ni saber
+      // que debe pedirla— si el dato no sale de aquí.
+      dmAnios: (mtrFloat(f.dmAnios) !== null ? mtrFloat(f.dmAnios) : null),
+      dmAniosRequerido: riesgo.dmAniosRequerido === true,
     };
   }
 
@@ -29407,6 +29510,52 @@ _vglOfrecerDeshacer(btn);
   }
 
   // ---------- POTENCIADORES (PASO 3) ----------
+  // =====================================================================
+  //  v17.6.94 — TIEMPO DE EVOLUCIÓN DE LA DIABETES
+  //  ------------------------------------------------------------------
+  //  El consenso usa el tiempo de evolución en DOS sitios y con DOS umbrales
+  //  distintos, y hasta esta versión ninguno de los dos podía dispararse porque
+  //  `dmAnios`/`dmLargaDuracion` no los alimentaba NADIE (Everest no tiene campo
+  //  para «desde cuándo es diabético»):
+  //
+  //    · Paso 1 (MUY ALTO): «DM con daño de órgano blanco o CONTEO>=3 o LARGA DURACIÓN»
+  //    · Paso 2 (ALTO):     «DM + CONTEO>=1 y >10 AÑOS»
+  //
+  //  Si «larga duración» significara lo mismo que «>10 años», la cláusula del paso 2
+  //  sería inalcanzable: el paso 1 se lleva a todos antes. Para que las dos vivan,
+  //  «larga duración» tiene que ser un umbral MÁS ALTO. Se fija en 20 años, que es
+  //  el corte que usan el consenso colombiano y la guía europea para «diabetes de
+  //  larga evolución».
+  //
+  //  ESTO ES UNA LECTURA, NO UNA CITA: el prompt v68 no pone número a «larga
+  //  duración». Se deja en una constante con nombre, a la vista, para que cambiarla
+  //  sea una línea y para que quede claro que es interpretable. Cambia la meta de LDL
+  //  de <70 a <55 en el diabético de muchos años: no es un detalle.
+  const MTR_DM_LARGA_DURACION_ANIOS = 20;
+
+  // ¿Sabemos hace cuánto es diabético? Tri-estado por diseño: para el NO diabético la
+  // pregunta no aplica y se responde `true` (no falta nada). Para el diabético, solo
+  // cuenta un dato REAL — un número de años, o el médico marcando explícitamente que sí
+  // o que no es de larga evolución. Sin eso, «no se sabe», que no es «no la tiene».
+  function mtrDmEvolucionConocida(f) {
+    const x = f || {};
+    if (!x.diabetes) return true;
+    if (mtrFloat(x.dmAnios) !== null) return true;
+    if (x.dmLargaDuracion === true || x.dmLargaDuracion === false) return true;
+    return false;
+  }
+
+  // ¿Es una diabetes de larga evolución? Lo que el médico marca a mano gana sobre el
+  // cálculo; si solo hay años, se compara con la constante de arriba.
+  function mtrDmLargaDuracion(f) {
+    const x = f || {};
+    if (!x.diabetes) return false;
+    if (x.dmLargaDuracion === true) return true;
+    if (x.dmLargaDuracion === false) return false;
+    const a = mtrFloat(x.dmAnios);
+    return a !== null && a >= MTR_DM_LARGA_DURACION_ANIOS;
+  }
+
   function mtrContarPotenciadores(f, conteoFr) {
     const x = f || {};
     const pot = [];
@@ -29421,8 +29570,17 @@ _vglOfrecerDeshacer(btn);
     const rac = mtrFloat(x.rac);
     if (rac !== null && rac > 30) pot.push("RAC>30");
     if (x.condicionesEspecificasMujer) pot.push("condiciones específicas de la mujer");
-    const dmAnios = mtrFloat(x.dmAnios);
-    if (x.diabetes && dmAnios !== null && dmAnios < 10 && conteoFr === 0) pot.push("diabetes <10 años sin FR");
+    // v17.6.94 — DIVERGENCIA DECLARADA con v68, y es una corrección de un hueco suyo.
+    // El paso 3 del consenso dice «DM<10a sin FR». Medido con el harness: un diabético de
+    // 12 años SIN ningún factor de riesgo mayor no lo recoge el paso 1 (no hay daño de
+    // órgano, CONTEO=0, no llega a larga duración), no lo recoge el paso 2 (exige
+    // CONTEO>=1) y el paso 3 lo deja fuera por pasar de 10 — así que cae al paso 4 y sale
+    // **BAJO**, mientras que el MISMO paciente con 5 años de diabetes sale MODERADO.
+    // Tener la enfermedad hace más tiempo lo bajaba de categoría: eso no es una regla,
+    // es un hueco de redacción. Aquí el potenciador es «diabetes sin FR mayores», sin
+    // techo de años. No baja a nadie: los de <10 años puntúan igual que antes, y los que
+    // ya subían por los pasos 1 o 2 ni siquiera llegan hasta aquí.
+    if (x.diabetes && conteoFr === 0) pot.push("diabetes sin otros factores de riesgo mayores");
     if (x.pobrezaMultidimensional) pot.push("pobreza multidimensional");
     return { conteo: pot.length, lista: pot };
   }
@@ -29443,7 +29601,7 @@ _vglOfrecerDeshacer(btn);
     if (rac !== null && rac >= 300) c.push("Macroalbuminuria severa (RAC>=300 mg/g)");
     if (x.diabetes) {
       const danoOrgano = (rac !== null && rac >= 30) || !!x.retinopatia || !!x.neuropatia;
-      if (danoOrgano || conteoFr >= 3 || x.dmLargaDuracion) {
+      if (danoOrgano || conteoFr >= 3 || mtrDmLargaDuracion(x)) {
         c.push("Diabetes con daño de órgano blanco / FR>=3 / larga duración");
       }
     }
@@ -29512,15 +29670,25 @@ _vglOfrecerDeshacer(btn);
     //
     // Es un PISO, no un valor fijo (confirmado con él): el paso 1 sigue mandando, así que
     // un diabético con daño de órgano blanco, ECV establecida o TFG<=30 sigue subiendo a
-    // MUY ALTO con meta <55. Lo que se elimina es la posibilidad de que un diabético caiga
-    // a "moderado" o "bajo" por el paso 4 — que es lo que ocurría siempre, porque las dos
-    // reglas de diabetes de los pasos 1 y 2 dependen de `dmAnios`/`dmLargaDuracion`, dos
-    // campos que en producción NO LOS ALIMENTA NADIE (auditoría del 20-ago): estaban
-    // muertos, y con ellos la única vía por la que un diabético subía de categoría.
-    if (x.diabetes) {
+    // MUY ALTO con meta <55.
+    //
+    // v17.6.94 — EL PISO DEJA DE SER INCONDICIONAL. Decisión del médico (27-ago): quitarlo
+    // Y añadir la casilla del tiempo de evolución, las dos mitades juntas. La razón por la
+    // que existía está escrita en su propio comentario original: las dos reglas de diabetes
+    // de los pasos 1 y 2 dependen de `dmAnios`/`dmLargaDuracion`, y en producción NO LOS
+    // ALIMENTABA NADIE. El piso no corregía una regla del consenso: tapaba una ceguera de
+    // datos. Con el dato ya no hay nada que tapar y el consenso clasifica de verdad.
+    //
+    // Sin el dato el piso sigue entero — y ESO ES LO QUE LO HACE SEGURO. Medido con el
+    // harness antes de tocar nada, quitándolo a secas: un hombre de 60 años con DM2 + HTA
+    // pasa de ALTO (<70) a MODERADO (<100), y uno de 52 con DM2 sola pasa de ALTO a
+    // **BAJO** (<116). Eso no es fidelidad al consenso, es perder al paciente por un campo
+    // vacío. Así que el piso se aplica solo cuando NO SE SABE, se marca como lo que es
+    // —provisional— y PIDE el dato en vez de callarse (ver `mtrSolicitudV68`).
+    if (x.diabetes && !mtrDmEvolucionConocida(x)) {
       return Object.assign({}, base, {
-        categoria: "alto", paso: 2, pisoPorDiabetes: true,
-        criterios: c2.concat(["Diabetes mellitus (piso institucional: riesgo ALTO como mínimo, independiente de otros factores)"]),
+        categoria: "alto", paso: 2, pisoPorDiabetes: true, dmAniosRequerido: true,
+        criterios: c2.concat(["Diabetes mellitus sin tiempo de evolución registrado (piso provisional: riesgo ALTO como mínimo mientras falte ese dato)"]),
       });
     }
 
@@ -32714,6 +32882,12 @@ _vglOfrecerDeshacer(btn);
     if (riesgo.motivo === "tfg_requerida") {
       return "SOLICITUD: falta la TFG (CKD-EPI) para clasificar el riesgo cardiovascular";
     }
+    // v17.6.94 — el piso provisional por diabetes NO deja la categoría en blanco (sería
+    // peor: sin categoría no hay meta de LDL, y sin meta no hay falla terapéutica ni
+    // órdenes), pero tampoco se calla: dice qué falta para que deje de ser provisional.
+    if (riesgo.dmAniosRequerido === true) {
+      return "SOLICITUD: registre hace cuántos años el paciente tiene diabetes; sin ese dato el riesgo queda en ALTO provisional";
+    }
     return "";
   }
 
@@ -34301,6 +34475,27 @@ _vglOfrecerDeshacer(btn);
         if (pr.erc === true) factores.enfermedadRenalDocumentada = true;
         if (pr.sindromeMetabolico === true) factores.sindromeMetabolico = true;
         factores.__fuenteProgramas = "Ruta Crónicos";
+      }
+    } catch (e) {}
+
+    // v17.6.94 — AÑOS DE EVOLUCIÓN DE LA DIABETES. Everest no tiene campo para «desde
+    // cuándo es diabético» (verificado contra MTR_CAMPOS_FACTORES y contra el mapa de
+    // campos del repo), así que el dato solo puede venir del médico. Se guarda por paciente
+    // en el mismo almacén que la meta individual de HbA1c (`_vglCosecha`, por cédula) y con
+    // el mismo criterio: NO caduca solo — los años de evolución de una enfermedad crónica
+    // no dejan de aplicar por sí solos, y volver a preguntarlo cada jornada sería pedirle
+    // al médico que reescriba lo que ya escribió.
+    //
+    // Sin este cable, `dmAnios` no lo alimenta nadie y las dos reglas de diabetes de los
+    // pasos 1 y 2 del consenso siguen sin poder dispararse — que es exactamente el estado
+    // que el piso incondicional venía tapando desde v16.2.9.
+    try {
+      const _cosDm = _vglCosechaLeer(apt && apt.doc_id);
+      const _dm = _cosDm && _cosDm.dmAniosManual;
+      const _v = _dm && _dm.v;
+      if (typeof _v === "number" && isFinite(_v) && _v >= 0) {
+        factores = factores || {};
+        factores.dmAnios = _v;
       }
     } catch (e) {}
 

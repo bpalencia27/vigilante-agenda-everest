@@ -6,6 +6,68 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.94 — 27-ago-2026 (el piso por diabetes deja de ser incondicional, y la casilla que lo hace posible)
+
+Divergencia **B1** de la revisión del 27-ago, con sus dos mitades juntas, como pidió el
+médico. Banco antes: 2.337 · después: **2.346**.
+
+El piso «todo diabético entra como ALTO» (v16.2.9) parecía una regla clínica. No lo era: su
+propio comentario decía por qué existía — las dos reglas de diabetes del consenso (paso 1
+«larga duración», paso 2 «DM+CONTEO≥1 y >10 años») dependen de `dmAnios`/`dmLargaDuracion`,
+y en producción **no los alimentaba nadie**. El piso no corregía el consenso: tapaba una
+ceguera de datos. Everest no tiene casilla para «desde cuándo es diabético», así que el dato
+solo puede venir del médico.
+
+**Lo primero fue medir, no cambiar.** Quitando el piso a secas, con el harness:
+
+| Paciente | Hoy | Sin el piso, sin el dato |
+|---|---|---|
+| 60 a, DM2 + HTA | ALTO (LDL <70) | **MODERADO** (<100) |
+| 52 a, DM2 sola | ALTO (<70) | **BAJO** (<116) |
+
+Por eso el piso no se quita: se vuelve **condicional**. Aplica solo cuando el tiempo de
+evolución no consta, se marca como provisional (`dmAniosRequerido`) y **pide el dato** en vez
+de callarse. Con el dato, manda el consenso.
+
+La medición destapó además un **hueco de redacción del propio v68**: el paso 3 dice «DM<10a
+sin FR», así que un diabético de 12 años sin ningún otro factor no lo recoge el paso 1
+(CONTEO=0, sin daño de órgano), ni el paso 2 (exige CONTEO≥1), ni el paso 3 (lo deja fuera
+por pasar de 10) — y salía **BAJO**, mientras el mismo paciente con 5 años salía MODERADO.
+Tener la enfermedad hace más tiempo lo bajaba de categoría. El potenciador pasa a ser
+«diabetes sin FR mayores», sin techo de años: no baja a nadie y cierra la no-monotonía.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **1** | `mtrDmEvolucionConocida` devuelve siempre `true` (el piso no aplica nunca) | 45, 47, 57 | *PISO POR DIABETES…*, *…es tri-estado*, *CON el dato manda el consenso*, *los 4 pasos reproducen al Copiloto* (10 diabéticos dorados por debajo de ALTO) → **6 rojas** |
+| **2** | `MTR_DM_LARGA_DURACION_ANIOS` baja de 20 a 10 | 45, 47 | *«larga duración» sale de los años…* → **4 rojas** |
+| **3** | `mtrDmLargaDuracion` ignora lo que el médico marcó a mano | 45 | *…y lo que marca el médico manda*; además 4 desviaciones contra el corpus dorado → **2 rojas** |
+| **4** | El potenciador recupera el techo de 10 años | 45 | *tener la diabetes hace MÁS tiempo nunca baja de categoría* → *a los 10 años bajó… 9a=moderado 10a=bajo* |
+| **5** | `mtrSolicitudV68` deja de pedir el dato | 57 | *el diabético sin tiempo de evolución sale con categoría Y con solicitud* |
+| **6 · CABLEADO** | `mtrTableroClinico` deja de publicar `dmAnios`/`dmAniosRequerido` | 47 | *el resumen publica los años de diabetes y si los está esperando* |
+| **7 · CABLEADO** | La reclasificación de los 20 s pierde `dmAnios` de la mezcla | 47 | *los años de diabetes sobreviven a la reclasificación de los 20 s* |
+| **8 · CABLEADO** | El ctx lee el dato pero lo guarda en un campo que el clasificador no mira | 47 | *el ctx del Panel lee los años guardados por el médico* |
+| **9** | La fila del Panel afirma el piso siempre, se esté aplicando o no | 47 | *…y no molesta cuando no aplica* → *no se afirma un piso que no se está aplicando* |
+
+Las nueve se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.346/2.346 tras cada restauración.
+
+**Las tres de CABLEADO son la mitad del trabajo.** El dato recorre cuatro tramos —el botón
+del Panel lo guarda por cédula, el ctx lo lee al armar el resumen, el clasificador lo usa, el
+tablero lo devuelve a pantalla— y cualquiera de ellos se puede cortar dejando todas las
+funciones intactas y el banco verde. La 7 es la más traicionera: el Panel rehace la
+clasificación cada 20 segundos con lo que lee de Everest, y Everest **no tiene este campo**,
+así que un `Object.assign` mal ordenado haría desaparecer el dato solo a los 20 segundos —
+el mismo defecto que v17.6.86 encontró con las frecuencias de los medicamentos.
+
+**Una decisión que hay que mirar de frente.** El prompt v68 no pone número a «larga
+duración»; solo dice «>10 años» en el paso 2. Si las dos cláusulas significaran lo mismo, la
+del paso 2 sería inalcanzable — el paso 1 se lleva a todos antes. Para que las dos vivan,
+«larga duración» tiene que ser un umbral más alto, y aquí se fija en **20 años**. Es una
+lectura, no una cita, y cambia la meta de LDL de <70 a <55 en el diabético de muchos años.
+Vive en una constante con nombre (`MTR_DM_LARGA_DURACION_ANIOS`) para que corregirla sea una
+línea.
+
 ## v17.6.93 — 27-ago-2026 (el grupo de sábados vuelve, pero solo cuando es fiable)
 
 Divergencia **A5** de la revisión del 27-ago. Banco antes: 2.329 · después: **2.337**.

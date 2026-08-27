@@ -16,6 +16,7 @@ module.exports = {
     "mtrResumenClinico", "mtrRenderResumenClinicoHtml", "mtrChipResumenTexto",
     "mtrClaseCategoria", "mtrFechaLegible", "mtrResumenDesdeModalLabs",
     "mtrRenderCabeceraRiesgoHtml", "mtrRenderFallaHtml", "mtrTextoAnr",
+    "mtrPanelDmAniosHtml", "mtrTableroClinico", "mtrRecalcularConFactores",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -35,6 +36,101 @@ module.exports = {
       },
       grupoSabado: "1-3",
     };
+
+    // ===== v17.6.94 — el tiempo de evolución de la diabetes, de punta a punta =====
+    // La regla del proyecto que aquí manda: probar la pieza no es probar que la pieza está
+    // conectada. El motor ya sabe usar `dmAnios`; lo que estas pruebas vigilan es que el
+    // dato LLEGUE desde donde el médico lo escribe hasta donde se clasifica, y que vuelva a
+    // la pantalla. Si se corta cualquier eslabón dejando las funciones intactas, caen aquí.
+
+    t.caso("v17.6.94 CABLEADO — el resumen publica los años de diabetes y si los está esperando", () => {
+      const sinDato = api.mtrTableroClinico(api.mtrResumenClinico(ctxBase));
+      t.cierto(sinDato.esDm2 === true, "la paciente del vector base es diabética");
+      t.igual(sinDato.dmAnios, null, "sin dato, null — no se inventa un número de años");
+      // La del vector base tiene RAC 45: el paso 1 ya la clasifica por daño de órgano
+      // blanco, así que los años no cambian nada y NO se piden.
+      t.cierto(sinDato.dmAniosRequerido === false,
+        "a quien ya está clasificado por otro criterio no se le pide un dato que no cambia nada");
+
+      // Un diabético que NO se clasifica por otra vía sí depende de ese dato: sin daño de
+      // órgano blanco, sin ECV y con menos de tres factores mayores, el piso provisional es
+      // lo único que lo sostiene.
+      const dependiente = api.mtrTableroClinico(api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 58, sexo: "M", pesoKg: 78, creatinina: 1.0,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 138, paDiastolica: 84,
+        factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-05-01", valor: 1.0 } },
+      }));
+      t.cierto(dependiente.esDm2 === true, "también es diabético");
+      t.cierto(dependiente.dmAniosRequerido === true,
+        "y aquí el tablero SÍ lo está esperando, porque nada más lo clasifica");
+
+      const conDato = api.mtrTableroClinico(api.mtrResumenClinico(Object.assign({}, ctxBase, {
+        factores: Object.assign({}, ctxBase.factores, { dmAnios: 22 }),
+      })));
+      t.igual(conDato.dmAnios, 22, "con dato, el número llega entero hasta la pantalla");
+      t.cierto(conDato.dmAniosRequerido === false, "y ya no se pide nada");
+    });
+
+    t.caso("v17.6.94 CABLEADO — los años de diabetes sobreviven a la reclasificación de los 20 s", () => {
+      // El Panel rehace la clasificación cada 20 segundos con los factores leídos de la
+      // pantalla de Everest, y Everest NO tiene este campo: si la mezcla no conservara lo
+      // que ya se sabía, el dato desaparecería solo a los 20 segundos y el paciente volvería
+      // al piso provisional sin que nadie tocara nada. Es el mismo defecto que v17.6.86
+      // encontró con las frecuencias de los medicamentos.
+      const previo = api.mtrResumenClinico(Object.assign({}, ctxBase, {
+        factores: Object.assign({}, ctxBase.factores, { dmAnios: 22 }),
+      }));
+      t.igual(previo.factores.dmAnios, 22, "el resumen de partida lo tiene");
+      const nuevo = api.mtrRecalcularConFactores(previo, { paSistolica: 150, paDiastolica: 92 }, "2026-08-16");
+      t.cierto(!!nuevo, "la reclasificación debía devolver algo");
+      t.igual(nuevo.factores.dmAnios, 22, "y los años de diabetes siguen ahí tras reclasificar");
+      t.cierto(nuevo.riesgo.dmAniosRequerido !== true, "así que no vuelve a pedirse un dato que ya está");
+    });
+
+    t.caso("v17.6.94 — la fila del Panel dice qué pasa cuando el dato falta, y no molesta cuando no aplica", () => {
+      t.igual(api.mtrPanelDmAniosHtml({ esDm2: false, dmAnios: null }), "",
+        "al no diabético no se le pregunta nada");
+      t.igual(api.mtrPanelDmAniosHtml(null), "", "sin datos, nada");
+
+      const falta = api.mtrPanelDmAniosHtml({ esDm2: true, dmAnios: null, dmAniosRequerido: true });
+      t.cierto(/hace cuántos años tiene diabetes/.test(falta), "pregunta lo que falta, en cristiano");
+      t.cierto(/ALTO como mínimo/.test(falta), "y dice qué está haciendo mientras tanto");
+      t.cierto(/data-accion="editar-dm-anios"/.test(falta), "con un botón para responderla");
+
+      // Y cuando el dato falta pero NO está cambiando nada, no se afirma lo que no es: este
+      // paciente está en MUY ALTO por el paso 1, decirle "dejo el riesgo en ALTO como
+      // mínimo" sería falso.
+      const faltaSinUrgencia = api.mtrPanelDmAniosHtml({ esDm2: true, dmAnios: null, dmAniosRequerido: false });
+      t.falso(/ALTO como mínimo/.test(faltaSinUrgencia), "no se afirma un piso que no se está aplicando");
+      t.cierto(/no cambia la clasificación/.test(faltaSinUrgencia), "se dice la verdad: aquí no cambia nada");
+      t.cierto(/data-accion="editar-dm-anios"/.test(faltaSinUrgencia), "y se puede registrar igual");
+
+      const doce = api.mtrPanelDmAniosHtml({ esDm2: true, dmAnios: 12 });
+      t.cierto(/12 años/.test(doce), "con dato, lo muestra");
+      t.falso(/hace cuántos años tiene diabetes/.test(doce), "y deja de preguntar");
+      t.falso(/larga evolución, y eso sube el riesgo/.test(doce), "12 años todavía no es larga evolución");
+
+      const uno = api.mtrPanelDmAniosHtml({ esDm2: true, dmAnios: 1 });
+      t.cierto(/1 año</.test(uno), "un año se escribe en singular (obtuvo: " + uno.replace(/<[^>]*>/g, " ").trim() + ")");
+
+      const larga = api.mtrPanelDmAniosHtml({ esDm2: true, dmAnios: 25 });
+      t.cierto(/larga evolución, y eso sube el riesgo/.test(larga), "25 años sí, y se dice por qué importa");
+    });
+
+    t.caso("v17.6.94 CABLEADO — el ctx del Panel lee los años guardados por el médico", () => {
+      // Este eslabón vive dentro de mtrResumenDesdeModalLabs, que necesita el modal de
+      // laboratorios abierto y no es aislable desde el banco. Se protege por texto fuente,
+      // igual que la regla única de sábado en la suite 68: lo que no se puede ejecutar aquí
+      // al menos no se puede borrar sin que caiga una prueba.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/_cosDm\.dmAniosManual/.test(src) || /cosecha[\s\S]{0,40}dmAniosManual/.test(src),
+        "el contexto del motor lee dmAniosManual del almacén por paciente");
+      t.cierto(/factores\.dmAnios = _v;/.test(src),
+        "y lo mete en los factores, que es lo único que el clasificador mira");
+      t.cierto(/_vglCosechaGuardar\(apt\.doc_id, \{ dmAniosManual:/.test(src),
+        "y el botón del Panel lo guarda en ese mismo almacén, por cédula");
+    });
 
     // ===== v17.6.90 — el ANR afirmaba una agrupación que no ocurría =====
     //

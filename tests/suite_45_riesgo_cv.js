@@ -69,6 +69,7 @@ module.exports = {
     "mtrAscvdFueraDeRangoEtario", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
     "mtrMetasLipidicas", "mtrEvaluarMetaLdl", "mtrLdlBasalDeSerie", "_isoAMs",
     "mtrEvaluarErc", "mtrRemisionNefrologia", "mtrSospechaIra", "mtrPosEstadio",
+    "mtrDmEvolucionConocida", "mtrDmLargaDuracion",
   ],
 
   pruebas(t, api) {
@@ -79,9 +80,11 @@ module.exports = {
       t.cierto(d.vectores.length >= 900, "se esperaban al menos 900 vectores, hay " + d.vectores.length);
     });
 
-    t.caso("PISO POR DIABETES: ningún diabético puede quedar por debajo de ALTO (v16.2.9)", () => {
-      // Decisión del médico (20-ago, textual): "sí, todo diabético debe entrar como riesgo
-      // ALTO". Es un PISO: el paso 1 sigue mandando hacia arriba.
+    t.caso("PISO POR DIABETES: el diabético SIN tiempo de evolución no puede quedar por debajo de ALTO", () => {
+      // v16.2.9 — decisión del médico (20-ago, textual): "sí, todo diabético debe entrar
+      // como riesgo ALTO". Es un PISO: el paso 1 sigue mandando hacia arriba.
+      // v17.6.94 — y ahora es CONDICIONAL: solo mientras no conste hace cuántos años tiene
+      // la diabetes. Con el dato manda el consenso; sin él, el piso (ver la prueba de abajo).
       const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
 
       const sinDm = api.mtrClasificarRiesgoCv(Object.assign({}, base));
@@ -90,6 +93,7 @@ module.exports = {
       const conDm = api.mtrClasificarRiesgoCv(Object.assign({}, base, { diabetes: true }));
       t.igual(conDm.categoria, "alto", "el diabético entra en ALTO");
       t.cierto(conDm.pisoPorDiabetes === true, "y queda marcado que fue por el piso");
+      t.cierto(conDm.dmAniosRequerido === true, "y que el piso es provisional por falta de un dato");
       t.cierto(conDm.criterios.some((c) => /diabetes mellitus/i.test(c) && /alto/i.test(c)), "el porqué se dice en pantalla");
 
       // El piso NO puede tapar el paso 1: con daño de órgano blanco sigue subiendo.
@@ -107,6 +111,77 @@ module.exports = {
       // Y la meta de LDL que se deriva baja de 116 a 70: el efecto que motivó todo.
       const metas = api.mtrMetasLipidicas(conDm.categoria, null);
       t.igual(metas.ldl, 70, "meta de LDL <70 (antes, en «bajo», era <116)");
+    });
+
+    // ====== v17.6.94 — EL TIEMPO DE EVOLUCIÓN DE LA DIABETES ======
+    // Las dos reglas de diabetes del consenso (paso 1 «larga duración», paso 2 «>10 años»)
+    // llevaban desde siempre sin poder dispararse porque nadie alimentaba los campos. El
+    // piso incondicional no corregía el consenso: tapaba esa ceguera.
+
+    t.caso("v17.6.94: saber si SE SABE hace cuánto es diabético es tri-estado", () => {
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: false }), "al no diabético no le falta nada: la pregunta no aplica");
+      t.cierto(api.mtrDmEvolucionConocida({}), "sin diabetes documentada, tampoco");
+      t.falso(api.mtrDmEvolucionConocida({ diabetes: true }), "al diabético sin dato SÍ le falta");
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: true, dmAnios: 0 }), "cero años es un dato, no un vacío");
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: true, dmLargaDuracion: false }),
+        "y decir explícitamente que NO es de larga evolución también responde la pregunta");
+      t.falso(api.mtrDmEvolucionConocida({ diabetes: true, dmAnios: "" }), "una cadena vacía no es un número de años");
+    });
+
+    t.caso("v17.6.94: «larga duración» sale de los años, y lo que marca el médico manda", () => {
+      t.falso(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 12 }), "12 años todavía no es larga evolución");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 20 }), "20 sí (es el corte exacto)");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 31 }), "y de ahí para arriba");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 3, dmLargaDuracion: true }),
+        "si el médico lo marca a mano, su palabra gana sobre el cálculo");
+      t.falso(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 40, dmLargaDuracion: false }),
+        "y también gana cuando dice que NO");
+      t.falso(api.mtrDmLargaDuracion({ diabetes: false, dmAnios: 40 }), "sin diabetes, no hay diabetes de larga evolución");
+    });
+
+    t.caso("v17.6.94: CON el dato manda el consenso, y el piso se aparta", () => {
+      const base = { edad: 60, sexo: "M", egfrCkdepi: 75, hta: true, enAntihipertensivos: true,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85, diabetes: true };
+      const sinDato = api.mtrClasificarRiesgoCv(Object.assign({}, base));
+      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso provisional");
+
+      const cinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 5 }));
+      t.cierto(!cinco.pisoPorDiabetes, "con 5 años el piso ya no interviene");
+      t.cierto(cinco.dmAniosRequerido !== true, "ni queda pidiendo el dato que ya tiene");
+
+      const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
+      t.igual(doce.categoria, "alto", "12 años + al menos un factor: ALTO por el paso 2");
+      t.igual(doce.paso, 2, "y por el paso 2, no por un piso");
+      t.cierto(doce.criterios.some((c) => /10 años/.test(c)), "citando la regla del consenso");
+
+      const veinticinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 25 }));
+      t.igual(veinticinco.categoria, "muy alto", "25 años es larga evolución: MUY ALTO por el paso 1");
+      t.igual(veinticinco.paso, 1, "y por el paso 1");
+    });
+
+    t.caso("v17.6.94: tener la diabetes hace MÁS tiempo nunca baja de categoría", () => {
+      // El hueco de redacción de v68: el paso 3 decía «DM<10a sin FR», así que un diabético
+      // de 12 años SIN ningún otro factor no lo recogía ni el paso 1 (CONTEO=0, sin daño de
+      // órgano, no llega a larga evolución), ni el paso 2 (exige CONTEO>=1), ni el paso 3
+      // (lo dejaba fuera por pasar de 10) — y salía BAJO, mientras que con 5 años salía
+      // MODERADO. Aquí se comprueba que la escalera solo sube.
+      const orden = { bajo: 0, moderado: 1, alto: 2, "muy alto": 3 };
+      const base = { edad: 52, sexo: "M", egfrCkdepi: 88, diabetes: true,
+        ct: 190, hdl: 50, ldl: 110, paSistolica: 120, paDiastolica: 75 };
+      let previo = -1, detalle = [];
+      for (const a of [0, 5, 9, 10, 12, 19, 20, 30]) {
+        const r = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: a }));
+        const n = orden[r.categoria];
+        detalle.push(a + "a=" + r.categoria);
+        t.cierto(n !== undefined, a + " años debía dar categoría (obtuvo " + r.categoria + ")");
+        t.cierto(n >= previo, "a los " + a + " años bajó de categoría respecto al tramo anterior · " + detalle.join(" "));
+        previo = n;
+      }
+      // Y en concreto: el caso que estaba roto.
+      const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
+      t.igual(doce.categoria, "moderado", "el diabético de 12 años sin otros factores ya no cae a BAJO");
+      t.cierto(doce.criterios.some((c) => /sin otros factores de riesgo mayores/.test(c)),
+        "y el porqué se dice sin el techo de años");
     });
 
     t.caso("los 4 pasos reproducen al Copiloto vector a vector", () => {
@@ -132,8 +207,14 @@ module.exports = {
         const js = api.mtrClasificarRiesgoCv(traducir(v.entrada));
         const py = v.salida;
 
-        if (v.entrada && v.entrada.diabetes === true
-            && py.categoria !== "alto" && py.categoria !== "muy alto") {
+        // v17.6.94 — la excepción se estrecha al caso que la justifica: el piso solo
+        // aplica al diabético cuyo TIEMPO DE EVOLUCIÓN no consta. Un vector dorado que sí
+        // lo traiga vuelve a compararse contra el Copiloto como cualquier otro — si algún
+        // día el corpus incorpora esos casos, esta suite los verá en vez de taparlos.
+        const _dmSinEvolucion = v.entrada && v.entrada.diabetes === true
+          && (v.entrada.dm_anios === null || v.entrada.dm_anios === undefined)
+          && (v.entrada.dm_larga_duracion === null || v.entrada.dm_larga_duracion === undefined);
+        if (_dmSinEvolucion && py.categoria !== "alto" && py.categoria !== "muy alto") {
           if (js.categoria !== "alto") {
             desviacionesPiso.push("diabético que NO quedó en alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
           }
@@ -180,6 +261,8 @@ module.exports = {
       // La excepción no puede quedar huérfana: si algún día deja de aplicarse a nadie,
       // es que el corpus cambió y hay que revisar si el piso sigue haciendo falta.
       const nDia = d.vectores.filter((v) => v.entrada && v.entrada.diabetes === true
+        && (v.entrada.dm_anios === null || v.entrada.dm_anios === undefined)
+        && (v.entrada.dm_larga_duracion === null || v.entrada.dm_larga_duracion === undefined)
         && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
       t.cierto(nDia > 0, "la excepción del piso por diabetes sigue ejercitándose (" + nDia + " vectores)");
       const nEdad = d.vectores.filter((v) => v.entrada && typeof v.entrada.edad === "number" && v.entrada.edad > 79
