@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.12.0
+// @version     17.13.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.12.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.13.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32264,6 +32264,14 @@ _vglOfrecerDeshacer(btn);
         control: (r.plan.control && r.plan.control.fecha) || null,
         motivoFtl: r.plan.motivoFtl ? limpiar(String(r.plan.motivoFtl)) : null,
         ordenar: (r.plan.ordenar || []).map((x) => x && x.clave).filter(Boolean),
+        // v17.13.0 — cuál de los exámenes ordenados FIJA la fecha de la toma. Es derivación
+        // pura de lo que el motor ya calculó (no recalcula nada, no mueve ninguna fecha):
+        // la ventana renal manda cuando está activa; si no, el driver cuyo vencimiento se
+        // convirtió en la fecha de toma sin ajustar (ftlSinAjustar). Si ningún vencimiento
+        // la fijó —p. ej. la fecha salió del piso de 14 días porque falta pedir algo— queda
+        // en null y la hoja simplemente no afirma que haya uno: casilla vacía antes que
+        // dato inventado.
+        dicta: mtrAnalitoQueFijaLaToma(r.plan),
         anr: r.plan.anr ? { ventanaDias: r.plan.anr.ventanaDias, vence: r.plan.anr.vence } : null,
       } : null,
       pendientes: {
@@ -32275,6 +32283,18 @@ _vglOfrecerDeshacer(btn);
         diferidos: (r.plan && r.plan.diferidos || []).map((x) => x && x.clave).filter(Boolean),
       },
     };
+  }
+
+  // v17.13.0 — Derivación pura: de los exámenes que se ordenan hoy, ¿cuál fija la fecha de
+  // la toma? Lee SOLO campos que el motor ya dejó escritos en el plan; no evalúa vigencias,
+  // no compara contra hoy y no toca ninguna fecha. Devuelve la clave del analito o null.
+  function mtrAnalitoQueFijaLaToma(plan) {
+    const p = plan || {};
+    if (p.anr && p.anr.vence) return "CREATININA";
+    if (!p.ftlSinAjustar) return null;
+    const cand = (p.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R")
+      && a.vence && !a.vencidoBase && a.vence === p.ftlSinAjustar);
+    return cand.length ? cand[0].clave : null;
   }
 
   // Aplana la hoja a texto etiquetado, compacto y legible. Es lo que ve Gemini y, si
@@ -32329,19 +32349,44 @@ _vglOfrecerDeshacer(btn);
       if (soloRcv.length) L.push("Medicamentos del programa cardiovascular: " + soloRcv.join("; "));
     }
     const pd = h.pendientes || {};
-    if ((pd.faltantes && pd.faltantes.length) || (pd.vencidos && pd.vencidos.length)) L.push("Paraclínicos pendientes/vencidos: " + [].concat(pd.faltantes || [], pd.vencidos || []).join(", "));
+    // v17.13.0 — iban en clave interna (COLESTEROL_LDL) mientras la línea de órdenes ya
+    // salía en nombre legible: el MISMO examen le llegaba al modelo con dos nombres
+    // distintos en el mismo mensaje, y uno de ellos no es español.
+    if ((pd.faltantes && pd.faltantes.length) || (pd.vencidos && pd.vencidos.length)) L.push("Paraclínicos pendientes/vencidos: " + [].concat(pd.faltantes || [], pd.vencidos || []).map(mtrNombreLegibleAnalito).join(", "));
     // v17.7.3 — el plan que el motor YA decidió. Va explícito para que el modelo lo CITE en
     // vez de proponer uno suyo: las fechas y la lista de órdenes son deterministas y no se
     // le delegan a un LLM (lo dice la cabecera del propio promptware).
     const pl = h.plan || {};
-    if (pl.ordenar && pl.ordenar.length) L.push("Exámenes que YA se van a ordenar en esta toma: " + pl.ordenar.join(", "));
-    if (pd.diferidos && pd.diferidos.length) L.push("Exámenes vigentes que NO entran en esta toma (diferidos, quedan para la siguiente): " + pd.diferidos.join(", "));
+    // v17.13.0 — ENCARGO DEL MÉDICO (27-ago): «usa el contexto de drivers y pasajeros que
+    // tiene el promptware, acá también es válido». El motor ya distingue el examen que DICTA
+    // la fecha de la toma (el driver cuyo vencimiento fijó la FTL, o la creatinina cuando
+    // manda la ventana renal) de los que solo se enganchan a esa misma muestra — y la hoja
+    // lo aplanaba en una lista donde todos pesaban igual, así que el modelo justificaba la
+    // toma sobre cualquiera, a veces sobre un pasajero.
+    // Los términos internos (DRIVER, PASAJERO, COSECHA, FTL, ANR) NO salen de aquí: el
+    // médico fue explícito en que esa jerga es del programador, no del usuario final. La
+    // hoja los traduce a español clínico llano ANTES de que el modelo los vea, que es la
+    // única defensa real — un prompt que prohíbe una palabra que igual le llega es más
+    // frágil que no mandarle nunca la palabra.
+    if (pl.ordenar && pl.ordenar.length) {
+      const _nom = (k) => mtrNombreLegibleAnalito(k);
+      L.push("Exámenes que YA se van a ordenar en esta toma: " + pl.ordenar.map(_nom).join(", "));
+      const dicta = (pl.dicta && pl.ordenar.indexOf(pl.dicta) >= 0) ? pl.dicta : null;
+      if (dicta) {
+        const resto = pl.ordenar.filter((k) => k !== dicta);
+        L.push("El examen que fija la fecha de la toma es " + _nom(dicta)
+          + (resto.length ? "; los demás (" + resto.map(_nom).join(", ") + ") se piden para aprovechar la misma muestra y no fijan la fecha." : "; es el único de esta toma."));
+      }
+    }
+    if (pd.diferidos && pd.diferidos.length) L.push("Exámenes vigentes que NO entran en esta toma (diferidos, quedan para la siguiente): " + pd.diferidos.map(mtrNombreLegibleAnalito).join(", "));
     if (pl.ftl || pl.control) {
       L.push("Fechas ya calculadas: toma de laboratorios " + (pl.ftl || "sin definir")
         + " · control " + (pl.control || "sin definir")
         + (pl.motivoFtl ? " (" + pl.motivoFtl + ")" : ""));
     }
-    if (pl.anr) L.push("Agujero negro renal ACTIVO: la creatinina vence el " + pl.anr.vence + ", dentro de la ventana de " + pl.anr.ventanaDias + " días, y por eso se adelanta a esta misma toma.");
+    // v17.13.0 — el rótulo decía «Agujero negro renal ACTIVO», que es el apodo interno del
+    // motor. El médico pidió que esa jerga no salga del código: se enuncia el hecho clínico.
+    if (pl.anr) L.push("Vigilancia de la función renal: la creatinina vence el " + pl.anr.vence + ", dentro de la ventana de " + pl.anr.ventanaDias + " días de vigilancia renal, y por eso se adelanta a esta misma toma.");
     // v17.9.0 — al final a propósito: es el bloque más largo y el que menos se resume. Va
     // después de lo calculado por el motor para que, si algo hay que recortar por longitud,
     // se recorte esto y no las cifras que el modelo tiene prohibido inventar.
@@ -32485,12 +32530,59 @@ _vglOfrecerDeshacer(btn);
   // Ambos datos SIGUEN disponibles para el médico — Análisis y Plan si recibe HECHOS DEL
   // PACIENTE, que es donde ya se interpretan labs y riesgo — esto solo saca lo que sobra de
   // Enfermedad Actual, no borra información en ningún otro lado.
+  // v17.13.0 — BLOQUE DE PRECEDENCIA, compartido por los tres prompts largos.
+  // Motivo: entre la v17.7.3 y la v17.12.0 la hoja de hechos creció con el examen físico
+  // completo, el uroanálisis, el síndrome metabólico, el plan con sus fechas y —desde la
+  // v17.10.0— la historia clínica entera tal como Everest la guarda («--- LO REGISTRADO EN
+  // LA HISTORIA CLÍNICA DE EVEREST ---», dentro de HECHOS DEL PACIENTE). NINGÚN prompt
+  // nombraba ese bloque nuevo. Es la regla que este mismo archivo escribió en la v17.7.3:
+  // un dato que llega al JSON y que el prompt no nombra es un dato que no llegó.
+  // Los rótulos de aquí abajo son EXACTAMENTE los que emite mtrRedaccionPrompt al armar
+  // `bloques` (más el de la hoja). Si alguno se renombra allá y no aquí, el modelo vuelve a
+  // buscar un bloque que no existe — por eso una prueba de suite_57 compara ambas listas.
+  // Va AL PRINCIPIO de cada prompt a propósito: el modelo por defecto es un flash-lite, y
+  // al final este bloque competiría con las reglas de formato de salida.
+  const MTR_PRECEDENCIA_SYS = [
+    "# FUENTES Y SU ORDEN DE MANDO",
+    "Solo existen los bloques que recibes abajo. Si dos se contradicen, manda el de arriba:",
+    "1. INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN — lo que él te pide expresamente para este borrador.",
+    "2. DATOS APORTADOS POR EL MÉDICO PARA ESTA NOTA — lo que anotó en la consulta de HOY.",
+    "3. TEXTO YA REGISTRADO EN LA HISTORIA HOY — lo que él lleva escrito en la casilla en este momento.",
+    "4. LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST (viene dentro de HECHOS DEL PACIENTE) — antecedentes patológicos y familiares, hábitos, revisión por sistemas, examen físico y el texto ya guardado de esta historia.",
+    "5. HECHOS DEL PACIENTE (y, en la nota, el JSON DEL MOTOR) — lo que el asistente ya calculó: función renal, riesgo cardiovascular, metas, laboratorios, plan de exámenes y fechas. NO recalcules ninguno: cítalos como vienen.",
+    "Lo que no esté en esos bloques NO EXISTE: no lo inventes, no lo supongas, no lo deduzcas de lo típico en un paciente parecido.",
+    "",
+    "# CÓMO SE LEE LA HISTORIA DE EVEREST",
+    "- Un campo en 'no' o 'false' ES UN HECHO: significa que el médico lo evaluó y lo descartó expresamente (p. ej. 'infarto de miocardio: no' = descartado). Un campo AUSENTE significa que no se preguntó. Son cosas distintas y jamás se tratan igual: de un campo ausente no se afirma ni que está ni que no está.",
+    "- De los antecedentes negativos escribe SOLO los pertinentes al motivo de consulta y al cuadro de hoy. El resto se calla: esto es semiología, no un inventario de la base de datos.",
+    "- Los identificadores de campo del sistema (sedentarismo, antecedentePatologicos, revisionSistema y similares) NUNCA se escriben: se traducen a lenguaje clínico.",
+    "",
+    "# EL TEXTO QUE EL MÉDICO YA ESCRIBIÓ",
+    "El texto ya redactado por el médico —el de la casilla de hoy y el guardado en la historia de Everest— es MATERIA PRIMA CLÍNICA: reescríbelo mejorado, con la semiología completa y la estructura y el lenguaje que exige la Resolución 1995 de 1999, en vez de repetirlo tal cual o de ignorarlo.",
+    "- CONSERVA todos y cada uno de los hechos que él consignó. Suprimir un dato suyo está PROHIBIDO.",
+    "- NO alteres ninguna cifra, fecha, dosis ni unidad que él haya escrito: se transcriben exactas.",
+    "- NO agregues ningún hecho que no esté en los bloques de arriba.",
+    "Lo que produces es un BORRADOR que el médico lee, edita y aprueba: nunca reemplaza su texto por su cuenta.",
+    "SI NO HAY TEXTO PREVIO, la sección se redacta COMPLETA desde cero con todo lo que traen los bloques: no la dejes corta por falta de un borrador de partida — el material está en la historia de Everest y en los hechos calculados.",
+    "",
+    "# JERGA INTERNA — PROHIBIDA EN LA SALIDA",
+    "Nunca escribas términos de logística interna del asistente ni sus siglas: AGUJERO NEGRO RENAL, ANR, FTL, COSECHA, DRIVER, DRIVER DICTADOR, PASAJERO, MODO ESTABLE, ESTADO A/D/R, BLOQ. Si algo así apareciera en los datos, tradúcelo a una frase clínica humana (por ejemplo: 'se adelanta el control de función renal para no dejarla vencer').",
+  ].join("\n");
+
   const MTR_EA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "# ROL",
     "Actúa como un médico general colombiano experto en semiología clínica y auditoría de historias clínicas bajo la Resolución 1995 de 1999. Redactas la sección ENFERMEDAD ACTUAL de la consulta de HOY, en primera persona del médico que documenta (refiere, niega, se evidencia). No preguntas ni pides datos: usas exclusivamente lo entregado.",
     "",
     "# FUENTE DE VERDAD",
-    "Solo los HECHOS DEL PACIENTE, el TEXTO YA REGISTRADO y los DATOS APORTADOS POR EL MÉDICO que recibas. CERO INFERENCIA: si un dato no está, para ti no existe — no lo inventes, no lo supongas, y no escribas 'no se registró' salvo necesidad clínica.",
+    "Las del bloque de arriba, en ese orden de mando. CERO INFERENCIA: si un dato no está, para ti no existe — no lo inventes, no lo supongas, y no escribas 'no se registró' salvo necesidad clínica.",
+    "",
+    "# LO QUE SIEMPRE VA (si consta en los bloques)",
+    "Sexo y edad · antecedentes pertinentes en extenso con su tiempo de evolución y su manejo actual · la cronología desde el último control · la semiotecnia de cada síntoma relevante, con sus positivos Y sus negativos pertinentes · la adherencia farmacológica · los estilos de vida cuantificados · las cifras de HOY que consten.",
+    "",
+    "# LO QUE NUNCA VA, AUNQUE TE LLEGUE EN LOS DATOS",
+    "Resultados de laboratorio y paraclínicos · clasificación de riesgo cardiovascular · metas terapéuticas · el plan de exámenes y sus fechas · quejas administrativas · siglas de diagnósticos · frases de relleno · cualquier cifra de signo vital que no conste. (Cada punto está detallado abajo en PROHIBIDO.)",
     "",
     "# CONTENIDO OBLIGATORIO (en este orden narrativo)",
     "1. Apertura: sexo, edad, antecedentes pertinentes EN EXTENSO con su tiempo de evolución y el manejo actual (medicamentos con dosis y frecuencia), integrados en la narración, no como lista.",
@@ -32536,8 +32628,13 @@ _vglOfrecerDeshacer(btn);
   // (su fuerte es extraer y plantillar, no razonar largo), y cada casilla es una llamada
   // pequeña e independiente.
   const MTR_BASE_CASILLA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "Actúa como un médico general colombiano que documenta la consulta de HOY en la historia clínica (Resolución 1995 de 1999).",
-    "FUENTE DE VERDAD: únicamente los HECHOS DEL PACIENTE, el TEXTO YA REGISTRADO, los DATOS APORTADOS y las INSTRUCCIONES DEL MÉDICO que recibas. CERO INFERENCIA: si un dato no está, no existe — no lo inventes ni lo supongas.",
+    // v17.13.0 — enumeraba tres fuentes y se le habían quedado afuera la historia de Everest
+    // (que llega desde la v17.10.0) y el orden entre ellas. Ambas cosas las enuncia ahora,
+    // una sola vez, el bloque de precedencia de arriba.
+    "FUENTE DE VERDAD: únicamente los bloques enumerados arriba. CERO INFERENCIA: si un dato no está, no existe — no lo inventes ni lo supongas.",
     "PROHIBIDO: siglas de diagnósticos (escribe Hipertensión Arterial, Diabetes Mellitus Tipo 2, Enfermedad Renal Crónica…), quejas administrativas, frases de relleno ('paciente estable', 'sin cambios'), viñetas, markdown, saludos, preámbulos y notas al pie.",
     "PERMITIDO abreviar solo unidades y posología: mg, kg, mmHg, lpm, dL, c/8h, v.o.",
     "SALIDA: prosa continua EN MAYÚSCULAS SOSTENIDAS, terminología médica formal. Responde ÚNICAMENTE con el texto final, sin explicar nada.",
@@ -32562,6 +32659,12 @@ _vglOfrecerDeshacer(btn);
     "3. SU ESTILO DE VIDA: dieta ajustada a SUS patologías (sal si hipertensión, azúcares si diabetes, proteínas según su función renal), actividad física adaptada a su edad y condición (frecuencia y minutos), y lo que aplique de tabaco/alcohol SOLO si consta en sus datos.",
     "4. SUS EXÁMENES Y CITA: qué exámenes le ordenaron hoy, cuándo tomárselos, si requieren ayuno cuando conste, y la fecha de su próximo control.",
     "5. SIGNOS DE ALARMA PERSONALIZADOS: por cuáles síntomas debe consultar a urgencias SIN ESPERAR CITA, elegidos según SUS patologías (p. ej. en diabetes: sudoración fría con temblor o confusión; en enfermedad renal: disminución marcada de la orina o hinchazón progresiva; en riesgo cardiovascular: dolor opresivo en el pecho, dificultad para respirar, pérdida súbita de fuerza o del habla, desviación de la cara, dolor de cabeza intenso e inusual).",
+    "SIEMPRE van los cinco puntos de arriba que tengan datos: sus medicamentos, sus metas, su estilo de vida, sus exámenes con fecha y sus signos de alarma.",
+    // v17.13.0 — el paciente y su familia LEEN esta casilla. Con la historia de Everest
+    // ahora en el contexto (109 marcaciones con nombres de campo del sistema), el riesgo de
+    // que un identificador crudo termine impreso en la hoja del paciente es real.
+    "NUNCA escribas identificadores de campo del sistema ni pares clave-valor ('sedentarismo: sí', 'antecedentePatologicos', 'revisionSistema', 'RAC', 'FTL'): esto lo lee el paciente. Todo se dice en palabras que él entienda.",
+    "NUNCA lo que no conste en sus datos: si no sabes su dosis, su cifra o su fecha, no la escribas — mejor una recomendación menos que una inventada.",
     "Frases cortas separadas por punto. Sin numerar, sin viñetas. Entre 80 y 160 palabras según los datos disponibles.",
   ].join("\n");
   // v17.1.0 (#110) — RETIRADO `MTR_CRONICOS_SYS`. Era el prompt de la casilla de Ruta
@@ -32571,6 +32674,8 @@ _vglOfrecerDeshacer(btn);
   // v14.2.0 — NOTA CLÍNICA (copiloto del médico, SIN la consola interactiva /meds//labs//ok:
   // el médico edita el resultado antes de copiarlo). Se basa en el JSON v68 del motor.
   const MTR_NOTA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "# ROL",
     "Eres un médico internista senior y auditor médico-legal experto en el sistema de salud colombiano y en riesgo cardiovascular. Generas de una sola vez la NOTA CLÍNICA FINAL para la historia clínica electrónica de ESTE paciente.",
     "",
@@ -32579,6 +32684,17 @@ _vglOfrecerDeshacer(btn);
     "- Un campo en null, vacío o ausente significa DATO NO DISPONIBLE (no se midió o no se pudo calcular): NO lo menciones ni lo interpretes como valor real. NUNCA escribas 'TFG 0', 'estadio terminal' ni 'meta LDL menor a 0' a partir de un campo vacío; si falta la función renal o la meta, simplemente no las afirmes.",
     "- DOBLE TFG: el ESTADIO CLÍNICO (CKD-EPI: estadio_clinico/tfg_ckdepi) gobierna decisiones clínicas, ajuste de dosis y remisión; el ADMINISTRATIVO (Cockcroft-Gault: estadio_administrativo/tfg_cg) es solo referencia logística de agenda.",
     "- USA los campos nota_clinica y alertas_dosis (escritos para la historia), puliendo la redacción. JAMÁS copies ni parafrasees technical_justification ni su jerga logística (AGUJERO NEGRO RENAL/ANR, MODO ESTABLE, COSECHA, ESTADO A/D/R, FTL, DRIVER DICTADOR): si aparece, tradúcela a frase clínica humana.",
+    "",
+    "",
+    "# LO QUE SIEMPRE VA (si el dato consta)",
+    "El blindaje médico-legal que corresponda · las dos tasas de filtración con su papel (la clínica gobierna, la administrativa es referencia) · cada ajuste de dosis renal con su motivo y la tasa usada · la meta de LDL y el colesterol no-HDL con su lectura de meta · las fechas y los exámenes YA decididos, CITADOS tal como vienen.",
+    "",
+    "# LO QUE NUNCA VA",
+    "Recalcular filtrado, riesgo o metas · proponer fechas u órdenes propias, moverlas o agregarles exámenes · jerga logística interna sin traducir · afirmar sobre un campo vacío · datos de otro paciente.",
+    // v17.13.0 — la hoja ya dice cuál examen FIJA la fecha de la toma y cuáles se piden para
+    // aprovechar la misma muestra. Sin esta línea el modelo justificaba la toma sobre
+    // cualquiera de la lista, a veces sobre uno que solo iba de acompañante.
+    "- LA TOMA SE JUSTIFICA SOBRE EL EXAMEN QUE FIJA SU FECHA (la hoja lo nombra explícitamente). Los demás se mencionan como aprovechamiento de la misma muestra, nunca como el motivo de la toma. Si la hoja no nombra ninguno, no afirmes cuál manda.",
     "",
     "# BLINDAJE MÉDICO-LEGAL (aplícalo siempre que corresponda)",
     "1. Con ajustes de metas o medicamentos: 'SE REALIZAN AJUSTES TERAPÉUTICOS Y/O DE METAS CON BASE EN EL PROTOCOLO INSTITUCIONAL DE RIESGO CARDIOVASCULAR (CONSENSO COLOMBIANO DE DISLIPIDEMIA 2024) Y EN LA FUNCIÓN RENAL ACTUAL (CKD-EPI 2021), EN EL MARCO DE LA RUTA INTEGRAL DE ATENCIÓN EN SALUD (RESOLUCIÓN 3280/2018).'",
@@ -33019,7 +33135,13 @@ _vglOfrecerDeshacer(btn);
     "Paraclínicos con resultado descriptivo:", "Síndrome metabólico:",
     "Exámenes que YA se van a ordenar en esta toma:",
     "Exámenes vigentes que NO entran en esta toma",
-    "Fechas ya calculadas:", "Agujero negro renal ACTIVO:",
+    "Fechas ya calculadas:",
+    // v17.13.0 — los dos rótulos siguientes cambiaron/nacieron con la traducción de la jerga
+    // interna a español clínico. Este filtro compara por TEXTO EXACTO: si el rótulo de la
+    // hoja y el de esta lista se separan, el filtro deja de reconocer su propia línea y
+    // falla en silencio (ver el comentario de «Signos vitales:» en mtrHojaDeHechosTexto).
+    "Vigilancia de la función renal:",
+    "El examen que fija la fecha de la toma es",
   ];
   function mtrQuitarDatosProhibidosEA(texto) {
     if (!texto) return "";
@@ -33566,7 +33688,16 @@ _vglOfrecerDeshacer(btn);
     return { ok: false, motivo: "casilla_no_aparecio", pestania: info.pestania };
   }
 
-  function mtrInsertarEnCasillaModo(modo, texto, docId, doc) {
+  // v17.13.0 — `opciones.reemplazar`. El médico pidió (27-ago) que la IA no solo lea su
+  // texto sino que lo devuelva reescrito y mejorado según la norma y la semiología. Eso
+  // choca de frente con la regla de la casa —«la casilla del médico es sagrada: ningún
+  // botón sobrescribe EN SILENCIO algo que él escribió a mano»— y la única resolución que
+  // respeta las dos es esta: la reescritura se le entrega como BORRADOR en el modal, y
+  // pisar la casilla exige que él lo confirme una vez visto.
+  // El valor por defecto NO cambia: sin `reemplazar` la función rechaza igual que siempre
+  // (`motivo:"ocupada"`) y devuelve el `previo` intacto. Solo el flujo de confirmación
+  // explícita pasa `reemplazar:true`, y aun entonces se devuelve `previo` para deshacer.
+  function mtrInsertarEnCasillaModo(modo, texto, docId, doc, opciones) {
     const info = MTR_CASILLAS_REDACTOR[modo];
     if (!info || !texto || !String(texto).trim()) return { ok: false, motivo: "sin_texto" };
     // v17.6.59 — auditoría 25-ago (1.21): vglEscrituraPermitida (el dead-man switch) tenía
@@ -33583,9 +33714,15 @@ _vglOfrecerDeshacer(btn);
     const el = mtrCasillaDeModo(modo, doc);
     if (!el) return { ok: false, motivo: "sin_casilla", pestania: info.pestania };
     const actual = String(el.value == null ? "" : el.value).trim();
-    if (actual !== "") return { ok: false, motivo: "ocupada", el: el, previo: el.value };
-    try { setNgValue(el, String(texto).trim()); return { ok: true, motivo: "insertado", el: el }; }
-    catch (e) { return { ok: false, motivo: "error" }; }
+    const reemplazar = !!(opciones && opciones.reemplazar === true);
+    if (actual !== "" && !reemplazar) return { ok: false, motivo: "ocupada", el: el, previo: el.value };
+    const previo = el.value;
+    try {
+      setNgValue(el, String(texto).trim());
+      return (actual !== "")
+        ? { ok: true, motivo: "reemplazado", el: el, previo: previo }
+        : { ok: true, motivo: "insertado", el: el };
+    } catch (e) { return { ok: false, motivo: "error" }; }
   }
 
   // v17.6.10 — mtrInsertarNota (inserción de nota partida) se retiró: sin llamador
@@ -34977,12 +35114,24 @@ _vglOfrecerDeshacer(btn);
           const bCan = document.createElement("button");
           bCan.className = "vgl-agm-btn sec"; bCan.textContent = "Dejarla como está"; bCan.style.marginLeft = "6px";
           bRee.addEventListener("click", () => {
-            if (typeof _pacienteSigueAbierto === "function" && resumen._docId && !_pacienteSigueAbierto(resumen._docId)) {
-              estado.textContent = "⚠ La historia abierta ya no es la de este paciente. No se reemplazó nada."; return;
+            // v17.13.0 — este botón escribía con setNgValue a pelo, saltándose el dead-man
+            // switch (vglEscrituraPermitida) que la inserción normal SÍ consulta: con la
+            // escritura suspendida, «Insertar» se negaba y «Reemplazar» pisaba igual — y
+            // pisando texto del médico, que es el caso más grave de los dos. Ahora pasa por
+            // mtrInsertarEnCasillaModo con {reemplazar:true}: mismas guardas que la
+            // inserción normal (dead-man, paciente abierto, casilla viva) y el reemplazo
+            // solo ocurre tras este clic explícito suyo.
+            const rr = mtrInsertarEnCasillaModo(modo, salida.value, resumen._docId, undefined, { reemplazar: true });
+            if (!rr.ok) {
+              estado.textContent = (rr.motivo === "otro_paciente")
+                ? "⚠ La historia abierta ya no es la de este paciente. No se reemplazó nada."
+                : (rr.motivo === "deadman")
+                  ? "⚠ La escritura en la historia está suspendida. No se reemplazó nada."
+                  : "No se pudo reemplazar.";
+              return;
             }
             try {
-              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: res.el, prev: res.previo }], "Redactor IA");
-              setNgValue(res.el, String(salida.value).trim());
+              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: rr.el, prev: rr.previo }], "Redactor IA");
               _registrarInsercion();
               estado.innerHTML = "";
               const okTxt = document.createElement("span");

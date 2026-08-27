@@ -37,7 +37,7 @@ module.exports = {
     "mtrJsonV68DesdeResumen", "mtrLeerTextoLibreHistoria",
     "mtrCasillaDeModo", "mtrRedactorModoSugerido", "mtrInsertarEnCasillaModo",
     "mtrCacheResumenEdadMin", "mtrCacheResumenBorrar",
-    "mtrCalcularDeltaEdicion",
+    "mtrCalcularDeltaEdicion", "mtrAnalitoQueFijaLaToma",
     "_vglClicablePestana", "_vglIrAPestanaYEsperar",
   ],
 
@@ -1663,7 +1663,13 @@ module.exports = {
       const txt = api.mtrHojaDeHechosTexto(h);
       t.cierto(txt.indexOf("Exámenes que YA se van a ordenar") >= 0, "las órdenes, en el texto");
       t.cierto(txt.indexOf("Fechas ya calculadas:") >= 0, "las fechas, en el texto");
-      t.cierto(txt.indexOf("Agujero negro renal ACTIVO") >= 0, "y el ANR explicado, no en clave");
+      // v17.13.0 — esta línea exigía el rótulo «Agujero negro renal ACTIVO», que es el apodo
+      // INTERNO del motor. El médico fue explícito (27-ago): «el usuario final no debe saber
+      // sobre esos términos, el ANR y todo lo demás solamente es conmigo el programador».
+      // La prueba fijaba jerga, no una regla: ahora exige el hecho clínico dicho en llano y,
+      // además, que el apodo NO viaje — que es lo que de verdad hay que proteger.
+      t.cierto(txt.indexOf("Vigilancia de la función renal:") >= 0, "y la ventana renal explicada en llano");
+      t.falso(/agujero negro/i.test(txt), "sin el apodo interno del motor: eso es del programador, no del médico");
     });
 
     t.caso("v17.7.3 — el síndrome metabólico llega con su porqué, no solo con su veredicto", () => {
@@ -1684,7 +1690,7 @@ module.exports = {
       t.igual(vacia.plan, null, "sin plan, null — no se inventan fechas");
       t.igual(vacia.labsTexto.length, 0, "y ningún paraclínico descriptivo de la nada");
       const txt = api.mtrHojaDeHechosTexto(vacia);
-      for (const rotulo of ["circunferencia abdominal", "Uroanálisis:", "Síndrome metabólico:", "Fechas ya calculadas:", "Agujero negro renal"]) {
+      for (const rotulo of ["circunferencia abdominal", "Uroanálisis:", "Síndrome metabólico:", "Fechas ya calculadas:", "Vigilancia de la función renal:"]) {
         t.falso(txt.indexOf(rotulo) >= 0, "sin dato, la línea «" + rotulo + "» no se fabrica");
       }
     });
@@ -1697,16 +1703,181 @@ module.exports = {
         "Fechas ya calculadas: toma de laboratorios 2026-08-29 · control 2026-09-04",
         "Síndrome metabólico: SÍ cumple criterios (5 de 5 evaluables)",
         "Exámenes que YA se van a ordenar en esta toma: CREATININA",
-        "Agujero negro renal ACTIVO: la creatinina vence el 2026-08-30",
+        "Vigilancia de la función renal: la creatinina vence el 2026-08-30",
         "Paraclínicos con resultado descriptivo: NITRITOS POSITIVO",
         "Refiere adecuada adherencia al tratamiento.",
       ].join("\n");
       const limpio = api.mtrQuitarDatosProhibidosEA(borrador);
       t.cierto(limpio.indexOf("consulta por control") >= 0, "la semiotecnia se respeta");
       t.cierto(limpio.indexOf("adherencia") >= 0, "y lo que sí es Enfermedad Actual también");
-      for (const rotulo of ["Fechas ya calculadas:", "Síndrome metabólico:", "Exámenes que YA", "Agujero negro renal", "Paraclínicos con resultado descriptivo:"]) {
+      for (const rotulo of ["Fechas ya calculadas:", "Síndrome metabólico:", "Exámenes que YA", "Vigilancia de la función renal:", "Paraclínicos con resultado descriptivo:"]) {
         t.falso(limpio.indexOf(rotulo) >= 0, "«" + rotulo + "» no puede quedarse en la Enfermedad Actual");
       }
+    });
+
+    // =========================================================================
+    //  v17.13.0 — LOS PROMPTS APRENDEN A USAR EL CONTEXTO QUE YA RECIBÍAN
+    //  Entre la v17.7.3 y la v17.12.0 la hoja creció con el examen físico, el
+    //  uroanálisis, el síndrome metabólico, el plan con sus fechas y la historia
+    //  clínica entera de Everest — y ningún prompt nombraba el bloque nuevo.
+    //  Regla que este proyecto ya se había escrito: un dato que llega al JSON y
+    //  que el prompt no nombra es un dato que no llegó.
+    // =========================================================================
+
+    // Una hoja con TODO puesto: es la única forma de comprobar que cada rótulo que
+    // el prompt cita existe de verdad en lo que se manda. Datos sintéticos, cero PHI.
+    const _hojaCompleta = () => api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+      ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+      hcEverest: {
+        secciones: {
+          antecedentePatologicos: { hipertensionArterial: true, infartoMiocardio: false },
+          habitosGestionRiesgo: { sedentarismo: true },
+        },
+        textos: { ultimaEnfermedad: "PACIENTE ASINTOMATICA, ADHERENTE" },
+      },
+    });
+
+    t.caso("v17.13.0 — todo rótulo que el prompt cita, el mensaje lo emite de verdad", () => {
+      // LA prueba que impide la próxima desconexión: barre los nombres de bloque que el
+      // bloque de precedencia enumera y exige que cada uno aparezca en el mensaje armado.
+      // Si alguien renombra un bloque en mtrRedaccionPrompt y no en el prompt (o al revés),
+      // esto se pone rojo en vez de dejar al modelo buscando algo que no existe.
+      const p = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {
+        contextoLibre: "PACIENTE REFIERE CEFALEA LEVE",
+        datosExtra: { tfgAportada: "72" },
+        indicaciones: "Enfatizar la adherencia",
+      });
+      const citados = [];
+      const re = /^\d+\. ([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 ]+?) (?:—|\()/gm;
+      let m;
+      while ((m = re.exec(p.system)) !== null) citados.push(m[1].trim());
+      t.cierto(citados.length >= 4, "el bloque de precedencia enumera las fuentes (" + citados.length + ")");
+      for (const rotulo of citados) {
+        t.cierto(p.user.indexOf(rotulo) >= 0, "«" + rotulo + "» que el prompt cita, sí viaja en el mensaje");
+      }
+    });
+
+    t.caso("v17.13.0 — los tres prompts nombran la historia clínica de Everest", () => {
+      const hoja = _hojaCompleta();
+      for (const modo of ["enfermedad_actual", "analisis_plan", "recomendaciones"]) {
+        const p = api.mtrRedaccionPrompt(modo, hoja, {});
+        t.cierto(p.system.indexOf("LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST") >= 0,
+          modo + ": el prompt nombra el bloque que la hoja lleva emitiendo desde la v17.10.0");
+      }
+      t.cierto(api.mtrHojaDeHechosTexto(hoja).indexOf("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---") >= 0,
+        "y la hoja lo emite con ese mismo nombre");
+    });
+
+    t.caso("v17.13.0 — la precedencia se enuncia, y va antes que el formato de salida", () => {
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {});
+      const iPrec = p.system.indexOf("# FUENTES Y SU ORDEN DE MANDO");
+      t.cierto(iPrec >= 0, "el bloque de precedencia existe");
+      const iFormato = p.system.indexOf("# FORMATO DE SALIDA");
+      t.cierto(iFormato > iPrec, "y va ANTES del formato: al final competiría con él en un modelo lite");
+      const iMedico = p.system.indexOf("DATOS APORTADOS POR EL MÉDICO");
+      const iMotor = p.system.indexOf("5. HECHOS DEL PACIENTE");
+      t.cierto(iMedico >= 0 && iMotor > iMedico,
+        "el médico manda por encima de lo que calculó el motor, no al revés");
+    });
+
+    t.caso("v17.13.0 — un «no» documentado no es lo mismo que un campo ausente", () => {
+      // Es la diferencia entre «se descartó» y «no se preguntó». Sin decirlo, el modelo
+      // trata los 109 campos en false de la historia como huecos y se los calla, o peor,
+      // los afirma al revés.
+      const p = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {});
+      t.cierto(/ES UN HECHO/.test(p.system), "el prompt dice que un 'no' ES UN HECHO");
+      t.cierto(/AUSENTE significa que no se preguntó/.test(p.system), "y que un campo ausente es otra cosa");
+      t.cierto(/SOLO los pertinentes al motivo de consulta/.test(p.system),
+        "y de los negativos solo se escriben los pertinentes: semiología, no inventario");
+    });
+
+    t.caso("v17.13.0 — el texto del médico se reescribe mejorado, sin perder ni un hecho suyo", () => {
+      // Encargo del médico (27-ago): «sí quiero que se reescriba de forma inteligentemente
+      // mejorada según las normas y la semiología». Con dos límites que él mismo impuso:
+      // no se le quita nada de lo que escribió, y no se le altera ninguna cifra.
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {
+        contextoLibre: "PACIENTE ASINTOMATICA",
+      });
+      t.cierto(/reescríbelo mejorado/.test(p.system), "se reescribe, no se repite tal cual");
+      t.cierto(/Resolución 1995 de 1999/.test(p.system), "con la norma que rige la historia clínica");
+      t.cierto(/Suprimir un dato suyo está PROHIBIDO/.test(p.system), "sin perder ningún hecho del médico");
+      t.cierto(/NO alteres ninguna cifra, fecha, dosis ni unidad/.test(p.system), "y sin tocarle una cifra");
+      t.cierto(/BORRADOR que el médico lee, edita y aprueba/.test(p.system),
+        "y sigue siendo un borrador: la casilla es suya");
+      t.cierto(/SI NO HAY TEXTO PREVIO/.test(p.system),
+        "y con la casilla vacía se redacta completa desde cero, no corta por falta de borrador");
+    });
+
+    t.caso("v17.13.0 — la casilla ocupada sigue intacta mientras el médico no confirme", () => {
+      // La regla de la casa entera en una prueba: la reescritura llega como borrador, y
+      // pisar lo que él escribió a mano exige un clic explícito suyo.
+      const c = cargar({ silencioso: true });
+      const ta = { value: "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", isConnected: true, dispatchEvent: () => {} };
+      c.env.doc.querySelector = (sel) => (sel === `textarea[name="UltimaEnfermedad"]` ? ta : null);
+      const doc = c.env.doc; const api2 = c.api;
+      {
+        const r1 = api2.mtrInsertarEnCasillaModo("enfermedad_actual", "BORRADOR NUEVO DE LA IA", null, doc);
+        t.falso(r1.ok, "sin confirmar, no se inserta");
+        t.igual(r1.motivo, "ocupada", "y se dice por qué");
+        t.igual(ta.value, "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", "la casilla quedó EXACTAMENTE como estaba");
+        const r2 = api2.mtrInsertarEnCasillaModo("enfermedad_actual", "BORRADOR NUEVO DE LA IA", null, doc, { reemplazar: true });
+        t.cierto(r2.ok, "con la confirmación explícita, sí se reemplaza");
+        t.igual(r2.motivo, "reemplazado", "y se distingue de una inserción en casilla vacía");
+        t.igual(r2.previo, "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", "devolviendo el texto anterior para Deshacer");
+        t.igual(ta.value, "BORRADOR NUEVO DE LA IA", "ahora sí quedó el borrador");
+      }
+    });
+
+    t.caso("v17.13.0 — la hoja dice cuál examen fija la fecha y cuáles se enganchan", () => {
+      // Encargo del médico (27-ago): «usa el contexto de drivers y pasajeros del promptware,
+      // acá también es válido». Sin esto la lista de órdenes era plana y el modelo
+      // justificaba la toma sobre cualquiera de ellas, a veces sobre un acompañante.
+      const h = _hojaCompleta();
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(h.plan.dicta === null || typeof h.plan.dicta === "string",
+        "la hoja trae qué examen fija la fecha, o null si ninguno la fijó");
+      if (h.plan.dicta) {
+        t.cierto(txt.indexOf("El examen que fija la fecha de la toma es") >= 0,
+          "y se dice en el texto que ve el modelo");
+      }
+      // Y la jerga interna NO viaja: el médico fue explícito en que esos términos son del
+      // programador, no del usuario final. La defensa real es no mandarle nunca la palabra.
+      for (const jerga of ["DRIVER", "PASAJERO", "COSECHA", "AGUJERO NEGRO", " FTL", " ANR"]) {
+        t.falso(txt.toUpperCase().indexOf(jerga) >= 0, "«" + jerga.trim() + "» no sale de la hoja");
+      }
+      const p = api.mtrRedaccionPrompt("analisis_plan", h, {});
+      t.cierto(/LA TOMA SE JUSTIFICA SOBRE EL EXAMEN QUE FIJA SU FECHA/.test(p.system),
+        "y el prompt sabe sobre cuál se justifica la toma");
+      t.cierto(/JERGA INTERNA — PROHIBIDA EN LA SALIDA/.test(p.system), "con la jerga prohibida en la salida");
+    });
+
+    t.caso("v17.13.0 — la hoja del paciente no puede llevar identificadores de campo", () => {
+      // Las Recomendaciones las lee el paciente y su familia. Con la historia de Everest en
+      // el contexto (marcaciones con nombre de campo del sistema) el riesgo es real.
+      const p = api.mtrRedaccionPrompt("recomendaciones", _hojaCompleta(), {});
+      t.cierto(/NUNCA escribas identificadores de campo del sistema/.test(p.system),
+        "prohibido explícitamente");
+      t.cierto(p.system.indexOf("sedentarismo: sí") >= 0, "con el ejemplo concreto del pattern que se cuela");
+    });
+
+    t.caso("v17.13.0 — ninguna advertencia clínica se perdió por el camino", () => {
+      // Regla del informe del enjambre: ninguna tanda quita peso a los avisos. Este caso
+      // fija las prohibiciones que ya regían antes de esta versión.
+      const ea = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {}).system;
+      for (const regla of [
+        "Inventar cifras de signos vitales",
+        "Resultados de laboratorio o paraclínicos",
+        "Clasificación de riesgo cardiovascular",
+        "Problemas administrativos",
+      ]) t.cierto(ea.indexOf(regla) >= 0, "Enfermedad Actual conserva: «" + regla + "»");
+      const np = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {}).system;
+      for (const regla of [
+        "NO recalcules TFG",
+        "DOBLE TFG",
+        "AJUSTE DE DOSIS POR FUNCIÓN RENAL",
+        "sin antibiótico a ciegas",
+        "DATO NO DISPONIBLE",
+      ]) t.cierto(np.indexOf(regla) >= 0, "Análisis y Plan conserva: «" + regla + "»");
     });
 
   },

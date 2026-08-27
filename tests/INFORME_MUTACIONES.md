@@ -4456,3 +4456,38 @@ rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 la misma clase de cambio (texto sin lógica) verificado por la misma prueba en bucle sobre
 las 12 formas; cualquier regresión futura en cualquiera de los 10 sitios hace caer esta
 misma prueba.
+
+---
+
+## v17.13.0 — los prompts aprenden a usar el contexto que ya recibían
+
+Entre la v17.7.3 y la v17.12.0 la hoja de hechos creció con el examen físico completo, el
+uroanálisis, el síndrome metabólico, el plan con sus fechas y —desde la v17.10.0— la historia
+clínica entera tal como Everest la guarda. **Ningún prompt nombraba el bloque nuevo**: es la
+regla que el propio proyecto se había escrito en la v17.7.3, *un dato que llega al JSON y que
+el prompt no nombra es un dato que no llegó*. Esta versión los conecta, ordena la precedencia
+entre las fuentes, pide la reescritura mejorada que encargó el médico (27-ago) sin tocarle la
+casilla sin confirmación, y traduce a español clínico la jerga interna del motor antes de que
+el modelo la vea.
+
+Cada mutación se aplicó **una a la vez** sobre el archivo de producción, se corrió el banco
+completo, se confirmó el rojo con la aserción esperada, y se restauró comparando con `diff`
+contra una copia intacta antes de la siguiente. El banco volvió a **2.441/2.441** tras la
+restauración final.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Se quitó del prompt la línea que nombra `LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST` | `suite_57` | *v17.13.0 — los tres prompts nombran la historia clínica de Everest* |
+| 2 | Se invirtió la precedencia: el motor por encima del médico | `suite_57` | *v17.13.0 — la precedencia se enuncia, y va antes que el formato de salida* → *el médico manda por encima de lo que calculó el motor, no al revés* |
+| 3 | Se borró la distinción entre un campo en `false` (documentado como ausente) y un campo ausente (no se preguntó) | `suite_57` | *v17.13.0 — un «no» documentado no es lo mismo que un campo ausente* |
+| 4 | Se renombró en el prompt un bloque (`TEXTO YA REGISTRADO EN LA HISTORIA HOY` → `RESUMEN DEL CONTROL ANTERIOR`) sin renombrarlo en `mtrRedaccionPrompt` | `suite_57` | *v17.13.0 — todo rótulo que el prompt cita, el mensaje lo emite de verdad* |
+| 5 | `reemplazar` pasó a ser el valor por defecto de `mtrInsertarEnCasillaModo` | `suite_57` | *v17.13.0 — la casilla ocupada sigue intacta mientras el médico no confirme* **y** *mtrInsertarEnCasillaModo: vacía inserta; ocupada NO pisa…* (las dos: es la regla de la casa) |
+| 6 | Se aplanó de nuevo la línea de órdenes, sin decir cuál examen fija la fecha | `suite_57` | *v17.13.0 — la hoja dice cuál examen fija la fecha y cuáles se enganchan* |
+| 7 | Se quitó una prohibición clínica del prompt de la nota (`sin antibiótico a ciegas`) | `suite_57` | *v17.13.0 — ninguna advertencia clínica se perdió por el camino* |
+
+**Cuatro pruebas existentes se corrigieron, no se acomodaron**: `suite_57` exigía en tres
+lugares el rótulo literal «Agujero negro renal ACTIVO», que es el apodo INTERNO del motor. El
+médico fue explícito el 27-ago: *«el usuario final no debe saber sobre esos términos, el ANR y
+todo lo demás solamente es conmigo el programador»*. La prueba fijaba jerga, no una regla.
+Ahora exige el hecho clínico dicho en llano («Vigilancia de la función renal:») **y además**
+que el apodo no viaje — que es lo que de verdad había que proteger y nadie comprobaba.
