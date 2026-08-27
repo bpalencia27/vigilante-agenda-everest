@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.8.0
+// @version     17.8.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1682,7 +1682,16 @@
       if (hayFalla) badges.push("Falla terapéutica");
       const pas = Number(factores.paSistolica), pad = Number(factores.paDiastolica);
       const paDescontrolada = (Number.isFinite(pas) && pas >= 160) || (Number.isFinite(pad) && pad >= 100);
-      if (paDescontrolada) badges.push("PA Descontrolada (" + pas + "/" + pad + ")");
+      // v17.8.1 — hallazgo #87. Esto imprimía literalmente «PA Descontrolada (165/NaN)»
+      // cuando solo se había podido leer la sistólica, y «(165/0)» cuando la diastólica
+      // llegaba en cero — una tensión imposible. «NaN» es una palabra de programador y un
+      // 0 es un dato falso: los dos hacen dudar de la cifra que SÍ es real.
+      if (paDescontrolada) {
+        const dosCifras = Number.isFinite(pas) && Number.isFinite(pad) && pad > 0;
+        badges.push(dosCifras
+          ? "PA Descontrolada (" + pas + "/" + pad + ")"
+          : "PA Descontrolada (" + (Number.isFinite(pas) && pas > 0 ? "sistólica " + pas : "diastólica " + pad) + ")");
+      }
 
       const sinResumen = !resumen;
       const dmSinVerificar = sinResumen && esDiabetico;   // no se puede saber si usa insulina
@@ -5454,7 +5463,15 @@
                   _vglFeedbackBoton(btn,
                       _huboEscritura
                           ? "✓ " + r.count + " casillas escritas" + (r.respetadas ? " · " + r.respetadas + " respetadas" : "")
-                          : "✋ Todo ya estaba escrito: no toqué nada" + (r.respetadas ? " (" + r.respetadas + " respetadas)" : ""),
+                          // v17.8.1 — hallazgo #34. Esta frase salía siempre que `count`
+                          // fuera 0, sin mirar por qué. Si además `respetadas` es 0, no es
+                          // que «todo ya estuviera escrito»: es que NINGÚN resultado casó
+                          // con una casilla de esta vista, que es un problema distinto y
+                          // que el médico necesita saber —puede estar en la pestaña
+                          // equivocada, o los nombres del laboratorio no coinciden.
+                          : (r.respetadas
+                              ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
+                              : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                       _huboEscritura ? "verde" : "ambar", "🧬 Auto-Labs (Athenea)");
                   _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
 _vglOfrecerDeshacer(btn);
@@ -9110,17 +9127,42 @@ _vglOfrecerDeshacer(btn);
         total: filas.reduce((s, f) => s + f.n, 0),
         filas: filas.slice(0, 12),
         embudo: { abiertos: abiertos, creadas: creadas, rechazadas: rechazadas, cupoPerdido: cupoPerdido, iaGen: iaGen, abandono: abandono },
+        // v17.8.1 — el estado REAL del envío remoto, para que el texto no tenga que
+        // suponerlo. `repOn()` ya sabe si hay interruptor, URL y transporte.
+        envioActivo: (function () { try { return !!(S.uxTelemetria !== false && repOn()); } catch (e) { return false; } })(),
       };
     } catch (e) { return { total: 0, filas: [], embudo: { abiertos: 0, creadas: 0, rechazadas: 0, cupoPerdido: 0, iaGen: 0, abandono: null } }; }
   }
 
+  // =====================================================================
+  //  v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #156: DOS PANTALLAS DEL MISMO PROGRAMA
+  //  AFIRMABAN LO CONTRARIO SOBRE EL MISMO DATO
+  //  ------------------------------------------------------------------
+  //  «Resumen del turno» aseguraba, sin condiciones, que «la telemetría no sale de este
+  //  equipo» — mientras Ajustes ofrece un interruptor («reporte») que la envía a una hoja
+  //  remota. Y la migración de estreno de v14.2.0 dejó ese interruptor ENCENDIDO, así que
+  //  la frase no era una imprecisión: en la instalación real del médico era falsa.
+  //
+  //  Una promesa sobre a dónde van sus datos no puede depender de que alguien se acuerde de
+  //  actualizar dos textos. Se calcula del estado real, en un solo sitio, y se prueba.
+  //  Nota: se describe el estado, NO se cambia. Encender o apagar el envío es decisión del
+  //  médico y se hace en Ajustes.
+  // =====================================================================
+  function mtrTextoDestinoTelemetria(envioActivo) {
+    return envioActivo === true
+      ? "Los conteos se envían al tablero remoto configurado en Ajustes. Puede apagarlo ahí."
+      : "Conteos locales: no salen de este computador.";
+  }
+
   // Pinta el bloque del tablero para la hoja «Resumen del turno». Puro: recibe los datos.
+  // `t.envioActivo` dice si el reporte remoto está encendido (ver mtrTextoDestinoTelemetria).
   function mtrTableroTelemetriaHtml(t) {
     try {
       if (t === null || t === undefined) return "";
       if (!t.filas.length) {
         return '<div class="vgl-grp"><div class="vgl-chart-cap"><span>TELEMETRÍA LOCAL</span></div>'
-          + '<div class="vgl-prod-nota">Sin eventos en la ventana actual. Los conteos se acumulan por ventana de 30 minutos y no salen del computador.</div></div>';
+          + '<div class="vgl-prod-nota">Sin eventos en la ventana actual. Los conteos se acumulan por ventana de 30 minutos. '
+          + escapeHtml(mtrTextoDestinoTelemetria(t && t.envioActivo)) + '</div></div>';
       }
       const e = t.embudo;
       const pct = (x) => (x === null || x === undefined) ? "—" : x + " %";
@@ -9132,7 +9174,8 @@ _vglOfrecerDeshacer(btn);
         + '<span class="vgl-prod-num">' + e.abiertos + ' abiertos · ' + e.creadas + ' creadas</span>'
         + '<span class="vgl-prod-pct">abandono ' + pct(e.abandono) + '</span></div>'
         + filas
-        + '<div class="vgl-prod-nota">Abandono = agendamientos abiertos que no terminaron en cita creada. Conteos locales: la telemetría no sale de este equipo.</div>'
+        + '<div class="vgl-prod-nota">Abandono = agendamientos abiertos que no terminaron en cita creada. '
+        + escapeHtml(mtrTextoDestinoTelemetria(t && t.envioActivo)) + '</div>'
         + '</div>';
     } catch (e) { return ""; }
   }
@@ -17739,6 +17782,7 @@ _vglOfrecerDeshacer(btn);
 
     const todosLabs = [];
     let _labsSolicitudesNoLeidas = 0;
+    let _labsAtheneaCrudos = null;
 
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
     // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
@@ -17748,6 +17792,10 @@ _vglOfrecerDeshacer(btn);
       // del array que devuelve Athenea, así que la línea de abajo (que copia analito a
       // analito a OTRO array) lo perdía irremediablemente. Se lee ANTES.
       try { _labsSolicitudesNoLeidas = (labsArr && labsArr.__vglIncompleto) || 0; } catch (e) {}
+      // v17.8.1 — `null` («no pude leer el portal») y `[]` («leí y no hay nada») son cosas
+      // distintas y la pantalla las presentaba igual. Se conserva el crudo para poder
+      // decirlo, porque `todosLabs` ya no lo distingue: los dos casos dejan el array vacío.
+      _labsAtheneaCrudos = (labsArr === undefined) ? null : labsArr;
       if (labsArr && labsArr.length) {
         labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
       }
@@ -17810,7 +17858,17 @@ _vglOfrecerDeshacer(btn);
       // Se marca completado y ademas se anota el desenlace, que es lo interesante.
       _fnCompletado = true;
       try { uxTrack("fn.labs.vacio"); uxTrack("fn.labs.complete"); } catch (e) {}
-      if (contentEl) contentEl.innerHTML = `<div class="vgl-agm-err vgl-labs-empty">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #26 (gravedad alta, riesgo clínico).
+      // Este mensaje es una afirmación sobre el PACIENTE y salía también cuando el fallo era
+      // del SISTEMA. `getAtheneaLabsAuto` está escrita a propósito para distinguir los dos
+      // casos —devuelve `null` cuando no pudo leer el portal y `[]` cuando leyó y no hay
+      // nada— y esa distinción se tiraba aquí. En consulta las dos frases llevan a conductas
+      // opuestas: «no tiene exámenes» hace que se los ordene otra vez; «no pude leer el
+      // portal» hace que se vuelva a intentar o se mire a mano.
+      const _noSePudoLeer = (_labsAtheneaCrudos === null) || _labsSolicitudesNoLeidas > 0;
+      if (contentEl) contentEl.innerHTML = _noSePudoLeer
+        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No pude leer el portal de Athenea</b>, así que no sé qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón azul de arriba.</div>`
+        : `<div class="vgl-agm-err vgl-labs-empty">ℹ Athenea respondió y <b>no tiene ningún paraclínico registrado</b> de los últimos 365 días para este paciente. Tampoco Annar ni Citi.<br><br>Verifique directamente en el portal con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
       return;
     }
 
@@ -18128,7 +18186,17 @@ _vglOfrecerDeshacer(btn);
       // distinta disfrazada de la otra — justo lo que la regla "sin dato = sin
       // suposición" prohíbe. Ahora la etiqueta dice la verdad: si no hay Cockcroft-Gault
       // real, se avisa que el número es CKD-EPI y por qué (falta el peso).
-      fila(erc.crcl != null ? "Filtrado (Cockcroft-Gault)" : "Filtrado (CKD-EPI — falta peso para Cockcroft-Gault)",
+      // v17.8.1 — hallazgo #13. La etiqueta acusaba al PESO cada vez que faltaba el
+      // Cockcroft-Gault, fuera cual fuera la causa. Reproducido: paciente con «Peso: 78 kg»
+      // impreso dos filas más arriba y sin creatinina; la fila seguía diciendo «falta peso».
+      // El motor ya publica `erc.faltan` con el insumo real; basta con leerlo en vez de
+      // suponerlo. Acusar al dato equivocado hace perder tiempo de consulta buscando algo
+      // que ya está.
+      fila(erc.crcl != null
+        ? "Filtrado (Cockcroft-Gault)"
+        : "Filtrado (CKD-EPI — para Cockcroft-Gault falta " + escapeHtml(
+            (Array.isArray(erc.faltan) && erc.faltan.length) ? erc.faltan.join(" y ") : "algún dato"
+          ) + ")",
         num(erc.crcl != null ? erc.crcl : erc.egfr, "mL/min"), F_CAL),
       fila("Estadio", erc.estadioAdministrativo || null, F_CAL),
     ]});
@@ -18485,7 +18553,21 @@ _vglOfrecerDeshacer(btn);
       + '</div>';
     const listaOrdenar = d.ordenar.length
       ? d.ordenar.map((x) => filaHtml(x, x.subestado === "vencido" ? "vgl-tab-venc" : "vgl-tab-pedir")).join("")
-      : '<div class="vgl-agm-dinfo">Nada por ordenar: el paciente está al día con su programa.</div>';
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #12 (gravedad alta, riesgo clínico).
+      // Aquí se afirmaba «el paciente está al día con su programa» CADA VEZ que la lista de
+      // ordenar quedaba vacía — incluido el caso en que no hay ningún programa identificado
+      // y por tanto NO SE EVALUÓ NADA. Reproducido con el arnés: paciente sin programa,
+      // `ordenar: 0`, y la pantalla lo declaraba al día. Es la regla fundacional de la casa
+      // al revés: un hueco rellenado con una frase tranquilizadora.
+      //   «no hay nada que pedir» y «no pude mirar» se ven igual en pantalla y son cosas
+      //   opuestas en consulta.
+      // OJO: `d.programa` es un OBJETO ({rector, rotulo, inscritos, porQue}) y por tanto
+      // SIEMPRE es truthy. Un primer intento de este arreglo comprobaba `d.programa` a
+      // secas y no cambiaba nada — lo cazó la prueba de la REGLA D. Lo que dice si hubo
+      // programa es `rector`.
+      : ((d.programa && d.programa.rector)
+        ? '<div class="vgl-agm-dinfo">Nada por ordenar: al día con el programa de ' + escapeHtml(String(d.programa.rotulo || d.programa.rector)) + '.</div>'
+        : '<div class="vgl-agm-err">No hay ningún programa identificado para este paciente, así que <b>no evalué qué exámenes le tocan</b>. Esto no quiere decir que esté al día. Marque el programa en la historia (hipertensión, diabetes o enfermedad renal) y vuelva a abrir el módulo.</div>');
     // v17.0.3 — Reporte real (2 veces): "Sin exámenes vigentes registrados" sonaba a "no
     // encontramos resultados válidos", y confundía/alarmaba porque el médico ACABABA de
     // pegar resultados en Everest. Causa real (revisada en mtrTableroClinico): "vigentes"
@@ -19365,7 +19447,19 @@ _vglOfrecerDeshacer(btn);
       return m;
     };
     const a = aMapa(firmaVieja), b = aMapa(firmaNueva), cambios = [];
-    Object.keys(b).forEach((k) => { if (a[k] !== b[k]) cambios.push(TABLERO_ROTULO_FACTOR[k] || k); });
+    // v17.8.1 — hallazgo #14. El aviso «🔄 Se actualizó con lo que acaba de escribir en la
+    // historia» terminaba diciendo «(_documentados, dislipidemiaDocumentada, ...)»: la firma
+    // de pantalla lleva contadores internos (`_documentados`, `_total`, `_fuente`) y, desde
+    // v17.7.0, el tri-estado completo con prefijo `L.`. Nada de eso es un nombre que el
+    // médico reconozca. Lo que no tenga rótulo de consultorio NO se imprime: es preferible
+    // un aviso que diga «se actualizó» a secas que uno que le enseñe el interior del motor.
+    Object.keys(b).forEach((k) => {
+      if (a[k] === b[k]) return;
+      const rotulo = TABLERO_ROTULO_FACTOR[k];
+      if (rotulo) { cambios.push(rotulo); return; }
+      if (k.charAt(0) === "_" || k.indexOf("L.") === 0) return;   // interno: no se enseña
+      cambios.push(k);
+    });
     return cambios;
   }
 
@@ -34438,7 +34532,23 @@ _vglOfrecerDeshacer(btn);
           try {
             const d = new Date();
             const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
-            r.texto = r.texto.replace(/\[ID\]/g, String(resumen._docId || "SIN_ID")).replace(/\[A[NÑ]O_MES\]/g, anioMes);
+            // v17.8.1 — hallazgo #59. Sin documento del paciente, el encabezado que se
+            // inserta EN LA HISTORIA CLÍNICA quedaba literalmente «#PACIENTE_SIN_ID_#...».
+            // Una palabra de programador dentro de un documento clínico firmado. Si no hay
+            // documento, no se escribe encabezado: es la regla de la casa (casilla vacía
+            // antes que dato inventado) aplicada al documento legal.
+            if (resumen._docId) {
+              r.texto = r.texto.replace(/\[ID\]/g, String(resumen._docId)).replace(/\[A[NÑ]O_MES\]/g, anioMes);
+            } else {
+              // Sin documento se quita LA LÍNEA del encabezado, no el texto. (Un primer
+              // intento vaciaba `r.texto` entero: eso habría borrado el análisis y plan
+              // completo, que es justo lo que el médico va a firmar. Un arreglo que destruye
+              // trabajo es peor que el defecto que arregla.)
+              r.texto = String(r.texto).split("\n")
+                .filter((l) => l.indexOf("[ID]") < 0)
+                .join("\n").replace(/^\n+/, "");
+              r.sinEncabezado = true;
+            }
           } catch (e) {}
         }
         return r;
@@ -34543,7 +34653,8 @@ _vglOfrecerDeshacer(btn);
               const d = new Date();
               const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
               textoFinal = textoFinal
-                .replace(/\[ID\]/g, String(resumen._docId || "SIN_ID"))
+                // v17.8.1 — ver hallazgo #59 arriba: nunca «SIN_ID» en la historia.
+                .replace(/\[ID\]/g, String(resumen._docId || ""))
                 .replace(/\[A[NÑ]O_MES\]/g, anioMes);
             } catch (e) {}
           }
@@ -35695,7 +35806,14 @@ _vglOfrecerDeshacer(btn);
     // Nada en falla: el foco lo marca el programa rector (ERC > DM2 > HTA).
     if (r.programa === "ERC") return "renal";
     if (r.programa === "DM2") return "metabólico";
-    return "lipídico";
+    if (r.programa) return "lipídico";
+    // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #96. Aquí había un `return "lipídico"`
+    // a secas: un paciente SIN programa y SIN nada en falla —o sea, del que no se sabe casi
+    // nada— salía con foco «lipídico», y ese foco viaja al JSON que lee la IA y al chip del
+    // Panel. Un foco inventado es peor que ninguno: le dice al médico y al modelo que la
+    // consulta va de lípidos cuando lo que pasa es que no hay datos. Sin programa y sin
+    // ejes, no hay con qué decidir: null. Quien lo pinte tiene que saber callarse.
+    return null;
   }
 
   // ---------- BANDERAS DE EDUCACIÓN (education_flags de S5) ----------

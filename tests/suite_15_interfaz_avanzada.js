@@ -1433,13 +1433,27 @@ module.exports = {
       t.igual(modal.innerHTML, "", "closeMod vacía y desmonta el modal");
     });
 
-    await t.casoAsync("openLaboratoriosModal: sin resultados dice la verdad y no inventa datos", async () => {
+    await t.casoAsync("openLaboratoriosModal: un fallo del portal NO se presenta como un hecho del paciente", async () => {
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #26. Esta prueba FIJABA EL DEFECTO:
+      // `labsSinDatos = true` dispara `onerror("sin red")`, o sea el portal NO contestó, y
+      // la prueba exigía que la pantalla dijera «No se encontraron paraclínicos recientes
+      // PARA ESTE PACIENTE» — una afirmación sobre el paciente cuando el fallo fue del
+      // sistema. En consulta las dos frases llevan a conductas opuestas: «no tiene
+      // exámenes» hace que se los vuelva a ordenar; «no pude leer» hace que se reintente.
+      //
+      // `getAtheneaLabsAuto` ya distinguía los dos casos a propósito (null vs []); lo que
+      // faltaba era que la pantalla lo dijera. Lo que la prueba protege de verdad —que no
+      // se inventen resultados de ejemplo— sigue exigido abajo.
       labsSinDatos = true;
       await cModal.api.openLaboratoriosModal({ doc_id: "87654321", nombre: "PEDRO" });
       const modal = ultimoModal("vgl-labs-modal");
       const contenido = modal.querySelector("#vgl-labs-content");
-      t.cierto(contenido.innerHTML.includes("No se encontraron paraclínicos recientes"));
-      t.cierto(contenido.innerHTML.includes("No se muestra ningún resultado de ejemplo"));
+      t.cierto(contenido.innerHTML.includes("No pude leer el portal"),
+        "con el portal caído se dice que el fallo fue del sistema");
+      t.cierto(contenido.innerHTML.includes("NO quiere decir que no tenga ninguno"),
+        "y se dice explícitamente lo que el médico NO puede concluir de esto");
+      t.falso(contenido.innerHTML.includes("no tiene ningún paraclínico registrado"),
+        "jamás se afirma nada sobre el paciente cuando no se pudo mirar");
       labsSinDatos = false;
     });
 

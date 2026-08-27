@@ -6,6 +6,67 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.8.1 — 27-ago-2026 (auditoría de experiencia: Tanda 1, todo lo que afirmaba algo falso)
+
+Nueve mensajes que **afirmaban sin haber mirado**. El informe lo llama patrón G —*«el fallo
+del sistema se presenta como un hecho del paciente»*— y es el que más veces viola la regla
+fundacional: *«casilla vacía antes que dato inventado»*.
+
+**Reproducido ejecutando el motor antes de tocar nada:**
+
+| # | Decía | Lo que pasaba de verdad |
+|---|---|---|
+| 12 | «el paciente **está al día con su programa**» | `programa: null` — no se evaluó nada |
+| 96 | `foco: "lipídico"` | sin programa y sin ejes: el foco se inventaba |
+| 87 | «PA Descontrolada **(165/NaN)**» | literal; con diastólica 0, «(165/0)» |
+| 26 | «No se encontraron paraclínicos **para este paciente**» | salía también con el portal caído |
+| 13 | «falta **peso**» | faltaba la **creatinina**, con el peso impreso dos filas arriba |
+| 34 | «**Todo ya estaba escrito**» | también cuando **nada casó** con ninguna casilla |
+| 59 | `#PACIENTE_SIN_ID_#RCV_CONTROL_2026_08` | palabra de programador **en la historia clínica** |
+| 14 | «(`_documentados`, `dislipidemiaDocumentada`)» | claves internas en un aviso al médico |
+| 156 | «la telemetría **no sale de este equipo**» | Ajustes tiene un interruptor que la envía |
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Volver a decir «al día» sin programa | *REGLA D — «al día con su programa» solo si HUBO un programa que evaluar* |
+| 2 | Que el foco vuelva a caer en «lipídico» | *el foco de la consulta no se inventa cuando no hay con qué decidir* |
+| 3 | Devolver el `NaN` a la píldora | *nunca una cifra imposible ni una palabra de programador en la píldora* |
+| 4 | Devolver las claves internas al aviso | *el aviso de cambios habla en idioma de consultorio, no en claves* |
+| 5 | Que la telemetría vuelva a prometer que no sale | *la telemetría dice a dónde va de verdad, según el interruptor* |
+| 6 | Que el fallo del portal vuelva a ser un hecho del paciente | *un fallo del portal NO se presenta como un hecho del paciente* |
+
+### La REGLA D, que es lo que impide la décima
+
+Las nueve son la misma clase de defecto, así que además de arreglarlas se fija el invariante:
+**un mensaje tranquilizador exige evidencia de que se evaluó algo**. Se ancla en el Panel, que
+es lo que el médico mira antes de decidir qué ordenar.
+
+### Dos pruebas que fijaban el defecto, no la regla
+
+- **`suite_15`** exigía que, con el portal caído (`onerror("sin red")`), la pantalla dijera «no
+  se encontraron paraclínicos **para este paciente**». Estaba fijando exactamente la mentira
+  del hallazgo #26. Se reescribió para exigir la distinción correcta; lo que protegía de
+  verdad —que no se inventen resultados de ejemplo— sigue exigido.
+- **`suite_67`** (v17.8.0) hizo lo mismo con la jerga del papel del paciente.
+
+### Tres tropiezos míos, y qué enseñó cada uno
+
+1. **Un arreglo que habría borrado el análisis y plan entero.** Para quitar el `SIN_ID` del
+   encabezado escribí `r.texto = ""`… y `r.texto` es **toda la redacción** que el médico va a
+   firmar, no el encabezado. Lo vi al releer el contexto antes de correr nada. Ahora se quita
+   **la línea** del encabezado. *Un arreglo que destruye trabajo es peor que el defecto.*
+2. **El primer arreglo del #12 no hacía nada.** Comprobaba `d.programa`, que es un **objeto**
+   (`{rector, rotulo, inscritos, porQue}`) y por tanto siempre verdadero. Lo cazó la prueba de
+   la REGLA D en su primera corrida: la aserción falló con el objeto entero impreso. Lo que
+   dice si hubo programa es `rector`.
+3. **La distinción `null` vs `[]` ya existía y se tiraba.** `getAtheneaLabsAuto` está escrita a
+   propósito para separar «no pude leer» de «no hay nada», y el modal aplastaba las dos en un
+   array vacío. No hubo que inventar nada: solo dejar de perder lo que el motor ya sabía.
+
+Banco completo en **2.416/2.416** con `TZ=America/Bogota`.
+
+---
+
 ## v17.8.0 — 27-ago-2026 (auditoría de experiencia: Tanda 0, las tres reglas mecánicas)
 
 Arranca el trabajo del enjambre de UI/UX y copywriting (19 agentes, 186 hallazgos brutos →

@@ -26,7 +26,9 @@ const RE_ID_CRUDO = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/g;
 
 module.exports = {
   nombre: "Tanda 0 — lint de pantalla (banderas y jerga)",
-  cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito"],
+  cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
+    "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
+    "_tableroQueCambio", "mtrTextoDestinoTelemetria"],
 
   pruebas(t, api) {
     const src = fs.readFileSync(RUTA, "utf8");
@@ -145,5 +147,103 @@ module.exports = {
       t.igual(crudos.join(", "), "",
         "el paciente no puede leer claves del catálogo en el papel que se lleva a su casa");
     });
+
+    // =================================================================
+    //  REGLA D — un mensaje tranquilizador exige evidencia de que se evaluó algo
+    //
+    //  TANDA 1 de la auditoría. Las nueve mentiras que corrige v17.8.1 son la MISMA
+    //  clase de defecto: afirmar sin haber mirado. El informe lo llama patrón G —«el
+    //  fallo del sistema se presenta como un hecho del paciente»— y aparece en los
+    //  seis módulos.
+    //
+    //  Arreglarlas una a una no basta: la décima nacerá igual. Esta regla fija el
+    //  invariante en el sitio donde más caro sale — el Panel, que es lo que el médico
+    //  mira antes de decidir qué ordenar.
+    // =================================================================
+    t.caso("REGLA D — «al día con su programa» solo si HUBO un programa que evaluar", () => {
+      // Sin programa no se evaluó nada, y decir «está al día» es rellenar un hueco con
+      // una frase tranquilizadora: exactamente lo que la regla de la casa prohíbe.
+      const sinPrograma = api.mtrTableroClinico(api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 60, sexo: "M", factores: {}, ultimos: {},
+      }));
+      // `programa` es un OBJETO con `rector` dentro; comprobar el objeto a secas da
+      // siempre verdadero, que es justo el error que tenía la primera versión del arreglo.
+      t.igual(sinPrograma.programa && sinPrograma.programa.rector, null,
+        "el vector tiene que salir sin programa rector, o no prueba nada");
+      const html = String(api.mtrPanelExamenesHtml(sinPrograma));
+      t.falso(/al día con/.test(html),
+        "sin programa NO se puede afirmar que el paciente esté al día: no se miró nada");
+      t.cierto(/no evalué qué exámenes le tocan/.test(html),
+        "y hay que decir por qué la lista está vacía, no dejarlo a la interpretación");
+      t.cierto(/no quiere decir que esté al día/i.test(html),
+        "explicando lo que el médico NO puede concluir de una lista vacía");
+
+      // Y con programa, el mensaje tranquilizador SÍ vale: es una conclusión, no un hueco.
+      const conPrograma = api.mtrTableroClinico(api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 60, sexo: "M", pesoKg: 80, creatinina: 1.0,
+        ct: 180, hdl: 50, ldl: 90, paSistolica: 120, paDiastolica: 75,
+        factores: { hta: true },
+        ultimos: {
+          CREATININA: { fecha: "2026-08-10", valor: 1.0 }, COLESTEROL_LDL: { fecha: "2026-08-10", valor: 90 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-10", valor: 180 }, COLESTEROL_HDL: { fecha: "2026-08-10", valor: 50 },
+          TRIGLICERIDOS: { fecha: "2026-08-10", valor: 120 }, GLUCOSA: { fecha: "2026-08-10", valor: 90 },
+          UROANALISIS: { fecha: "2026-08-10", valor: 1 }, RAC: { fecha: "2026-08-10", valor: 10 },
+          HEMOGLOBINA: { fecha: "2026-08-10", valor: 14 },
+        },
+      }));
+      t.cierto(!!(conPrograma.programa && conPrograma.programa.rector), "este vector sí tiene programa rector");
+      const html2 = String(api.mtrPanelExamenesHtml(conPrograma));
+      t.falso(/no evalué qué exámenes le tocan/.test(html2),
+        "con programa no se pide marcar nada: la evaluación sí corrió");
+    });
+
+    t.caso("v17.8.1 — el foco de la consulta no se inventa cuando no hay con qué decidir", () => {
+      // Hallazgo #96. Un foco inventado viaja al JSON que lee la IA y al chip del Panel:
+      // le dice al médico y al modelo que la consulta va de lípidos cuando lo que pasa es
+      // que no hay datos.
+      t.igual(api.mtrPriorityFocus({ riesgo: {}, plan: {} }), null,
+        "sin programa y sin ejes en falla, el foco es null — no «lipídico» por descarte");
+      t.igual(api.mtrPriorityFocus({ riesgo: {}, plan: {}, programa: "ERC" }), "renal",
+        "con programa rector sí hay con qué decidir");
+      t.igual(api.mtrPriorityFocus({ riesgo: {}, plan: {}, programa: "DM2" }), "metabólico", "ídem DM2");
+      t.igual(api.mtrPriorityFocus({ riesgo: {}, plan: {}, programa: "HTA" }), "lipídico",
+        "y el programa de hipertensión conserva su foco lipídico: eso NO era una invención");
+    });
+
+    t.caso("v17.8.1 — nunca una cifra imposible ni una palabra de programador en la píldora", () => {
+      // Hallazgo #87, reproducido literal antes de tocarlo: «PA Descontrolada (165/NaN)».
+      const badges = (f) => api._evaluarComplejidadPaciente({}, { factores: Object.assign({ hta: true }, f) }).badges.join(" | ");
+      const soloSist = badges({ paSistolica: 165 });
+      t.falso(/NaN/.test(soloSist), "«NaN» es una palabra de programador: nunca en pantalla");
+      t.cierto(/sistólica 165/.test(soloSist), "se nombra la cifra que SÍ se pudo leer");
+      const diastCero = badges({ paSistolica: 165, paDiastolica: 0 });
+      t.falso(/165\/0/.test(diastCero), "«165/0» es una tensión imposible: hace dudar de la cifra real");
+      t.cierto(/165\/100/.test(badges({ paSistolica: 165, paDiastolica: 100 })),
+        "con las dos cifras reales se imprimen las dos, como siempre");
+    });
+
+    t.caso("v17.8.1 — el aviso de cambios habla en idioma de consultorio, no en claves", () => {
+      // Hallazgo #14: el aviso terminaba diciendo «(_documentados, dislipidemiaDocumentada)».
+      const c = api._tableroQueCambio("_documentados=3|hta=false|L.hta=false|_total=25",
+                                      "_documentados=4|hta=true|L.hta=true|_total=25");
+      t.cierto(c.indexOf("hipertensión") >= 0, "lo que cambió se nombra como lo nombra el médico");
+      t.falso(c.some((x) => String(x).charAt(0) === "_" || String(x).indexOf("L.") === 0),
+        "los contadores internos y el tri-estado NO se le enseñan a nadie");
+    });
+
+    t.caso("v17.8.1 — la telemetría dice a dónde va de verdad, según el interruptor", () => {
+      // Hallazgo #156: dos pantallas del mismo programa afirmaban lo contrario. Una promesa
+      // sobre a dónde van sus datos no puede depender de que alguien actualice dos textos.
+      const apagado = api.mtrTextoDestinoTelemetria(false);
+      const encendido = api.mtrTextoDestinoTelemetria(true);
+      t.cierto(/no salen de este computador/.test(apagado), "apagado: se promete que no sale");
+      t.falso(/no salen de este computador/.test(encendido),
+        "encendido: NO se puede seguir prometiendo que no sale");
+      t.cierto(/se envían/.test(encendido) && /Ajustes/.test(encendido),
+        "se dice que sale y dónde apagarlo, que es lo accionable");
+      t.cierto(/no salen de este computador/.test(api.mtrTextoDestinoTelemetria(undefined)),
+        "sin dato se asume lo conservador: no afirmar un envío que no consta");
+    });
+
   },
 };
