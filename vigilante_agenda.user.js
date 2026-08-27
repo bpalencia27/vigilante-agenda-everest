@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.94
+// @version     17.6.95
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.94";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.95";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3858,17 +3858,58 @@
       // resumen en caché), esta función retornaba aquí mismo y el bloque de aplicar50
       // quedaba inalcanzable: un LDL fuera de meta con contexto clínico completo se
       // reportaba "vigente" por los 180 días enteros de la tabla, sin acortar a la mitad.
+      // v17.6.95 — HUECO 8: UNA SOLA TABLA DE VIGENCIAS. Aqui vivia una consulta a
+      // `vigenciaPorEstadio` (la tabla legacy, transcripcion de la Tabla 50 oficial),
+      // mientras TODO el resto del producto —el motor, el Panel, Agendar, Ordenar— ya
+      // usaba `mtrVigenciaDiasNorma`. Las dos no coinciden, y donde no coinciden la legacy
+      // siempre es MAS LARGA: declara vigente un examen que la norma da por vencido.
+      //
+      // Medido con el harness sobre las 8 claves RCV, todos los estadios, ambos programas
+      // y esDM2 en los dos valores (barrido exhaustivo, cero celdas al reves):
+      //   · ERC G5 -> la legacy no tiene columna G5, devuelve null, y el respaldo plano de
+      //     180 dias entra para los OCHO analitos. La norma colapsa G5 en G4 (que es lo
+      //     conservador) y da 120/60/93. Efecto real, reproducido de punta a punta sobre el
+      //     aviso rojo de entrada: un paciente ERC G5 con TODOS sus examenes de hace 170
+      //     dias recibe "todo al dia", mientras el mismo paciente en G4 recibe seis
+      //     examenes marcados. Mover al paciente un estadio HACIA PEOR apagaba el aviso.
+      //   · ERC G4 + RAC -> la Tabla 50 no tiene fila `rac` (pide "micro albuminuria", que
+      //     es otro analito), asi que tambien caia al respaldo de 180. La norma da 120.
+      // DM2 y HTA no cambian en ninguna celda: la divergencia entera vivia en ERC.
+      //
+      // Esto NO es una decision clinica nueva. `MTR_CORRECCIONES_NORMA` ya declaraba
+      // "ERC/rac/G4: copiloto 180 -> norma 120", y `MTR_MAPA_ESTADIO_ERC` ya mapeaba
+      // G5 -> G4. Lo unico que pasaba es que el aviso de entrada y el antiduplicado de PyM
+      // eran los dos ultimos sitios que no se habian enterado.
+      //
+      // `mtrColapsarVigencia(v, false)` convierte el rango [min,max] de la creatinina en su
+      // valor SUPERIOR, que es exactamente lo que hacia la linea vieja (`v.max`): aqui no
+      // hay forma de saber si la funcion renal se esta moviendo, y suponerlo seria inferir.
+      // `vigenciaPorEstadio` NO se borra: es la transcripcion de la Tabla 50, con filas que
+      // la norma no tiene (hematocrito, depuracion en orina 24h, microalbuminuria), y sigue
+      // sirviendo de documento de referencia con sus propias pruebas.
       let base = null;
       if (opts && (opts.estadio || opts.programa)) {
           const analito = analitoTablaDesdeClaveRcv(key);
-          if (analito) {
+          if (analito && typeof mtrVigenciaDiasNorma === "function") {
               const programa = opts.programa || (opts.estadio ? "ERC" : null);
-              const v = vigenciaPorEstadio(programa, opts.estadio, analito, opts);
-              if (typeof v === "number") base = v;
-              else if (v && typeof v === "object") {
-                  if (Number.isFinite(v.max)) base = v.max;
-                  else if (Number.isFinite(v.min)) base = v.min;
-              }
+              const esDm2 = (opts.esDM2 === true || opts.esDm2 === true);
+              // El override de RAC>=30 se aplica mas abajo, con `resultValCrudo`, que es el
+              // valor que este camino SI tiene; por eso aqui va `null` y no se pide dos veces.
+              const v = mtrVigenciaDiasNorma(programa, analito, opts.estadio, esDm2, opts.edad, null);
+              // `funcionRenalInestable` se LEE aunque hoy nadie lo mande: los dos llamadores
+              // no lo pasan, asi que vale false y el rango se colapsa a su extremo SUPERIOR,
+              // que es exactamente lo que hacia la linea vieja (`v.max`). Se deja leido, y no
+              // cableado a `false` a pelo, para que quede claro que es una DECISION y no un
+              // descuido: encenderlo baja la creatinina de 121 a 90 en G3a/G3b y de 93 a 60 en
+              // G4/G5 (medido), y eso es un cambio clinico que el medico no ha pedido aqui.
+              const colapsada = (typeof mtrColapsarVigencia === "function")
+                ? mtrColapsarVigencia(v, !!opts.funcionRenalInestable) : v;
+              if (typeof colapsada === "number" && Number.isFinite(colapsada)) base = colapsada;
+              // "BLOQ" o null dejan `base` en null y se cae al respaldo plano, igual que hoy.
+              // Verificado por barrido: ninguna de las 8 claves RCV puede producir "BLOQ"
+              // (los analitos bloqueables —PTH, fosforo, albumina, HbA1c— no estan en el mapa
+              // de `analitoTablaDesdeClaveRcv`). La suite lo fija con una prueba, para que si
+              // alguien anade uno bloqueable al mapa tenga que decidir que hacer aqui.
           }
       }
       // v16.4.0 — LA MISMA VARA EN TODOS LOS CAMINOS (decisión del médico, 20-ago: "una

@@ -2,14 +2,25 @@
 //  SUITE 28 — Vigencias por estadio renal (R2, MODO SOMBRA)
 //
 //  Consulta pura de la tabla de vigencias transcrita de
-//  PROMPT_JULES_R2_VIGENCIAS_ESTADIO.md líneas 35-70. NO está conectada a ningún
-//  aviso: el médico sigue viendo los 180 días planos hoy (RCV_VIGENCIA_DIAS,
-//  _vigenciaDiasParaAnalito y _analitosRcvVencidos, sin tocar). Esta suite solo
-//  verifica la tabla y su función de consulta en aislamiento.
+//  PROMPT_JULES_R2_VIGENCIAS_ESTADIO.md líneas 35-70 (la "Tabla 50" oficial).
+//
+//  OJO CON LA CABECERA VIEJA: decía que esta tabla estaba en "modo sombra" y que el
+//  médico seguía viendo 180 días planos. Eso dejó de ser cierto en v16.4.0, cuando el
+//  aviso de entrada y el antiduplicado de PyM empezaron a pasarle programa y estadio.
+//
+//  Y desde v17.6.95 vuelve a ser casi cierto, pero por otro motivo: `vigenciaPorEstadio`
+//  YA NO decide nada en producción. `_vigenciaDiasParaAnalito` delega en
+//  `mtrVigenciaDiasNorma` —la misma tabla que usan el motor, el Panel, Agendar y
+//  Ordenar— porque las dos no coincidían y la legacy siempre era la más larga.
+//  Esta tabla se conserva como DOCUMENTO DE REFERENCIA de la Tabla 50, con filas que la
+//  norma no tiene (hematocrito, depuración en orina 24 h, microalbuminuria), y sus
+//  pruebas siguen fijando su contenido. Lo que ya no hace es gobernar un aviso.
 // =====================================================================
 module.exports = {
   nombre: "Vigencias por estadio renal (R2, sombra)",
-  cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv", "_vigenciaDiasParaAnalito"],
+  cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv", "_vigenciaDiasParaAnalito",
+    "mtrVigenciaDiasNorma", "mtrColapsarVigencia", "_analitosRcvVencidos",
+    "pymRcvCubiertoPorAthenea", "mtrCacheResumenGuardar"],
 
   pruebas(t, api) {
     // --- Programa ERC: creatinina, los tres rangos {min,max} tal cual la tabla fuente ---
@@ -242,6 +253,186 @@ module.exports = {
     t.caso("v17.6.27: sin opts.aplicar50, el resultado por estadio/programa no cambia (compatibilidad)", () => {
       t.igual(api._vigenciaDiasParaAnalito("COLESTEROL_LDL", "150", { programa: "HTA", categoriaRiesgo: "alto" }), 180,
         "sin aplicar50, la vigencia por tabla se respeta tal cual, sin acortar");
+    });
+
+    // =================================================================
+    // v17.6.95 — HUECO 8: UNA SOLA TABLA DE VIGENCIAS
+    //
+    // El aviso rojo de entrada y el antiduplicado de PyM eran los dos últimos sitios que
+    // consultaban la tabla legacy. Donde las dos tablas no coinciden, la legacy SIEMPRE es
+    // la más larga: declara vigente un examen que la norma da por vencido. Barrido
+    // exhaustivo (8 claves × todos los estadios × 3 programas × esDM2 en ambos valores):
+    // cero celdas al revés, y toda la divergencia dentro del programa ERC.
+    // =================================================================
+
+    const CLAVES_RCV = ["COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
+      "GLUCOSA", "UROANALISIS", "CREATININA", "RAC"];
+
+    t.caso("v17.6.95: ERC G5 ya no recibe 180 días planos (era el paciente MÁS enfermo con la vigencia MÁS larga)", () => {
+      // La tabla legacy no tiene columna G5: devolvía null y entraba el respaldo plano de
+      // 180 para los OCHO analitos. La norma colapsa G5 en G4, que es lo conservador.
+      const g5 = (k) => api._vigenciaDiasParaAnalito(k, null, { programa: "ERC", estadio: "G5", esDM2: true, edad: 60 });
+      t.igual(g5("GLUCOSA"), 60, "glicemia en G5: 60 días, no 180");
+      t.igual(g5("CREATININA"), 93, "creatinina en G5: 93 (extremo superior del rango 60-93), no 180");
+      t.igual(g5("COLESTEROL_TOTAL"), 120, "colesterol total en G5");
+      t.igual(g5("COLESTEROL_LDL"), 120, "LDL en G5");
+      t.igual(g5("TRIGLICERIDOS"), 120, "triglicéridos en G5");
+      t.igual(g5("UROANALISIS"), 120, "parcial de orina en G5");
+      t.igual(g5("RAC"), 120, "RAC en G5");
+      t.igual(g5("COLESTEROL_HDL"), 180, "el HDL sí son 180 en todos los estadios: no se acorta lo que la norma no acorta");
+    });
+
+    t.caso("v17.6.95: ningún estadio de ERC puede quedar con la vigencia más larga que el anterior", () => {
+      // La propiedad que de verdad importa, y que el defecto rompía: cuanto peor el
+      // estadio, la vigencia nunca puede alargarse. Con la tabla legacy, pasar de G4 a G5
+      // la alargaba de 60 a 180.
+      const ORDEN = ["G1", "G2", "G3a", "G3b", "G4", "G5"];
+      for (const k of CLAVES_RCV) {
+        let previo = Infinity;
+        const traza = [];
+        for (const est of ORDEN) {
+          const v = api._vigenciaDiasParaAnalito(k, null, { programa: "ERC", estadio: est, esDM2: true, edad: 60 });
+          traza.push(est + "=" + v);
+          t.cierto(v <= previo, k + " se ALARGA al empeorar el estadio · " + traza.join(" "));
+          previo = v;
+        }
+      }
+    });
+
+    t.caso("v17.6.95: ERC G4 + RAC pasa de 180 a 120 (la Tabla 50 no tiene fila `rac`, tiene `microalbuminuria`)", () => {
+      // Que `vigenciaPorEstadio` devuelva null para `rac` en ERC es CORRECTO respecto de su
+      // fuente y se sigue fijando más arriba en esta misma suite. El problema era que ese
+      // null caía al respaldo plano de 180 en vez de a la norma, que sí tiene la fila.
+      t.igual(api.vigenciaPorEstadio("ERC", "G4", "rac", {}), null, "la Tabla 50 sigue sin fila rac: intacta");
+      t.igual(api._vigenciaDiasParaAnalito("RAC", null, { programa: "ERC", estadio: "G4", esDM2: true, edad: 60 }), 120,
+        "pero el aviso ya no usa el respaldo de 180: usa la norma");
+      // Esto ya estaba DECLARADO como corrección de la norma desde antes de esta versión;
+      // lo único que faltaba era que este camino se enterara.
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "rac", "G4", true, 60, null), 120, "la norma ya lo decía");
+    });
+
+    t.caso("v17.6.95: DM2 y HTA no cambian en NINGUNA celda", () => {
+      // La divergencia entera vivía en ERC. Si esta prueba cae, el cambio se desbordó.
+      for (const prog of ["DM2", "HTA"]) {
+        for (const k of CLAVES_RCV) {
+          for (const est of ["G1", "G2", "G3a", "G3b", "G4", "G5", null]) {
+            const v = api._vigenciaDiasParaAnalito(k, null, { programa: prog, estadio: est, esDM2: true, edad: 60 });
+            t.igual(v, 180, prog + "/" + est + "/" + k + " debía seguir en 180");
+          }
+        }
+      }
+    });
+
+    t.caso("v17.6.95: la creatinina sigue tomando el extremo SUPERIOR del rango, no el inferior", () => {
+      // La línea vieja hacía `v.max`. `mtrColapsarVigencia(v, false)` hace lo mismo. Elegir
+      // el inferior sin saber si la función renal se está moviendo sería inferir.
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", null, { programa: "ERC", estadio: "G3a", esDM2: true, edad: 60 }), 121,
+        "G3a: 121, el superior del rango 90-121");
+      t.igual(api._vigenciaDiasParaAnalito("CREATININA", null, { programa: "ERC", estadio: "G4", esDM2: true, edad: 60 }), 93,
+        "G4: 93, el superior del rango 60-93");
+      t.igual(api.mtrColapsarVigencia([90, 121], false), 121, "y el colapsador es el que decide, con la regla de la norma");
+      t.igual(api.mtrColapsarVigencia([90, 121], true), 90, "con la función renal moviéndose sería el inferior");
+    });
+
+    t.caso("v17.6.95: el recorte por albuminuria (RAC>=30) sigue vivo y no se aplica dos veces", () => {
+      // El override de la norma es un plazo PLANO de 90 días acotado a la base. Aquí se
+      // aplica con `resultValCrudo`, que es el valor que este camino sí tiene.
+      const conRac = (est, val) => api._vigenciaDiasParaAnalito("RAC", val, { programa: "ERC", estadio: est, esDM2: true, edad: 60 });
+      t.igual(conRac("G2", "10"), 180, "RAC normal en G2: los 180 de la tabla");
+      t.igual(conRac("G2", "350"), 90, "RAC 350 en G2: recorte a 90");
+      t.igual(conRac("G4", "350"), 90, "RAC 350 en G4: 90, no 60 — el plazo es plano, no la mitad de 120");
+      t.igual(conRac("G4", "10"), 120, "y sin albuminuria manda la tabla");
+      t.igual(conRac("G2", "> 300"), 90, "el LIS reporta desigualdades: '> 300' también recorta");
+    });
+
+    t.caso("v17.6.95: ninguna de las 8 claves RCV puede producir BLOQ (si alguien añade una, esta prueba lo obliga a decidir)", () => {
+      // `base` solo se acepta si es un número finito; un "BLOQ" caería al respaldo de 180,
+      // es decir el aviso listaría como vencido un examen que está BLOQUEADO por KDIGO.
+      // Hoy eso no puede pasar porque ningún analito bloqueable (PTH, fósforo, albúmina,
+      // HbA1c) está en el mapa de analitoTablaDesdeClaveRcv. Se fija por prueba.
+      const bloqueables = [];
+      for (const k of CLAVES_RCV) {
+        const a = api.analitoTablaDesdeClaveRcv(k);
+        t.cierto(a !== null, k + " debía tener traducción a nombre de analito");
+        for (const prog of ["ERC", "DM2", "HTA"]) {
+          for (const est of ["G1", "G2", "G3a", "G3b", "G4", "G5"]) {
+            for (const dm of [true, false]) {
+              if (api.mtrVigenciaDiasNorma(prog, a, est, dm, 60, null) === "BLOQ") bloqueables.push(prog + "/" + est + "/" + k);
+            }
+          }
+        }
+      }
+      t.igual(bloqueables, [], "si esto deja de estar vacío hay que decidir qué hace el aviso con un examen bloqueado");
+    });
+
+    t.caso("v17.6.95 PUNTA A PUNTA: el paquete RCV deja de declararse «cubierto» en un ERC G5", () => {
+      // Este es el camino donde el defecto AFIRMA algo en pantalla, no donde se calla:
+      // `pymRcvCubiertoPorAthenea` en true desmarca la casilla del paquete RCV y pinta
+      // «🧪 Athenea ya tiene todos estos resultados vigentes — el paciente ya se los hizo».
+      // Con exámenes de 130 días en un G5 eso era falso: la glicemia vence a los 60.
+      // (La casilla NO se bloquea nunca — decisión del médico del 20-ago — así que lo que
+      //  se perdía era el premarcado y la confianza en el mensaje, no la posibilidad.)
+      const HACE_130 = "2026-04-19";
+      const HOY = "2026-08-27";
+      const labs = [
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: HACE_130 },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "45", Fecha: HACE_130 },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: HACE_130 },
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: HACE_130 },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: HACE_130 },
+        { codigo: "903895", nombre: "CREATININA", Resultado: "6.0", Fecha: HACE_130 },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: HACE_130 },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "50", Fecha: HACE_130 },
+      ];
+      // Se siembra la caché igual que hace producción: es de ahí de donde los dos
+      // llamadores sacan programa y estadio (ver las líneas del ctx en el userscript).
+      const conEstadio = (docId, estadio) => {
+        api.mtrCacheResumenGuardar(docId, {
+          programa: "ERC",
+          erc: { estadioAdministrativo: estadio },
+          factores: { diabetes: true },
+          riesgo: { categoria: "muy alto" },
+        });
+        return api.pymRcvCubiertoPorAthenea(labs, HOY, docId);
+      };
+      t.falso(conEstadio("h8-g4", "G4"), "en G4 ya se sabía que NO estaba cubierto");
+      t.falso(conEstadio("h8-g5", "G5"),
+        "y en G5 tampoco puede estarlo: la glicemia de 130 días vence a los 60");
+      // El contraste: un G2 con esos mismos exámenes sí está cubierto de verdad.
+      t.cierto(conEstadio("h8-g2", "G2"), "un ERC G2 con 130 días sí está cubierto (vigencia 180)");
+      try { api.mtrCacheResumenBorrar(); } catch (e) {}
+    });
+
+    t.caso("v17.6.95 PUNTA A PUNTA: el aviso rojo de un ERC G5 deja de decir «todo al día»", () => {
+      // El defecto no se ve mirando la tabla: se ve en lo que el médico lee al abrir la
+      // historia. Estos son los MISMOS exámenes, el MISMO día, y solo cambia el estadio.
+      const HOY = "2026-08-27";
+      const HACE_170 = "2026-03-10";
+      const labs = [
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: HACE_170 },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "45", Fecha: HACE_170 },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: HACE_170 },
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: HACE_170 },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: HACE_170 },
+        { codigo: "903895", nombre: "CREATININA", Resultado: "3.8", Fecha: HACE_170 },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: HACE_170 },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "100", Fecha: HACE_170 },
+      ];
+      const avisa = (est) => api._analitosRcvVencidos(labs, HOY, {
+        programa: "ERC", estadio: est, esDM2: true, esDm2: true, edad: 60, aplicar50: true,
+      }).map((x) => x.key).sort();
+
+      const g4 = avisa("G4");
+      const g5 = avisa("G5");
+      t.cierto(g4.length >= 6, "en G4 el aviso ya listaba al menos 6 exámenes (obtuvo " + g4.length + ")");
+      t.cierto(g5.length >= g4.length,
+        "el paciente MÁS enfermo no puede recibir MENOS avisos que el menos enfermo · G4=[" + g4.join(",") + "] G5=[" + g5.join(",") + "]");
+      t.cierto(g5.indexOf("GLUCOSA") >= 0, "la glicemia de hace 170 días en un G5 (vigencia 60) tiene que salir");
+      t.cierto(g5.indexOf("CREATININA") >= 0, "y la creatinina (vigencia 93) también");
+      t.cierto(g5.indexOf("RAC") >= 0, "y la RAC (vigencia 120), que antes caía al respaldo de 180");
+      // Y el contraste que prueba que no se volvió todo más estricto porque sí:
+      const g2 = avisa("G2");
+      t.igual(g2, [], "un ERC G2 con esos mismos exámenes de 170 días sigue al día: 180 no se toca");
     });
   },
 };

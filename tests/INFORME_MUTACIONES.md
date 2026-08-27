@@ -6,6 +6,96 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.95 — 27-ago-2026 (una sola tabla de vigencias: el ERC G5 tenía las más largas)
+
+Hueco 8 del plan de fidelidad. Banco antes: 2.346 · después: **2.355**.
+
+Convivían dos tablas de vigencias. El motor, el Panel, Agendar y Ordenar usan
+`mtrVigenciaDiasNorma`; el **aviso rojo de entrada** y el **antiduplicado del paquete RCV**
+eran los dos únicos sitios que seguían consultando la legacy. Barrido exhaustivo del camino
+real (8 claves × 6 estadios × 3 programas × `esDM2` en ambos valores): **8 celdas divergen
+de 48, y en las ocho la legacy da MÁS días. Ninguna al revés.** Toda la divergencia vive
+dentro del programa ERC; DM2 y HTA no cambian en ninguna celda.
+
+Dos causas distintas:
+
+1. **No hay columna G5.** `vigenciaPorEstadio` devuelve `null` para los 15 analitos en G5 —
+   honesto, dice «no lo sé»— y el consumidor traduce ese `null` a `RCV_VIGENCIA_DIAS`, que
+   es **180 días planos: el valor más largo de toda la tabla**.
+2. **No hay fila `rac` en ERC.** La Tabla 50 pide «micro albuminuria», que es otro analito
+   (decisión deliberada de v14.1.2), pero el traductor mapea `RAC → "rac"`. El puente apunta
+   a una fila que no existe → el mismo `null` → los mismos 180.
+
+| celda | legacy | norma | exceso |
+|---|---|---|---|
+| GLUCOSA · ERC G5 | 180 | 60 | **+120 d, el triple** |
+| CREATININA · ERC G5 | 180 | 93 | +87 d |
+| CT / LDL / TG / URO / RAC · ERC G5 | 180 | 120 | +60 d cada uno |
+| RAC · ERC **G4** | 180 | 120 | +60 d |
+
+**Esto no es una decisión clínica nueva: es una que el médico ya tomó.** El propio código lo
+dice en `MTR_MAPA_ESTADIO_ERC` (línea ~26525): *«D-4 (decisión del médico, 4-ago-2026): G5
+hereda la columna G4 mientras el protocolo no tabule una propia. Sin esto el paciente MÁS
+grave recibía las vigencias MÁS largas.»* Se aplicó al motor y nunca a la tabla legacy.
+
+Reproducido de punta a punta, mismos exámenes y mismo día, cambiando solo el estadio:
+
+| exámenes de hace… | ERC G4, aviso rojo | ERC G5, aviso rojo |
+|---|---|---|
+| 100 días | GLUCOSA, CREATININA | **ninguno** |
+| 130 días | 6 exámenes | **ninguno** |
+| 170 días | 6 exámenes | **ninguno** |
+
+Y en el segundo llamador el defecto no se calla, **afirma**: con exámenes de 130 días,
+`pymRcvCubiertoPorAthenea` devolvía `true` para un G5 y la pantalla decía «🧪 Athenea ya
+tiene todos estos resultados vigentes — el paciente ya se los hizo». (La casilla nunca se
+bloquea —decisión del médico del 20-ago—, así que lo que se perdía era el premarcado y la
+confianza en el mensaje, no la posibilidad de ordenarlo.)
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **1** | Se revierte a `vigenciaPorEstadio` (el estado de v17.6.94) | `suite_28` | *ERC G5 ya no recibe 180 días planos*, *ningún estadio puede quedar con la vigencia más larga que el anterior* (→ `G4=120 G5=180`), y **las dos de punta a punta** → **8 rojas** |
+| **2 · LA TRAMPA GRAVE** | Se delega **sin** `mtrColapsarVigencia` | `suite_28` | *la creatinina sigue tomando el extremo SUPERIOR del rango* → **4 rojas** |
+| **3** | Se colapsa al extremo **INFERIOR** (`funcionRenalInestable` forzado a `true`) | `suite_28` | *la creatinina sigue tomando el extremo SUPERIOR* → **3 rojas** |
+| **4** | Se quita la guarda de tipo que protegería de un `"BLOQ"` | — | **NO CAE.** Ver abajo. |
+| **5** | Se ignora `esDm2` | — | **NO CAE.** Ver abajo. |
+
+Las tres primeras se aplicaron **una a una**, restaurando con `diff` contra copia intacta
+antes de la siguiente; cada corrida dejó rojo con la aserción exacta esperada y el banco
+volvió a 2.355/2.355 tras cada restauración.
+
+**La mutación 2 es la razón de que este arreglo no fuera de una línea.** El motor devuelve la
+creatinina como **array** `[90,121]`, no como el objeto `{min,max}` de la legacy; el bloque
+viejo leía `v.max`, que sobre un array es `undefined`. Una delegación que no colapse deja la
+creatinina **peor que antes**: 121→180 en G3a/G3b y 93→180 en G4. Y antes de esta versión
+había **una sola** aserción en todo el banco que lo habría atrapado.
+
+**Las mutaciones 4 y 5 no caen, y no se disimula.** No son pruebas flojas: son mutaciones
+**inertes** por construcción, y está verificado por qué.
+- La 4: `"BLOQ"` es **inalcanzable** por las 8 claves RCV — la imagen del traductor
+  (`colesterol_total, hdl, ldl, trigliceridos, glicemia, parcial_orina, creatinina, rac`) es
+  disjunta del conjunto de analitos bloqueables (`pth, albumina, fosforo, hba1c`). Barrido de
+  8 claves × 3 programas × 6 estadios × `esDm2`: cero `"BLOQ"`. La guarda es defensa en
+  profundidad y hoy no tiene forma de ejercitarse. **Lo que sí queda vivo es la prueba que
+  fija esa inalcanzabilidad**: el día que alguien añada PTH, fósforo, albúmina o HbA1c a
+  `RCV_VIGENCIA_KEYS`, esa prueba cae y lo obliga a decidir qué hace el aviso con un examen
+  que la norma prohíbe pedir.
+- La 5: `esDm2` solo distingue algo para `hba1c` en ERC, y HbA1c **no está** entre las 8
+  claves (exclusión deliberada, línea ~3563: «no todo paciente es diabético»). El parámetro
+  viaja por corrección de contrato, no porque hoy cambie un día de vigencia.
+
+**Lo que este arreglo deja fuera a propósito**, y queda escrito en el código para que sea una
+decisión y no un descuido: `funcionRenalInestable` se **lee** pero ningún llamador lo manda,
+así que vale `false` y el rango se colapsa a su extremo superior — exactamente lo que hacía
+la línea vieja. Encenderlo bajaría la creatinina de 121 a 90 en G3a/G3b y de 93 a 60 en
+G4/G5 (medido), y eso es un cambio clínico que el médico no ha pedido en este hueco.
+
+**Un hallazgo aparte que la auditoría destapó y que NO se toca aquí:** `HBA1C` no está en
+`RCV_VIGENCIA_KEYS` ni en el traductor, así que el antiduplicado es ciego a ella — un
+diabético con la HbA1c vencida hace 219 días puede recibir «RCV ya cubierto». La exclusión
+es deliberada; que el paquete pueda declararse cubierto por ella es una decisión propia del
+médico y merece su propia entrega.
+
 ## v17.6.94 — 27-ago-2026 (el piso por diabetes deja de ser incondicional, y la casilla que lo hace posible)
 
 Divergencia **B1** de la revisión del 27-ago, con sus dos mitades juntas, como pidió el
