@@ -29,7 +29,7 @@ const respuesta = (data) => ({
 
 module.exports = {
   nombre: "Llamadas a Everest y clínicas",
-  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "fetchAtheneaLabs"],
+  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "_apiCorteEstadoParaTest", "_apiCorteResetParaTest", "_saludEstado", "_saludMarca", "_saludRegParaTest", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "fetchAtheneaLabs"],
   async pruebas(t, api, env, cargar) {
     await t.casoAsync("apiOrdenamientoGuardar construye payload correctamente y llama al endpoint", async () => {
       let fetchUrl, fetchOpts;
@@ -413,5 +413,98 @@ module.exports = {
       const data = await c.api.pageFetchJson("/apiviva/salud");
       t.igual(data.salud, "ok");
     });
+    // =================================================================
+    //  v17.15.0 — LA CONSOLA DEL 27-ago Y LA TORMENTA QUE LA CAUSABA
+    //
+    //  El médico pegó su consola en vivo: una pared de «GM fallback también
+    //  falló en intento N», cada una con su traza, sobre BuscarPaciente y
+    //  GetUsuarioPerfil, con los servicios de Everest devolviendo 500.
+    //
+    //  Medido con este mismo arnés ANTES de tocar nada: UNA búsqueda de
+    //  paciente disparaba 16 peticiones y 8 líneas de consola. Y no la pedía
+    //  nadie — la disparaba el preparador por hover, cuyo fallo se descarta
+    //  con un catch vacío. Después: 4 peticiones y 0 líneas.
+    // =================================================================
+
+    // Cuenta peticiones (fetch + GM_xmlhttpRequest) y líneas de consola de una llamada.
+    // console.warn se cuenta sobre el objeto REAL de Node porque es el mismo que el arnés
+    // inyecta en el vm cuando no se pide `silencioso`.
+    const _medirCaida = async (opts) => {
+      let peticiones = 0, avisos = 0;
+      const c = cargar({
+        fetch: async () => { peticiones++; return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}), text: async () => "", clone() { return this; } }; },
+        gmxhr: (o) => { peticiones++; setTimeout(() => { try { o.onload({ status: 500, responseText: "" }); } catch (e) {} }, 0); },
+      });
+      const real = console.warn;
+      console.warn = () => { avisos++; };
+      try { await c.api.apiAccesoBuscarPaciente("40123456", opts); }
+      finally { console.warn = real; }
+      return { peticiones, avisos, c };
+    };
+
+    await t.casoAsync("v17.15.0 — una llamada especulativa no insiste ni narra su fallo", async () => {
+      const r = await _medirCaida({ especulativo: true });
+      t.igual(r.avisos, 0, "cero líneas de consola: su fallo no tiene consecuencia y no puede tapar los diagnósticos");
+      t.cierto(r.peticiones <= 4, "un intento por ruta, sin los cuatro reintentos (fueron " + r.peticiones + ")");
+    });
+
+    await t.casoAsync("v17.15.0 — lo que el médico está esperando NO cambió: sigue insistiendo y avisando", async () => {
+      // La otra mitad de la regla. Un arreglo que calle también las peticiones que alguien
+      // espera sería peor que el defecto: ahí el silencio sí esconde algo.
+      const r = await _medirCaida(undefined);
+      t.cierto(r.avisos >= 4, "sigue narrando cada intento fallido (fueron " + r.avisos + ")");
+      t.cierto(r.peticiones >= 8, "y sigue reintentando con espera exponencial (fueron " + r.peticiones + ")");
+    });
+
+    await t.casoAsync("v17.15.0 — el cortacircuitos frena lo especulativo y JAMÁS lo que el médico pidió", async () => {
+      let peticiones = 0;
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => { peticiones++; return { ok: false, status: 500, headers: { get: () => null }, json: async () => ({}), text: async () => "", clone() { return this; } }; },
+        gmxhr: (o) => { peticiones++; setTimeout(() => { try { o.onload({ status: 500, responseText: "" }); } catch (e) {} }, 0); },
+      });
+      c.api._apiCorteResetParaTest();
+      // Tres fallos seguidos abren el corte.
+      for (let i = 0; i < 3; i++) await c.api.apiAccesoBuscarPaciente("4012345" + i, { especulativo: true });
+      t.cierto(c.api._apiCorteEstadoParaTest().hasta > 0, "tras 3 fallos seguidos, el corte queda abierto");
+
+      const antes = peticiones;
+      await c.api.apiAccesoBuscarPaciente("40129999", { especulativo: true });
+      t.igual(peticiones - antes, 0, "una especulativa ya no sale a la red");
+
+      const antes2 = peticiones;
+      await c.api.apiAccesoBuscarPaciente("40128888");
+      t.cierto(peticiones - antes2 > 0,
+        "pero lo que el médico pide con un clic se intenta igual: el asistente no puede negarse a hacer lo que le mandaron");
+      c.api._apiCorteResetParaTest();
+    });
+
+    await t.casoAsync("v17.15.0 — «Servicios de Everest» aparece en el panel de salud y refleja la caída", async () => {
+      // Los otros cuatro módulos se marcan desde la lectura de la PANTALLA, que sigue
+      // funcionando con la API caída: el panel podía decir «✓ leyendo bien» en los cuatro
+      // mientras agendar y buscar paciente estaban rotos. Este mira lo que de verdad decide.
+      const c = cargar({
+        silencioso: true,
+        fetch: async () => ({ ok: false, status: 500, headers: { get: () => null }, json: async () => ({}), text: async () => "", clone() { return this; } }),
+        gmxhr: (o) => { setTimeout(() => { try { o.onload({ status: 500, responseText: "" }); } catch (e) {} }, 0); },
+      });
+      c.api._apiCorteResetParaTest();
+      const reg = c.api._saludRegParaTest ? c.api._saludRegParaTest() : null;
+      t.cierto(!!c.api._saludEstado, "el semáforo de salud está publicado");
+      await c.api.apiAccesoBuscarPaciente("40123456");
+      const m = reg ? reg.everest : null;
+      t.cierto(!!m && m.falloDesde > 0, "el fallo quedó anotado en el módulo everest");
+      // El umbral de 3 minutos es del semáforo, no de esta prueba: se simula el paso del
+      // tiempo en vez de esperarlo, que es lo que hace el resto del banco.
+      t.igual(c.api._saludEstado(m, m.falloDesde + 3 * 60 * 1000 + 1), "alerta",
+        "y tras 3 minutos de fallo sostenido el panel lo pinta en alerta");
+      // Con una respuesta buena vuelve a verde: no se queda pegado en rojo.
+      const c2 = cargar({ silencioso: true, fetch: async () => respuesta({ data: { id: 5 } }) });
+      c2.api._apiCorteResetParaTest();
+      await c2.api.apiAccesoBuscarPaciente("40123456");
+      const reg2 = c2.api._saludRegParaTest ? c2.api._saludRegParaTest() : null;
+      t.igual(c2.api._saludEstado(reg2.everest, Date.now()), "ok", "una respuesta buena lo devuelve a verde");
+    });
+
   }
 };

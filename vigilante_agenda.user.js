@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.14.1
+// @version     17.15.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.14.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.15.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -15528,16 +15528,68 @@ _vglOfrecerDeshacer(btn);
     };
   }
 
+  // v17.15.0 — CORTACIRCUITOS PARA LAS LLAMADAS ESPECULATIVAS.
+  //
+  // REPORTE EN CONSULTA (27-ago): el médico pegó su consola y era una pared de
+  // «[Vigilante SYNAPSE] GM fallback también falló en intento N», cada una con su traza de
+  // pila, sobre BuscarPaciente y GetUsuarioPerfil. Los servicios de Everest devolvían 500 y
+  // agotaban el tiempo. Medido con el arnés ANTES de tocar nada: UN solo hover sobre una
+  // tarjeta de paciente dispara **16 peticiones al servidor y 8 líneas de consola**.
+  //
+  // El detonante no es una acción del médico: es el preparador por hover, una optimización
+  // ESPECULATIVA cuyo fallo no tiene ninguna consecuencia (su llamador lo descarta con un
+  // catch vacío). Pasar el cursor por la lista del día con el servidor caído son cientos de
+  // peticiones a un servidor que ya está mal, y una consola inservible — justo la consola
+  // donde este proyecto le pide al médico que lea los diagnósticos.
+  //
+  // Dos frenos, y ninguno toca lo que el médico pidió con un clic:
+  //   · `options.especulativo`: un intento, sin reintentos y sin narrar el fallo.
+  //   · el cortacircuitos de aquí abajo: tras 3 fallos seguidos, lo especulativo se
+  //     suspende 5 minutos y se dice UNA vez, no una por intento.
+  // Una acción PEDIDA por el médico se intenta siempre, cortacircuitos o no: el asistente
+  // no puede negarse a hacer lo que le mandaron.
+  const API_CORTE_FALLOS = 3;
+  const API_CORTE_MS = 5 * 60 * 1000;
+  let _apiFallosSeguidos = 0;
+  let _apiCorteHasta = 0;
+  let _apiCorteAvisado = false;
+  function _apiCorteAbierto(ahora) {
+    return _apiCorteHasta > 0 && (ahora || Date.now()) < _apiCorteHasta;
+  }
+  function _apiMarcarResultado(ok) {
+    if (ok) {
+      _apiFallosSeguidos = 0; _apiCorteHasta = 0; _apiCorteAvisado = false;
+      try { _saludMarca("everest", true); } catch (e) {}
+      return;
+    }
+    _apiFallosSeguidos++;
+    try { _saludMarca("everest", false); } catch (e) {}
+    if (_apiFallosSeguidos >= API_CORTE_FALLOS && !_apiCorteAbierto()) {
+      _apiCorteHasta = Date.now() + API_CORTE_MS;
+      if (!_apiCorteAvisado) {
+        _apiCorteAvisado = true;
+        try { console.warn("[Vigilante] los servicios de Everest no responden: se suspenden " + Math.round(API_CORTE_MS / 60000) + " min las consultas que el asistente hace por adelantado. Lo que usted pida con un clic se sigue intentando."); } catch (e) {}
+      }
+    }
+  }
+  function _apiCorteEstadoParaTest() { return { fallos: _apiFallosSeguidos, hasta: _apiCorteHasta }; }
+  function _apiCorteResetParaTest() { _apiFallosSeguidos = 0; _apiCorteHasta = 0; _apiCorteAvisado = false; }
+
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
+    // v17.15.0 — una llamada especulativa no insiste ni narra, y no sale siquiera si el
+    // cortacircuitos está abierto. Devolver null es su modo normal de fallar: el llamador
+    // real volverá a pedirlo cuando de verdad haga falta.
+    const especulativo = !!(options && options.especulativo === true);
+    if (especulativo && _apiCorteAbierto()) return null;
     // v11.0.1 — NO se reintenta una ESCRITURA. Este núcleo reintentaba hasta 4 veces y,
     // en cada vuelta, repetía la petición por una segunda vía (GM_xmlhttpRequest): hasta
     // OCHO envíos del mismo POST. En AsignarTurno son ocho citas para el mismo paciente;
     // en GuardarOrdenamiento, ocho órdenes clínicas repetidas.
     const metodo = String((options && options.method) || "GET").toUpperCase();
     const esEscritura = metodo !== "GET" && metodo !== "HEAD" && !(options && options.__idempotent === true);
-    const maxRetries = esEscritura ? 0 : 3;
+    const maxRetries = (esEscritura || especulativo) ? 0 : 3;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       let isError = false;
@@ -15550,7 +15602,7 @@ _vglOfrecerDeshacer(btn);
           }, options || {}));
           if (resp && resp.ok) {
             const data = await resp.json();
-            if (data) return data;
+            if (data) { _apiMarcarResultado(true); return data; }
           } else if (resp && resp.status >= 500) {
             isError = true;
           } else {
@@ -15584,10 +15636,14 @@ _vglOfrecerDeshacer(btn);
                 ontimeout: () => reject(new Error("Timeout")),
               }, options || {}));
             });
-            if (result) return result;
+            if (result) { _apiMarcarResultado(true); return result; }
           } catch (e) {
             // [BLINDADO v8.2.0 NET-01] Silent Failure eliminado: registrar para diagnóstico técnico (sin datos de pacientes)
-            if (console && console.warn) console.warn('[Vigilante SYNAPSE] GM fallback también falló en intento ' + attempt + ':', (e && e.message) || String(e));
+            // v17.15.0 — salvo en la vía especulativa: su fallo no tiene consecuencia y
+            // narrarlo con traza, cuatro veces por ruta y por cada tarjeta que roza el
+            // cursor, sepulta la consola que el médico necesita para diagnosticar. El
+            // fallo SÍ se cuenta (más abajo, en _apiMarcarResultado) — solo no se narra.
+            if (!especulativo && console && console.warn) console.warn('[Vigilante SYNAPSE] GM fallback también falló en intento ' + attempt + ':', (e && e.message) || String(e));
           }
         }
 
@@ -15599,6 +15655,14 @@ _vglOfrecerDeshacer(btn);
         }
       }
     }
+    // v17.15.0 — se agotaron los intentos. Es lo que alimenta el módulo «Servicios de
+    // Everest» del panel de salud: hasta ahora ese panel podía decir «✓ leyendo bien» en
+    // sus cuatro módulos con toda la API de Everest devolviendo 500, porque los cuatro se
+    // marcan desde la lectura de la PANTALLA, que sigue funcionando. El médico no tenía
+    // forma de saber que agendar o buscar un paciente iban a fallar hasta intentarlo.
+    // Un 4xx NO llega aquí (se devuelve arriba sin reintentar): eso es una respuesta del
+    // servidor, no una caída, y contarlo como fallo abriría el cortacircuitos sin motivo.
+    _apiMarcarResultado(false);
     return null;
   }
 
@@ -15723,7 +15787,9 @@ _vglOfrecerDeshacer(btn);
   // no cambia, la clave ya separa por médico y por cédula, y el TTL cubre el resto. Es la
   // cuarta vez que este proyecto casi mete un invalidador sin llamador.)
   const _pacienteIdCache = new Map();
-  async function apiAccesoBuscarPaciente(docId) {
+  // v17.15.0 — `opts.especulativo` viaja hasta pageFetchJson: el preparador por hover lo
+  // pasa, el modal que el médico abrió NO. Es la única diferencia entre las dos vías.
+  async function apiAccesoBuscarPaciente(docId, opts) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
@@ -15749,7 +15815,7 @@ _vglOfrecerDeshacer(btn);
 
     for (const path of paths) {
       try {
-        const res = await pageFetchJson(path);
+        const res = await pageFetchJson(path, (opts && opts.especulativo) ? { especulativo: true } : undefined);
         const pid = extractPatientId(res);
         if (pid) { _pacienteIdCache.set(clave, { pid, ts: Date.now() }); return pid; }
       } catch (e) {}
@@ -16279,7 +16345,11 @@ _vglOfrecerDeshacer(btn);
       let smsEnviado = false;
       if (celular && radicado) {
         try {
-          const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${encodeURIComponent(telParam)}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${encodeURIComponent(radicado)}&codigoSede=378`;
+          const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${encodeURIComponent(telParam)}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${encodeURIComponent(radicado)}&codigoSede=${mtrSedeIdLab()}`;
+          // v17.15.0 — la v17.6.3 sacó el 378 cableado de CINCO URLs a mtrSedeIdLab() y dejó
+          // esta, que es la peor de las seis: es el mensaje que le llega al CELULAR DEL
+          // PACIENTE diciéndole a qué laboratorio ir. Un colega de otra sede que instalara
+          // el script mandaba a sus pacientes a la sede equivocada, por escrito.
           // v12.3.33 — hallado en revisión adversarial: _gmReq resuelve con CUALQUIER
           // estado HTTP (incluidos 4xx/5xx), así que un rechazo del servicio de SMS se
           // anunciaba igual como "Se envió SMS" y el médico se saltaba el recordatorio
@@ -23139,7 +23209,12 @@ _vglOfrecerDeshacer(btn);
       if (GHOST.promises.has(promKey)) return; // Re-verificar en el momento de lanzar
       const p = (async () => {
         try {
-          const pacienteId = await apiAccesoBuscarPaciente(docId);
+          // v17.15.0 — ESPECULATIVO. Esto no lo pidió nadie: el cursor pasó por encima de
+          // una tarjeta. Con el servidor caído, tratarlo como una petición que alguien
+          // espera costaba 16 peticiones y 8 líneas de consola POR TARJETA (medido con el
+          // arnés). Su fallo ya se descartaba con el catch vacío de abajo — ahora también
+          // deja de insistir y de gritar.
+          const pacienteId = await apiAccesoBuscarPaciente(docId, { especulativo: true });
           if (pacienteId) {
             const dt = new Date();
             dt.setDate(dt.getDate() + 1);
@@ -24536,11 +24611,11 @@ _vglOfrecerDeshacer(btn);
   //  ------------------------------------------------------------------
   //  El contrato del DOM documenta 95 puntos de apoyo con su «si falla»: en
   //  varios, el efecto real era que un módulo callaba SIN avisar y el médico
-  //  solo percibía «se dañó». Este registro anota, en cuatro frentes (agenda,
-  //  historia, laboratorios y lista de prevención), la última lectura buena y
+  //  solo percibía «se dañó». Este registro anota, en cinco frentes (los servicios
+  //  de Everest, agenda, historia, laboratorios y lista de prevención), la última buena y
   //  el último fallo. El punto de estado del panel se pone ÁMBAR solo tras
   //  3 minutos de fallo sostenido (los parpadeos de Everest no alarman), y al
-  //  tocarlo se abre un globito con los cuatro renglones en lenguaje llano.
+  //  tocarlo se abre un globito con los cinco renglones en lenguaje llano.
   //  NADA clínico depende de esto: es un termómetro, no una compuerta.
   // =====================================================================
   const _saludReg = {
@@ -24548,14 +24623,26 @@ _vglOfrecerDeshacer(btn);
     historia: { ok: 0, fallo: 0, falloDesde: 0 },
     labs:     { ok: 0, fallo: 0, falloDesde: 0 },
     pym:      { ok: 0, fallo: 0, falloDesde: 0 },
+    // v17.15.0 — QUINTO FRENTE. Los cuatro de arriba se marcan desde la lectura de la
+    // PANTALLA, que sigue funcionando aunque los servicios de Everest estén caídos: en la
+    // consola real del 27-ago toda la API devolvía 500 y este panel podía seguir diciendo
+    // «✓ leyendo bien» en los cuatro. Este lo marca _pageFetchJsonCore, así que refleja lo
+    // que de verdad decide si agendar o buscar un paciente van a funcionar.
+    everest:  { ok: 0, fallo: 0, falloDesde: 0 },
   };
   const SALUD_MIN_FALLO_MS = 3 * 60 * 1000;
   const SALUD_ROTULOS = {
+    everest: "Servicios de Everest (buscar paciente, agendar)",
     agenda: "Agenda del día",
     historia: "Historia clínica",
     labs: "Laboratorios (Athenea)",
     pym: "Lista de prevención (PyM)",
   };
+
+  // Accesor de solo lectura para el banco (mismo patrón que _getRacGuardiaParaTest):
+  // el registro es privado y sin esto una prueba tendría que adivinar su estado por la
+  // interfaz pintada, que es justo lo que no se puede montar en el arnés.
+  function _saludRegParaTest() { return _saludReg; }
 
   function _saludMarca(mod, ok) {
     const m = _saludReg[mod];

@@ -132,3 +132,47 @@ una cuenta de Google personal (pendiente #7 de siempre: ¿se queda, se retira, o
 y el token siga siendo el mismo; (5) encender los interruptores en cada PC (o decidir retirar
 el canal). Del lado mío, cuando decida: acuse real del servidor (corregir el "no" contado como
 éxito), `Codigo.gs` de vuelta al repo, y el disparador de correo "si pasan 24 h sin filas".
+
+---
+
+# Estado real al 27-ago-2026 (revisión contra el código v17.15.0)
+
+Este documento listaba como abiertas cosas que llevaban semanas cerradas. Un documento de
+pendientes que miente hace que nadie lo lea. Revisado una por una contra el código de hoy:
+
+| # | Estado | Evidencia |
+|---|---|---|
+| 1, 2, 3, 4, 9, 13, 16 | **RESUELTAS** — respondidas por el médico en la entrevista del 20-ago y cableadas | marcadas ya arriba |
+| **5** LDL basal | **RESUELTA (v16.9.0)** | `mtrLdlBasalDeSerie` toma el LDL más alto de los controles del último año y lo inyecta a `mtrEvaluarMetaLdl`; sin serie, la interfaz dice «reducción ≥X % no evaluable: sin LDL previo del último año» en vez de castigar. Pruebas en `suite_45` |
+| **6** El sábado | **MEDIDA, y la conclusión cambió** — ver abajo | `tools/medir_sabados.js` |
+| **7** toma→control | **RESUELTA (v16.9.0)** | objetivo único +7, ventana 14–21 |
+| **8** La sede 378 | **CERRADA (v17.15.0)** | la v17.6.3 sacó el literal de cinco URLs a `mtrSedeIdLab()` y dejó **una**: la del SMS al paciente. Ya no |
+| **10** Embarazo | **RESUELTA (v16.9.0 / v17.0.2)** | `mtrDebePreguntarEmbarazo` + confirmación con vigencia de 30 días, consumida por `mtrEvaluarUroanalisis`. Prueba en `suite_48` |
+| **11** Cosecha 25 % | **RESUELTA** | margen al 33 %, con prueba desde v17.7.x |
+| **12** Discordancia de TFG | **RESUELTA (v16.9.0)** | umbral a 2 estadios en `evaluarDiscordanciaTFG`, «REVISE EL DATO» desde 3. Prueba en `suite_27` |
+| **14** Festivos hasta 2027 | **RESUELTA (v16.9.0)** | `mtrEsFestivoCO` calcula por Ley Emiliani, sin techo; la tabla queda solo de 2024-2027 y delega fuera de rango |
+| **15** Plazo por defecto | **RESUELTA** | sin datos, ningún chip activo |
+| **17** Tamizajes ocultos | **DECIDIDA por el médico el 27-ago: «dejarlo exactamente como está»** | ni contador visible ni sacar el campo del modo programador. **No es un pendiente: es una decisión tomada** |
+| **18** Cuatro relojes | **RESUELTA (v17.6.0)** | un solo TTL de 10 min en resumen, medicamentos, labs y tabla oficial |
+| Telemetría: acuse falso | **RESUELTA (v16.4.0), y desde la v17.15.0 con prueba** | `repPost` excluye del `ok` la respuesta `"no"`; el caso quedaba sin fijar y una regresión habría sido muda |
+
+## La #6 medida: la conclusión del 20-ago no se sostiene
+
+El documento decía «el sábado tiene CUATRO reglas distintas» y recomendaba unificar. Medido
+con `tools/medir_sabados.js` sobre un año de fechas × los seis plazos del modal:
+
+- La regla de `calcBusinessTargetDate` («el sábado nunca es hábil») **actúa en 310 de 2.190
+  casos (14,2 %)** … y le cuesta al médico **CERO sábados ofrecidos**. En un caso incluso le
+  ofrece uno más. Mueve el centro del abanico de días, no lo que él puede elegir: los chips
+  siguen mostrando los mismos sábados.
+- La otra «divergencia» —los chips ofrecen los 52 sábados del año y el motor acepta 0, 28, 28
+  o 52 según el estado del grupo— **no es un defecto: son dos preguntas distintas**. El chip
+  ofrece marcado «por confirmar» (`confirmado: !esSabado`) y deja decidir al médico; el motor
+  decide qué SUGERIR. Que difieran es el diseño.
+- **Ninguna discrepancia deja vencer un examen**: un sábado rechazado empuja el control al
+  lunes (+2 días) y eso vive dentro de la ventana clínica que `mtrFechaControlSugerida` ya
+  respeta. CERO VENCIDOS (S0) no se toca.
+
+**Recomendación, contraria a la del 20-ago: no unificar.** El cambio movería fechas reales a
+cambio de cero sábados ganados, en un módulo que el médico usa en vivo. Queda documentado
+como divergencia conocida y medida, no como deuda.

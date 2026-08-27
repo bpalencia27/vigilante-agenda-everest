@@ -122,6 +122,27 @@ module.exports = {
       t.igual(red.posts[0].url, "https://mi.servidor/hoja");
     });
 
+
+    await t.casoAsync("v17.15.0 — el «no» del panel NO cuenta como entregado, y deja causa legible", async () => {
+      // El defecto que esto fija se corrigió en la v16.4.0 y se quedó SIN PRUEBA: la de
+      // arriba cubre 500, login de Google, HTML y caída de red, pero ninguna fija el «no».
+      // Es el peor de los cinco porque es el silencioso: el receptor responde 200 con el
+      // cuerpo «no» al rechazar el token, y contarlo como entregado producía una hoja vacía
+      // con el sello en verde — exactamente los 9 días de mudez que nadie notó en agosto.
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.status = 200; red.finalUrl = ""; red.cuerpo = "no";
+      t.falso(await c.api.repPost({ a: 9 }), "un «no» del panel no es una entrega");
+      let err = null;
+      try { err = JSON.parse(c.env.win.localStorage.getItem("vgl_rep_last_err") || "null"); } catch (e) {}
+      t.cierto(!!err && /token/i.test(err.detalle || ""),
+        "y la causa dice qué revisar, no un «respuesta 200» que no ayuda a nadie");
+      // «dup» SÍ es éxito: la fila ya había llegado y el servidor la descartó por duplicada.
+      // Sin esta mitad, alguien podría «arreglar» el «no» rechazando cualquier respuesta corta.
+      red.cuerpo = "dup";
+      t.cierto(await c.api.repPost({ a: 10 }), "«dup» sigue siendo entrega: la fila ya estaba");
+    });
+
     // ---------- repQLoad / repQSave ----------
     t.caso("repQLoad: sin nada guardado arranca vacía; carga lo guardado; corrupto o 'null' no revienta", () => {
       // sin nada en GM

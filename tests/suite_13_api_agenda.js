@@ -592,7 +592,15 @@ module.exports = {
       t.cierto(urlSms.startsWith("https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio"));
       t.cierto(urlSms.includes("Celular=3000000000"), "el celular se limpia de espacios y guiones antes de mandarlo");
       t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
-      t.cierto(urlSms.includes("codigoSede=378"));
+      // v17.15.0 — la prueba pedía el literal «378», así que protegía el cableado en vez de
+      // la regla: si alguien cambiaba la sede en mtrSedeIdLab(), esta línea seguía exigiendo
+      // el número viejo y el rojo señalaba al arreglo, no al defecto. La v17.6.3 sacó el 378
+      // de CINCO URLs a esa función y dejó fuera justo esta — la del mensaje que llega al
+      // CELULAR DEL PACIENTE diciéndole a qué laboratorio ir. Ahora se exige la función.
+      t.cierto(urlSms.includes("codigoSede=" + e.c.api.mtrSedeIdLab()),
+        "la sede del SMS sale de mtrSedeIdLab(), no de un literal: un colega de otra sede mandaría a sus pacientes al laboratorio equivocado, por escrito");
+      t.falso(/codigoSede=378\b/.test(urlSms) && e.c.api.mtrSedeIdLab() !== 378,
+        "y si la sede cambia, el SMS cambia con ella");
       t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
     });
 

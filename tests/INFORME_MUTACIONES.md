@@ -4549,3 +4549,53 @@ confirmada. Lo que cambia es que la tamización de mama sale de su alcance, porq
 periodicidad depende de la edad y del riesgo (Resolución 3280/2018) y eso ya lo resuelve el
 programa de la IPS al armar la lista. El resultado de Athenea **no se esconde**: se sigue
 mostrando con su fecha; lo único que deja de hacer es tocar la casilla.
+
+---
+
+## v17.15.0 — la consola deja de sepultarse sola, y el panel de salud mira lo que falló
+
+El médico pegó su consola de una sesión real en v17.14.1: una pared de
+«[Vigilante SYNAPSE] GM fallback también falló en intento N», cada una con su traza de pila,
+sobre `BuscarPaciente` y `GetUsuarioPerfil`, con los servicios de Everest devolviendo 500 y
+agotando el tiempo.
+
+**El defecto reproducido con números ANTES de tocar nada** (`/tmp/repro.js` sobre el arnés,
+servidor simulado devolviendo 500):
+
+| | peticiones al servidor | líneas de consola |
+|---|---|---|
+| Antes — un solo hover sobre una tarjeta | **16** | **8** |
+| Después — el mismo hover | **4** | **0** |
+| Después — lo que el médico pide con un clic | 16 | 8 (**sin cambio, a propósito**) |
+| Después — con el cortacircuitos abierto: especulativa / pedida | **0** / 8 | |
+
+El detonante no era una acción del médico: era el preparador por hover, una optimización
+especulativa cuyo fallo ya se descartaba con un `catch` vacío. Con el servidor caído, pasar
+el cursor por la lista del día eran cientos de peticiones a un servidor que ya estaba mal, y
+una consola inservible — justo la consola donde este proyecto le pide al médico que lea los
+diagnósticos.
+
+Banco en verde tras la restauración final: **2.451/2.451**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Que una llamada `especulativo` volviera a reintentar 4 veces | `suite_05` | *v17.15.0 — una llamada especulativa no insiste ni narra su fallo* |
+| 2 | Que el `console.warn` por intento volviera a emitirse en la vía especulativa | `suite_05` | *(la misma)* |
+| 3 | Que el cortacircuitos frenara también lo que el médico pidió con un clic | `suite_05` | *v17.15.0 — el cortacircuitos frena lo especulativo y JAMÁS lo que el médico pidió* |
+| 4 | Quitar `_apiMarcarResultado(false)` del agotamiento de intentos | `suite_05` | *v17.15.0 — «Servicios de Everest» aparece en el panel de salud y refleja la caída* **y** la del cortacircuitos (sin marcar fallos no se abre nunca: es la consecuencia correcta, no un descuido de la prueba) |
+| 5 | Devolver el `378` literal a la URL del SMS del paciente | `suite_13` | *apiLaboratorioAgendarAuto: con celular conocido, envía el SMS…* → *la sede del SMS sale de `mtrSedeIdLab()`, no de un literal* |
+| 6 | Que `repPost` volviera a contar el `"no"` del panel como entregado | `suite_11` | *v17.15.0 — el «no» del panel NO cuenta como entregado, y deja causa legible* |
+
+**Una prueba existente fijaba el cableado, no la regla.** `suite_13` exigía literalmente
+`codigoSede=378`: si alguien cambiaba la sede en `mtrSedeIdLab()`, esa línea seguía pidiendo
+el número viejo y el rojo habría señalado al arreglo en vez de al defecto. Reescrita para
+exigir la función. Es la misma clase de defecto que ya se documentó cuatro veces en este
+informe — una prueba que protege lo que hay en vez de lo que debe haber.
+
+**Y el residuo que destapó:** la v17.6.3 sacó el `378` cableado de **cinco** URLs a
+`mtrSedeIdLab()` y dejó **una** — la del SMS que llega al celular del paciente diciéndole a
+qué laboratorio ir. De las seis, la única que sale de la IPS por escrito.
+
+**Sin mutación, y se dice en vez de inventar una:** el `TZ: America/Bogota` del flujo de
+GitHub, la medición de sábados (`tools/medir_sabados.js`) y la revisión de
+`docs/DECISIONES_PENDIENTES_20260820.md` no cambian el comportamiento del script.
