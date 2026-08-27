@@ -1,9 +1,3 @@
-/* Verificación EMPÍRICA de color en Chromium contra un CSS de Everest simulado.
-   Uso:  npm i playwright  (una vez, fuera del repo)  y luego
-         node tools/verificar_color_chromium.js
-   Vive en tools/ y NO en tests/ a propósito: el banco no puede depender de que haya
-   un navegador instalado. Es la comprobación manual que CLAUDE.md exige para toda
-   regla de color nueva en un panel pegado a document.body. */
 // Verificación EMPÍRICA que exige CLAUDE.md: el CSS real del script, montado contra un
 // "Everest" agresivo, en Chromium de verdad. No una copia recortada a mano.
 const fs = require("fs");
@@ -31,6 +25,7 @@ const EVEREST = `
 const CASOS = [
   { id: "vgl-ordenar-modal", cls: "vgl-ord-sexwarn", que: "aviso: citología a un hombre", token: "--c-rojo" },
   { id: "vgl-ordenar-modal", cls: "vgl-ord-vigwarn", que: "aviso de vigencia", token: "--c-verde" },
+  { id: "vgl-ordenar-modal", cls: "vgl-ord-parcial", que: "corrida de órdenes A MEDIAS", token: "--c-ambar" },
   { id: "vgl-ordenar-modal", cls: "vgl-ord-pymsrc", que: "origen del paquete PyM", token: "--c-morado" },
   { id: "vgl-labs-modal",    cls: "vgl-labs-val",   que: "valor de laboratorio", token: "--fg" },
   { id: "vgl-labs-modal",    cls: "vgl-labs-patient", que: "nombre del paciente", token: "--fg" },

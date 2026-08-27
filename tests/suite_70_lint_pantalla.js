@@ -28,7 +28,8 @@ module.exports = {
   nombre: "Tanda 0 — lint de pantalla (banderas y jerga)",
   cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
     "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
-    "_tableroQueCambio", "mtrTextoDestinoTelemetria"],
+    "_tableroQueCambio", "mtrTextoDestinoTelemetria",
+    "_agruparToasts", "mtrColorMasGrave"],
 
   pruebas(t, api) {
     const src = fs.readFileSync(RUTA, "utf8");
@@ -243,6 +244,60 @@ module.exports = {
         "se dice que sale y dónde apagarlo, que es lo accionable");
       t.cierto(/no salen de este computador/.test(api.mtrTextoDestinoTelemetria(undefined)),
         "sin dato se asume lo conservador: no afirmar un envío que no consta");
+    });
+
+
+    // =================================================================
+    //  TANDA 2 de la auditoría — COLOR CON SIGNIFICADO
+    //
+    //  Patrón A del informe: «el ámbar señala diez cosas sin relación entre sí; el rojo es
+    //  a la vez alarma clínica, "no hay cupos ese día", "este paciente no necesita nada" y
+    //  el botón de cerrar ventana. Con esa dispersión el color deja de comunicar y pasa a
+    //  ser decoración».
+    //
+    //  Las dos de aquí son las que cambian una conducta: una rebaja una alarma y la otra
+    //  disfraza un fallo de éxito.
+    // =================================================================
+    t.caso("v17.11.0 — agrupar avisos NUNCA puede rebajar la alarma", () => {
+      // Hallazgo #63, gravedad alta. Reproducido: un aviso ROJO —la confirmación
+      // extemporánea, que este proyecto trata como evidencia para una reclamación—
+      // agrupado con un AZUL rutinario del mismo paciente salía en ÁMBAR. El rojo
+      // desaparecía por el solo hecho de que hubiera otro aviso al lado.
+      const grupo = (colores) => api._agruparToasts(
+        colores.map((c, i) => ({ color: c, title: "aviso " + i, body: "x", apptKey: "P1" }))
+      )[0];
+      t.igual(grupo(["ROJO", "AZUL"]).color, "ROJO",
+        "un ROJO agrupado sigue siendo ROJO: es el aviso que sostiene una reclamación");
+      t.igual(grupo(["AZUL", "ROJO"]).color, "ROJO", "el orden de llegada no lo cambia");
+      t.igual(grupo(["MORADO", "AZUL"]).color, "MORADO", "ni el morado se rebaja");
+      t.igual(grupo(["AMBAR", "AZUL"]).color, "AMBAR", "ni el ámbar");
+      t.igual(grupo(["VERDE", "AZUL"]).color, "VERDE", "y lo rutinario tampoco se agrava de más");
+
+      // El orden de gravedad, fijado aparte: es lo que hace que la regla se sostenga.
+      t.igual(api.mtrColorMasGrave(["AZUL", "VERDE", "AMBAR", "MORADO", "ROJO"]), "ROJO");
+      t.igual(api.mtrColorMasGrave(["AZUL", "VERDE"]), "VERDE");
+      t.igual(api.mtrColorMasGrave([]), "AZUL", "sin avisos, lo más rutinario");
+      t.igual(api.mtrColorMasGrave(["COLOR_QUE_NADIE_DECLARO"]), "ROJO",
+        "un color desconocido se trata como lo MÁS grave: callar una alarma por no saber "
+        + "clasificarla es el peor error posible aquí");
+    });
+
+    t.caso("v17.11.0 — una corrida de órdenes a medias no puede parecerse a una que salió bien", () => {
+      // Hallazgo #44, gravedad alta. El aviso del parcial usaba .vgl-ord-vigwarn, que en
+      // ESE modal es VERDE y significa «esto ya está cubierto»: de un vistazo, una corrida
+      // en la que parte de las órdenes NO se crearon decía «todo bien».
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/successMsg\.className = parcial \? "vgl-ord-parcial"/.test(src),
+        "el parcial usa su clase propia, no la del verde de «ya cubierto»");
+      t.falso(/successMsg\.className = parcial \? "vgl-ord-vigwarn"/.test(src),
+        "y no puede volver a la clase verde por la puerta de atrás");
+      // La clase existe y es ámbar con !important (el modal cuelga de document.body).
+      const bloque = /#vgl-ordenar-modal \.vgl-ord-parcial\{[^}]*\}/.exec(src);
+      t.cierto(!!bloque, "la clase .vgl-ord-parcial está declarada");
+      t.cierto(/--c-ambar/.test(bloque[0]), "en ámbar, que es el color de «ojo con esto»");
+      t.cierto(/!important/.test(bloque[0]),
+        "y blindada: este modal cuelga de document.body, fuera de #vgl-root");
     });
 
   },

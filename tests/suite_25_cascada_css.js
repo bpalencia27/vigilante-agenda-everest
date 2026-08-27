@@ -536,8 +536,15 @@ module.exports = {
       // hombre, que hasta hoy podía perder contra cualquier regla de Everest con
       // especificidad >=10. Este contador existe para que un salto así no pase inadvertido:
       // cumple su función y por eso se sube a mano, con el motivo escrito.
-      const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 404, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 404, salió ${importantTotal})`);
+      // v17.11.0 — EL CONTADOR CONTABA COMENTARIOS. Escribir «con !important porque este
+      // modal cuelga de document.body» en un comentario CSS subía el total como si se
+      // hubiera añadido una declaración. Un contador que se mueve porque alguien explicó
+      // algo no está midiendo lo que dice medir, y peor: empuja a NO documentar. Ahora
+      // cuenta sobre el CSS con los comentarios quitados —`cssClean`, que esta misma suite
+      // ya construye para las demás reglas— y el número baja de 404 a 378 SIN que haya
+      // cambiado una sola declaración: los 26 de diferencia siempre fueron prosa.
+      const importantTotal = (cssClean.match(/!important/g) || []).length;
+      t.cierto(importantTotal === 378, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 378 declaraciones reales, sin contar comentarios, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del

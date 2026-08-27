@@ -6,6 +6,55 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.11.0 — 27-ago-2026 (auditoría de experiencia: Tanda 2, color con significado)
+
+Patrón A del informe: *«el ámbar señala diez cosas sin relación entre sí; el rojo es a la vez
+alarma clínica, "no hay cupos ese día", "este paciente no necesita nada" y el botón de cerrar
+ventana. Con esa dispersión el color deja de comunicar y pasa a ser decoración»*.
+
+Las dos de esta entrega son las que **cambian una conducta**: una rebaja una alarma y la otra
+disfraza un fallo de éxito.
+
+### #63 — agrupar avisos rebajaba la alarma
+
+Reproducido: un aviso **ROJO** —la confirmación extemporánea, que este proyecto trata como
+evidencia para una reclamación— agrupado con un AZUL rutinario del mismo paciente salía en
+**ÁMBAR**. El rojo desaparecía por el solo hecho de que hubiera otro aviso al lado. El mismo
+defecto estaba en «Alerta Múltiple», donde afecta a más avisos a la vez.
+
+Ahora el color de un grupo es el del **más grave** que contiene (`mtrColorMasGrave`), con el
+mismo orden que el resto del archivo ya usa. Y un color que nadie declaró se trata como **lo
+más grave**: callar una alarma por no saber clasificarla es el peor error posible aquí.
+
+### #44 — una corrida a medias se pintaba de «todo bien»
+
+El aviso de que las órdenes salieron **a medias** reutilizaba `.vgl-ord-vigwarn`, que en ESE
+modal es **verde** y significa «esto ya está cubierto». De un vistazo, una corrida en la que
+parte de las órdenes NO se crearon decía que todo había ido bien — y el médico se va creyendo
+que quedaron pedidas. Clase propia en ámbar, con `!important` (el modal cuelga de
+`document.body`), **verificada en Chromium** contra un CSS de Everest agresivo: sobrevive.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | El grupo vuelve al ámbar fijo | *agrupar avisos NUNCA puede rebajar la alarma* |
+| 2 | Un color desconocido deja de tratarse como grave | la misma |
+| 3 | El parcial vuelve a la clase verde | *una corrida a medias no puede parecerse a una que salió bien* |
+
+### El contador de `!important` contaba comentarios
+
+Al añadir la clase nueva, el contador de `suite_25` saltó **+2** cuando la declaración era
+**una**. La otra estaba dentro de un **comentario CSS**: escribir «con `!important` porque este
+modal cuelga de document.body» subía el total como si se hubiera añadido código.
+
+Un contador que se mueve porque alguien **explicó** algo no mide lo que dice medir, y peor:
+**empuja a no documentar**. Ahora cuenta sobre el CSS con los comentarios quitados —usando el
+`cssClean` que esa misma suite ya construye— y el número baja de 404 a **378 sin que haya
+cambiado una sola declaración**: los 26 de diferencia siempre fueron prosa.
+
+Banco completo en **2.429/2.429** con `TZ=America/Bogota`.
+
+---
+
 ## v17.10.0 — 27-ago-2026 (la historia se lee mientras se escribe, no al guardarla)
 
 **Rechazo explícito del médico a la v17.9.0, y tenía razón:** *«no me sirve para la siguiente

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.10.0
+// @version     17.11.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.10.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.11.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10913,6 +10913,31 @@ _vglOfrecerDeshacer(btn);
   //      idénticas y las dos llegaban a la pila.
   //   2. Avisos DISTINTOS del mismo paciente (p. ej. "Cierre de consulta" + "Espera
   //      prolongada" del mismo tick) se combinan en UNA sola tarjeta en vez de apilarse.
+  // =====================================================================
+  //  v17.11.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #63 (gravedad alta): AGRUPAR NO PUEDE
+  //  REBAJAR LA ALARMA
+  //  ------------------------------------------------------------------
+  //  El grupo salía SIEMPRE en ÁMBAR cuando alguno de los avisos era crítico. Reproducido:
+  //  un aviso ROJO —la confirmación extemporánea, que este proyecto trata como evidencia
+  //  para una reclamación— agrupado con un AZUL rutinario del mismo paciente salía en
+  //  ÁMBAR. El rojo desaparecía por el solo hecho de que hubiera otro aviso al lado.
+  //
+  //  Regla: el color de un grupo es el del aviso MÁS GRAVE que contiene. Nunca uno fijo.
+  //  Es el orden que el resto del archivo ya usa para ordenar y para no autodescartar
+  //  (ver el comentario de _renderToast: «ROJO/MORADO/ÁMBAR van al FRENTE»).
+  // =====================================================================
+  const MTR_ORDEN_GRAVEDAD_COLOR = ["ROJO", "MORADO", "AMBAR", "VERDE", "AZUL"];
+  function mtrColorMasGrave(colores) {
+    const lista = (Array.isArray(colores) ? colores : []).filter(Boolean);
+    for (const c of MTR_ORDEN_GRAVEDAD_COLOR) {
+      if (lista.indexOf(c) >= 0) return c;
+    }
+    // Un color que nadie declaró no puede rebajar nada: si hay algo y no se reconoce, se
+    // trata como lo más grave. Callar una alarma por no saber clasificarla es el peor
+    // error posible aquí.
+    return lista.length ? "ROJO" : "AZUL";
+  }
+
   // Función pura para que el banco la pueda probar: agrupa por apptKey.
   function _agruparToasts(lista) {
     const out = [];
@@ -10924,9 +10949,9 @@ _vglOfrecerDeshacer(btn);
     }
     for (const [, listaP] of porPaciente) {
       if (listaP.length === 1) { out.push(listaP[0]); continue; }
-      const critico = listaP.some((t) => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR");
       out.push({
-        color: critico ? "AMBAR" : "AZUL",
+        // v17.11.0 — el más grave, nunca un valor fijo (ver mtrColorMasGrave arriba).
+        color: mtrColorMasGrave(listaP.map((t) => t && t.color)),
         title: listaP.length + " avisos de este paciente",
         body: listaP.map((t) => "• " + t.title + ": " + t.body).join("  |  "),
         persist: true, apptKey: listaP[0].apptKey,
@@ -10946,7 +10971,11 @@ _vglOfrecerDeshacer(btn);
         const agrupados = _agruparToasts(toastQueue);
         if (agrupados.length > 3) {
           const criticos = agrupados.filter(t => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR").length;
-          _renderToast("AMBAR", `Alerta Múltiple (${agrupados.length})`, `${criticos} alertas críticas y ${agrupados.length - criticos} rutinarias recibidas.`, true);
+          // v17.11.0 — mismo defecto que en _agruparToasts, y aquí afecta a MÁS avisos a la
+          // vez: «Alerta Múltiple» salía en ÁMBAR fijo aunque dentro hubiera un ROJO.
+          _renderToast(mtrColorMasGrave(agrupados.map((t) => t && t.color)),
+            `Alerta Múltiple (${agrupados.length})`,
+            `${criticos} alertas críticas y ${agrupados.length - criticos} rutinarias recibidas.`, true);
         } else {
           agrupados.forEach(t => _renderToast(t.color, t.title, t.body, t.persist, t.apptKey));
         }
@@ -14777,6 +14806,19 @@ _vglOfrecerDeshacer(btn);
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
         color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.13);
         border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+      }
+      /* v17.11.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #44 (gravedad alta). El aviso de que
+         la corrida salió A MEDIAS reutilizaba .vgl-ord-vigwarn, que en ESTE modal es VERDE
+         y significa «esto ya está cubierto». O sea: de un vistazo, una corrida en la que
+         parte de las órdenes NO se crearon decía «todo bien». El médico se va creyendo que
+         quedaron pedidas.
+         Clase propia, en ámbar, con !important porque este modal cuelga de document.body
+         (regla de la casa) y verificada en Chromium contra un CSS de Everest agresivo. */
+      #vgl-ordenar-modal .vgl-ord-parcial{
+        font-size:var(--t-micro);font-weight:700;line-height:1.45;
+        color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.13);
+        border:1px solid rgba(var(--rgb-ambar),.45);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
       }
 
@@ -22855,7 +22897,10 @@ _vglOfrecerDeshacer(btn);
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
-          successMsg.className = parcial ? "vgl-ord-vigwarn" : "vgl-msg-success";
+          // v17.11.0 — hallazgo #44: el parcial usaba .vgl-ord-vigwarn, que en este modal es
+          // VERDE («ya está cubierto»). Una corrida a medias no puede parecerse a una que
+          // salió bien: clase propia en ámbar.
+          successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
           successMsg.innerHTML = parcial
             ? `
             <div style="font-size:14px;font-weight:600;margin-bottom:4px">⚠️ Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
