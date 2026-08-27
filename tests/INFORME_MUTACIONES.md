@@ -6,6 +6,80 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.97 — 27-ago-2026 (la cintura era la cadera, y no se podía leer por id)
+
+Cuarto punto de la Fase 3. Banco antes: 2.361 · después: **2.369**.
+
+`mtrLeerCinturaDelDom` leía `cinturaPelvica`. **Eso no es la cintura: es la CADERA.** Lo
+confirmó el médico al ver su propia pantalla: *«Circunferencia abdominal es lo que es cintura
+en Everest, y cintura pélvica es caderas»*. Como la cadera siempre mide más que la cintura,
+cablearla habría marcado obesidad central en casi todo paciente → un factor de riesgo mayor
+falso → meta de LDL más estricta → más exámenes. **No llegó a hacer daño porque la función
+estaba MUERTA** (cero llamadores) desde que se escribió en v17.6.65. Se corrige antes de
+darle ningún uso.
+
+**Y no se puede leer por id.** El diagnóstico que corrió el médico en su pantalla el 26-ago
+devolvió la fila antropométrica entera:
+
+| rótulo | id |
+|---|---|
+| Peso (Kg) | `peso` |
+| Talla (cm) | `Talla` |
+| IMC | `IMC` |
+| **Circunferencia abdominal (cm)** | **`alert_message`** |
+| Perímetro Cefálico (cm) | `IMC` ← repetido |
+| Perímetro Braquial (cm) | `alert_message` ← repetido |
+| Pliegue Cutáneo Subescapular | `IMC` ← repetido |
+| Pliegue Cutáneo del Tríceps | `alert_message` ← repetido |
+| Perímetro de pantorrilla (cm) | `perimetroPantorrilla` |
+| Cintura pélvica (cm) | `cinturaPelvica` |
+
+Cuatro casillas comparten dos ids, ninguna tiene atributo `name`, y la cintura es una de las
+repetidas. Solo es alcanzable por **rótulo**. La estrategia de `mtrLeerCampoPorRotulo` no es
+una conjetura: es la misma de `DIAGNOSTICO_CINTURA.js`, que se ejecutó contra el Everest real
+y devolvió el rótulo correcto para las diez casillas.
+
+**Regla dura:** si el rótulo casa con MÁS DE UNA casilla, se devuelve `null`. Un id repetido
+ya costó una lectura equivocada; una coincidencia ambigua no se resuelve eligiendo la primera.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| **1** | La cintura vuelve a leer `cintura pélvica` | *la cintura es la CIRCUNFERENCIA ABDOMINAL, nunca la cintura pélvica* → **2 rojas** |
+| **2** | Con 2+ coincidencias se coge la primera en vez de `null` | *un rótulo que casa con DOS casillas devuelve null, no la primera* |
+| **3** | Se quita el rango de plausibilidad (30–250 cm) | *una cintura imposible no pasa, y nunca se inventa* |
+| **4** | El umbral del síndrome metabólico vuelve a `>` estricto | *el umbral del síndrome metabólico es MAYOR O IGUAL, como dice el consenso* |
+| **5** | La obesidad central por perímetro deja de contar como FR mayor | *la obesidad central cuenta como FR mayor, con SU umbral* |
+| **6 · CABLEADO** | El contexto lee la cintura y no la mete en los factores | *la cintura se lee en los cuatro sitios que la necesitan* |
+| **7 · CABLEADO** | La cintura sale de la FIRMA de los 20 s | *…los cuatro sitios…* |
+| **8 · CABLEADO** | La reclasificación de los 20 s pierde `cinturaCm` de la mezcla | *la cintura sobrevive a la reclasificación de los 20 s* |
+
+Las ocho se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.369/2.369 tras cada restauración.
+
+**Dos umbrales distintos sobre la misma medida, y v68 los escribe distintos.** El de los FR
+mayores es `obesidad(IMC>=30 o CA>94H/>90M)` —estricto—; el del síndrome metabólico es
+`CA>=90H/>=80M` —mayor o igual—. Se respetan los dos tal como están escritos. El segundo era
+además una divergencia silenciosa: el código tenía `>` donde el consenso dice `>=`, así que un
+hombre de exactamente 90 cm no sumaba el criterio que la norma sí le cuenta. Afecta solo al
+valor justo en el borde, pero el borde es donde se decide.
+
+**Lo que gana el motor, medido:** el paciente clásico del programa (TG 200, HDL 35) pasaba de
+`cumple: null` —«con lo que hay no se puede decidir», con solo 4 de los 5 criterios
+evaluables— a un veredicto real. Y el dato sirve en los dos sentidos: con 104 cm **cumple**,
+con 84 cm se puede **descartar**, cosa que antes tampoco se podía.
+
+**La mutación 7 es la lección del peso, repetida.** En v17.6.75 el peso no entraba en la firma
+de la vigilancia de 20 s, así que escribirlo en Examen físico no contaba como «algo cambió» y
+el Panel no reclasificaba por él solo. La cintura habría heredado el mismo defecto: se lee en
+tres sitios y se compara en un cuarto, y ese cuarto es el que decide si merece la pena releer.
+
+**Un aviso sobre la mutación 4:** la primera vez se aplicó con un comentario de línea al final
+(`// MUTACION 4`), que se tragó el resto de la sentencia y convirtió el `criterios.push(...)`
+en un no-op. Cayeron cinco pruebas en vez de una — un rojo que no probaba lo que decía probar.
+Se repitió con `/* … */` delante y entonces cayó la prueba correcta, y solo esa. Una mutación
+mal formada es tan inútil como una prueba que no cae.
+
 ## v17.6.96 — 27-ago-2026 (el punto ciego de la HbA1c en el antiduplicado del paquete RCV)
 
 Hallazgo que destapó la auditoría del hueco 8 y que allí se dejó fuera a propósito, por ser

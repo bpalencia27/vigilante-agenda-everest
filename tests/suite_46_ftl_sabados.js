@@ -47,6 +47,7 @@ module.exports = {
     "mtrSabadoMemoriaLeer", "mtrSabadoMemoriaGuardar", "mtrSabadoGrupoDeMedico",
     "mtrSabadoRegistrarObservacion", "mtrSabadoFijarGrupoManual",
     "mtrGrupoSabadoFiable", "mtrSabadoTrabajaEsteMedico",
+    "mtrLeerCampoPorRotulo", "mtrLeerCinturaDelDom",
   ],
 
   pruebas(t, api) {
@@ -518,6 +519,94 @@ module.exports = {
       t.noLanza(() => { api.mtrSabadoMemoriaGuardar({ "1": { origen: "observado", observados: [] } }); },
         "guardar no puede lanzar");
       t.noLanza(() => { api.mtrSabadoMemoriaGuardar(null); }, "ni con null");
+    });
+
+    // ============ v17.6.97 — LA CINTURA, POR RÓTULO ============
+    //
+    // La fila antropométrica de Everest NO se puede leer por id: cuatro de sus diez
+    // casillas comparten dos ids entre sí (`alert_message` e `IMC`), ninguna tiene
+    // atributo `name`, y la circunferencia abdominal —la que de verdad es la cintura—
+    // es una de las repetidas. Verificado con el diagnóstico que el médico corrió en
+    // su propia pantalla el 26-ago. Este DOM falso reproduce esa fila tal cual.
+    const everestAntropometria = (valores) => {
+      const FILA = [
+        ["Peso (Kg): *", "peso"], ["Talla (cm):*", "Talla"], ["IMC:", "IMC"],
+        ["Circunferencia abdominal (cm):", "alert_message"],
+        ["Perímetro Cefálico (cm):", "IMC"],
+        ["Perímetro Braquial (cm):", "alert_message"],
+        ["Pliegue Cutáneo Subescapular (mm):", "IMC"],
+        ["Pliegue Cutáneo del Tríceps (mm):", "alert_message"],
+        ["Perímetro de pantorrilla (cm):", "perimetroPantorrilla"],
+        ["Cintura pélvica (cm):", "cinturaPelvica"],
+      ];
+      const inputs = FILA.map(([rot, id]) => {
+        const celdaRot = { textContent: rot, innerText: rot, previousElementSibling: null };
+        const input = {
+          id: id, value: (valores && valores[rot] != null) ? String(valores[rot]) : "",
+          tagName: "INPUT", type: "number", getAttribute: () => null, closest: () => null,
+        };
+        input.parentElement = { previousElementSibling: celdaRot, parentElement: null };
+        return input;
+      });
+      return { querySelectorAll: (sel) => (/input/.test(sel) ? inputs : []), querySelector: () => null };
+    };
+
+    t.caso("v17.6.97: la cintura es la CIRCUNFERENCIA ABDOMINAL, nunca la cintura pélvica (que es la cadera)", () => {
+      // El defecto que esto cierra: mtrLeerCinturaDelDom leía `cinturaPelvica`. Como la
+      // cadera SIEMPRE mide más que la cintura, cablearla habría marcado obesidad central
+      // en casi todo paciente — un factor de riesgo mayor falso, meta de LDL más estricta
+      // y más exámenes. Estaba muerta, así que no llegó a hacer daño.
+      const d = everestAntropometria({
+        "Circunferencia abdominal (cm):": "104",
+        "Cintura pélvica (cm):": "118",
+        "Peso (Kg): *": "82",
+      });
+      t.igual(api.mtrLeerCinturaDelDom(d), 104, "lee la abdominal");
+      t.cierto(api.mtrLeerCinturaDelDom(d) !== 118, "y JAMÁS la pélvica, que es la cadera");
+      // El lector genérico sí puede traer la cadera, si algún día se pide a propósito.
+      t.igual(api.mtrLeerCampoPorRotulo(/cintura\s+p[ée]lvica/i, d), 118, "la cadera existe, pero hay que pedirla por su nombre");
+      t.igual(api.mtrLeerCampoPorRotulo(/peso/i, d), 82, "y el mismo lector sirve para el resto de la fila");
+    });
+
+    t.caso("v17.6.97: un rótulo que casa con DOS casillas devuelve null, no la primera", () => {
+      // En esa fila hay dos «Perímetro» (cefálico y braquial) y dos «Pliegue Cutáneo».
+      // Un id repetido ya costó una lectura equivocada; una coincidencia ambigua no se
+      // resuelve eligiendo una.
+      const d = everestAntropometria({ "Perímetro Cefálico (cm):": "55", "Perímetro Braquial (cm):": "30" });
+      t.igual(api.mtrLeerCampoPorRotulo(/per[íi]metro/i, d), null, "dos coincidencias: null");
+      t.igual(api.mtrLeerCampoPorRotulo(/pliegue/i, d), null, "otros dos: null");
+      t.igual(api.mtrLeerCampoPorRotulo(/no\s+existe\s+este\s+campo/i, d), null, "cero coincidencias: null");
+      t.igual(api.mtrLeerCampoPorRotulo(/circunferencia\s+abdominal/i, d), null, "presente pero vacía: null, no cero");
+    });
+
+    t.caso("v17.6.97: una cintura imposible no pasa, y nunca se inventa", () => {
+      t.igual(api.mtrLeerCinturaDelDom(everestAntropometria({})), null, "casilla vacía");
+      t.igual(api.mtrLeerCinturaDelDom(everestAntropometria({ "Circunferencia abdominal (cm):": "5" })), null, "5 cm no es un paciente");
+      t.igual(api.mtrLeerCinturaDelDom(everestAntropometria({ "Circunferencia abdominal (cm):": "900" })), null, "900 cm tampoco");
+      t.igual(api.mtrLeerCinturaDelDom(everestAntropometria({ "Circunferencia abdominal (cm):": "-80" })), null, "un negativo tampoco");
+      t.igual(api.mtrLeerCinturaDelDom(everestAntropometria({ "Circunferencia abdominal (cm):": "104,5" })), 104.5, "y la coma decimal sí, que es como escribe Everest");
+      t.noLanza(() => api.mtrLeerCinturaDelDom(null), "sin documento no puede lanzar");
+      t.igual(api.mtrLeerCinturaDelDom({}), null, "un documento sin querySelectorAll tampoco lanza");
+    });
+
+    t.caso("v17.6.97 CABLEADO — la cintura se lee en los cuatro sitios que la necesitan", () => {
+      // Los cuatro puntos viven dentro de funciones de interfaz que el banco no puede
+      // ejecutar (necesitan el Panel abierto y el DOM de Everest). Se protegen por texto
+      // fuente, igual que la regla única de sábado en la suite 68. Lo que no se puede
+      // ejecutar aquí, al menos no se puede borrar sin que caiga una prueba.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.cierto(/_cAlAbrir[\s\S]{0,90}_factoresAlAbrir\.cinturaCm = _cAlAbrir;/.test(src),
+        "al ABRIR el Panel se reconcilia con lo que hay en pantalla");
+      t.cierto(/cTick[\s\S]{0,90}factores\.cinturaCm = cTick;/.test(src),
+        "el repaso de los 20 s la vuelve a leer");
+      t.cierto(/partes\.push\("cintura=" \+ \(cDom == null \? "" : cDom\)\);/.test(src),
+        "y entra en la FIRMA: sin esto, escribirla no contaría como «algo cambió» (lección del peso, v17.6.75)");
+      t.cierto(/const cinturaDom = _mismoPac \? mtrLeerCinturaDelDom\(\) : null;/.test(src),
+        "el contexto del motor la lee dentro del guard anti-cruce de pacientes");
+      t.cierto(/if \(mtrFloat\(factores\.cinturaCm\) === null\) factores\.cinturaCm = cinturaDom;/.test(src),
+        "y no pisa lo que el médico ya hubiera documentado a mano");
+      t.falso(/mtrLeerCampoNumerico\("cinturaPelvica"/.test(src),
+        "y NADIE vuelve a leer cinturaPelvica como si fuera la cintura");
     });
 
     t.caso("el IMC se lee del campo numérico de Everest, y un valor imposible no pasa", () => {

@@ -69,7 +69,7 @@ module.exports = {
     "mtrAscvdFueraDeRangoEtario", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
     "mtrMetasLipidicas", "mtrEvaluarMetaLdl", "mtrLdlBasalDeSerie", "_isoAMs",
     "mtrEvaluarErc", "mtrRemisionNefrologia", "mtrSospechaIra", "mtrPosEstadio",
-    "mtrDmEvolucionConocida", "mtrDmLargaDuracion",
+    "mtrDmEvolucionConocida", "mtrDmLargaDuracion", "mtrSindromeMetabolico",
   ],
 
   pruebas(t, api) {
@@ -111,6 +111,74 @@ module.exports = {
       // Y la meta de LDL que se deriva baja de 116 a 70: el efecto que motivó todo.
       const metas = api.mtrMetasLipidicas(conDm.categoria, null);
       t.igual(metas.ldl, 70, "meta de LDL <70 (antes, en «bajo», era <116)");
+    });
+
+    // ====== v17.6.97 — LA CINTURA, QUE POR FIN LLEGA AL MOTOR ======
+
+    t.caso("v17.6.97: el 5º criterio del síndrome metabólico deja de ser inevaluable", () => {
+      // Paciente clásico del programa: TG 200, HDL 35, sin más. Sin la cintura solo se
+      // pueden juzgar 4 de los 5 criterios y el veredicto queda en null («con lo que hay
+      // no se puede decidir»). Con la cintura, se decide — en los dos sentidos.
+      const base = { sexo: "M", trigliceridos: 200, hdl: 35, paSistolica: 128, paDiastolica: 82, glicemia: 95 };
+      const sin = api.mtrSindromeMetabolico(base);
+      t.igual(sin.evaluables, 4, "sin cintura solo hay 4 criterios evaluables");
+      t.igual(sin.cumple, null, "y el veredicto queda sin decidir, que es lo honesto");
+
+      const conAlta = api.mtrSindromeMetabolico(Object.assign({}, base, { cinturaCm: 104 }));
+      t.igual(conAlta.evaluables, 5, "con la cintura ya son los cinco");
+      t.igual(conAlta.cumple, true, "y con 104 cm cumple");
+
+      const conNormal = api.mtrSindromeMetabolico(Object.assign({}, base, { cinturaCm: 84 }));
+      t.igual(conNormal.cumple, false,
+        "y con 84 cm se puede DESCARTAR: el dato también sirve para decir que no");
+    });
+
+    t.caso("v17.6.97: el umbral del síndrome metabólico es MAYOR O IGUAL, como dice el consenso", () => {
+      // v68, S2: «Sd metabólico si >=3 de: CA>=90H/>=80M…». Estaba con mayor estricto, así
+      // que el hombre de exactamente 90 cm no sumaba el criterio que la norma sí le cuenta.
+      const h = (ca) => api.mtrSindromeMetabolico({ sexo: "M", cinturaCm: ca, trigliceridos: 200, hdl: 35, paSistolica: 120, paDiastolica: 70, glicemia: 90 });
+      const m = (ca) => api.mtrSindromeMetabolico({ sexo: "F", cinturaCm: ca, trigliceridos: 200, hdl: 55, paSistolica: 120, paDiastolica: 70, glicemia: 90 });
+      t.falso(h(89).criterios.some((c) => /cintura/.test(c)), "hombre 89 cm: no");
+      t.cierto(h(90).criterios.some((c) => /cintura/.test(c)), "hombre 90 cm: SÍ (el borde exacto)");
+      t.falso(m(79).criterios.some((c) => /cintura/.test(c)), "mujer 79 cm: no");
+      t.cierto(m(80).criterios.some((c) => /cintura/.test(c)), "mujer 80 cm: SÍ");
+    });
+
+    t.caso("v17.6.97: la obesidad central cuenta como FR mayor, con SU umbral (no el del síndrome)", () => {
+      // Son dos reglas distintas sobre la misma medida, y v68 las escribe distintas:
+      //   FR mayor:            «obesidad(IMC>=30 o CA>94H/>90M)»   -> estricto
+      //   Síndrome metabólico: «CA>=90H/>=80M»                     -> mayor o igual
+      const fr = (sexo, ca) => api.mtrClasificarRiesgoCv({
+        edad: 55, sexo: sexo, egfrCkdepi: 90, cinturaCm: ca,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 120, paDiastolica: 75,
+      }).conteoFrMayores;
+      t.igual(fr("M", 94), 0, "hombre 94 cm: el umbral es ESTRICTO, todavía no");
+      t.igual(fr("M", 96), 1, "hombre 96 cm: sí");
+      t.igual(fr("F", 90), 0, "mujer 90 cm: todavía no");
+      t.igual(fr("F", 92), 1, "mujer 92 cm: sí");
+      t.igual(fr("M", null), 0, "sin cintura no se infiere nada");
+      // Y lo que ya documentaba el médico a mano sigue mandando.
+      t.igual(api.mtrClasificarRiesgoCv({ edad: 55, sexo: "M", egfrCkdepi: 90, circunferenciaAbdElevada: true,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 120, paDiastolica: 75 }).conteoFrMayores, 1,
+        "la casilla marcada a mano cuenta igual, sin necesidad del número");
+    });
+
+    t.caso("v17.6.97 CABLEADO — la cintura sobrevive a la reclasificación de los 20 s", () => {
+      // Everest sí tiene la casilla, pero el repaso de los 20 s reconstruye los factores
+      // desde el DOM; si la mezcla no la conservara, el dato desaparecería solo. Es el
+      // mismo defecto que v17.6.86 encontró con las frecuencias y v17.6.94 con los años
+      // de diabetes.
+      const previo = api.mtrResumenClinico({
+        hoyIso: "2026-08-27", edad: 58, sexo: "M", pesoKg: 82, creatinina: 1.0,
+        ct: 200, hdl: 35, ldl: 120, paSistolica: 128, paDiastolica: 82,
+        factores: { hta: true, cinturaCm: 104, trigliceridos: 200 },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.0 } },
+      });
+      t.igual(previo.factores.cinturaCm, 104, "el resumen de partida la tiene");
+      t.cierto(!!previo.sindromeMetabolico, "y el síndrome metabólico se calcula");
+      const nuevo = api.mtrRecalcularConFactores(previo, { paSistolica: 132 }, "2026-08-27");
+      t.cierto(!!nuevo, "la reclasificación devolvió algo");
+      t.igual(nuevo.factores.cinturaCm, 104, "y la cintura sigue ahí tras reclasificar");
     });
 
     // ====== v17.6.94 — EL TIEMPO DE EVOLUCIÓN DE LA DIABETES ======

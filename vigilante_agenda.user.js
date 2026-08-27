@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.96
+// @version     17.6.97
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.96";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.97";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -19067,6 +19067,11 @@ _vglOfrecerDeshacer(btn);
         // escrito llegue a Cockcroft-Gault sin tener que cerrar y reabrir el Panel.
         const _pAlAbrir = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
         if (_pAlAbrir != null) _factoresAlAbrir.pesoKg = _pAlAbrir;
+        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
+        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
+        // sin poder contarse nunca.
+        const _cAlAbrir = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
+        if (_cAlAbrir != null) _factoresAlAbrir.cinturaCm = _cAlAbrir;
         const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
         if (_reconciliado) {
           _resumen = _reconciliado;
@@ -19097,6 +19102,11 @@ _vglOfrecerDeshacer(btn);
         if (t) { factores.paSistolica = t.pas; factores.paDiastolica = t.pad; }
         const pTick = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
         if (pTick != null) factores.pesoKg = pTick;
+        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
+        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
+        // sin poder contarse nunca.
+        const cTick = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
+        if (cTick != null) factores.cinturaCm = cTick;
         const nuevo = mtrRecalcularConFactores(_resumen, factores, todayStamp());
         if (!nuevo) return;
         // Lo que el médico acaba de escribir puede abrir la compuerta: se
@@ -19133,12 +19143,17 @@ _vglOfrecerDeshacer(btn);
       // contaba como "algo cambió", así que la vigilancia de 20 s nunca reclasificaba
       // por eso solo — se quedaba esperando que cambiara alguna otra casilla.
       const pDom = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
+      // v17.6.97 — misma lección que el peso en v17.6.75: si la cintura no entra en la
+      // firma, escribirla en Examen físico NO cuenta como «algo cambió» y la vigilancia
+      // de 20 s no reclasifica por ella sola.
+      const cDom = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
       const partes = Object.keys(f).sort().map((k) => {
         const v = f[k];
         return (v === null || v === undefined || typeof v === "object") ? "" : k + "=" + String(v);
       }).filter(Boolean);
       if (t) partes.push("pas=" + (t.pas == null ? "" : t.pas), "pad=" + (t.pad == null ? "" : t.pad));
       partes.push("peso=" + (pDom == null ? "" : pDom));
+      partes.push("cintura=" + (cDom == null ? "" : cDom));
       return partes.join("|");
     } catch (e) { return ""; }
   }
@@ -29526,7 +29541,15 @@ _vglOfrecerDeshacer(btn);
     if (x.prediabetesSdMetabolico) fr.push("prediabetes/Sd. metabólico");
     if (x.sedentarismo) fr.push("sedentarismo");
     const imc = mtrFloat(x.imc);
-    if (x.obesidad || (imc !== null && imc >= 30) || x.circunferenciaAbdElevada) fr.push("obesidad");
+    // v17.6.97 — `circunferenciaAbdElevada` era un booleano que NO ALIMENTABA NADIE, así
+    // que la obesidad solo podía contarse por IMC. Ahora se deriva de la cintura leída
+    // del DOM con el umbral del consenso, que NO es el mismo del síndrome metabólico:
+    // v68 dice «obesidad(IMC>=30 o CA>94H/>90M)» aquí, y «CA>=90H/>=80M» allá. Son dos
+    // reglas distintas de la misma medida y se respetan las dos tal como están escritas.
+    const _caFr = mtrFloat(x.cinturaCm);
+    const _caElevadaFr = x.circunferenciaAbdElevada === true
+      || (_caFr !== null && ((mtrEsSexoMasculino(x.sexo) && _caFr > 94) || (mtrEsSexoFemenino(x.sexo) && _caFr > 90)));
+    if (x.obesidad || (imc !== null && imc >= 30) || _caElevadaFr) fr.push("obesidad");
     if (x.masld) fr.push("MASLD (hígado graso)");
     if (x.apneaSueno) fr.push("apnea del sueño");
     if (x.hiperuricemia) fr.push("hiperuricemia");
@@ -29563,7 +29586,11 @@ _vglOfrecerDeshacer(btn);
     const cintura = mtrFloat(x.cinturaCm);
     if (cintura !== null && (esF || esM)) {
       evaluables++;
-      if ((esM && cintura > 90) || (esF && cintura > 80)) criterios.push("cintura elevada (" + cintura + " cm)");
+      // v17.6.97 — el consenso dice «CA>=90H/>=80M», con MAYOR O IGUAL (S2, FR MAYORES
+      // del spec). Aquí estaba con mayor estricto, así que un hombre de exactamente
+      // 90 cm no sumaba el criterio que la norma sí le cuenta. Afecta solo al valor
+      // justo en el borde, pero el borde es donde se decide.
+      if ((esM && cintura >= 90) || (esF && cintura >= 80)) criterios.push("cintura elevada (" + cintura + " cm)");
     }
     const tg = mtrFloat(x.trigliceridos);
     if (tg !== null) {
@@ -34260,13 +34287,98 @@ _vglOfrecerDeshacer(btn);
     return { pas: mtrLeerCampoNumerico("sistolica", doc), pad: null };
   }
 
-  // v17.6.65 — auditoría 25-ago (sección 4): circunferencia de cintura, para
-  // mtrSindromeMetabolico. Ancla real: id="cinturaPelvica" (tipo number, pestaña
-  // "Examen físico"), confirmada en las capturas del DOM (grounding/mapas/). Mismo
-  // criterio que mtrLeerTensionDelDom: sin la casilla o sin valor, null — nunca se
-  // inventa la cintura.
+  // =====================================================================
+  //  v17.6.97 — LECTURA POR RÓTULO (y la corrección de la cintura)
+  //  ------------------------------------------------------------------
+  //  La fila antropométrica de Everest NO SE PUEDE LEER POR ID. Verificado con el
+  //  diagnóstico que corrió el médico en su propia pantalla (26-ago):
+  //
+  //      Peso (Kg)                     -> id="peso"
+  //      Talla (cm)                    -> id="Talla"
+  //      IMC                           -> id="IMC"
+  //      Circunferencia abdominal (cm) -> id="alert_message"   <-- la cintura
+  //      Perímetro Cefálico (cm)       -> id="IMC"             <-- REPETIDO
+  //      Perímetro Braquial (cm)       -> id="alert_message"   <-- REPETIDO
+  //      Pliegue Cutáneo Subescapular  -> id="IMC"             <-- REPETIDO
+  //      Pliegue Cutáneo del Tríceps   -> id="alert_message"   <-- REPETIDO
+  //      Perímetro de pantorrilla (cm) -> id="perimetroPantorrilla"
+  //      Cintura pélvica (cm)          -> id="cinturaPelvica"
+  //
+  //  Ninguno tiene atributo `name`, y cuatro comparten dos ids entre sí. La
+  //  circunferencia abdominal solo es alcanzable por su RÓTULO.
+  //
+  //  La estrategia de abajo no es una conjetura: es la misma de DIAGNOSTICO_CINTURA.js,
+  //  que se ejecutó contra el Everest real y devolvió el rótulo correcto para los diez
+  //  campos de la fila.
+  //
+  //  REGLA DURA: si el rótulo casa con MÁS DE UNA casilla, se devuelve null. Un id
+  //  repetido ya nos costó una lectura equivocada; una coincidencia ambigua no se
+  //  resuelve eligiendo la primera.
+  function _mtrRotuloDeCampo(el, doc) {
+    try {
+      const d = doc || (typeof document !== "undefined" ? document : null);
+      const limpia = (t) => String(t == null ? "" : t).replace(/\s+/g, " ").trim();
+      if (el.id && d && typeof d.querySelector === "function") {
+        // Ojo: con ids repetidos, `label[for=...]` puede apuntar a OTRA casilla. Sirve
+        // igual para descartar, porque lo que se compara después es el conjunto entero.
+        try {
+          const l = d.querySelector('label[for="' + String(el.id).replace(/"/g, '\\"') + '"]');
+          if (l && limpia(l.textContent)) return limpia(l.textContent);
+        } catch (e) {}
+      }
+      if (typeof el.closest === "function") {
+        const envuelve = el.closest("label");
+        if (envuelve && limpia(envuelve.textContent)) return limpia(envuelve.textContent);
+      }
+      if (typeof el.getAttribute === "function") {
+        const aria = el.getAttribute("aria-label");
+        if (limpia(aria)) return limpia(aria);
+      }
+      // La maqueta de dos columnas de Everest: el rótulo vive en la celda anterior.
+      let n = el.parentElement;
+      for (let salto = 0; n && salto < 4; salto++, n = n.parentElement) {
+        let prev = n.previousElementSibling;
+        while (prev) {
+          const t = limpia(prev.innerText || prev.textContent || "");
+          if (t && t.length < 80) return t;
+          prev = prev.previousElementSibling;
+        }
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  // Devuelve el valor numérico de la ÚNICA casilla cuyo rótulo casa. 0 o 2+ -> null.
+  function mtrLeerCampoPorRotulo(rotuloRe, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function" || !rotuloRe) return null;
+    let nodos = [];
+    try { nodos = Array.prototype.slice.call(d.querySelectorAll("input, select, textarea")); } catch (e) { return null; }
+    const casan = nodos.filter((el) => {
+      try { return rotuloRe.test(_mtrRotuloDeCampo(el, d)); } catch (e) { return false; }
+    });
+    if (casan.length !== 1) return null;      // ambiguo o ausente: no se adivina
+    return _labNumerico(casan[0].value);
+  }
+
+  // v17.6.97 — LA CINTURA, CORREGIDA. Hasta aquí esta función leía `cinturaPelvica`,
+  // que NO es la cintura: es la CADERA. Lo confirmó el médico al ver la pantalla
+  // ("Circunferencia abdominal es lo que es cintura en Everest, y cintura pélvica es
+  // caderas"). Como la cadera siempre mide más que la cintura, cablear esto habría
+  // marcado obesidad central en casi todo paciente -> un factor de riesgo mayor falso
+  // -> meta de LDL más estricta -> más exámenes. No llegó a hacer daño porque la
+  // función estaba MUERTA (cero llamadores) desde que se escribió en v17.6.65; se
+  // corrige ANTES de darle ningún uso.
+  const MTR_ROTULO_CINTURA = /circunferencia\s+abdominal/i;
+  const MTR_CINTURA_MIN_CM = 30;
+  const MTR_CINTURA_MAX_CM = 250;
   function mtrLeerCinturaDelDom(doc) {
-    return mtrLeerCampoNumerico("cinturaPelvica", doc);
+    const v = mtrLeerCampoPorRotulo(MTR_ROTULO_CINTURA, doc);
+    if (v === null) return null;
+    // Una circunferencia abdominal fuera de este rango no es un paciente: es un dedazo
+    // o una casilla que no era. Mismo criterio que ya usa mtrLeerCampoNumerico con el IMC.
+    if (v < MTR_CINTURA_MIN_CM || v > MTR_CINTURA_MAX_CM) return null;
+    return v;
   }
 
   // v17.6.75 — REPORTE EN VIVO (26-ago, captura): "no aparece la TFG y me dice que
@@ -34518,6 +34630,10 @@ _vglOfrecerDeshacer(btn);
     // un paciente sin peso guardado en Athenea se queda "sin dato" para Cockcroft-Gault
     // aunque el médico lo acabe de escribir en Examen físico.
     const pesoDom = _mismoPac ? mtrLeerPesoDelDom() : null;
+    // v17.6.97 — la cintura entra al motor por primera vez. Va dentro del mismo guard
+    // `_mismoPac`: leer el DOM de OTRO paciente y metérselo a este es exactamente el
+    // cruce que ese guard existe para impedir.
+    const cinturaDom = _mismoPac ? mtrLeerCinturaDelDom() : null;
     // v17.6.85 — el sexo era el ÚNICO insumo de Cockcroft-Gault/CKD-EPI SIN red de
     // seguridad: peso y tensión ya tienen respaldo de DOM (arriba), el sexo tenía una sola
     // fuente (la demografía de la API) y un solo intento. Si esa ficha llegaba con el campo
@@ -34579,6 +34695,16 @@ _vglOfrecerDeshacer(btn);
     // Sin este cable, `dmAnios` no lo alimenta nadie y las dos reglas de diabetes de los
     // pasos 1 y 2 del consenso siguen sin poder dispararse — que es exactamente el estado
     // que el piso incondicional venía tapando desde v16.2.9.
+    // v17.6.97 — la cintura leída del DOM entra en los factores. Es el 5º criterio del
+    // síndrome metabólico y, con otro umbral, la obesidad central de los FR mayores.
+    // Nunca pisa un dato que el médico ya hubiera documentado a mano.
+    try {
+      if (cinturaDom != null) {
+        factores = factores || {};
+        if (mtrFloat(factores.cinturaCm) === null) factores.cinturaCm = cinturaDom;
+      }
+    } catch (e) {}
+
     try {
       const _cosDm = _vglCosechaLeer(apt && apt.doc_id);
       const _dm = _cosDm && _cosDm.dmAniosManual;
