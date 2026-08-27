@@ -20,7 +20,8 @@ module.exports = {
   nombre: "Vigencias por estadio renal (R2, sombra)",
   cubre: ["vigenciaPorEstadio", "analitoTablaDesdeClaveRcv", "_vigenciaDiasParaAnalito",
     "mtrVigenciaDiasNorma", "mtrColapsarVigencia", "_analitosRcvVencidos",
-    "pymRcvCubiertoPorAthenea", "mtrCacheResumenGuardar"],
+    "pymRcvCubiertoPorAthenea", "mtrCacheResumenGuardar",
+    "pymPaqueteCubiertoPorAthenea", "pymPaqueteHechoEnAthenea"],
 
   pruebas(t, api) {
     // --- Programa ERC: creatinina, los tres rangos {min,max} tal cual la tabla fuente ---
@@ -377,6 +378,101 @@ module.exports = {
         }
       }
       t.igual(bloqueables, [], "si esto deja de estar vacío hay que decidir qué hace el aviso con un examen bloqueado");
+    });
+
+    // =================================================================
+    // v17.6.99 — REPORTADO EN CONSULTA: «ya se lo realizó y me sigue mostrando
+    // para enviárselo». El PSA aparecía hecho en Athenea seis días antes y el modal
+    // de órdenes lo seguía ofreciendo premarcado.
+    //
+    // La causa NO era que el script no reconociera el examen —lo reconoce— sino que el
+    // paquete Z125 no tenía `vigenciaDias`, y `pymPaqueteCubiertoPorAthenea` se rendía en
+    // su primera línea con cualquier paquete que no la tuviera. Cinco de los ocho paquetes
+    // estaban así, y nunca se cruzaban contra Athenea. Y esta función NO TENÍA NINGUNA
+    // PRUEBA: se podía cambiar entera y el banco seguía verde.
+    // =================================================================
+
+    const _pkg = (cie10) => (api.__PYM_CATALOG || []).find((p) => p && p.cie10 === cie10);
+    const _lab = (cod, nom, fecha, res) => ([{ codigo: cod, nombre: nom, Resultado: res, Fecha: fecha }]);
+    const _HOY99 = "2026-08-27";
+    const _LAB_PSA = (fecha, res) => _lab("906610", "ANTIGENO ESPECIFICO DE PROSTATA", fecha, res == null ? "0.63" : res);
+
+    t.caso("v17.6.99: el PSA hecho hace seis días ya NO se vuelve a ofrecer", () => {
+      // El caso exacto del reporte. Antes de esta versión devolvía false («no está hecho»).
+      const psa = _pkg("Z125");
+      t.cierto(!!psa, "el paquete del PSA existe en el catálogo");
+      t.igual(psa.vigenciaDias, 730, "y ya tiene la vigencia que confirmó el médico (27-ago): 2 años");
+      t.cierto(api.pymPaqueteCubiertoPorAthenea(psa, _LAB_PSA("2026-08-21"), _HOY99),
+        "hecho hace 6 días: cubierto, no se premarca");
+      t.cierto(api.pymPaqueteCubiertoPorAthenea(psa, _LAB_PSA("2025-09-01"), _HOY99),
+        "hecho hace 360 días: sigue dentro de los 2 años");
+      t.falso(api.pymPaqueteCubiertoPorAthenea(psa, _LAB_PSA("2024-01-15"), _HOY99),
+        "hecho hace 955 días: fuera de los 2 años, se ofrece — y con razón");
+      t.falso(api.pymPaqueteCubiertoPorAthenea(psa, [], _HOY99), "si no aparece, no se afirma que esté hecho");
+    });
+
+    t.caso("v17.6.99: NINGÚN paquete del catálogo puede quedarse sin cruzar contra Athenea", () => {
+      // La guarda que impide que esto vuelva a pasar. Un paquete o tiene vigencia (y se
+      // juzga si sigue vigente) o, al menos, se puede saber si está hecho y desde cuándo.
+      // Lo que no puede es caer por el hueco y ofrecerse siempre en silencio.
+      const sinCruce = [];
+      for (const p of (api.__PYM_CATALOG || [])) {
+        if (!p || !p.cie10) continue;
+        const tieneCups = Array.isArray(p.cups) && p.cups.length;
+        const tienePalabras = Array.isArray(p.keywords) && p.keywords.length;
+        if (!tieneCups && !tienePalabras) sinCruce.push(p.cie10);
+      }
+      t.igual(sinCruce, [], "todo paquete necesita CUPS o palabras clave para poder reconocerse en Athenea");
+    });
+
+    t.caso("v17.6.99: «¿está hecho?» y «¿sigue vigente?» son dos preguntas distintas", () => {
+      // Separarlas es lo que arregla el defecto: la segunda exige una vigencia declarada,
+      // la primera no. La mamografía sigue sin vigencia confirmada.
+      const mamo = _pkg("Z123");
+      t.cierto(!!mamo && !mamo.vigenciaDias, "la mamografía sigue sin vigencia confirmada");
+      const labs = _lab("876802", "MAMOGRAFIA BILATERAL", "2026-08-21", "BIRADS 1");
+      t.falso(api.pymPaqueteCubiertoPorAthenea(mamo, labs, _HOY99),
+        "sin vigencia NUNCA se declara cubierta: no se inventa el intervalo");
+      const hecho = api.pymPaqueteHechoEnAthenea(mamo, labs, _HOY99);
+      t.cierto(!!hecho, "pero SÍ se sabe que está hecha");
+      t.igual(hecho.iso, "2026-08-21", "con su fecha");
+      t.igual(hecho.dias, 6, "y cuántos días hace");
+    });
+
+    t.caso("v17.6.99: un examen PENDIENTE no cuenta como hecho, y la basura no revienta", () => {
+      const psa = _pkg("Z125");
+      t.igual(api.pymPaqueteHechoEnAthenea(psa, _LAB_PSA("2026-08-21", "PENDIENTE"), _HOY99), null,
+        "una muestra sin procesar no es un examen hecho");
+      t.igual(api.pymPaqueteHechoEnAthenea(psa, [], _HOY99), null, "sin laboratorios, null");
+      t.igual(api.pymPaqueteHechoEnAthenea(null, _LAB_PSA("2026-08-21"), _HOY99), null, "sin paquete, null");
+      t.igual(api.pymPaqueteHechoEnAthenea(psa, _LAB_PSA("2026-08-21"), "no-es-una-fecha"), null,
+        "con la fecha de hoy ilegible NO se afirma nada — la misma trampa del cruce de RCV");
+      t.noLanza(() => api.pymPaqueteHechoEnAthenea(psa, [{}, null, "basura"], _HOY99), "ni con basura dentro");
+    });
+
+    t.caso("v17.6.99: se queda con el resultado MÁS RECIENTE cuando hay varios", () => {
+      const psa = _pkg("Z125");
+      const varios = _LAB_PSA("2024-01-15").concat(_LAB_PSA("2026-08-21")).concat(_LAB_PSA("2025-03-02"));
+      const h = api.pymPaqueteHechoEnAthenea(psa, varios, _HOY99);
+      t.igual(h.iso, "2026-08-21", "el más reciente manda, venga en el orden que venga");
+    });
+
+    t.caso("v17.6.99 CABLEADO — el modal cruza TODOS los paquetes y respeta el tope para desmarcar", () => {
+      // Los tres puntos viven dentro de openOrdenamientoModal, que el banco no puede
+      // ejecutar con Athenea simulada. Se protegen por texto fuente, igual que las reglas
+      // del sábado y de la cintura. Lo que no se puede ejecutar aquí, al menos no se puede
+      // borrar sin que caiga una prueba.
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      t.falso(/const paquetesConVigencia = pkgsToRender\.filter/.test(src),
+        "ya no se filtra por vigencia antes de cruzar: ese filtro ERA el defecto");
+      t.cierto(/atheneaHechoPorCie10\[_p\.cie10\] = pymPaqueteHechoEnAthenea\(/.test(src),
+        "los paquetes sin vigencia se cruzan por la vía de «¿está hecho?»");
+      t.cierto(/const hechoYReciente = !!hechoSinVigencia && hechoSinVigencia\.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;/.test(src),
+        "y solo se desmarca lo reciente");
+      t.cierto(/!yaHechoAthenea && !hechoYReciente/.test(src),
+        "el premarcado mira las dos vías");
+      t.cierto(/const PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS = 730;/.test(src),
+        "el tope es el intervalo más largo que el médico ha confirmado, no uno inventado");
     });
 
     // =================================================================

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.98
+// @version     17.6.99
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.98";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.99";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11054,11 +11054,42 @@ _vglOfrecerDeshacer(btn);
   // caída, sesión vencida, sin resultado del examen, fecha ilegible) devuelve false — el
   // paquete se ofrece como siempre. Un falso "ya está hecho" le quitaría al paciente un
   // examen que necesita; un falso "hágalo" solo cuesta un clic.
-  function pymPaqueteCubiertoPorAthenea(pkg, labs, hoyIso) {
+  // v17.6.99 — ¿ESTE EXAMEN APARECE HECHO EN ATHENEA, Y DESDE CUÁNDO?
+  //
+  // Se extrae de `pymPaqueteCubiertoPorAthenea`, que hacía las dos cosas en una: buscar el
+  // resultado y juzgar si sigue vigente. Separarlas hace falta porque son dos preguntas
+  // distintas y solo la SEGUNDA necesita una vigencia declarada:
+  //
+  //   · «¿sigue vigente?»  -> exige saber cuánto vale ese examen según la norma.
+  //   · «¿está hecho?»     -> no exige nada: o el resultado está en Athenea, o no está.
+  //
+  // Reportado en consulta (27-ago-2026): el script seguía ofreciendo un PSA que el paciente
+  // se había hecho seis días antes. La causa no era que no lo reconociera —lo reconoce
+  // perfectamente— sino que el paquete Z125 no tenía `vigenciaDias`, y sin ese campo el
+  // cruce se rendía en su primera línea. Cinco de los ocho paquetes estaban así.
+  //
+  // Devuelve `{ iso, dias }` del resultado MÁS RECIENTE que case, o null si no aparece
+  // ninguno. Nunca inventa una vigencia: eso lo decide quien llama.
+  // v17.6.99 — TOPE PARA DESMARCAR SIN VIGENCIA CONFIRMADA. El médico decidió (27-ago)
+  // que un examen que ya aparece hecho se avise y se desmarque, aunque no se sepa cada
+  // cuánto se repite. Estaba respondiendo sobre un PSA de SEIS DÍAS.
+  //
+  // El caso que no tenía delante es el contrario: una mamografía de hace 955 días también
+  // «aparece hecha», y desmarcarla en silencio ya no evita un duplicado — provoca una
+  // OMISIÓN, que es peor. Así que el aviso se da siempre (con su fecha, para que él juzgue),
+  // pero la casilla solo se desmarca si el resultado es más reciente que el intervalo MÁS
+  // LARGO que el propio médico ha confirmado para cualquier examen: los 730 días del SOMF
+  // (22-ago) y del PSA (27-ago). No es una vigencia inventada para la mamografía; es negarse
+  // a suponer que algo sigue bueno más allá de lo que él mismo ha dado por bueno alguna vez.
+  //
+  // Se cambia con una línea si él prefiere lo otro.
+  const PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS = 730;
+
+  function pymPaqueteHechoEnAthenea(pkg, labs, hoyIso) {
     try {
-      if (!pkg || !pkg.vigenciaDias || !Array.isArray(labs) || !labs.length) return false;
+      if (!pkg || !Array.isArray(labs) || !labs.length) return null;
       const hoy = _parseFechaHoraLike(hoyIso);
-      if (!hoy) return false;                                  // misma trampa que en RCV: fecha de hoy ilegible NO se lee como "todo hecho"
+      if (!hoy) return null;                                   // fecha de hoy ilegible: no se afirma nada
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
       const codigos = new Set((pkg.cups || []).map((c) => String(c.codigo || "").trim()).filter(Boolean));
       const palabras = (pkg.keywords || []).map((k) => stripAccents(String(k)).toLowerCase());
@@ -11080,11 +11111,19 @@ _vglOfrecerDeshacer(btn);
         const fi = _extractAtheneaFecha(lab);
         if (fi && fi.iso && (!mejorIso || fi.iso > mejorIso)) mejorIso = fi.iso;
       }
-      if (!mejorIso) return false;                             // el examen no aparece: no se puede afirmar que esté hecho
+      if (!mejorIso) return null;                              // el examen no aparece: no se puede afirmar que esté hecho
       const fechaMs = new Date(mejorIso + "T00:00:00").getTime();
-      const dias = Math.round((hoyMs - fechaMs) / 86400000);
-      return dias <= pkg.vigenciaDias;
-    } catch (e) { return false; }
+      return { iso: mejorIso, dias: Math.round((hoyMs - fechaMs) / 86400000) };
+    } catch (e) { return null; }
+  }
+
+  // ¿Está hecho Y sigue vigente? Ahora es una sola línea sobre la función de arriba: una
+  // sola forma de reconocer el examen, y la vigencia aplicada aparte. Antes las dos cosas
+  // vivían juntas y un paquete sin `vigenciaDias` ni siquiera llegaba a buscarse.
+  function pymPaqueteCubiertoPorAthenea(pkg, labs, hoyIso) {
+    if (!pkg || !pkg.vigenciaDias) return false;
+    const hecho = pymPaqueteHechoEnAthenea(pkg, labs, hoyIso);
+    return !!hecho && hecho.dias <= pkg.vigenciaDias;
   }
 
   function maybeNotify(a) {
@@ -21741,7 +21780,11 @@ _vglOfrecerDeshacer(btn);
       cie10: "Z125",
       titulo: "PSA (antígeno de próstata)",
       keywords: ["psa", "prostata"],
-      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
+      // v17.6.99 — VIGENCIA CONFIRMADA por el médico (27-ago-2026): 2 años. La pidió al
+      // reportar en consulta que el script le seguía ofreciendo un PSA que el paciente ya
+      // se había hecho seis días antes. Sin este campo, `pymPaqueteCubiertoPorAthenea` se
+      // rinde en su primera línea y el paquete NUNCA se cruza contra Athenea.
+      vigenciaDias: 730,
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
       ]
@@ -22200,8 +22243,15 @@ _vglOfrecerDeshacer(btn);
     // bloquea nada: se cae en silencio al comportamiento de siempre (mismo principio que el
     // cruce de Everest, un poco más abajo).
     const atheneaVigentePorCie10 = {};
-    const paquetesConVigencia = pkgsToRender.filter((p) => p && p.vigenciaDias);
-    if (paquetesConVigencia.length) {
+    // v17.6.99 — y, para los paquetes cuya vigencia el médico todavía no ha confirmado,
+    // DESDE CUÁNDO aparece hecho. No se da por cubierto —no se inventa una vigencia— pero
+    // tampoco se le vuelve a ofrecer en silencio un examen que ya está en Athenea.
+    const atheneaHechoPorCie10 = {};
+    // v17.6.99 — el cruce se hace ahora para TODOS los paquetes candidatos, no solo para
+    // los que tienen vigencia. Antes se filtraba aquí, y ese filtro era justo el que dejaba
+    // a cinco de los ocho paquetes sin cruzarse nunca contra Athenea. El coste de red no
+    // cambia: sigue siendo UNA consulta por paciente, cacheada en `_labsPrefetch`.
+    if (pkgsToRender.length) {
       let labsPacienteAthenea = null;
       try {
         // "una consulta por paciente": si la historia de este paciente ya está abierta (o se
@@ -22217,10 +22267,17 @@ _vglOfrecerDeshacer(btn);
       } catch (e) { console.warn("[Vigilante PyM] no se pudo sincronizar con Athenea para el cruce antiduplicado:", e); labsPacienteAthenea = null; }
       if (!vivo()) return;
       const _hoyPyM = todayStamp();
-      for (const _p of paquetesConVigencia) {
-        atheneaVigentePorCie10[_p.cie10] = (_p.cie10 === "I10X")
-          ? pymRcvCubiertoPorAthenea(labsPacienteAthenea, _hoyPyM, apt && apt.doc_id)
-          : pymPaqueteCubiertoPorAthenea(_p, labsPacienteAthenea, _hoyPyM);
+      for (const _p of pkgsToRender) {
+        if (!_p) continue;
+        if (_p.vigenciaDias) {
+          atheneaVigentePorCie10[_p.cie10] = (_p.cie10 === "I10X")
+            ? pymRcvCubiertoPorAthenea(labsPacienteAthenea, _hoyPyM, apt && apt.doc_id)
+            : pymPaqueteCubiertoPorAthenea(_p, labsPacienteAthenea, _hoyPyM);
+        } else {
+          // Sin vigencia confirmada no se puede decir «vigente», pero sí «ya está hecho,
+          // y desde cuándo». El I10X nunca cae aquí: siempre tiene vigencia.
+          atheneaHechoPorCie10[_p.cie10] = pymPaqueteHechoEnAthenea(_p, labsPacienteAthenea, _hoyPyM);
+        }
       }
     }
 
@@ -22259,7 +22316,13 @@ _vglOfrecerDeshacer(btn);
               // v17.6.2 — ahora el cruce por paquete: VIH (Z113, 1 año) y SOMF (Z121, 2 años)
               // también se desmarcan cuando Athenea ya trae el resultado dentro de su vigencia.
               const yaHechoAthenea = atheneaVigentePorCie10[pkg.cie10] === true;
-              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && !yaHechoAthenea;
+              // v17.6.99 — hecho, pero sin vigencia confirmada con la que juzgarlo.
+              const hechoSinVigencia = atheneaHechoPorCie10[pkg.cie10] || null;
+              // Solo desmarca si es RECIENTE (ver PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS). Un
+              // resultado más viejo que eso se avisa igual, pero se sigue premarcando: ahí
+              // el riesgo ya no es repetir un examen, es no pedirlo.
+              const hechoYReciente = !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
+              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && !yaHechoAthenea && !hechoYReciente;
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
@@ -22272,6 +22335,7 @@ _vglOfrecerDeshacer(btn);
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
+                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto${hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde."}</div>` : ""}
                     ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}${idx === 0 ? vglTip("Códigos oficiales de procedimiento asignados automáticamente.") : ""}

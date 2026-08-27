@@ -6,6 +6,72 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.99 — 27-ago-2026 (reportado en consulta: un examen ya hecho se seguía ofreciendo)
+
+Reporte del médico, en vivo: *«me sale que hay que enviarle el antígeno de próstata pero ya se
+lo realizó y me sigue mostrando para enviárselo; habíamos quedado que lo que ya está realizado
+no se vuelve a ordenar»*. En su pantalla el PSA aparecía hecho **seis días antes**.
+Banco antes: 2.376 · después: **2.382**.
+
+### La causa, reproducida
+
+El script **reconoce el PSA perfectamente**. Lo comprobé: al mismo paquete, con una vigencia
+puesta a mano, lo detecta como hecho sin problema. El defecto era una sola cosa: el paquete
+`Z125` no tenía `vigenciaDias`, y `pymPaqueteCubiertoPorAthenea` se rendía en su primera
+línea con cualquier paquete que no la tuviera:
+
+```js
+if (!pkg || !pkg.vigenciaDias || !Array.isArray(labs) || !labs.length) return false;
+```
+
+Ese `return false` significa «no está hecho», así que el paquete se volvía a ofrecer
+premarcado. **Cinco de los ocho paquetes del catálogo estaban así** y nunca se cruzaban
+contra Athenea: PSA, mamografía, citología, tamización cardiometabólica y hemoglobina. Cada
+uno con el mismo comentario escrito al lado: *«vigenciaDias: sin confirmar (Resolución
+3280/2018) — pregunta abierta para el médico»*. La pregunta nunca se le hizo.
+
+Y **`pymPaqueteCubiertoPorAthenea` no tenía ninguna prueba**: se podía cambiar entera y el
+banco seguía verde.
+
+### El arreglo
+
+1. **Vigencia del PSA: 730 días**, confirmada por el médico al reportarlo (27-ago).
+2. **Se separan dos preguntas que estaban en una**, porque solo la segunda necesita una
+   vigencia declarada:
+   - *¿está hecho?* → `pymPaqueteHechoEnAthenea` devuelve `{iso, dias}` o `null`.
+   - *¿sigue vigente?* → `pymPaqueteCubiertoPorAthenea`, ahora una línea sobre la anterior.
+   Una sola forma de reconocer el examen; la vigencia aplicada aparte.
+3. **El modal cruza TODOS los paquetes**, no solo los que tienen vigencia — ese filtro *era*
+   el defecto. El coste de red no cambia: sigue siendo una consulta por paciente, cacheada.
+4. Para los que siguen sin vigencia confirmada: se avisa con la fecha y no se da por cubierto.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| **1** | El PSA pierde su `vigenciaDias` | *el PSA hecho hace seis días ya NO se vuelve a ofrecer* |
+| **2** | Se ignora la vigencia: cualquier resultado cuenta como cubierto | *…* (la aserción de los 955 días) |
+| **3** | Un examen `PENDIENTE` pasa a contar como hecho | *un examen PENDIENTE no cuenta como hecho…* |
+| **4** | Se queda con el PRIMER resultado en vez del más reciente | *se queda con el resultado MÁS RECIENTE cuando hay varios* |
+| **5 · CABLEADO** | Vuelve el filtro `paquetesConVigencia` | *el modal cruza TODOS los paquetes y respeta el tope* |
+| **6** | Se quita el tope de 730 días para desmarcar | *…y respeta el tope para desmarcar* |
+
+Las seis se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.382/2.382 tras cada restauración.
+
+### Una decisión que se tomó por él, y por qué
+
+El médico decidió que un examen ya hecho se avise **y se desmarque**, aunque no se sepa cada
+cuánto se repite. Estaba respondiendo sobre un PSA de **seis días**.
+
+El caso que no tenía delante es el contrario: una mamografía de **hace 955 días** también
+«aparece hecha». Desmarcarla en silencio ya no evita un duplicado — provoca una **omisión**,
+que es peor. Así que el aviso se da siempre, con su fecha y los días, pero la casilla solo se
+desmarca si el resultado es más reciente que el intervalo **más largo que él mismo ha
+confirmado** para cualquier examen: los 730 días del SOMF (22-ago) y del PSA (27-ago). No es
+una vigencia inventada para la mamografía; es negarse a suponer que algo sigue bueno más allá
+de lo que él ha dado por bueno alguna vez. Queda en una constante con nombre y se cambia con
+una línea si prefiere lo otro.
+
 ## v17.6.98 — 27-ago-2026 (el ANR agrupa de verdad)
 
 Último punto de la Fase 3, y el único que toca la orden de laboratorios de un paciente real.
