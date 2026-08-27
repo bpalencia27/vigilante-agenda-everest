@@ -1,3 +1,7 @@
 ## 2024-08-15 - Missing Accessible Names on Floating Action Buttons
 **Learning:** Found several missing `aria-label` attributes on floating action/overlay buttons (`vgl-dock-btn`, `vgl-pymb-toggle`, etc) across the interface. However, I learned that adding `aria-label` to buttons that already have visible text (like "Entendido") is an accessibility regression because it overrides their programmatic name, violating WCAG 2.5.3 (Label in Name). Voice command users wouldn't be able to activate them by saying the text they see on screen.
 **Action:** Only add `aria-label` to truly icon-only buttons. Do not add `aria-label` to buttons that already have a textual name.
+
+## 2024-10-27 - Stale ARIA labels on dynamic toggle buttons
+**Learning:** Setting `aria-label` or `aria-expanded` only when a toggle button is created leads to stale accessibility attributes if the UI state changes later. In `vigilante_agenda.user.js`, `vgl-dock-toggle` had its initial label set dynamically based on the state variable, but failed to update when the state toggled inside the `click` listener. This would result in screen readers continuously reading the initial state, rather than the updated state.
+**Action:** When implementing buttons with toggle states (like expand/collapse widgets), always ensure that state-dependent ARIA attributes (like `aria-label` and `aria-expanded`) are explicitly updated within the event listener that triggers the state change.
