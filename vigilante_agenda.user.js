@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.7.1
+// @version     17.7.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31418,8 +31418,11 @@ _vglOfrecerDeshacer(btn);
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0];
 
     if (hayEstadoA) {
-      // Hay que pedir algo YA. Piso de 14 días para que al paciente le dé
-      // tiempo, techo de 22. Pero si un examen vigente vence ANTES del piso,
+      // Hay que pedir algo YA. Piso de MTR_PISO_ESTADO_A días para que al paciente le dé
+      // tiempo, techo de MTR_TECHO_ESTADO_A. (v17.7.2 — este comentario decía «techo de
+      // 22» y la constante vale 21 desde v16.9.0, cuando se igualó al techo que ya usaba
+      // mtrPlanLabsPrimero. Un comentario que contradice a su propia línea de código es una
+      // trampa para quien lo lea después.) Pero si un examen vigente vence ANTES del piso,
       // manda él: el piso NUNCA puede retrasar una toma por encima de un
       // vencimiento (eso rompería CERO VENCIDOS).
       const piso = mtrSumarDias(hoy, MTR_PISO_ESTADO_A);
@@ -31455,7 +31458,12 @@ _vglOfrecerDeshacer(btn);
       };
     }
 
-    // ---- Agujero Negro Renal: en G3a-G4 la creatinina puede mandar ----
+    // ---- Agujero Negro Renal: en G3a-G5 la creatinina puede mandar ----
+    // v17.7.2 — este rótulo decía «G3a-G4», igual que el spec, pero MTR_ESTADIOS_ANR
+    // incluye G5 desde siempre. Manda el código y se corrige el rótulo, por decisión
+    // explícita del médico (27-ago): G5 es el paciente MÁS enfermo, sacarlo del ANR sería
+    // dejar sin agrupar justo al que menos puede permitirse un segundo viaje. Anotado como
+    // divergencia deliberada en MOTOR_RCV_V68_SPEC.md.
     // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
     // VENTANAS ANR ANCLADAS EN "HOY", no en la fecha de la propia creatinina. La ventana
     // (30/45/60/90 días, según mtrVentanaAnrDias) se mide desde `hoy` — el día en que
@@ -31469,6 +31477,16 @@ _vglOfrecerDeshacer(btn);
     // ANR" no es una fecha fija en el calendario, cambia según cuándo se mire.
     let anr = null;
     const creat = drivers.find((a) => a.clave === "CREATININA");
+    // v17.7.2 — el tercer parámetro (vigilanciaEstrecha) va en `false` A PROPÓSITO, y esto
+    // NO es un cabo suelto: es una decisión del médico (27-ago) tomada con la medición
+    // delante. La rama de 30 días existe porque es port fiel del Copiloto Python —44 de los
+    // 242 vectores dorados de tests/golden/ventana_anr_dias.json la fijan, así que borrarla
+    // rompería la conformidad—, pero cablearla aquí haría daño: en el motor Python el ANR
+    // RETRASA la toma y estrechar la ventana protege; en el nuestro la ADELANTA, así que
+    // estrecharla activa el ANR MENOS. Medido con el arnés: 51 planes perderían la
+    // agrupación, y precisamente en pacientes con sospecha de daño renal agudo — los que
+    // más necesitan que la creatinina entre en esta toma. El mecanismo está invertido, y
+    // copiar la regla al pie de la letra desprotegería. Divergencia declarada en el spec.
     const ventanaAnr = mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false);
     if (ventanaAnr && creat && creat.vence) {
       const limite = mtrSumarDias(hoy, ventanaAnr);

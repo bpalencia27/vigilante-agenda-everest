@@ -6,6 +6,52 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.7.2 — 27-ago-2026 (que el código deje de contradecirse a sí mismo)
+
+Entrega de **cero cambios de conducta**: comentarios, spec y una prueba. Ninguna fecha se
+mueve, ninguna orden cambia. Va aparte a propósito, para que las entregas que sí tocan lo que
+se ordena lleguen limpias.
+
+**Tres comentarios del motor afirmaban lo que su propia línea de código desmentía:**
+
+| Decía | La línea de al lado hacía |
+|---|---|
+| «techo de 22» (`:31422`) | `MTR_TECHO_ESTADO_A = 21` desde v16.9.0 |
+| «Agujero Negro Renal: en G3a-G4» (`:31455`) | `MTR_ESTADIOS_ANR` incluye **G5** |
+| `mtrVentanaAnrDias(..., false)` a secas (`:31472`) | una decisión medida, con pinta de cabo suelto |
+
+Un comentario que miente es peor que no tener comentario: el siguiente que lo lea —yo
+incluido— lo tomará por cierto.
+
+**El error que estuve a punto de cometer, y por qué no lo cometí.** El plan aprobado decía
+«retirar la rama muerta `if (vigilanciaEstrecha) return 30;`». Antes de borrarla la medí:
+**44 de los 242 vectores dorados** de `tests/golden/ventana_anr_dias.json` dependen de ella.
+No es código sobrante — es port fiel del Copiloto Python, y borrarlo habría roto la
+conformidad cruzada. *Muerta en producción no es lo mismo que sobrante.* Se queda, y lo que
+se corrige es que su `false` lleve al lado el porqué (decisión del médico del 27-ago: el
+mecanismo está invertido respecto a v68 y estrechar la ventana **desprotegería** —51 planes
+perderían la agrupación en pacientes con sospecha de daño renal agudo).
+
+**Cuatro divergencias que llevaban tiempo sin declararse** se añaden a la tabla de
+`MOTOR_RCV_V68_SPEC.md`: el techo 21 vs 22, el ANR en G3a-G5, las ventanas 45/60/90 en vez de
+30/45/60, y la vigilancia estrecha presente pero nunca activada.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Devolver el comentario «techo de 22» | `suite_38` | *ningún comentario del motor contradice a su propia constante* |
+| 2 | Devolver el rótulo «G3a-G4» del ANR | `suite_38` | la misma |
+| 3 | Borrar `if (vigilanciaEstrecha) return 30;` | `suite_38` + `suite_43` | *la rama de 30 días NO se borra: la fijan los vectores dorados*, *el ANR solo existe de G3a en adelante* y **los 242 vectores dorados contra `motor_vigencias.py`** |
+
+La mutación 3 es la que importa: reproduce exactamente el borrado que el plan pedía, y hace
+caer los vectores dorados. La red que impide ese error ya existía; lo que faltaba era una
+prueba que dijera **por qué** esa rama no se toca, para que el siguiente no tenga que
+descubrirlo midiendo.
+
+Cada mutación aplicada una a la vez, restaurada verificando con `diff`. Banco completo en
+**2.393/2.393** con `TZ=America/Bogota`.
+
+---
+
 ## v17.7.1 — 27-ago-2026 (reportado en consulta: falta un analito en el historial de paraclínicos)
 
 **El reporte, textual:** *«el módulo de laboratorios no está reportando todos los analitos,
