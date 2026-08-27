@@ -11,6 +11,7 @@ module.exports = {
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
     "mtrAvisoTablaLabsHtml", "atheneaLecturaIncompleta",   // v17.7.1
+    "_esMuestraSerica", "_agruparUroanalisisParaTabla",    // v17.7.4
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1923,6 +1924,84 @@ module.exports = {
       const iCopia = src.indexOf('labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)"');
       t.cierto(iLee > 0 && iCopia > 0 && iLee < iCopia,
         "el marcador se lee ANTES de copiar los analitos: al copiarlos se pierde");
+    });
+
+
+    // =================================================================
+    //  v17.7.4 — REPORTE EN CONSULTA (27-ago): «falta la creatinina en esta paciente que
+    //  fue tomada también ahora en agosto». El diagnóstico que corrió el médico lo cazó, y
+    //  la causa no se podía adivinar desde el código: Athenea nombra los exámenes con la
+    //  nomenclatura del laboratorio, y dos analitos DE SANGRE llevan la palabra «orina»
+    //  dentro de su propio nombre. Uno de ellos dice literalmente «diferente a orina».
+    //
+    //  Consecuencia doble y silenciosa: desaparecían de la tabla (absorbidos por el bloque
+    //  «Uroanálisis» — 31 analitos contados en la paciente real) Y quedaban sin casar con
+    //  ninguna casilla, incluida la creatinina sérica, que es la que manda el estadio
+    //  renal, las vigencias y el ANR.
+    //
+    //  Los nombres de abajo son los REALES de Athenea, verificados en campo. No son PHI:
+    //  son nomenclatura de laboratorio, sin nada del paciente.
+    // =================================================================
+    const NOMBRES_REALES_ATHENEA = {
+      creatininaSerica: "CREATININA EN SUERO. ORINA U OTROS",
+      glucosaSerica: "GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA",
+      creatininaOrina: "CREATININA EN ORINA ESPONTANEA",
+    };
+
+    t.caso("v17.7.4 — un examen DE SANGRE cuyo nombre contiene «orina» no es de orina", () => {
+      const creat = { NombreParametro: NOMBRES_REALES_ATHENEA.creatininaSerica, NombreParametroPadre: "QUIMICA SANGUINEA" };
+      const gluc = { NombreParametro: NOMBRES_REALES_ATHENEA.glucosaSerica, NombreParametroPadre: "QUIMICA SANGUINEA" };
+      t.falso(testApi._esAnalitoDeOrina(creat), "la creatinina SÉRICA no puede contar como analito de orina");
+      t.falso(testApi._esAnalitoDeOrina(gluc), "ni la glicemia, cuyo nombre dice «DIFERENTE A ORINA»");
+      // Y lo que de verdad importa: que lleguen a su casilla.
+      t.igual((testApi._matchLabInWhitelist(creat) || {}).key, "CREATININA",
+        "la creatinina sérica casa con su casilla: sin esto no hay TFG, ni estadio, ni vigencias, ni ANR");
+      t.igual((testApi._matchLabInWhitelist(gluc) || {}).key, "GLUCOSA", "y la glicemia con la suya");
+
+      // Variante CONSTRUIDA (no observada en campo, a diferencia de las dos de arriba): un
+      // nombre que declara la muestra solo por descarte, sin decir «en suero». «Diferente a
+      // orina» es una negación explícita y tiene que bastar por sí sola — si el patrón solo
+      // mirara «EN SUERO», este volvería a caer en el bloque de orina.
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "GLUCOSA. LCR U OTRO FLUIDO DIFERENTE A ORINA" }),
+        "«diferente a orina» dice, por sí solo, que la muestra no es orina");
+    });
+
+    t.caso("v17.7.4 — la guarda de orina sigue entera: no se abrió un boquete al arreglarlo", () => {
+      // La guarda existe desde v12.3.37 por un error clínico REAL en la dirección
+      // contraria: la hemoglobina EN ORINA cayendo en la casilla de hemoglobina sérica.
+      // Arreglar un sentido sin romper el otro es la mitad del trabajo.
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }),
+        "la hemoglobina EN ORINA sigue siendo de orina");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }), null,
+        "y jamás casa con la casilla sérica");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS" }), null,
+        "la glucosa EN ORINA tampoco casa con la glicemia");
+      // Las otras exclusiones de la creatinina describen OTRO examen, no otra muestra:
+      // esas no se tocan.
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "DEPURACION DE CREATININA EN ORINA 24 H" }), null,
+        "la depuración de 24 h sigue excluida: es otro examen, no otra muestra");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "CREATINURIA" }), null, "y la creatinuria también");
+    });
+
+    t.caso("v17.7.4 — el bloque «Uroanálisis» de la tabla deja de tragarse exámenes de sangre", () => {
+      // Reproduce la toma real: un uroanálisis de verdad más los dos analitos séricos que
+      // el bloque estaba absorbiendo. Antes de este arreglo la tabla mostraba UNA fila
+      // (Uroanálisis) y los dos séricos solo existían escondidos dentro del acordeón.
+      const labs = [
+        { NombreParametro: "Nitritos", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: "Leucocitos", NombreParametroPadre: "UROANALISIS", Resultado: "0-2", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: NOMBRES_REALES_ATHENEA.creatininaSerica, NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "0.9", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: NOMBRES_REALES_ATHENEA.glucosaSerica, NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "95", __vglFechaSolicitud: "2026-08-20" },
+      ];
+      const filas = testApi._agruparUroanalisisParaTabla(labs);
+      const nombres = filas.map((f) => String(f.NombreParametro || ""));
+      t.cierto(nombres.indexOf("Uroanálisis") >= 0, "el uroanálisis sigue agrupándose en su bloque");
+      t.cierto(nombres.indexOf(NOMBRES_REALES_ATHENEA.creatininaSerica) >= 0,
+        "y la creatinina sérica conserva su PROPIA fila: es justo la que el médico no encontraba");
+      t.cierto(nombres.indexOf(NOMBRES_REALES_ATHENEA.glucosaSerica) >= 0, "igual que la glicemia");
+      const bloque = filas.find((f) => Array.isArray(f.__vglGrupoUroComponentes));
+      t.igual(bloque.__vglGrupoUroComponentes.length, 2,
+        "dentro del bloque quedan SOLO los dos componentes de orina, no los cuatro");
     });
 
   }

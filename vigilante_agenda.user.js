@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.7.2
+// @version     17.7.4
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.2";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.4";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1346,12 +1346,47 @@
   // mayúsculas y con los espacios colapsados ("Resultado  Hematíes " → "RESULTADO HEMATIES").
   const _canonTexto = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
 
+  // =====================================================================
+  //  v17.7.4 — LA MUESTRA VA DECLARADA EN EL NOMBRE, Y MANDA
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago) + DIAGNÓSTICO REAL DE LA PACIENTE: «el módulo de
+  //  laboratorios no está reportando todos los analitos, falta la creatinina». El
+  //  diagnóstico lo cazó: Athenea nombra los exámenes con la nomenclatura del laboratorio,
+  //  y dos analitos DE SANGRE llevan la palabra «orina» DENTRO de su propio nombre:
+  //
+  //      CREATININA EN SUERO. ORINA U OTROS
+  //      GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA
+  //
+  //  El segundo dice literalmente «diferente a orina» y el patrón /\bORINA\b/ se quedaba
+  //  con la palabra suelta. Consecuencia doble y silenciosa: los dos desaparecían de la
+  //  tabla de paraclínicos (absorbidos dentro del bloque «Uroanálisis», 31 analitos
+  //  contados en la paciente real) y, además, la guarda de orina de _matchLabInWhitelist
+  //  los dejaba SIN casar con ninguna casilla — la creatinina sérica, que es la que manda
+  //  el estadio renal, las vigencias y el ANR.
+  //
+  //  Regla: si el nombre declara la muestra («EN SUERO», «SÉRICA», «EN SANGRE», «PLASMA»,
+  //  «DIFERENTE A ORINA»), esa declaración MANDA sobre cualquier mención suelta de orina.
+  //  El laboratorio es explícito a propósito; ignorarlo para quedarse con una subcadena es
+  //  justo el error que este proyecto ya cometió al revés (hemoglobina de orina cayendo en
+  //  la casilla sérica, v12.3.37).
+  // =====================================================================
+  const MTR_MUESTRA_SERICA_RE = /\bEN SUERO\b|\bSERICA\b|\bSERICO\b|\bEN SANGRE\b|\bPLASMA\b|DIFERENTE A ORINA/;
+  function _esMuestraSerica(nombre) {
+    return MTR_MUESTRA_SERICA_RE.test(_canonTexto(nombre));
+  }
+
   // v12.3.37 — ¿Este analito pertenece al panel de ORINA? Primero por su padre
   // (NombreParametroPadre, el campo con que Athenea agrupa los hijos de un panel);
   // como respaldo, por nombre propio SOLO cuando el nombre existe únicamente en orina.
   // Jamás por "LEUCOCITOS"/"HEMATIES"/"HEMOGLOBINA" a secas: esos también son del
   // hemograma EN SANGRE, y confundirlos escribiría sangre en las casillas de orina.
   function _esAnalitoDeOrina(lab) {
+      // v17.7.4 — si el propio nombre declara que la muestra es SUERO/SANGRE/PLASMA, no es
+      // de orina, pase lo que pase con el resto de patrones. Va lo primero a propósito: es
+      // la única señal EXPLÍCITA de muestra que da el laboratorio, y todo lo demás aquí son
+      // inferencias por subcadena. La dirección también importa: tratar un examen de sangre
+      // como si fuera de orina lo hace DESAPARECER de la tabla y de las casillas.
+      if (_esMuestraSerica(lab && (lab.NombreParametro || lab.nombre || lab.examen))) return false;
       const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));
       // [confirmado con informe real de laboratorio y captura de pantalla real, aportados
       // en consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel DISTINTO (creatinina en
@@ -2656,7 +2691,16 @@
           // casaría aquí con la entrada general UROANALISIS y jamás llegaría a su casilla
           // de componente: si el analito mapea a un componente, se deja pasar a esa ruta.
           if (deOrina && item.key === "UROANALISIS" && _matchUroComponente(lab)) continue;
-          if (item.excluye && item.excluye.some((x) => name.includes(_canonNombreLab(x)))) continue;
+          // v17.7.4 — «CREATININA EN SUERO. ORINA U OTROS» contiene «ORINA» y la exclusión
+          // de la creatinina lo tumbaba, dejando la creatinina SÉRICA sin casar con nada.
+          // Cuando el nombre declara la muestra, la exclusión por «ORINA» no aplica; las
+          // demás (CREATINURIA, DEPURAC, 24 H) siguen intactas porque describen OTRO examen,
+          // no otra muestra del mismo.
+          const _serica = _esMuestraSerica(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+          if (item.excluye && item.excluye.some((x) => {
+              if (_serica && _canonNombreLab(x) === _canonNombreLab("ORINA")) return false;
+              return name.includes(_canonNombreLab(x));
+          })) continue;
           for (const n of item.names) {
               if (name.includes(_canonNombreLab(n))) return item;
           }
@@ -31826,11 +31870,23 @@ _vglOfrecerDeshacer(btn);
     for (const k of MTR_HECHOS_FACTORES) if (f[k] === true) factores[k] = true;
 
     const labs = [];
+    // v17.7.3 — los laboratorios con resultado de TEXTO (el uroanálisis cualitativo:
+    // nitritos, esterasa, proteinuria, cilindros…) se descartaban aquí por el filtro
+    // `typeof c.valor !== "number"`, así que la IA no los veía NUNCA. Van en un array
+    // aparte, no mezclados con los numéricos: quien espera números sigue recibiendo solo
+    // números, y quien redacta la nota recibe además lo cualitativo.
+    const labsTexto = [];
     const ult = o.ultimos || {};
     for (const clave of Object.keys(ult)) {
       const c = ult[clave];
-      if (!c || c.valor == null || typeof c.valor !== "number") continue;
-      labs.push({ analito: clave, valor: c.valor, hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
+      if (!c || c.valor == null) continue;
+      if (typeof c.valor === "number") {
+        labs.push({ analito: clave, valor: c.valor, hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
+        continue;
+      }
+      const txt = limpiar(String(c.valor).trim());
+      if (!txt) continue;
+      labsTexto.push({ analito: clave, valor: txt.slice(0, 60), hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
     }
 
     // Medicamentos: nombres de moléculas (no son PHI). Aun así se limpian y se acotan.
@@ -31864,6 +31920,12 @@ _vglOfrecerDeshacer(btn);
         imc: (typeof f.imc === "number") ? f.imc : null,
         paSistolica: (typeof f.paSistolica === "number") ? f.paSistolica : null,
         paDiastolica: (typeof f.paDiastolica === "number") ? f.paDiastolica : null,
+        // v17.7.3 — peso y CINTURA, que el examen físico sí tiene y la IA no recibía. La
+        // cintura se lee por rótulo desde v17.6.97 y es el 5º criterio del síndrome
+        // metabólico; que no llegara aquí obligaba al modelo a redactar el examen físico
+        // sin uno de sus datos.
+        pesoKg: (typeof f.pesoKg === "number") ? f.pesoKg : null,
+        cinturaCm: (typeof f.cinturaCm === "number") ? f.cinturaCm : null,
       },
       metaLdl: (r.meta && r.meta.metas) ? r.meta.metas.ldl : null,
       // v17.6.64 — auditoría 25-ago (sección 4): cNoHDL (colesterol no-HDL = CT − HDL) NO
@@ -31889,9 +31951,37 @@ _vglOfrecerDeshacer(btn);
       // hoja de hechos que lee la IA, ni al recuadro que el médico copia a mano si la IA
       // falla. Ver mtrEducacionFlagsTexto() y el mismo defecto en mtrJsonV68DesdeResumen.
       educacion: mtrEducacionFlagsTexto(r.educationFlags),
+      labsTexto: labsTexto,
+      // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
+      // toda esa información sirve de grounding para redactar una excelente nota clínica».
+      // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
+      // modelo opinaba con menos datos de los que el propio asistente tenía en la mano.
+      // Regla de la casa intacta: lo que no conste se OMITE (null / lista vacía), nunca se
+      // rellena con un valor plausible.
+      uroanalisis: (r.uroanalisis && r.uroanalisis.estado) ? {
+        estado: r.uroanalisis.estado,
+        criterios: Array.isArray(r.uroanalisis.criterios) ? r.uroanalisis.criterios.slice(0, 10) : [],
+        conducta: r.uroanalisis.conducta ? limpiar(String(r.uroanalisis.conducta)) : null,
+      } : null,
+      sindromeMetabolico: (r.sindromeMetabolico && r.sindromeMetabolico.cumple === true) ? {
+        criterios: Array.isArray(r.sindromeMetabolico.criterios) ? r.sindromeMetabolico.criterios.slice(0, 6) : [],
+        count: r.sindromeMetabolico.count != null ? r.sindromeMetabolico.count : null,
+        evaluables: r.sindromeMetabolico.evaluables != null ? r.sindromeMetabolico.evaluables : null,
+      } : null,
+      plan: (r.plan) ? {
+        ftl: r.plan.ftl || null,
+        control: (r.plan.control && r.plan.control.fecha) || null,
+        motivoFtl: r.plan.motivoFtl ? limpiar(String(r.plan.motivoFtl)) : null,
+        ordenar: (r.plan.ordenar || []).map((x) => x && x.clave).filter(Boolean),
+        anr: r.plan.anr ? { ventanaDias: r.plan.anr.ventanaDias, vence: r.plan.anr.vence } : null,
+      } : null,
       pendientes: {
         faltantes: (r.plan && r.plan.faltantes || []).map((x) => x && x.clave).filter(Boolean),
         vencidos: (r.plan && r.plan.vencidos || []).map((x) => x && x.clave).filter(Boolean),
+        // v17.7.3 — los DIFERIDOS: exámenes vigentes que NO entran en esta toma porque el
+        // margen de la cosecha no da. Se ven en pantalla desde hace versiones y la IA no
+        // los recibía, así que podía recomendar pedir algo que el plan decidió aplazar.
+        diferidos: (r.plan && r.plan.diferidos || []).map((x) => x && x.clave).filter(Boolean),
       },
     };
   }
@@ -31915,8 +32005,32 @@ _vglOfrecerDeshacer(btn);
     if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL");
     if (h.cNoHDL != null) L.push("Colesterol no-HDL: " + h.cNoHDL + " mg/dL" + (h.metaCnoHdl != null ? " (meta: <" + h.metaCnoHdl + " mg/dL)" : ""));
     const an = h.antropometria || {};
-    if (an.paSistolica != null) L.push("Signos vitales: PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg" + (an.imc != null ? " · IMC: " + an.imc : ""));
+    // v17.7.3 — el examen físico completo: peso y cintura además de PA e IMC. Cada dato
+    // solo aparece si consta; un hueco se calla, nunca se rellena.
+    // La etiqueta sigue siendo «Signos vitales:» A PROPÓSITO, aunque ahora lleve más cosas:
+    // es uno de los 5 prefijos de MTR_EA_PREFIJOS_PROHIBIDOS, la segunda capa que borra del
+    // borrador de Enfermedad Actual las líneas que el modelo copie tal cual de la hoja.
+    // Renombrarla dejaría ese filtro sin reconocer su propia línea — y el filtro compara
+    // por texto exacto, así que fallaría en silencio.
+    if (an.paSistolica != null || an.pesoKg != null || an.cinturaCm != null) {
+      const ex = [];
+      if (an.paSistolica != null) ex.push("PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg");
+      if (an.pesoKg != null) ex.push("peso " + an.pesoKg + " kg");
+      if (an.imc != null) ex.push("IMC " + an.imc);
+      if (an.cinturaCm != null) ex.push("circunferencia abdominal " + an.cinturaCm + " cm");
+      L.push("Signos vitales: " + ex.join(" · "));
+    }
+    if (h.sindromeMetabolico) {
+      L.push("Síndrome metabólico: SÍ cumple criterios (" + h.sindromeMetabolico.count + " de "
+        + h.sindromeMetabolico.evaluables + " evaluables): " + (h.sindromeMetabolico.criterios || []).join(", "));
+    }
     if (h.labs && h.labs.length) L.push("Laboratorios y paraclínicos: " + h.labs.map((x) => x.analito + " " + x.valor + (x.hace ? " (" + x.hace + ")" : "")).join("; "));
+    if (h.labsTexto && h.labsTexto.length) L.push("Paraclínicos con resultado descriptivo: " + h.labsTexto.map((x) => x.analito + " " + x.valor + (x.hace ? " (" + x.hace + ")" : "")).join("; "));
+    if (h.uroanalisis) {
+      L.push("Uroanálisis: " + h.uroanalisis.estado
+        + ((h.uroanalisis.criterios && h.uroanalisis.criterios.length) ? " — " + h.uroanalisis.criterios.join(", ") : "")
+        + (h.uroanalisis.conducta ? ". Conducta que ya definió el motor: " + h.uroanalisis.conducta : ""));
+    }
     // v16.1.0 — a la IA y a los textos solo viajan los medicamentos del programa
     // cardiovascular: el resto no es asunto de este asistente.
     if (h.medicamentos && h.medicamentos.length) {
@@ -31925,6 +32039,18 @@ _vglOfrecerDeshacer(btn);
     }
     const pd = h.pendientes || {};
     if ((pd.faltantes && pd.faltantes.length) || (pd.vencidos && pd.vencidos.length)) L.push("Paraclínicos pendientes/vencidos: " + [].concat(pd.faltantes || [], pd.vencidos || []).join(", "));
+    // v17.7.3 — el plan que el motor YA decidió. Va explícito para que el modelo lo CITE en
+    // vez de proponer uno suyo: las fechas y la lista de órdenes son deterministas y no se
+    // le delegan a un LLM (lo dice la cabecera del propio promptware).
+    const pl = h.plan || {};
+    if (pl.ordenar && pl.ordenar.length) L.push("Exámenes que YA se van a ordenar en esta toma: " + pl.ordenar.join(", "));
+    if (pd.diferidos && pd.diferidos.length) L.push("Exámenes vigentes que NO entran en esta toma (diferidos, quedan para la siguiente): " + pd.diferidos.join(", "));
+    if (pl.ftl || pl.control) {
+      L.push("Fechas ya calculadas: toma de laboratorios " + (pl.ftl || "sin definir")
+        + " · control " + (pl.control || "sin definir")
+        + (pl.motivoFtl ? " (" + pl.motivoFtl + ")" : ""));
+    }
+    if (pl.anr) L.push("Agujero negro renal ACTIVO: la creatinina vence el " + pl.anr.vence + ", dentro de la ventana de " + pl.anr.ventanaDias + " días, y por eso se adelanta a esta misma toma.");
     if (h.foco) L.push("Foco de la consulta: " + h.foco);
     if (h.educacion && h.educacion.length) L.push("Educación indicada: " + h.educacion.join("; "));
     return L.join("\n");
@@ -32584,9 +32710,18 @@ _vglOfrecerDeshacer(btn);
   // prefijos que mtrHojaDeHechosTexto usa para esos datos (los mismos 5 bloques que
   // MTR_EA_SYS prohíbe por su nombre) — no toca ninguna otra línea, y solo aplica al modo
   // "enfermedad_actual" (en "analisis_plan" esas mismas líneas son contenido correcto).
+  // v17.7.3 — la hoja de hechos creció (uroanálisis, síndrome metabólico, plan y fechas,
+  // paraclínicos descriptivos). Cada bloque nuevo que sea un DATO —y no semiotecnia— tiene
+  // que entrar también en esta lista: si no, el modelo puede copiarlo tal cual dentro de la
+  // Enfermedad Actual y el filtro no lo reconocería. Las fechas y el plan pertenecen a
+  // Análisis y Plan, nunca a la Enfermedad Actual.
   const MTR_EA_PREFIJOS_PROHIBIDOS = [
     "Signos vitales:", "Laboratorios y paraclínicos:", "Función renal:",
     "Riesgo cardiovascular:", "Meta LDL:",
+    "Paraclínicos con resultado descriptivo:", "Síndrome metabólico:",
+    "Exámenes que YA se van a ordenar en esta toma:",
+    "Exámenes vigentes que NO entran en esta toma",
+    "Fechas ya calculadas:", "Agujero negro renal ACTIVO:",
   ];
   function mtrQuitarDatosProhibidosEA(texto) {
     if (!texto) return "";

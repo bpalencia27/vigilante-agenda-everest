@@ -1598,5 +1598,116 @@ module.exports = {
       t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
     });
 
+
+    // =================================================================
+    //  v17.7.3 — LA HOJA DE HECHOS COMPLETA
+    //  Encargo del médico (27-ago): «la IA debe recibir todo el JSON de Everest ya que
+    //  toda esa información sirve de grounding para redactar una excelente nota clínica:
+    //  se debe mandar el examen físico, medicamentos actuales, laboratorios actuales,
+    //  exámenes por vencer, clasificación del riesgo cardiovascular, etc.»
+    //
+    //  Todo esto YA estaba calculado en el script y nadie lo copiaba a la hoja: el modelo
+    //  opinaba con menos datos de los que el propio asistente tenía en la mano.
+    // =================================================================
+    const _ctx773 = {
+      hoyIso: "2026-08-16", edad: 68, sexo: "F", pesoKg: 62, creatinina: 1.6,
+      rac: 45, ct: 230, hdl: 42, ldl: 148, paSistolica: 148, paDiastolica: 88,
+      factores: { hta: true, diabetes: true, cinturaCm: 96 },
+      ultimos: {
+        CREATININA: { fecha: "2026-05-01", valor: 1.6 },
+        COLESTEROL_TOTAL: { fecha: "2026-05-01", valor: 230 },
+        COLESTEROL_HDL: { fecha: "2026-05-01", valor: 42 },
+        TRIGLICERIDOS: { fecha: "2026-05-01", valor: 190 },
+        GLUCOSA: { fecha: "2026-01-01", valor: 132 },
+        NITRITOS: { fecha: "2026-05-01", valor: "POSITIVO" },
+      },
+      uroHallazgos: { nitritos: "POSITIVO" },
+    };
+    const _hoja773 = () => api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+      ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+    });
+
+    t.caso("v17.7.3 — el examen físico llega entero: peso y cintura, no solo la tensión", () => {
+      const h = _hoja773();
+      t.igual(h.antropometria.pesoKg, 62, "el peso");
+      t.igual(h.antropometria.cinturaCm, 96, "y la circunferencia abdominal, que se lee por rótulo desde v17.6.97");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("peso 62 kg") >= 0, "el peso, en el texto que ve el modelo");
+      t.cierto(txt.indexOf("circunferencia abdominal 96 cm") >= 0, "y la cintura, con el nombre que usa Everest");
+      // La etiqueta NO puede cambiar: es uno de los prefijos con que se limpia la
+      // Enfermedad Actual, y ese filtro compara texto exacto.
+      t.cierto(txt.indexOf("Signos vitales:") >= 0,
+        "la etiqueta sigue siendo «Signos vitales:»: renombrarla dejaría el filtro de Enfermedad Actual sin reconocer su propia línea");
+    });
+
+    t.caso("v17.7.3 — el uroanálisis y los paraclínicos de texto dejan de ser invisibles", () => {
+      const h = _hoja773();
+      t.cierto(h.labsTexto.some((x) => x.analito === "NITRITOS"),
+        "un resultado de TEXTO ya no se descarta: el filtro de números lo tiraba");
+      t.falso(h.labs.some((x) => x.analito === "NITRITOS"),
+        "pero NO se mezcla con los numéricos: quien espera números sigue recibiendo solo números");
+      t.cierto(!!h.uroanalisis && !!h.uroanalisis.estado, "y el uroanálisis llega con su estado ya evaluado");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("Uroanálisis: ") >= 0, "nombrado en el texto");
+      t.cierto(txt.indexOf("Conducta que ya definió el motor") >= 0,
+        "con la conducta YA decidida, para que el modelo la cite en vez de improvisar una");
+    });
+
+    t.caso("v17.7.3 — el plan que el motor ya decidió viaja con los hechos", () => {
+      const h = _hoja773();
+      t.cierto(!!h.plan.ftl, "la fecha de toma");
+      t.cierto(!!h.plan.control, "la fecha de control");
+      t.cierto(h.plan.ordenar.length > 0, "y qué se va a ordenar");
+      t.cierto(!!h.plan.anr, "el agujero negro renal, cuando está activo");
+      t.cierto(Array.isArray(h.pendientes.diferidos), "los diferidos, aunque estén vacíos");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("Exámenes que YA se van a ordenar") >= 0, "las órdenes, en el texto");
+      t.cierto(txt.indexOf("Fechas ya calculadas:") >= 0, "las fechas, en el texto");
+      t.cierto(txt.indexOf("Agujero negro renal ACTIVO") >= 0, "y el ANR explicado, no en clave");
+    });
+
+    t.caso("v17.7.3 — el síndrome metabólico llega con su porqué, no solo con su veredicto", () => {
+      const h = _hoja773();
+      t.cierto(!!h.sindromeMetabolico, "esta paciente lo cumple");
+      t.cierto(h.sindromeMetabolico.criterios.length >= 3, "y viajan los criterios que se cumplieron");
+      t.cierto(api.mtrHojaDeHechosTexto(h).indexOf("Síndrome metabólico: SÍ cumple") >= 0, "nombrado en el texto");
+    });
+
+    t.caso("v17.7.3 — lo que no consta se OMITE, nunca se rellena", () => {
+      // La regla de la casa. El motivo por el que estos datos no estaban era que faltaban,
+      // no que sobraran: cambiarlos por un valor plausible sería peor que no tenerlos.
+      const vacia = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
+      t.igual(vacia.antropometria.cinturaCm, null, "sin cintura, null — no se estima por el IMC");
+      t.igual(vacia.antropometria.pesoKg, null, "sin peso, null");
+      t.igual(vacia.uroanalisis, null, "sin uroanálisis, null — no se declara «sin hallazgos»");
+      t.igual(vacia.sindromeMetabolico, null, "sin criterios, null — no se da por descartado");
+      t.igual(vacia.plan, null, "sin plan, null — no se inventan fechas");
+      t.igual(vacia.labsTexto.length, 0, "y ningún paraclínico descriptivo de la nada");
+      const txt = api.mtrHojaDeHechosTexto(vacia);
+      for (const rotulo of ["circunferencia abdominal", "Uroanálisis:", "Síndrome metabólico:", "Fechas ya calculadas:", "Agujero negro renal"]) {
+        t.falso(txt.indexOf(rotulo) >= 0, "sin dato, la línea «" + rotulo + "» no se fabrica");
+      }
+    });
+
+    t.caso("v17.7.3 — los bloques nuevos NO se pueden colar en la Enfermedad Actual", () => {
+      // Son datos, no semiotecnia: pertenecen a Análisis y Plan. El prompt ya lo prohíbe,
+      // pero un prompt es una instrucción, no una garantía — por eso existe el filtro.
+      const borrador = [
+        "Paciente que consulta por control.",
+        "Fechas ya calculadas: toma de laboratorios 2026-08-29 · control 2026-09-04",
+        "Síndrome metabólico: SÍ cumple criterios (5 de 5 evaluables)",
+        "Exámenes que YA se van a ordenar en esta toma: CREATININA",
+        "Agujero negro renal ACTIVO: la creatinina vence el 2026-08-30",
+        "Paraclínicos con resultado descriptivo: NITRITOS POSITIVO",
+        "Refiere adecuada adherencia al tratamiento.",
+      ].join("\n");
+      const limpio = api.mtrQuitarDatosProhibidosEA(borrador);
+      t.cierto(limpio.indexOf("consulta por control") >= 0, "la semiotecnia se respeta");
+      t.cierto(limpio.indexOf("adherencia") >= 0, "y lo que sí es Enfermedad Actual también");
+      for (const rotulo of ["Fechas ya calculadas:", "Síndrome metabólico:", "Exámenes que YA", "Agujero negro renal", "Paraclínicos con resultado descriptivo:"]) {
+        t.falso(limpio.indexOf(rotulo) >= 0, "«" + rotulo + "» no puede quedarse en la Enfermedad Actual");
+      }
+    });
+
   },
 };

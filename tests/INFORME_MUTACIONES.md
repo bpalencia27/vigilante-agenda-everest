@@ -6,6 +6,90 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.7.4 — 27-ago-2026 (la causa real: Athenea llama «orina» a un examen de sangre)
+
+**El diagnóstico del médico resolvió lo que ningún informe podía adivinar.** La v17.7.1 dijo
+explícitamente que NO se afirmaba conocer la causa de la creatinina que faltaba, y se le
+entregó un diagnóstico de consola. Él lo corrió. Esto es lo que devolvió:
+
+    CREATININA EN SUERO. ORINA U OTROS
+    GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA
+
+Athenea nombra los exámenes con la nomenclatura del laboratorio, y **dos analitos DE SANGRE
+llevan la palabra «orina» dentro de su propio nombre**. El segundo dice literalmente
+*«diferente a orina»* y el patrón `/\bORINA\b/` se quedaba con la palabra suelta.
+
+**El daño era doble, y la mitad no estaba reportada:**
+
+| | |
+|---|---|
+| Desaparecían de la tabla, absorbidos por el bloque «Uroanálisis» | 31 analitos contados dentro del acordeón en la paciente real |
+| **Y no casaban con NINGUNA casilla** (`_matchLabInWhitelist` → `null`) | la creatinina sérica es la que manda el estadio renal, las vigencias y el ANR |
+
+Lo segundo no lo reportó nadie porque es invisible: un examen que no casa con su casilla no
+da error, simplemente no está.
+
+**La regla nueva:** si el nombre declara la muestra (`EN SUERO`, `SÉRICA`, `EN SANGRE`,
+`PLASMA`, `DIFERENTE A ORINA`), esa declaración **manda** sobre cualquier mención suelta de
+orina. El laboratorio es explícito a propósito; quedarse con una subcadena es justo el error
+que este proyecto ya cometió al revés en v12.3.37 (hemoglobina de orina cayendo en la casilla
+sérica). Por eso la prueba 2 comprueba que esa guarda vieja sigue entera: arreglar un sentido
+sin romper el otro es la mitad del trabajo.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| A | Quitar la precedencia de la muestra declarada | `suite_08` | *un examen DE SANGRE cuyo nombre contiene «orina» no es de orina* **y** *el bloque «Uroanálisis» deja de tragarse exámenes de sangre* |
+| B | Quitar `DIFERENTE A ORINA` del patrón | `suite_08` | *un examen DE SANGRE cuyo nombre contiene «orina» no es de orina* |
+| C | Devolver la exclusión «ORINA» sobre un nombre sérico | `suite_08` | la misma |
+
+**La mutación B no cayó a la primera**, y eso fue información: el nombre real ya casaba por
+`EN SUERO`, así que la alternativa `DIFERENTE A ORINA` no cargaba peso propio. En vez de dar
+la mutación por buena se le escribió su caso —un nombre que declara la muestra SOLO por
+descarte— y se **anotó en la prueba que ese nombre es construido, no observado en campo**,
+para que nadie lo lea después como evidencia real.
+
+Banco completo en **2.402/2.402** con `TZ=America/Bogota`.
+
+---
+
+## v17.7.3 — 27-ago-2026 (la hoja de hechos completa)
+
+**Encargo textual del médico (27-ago):** *«la IA debe recibir todo el JSON de Everest ya que
+toda esa información sirve de grounding para redactar una excelente nota clínica: se debe
+mandar el examen físico, medicamentos actuales, laboratorios actuales, exámenes por vencer,
+clasificación del riesgo cardiovascular, etc.»*
+
+Todo lo que sigue **ya estaba calculado en el script** y nadie lo copiaba a `mtrHojaDeHechos`:
+el modelo opinaba con menos datos de los que el propio asistente tenía en la mano.
+
+| Añadido | Por qué faltaba |
+|---|---|
+| Peso y **cintura** | nadie los copiaba (la cintura se lee por rótulo desde v17.6.97) |
+| Uroanálisis y paraclínicos de texto | el filtro `typeof c.valor !== "number"` descartaba **todo** resultado descriptivo |
+| Síndrome metabólico con sus criterios | calculado en el resumen, nunca leído aquí |
+| Plan: FTL, control, qué se va a ordenar, ANR | ídem |
+| Exámenes **diferidos** | se ven en pantalla desde hace versiones; la IA podía recomendar pedir algo que el plan aplazó |
+
+**Dos cosas que la prueba obligó a pensar mejor:**
+
+1. **Un renombre de etiqueta habría roto un filtro en silencio.** Iba a llamar «Examen
+   físico:» a la línea que ahora lleva PA, peso, IMC y cintura. `suite_57` se puso roja y al
+   mirar por qué apareció el motivo real: «Signos vitales:» es uno de los prefijos de
+   `MTR_EA_PREFIJOS_PROHIBIDOS`, la segunda capa que borra de la Enfermedad Actual las líneas
+   que el modelo copie tal cual de la hoja. Compara **texto exacto**: renombrarla la habría
+   dejado sin reconocer su propia línea, sin error visible. Se conserva la etiqueta.
+2. **Un dato que llega al JSON y que el filtro no conoce es un boquete nuevo.** Los cinco
+   bloques añadidos son DATOS (pertenecen a Análisis y Plan, no a la Enfermedad Actual), así
+   que se registran los cinco prefijos nuevos en esa lista, con su prueba.
+
+**Regla de la casa, verificada explícitamente:** lo que no consta se **omite** (`null` / lista
+vacía), nunca se rellena. Hay una prueba entera dedicada a eso: sin cintura no se estima por
+el IMC, sin uroanálisis no se declara «sin hallazgos», sin plan no se inventan fechas.
+
+Banco en **2.399/2.399** al cerrar esta entrega.
+
+---
+
 ## v17.7.2 — 27-ago-2026 (que el código deje de contradecirse a sí mismo)
 
 Entrega de **cero cambios de conducta**: comentarios, spec y una prueba. Ninguna fecha se
