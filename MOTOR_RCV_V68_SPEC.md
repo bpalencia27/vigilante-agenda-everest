@@ -56,5 +56,5 @@ S6: valida TFG ambas; pasos en orden con CONTEO; pasajeros no bloqueados en orde
 | Cláusula v68 | Lo que hace el script | Por qué gana el script |
 |---|---|---|
 | Cosecha ≤25% de la vigencia | 33% (v17.6.0) | Decisión del médico, auditoría del 20-ago: "en su población el viaje pesa más que la vigencia" |
-| Sábado control: quincena fija anclada 2026-07-11 | Grupos 1º-3º / 2º-4º sábado del mes, deducidos observando la agenda real del médico (v16.9.0+) | Regla dada por el médico el 2026-08-16; la quincena fija se conserva solo en los vectores dorados |
+| Sábado control: quincena fija anclada 2026-07-11 | Grupos 1º-3º / 2º-4º sábado del mes deducidos de la agenda real, **pero solo cuando la deducción es fiable**; si sale en conflicto o es una conjetura, vale cualquier sábado con agenda propia observada (v17.6.93) | Revisión del 2026-08-27. La quincena fija de v68 y la regla de grupos a secas le tachaban sábados en los que sí trabaja: su deducción sale en CONFLICTO, y en conflicto el grupo queda en null (medido sobre sep-2026: con grupo 1-3, 2 de 4 sábados; con su deducción real, ninguno). La quincena fija se conserva solo en los vectores dorados |
 | Festivos como tabla fija 2026/2027 | Cálculo algorítmico (mtrPascuaCO + ley Emiliani) para cualquier año | Equivalente y no caduca; la tabla v68 sirve de vector de prueba |

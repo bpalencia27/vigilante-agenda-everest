@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.92
+// @version     17.6.93
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.92";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.93";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -30235,7 +30235,17 @@ _vglOfrecerDeshacer(btn);
 
   // ¿Consta que este médico trabaja sábados? Se responde con lo OBSERVADO (agendas
   // propias vistas en sábado), nunca con una tabla de IDs que envejece.
+  //
+  // v17.6.93 — este objeto es EL QUE VIAJA al motor (ver `grupoSabado:` en el contexto
+  // de mtrResumenClinico) y hasta ahora se dejaba por el camino tres datos que sí tiene
+  // `mtrSabadoGrupoDeMedico`: el grupo con su nombre propio, la CONFIANZA de la deducción
+  // y si salió en CONFLICTO. Sin esos tres, `mtrGrupoSabadoFiable` no puede distinguir
+  // «grupo deducido con datos coherentes» de «grupo adivinado con una sola observación»,
+  // y se quedaría siempre en null: la regla de grupo quedaría escrita y sin cablear —
+  // exactamente el fallo que la propia auditoría de v17.0.1 encontró aquí mismo.
   function mtrSabadoTrabajaEsteMedico(medicoId) {
+    const vacio = { habilitado: false, observados: [], origen: null, grupoDeducido: null,
+                    grupo: null, confianza: "sin_datos", conflicto: false };
     try {
       const info = mtrSabadoGrupoDeMedico(medicoId) || {};
       const obs = Array.isArray(info.observados) ? info.observados : [];
@@ -30243,9 +30253,12 @@ _vglOfrecerDeshacer(btn);
         habilitado: obs.length > 0 || info.origen === "manual",
         observados: obs,
         origen: info.origen || null,
-        grupoDeducido: info.grupo || null,        // informativo: ya no decide nada
+        grupoDeducido: info.grupo || null,        // nombre histórico, se conserva por compatibilidad
+        grupo: info.grupo || null,
+        confianza: info.confianza || "sin_datos",
+        conflicto: info.conflicto === true,
       };
-    } catch (e) { return { habilitado: false, observados: [], origen: null, grupoDeducido: null }; }
+    } catch (e) { return vacio; }
   }
 
   function mtrMedicoTrabajaSabado(iso, grupo) {
@@ -30373,6 +30386,35 @@ _vglOfrecerDeshacer(btn);
 
   // ¿Puede caer una CITA DE CONTROL este día?
   // L-V sí (salvo festivo). Domingo nunca. Sábado solo si le toca a este médico.
+  // v17.6.93 — ¿Se puede confiar en el grupo de sábados de este médico? Devuelve "1-3"/"2-4"
+  // SOLO cuando la deducción es concluyente, y null en todo lo demás (conflicto, conjetura
+  // con pocas observaciones, sin datos, o un booleano suelto del modelo viejo).
+  //
+  // Existe por la historia de esta regla, que conviene no repetir: la de grupos se cableó,
+  // se probó contra la agenda real del médico el 20-ago y se RETIRÓ porque le tachaba
+  // sábados en los que sí tenía agenda — su deducción salió en CONFLICTO (agendas suyas en
+  // sábados de los dos grupos) y con la regla activa eso deja CERO sábados ofrecidos.
+  // Medido con el harness sobre septiembre de 2026: con grupo 1-3 se ofrecen 2 de 4 sábados;
+  // con la deducción en conflicto, ninguno.
+  //
+  // Decisión del médico (27-ago), tras ver esa medición: el grupo manda cuando la deducción
+  // es fiable, y cuando no lo es se cae a la regla de hoy en vez de castigarlo por un dato
+  // ambiguo. Una "conjetura" (menos observaciones de las que el propio motor exige para
+  // deducir) NO se considera fiable: quitarle un sábado a alguien por una corazonada es
+  // exactamente lo que ya falló una vez.
+  // Se exige constancia POSITIVA de fiabilidad («deducido» o «manual»): un objeto que
+  // nombra un grupo pero no dice de dónde salió no basta. La duda se resuelve siempre
+  // hacia ofrecer el sábado, nunca hacia esconderlo.
+  const MTR_SAB_CONFIANZAS_FIABLES = ["deducido", "manual"];
+  function mtrGrupoSabadoFiable(grupoSabado) {
+    const x = grupoSabado;
+    if (!x || typeof x !== "object") return null;      // string/booleano: modelo viejo, sin grupo fiable
+    if (x.conflicto === true) return null;
+    if (MTR_SAB_CONFIANZAS_FIABLES.indexOf(x.confianza) < 0) return null;
+    const g = String(x.grupo == null ? "" : x.grupo).trim();
+    return (g === MTR_SAB_GRUPO_13 || g === MTR_SAB_GRUPO_24) ? g : null;
+  }
+
   // `grupoSabado` en null => los sábados quedan fuera (no se propone lo que no
   // se sabe; la interfaz los ofrece aparte como "por confirmar").
   function mtrDiaValidoParaControlConSabado(iso, grupoSabado) {
@@ -30384,7 +30426,22 @@ _vglOfrecerDeshacer(btn);
     // v16.9.0 — regla única: basta con que conste que el médico trabaja sábados. Antes
     // se exigía además que ESE sábado cayera en "su" grupo, y eso tachaba sábados en los
     // que sí tiene agenda (deducción en conflicto con datos reales del 20-ago).
-    if (d === 6) return mtrSabadosHabilitados(grupoSabado);
+    //
+    // v17.6.93 — decisión del médico del 27-ago: el grupo vuelve, pero SOLO cuando la
+    // deducción es fiable. Sigue mandando primero lo de v16.9.0 (si no consta que trabaja
+    // sábados, no se propone ninguno); y si consta, se afina con el grupo cuando se puede
+    // confiar en él. Con la deducción en conflicto o en conjetura se ofrecen todos, que es
+    // el comportamiento de v16.9.0 — se prefiere ofrecer un sábado de más, que el médico
+    // descarta de un vistazo, a esconderle uno en el que sí trabaja.
+    if (d === 6) {
+      if (!mtrSabadosHabilitados(grupoSabado)) return false;
+      const g = mtrGrupoSabadoFiable(grupoSabado);
+      if (g === null) return true;                     // trabaja sábados, pero el grupo no es fiable
+      const suyo = mtrMedicoTrabajaSabado(iso, g);
+      // `null` = 5º sábado del mes, que no pertenece a ningún grupo: no se descarta, por la
+      // misma razón de arriba (no esconder un día en el que puede tener agenda).
+      return suyo === null ? true : suyo;
+    }
     return true;
   }
 

@@ -46,6 +46,7 @@ module.exports = {
     "mtrLeerRadioSiNo", "mtrLeerCampoNumerico", "mtrLeerFactoresRcvDelDom",
     "mtrSabadoMemoriaLeer", "mtrSabadoMemoriaGuardar", "mtrSabadoGrupoDeMedico",
     "mtrSabadoRegistrarObservacion", "mtrSabadoFijarGrupoManual",
+    "mtrGrupoSabadoFiable", "mtrSabadoTrabajaEsteMedico",
   ],
 
   pruebas(t, api) {
@@ -542,13 +543,115 @@ module.exports = {
       t.cierto(api.mtrDiaValidoParaControlConSabado(r.fecha, null), "y debe ser un día válido");
     });
 
-    t.caso("el control cae en sábado SOLO si consta que el médico trabaja sábados (v16.9.0, ya no por grupo)", () => {
-      // v16.9.0 — regla única: basta que conste que el médico trabaja sábados; el grupo
-      // (1-3/2-4) ya no decide qué sábado le toca (deducción en conflicto con datos reales).
-      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-08-08", "1-3"), "2º sábado con grupo 1-3: sí (v16.9.0)");
+    t.caso("el control cae en sábado SOLO si consta que el médico trabaja sábados", () => {
+      // v16.9.0 — primer filtro, y sigue mandando: si no consta agenda propia en sábado, no
+      // se propone ninguno. Un GRUPO suelto (string del modelo viejo) no dice de dónde salió,
+      // así que habilita los sábados pero no los afina — ver v17.6.93 más abajo.
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-08-08", "1-3"), "2º sábado con grupo 1-3 suelto: sí");
       t.cierto(api.mtrDiaValidoParaControlConSabado("2026-08-08", "2-4"), "2º sábado con grupo 2-4: sí");
       t.falso(api.mtrDiaValidoParaControlConSabado("2026-08-08", null), "sin constancia de que trabaje sábados no se propone sábado");
       t.falso(api.mtrDiaValidoParaControlConSabado("2026-08-09", "2-4"), "domingo nunca");
+    });
+
+    // ============ v17.6.93 — EL GRUPO VUELVE, PERO SOLO SI ES FIABLE ============
+    // Decisión del médico (27-ago) tras ver la medición sobre septiembre de 2026: con grupo
+    // 1-3 se le ofrecen 2 de 4 sábados; con su deducción REAL, que salió en conflicto el
+    // 20-ago, se le ofrecerían CERO. De ahí la regla: el grupo afina cuando se puede confiar
+    // en él, y cuando no, se cae a la regla de v16.9.0 (ofrecer de más antes que esconder).
+
+    t.caso("mtrGrupoSabadoFiable exige constancia positiva de fiabilidad", () => {
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "1-3", confianza: "deducido" }), "1-3", "deducido: fiable");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "2-4", confianza: "manual" }), "2-4", "fijado a mano: fiable");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "1-3", confianza: "conjetura" }), null,
+        "una sola observación es una corazonada: no se le quita un sábado por eso");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "1-3", confianza: "deducido", conflicto: true }), null,
+        "en conflicto NUNCA, aunque venga con grupo (es el caso real del 20-ago)");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: null, confianza: "sin_datos" }), null, "sin datos");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "1-3" }), null,
+        "un grupo que no dice de dónde salió tampoco basta");
+      t.igual(api.mtrGrupoSabadoFiable({ grupo: "loquesea", confianza: "deducido" }), null, "grupo que no existe");
+      t.igual(api.mtrGrupoSabadoFiable("1-3"), null, "string del modelo viejo: no es fiable");
+      t.igual(api.mtrGrupoSabadoFiable(true), null, "booleano: tampoco");
+      t.igual(api.mtrGrupoSabadoFiable(null), null, "null: tampoco");
+    });
+
+    t.caso("con el grupo FIABLE se afinan los sábados de septiembre de 2026", () => {
+      // sep-2026: 5 (1º), 12 (2º), 19 (3º), 26 (4º).
+      const g13 = { habilitado: true, observados: ["2026-08-01", "2026-08-15"], grupo: "1-3", confianza: "deducido", conflicto: false };
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-09-05", g13), "1º sábado: le toca");
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-12", g13), "2º sábado: NO le toca");
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-09-19", g13), "3º sábado: le toca");
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-26", g13), "4º sábado: NO le toca");
+
+      const g24 = { habilitado: true, observados: ["2026-08-08", "2026-08-22"], grupo: "2-4", confianza: "deducido", conflicto: false };
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-05", g24), "el otro grupo, al revés");
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-09-12", g24), "2º sábado: le toca");
+    });
+
+    t.caso("EL FALLO DEL 20-AGO NO PUEDE VOLVER: en conflicto se ofrecen TODOS los sábados", () => {
+      // Es el caso real del médico: tiene agendas propias en sábados de los DOS grupos.
+      // Con la regla vieja de grupos eso dejaba el grupo en null y se le tachaban los cuatro.
+      const conf = { habilitado: true, observados: ["2026-08-01", "2026-08-08"], grupo: null, confianza: "conflicto", conflicto: true };
+      for (const iso of ["2026-09-05", "2026-09-12", "2026-09-19", "2026-09-26"]) {
+        t.cierto(api.mtrDiaValidoParaControlConSabado(iso, conf), "en conflicto se ofrece el " + iso);
+      }
+      const conj = { habilitado: true, observados: ["2026-08-01"], grupo: "1-3", confianza: "conjetura", conflicto: false };
+      for (const iso of ["2026-09-05", "2026-09-12", "2026-09-19", "2026-09-26"]) {
+        t.cierto(api.mtrDiaValidoParaControlConSabado(iso, conj), "con una conjetura se ofrece el " + iso);
+      }
+    });
+
+    t.caso("el 5º sábado del mes no es de ningún grupo: no se esconde", () => {
+      // 2026-10-31 es el 5º sábado de octubre. Ningún grupo lo reclama; si se descartara,
+      // el médico perdería un día en el que sí puede tener agenda.
+      const g13 = { habilitado: true, observados: ["2026-08-01", "2026-08-15"], grupo: "1-3", confianza: "deducido", conflicto: false };
+      t.igual(api.mtrGrupoDeEsteSabado("2026-10-31"), null, "el 5º sábado no pertenece a ningún grupo");
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-10-31", g13), "y aun así se ofrece");
+    });
+
+    t.caso("el grupo no resucita un sábado si NO consta que el médico trabaje sábados", () => {
+      // El filtro de v16.9.0 va primero: sin agenda propia observada, ningún grupo lo salva.
+      const sinAgenda = { habilitado: false, observados: [], grupo: "1-3", confianza: "deducido", conflicto: false };
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-05", sinAgenda), "su propio grupo, pero sin constancia: no");
+    });
+
+    t.caso("CABLEADO REAL — lo que mtrSabadoTrabajaEsteMedico entrega BASTA para afinar", () => {
+      // Punta a punta: nadie construye a mano el objeto en producción. El que viaja al motor
+      // (`grupoSabado:` en el contexto de mtrResumenClinico) lo fabrica esta función leyendo
+      // la memoria por médico. Si vuelve a dejarse por el camino `grupo`/`confianza`/`conflicto`
+      // —como hacía hasta v17.6.92— la regla de grupo queda escrita y sin cablear, y esta
+      // prueba es la única que lo nota.
+      api.mtrSabadoFijarGrupoManual("sab93a", "");
+      api.mtrSabadoRegistrarObservacion("sab93a", "2026-08-01");   // 1º
+      api.mtrSabadoRegistrarObservacion("sab93a", "2026-08-15");   // 3º -> deducido 1-3
+      const info = api.mtrSabadoTrabajaEsteMedico("sab93a");
+      t.cierto(info.habilitado, "consta que trabaja sábados");
+      t.igual(api.mtrGrupoSabadoFiable(info), "1-3", "y su grupo llega entero y fiable");
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-09-05", info), "1º sábado: le toca");
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-12", info), "2º sábado: NO le toca");
+      t.cierto(api.mtrDiaValidoParaControlConSabado("2026-09-19", info), "3º sábado: le toca");
+      t.falso(api.mtrDiaValidoParaControlConSabado("2026-09-26", info), "4º sábado: NO le toca");
+    });
+
+    t.caso("CABLEADO REAL — con la deducción en conflicto, el mismo camino ofrece los cuatro", () => {
+      api.mtrSabadoFijarGrupoManual("sab93b", "");
+      api.mtrSabadoRegistrarObservacion("sab93b", "2026-08-01");   // 1º
+      api.mtrSabadoRegistrarObservacion("sab93b", "2026-08-08");   // 2º -> conflicto
+      const info = api.mtrSabadoTrabajaEsteMedico("sab93b");
+      t.cierto(info.conflicto === true, "el conflicto viaja con el objeto");
+      t.igual(api.mtrGrupoSabadoFiable(info), null, "y por eso el grupo no se usa");
+      for (const iso of ["2026-09-05", "2026-09-12", "2026-09-19", "2026-09-26"]) {
+        t.cierto(api.mtrDiaValidoParaControlConSabado(iso, info), "se ofrece el " + iso);
+      }
+    });
+
+    t.caso("la fecha de control no cae en un sábado del OTRO grupo", () => {
+      // Toma el sábado 2026-09-05: el objetivo (+7) es el sábado 12, que NO es de su grupo.
+      const g13 = { habilitado: true, observados: ["2026-08-01", "2026-08-15"], grupo: "1-3", confianza: "deducido", conflicto: false };
+      const r = api.mtrFechaControlSugerida("2026-09-05", { grupoSabado: g13 });
+      t.cierto(!!r, "debía salir fecha");
+      t.cierto(r.fecha !== "2026-09-12", "el 2º sábado no es suyo: no se propone (salió " + r.fecha + ")");
+      t.cierto(api.mtrDiaValidoParaControlConSabado(r.fecha, g13), "y la que salga tiene que ser válida");
     });
 
     t.caso("el control se separa de la toma al menos 4 días (>=72 h para el resultado)", () => {

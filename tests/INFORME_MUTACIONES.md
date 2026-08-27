@@ -6,6 +6,47 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.93 — 27-ago-2026 (el grupo de sábados vuelve, pero solo cuando es fiable)
+
+Divergencia **A5** de la revisión del 27-ago. Banco antes: 2.329 · después: **2.337**.
+
+El motor v68 ancla los sábados a una quincena fija; el script llevaba desde v16.9.0 la
+regla contraria (*cualquier sábado si consta agenda propia*) porque la de grupos, cableada
+y probada contra la agenda real el 20-ago, le **tachaba sábados en los que sí trabajaba**:
+su deducción sale en CONFLICTO, y en conflicto el grupo queda en `null`, lo que dejaba
+CERO sábados ofrecidos. Medido con el harness sobre septiembre de 2026 antes de tocar
+nada: con grupo 1-3 se ofrecen 2 de 4 sábados; con su deducción real, ninguno.
+
+Decisión del médico tras ver esa medición: **el grupo afina cuando la deducción es fiable,
+y cuando no lo es se cae a la regla de v16.9.0**. La duda se resuelve siempre hacia ofrecer
+el sábado de más —que él descarta de un vistazo— antes que esconderle uno en el que
+trabaja.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **1** | `mtrGrupoSabadoFiable`: se quita la guarda `if (x.conflicto === true) return null` | `suite_46` | *mtrGrupoSabadoFiable exige constancia positiva de fiabilidad* → *en conflicto NUNCA, aunque venga con grupo (es el caso real del 20-ago)* |
+| **2** | El respaldo `if (g === null) return true` pasa a `return false` (grupo no fiable ⇒ esconder) | `suite_46` (+`suite_24`, `suite_38`) | *EL FALLO DEL 20-AGO NO PUEDE VOLVER: en conflicto se ofrecen TODOS los sábados* → **6 pruebas rojas** |
+| **3** | `return suyo === null ? true : suyo` pasa a `return suyo === true` (el 5º sábado se descarta) | `suite_46` | *el 5º sábado del mes no es de ningún grupo: no se esconde* → *y aun así se ofrece* |
+| **4 · CABLEADO** | `mtrSabadoTrabajaEsteMedico` vuelve al objeto de v17.6.92 (tira `grupo`/`confianza`/`conflicto`) | `suite_46` | *CABLEADO REAL — lo que mtrSabadoTrabajaEsteMedico entrega BASTA para afinar* y *…con la deducción en conflicto, el mismo camino ofrece los cuatro* → **2 rojas** |
+| **5** | `MTR_SAB_CONFIANZAS_FIABLES` acepta también `"conjetura"` | `suite_46` | *mtrGrupoSabadoFiable exige constancia positiva…* → *una sola observación es una corazonada* → **2 rojas** |
+| **6** | Se quita el filtro de v16.9.0 (`if (!mtrSabadosHabilitados(...)) return false`) | `suite_46` (+`suite_24`, `suite_38`) | *el grupo no resucita un sábado si NO consta que el médico trabaje sábados* → **6 pruebas rojas** |
+
+Las seis se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.337/2.337 tras cada restauración.
+
+**La mutación 4 es la importante.** Las otras cinco prueban la función; la 4 prueba que la
+función está CONECTADA. `mtrSabadoTrabajaEsteMedico` es quien fabrica el objeto que viaja
+al motor (`grupoSabado:` en el contexto de `mtrResumenClinico`), y hasta v17.6.92 dejaba
+por el camino los tres campos que la regla necesita: renombraba `grupo` a `grupoDeducido`
+y descartaba `confianza` y `conflicto`. Con ese objeto, `mtrGrupoSabadoFiable` devuelve
+`null` SIEMPRE: la regla habría quedado escrita, verde en pruebas de unidad, y sin ningún
+efecto en producción — que es exactamente el fallo que la auditoría de v17.0.1 ya había
+encontrado en esta misma línea de código. Se detectó ANTES de entregar porque las dos
+pruebas *CABLEADO REAL* recorren el camino entero (memoria por médico →
+`mtrSabadoTrabajaEsteMedico` → `mtrDiaValidoParaControlConSabado`) en vez de construir a
+mano el objeto que ninguna parte de producción construye.
+
 ## v17.6.92 — 27-ago-2026 (el síndrome metabólico existía, estaba muerto y no contaba)
 
 Segundo hueco de la Fase 2 (v68 S2, FR MAYORES).
