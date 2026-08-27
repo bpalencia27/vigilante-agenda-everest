@@ -205,17 +205,31 @@ module.exports = {
       t.igual(api.analitoTablaDesdeClaveRcv("RAC"), "rac");
     });
 
-    // --- Mapeo: las 9 ausencias documentadas (analitos de la tabla sin clave RCV hoy) ---
-    t.caso("analitoTablaDesdeClaveRcv - las 9 claves que NO existen en RCV_VIGENCIA_KEYS no se inventan: null", () => {
+    // --- Mapeo: las ausencias documentadas (analitos de la tabla sin clave RCV hoy) ---
+    t.caso("analitoTablaDesdeClaveRcv - las claves que NO tienen vigencia propia no se inventan: null", () => {
       t.igual(api.analitoTablaDesdeClaveRcv("HEMOGLOBINA"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("PTH"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("ALBUMINA"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("FOSFORO"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("LDL"), null);
-      t.igual(api.analitoTablaDesdeClaveRcv("HBA1C"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("ECG"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("ECOCARDIOGRAMA"), null);
       t.igual(api.analitoTablaDesdeClaveRcv("ACIDO_URICO"), null);
+    });
+
+    t.caso("v17.6.96: HbA1c SÍ tiene mapeo, y eso NO la mete en el aviso rojo de entrada", () => {
+      // Dos listas distintas que nunca hay que volver a confundir:
+      //  · RCV_VIGENCIA_KEYS = de qué se avisa en ROJO a TODO paciente. HbA1c sigue FUERA
+      //    (pedido explícito del médico del 11-08-2026: no todo paciente es diabético).
+      //  · el MAPA del traductor = "si me preguntan por esta clave, ¿qué vigencia tiene?".
+      //    Devolver null obligaba al consumidor a caer en 180 planos, que para la HbA1c de
+      //    un ERC G4 son 120 según la norma, y para un no diabético no son 180: es BLOQ.
+      t.igual(api.analitoTablaDesdeClaveRcv("HBA1C"), "hba1c", "el traductor ya la conoce");
+      const src = require("fs").readFileSync(require("./harness").RUTA, "utf8");
+      const lista = /const RCV_VIGENCIA_KEYS = \[([^\]]*)\]/.exec(src);
+      t.cierto(!!lista, "debía encontrarse RCV_VIGENCIA_KEYS en el fuente");
+      t.falso(/HBA1C/.test(lista[1]),
+        "HbA1c NO puede entrar en la lista del aviso rojo: se le pediría a todo paciente");
     });
 
     t.caso("analitoTablaDesdeClaveRcv - clave completamente desconocida (ni RCV ni de la tabla): null", () => {
@@ -365,6 +379,128 @@ module.exports = {
       t.igual(bloqueables, [], "si esto deja de estar vacío hay que decidir qué hace el aviso con un examen bloqueado");
     });
 
+    // =================================================================
+    // v17.6.96 — EL PUNTO CIEGO DE LA HbA1c EN EL ANTIDUPLICADO
+    //
+    // El paquete I10X («RCV EXPRÉS») ordena el CUPS 903426 desde v14.0.0, pero
+    // `pymRcvCubiertoPorAthenea` respondía «ya está todo cubierto» mirando solo las 8 claves
+    // de RCV_VIGENCIA_KEYS, que no la incluyen. La pregunta que hay que mantener separada:
+    // el AVISO ROJO se le hace a todo paciente (y ahí la HbA1c no entra, por decisión del
+    // médico); el ANTIDUPLICADO responde «¿lo que este paquete iba a pedir ya está hecho?»,
+    // y ahí sí entra — pero solo cuando consta que el paciente es diabético.
+    // =================================================================
+
+    const _labsHba1c = (fBase, fHba1c, valHba1c) => {
+      const l = [
+        { codigo: "903818", nombre: "COLESTEROL TOTAL", Resultado: "180", Fecha: fBase },
+        { codigo: "903815", nombre: "COLESTEROL HDL", Resultado: "45", Fecha: fBase },
+        { codigo: "903868", nombre: "TRIGLICERIDOS", Resultado: "150", Fecha: fBase },
+        { codigo: "903841", nombre: "GLUCOSA EN SUERO", Resultado: "90", Fecha: fBase },
+        { codigo: "907106", nombre: "UROANALISIS", Resultado: "NORMAL", Fecha: fBase },
+        { codigo: "903895", nombre: "CREATININA", Resultado: "0.9", Fecha: fBase },
+        { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: fBase },
+        { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "50", Fecha: fBase },
+      ];
+      if (fHba1c) l.push({ codigo: "903426", nombre: "HEMOGLOBINA GLICOSILADA", Resultado: valHba1c || "6.5", Fecha: fHba1c });
+      return l;
+    };
+    const _HOY96 = "2026-08-27";
+    const _op96 = (dm, prog, est, extra) => Object.assign({
+      programa: prog, estadio: est, esDM2: dm, esDm2: dm, categoriaRiesgo: "alto", aplicar50: true,
+    }, extra || {});
+
+    t.caso("v17.6.96: el aviso rojo de entrada NO cambia para NADIE", () => {
+      // La regla del 11-08-2026 es innegociable: sin `clavesExtra`, la HbA1c no se mira,
+      // ni en el diabético ni en el que no lo es. Si esta prueba cae, el arreglo se desbordó
+      // al aviso que ve TODO paciente al abrir su historia.
+      const labs = _labsHba1c("2026-07-28", "2026-01-20", "11.2");   // HbA1c de 219 días
+      for (const dm of [true, false]) {
+        const f = api._analitosRcvVencidos(labs, _HOY96, _op96(dm, dm ? "DM2" : "HTA", "G2"));
+        t.igual(f.map((x) => x.key), [], "sin clavesExtra no se reporta nada (diabético=" + dm + ")");
+      }
+    });
+
+    t.caso("v17.6.96: con clavesExtra, la HbA1c vencida SÍ se reporta", () => {
+      const vieja = _labsHba1c("2026-07-28", "2026-01-20", "6.5");    // 219 días, en meta
+      const f = api._analitosRcvVencidos(vieja, _HOY96, _op96(true, "DM2", "G2", { clavesExtra: ["HBA1C"] }));
+      t.igual(f.map((x) => x.key), ["HBA1C"], "solo la HbA1c: lo demás está fresco");
+      t.cierto(/HbA1c/.test(f[0].nombre || ""), "y con nombre legible, no «HBA1C» pelado (obtuvo: " + f[0].nombre + ")");
+
+      const fresca = _labsHba1c("2026-07-28", "2026-08-20", "6.5");
+      t.igual(api._analitosRcvVencidos(fresca, _HOY96, _op96(true, "DM2", "G2", { clavesExtra: ["HBA1C"] })).length, 0,
+        "una HbA1c reciente y en meta no se reporta");
+
+      const ninguna = _labsHba1c("2026-07-28", null);
+      t.igual(api._analitosRcvVencidos(ninguna, _HOY96, _op96(true, "DM2", "G2", { clavesExtra: ["HBA1C"] })).map((x) => x.key),
+        ["HBA1C"], "y si nunca se la han tomado, también");
+    });
+
+    t.caso("v17.6.96: BLOQ ya no se disfraza de 180 — un examen que la norma niega se SALTA", () => {
+      // ERC sin diabetes documentada: la norma devuelve BLOQ para la HbA1c. Antes de esta
+      // versión el consumidor lo traducía a 180 días planos, es decir afirmaba una vigencia
+      // sobre un examen que la norma prohíbe pedir. Ahora se salta.
+      t.igual(api.mtrVigenciaDiasNorma("ERC", "hba1c", "G4", false, 60, null), "BLOQ", "la norma lo bloquea");
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "6.5", _op96(false, "ERC", "G4")), "BLOQ",
+        "y el consumidor propaga el BLOQ en vez de devolver 180");
+      const labs = _labsHba1c("2026-07-28", "2026-01-20", "6.5");
+      const f = api._analitosRcvVencidos(labs, _HOY96, _op96(false, "ERC", "G4", { clavesExtra: ["HBA1C"] }));
+      t.igual(f.map((x) => x.key), [], "aun pidiéndola como clave extra, un ERC no diabético no la recibe");
+      // EL CASO QUE DE VERDAD PRUEBA EL SALTO: sin ninguna HbA1c en Athenea. Con una
+      // presente, la comparación `dias > "BLOQ"` da NaN y el analito tampoco se reporta —
+      // así que ese caso NO distingue si el salto existe. Sin candidato, en cambio, la rama
+      // de «nunca se la han tomado» lo empujaría a faltantes: un examen que la norma
+      // PROHÍBE pedir, anunciado como pendiente.
+      const sinNinguna = _labsHba1c("2026-07-28", null);
+      t.igual(api._analitosRcvVencidos(sinNinguna, _HOY96, _op96(false, "ERC", "G4", { clavesExtra: ["HBA1C"] })).map((x) => x.key),
+        [], "y si NUNCA se la han tomado, tampoco se pide: la norma la bloquea, no está «pendiente»");
+      // Y con diabetes documentada la misma HbA1c sí se mira, con la vigencia de 120 de G4.
+      const g = api._analitosRcvVencidos(labs, _HOY96, _op96(true, "ERC", "G4", { clavesExtra: ["HBA1C"] }));
+      t.igual(g.map((x) => x.key), ["HBA1C"], "el mismo paciente, con diabetes documentada, sí");
+    });
+
+    t.caso("v17.6.96: la regla del 50 % alcanza por fin a la HbA1c", () => {
+      // `HBA1C` llevaba en MTR_CLAVES_CON_META desde v16.4.0 sin ningún consumidor que le
+      // pasara esa clave. Ahora una HbA1c fuera de meta acorta su vigencia a la mitad, igual
+      // que el LDL: el descontrolado se cita antes.
+      const o = _op96(true, "DM2", "G2");
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "6.5", o), 180, "en meta: los 180 completos");
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", o), 90, "fuera de meta: la mitad");
+      const oErc = _op96(true, "ERC", "G4");
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "6.5", oErc), 120, "ERC G4 en meta: 120, no 180");
+      t.igual(api._vigenciaDiasParaAnalito("HBA1C", "11.2", oErc), 60, "ERC G4 fuera de meta: 60");
+    });
+
+    t.caso("v17.6.96 PUNTA A PUNTA: el paquete RCV deja de declararse cubierto con la HbA1c vencida", () => {
+      // Es el camino donde el defecto AFIRMA: la pantalla decía «Athenea ya tiene todos
+      // estos resultados vigentes — el paciente ya se los hizo» sobre un paquete que iba a
+      // pedir una HbA1c de 219 días. Nadie construye `clavesExtra` a mano en producción: lo
+      // hace `pymRcvCubiertoPorAthenea` leyendo el resumen en caché. Si se corta ese cable
+      // dejando todo lo demás intacto, esta prueba es la única que lo nota.
+      const RES = (dm, prog, est) => ({
+        programa: prog, erc: { estadioAdministrativo: est },
+        factores: { diabetes: dm }, riesgo: { categoria: "alto" },
+      });
+      const cubierto = (docId, labs, res) => {
+        api.mtrCacheResumenGuardar(docId, res);
+        return api.pymRcvCubiertoPorAthenea(labs, _HOY96, docId);
+      };
+      const vieja = _labsHba1c("2026-07-28", "2026-01-20", "11.2");   // 219 días, 11,2 %
+      const fresca = _labsHba1c("2026-07-28", "2026-08-20", "6.5");
+      const ninguna = _labsHba1c("2026-07-28", null);
+
+      t.falso(cubierto("h96-a", vieja, RES(true, "DM2", "G2")),
+        "diabético con la HbA1c vencida: el paquete NO está cubierto");
+      t.falso(cubierto("h96-b", ninguna, RES(true, "DM2", "G2")),
+        "diabético sin ninguna HbA1c: tampoco, el paquete la ordena");
+      t.cierto(cubierto("h96-c", fresca, RES(true, "DM2", "G2")),
+        "diabético con la HbA1c reciente y en meta: sí está cubierto");
+      t.cierto(cubierto("h96-d", vieja, RES(false, "HTA", "G2")),
+        "NO diabético con esa misma HbA1c vieja: sigue cubierto, no se le pide");
+      t.cierto(api.pymRcvCubiertoPorAthenea(vieja, _HOY96, "h96-sin-cache"),
+        "sin resumen en caché no consta la diabetes, así que no se exige: «no se sabe» no se lee como «sí»");
+      try { api.mtrCacheResumenBorrar(); } catch (e) {}
+    });
+
     t.caso("v17.6.95 PUNTA A PUNTA: el paquete RCV deja de declararse «cubierto» en un ERC G5", () => {
       // Este es el camino donde el defecto AFIRMA algo en pantalla, no donde se calla:
       // `pymRcvCubiertoPorAthenea` en true desmarca la casilla del paquete RCV y pinta
@@ -383,6 +519,11 @@ module.exports = {
         { codigo: "903895", nombre: "CREATININA", Resultado: "6.0", Fecha: HACE_130 },
         { codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: "10", Fecha: HACE_130 },
         { codigo: "903817", nombre: "COLESTEROL LDL", Resultado: "50", Fecha: HACE_130 },
+        // v17.6.96 — este paciente está marcado como diabético, y desde esa versión el
+        // antiduplicado también exige la HbA1c en los diabéticos. Se le añade una reciente
+        // y EN META para que esta prueba siga midiendo lo suyo —las vigencias por estadio—
+        // y no se enrede con el hueco de la HbA1c, que tiene sus propias pruebas.
+        { codigo: "903426", nombre: "HEMOGLOBINA GLICOSILADA", Resultado: "6.5", Fecha: "2026-08-20" },
       ];
       // Se siembra la caché igual que hace producción: es de ahí de donde los dos
       // llamadores sacan programa y estadio (ver las líneas del ctx en el userscript).

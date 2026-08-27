@@ -6,6 +6,69 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.96 — 27-ago-2026 (el punto ciego de la HbA1c en el antiduplicado del paquete RCV)
+
+Hallazgo que destapó la auditoría del hueco 8 y que allí se dejó fuera a propósito, por ser
+una decisión propia del médico. Banco antes: 2.355 · después: **2.361**.
+
+El paquete I10X («RCV EXPRÉS») ordena el CUPS **903426, Hemoglobina Glicosilada**, desde
+v14.0.0 — está en `PYM_CATALOG` y salió de una orden REAL ya guardada en Everest. Pero
+`pymRcvCubiertoPorAthenea`, que responde «¿lo que este paquete iba a pedir ya está hecho?»,
+lo decidía mirando solo las 8 claves de `RCV_VIGENCIA_KEYS`, que no la incluyen.
+
+**Reproducido:** diabético con TODO fresco de 30 días y la HbA1c en **11,2 % de hace 219
+días** → `pymRcvCubiertoPorAthenea` devolvía `true`, la casilla del paquete se desmarcaba y
+la pantalla afirmaba «🧪 Athenea ya tiene todos estos resultados vigentes — el paciente ya se
+los hizo». Falso: el examen que el paquete iba a pedir llevaba 39 días vencido, con un valor
+catastrófico.
+
+**Dos listas que no hay que volver a confundir.** La exclusión de HbA1c es DELIBERADA y es
+del médico (11-08-2026, textual: *«HbA1c… NUNCA entra en esta regla de vigencia (no todo
+paciente es diabético)»*), pero habla del **aviso rojo de entrada**, que se le hace a TODO
+paciente. El **antiduplicado** responde otra pregunta, sobre un paquete concreto y un
+paciente concreto. Por eso el arreglo NO añade la clave a `RCV_VIGENCIA_KEYS`, sino que el
+llamador la aporta —`opts.clavesExtra`— y **solo cuando consta la diabetes**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| **1** | `_analitosRcvVencidos` ignora `opts.clavesExtra` | *con clavesExtra, la HbA1c vencida SÍ se reporta*, *BLOQ ya no se disfraza de 180*, y la de punta a punta → **3 rojas** |
+| **2** | La clave extra se pide **sin** comprobar la diabetes | *…PUNTA A PUNTA…* → *NO diabético con esa misma HbA1c vieja: sigue cubierto* |
+| **3** | El consumidor deja de saltar `BLOQ` | *BLOQ ya no se disfraza de 180 — un examen que la norma niega se SALTA* |
+| **4** | El traductor olvida `HBA1C: "hba1c"` | *HbA1c SÍ tiene mapeo…*, *BLOQ…*, *la regla del 50 % alcanza por fin a la HbA1c* → **3 rojas** |
+| **5** | `_vigenciaDiasParaAnalito` deja de propagar `BLOQ` | *BLOQ ya no se disfraza de 180…* |
+| **6 · CABLEADO** | El antiduplicado deja de pedir la clave extra | *…PUNTA A PUNTA…* — las de unidad siguen verdes, porque construyen `clavesExtra` a mano |
+| **7** | Diseño (A): meter `HBA1C` en `RCV_VIGENCIA_KEYS` | **9 rojas**, entre ellas la que fija la decisión del médico: *_analitosRcvVencidos: HbA1c NUNCA entra en la regla, ni ausente ni vencido* |
+
+Las siete se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.361/2.361 tras cada restauración.
+
+**La mutación 7 es la que más tranquiliza:** el diseño obvio —añadir la clave a la lista de
+siempre— rompe nueve pruebas, y una de ellas lleva años fijando la decisión del médico. Las
+barandas ya estaban puestas; lo que faltaba era la puerta correcta.
+
+**Una prueba mía no cazó su propia mutación, y se arregló antes de entregar.** La primera
+versión del caso de `BLOQ` usaba un paciente CON HbA1c presente. Al quitar el salto, la
+comparación `dias > "BLOQ"` da `NaN`, que es `false`, así que el analito tampoco se reportaba
+y la prueba seguía verde con el código roto. El caso que sí distingue es el del paciente que
+**nunca** se la ha tomado: sin candidato, la rama de «nunca realizado» lo empujaría a
+faltantes — un examen que la norma PROHÍBE pedir, anunciado como pendiente. Es la séptima vez
+que este proyecto se lleva ese susto, y la regla que lo evita sigue siendo la misma: *una
+aserción sobre el resultado final puede estar pasando por un camino distinto del que crees
+estar probando*.
+
+**Efecto secundario que vale la pena:** `HBA1C` llevaba en `MTR_CLAVES_CON_META` desde
+v16.4.0 **sin ningún consumidor que le pasara esa clave**. Con el arreglo, la regla del 50 %
+del médico alcanza por fin a la hemoglobina glicosilada: una HbA1c fuera de meta parte su
+vigencia a la mitad (180→90, y 120→60 en ERC G4/G5), igual que el LDL. El descontrolado se
+cita antes.
+
+**Límite conocido, escrito para que no sorprenda:** si no hay resumen en caché no consta la
+diabetes, así que la clave extra no se pide y el punto ciego persiste en ese camino. Es
+deliberado —«no se sabe» no puede leerse como «sí»— y además ese camino ya está degradado por
+completo (sin programa ni estadio, todas las vigencias caen a 180 planos), no solo para la
+HbA1c.
+
 ## v17.6.95 — 27-ago-2026 (una sola tabla de vigencias: el ERC G5 tenía las más largas)
 
 Hueco 8 del plan de fidelidad. Banco antes: 2.346 · después: **2.355**.

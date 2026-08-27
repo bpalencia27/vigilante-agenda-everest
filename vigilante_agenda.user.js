@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.95
+// @version     17.6.96
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.95";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.96";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -3582,6 +3582,10 @@
       UROANALISIS: "Uroanálisis",
       CREATININA: "Creatinina en Suero",
       RAC: "RAC (Relación Albúmina/Creatinina)",
+      // v17.6.96 — HbA1c NO esta en RCV_VIGENCIA_KEYS (ver el comentario de arriba), pero el
+      // antiduplicado del paquete RCV si la pide como clave extra en pacientes diabeticos, y
+      // sin nombre saldria como «HBA1C» en mayuscula pelada si algun dia se pinta.
+      HBA1C: "Hemoglobina glicosilada (HbA1c)",
   };
   // v12.6.0 — RAC (relación albúmina/creatinina) con albuminuria franca (≥30 mg/g) pide
   // control más frecuente que los demás analitos del grupo: su vigencia se reduce a la
@@ -3905,6 +3909,12 @@
               const colapsada = (typeof mtrColapsarVigencia === "function")
                 ? mtrColapsarVigencia(v, !!opts.funcionRenalInestable) : v;
               if (typeof colapsada === "number" && Number.isFinite(colapsada)) base = colapsada;
+              // v17.6.96 — BLOQ deja de disfrazarse de 180. Hasta v17.6.95 esto era
+              // inalcanzable (ninguna de las 8 claves podia producirlo) y se anoto asi en el
+              // informe de mutaciones; con HbA1c en el MAPA ya SI es alcanzable —un ERC sin
+              // diabetes documentada— y devolver 180 seria afirmar una vigencia sobre un
+              // examen que la norma niega. Se devuelve el propio BLOQ y el consumidor lo salta.
+              else if (colapsada === MTR_BLOQ) return MTR_BLOQ;
               // "BLOQ" o null dejan `base` en null y se cae al respaldo plano, igual que hoy.
               // Verificado por barrido: ninguna de las 8 claves RCV puede producir "BLOQ"
               // (los analitos bloqueables —PTH, fosforo, albumina, HbA1c— no estan en el mapa
@@ -4185,24 +4195,49 @@
           COLESTEROL_HDL: "hdl",
           COLESTEROL_LDL: "ldl",
           RAC: "rac",
+          // v17.6.96 — HbA1c entra al MAPA, pero NO a `RCV_VIGENCIA_KEYS`. Son dos cosas
+          // distintas y conviene no confundirlas nunca mas:
+          //   · `RCV_VIGENCIA_KEYS` = "de que le aviso en ROJO a TODO paciente al abrir su
+          //     historia". Ahi HbA1c sigue FUERA, por pedido explicito del medico del
+          //     11-08-2026: no todo paciente es diabetico.
+          //   · este MAPA = "si alguien me pregunta por esta clave, ¿que vigencia tiene?".
+          //     Devolver null aqui obligaba al consumidor a caer en los 180 dias planos, que
+          //     para la HbA1c de un ERC G4/G5 son 120 segun la norma — y para un NO diabetico
+          //     no son 180, es que NO SE PIDE (la norma devuelve BLOQ).
+          HBA1C: "hba1c",
       };
       return Object.prototype.hasOwnProperty.call(MAPA, clave) ? MAPA[clave] : null;
   }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
   // `opts` opcional: { estadio, programa, esDM2, edad } para vigencia por estadio (T3).
+  // v17.6.96 — `opts.clavesExtra`: analitos que este llamador concreto quiere vigilar ADEMAS
+  // de los 8 de siempre. Existe por el punto ciego de HbA1c del antiduplicado del paquete RCV
+  // (ver `pymRcvCubiertoPorAthenea`), y esta hecho asi —una lista que aporta el llamador, no
+  // una clave mas en `RCV_VIGENCIA_KEYS`— precisamente para NO tocar el aviso rojo de entrada:
+  // esa lista la fijo el medico el 11-08-2026 y dice, textualmente, que la HbA1c no entra
+  // porque no todo paciente es diabetico. Quien pide la clave extra es quien SABE que este
+  // paciente si lo es.
   function _analitosRcvVencidos(labsArray, hoyIso, opts) {
       const hoy = _parseFechaHoraLike(hoyIso);
       if (!hoy) return [];
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
       const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });
+      const extra = (opts && Array.isArray(opts.clavesExtra)) ? opts.clavesExtra : [];
+      const claves = RCV_VIGENCIA_KEYS.concat(extra.filter((k) => RCV_VIGENCIA_KEYS.indexOf(k) < 0));
       const faltantes = [];
-      for (const key of RCV_VIGENCIA_KEYS) {
+      for (const key of claves) {
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, opts);
+          // v17.6.96 — BLOQ: la norma PROHIBE pedir este analito a este paciente (bloqueo
+          // KDIGO, o HbA1c en quien no consta diabetes). No es "vencido": es que no se pide.
+          // Reportarlo como faltante seria pedir un examen que la norma niega, y tratarlo
+          // como 180 dias planos —lo que pasaba antes— es peor todavia: se afirma una
+          // vigencia sobre algo que no deberia estar en la lista.
+          if (vigenciaDias === MTR_BLOQ) continue;
           const c = candidatos.get(key);
           if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
           const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
           const dias = Math.round((hoyMs - fechaMs) / 86400000);
-          const vigenciaDias = _vigenciaDiasParaAnalito(key, c.resultVal, opts);
           if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
       }
       return faltantes;
@@ -10980,13 +11015,27 @@ _vglOfrecerDeshacer(btn);
       // resumen, tabla por estadio + 50%; si no, tamizaje plano. Así "ya cubierto" y
       // "vencido" no pueden volver a contradecirse en la misma sesión.
       const _resPym = (typeof mtrCacheResumenLeer === "function" && ctxDocId) ? mtrCacheResumenLeer(ctxDocId) : null;
+      // v17.6.96 — PUNTO CIEGO DE LA HbA1c, cerrado. El paquete I10X («RCV EXPRES») ordena el
+      // CUPS 903426, Hemoglobina Glicosilada, desde v14.0.0 — pero esta funcion respondia «ya
+      // esta todo cubierto» mirando solo las 8 claves de `RCV_VIGENCIA_KEYS`, que no la
+      // incluyen. Reproducido: diabetico con TODO fresco de 30 dias y la HbA1c en 11,2 % de
+      // hace 219, `pymRcvCubiertoPorAthenea` devolvia true y la pantalla afirmaba «Athenea ya
+      // tiene todos estos resultados vigentes — el paciente ya se los hizo». Falso: el examen
+      // que el paquete iba a pedir llevaba 39 dias vencido, y con un valor catastrofico.
+      //
+      // La clave extra va SOLO cuando consta la diabetes. Si no consta —o si no hay resumen en
+      // cache— no se pide: la decision del medico del 11-08-2026 sigue intacta, y «no se sabe»
+      // nunca se lee como «si». Esa es tambien la razon de que esto NO sea una clave nueva en
+      // `RCV_VIGENCIA_KEYS`: ahi la pediria a todo el mundo, incluido el no diabetico.
+      const _esDm2Pym = !!(_resPym && _resPym.factores && _resPym.factores.diabetes);
       const _optsPym = _resPym ? {
         programa: _resPym.programa || null,
         estadio: _resPym.erc && _resPym.erc.estadioAdministrativo || null,
-        esDM2: !!(_resPym.factores && _resPym.factores.diabetes),
-        esDm2: !!(_resPym.factores && _resPym.factores.diabetes),
+        esDM2: _esDm2Pym,
+        esDm2: _esDm2Pym,
         categoriaRiesgo: _resPym.riesgo && _resPym.riesgo.categoria || null,
         aplicar50: true,
+        clavesExtra: _esDm2Pym ? ["HBA1C"] : [],
       } : undefined;
       return _analitosRcvVencidos(labs, hoyIso, _optsPym).length === 0;
     } catch (e) { return false; }
