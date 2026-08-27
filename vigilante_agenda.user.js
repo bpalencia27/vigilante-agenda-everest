@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.91
+// @version     17.6.92
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.91";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.92";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32843,7 +32843,45 @@ _vglOfrecerDeshacer(btn);
       pesoKg: c.pesoKg,
       ct: c.ct, hdl: c.hdl, ldl: c.ldl,
       paSistolica: c.paSistolica, paDiastolica: c.paDiastolica,
+      // v17.6.92 — TRIGLICÉRIDOS y GLICEMIA nunca llegaban al clasificador, aunque el motor
+      // ya los tenía en `c.ultimos`. Son dos de los cinco criterios del síndrome metabólico,
+      // así que sin ellos ese cálculo no podía ni intentarse. Se toman del ctx si el llamador
+      // los trae y, si no, del último resultado —el mismo sitio del que sale el resto.
+      trigliceridos: (function () {
+        const directo = mtrFloat(c.tg);
+        if (directo !== null) return directo;
+        const u = (c.ultimos && c.ultimos.TRIGLICERIDOS) ? mtrFloat(c.ultimos.TRIGLICERIDOS.valor) : null;
+        return u;
+      })(),
+      glicemia: (function () {
+        const directo = mtrFloat(c.glicemia);
+        if (directo !== null) return directo;
+        const u = (c.ultimos && c.ultimos.GLUCOSA) ? mtrFloat(c.ultimos.GLUCOSA.valor) : null;
+        return u;
+      })(),
     });
+
+    // v17.6.92 — auditoría v68 (S2, FR MAYORES). `mtrSindromeMetabolico` existía desde hacía
+    // versiones y estaba MUERTA: cero llamadores en producción. El síndrome metabólico es uno
+    // de los diez factores de riesgo mayores del consenso, y hoy sumaba CERO siempre.
+    //
+    // Verificado con el harness sobre el paciente clásico del programa (hipertenso tratado,
+    // sedentario, TG 200, HDL 35, glicemia 105, NO diabético): el cálculo dice `cumple: true`
+    // con cuatro de cinco criterios, pero el conteo de factores mayores salía en 2 y el
+    // paciente se clasificaba **BAJO con meta de LDL 116**. Con el punto que le corresponde
+    // cruza el CONTEO>=3 del Paso 2 y es ALTO con meta <70 — y de la meta salen la falla
+    // terapéutica, las vigencias y las fechas de toma.
+    //
+    // REGLA INNEGOCIABLE: `cumple` es TRI-ESTADO y solo se cuenta cuando es `true`. Un `null`
+    // significa "con lo que hay no se puede decidir" (faltan criterios que aún podrían
+    // empujarlo a 3) y NO se cuenta ni a favor ni en contra: contarlo sería inferir, que es
+    // justo lo que la regla de la casa prohíbe. Y si el médico ya documentó el factor a mano,
+    // eso manda: no se le pisa con el cálculo.
+    const _sdMet = mtrSindromeMetabolico(factores);
+    if (factores.prediabetesSdMetabolico !== true && _sdMet && _sdMet.cumple === true) {
+      factores.prediabetesSdMetabolico = true;
+    }
+
     const riesgo = mtrClasificarRiesgoCv(factores);
     // v16.9.0 — El basal se deduce de la serie de LDL que ya vino de Athenea (ver
     // mtrLdlBasalDeSerie) salvo que el llamador entregue uno explícito. Sin serie, sigue
@@ -32884,6 +32922,11 @@ _vglOfrecerDeshacer(btn);
     });
 
     const resumen = { erc: erc, riesgo: riesgo, meta: meta, programa: programa, plan: plan, factores: factores };
+    // v17.6.92 — el cálculo del síndrome metabólico viaja con el resumen, no solo su
+    // conclusión: el médico tiene que poder ver POR QUÉ cuenta (qué criterios se cumplieron y
+    // cuántos se pudieron evaluar) y no solo que su paciente subió de categoría. Un factor de
+    // riesgo que aparece sin explicación es indistinguible de uno inventado.
+    resumen.sindromeMetabolico = _sdMet || null;
     // v17.6.0 — SEGUNDO ESLABÓN QUE FALTABA (el primero: mtrResumenDesdeModalLabs no
     // mandaba el valor crudo — ver el comentario allá). Aunque ctx.hba1c ya llegara con
     // el valor de laboratorio, este resumen NUNCA lo copiaba a un campo propio: viajaba

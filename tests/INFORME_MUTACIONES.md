@@ -6,6 +6,59 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.92 — 27-ago-2026 (el síndrome metabólico existía, estaba muerto y no contaba)
+
+Segundo hueco de la Fase 2 (v68 S2, FR MAYORES).
+
+`mtrSindromeMetabolico` llevaba versiones escrita, bien resuelta y con **cero llamadores en
+producción**. Es uno de los diez factores de riesgo mayores del consenso, y sumaba cero
+siempre. De paso, al clasificador tampoco le llegaban **triglicéridos ni glicemia** —dos de los
+cinco criterios—, así que el cálculo no podía ni intentarse.
+
+Reproducido con el harness sobre el paciente clásico del programa (hipertenso tratado,
+sedentario, TG 200, HDL 35, glicemia 105, **no** diabético para que no lo tapara el piso
+institucional):
+
+```
+mtrSindromeMetabolico -> cumple: true   (4 de 5 criterios evaluables)
+factores.prediabetesSdMetabolico : undefined
+conteoFrMayores : 2      categoría: BAJO      meta LDL: 116
+```
+
+Con el punto que le corresponde cruza el `CONTEO>=3` del Paso 2: **ALTO, meta <70**. Y de la
+meta salen la falla terapéutica, las vigencias y las fechas de toma — un solo factor no contado
+mueve todo lo demás.
+
+**La regla que no se puede equivocar:** `cumple` es TRI-ESTADO y solo cuenta cuando es `true`.
+Un `null` significa "con lo que hay no se puede decidir" (faltan criterios que aún podrían
+empujarlo a 3) y no cuenta ni a favor ni en contra: contarlo sería inferir un factor de riesgo,
+y de ahí sale una meta más estricta. Y si el médico ya documentó el factor a mano, eso manda:
+el cálculo no se lo pisa.
+
+El detalle del cálculo (criterios cumplidos y cuántos se pudieron evaluar) viaja en el resumen:
+un factor de riesgo que aparece sin explicación es indistinguible de uno inventado.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **sin cablear** | se quitó la asignación de `prediabetesSdMetabolico` | `suite_45` | *…cuenta como factor mayor y cambia la categoría* |
+| **tri-estado relajado** | `cumple !== false` en vez de `=== true` (un "sin decidir" pasaría a contar) | `suite_45` | *…un síndrome metabólico SIN DECIDIR no cuenta como factor* |
+| **sin triglicéridos** | `trigliceridos: null` fijo | `suite_45` | *…cuenta como factor mayor* **y** *…los triglicéridos y la glicemia llegan al clasificador* |
+| **sin glicemia** | `glicemia: null` fijo | `suite_45` | *…los triglicéridos y la glicemia llegan al clasificador* |
+| **sin detalle** | `resumen.sindromeMetabolico = null` | `suite_45` | **cuatro** pruebas |
+
+Las cinco cayeron a la primera. Aplicadas de una en una desde copia intacta, restaurado con
+`diff`. Banco en 2329/2329.
+
+**Falta el quinto criterio, la CINTURA**, y se anota para no aparentar una cobertura que no
+existe: el cálculo corre hoy con cuatro de cinco. En el paciente clásico eso basta para
+concluir, pero en otros dejará `null` donde con la cintura habría decidido. Va en su propia
+entrega porque tiene un riesgo aparte: el diagnóstico de campo del médico (27-ago) reveló que
+Everest **repite los identificadores** en esa fila —`alert_message` e `IMC` aparecen en tres
+casillas distintas cada uno— y que el campo correcto, *"Circunferencia abdominal (cm)"*, no
+tiene `name`. Es decir: no es alcanzable por identificador y habrá que leerlo por su rótulo.
+Ojo además con `mtrLeerCinturaDelDom`, que hoy lee `cinturaPelvica` = **CADERAS**: usarla habría
+sobrediagnosticado obesidad central en casi todos los pacientes.
+
 ## v17.6.91 — 27-ago-2026 (la gestante con bacteriuria no recibía la pregunta de embarazo)
 
 Primer hueco de la Fase 2 (v68 S4 UROANÁLISIS: *"Embarazo: tamizar y tratar"*).

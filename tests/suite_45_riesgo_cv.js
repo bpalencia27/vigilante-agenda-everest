@@ -305,6 +305,74 @@ module.exports = {
       t.cierto(r2.criterios.some((c) => c.includes("cintura")) && r2.criterios.some((c) => c.includes("triglic")) && r2.criterios.some((c) => c.includes("HDL")));
     });
 
+    // ===== v17.6.92 — el síndrome metabólico existía y NO CONTABA =====
+    //
+    // `mtrSindromeMetabolico` llevaba versiones escrita y con CERO llamadores en producción.
+    // Es uno de los diez factores de riesgo mayores del consenso, y sumaba cero siempre.
+    // Verificado con el harness sobre el paciente clásico del programa (hipertenso tratado,
+    // sedentario, TG 200, HDL 35, glicemia 105, NO diabético): el cálculo decía `cumple:true`
+    // con cuatro de cinco criterios, pero el conteo salía en 2 y el paciente se clasificaba
+    // **BAJO con meta de LDL 116**. Con su punto cruza el CONTEO>=3 del Paso 2: ALTO, meta
+    // <70. Y de la meta salen la falla terapéutica, las vigencias y las fechas de toma.
+    //
+    // De paso, al clasificador no le llegaban TRIGLICÉRIDOS ni GLICEMIA, que son dos de los
+    // cinco criterios: sin ellos el cálculo no podía ni intentarse.
+    const clasico = (over, factOver) => api.mtrResumenClinico(Object.assign({
+      hoyIso: "2026-08-27", edad: 55, sexo: "M", pesoKg: 88, creatinina: 0.9,
+      ct: 230, hdl: 35, ldl: 140, paSistolica: 142, paDiastolica: 90,
+      ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      factores: Object.assign({ hta: true, sedentarismo: true, enAntihipertensivos: true, diabetes: false }, factOver || {}),
+    }, over || {}));
+
+    t.caso("v17.6.92: el síndrome metabólico cuenta como factor mayor y cambia la categoría", () => {
+      const r = clasico({ tg: 200, glicemia: 105 });
+      t.igual(r.sindromeMetabolico.cumple, true, "el cálculo concluye que cumple");
+      t.igual(r.factores.prediabetesSdMetabolico, true, "y llega al clasificador como factor");
+      t.igual(r.riesgo.conteoFrMayores, 3, "el conteo sube de 2 a 3");
+      t.igual(r.riesgo.categoria, "alto", "y con CONTEO>=3 el Paso 2 lo hace ALTO");
+      t.igual(r.meta.metas.ldl, 70, "meta de LDL 70, no 116");
+      // El médico tiene que poder ver POR QUÉ: un factor sin explicación es indistinguible
+      // de uno inventado.
+      t.cierto(r.sindromeMetabolico.criterios.length >= 3, "y viaja el detalle de los criterios");
+      t.cierto(r.sindromeMetabolico.criterios.some((x) => /triglic/i.test(x)), "nombrando cuáles: " + JSON.stringify(r.sindromeMetabolico.criterios));
+    });
+
+    t.caso("v17.6.92: los triglicéridos y la glicemia llegan al clasificador", () => {
+      // Del ctx si el llamador los trae…
+      const directo = clasico({ tg: 200, glicemia: 105 });
+      t.igual(directo.factores.trigliceridos, 200, "triglicéridos del ctx");
+      t.igual(directo.factores.glicemia, 105, "glicemia del ctx");
+      // …y si no, del último resultado, que es de donde sale el resto del motor.
+      const deUltimos = clasico({
+        ultimos: {
+          CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 210 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 110 },
+        },
+      });
+      t.igual(deUltimos.factores.trigliceridos, 210, "triglicéridos del último resultado");
+      t.igual(deUltimos.factores.glicemia, 110, "glicemia del último resultado");
+      t.igual(deUltimos.sindromeMetabolico.cumple, true, "y con eso el cálculo ya puede concluir");
+    });
+
+    // LA REGLA QUE NO SE PUEDE EQUIVOCAR: `cumple` es tri-estado. Un `null` significa "con lo
+    // que hay no se puede decidir" y NO cuenta ni a favor ni en contra. Contarlo sería
+    // inferir un factor de riesgo, y de ahí sale una meta de LDL más estricta.
+    t.caso("v17.6.92: un síndrome metabólico SIN DECIDIR no cuenta como factor", () => {
+      const sinDecidir = clasico({ tg: 100, glicemia: 85 });
+      t.igual(sinDecidir.sindromeMetabolico.cumple, null, "el vector es el que debe ser: sin decidir");
+      t.falso(sinDecidir.factores.prediabetesSdMetabolico === true, "no se marca el factor");
+      t.igual(sinDecidir.riesgo.conteoFrMayores, 2, "y el conteo no sube");
+      t.igual(sinDecidir.riesgo.categoria, "bajo", "la categoría se queda donde estaba");
+    });
+
+    t.caso("v17.6.92: si el médico ya documentó el factor, el cálculo no se lo pisa", () => {
+      const marcado = clasico({}, { prediabetesSdMetabolico: true });
+      t.igual(marcado.sindromeMetabolico.cumple, null, "el cálculo no concluye…");
+      t.igual(marcado.factores.prediabetesSdMetabolico, true, "…pero lo que el médico documentó manda");
+      t.igual(marcado.riesgo.conteoFrMayores, 3, "y sigue contando");
+    });
+
     t.caso("mtrSindromeMetabolico: los cortes de cintura y HDL son distintos por sexo", () => {
       // Mujer: cintura >80 (no >90), HDL <50 (no <40).
       const mujer = api.mtrSindromeMetabolico({ sexo: "F", cinturaCm: 85, hdl: 45 });
