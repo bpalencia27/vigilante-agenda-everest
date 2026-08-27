@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.14.0
+// @version     17.14.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.14.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.14.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11355,6 +11355,19 @@ _vglOfrecerDeshacer(btn);
   //
   // Se cambia con una línea si él prefiere lo otro.
   const PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS = 730;
+
+  // v17.14.0 — DECISIÓN DEL MÉDICO (27-ago, entrevista): «mamografía guiarse netamente de
+  // los SharePoints». Para la tamización de mama, la lista de PyM de la sede (el Excel de
+  // SharePoint) es la ÚNICA autoridad sobre si toca o no: si ahí figura pendiente, se
+  // premarca, aunque Athenea traiga un resultado previo. El tope de 730 días de arriba no
+  // aplica a estos paquetes — ni para desmarcar ni para dejar de hacerlo.
+  //
+  // Por qué solo estos: en la mamografía la periodicidad depende de la edad y del riesgo
+  // (Resolución 3280/2018), no de una vigencia fija que el script pueda calcular, y el
+  // programa de la IPS ya la resuelve al armar la lista. El resultado de Athenea NO se
+  // esconde: se sigue mostrando con su fecha, para que el médico lo tenga presente — lo
+  // único que cambia es que no toca la casilla.
+  const PYM_MANDA_SHAREPOINT = ["Z123"];
 
   function pymPaqueteHechoEnAthenea(pkg, labs, hoyIso) {
     try {
@@ -22762,8 +22775,10 @@ _vglOfrecerDeshacer(btn);
               // Solo desmarca si es RECIENTE (ver PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS). Un
               // resultado más viejo que eso se avisa igual, pero se sigue premarcando: ahí
               // el riesgo ya no es repetir un examen, es no pedirlo.
-              const hechoYReciente = !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
-              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && !yaHechoAthenea && !hechoYReciente;
+              // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
+              const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
+              const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
+              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
@@ -22776,7 +22791,7 @@ _vglOfrecerDeshacer(btn);
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
-                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto${hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde."}</div>` : ""}
+                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). ${mandaPym ? "Aquí manda la lista de PyM de la sede, no este resultado: si ahí figura pendiente, se premarca. Descárquelo usted si no corresponde." : "No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto" + (hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde.")}</div>` : ""}
                     ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}${idx === 0 ? vglTip("Códigos oficiales de procedimiento asignados automáticamente.") : ""}

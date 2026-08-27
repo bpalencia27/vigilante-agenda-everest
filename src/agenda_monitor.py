@@ -104,7 +104,7 @@ JS_ES_AGENDA = "() => document.querySelectorAll('.labelHora').length > 0"
 
 
 def extraer_documento(texto: Optional[str]) -> str:
-    """Extrae la cédula de textos tipo '21448257, 66 años' -> '21448257'."""
+    """Extrae la cédula de textos tipo '20111222, 66 años' -> '20111222'."""
     if not texto:
         return ""
     limpio = re.sub(r"[.\s]", "", texto.split(",")[0])

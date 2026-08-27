@@ -617,5 +617,69 @@ module.exports = {
         "y cuando no puede juzgar lo dice, en vez de callarse: la regla de la casa");
     });
 
+    // =================================================================
+    //  v17.14.0 — LA BARRERA DE PHI TAMBIÉN APLICA AL REPOSITORIO
+    //
+    //  Auditoría del 27-ago: las capturas de red de agosto llevaban PHI REAL
+    //  sin redactar —nombre completo, cédula, dirección, celular y correo de
+    //  cinco pacientes, más el registro médico de tres profesionales—, y un
+    //  celular real se había copiado a un fixture de pruebas. Ya había SEIS
+    //  commits previos titulados «fix(phi)» sobre estos mismos archivos: la
+    //  redacción a ojo, repetida seis veces, seguía dejando datos. Se vuelve
+    //  mecánica.
+    //
+    //  Decisión del médico (27-ago): valores sintéticos que preservan la forma
+    //  (la captura sigue sirviendo de evidencia de la API), y NO se reescribe
+    //  el historial de git — la redacción es hacia adelante.
+    // =================================================================
+    t.caso("v17.14.0 — ningún archivo del repositorio trae la PHI real que se redactó", () => {
+      const raiz = path.join(__dirname, "..");
+      // Los identificadores concretos que estaban publicados. Un archivo que vuelva a
+      // traer cualquiera de ellos es una regresión, no un dato nuevo.
+      const PROHIBIDOS = ["32304889", "43077616", "21448257", "1128397873", "7379688",
+        "3132975614", "3504447019", "3105066018", "1035853169", "1143449208",
+        "CLARA DE JESUS", "PALACIO BORJA", "MARTA CELENY", "ROSADEL", "TAPIAS RIVERA",
+        "JOSE LUIS DURANGO", "RICMAR", "clarapalacio", "tatiana-valencia",
+        "SERRAMONTE", "POTRERITO"];
+      const saltar = new Set(["node_modules", ".git", ".github"]);
+      const archivos = [];
+      const recorrer = (dir) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (saltar.has(e.name)) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) recorrer(full);
+          else if (/\.(js|json|md|py|txt|html|css)$/.test(e.name)) archivos.push(full);
+        }
+      };
+      recorrer(raiz);
+      t.cierto(archivos.length > 50, "el barrido recorre el repositorio de verdad (" + archivos.length + " archivos)");
+      const sucios = [];
+      for (const f of archivos) {
+        // Esta misma prueba nombra los prohibidos: leerse a sí misma daría siempre rojo.
+        if (f.endsWith("suite_31_seguridad_phi_xss.js")) continue;
+        let t2 = "";
+        try { t2 = fs.readFileSync(f, "utf8"); } catch (e) { continue; }
+        for (const mal of PROHIBIDOS) if (t2.indexOf(mal) >= 0) sucios.push(path.relative(raiz, f) + " → " + mal);
+      }
+      t.igual(sucios.join(" | "), "", "ningún archivo trae PHI real redactada");
+    });
+
+    t.caso("v17.14.0 — una captura de red no puede traer un correo de dominio personal", () => {
+      // Regla estructural, no lista de casos: un correo @gmail/@hotmail/@outlook/@yahoo
+      // dentro de una captura es, por definición, el de una persona real — los sintéticos
+      // usan @ejemplo.com. Es lo que atrapa la PRÓXIMA captura, no la de agosto.
+      const raiz = path.join(__dirname, "..");
+      const capturas = fs.readdirSync(raiz).filter((f) => /^captura_.*\.json$/.test(f));
+      t.cierto(capturas.length >= 2, "hay capturas de red versionadas (" + capturas.length + ")");
+      const RE_PERSONAL = /[\w.+-]+@(?:gmail|hotmail|outlook|yahoo|live|icloud)\.[\w.]+/gi;
+      const sucios = [];
+      for (const f of capturas) {
+        const t2 = fs.readFileSync(path.join(raiz, f), "utf8");
+        const h = t2.match(RE_PERSONAL);
+        if (h) sucios.push(f + " → " + h.join(", "));
+      }
+      t.igual(sucios.join(" | "), "", "ninguna captura trae un correo personal real");
+    });
+
   }
 };

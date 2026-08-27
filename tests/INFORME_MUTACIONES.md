@@ -4514,3 +4514,38 @@ CLAUDE.md — `div,span,p,b,small,label{color:#111827 !important}` — y sobrevi
 El contador de `!important` de `suite_25` (Regla G) subió de 378 a 379: es exactamente el
 `color` de `.vgl-conf-desfase`, que la Regla E **exige** por colgar de `document.body` fuera
 de `#vgl-root`. Se actualizó el esperado con esa razón escrita, no en silencio.
+
+---
+
+## v17.14.1 — PHI real fuera del repositorio y la mamografía se guía por PyM
+
+Dos decisiones del médico en la entrevista del 27-ago, más el hallazgo que la motivó.
+
+**El hallazgo.** Una auditoría del repositorio encontró PHI REAL sin redactar, ya publicada:
+nombre completo, cédula, dirección, celular, correo y fecha de nacimiento de dos pacientes en
+las capturas de red de agosto; tres pacientes más con nombre y cédula en la maqueta
+`src/overlay_ui.py`; el registro médico de tres profesionales; y un celular real copiado a un
+fixture de `tests/suite_62`. Ya había **seis** commits previos titulados `fix(phi)` sobre esos
+mismos archivos: la redacción a ojo, repetida seis veces, seguía dejando datos. Por eso la
+regla se vuelve mecánica.
+
+**Decisiones del médico.** Valores sintéticos que preservan la forma (la captura sigue
+sirviendo de evidencia de la API de Everest), y **no se reescribe el historial de git** — la
+redacción es hacia adelante. Y: *«mamografía guiarse netamente de los SharePoints»*.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 11 | Se devolvió a una captura de red una de las cédulas reales que se habían redactado (no se transcribe aquí: este informe también está bajo la regla) | `suite_31` | *v17.14.0 — ningún archivo del repositorio trae la PHI real que se redactó* |
+| 12 | Se devolvió un correo de dominio personal (`@gmail.com`) a una captura | `suite_31` | *v17.14.0 — una captura de red no puede traer un correo de dominio personal* |
+| 13 | Se vació `PYM_MANDA_SHAREPOINT`, dejando la mamografía otra vez a merced del tope de 730 días | `suite_28` | *v17.6.99 CABLEADO — el modal cruza TODOS los paquetes y respeta el tope para desmarcar* |
+
+La prueba 12 es la que importa a futuro: no es una lista de casos conocidos sino una regla
+estructural —un correo `@gmail/@hotmail/@outlook/@yahoo/@live/@icloud` dentro de una captura
+es, por definición, el de una persona real— y por eso atrapa la PRÓXIMA captura, no la de
+agosto. La 11 es el guardarraíl de regresión de lo ya redactado.
+
+El tope de 730 días **no se tocó**: sigue rigiendo para los demás paquetes sin vigencia
+confirmada. Lo que cambia es que la tamización de mama sale de su alcance, porque su
+periodicidad depende de la edad y del riesgo (Resolución 3280/2018) y eso ya lo resuelve el
+programa de la IPS al armar la lista. El resultado de Athenea **no se esconde**: se sigue
+mostrando con su fecha; lo único que deja de hacer es tocar la casilla.

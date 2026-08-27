@@ -467,10 +467,19 @@ module.exports = {
         "ya no se filtra por vigencia antes de cruzar: ese filtro ERA el defecto");
       t.cierto(/atheneaHechoPorCie10\[_p\.cie10\] = pymPaqueteHechoEnAthenea\(/.test(src),
         "los paquetes sin vigencia se cruzan por la vía de «¿está hecho?»");
-      t.cierto(/const hechoYReciente = !!hechoSinVigencia && hechoSinVigencia\.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;/.test(src),
+      t.cierto(/const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia\.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;/.test(src),
         "y solo se desmarca lo reciente");
       t.cierto(/!yaHechoAthenea && !hechoYReciente/.test(src),
         "el premarcado mira las dos vías");
+      // v17.14.0 — decisión del médico (27-ago): «mamografía guiarse netamente de los
+      // SharePoints». Para esos paquetes, la lista de PyM de la sede manda sobre lo que
+      // Athenea traiga: el resultado se muestra con su fecha, pero no toca la casilla.
+      t.cierto(/const PYM_MANDA_SHAREPOINT = \["Z123"\];/.test(src),
+        "la tamización de mama se guía por la lista de PyM, no por el tope de días");
+      t.cierto(/const mandaPym = PYM_MANDA_SHAREPOINT\.indexOf\(pkg\.cie10\) >= 0;/.test(src),
+        "y el premarcado lo consulta de verdad");
+      t.cierto(/mandaPym \|\| \(!yaHechoAthenea && !hechoYReciente\)/.test(src),
+        "si PyM manda, ni el cruce vigente ni el tope pueden desmarcarlo");
       t.cierto(/const PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS = 730;/.test(src),
         "el tope es el intervalo más largo que el médico ha confirmado, no uno inventado");
     });
