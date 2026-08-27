@@ -29,7 +29,7 @@ module.exports = {
   cubre: ["mtrHojaEducativaHtml", "mtrNombreLegibleAnalito",
     "mtrPanelExamenesHtml", "mtrPriorityFocus", "_evaluarComplejidadPaciente",
     "_tableroQueCambio", "mtrTextoDestinoTelemetria",
-    "_agruparToasts", "mtrColorMasGrave"],
+    "_agruparToasts", "mtrColorMasGrave", "pymMotivoSinActividades"],
 
   pruebas(t, api) {
     const src = fs.readFileSync(RUTA, "utf8");
@@ -336,6 +336,64 @@ module.exports = {
       // Y la prueba de que hace falta: hay avisos cuya instrucción vive al final.
       t.cierto(/Notificaciones BLOQUEADAS/.test(src) && /y recargue/.test(src),
         "existen avisos con el qué-hacer al final de la frase");
+    });
+
+    // =================================================================
+    //  REGLA E — renombrada desde «REGLA D» de la v17.14.0
+    //
+    //  Convivían dos reglas D con significados distintos: la del enjambre
+    //  («un mensaje tranquilizador exige evidencia») y la que se añadió en
+    //  v17.14.0 («un aviso no puede estar donde no se lee»). Dos reglas con
+    //  el mismo nombre es una invitación a citar la equivocada. Las de arriba
+    //  conservan sus rótulos D1/D2 por estar ya citadas en el informe de
+    //  mutaciones; lo que sigue es la D del enjambre, extendida.
+    // =================================================================
+
+    t.caso("REGLA D (#Tanda 4) — «no tiene actividades pendientes» exige haber mirado una lista", () => {
+      // El modal de Órdenes daba la MISMA frase —una afirmación sobre el paciente— en tres
+      // situaciones distintas: lista cargada y sin pendientes (cierta), paciente que no
+      // figura en la lista (no se sabe), y lista sin cargar (no se miró nada). Patrón G.
+      const sinLista = api.pymMotivoSinActividades({ listaCargada: false });
+      t.igual(sinLista.motivo, "sin_lista", "sin lista, el motivo es la lista");
+      t.falso(/para este paciente|no tiene/i.test(sinLista.texto),
+        "y el texto NO afirma nada sobre el paciente");
+      t.cierto(/no lo sé/.test(sinLista.texto), "dice que es ignorancia, con esas palabras");
+
+      // La base piloto y la lista de otro día son el mismo caso: no es la de hoy.
+      t.igual(api.pymMotivoSinActividades({ listaCargada: true, esBasePiloto: true }).motivo, "sin_lista",
+        "la base de respaldo no es la lista de la sede");
+      t.igual(api.pymMotivoSinActividades({ listaCargada: true, diaDistinto: true }).motivo, "sin_lista",
+        "la lista de ayer no responde por hoy");
+
+      const noEsta = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: false });
+      t.igual(noEsta.motivo, "no_esta_en_lista", "está la lista, pero él no figura en ella");
+      t.cierto(/NO aparece en la lista/.test(noEsta.texto), "y se dice cuál es la duda");
+
+      const ok = api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: true });
+      t.igual(ok.motivo, "sin_pendientes", "solo aquí se puede afirmar que no tiene pendientes");
+      t.cierto(/está en la lista/.test(ok.texto), "y la afirmación viene con su evidencia");
+
+      // `pacienteEnLista: null` = todavía no se ha indexado ninguna base. No se puede
+      // afirmar que el paciente no esté: manda el primer motivo.
+      t.igual(api.pymMotivoSinActividades({ listaCargada: true, pacienteEnLista: null }).motivo,
+        "sin_pendientes", "sin poder comprobar la pertenencia no se inventa una exclusión");
+    });
+
+    t.caso("REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada", () => {
+      // Eran dos estados para tres situaciones: con ultimaLectura en 0 el reloj afirmaba
+      // «Datos al día» sobre datos que no existen. No alarmar al arrancar está bien; decir
+      // que están al día es rellenar un hueco con una frase tranquilizadora.
+      const i = src.indexOf("const _hubo = !!state.ultimaLectura;");
+      t.cierto(i > 0, "el tercer estado existe");
+      const bloque = src.slice(i, i + 900);
+      t.cierto(/Todavía no he leído la agenda/.test(bloque),
+        "sin lectura se dice que no se ha leído, no que esté al día");
+      t.cierto(/no sé si los datos están al día/.test(bloque),
+        "y se nombra la ignorancia en vez de taparla");
+      t.cierto(/_hubo && \(Date\.now\(\) - state\.ultimaLectura\)/.test(bloque),
+        "«fresco» exige que HAYA habido una lectura");
+      t.cierto(/toggle\("vgl-stale", _hubo && !fresco\)/.test(bloque),
+        "y el arranque sigue sin pintarse en alarma: no se cambia una mentira por un susto");
     });
 
   },

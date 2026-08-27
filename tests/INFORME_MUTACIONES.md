@@ -4599,3 +4599,65 @@ qué laboratorio ir. De las seis, la única que sale de la IPS por escrito.
 **Sin mutación, y se dice en vez de inventar una:** el `TZ: America/Bogota` del flujo de
 GitHub, la medición de sábados (`tools/medir_sabados.js`) y la revisión de
 `docs/DECISIONES_PENDIENTES_20260820.md` no cambian el comportamiento del script.
+
+---
+
+## v17.16.0 — Tanda 4: tres afirmaciones que nadie había comprobado
+
+Sigue la **REGLA D** del enjambre —*un mensaje tranquilizador exige evidencia de que se
+evaluó algo*— y su patrón G: *el fallo del sistema se presenta como un hecho del paciente*.
+La v17.8.1 corrigió nueve casos; estos tres son de la misma familia y seguían vivos.
+
+**1. El modal de Órdenes.** Decía «No se detectaron actividades de prevención pendientes en
+la base de PyM **para este paciente**» en tres situaciones que no se parecen en nada: la
+lista está cargada y él no tiene pendientes (cierta); la lista está cargada y él **no
+aparece** en ella (no se sabe nada de él); y **la lista no está cargada** (no se miró nada, y
+la frase es falsa). Los datos para distinguirlas ya existían (`state.pymFile`, `pymDia`,
+`pymFallback`, `pymTodos` — este último guardado explícitamente para eso). Ahora hay tres
+mensajes, y el del caso 1 viene con su evidencia dicha: «está en la lista de hoy y no tiene
+pendientes».
+
+**2. El reloj del turno.** Con `state.ultimaLectura` en 0 —arranque, o una sesión en la que
+nunca se pudo leer la agenda— afirmaba **«Datos al día»** sobre datos que no existen. No
+alarmar al arrancar está bien y se conserva (no se pinta en `vgl-stale`); afirmar que están
+al día es otra cosa. Tres estados donde había dos.
+
+**3. El cruce antiduplicado contra Athenea.** Su propio comentario decía que un fallo de red
+«se cae **en silencio** al comportamiento de siempre». La conducta era correcta —ante la duda
+se ofrece el examen, nunca se esconde— pero el médico veía la lista premarcada igual que
+siempre, sin forma de saber que la comprobación no se hizo. El síntoma que le queda es
+exactamente el que él reportó en la v17.6.99: *«me sale que hay que enviarle el antígeno de
+próstata pero ya se lo realizó»*, y sin ninguna explicación a la vista. Ahora lo dice.
+
+Banco en verde tras la restauración final: **2.455/2.455**. El color nuevo se verificó en
+Chromium real contra el «Everest agresivo» de CLAUDE.md.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Que el motivo «sin lista» dejara de existir y todo cayera en «sin pendientes» | `suite_70` + `suite_15` | *REGLA D (#Tanda 4) — «no tiene actividades pendientes» exige haber mirado una lista* **y** *openOrdenamientoModal: sin coincidencia PyM…* |
+| 2 | Que el modal volviera a la frase única, ignorando el motivo | `suite_15` | *openOrdenamientoModal: sin coincidencia PyM no ofrece NADA para ordenar y lo avisa* |
+| 3 | Que el reloj volviera a dar por hecho que hubo lectura | `suite_70` | *REGLA D (#Tanda 4) — el reloj no dice «datos al día» antes de haber leído nada* |
+| 4 | Que el fallo de Athenea volviera a caerse en silencio | `suite_15` | *v17.16.0 — si no se pudo consultar Athenea, el modal lo DICE en vez de callarlo* |
+| 5 | Que el aviso dejara de distinguir `null` («no pude preguntar») de `[]` («pregunté y no hay») | `suite_15` | *v17.16.0 — si Athenea SÍ responde (aunque sin nada), el aviso NO sale* |
+
+**Una prueba existente llamaba «aviso honesto» a la frase menos honesta del modal.**
+`suite_15` fijaba literalmente *«No se detectaron actividades de prevención pendientes»* — en
+un vector donde **no se había cargado ninguna lista de PyM**. Es la octava vez que este
+informe registra una prueba que fija un defecto en vez de una regla, y se reescribió dejando
+escrito el porqué.
+
+**Y una aserción mía nació equivocada y se corrigió en el sitio, no se acomodó.** Al escribir
+la mitad «si Athenea responde, el aviso no sale» la añadí a un caso cuyo vector **no** tiene
+a Athenea respondiendo (el arnés por defecto devuelve `null`, que es justamente «no se pudo
+leer»): la aserción se puso roja con razón. En vez de relajarla, se movió a un caso con un
+plan de red propio donde el portal contesta en cada puerta y el paciente no tiene ninguna
+solicitud — y ese caso **empieza comprobando que el vector da `[]` y no `null`**, o no estaría
+distinguiendo nada.
+
+El contador de `!important` de `suite_25` sube de 379 a 380: es el `color` de
+`.vgl-ord-nocruce`, que la Regla E **exige** por colgar de `document.body`.
+
+**Nota de nomenclatura:** convivían dos «REGLA D» con significados distintos (la del enjambre
+y la que añadió la v17.14.0 para los avisos que no se leen). Las de la v17.14.0 conservan sus
+rótulos D1/D2 por estar ya citadas en este informe, y queda anotado en `suite_70` que la D a
+secas es la del enjambre.

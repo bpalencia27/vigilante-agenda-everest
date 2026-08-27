@@ -2479,12 +2479,78 @@ module.exports = {
       await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
       const modal = ultimoOrd();
       t.cierto(!!modal);
-      t.cierto(modal.innerHTML.includes("No se detectaron actividades de prevención pendientes"), "aviso honesto de que no hay coincidencia en la base de PyM");
+      // v17.16.0 — esta línea llamaba «aviso honesto» a la frase MENOS honesta del modal.
+      // «No se detectaron actividades de prevención pendientes PARA ESTE PACIENTE» es una
+      // afirmación sobre el paciente, y en este mismo vector no se ha cargado ninguna lista
+      // de PyM: no se miró nada. La prueba fijaba el defecto, no la regla — la misma clase
+      // de error que ya se documentó siete veces en INFORME_MUTACIONES.md.
+      t.cierto(modal.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
+        "sin lista cargada se dice ESO, no que el paciente no tenga nada");
+      t.cierto(modal.innerHTML.includes("no lo sé"),
+        "y se dice explícitamente que es ignorancia, no un hallazgo");
+      t.falso(/pendientes[^<]{0,40}para este paciente/i.test(modal.innerHTML),
+        "nunca se afirma nada sobre el paciente sin haber mirado una lista");
       t.falso(modal.innerHTML.includes(" checked"), "ninguna casilla premarcada sin coincidencia explícita");
       // v16.2.0 — orden del médico: sin coincidencia NO se ofrece el catálogo entero para
       // marcar a mano (era el riesgo de sobre-ordenar); no se pinta ni un ítem.
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "sin coincidencia no se ofrece ninguna actividad");
-      t.cierto(modal.innerHTML.includes("Sin actividades para ordenar"), "el botón de confirmar queda deshabilitado con su rótulo honesto");
+      t.cierto(modal.innerHTML.includes("No hay lista que consultar"),
+        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay lista");
+    });
+
+
+    await t.casoAsync("v17.16.0 — si no se pudo consultar Athenea, el modal lo DICE en vez de callarlo", async () => {
+      // REGLA D. El cruce antiduplicado contra Athenea se caía «en silencio al
+      // comportamiento de siempre» (así lo decía su propio comentario). La conducta era la
+      // correcta —ante la duda se ofrece el examen, nunca se esconde— pero el médico veía
+      // la lista premarcada igual que siempre, sin forma de saber que la comprobación no se
+      // hizo. El síntoma que le queda es exactamente el que él reportó en la v17.6.99:
+      // «me sale que hay que enviarle el antígeno de próstata pero ya se lo realizó».
+      //
+      // `null` = no se pudo preguntar. `[]` = se preguntó y no había nada. getAtheneaLabsAuto
+      // las distingue a propósito, y hasta hoy el modal las trataba igual.
+      const cCaido = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("portal caído"); },
+        gmxhr: (o) => { setTimeout(() => { try { o.onerror(new Error("NetErr")); } catch (e) {} }, 0); },
+      });
+      enriquecerDom(cCaido);
+      await cCaido.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía"] });
+      const modal = cCaido.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      t.cierto(!!modal, "el modal se abre igual: un fallo de red no puede dejar al médico sin la lista");
+      t.cierto(modal.innerHTML.includes("vgl-ord-nocruce"), "y trae el aviso de que no se pudo cruzar");
+      t.cierto(/no comprobé si alguno de estos exámenes ya se lo hicieron/.test(modal.innerHTML),
+        "dicho en lo que significa para él, no en jerga de red");
+      t.cierto(modal.innerHTML.includes("Mamografía (Mamografía Bilateral)"),
+        "la actividad se sigue ofreciendo: ante la duda se ofrece, nunca se esconde");
+    });
+
+
+    await t.casoAsync("v17.16.0 — si Athenea SÍ responde (aunque sin nada), el aviso NO sale", async () => {
+      // La otra mitad, y la que de verdad prueba la distinción: `[]` («pregunté y no hay»)
+      // NO puede disparar el aviso de `null` («no pude preguntar»). Un aviso que aparece
+      // siempre no avisa de nada — y la mitad de los defectos de este proyecto nacen de
+      // tratar esos dos valores como el mismo.
+      const cVacio = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const url = String(o.url || "");
+          // El portal responde bien en cada puerta, pero este paciente no tiene NINGUNA
+          // solicitud de laboratorio: `DatosPaciente` no trae ni un formulario.
+          if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+          else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+          else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: "CC: 888 — sin solicitudes" });
+          else o.onload({ status: 200, responseText: "" });
+        },
+      });
+      enriquecerDom(cVacio);
+      const vacio = await cVacio.api.getAtheneaLabsAuto("888");
+      t.igual(vacio, [], "el vector tiene que dar [] y no null, o esta prueba no distingue nada");
+      await cVacio.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía"] });
+      const modal = cVacio.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      t.cierto(!!modal, "el modal se abre");
+      t.falso(modal.innerHTML.includes("vgl-ord-nocruce"),
+        "se preguntó y se obtuvo respuesta: no hay nada que advertir");
     });
 
     await t.casoAsync("openOrdenamientoModal: con coincidencia, el choque de sexo desmarca y advierte", async () => {

@@ -33,6 +33,8 @@ const CASOS = [
   // v17.14.0 — el aviso de desfase del reconciliador (#69 del enjambre). Cuelga de
   // document.body como los demás, así que su color tiene que sobrevivir al Everest agresivo.
   { id: "vgl-confirma-modal", cls: "vgl-conf-desfase", que: "aviso: su respuesta anterior quedó desactualizada", token: "--c-ambar" },
+  // v17.16.0 — el aviso de que no se pudo cruzar contra Athenea (Tanda 4).
+  { id: "vgl-ordenar-modal", cls: "vgl-ord-nocruce", que: "aviso: no se pudo cruzar contra Athenea", token: "--c-ambar" },
 ];
 const BANDERAS = [
   { cls: "agpend", que: "🗓️ SIN TERMINAR", debeSer: "--c-ambar" },

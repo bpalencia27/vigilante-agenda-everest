@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.15.0
+// @version     17.16.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.15.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.16.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8158,6 +8158,48 @@ _vglOfrecerDeshacer(btn);
   function debeBuscarPymDiario() {
     return !state.pymFile || state.pymFallback === true || state.pymDia !== todayStamp();
   }
+  // v17.16.0 — TANDA 4, REGLA D («un mensaje tranquilizador exige evidencia de que se
+  // evaluó algo»). El modal de Órdenes decía, sin coincidencias:
+  //
+  //   «No se detectaron actividades de prevención pendientes en la base de PyM PARA ESTE
+  //    PACIENTE.»
+  //
+  // Eso es una afirmación sobre el PACIENTE, y se emitía igual en tres situaciones que no
+  // se parecen en nada:
+  //   1. la lista de hoy está cargada y él no tiene nada pendiente  -> la frase es cierta;
+  //   2. la lista está cargada y él NO APARECE en ella (cédula que no cruza, paciente
+  //      nuevo) -> no se sabe nada de él, y el propio índice ya guarda pymTodos justo
+  //      para poder distinguirlo (ver el comentario de indexRows);
+  //   3. la lista NO está cargada (SharePoint caído, aún no la suben, o es la de ayer)
+  //      -> no se miró ninguna lista, y la frase es sencillamente falsa.
+  //
+  // Es el patrón G del informe del enjambre —«el fallo del sistema se presenta como un
+  // hecho del paciente»— idéntico a los nueve que corrigió la v17.8.1. Los datos para
+  // distinguir los tres casos YA existían (state.pymFile, pymDia, pymFallback, pymTodos):
+  // lo único que faltaba era no tirarlos.
+  //
+  // Función PURA para poder probarla: recibe el estado, devuelve el motivo y el texto.
+  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes"];
+  function pymMotivoSinActividades(est) {
+    const e = est || {};
+    if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
+      return {
+        motivo: "sin_lista",
+        texto: "No tengo cargada la lista de prevención de hoy" + (e.esBasePiloto ? " (estoy con la base de respaldo, no con la de la sede)" : e.diaDistinto ? " (la que tengo es de otro día)" : "") + ", así que NO he podido mirar qué le corresponde a este paciente. Esto no dice que no tenga nada pendiente: dice que no lo sé. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    if (e.pacienteEnLista === false) {
+      return {
+        motivo: "no_esta_en_lista",
+        texto: "Este paciente NO aparece en la lista de prevención de hoy (puede ser nuevo, o su identificación no cruza con la del archivo). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    return {
+      motivo: "sin_pendientes",
+      texto: "Este paciente está en la lista de prevención de hoy y no tiene actividades pendientes. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+    };
+  }
+
   // Huella de un archivo PyM: identifica "el mismo archivo" sin depender solo de la fecha.
   function pymFP(name, mtime) { return String(name || "") + "|" + String(mtime || ""); }
 
@@ -14846,6 +14888,16 @@ _vglOfrecerDeshacer(btn);
          quedaron pedidas.
          Clase propia, en ámbar, con !important porque este modal cuelga de document.body
          (regla de la casa) y verificada en Chromium contra un CSS de Everest agresivo. */
+      /* v17.16.0 — el aviso de que el cruce contra Athenea no se pudo hacer. Ámbar, que es
+         el color de «ojo con esto»: no es un error del paciente ni una alarma clínica, es
+         una comprobación que falta. Con !important porque #vgl-ordenar-modal cuelga de
+         document.body, fuera de #vgl-root (Regla E de CLAUDE.md). */
+      #vgl-ordenar-modal .vgl-ord-nocruce{
+        margin:0 0 10px;padding:8px 10px;border-radius:var(--r-chip);
+        font-size:var(--t-micro);line-height:1.45;font-weight:600;
+        color:var(--c-ambar) !important;
+        background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.35);
+      }
       #vgl-ordenar-modal .vgl-ord-parcial{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
         color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.13);
@@ -22736,6 +22788,19 @@ _vglOfrecerDeshacer(btn);
     // catálogo institucional real (Ordenamientos de Everest) si de verdad corresponde algo.
     const hayCoincidencia = matchedPackages && matchedPackages.length > 0;
     const pkgsToRender = hayCoincidencia ? matchedPackages : [];
+    // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. Los tres motivos ya se podían
+    // distinguir con lo que el estado guarda; hasta hoy los tres salían con la misma frase,
+    // que además afirmaba algo sobre el paciente en los dos casos en que no se sabe nada
+    // de él. `pymTodos` es null mientras no se haya indexado ninguna base: entonces no se
+    // puede afirmar que el paciente no esté en la lista, y el primer motivo ya manda.
+    const _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades({
+      listaCargada: !!state.pymFile,
+      esBasePiloto: state.pymFallback === true,
+      diaDistinto: !!state.pymFile && state.pymDia !== todayStamp(),
+      pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
+        ? state.pymTodos.has(normalizeKey(apt.doc_id))
+        : null,
+    });
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
@@ -22771,6 +22836,16 @@ _vglOfrecerDeshacer(btn);
     // DESDE CUÁNDO aparece hecho. No se da por cubierto —no se inventa una vigencia— pero
     // tampoco se le vuelve a ofrecer en silencio un examen que ya está en Athenea.
     const atheneaHechoPorCie10 = {};
+    // v17.16.0 — TANDA 4, REGLA D. El comentario de abajo decía, con estas palabras, que un
+    // fallo de red «se cae EN SILENCIO al comportamiento de siempre». La conducta es la
+    // correcta (ante la duda se ofrece el examen, nunca se oculta); el silencio no lo es:
+    // el médico ve la lista premarcada igual que siempre y no tiene forma de saber que el
+    // cruce contra Athenea NO se pudo hacer. El síntoma que le queda es exactamente el que
+    // reportó en la v17.6.99 —«me sale que hay que enviarle el antígeno de próstata pero ya
+    // se lo realizó»— sin ninguna explicación a la vista.
+    // `null` = no se pudo preguntar. `[]` = se preguntó y Athenea no trajo nada. Son cosas
+    // distintas y getAtheneaLabsAuto ya las distingue a propósito.
+    let atheneaNoRespondio = false;
     // v17.6.99 — el cruce se hace ahora para TODOS los paquetes candidatos, no solo para
     // los que tienen vigencia. Antes se filtraba aquí, y ese filtro era justo el que dejaba
     // a cinco de los ocho paquetes sin cruzarse nunca contra Athenea. El coste de red no
@@ -22790,6 +22865,7 @@ _vglOfrecerDeshacer(btn);
         }
       } catch (e) { console.warn("[Vigilante PyM] no se pudo sincronizar con Athenea para el cruce antiduplicado:", e); labsPacienteAthenea = null; }
       if (!vivo()) return;
+      atheneaNoRespondio = (labsPacienteAthenea === null);
       const _hoyPyM = todayStamp();
       for (const _p of pkgsToRender) {
         if (!_p) continue;
@@ -22830,7 +22906,8 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-ux-caption" style="font-size:12px;color:#a0aec0;margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
 
         <div class="vgl-agm-sec">
-          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">No se detectaron actividades de prevención pendientes en la base de PyM para este paciente. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.</div>`}
+          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
+          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">⚠ No pude consultar Athenea para este paciente, así que <b>no comprobé si alguno de estos exámenes ya se lo hicieron</b>. La lista sale completa a propósito (ante la duda se ofrece, nunca se esconde): revísela antes de ordenar.</div>` : ""}
           <div id="vgl-ord-list">
             ${pkgsToRender.map((pkg, idx) => {
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
@@ -22875,7 +22952,7 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : "Sin actividades para ordenar"}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista que consultar")}</button>
         </div>
       </div>
     `;
@@ -24706,10 +24783,20 @@ _vglOfrecerDeshacer(btn);
       const mm = String(ahora.getMinutes()).padStart(2, "0");
       const turnoMin = Math.max(0, Math.floor((Date.now() - (state.turnoInicio || Date.now())) / 60000));
       const h = Math.floor(turnoMin / 60), m = turnoMin % 60;
-      const fresco = !state.ultimaLectura || (Date.now() - state.ultimaLectura) <= 30000;
-      c.classList.toggle("vgl-stale", !fresco);
+      // v17.16.0 — TANDA 4, REGLA D. Eran DOS estados para TRES situaciones: con
+      // `ultimaLectura` en 0 (arranque, o una sesión en la que nunca se pudo leer la
+      // agenda) `fresco` salía true y el reloj afirmaba «Datos al día» — sobre datos que
+      // no existen. No alarmar al arrancar está bien y se conserva (no se pinta en
+      // `vgl-stale`); afirmar que están al día es otra cosa: es rellenar un hueco con una
+      // frase tranquilizadora, que es justo lo que la regla de la casa prohíbe.
+      const _hubo = !!state.ultimaLectura;
+      const fresco = _hubo && (Date.now() - state.ultimaLectura) <= 30000;
+      c.classList.toggle("vgl-stale", _hubo && !fresco);
       c.textContent = hh + ":" + mm + " · " + h + "h" + (m < 10 ? "0" : "") + m + "m";
-      c.title = fresco ? "Hora actual y tiempo de turno. Datos al día." : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".";
+      c.title = !_hubo
+        ? "Hora actual y tiempo de turno. Todavía no he leído la agenda en esta sesión: no sé si los datos están al día."
+        : fresco ? "Hora actual y tiempo de turno. Datos al día."
+        : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".";
     } catch (e) {}
   }
   // ===== [v17.6.7] Cierre de turno: checklist y adherencia.
