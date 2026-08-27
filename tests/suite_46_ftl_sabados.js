@@ -48,6 +48,7 @@ module.exports = {
     "mtrSabadoRegistrarObservacion", "mtrSabadoFijarGrupoManual",
     "mtrGrupoSabadoFiable", "mtrSabadoTrabajaEsteMedico",
     "mtrLeerCampoPorRotulo", "mtrLeerCinturaDelDom",
+    "mtrConsolidarMtt",            // v17.7.5 — el invariante de las fusiones
   ],
 
   pruebas(t, api) {
@@ -939,5 +940,183 @@ module.exports = {
       t.igual(api.mtrLeerFactoresRcvDelDom("1234567890", d), null,
         "con una cédula que no se puede confirmar, NO se lee nada");
     });
+
+    // =================================================================
+    //  v17.7.5 — MTT-CONSOLIDA: la cláusula ya se cumple, y ahora está FIJADA
+    //  El spec pide «order_list = incluidos + drivers debidos + pasajeros no bloqueados +
+    //  MTT fusionados». En el código, order_list es solo `claves(plan.ordenar)` y las
+    //  fusiones salen por un campo aparte — sobre el papel, un hueco.
+    //
+    //  Medido antes de escribir nada: 1.440 planes, 128 con fusión MTT, y **cero** fusiones
+    //  fuera de order_list. No es casualidad, es el mecanismo: una fusión exige que la toma
+    //  caiga EN O DESPUÉS de la fecha de recontrol, y un analito cuyo recontrol ya venció
+    //  para cuando llega la toma entra al plan por su propio pie.
+    //
+    //  Por eso NO se añadió una unión explícita: sería una línea que ninguna mutación puede
+    //  matar —no cambia nada en ningún caso alcanzable— y este proyecto ya arrastra
+    //  bastantes ramas inertes. Lo que sí faltaba era esta prueba: convierte la coincidencia
+    //  en un invariante que se pone rojo el día que la Cosecha cambie.
+    // =================================================================
+    t.caso("v17.7.5 — toda fusión MTT está en la lista de órdenes (invariante, no coincidencia)", () => {
+      const f = (d) => new Date(Date.UTC(2026, 7, 16) - d * 86400000).toISOString().slice(0, 10);
+      const ALIAS = { ldl: "COLESTEROL_LDL", hba1c: "HBA1C", glicemia: "GLUCOSA" };
+      let conFusion = 0, fuera = 0;
+      for (const aLdl of [1, 60, 140]) {
+        for (const aOtros of [1, 90, 175]) {
+          for (const creat of [0.9, 1.6, 2.4]) {
+            for (const hba1c of [null, 11.5]) {
+              const r = api.mtrResumenClinico({
+                hoyIso: "2026-08-16", edad: 66, sexo: "M", pesoKg: 80, creatinina: creat,
+                ct: 300, hdl: 35, ldl: 260, paSistolica: 150, paDiastolica: 90, hba1c: hba1c,
+                factores: { hta: true, diabetes: hba1c != null },
+                ultimos: {
+                  CREATININA: { fecha: f(aOtros), valor: creat },
+                  COLESTEROL_LDL: { fecha: f(aLdl), valor: 260 },
+                  COLESTEROL_TOTAL: { fecha: f(aOtros), valor: 300 },
+                  COLESTEROL_HDL: { fecha: f(aOtros), valor: 35 },
+                  TRIGLICERIDOS: { fecha: f(aOtros), valor: 250 },
+                  GLUCOSA: { fecha: f(aOtros), valor: 140 },
+                  RAC: { fecha: f(aOtros), valor: 12 },
+                  UROANALISIS: { fecha: f(aOtros), valor: 1 },
+                  HEMOGLOBINA: { fecha: f(aOtros), valor: 14 },
+                  HBA1C: hba1c != null ? { fecha: f(aLdl), valor: hba1c } : undefined,
+                },
+              });
+              const fus = (r.fallas && r.fallas.fusiones) || [];
+              if (!fus.length) continue;
+              conFusion++;
+              const orden = (r.plan.ordenar || []).map((x) => x.clave);
+              for (const x of fus) {
+                const k = ALIAS[String(x.analito).toLowerCase()] || String(x.analito).toUpperCase();
+                if (orden.indexOf(k) < 0) fuera++;
+              }
+            }
+          }
+        }
+      }
+      t.cierto(conFusion > 0, "el barrido tiene que producir fusiones, o no estaría probando nada");
+      t.igual(fuera, 0,
+        "una falla grave que se retoma en la misma toma TIENE que estar en la orden: si no, el médico la agenda y nadie la pide");
+    });
+
+
+    // =================================================================
+    //  v17.7.5 — LA CLÁUSULA DEL RAC, LA ÚLTIMA RAMA DEL SPEC SIN CONSTRUIR
+    //  v68: «RAC sincroniza si venc<=Vc+60d y reinicia» (Vc = vencimiento de la creatinina).
+    //  Medido ANTES de escribirla: 2.016 planes, 672 con ANR, 480 con el RAC dentro de la
+    //  ventana — y **72 salían DIFERIDOS**: el paciente volvía una segunda vez solo por el
+    //  RAC. Después: 0. Contención sobre 2.688 planes: 0 cambian la fecha de toma, 0 la de
+    //  control, 88 cambian la lista y en los 88 lo único que cambia es que se añade el RAC.
+    // =================================================================
+    const _racVector = (opts) => {
+      const o = opts || {};
+      const f = (d) => new Date(Date.UTC(2026, 7, 16) - d * 86400000).toISOString().slice(0, 10);
+      return api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 66, sexo: "M", pesoKg: 80,
+        creatinina: o.creatinina != null ? o.creatinina : 1.4,
+        ct: 200, hdl: 45, ldl: 100, paSistolica: 130, paDiastolica: 80, rac: 45,
+        factores: { hta: true, diabetes: true },
+        ultimos: {
+          CREATININA: { fecha: f(o.aCreat != null ? o.aCreat : 90), valor: o.creatinina != null ? o.creatinina : 1.4 },
+          RAC: { fecha: f(o.aRac != null ? o.aRac : 10), valor: 45 },
+          COLESTEROL_LDL: { fecha: f(5), valor: 100 }, COLESTEROL_TOTAL: { fecha: f(5), valor: 200 },
+          COLESTEROL_HDL: { fecha: f(5), valor: 45 }, TRIGLICERIDOS: { fecha: f(5), valor: 150 },
+          GLUCOSA: { fecha: f(5), valor: 100 }, UROANALISIS: { fecha: f(5), valor: 1 },
+          HBA1C: { fecha: f(5), valor: 6.5 },
+        },
+      });
+    };
+    const _clavesDe = (l) => (l || []).map((x) => x && x.clave).filter(Boolean);
+
+    t.caso("v17.7.5 — con el ANR activo, el RAC que vence dentro de Vc+60d entra en la toma", () => {
+      const r = _racVector({});
+      t.cierto(!!r.plan.anr, "el vector tiene que activar el ANR, o no estaría probando la cláusula");
+      t.cierto(_clavesDe(r.plan.ordenar).indexOf("RAC") >= 0,
+        "el RAC entra en la toma que ya existe: sin esto el paciente vuelve una segunda vez solo por él");
+      t.falso(_clavesDe(r.plan.diferidos).indexOf("RAC") >= 0, "y no queda diferido");
+    });
+
+    t.caso("v17.7.5 — fuera de la ventana de 60 días, el RAC sigue la regla general", () => {
+      // Vector localizado a propósito con el arnés: creatinina de hace 110 días y RAC de
+      // HOY, así que el RAC vence 79 días después de la creatinina — fuera de los 60 de la
+      // cláusula. Es la prueba que impide que el cambio se desborde a todo RAC: sin un caso
+      // concreto donde NO aplique, forzar el RAC siempre pasaría igual de verde.
+      const r = _racVector({ aRac: 0, aCreat: 110, creatinina: 1.4 });
+      t.cierto(!!r.plan.anr, "el ANR sigue activo en este vector");
+      const it = [].concat(r.plan.ordenar || [], r.plan.diferidos || []).find((x) => x.clave === "RAC");
+      const gap = Math.round((new Date(it.vence + "T00:00:00") - new Date(r.plan.anr.vence + "T00:00:00")) / 86400000);
+      t.cierto(gap > 60, "el vector tiene que caer FUERA de la ventana (medido: 79 días), o no prueba nada");
+      t.cierto(_clavesDe(r.plan.diferidos).indexOf("RAC") >= 0,
+        "y ahí el RAC sigue diferido: la cláusula del spec no se aplica a todo RAC, solo al que entra en la ventana");
+    });
+
+    t.caso("v17.7.5 — sin ANR, la cláusula no existe y el RAC vuelve a la regla del 33 %", () => {
+      // Estadio G1 (creatinina normal): no hay agujero negro renal. Vector localizado con
+      // el arnés: RAC de HOY con vigencia de 180 y una toma a un mes — el margen excede el
+      // 33 % y la Cosecha lo difiere, como a cualquier otro analito. Sin esta prueba,
+      // forzar el RAC SIEMPRE pasaría igual de verde.
+      const f = (d) => new Date(Date.UTC(2026, 7, 16) - d * 86400000).toISOString().slice(0, 10);
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 66, sexo: "M", pesoKg: 80, creatinina: 0.8,
+        ct: 200, hdl: 45, ldl: 100, paSistolica: 130, paDiastolica: 80, rac: 12,
+        factores: { hta: true, diabetes: true },
+        ultimos: {
+          CREATININA: { fecha: f(60), valor: 0.8 }, RAC: { fecha: f(0), valor: 12 },
+          COLESTEROL_LDL: { fecha: f(60), valor: 100 }, COLESTEROL_TOTAL: { fecha: f(60), valor: 200 },
+          COLESTEROL_HDL: { fecha: f(60), valor: 45 }, TRIGLICERIDOS: { fecha: f(60), valor: 150 },
+          GLUCOSA: { fecha: f(60), valor: 100 }, UROANALISIS: { fecha: f(60), valor: 1 },
+          HBA1C: { fecha: f(60), valor: 6.5 },
+        },
+      });
+      t.igual(r.plan.anr, null, "con creatinina normal no hay ANR");
+      t.cierto(_clavesDe(r.plan.diferidos).indexOf("RAC") >= 0,
+        "y el RAC se difiere: la cláusula vive DENTRO del bloque del ANR, no fuera");
+    });
+
+    t.caso("v17.7.5 — el RAC entra a la toma, pero NO mueve ninguna fecha", () => {
+      // La contención que hace segura esta entrega, igual que en v17.6.98: la cláusula solo
+      // AÑADE un examen a la orden. Si moviera la fecha, podría dejar vencer otro examen —
+      // y CERO VENCIDOS está por encima de la logística en el propio v68.
+      const r = _racVector({});
+      const ftl = r.plan.ftl;
+      t.cierto(!!ftl, "hay fecha de toma");
+      // El RAC cosechado no puede ser quien manda la fecha: la manda otro vencimiento.
+      const racItem = (r.plan.ordenar || []).find((x) => x.clave === "RAC");
+      t.cierto(!!racItem && racItem.vence > ftl,
+        "el RAC se adelanta a la toma: su vencimiento propio es POSTERIOR, así que no es él quien fija la fecha");
+    });
+
+    t.caso("v17.7.5 — barrido: con el ANR activo no queda ni un RAC diferido dentro de la ventana", () => {
+      const f = (d) => new Date(Date.UTC(2026, 7, 16) - d * 86400000).toISOString().slice(0, 10);
+      let conAnr = 0, candidatos = 0, diferidos = 0;
+      for (const aCreat of [45, 60, 75, 90])
+        for (const aRac of [10, 40, 70, 100, 160])
+          for (const creat of [1.4, 1.8, 2.4]) {
+            const r = api.mtrResumenClinico({
+              hoyIso: "2026-08-16", edad: 66, sexo: "M", pesoKg: 80, creatinina: creat,
+              ct: 200, hdl: 45, ldl: 100, paSistolica: 130, paDiastolica: 80, rac: 45,
+              factores: { hta: true, diabetes: true },
+              ultimos: {
+                CREATININA: { fecha: f(aCreat), valor: creat }, RAC: { fecha: f(aRac), valor: 45 },
+                COLESTEROL_LDL: { fecha: f(5), valor: 100 }, COLESTEROL_TOTAL: { fecha: f(5), valor: 200 },
+                COLESTEROL_HDL: { fecha: f(5), valor: 45 }, TRIGLICERIDOS: { fecha: f(5), valor: 150 },
+                GLUCOSA: { fecha: f(5), valor: 100 }, UROANALISIS: { fecha: f(5), valor: 1 },
+                HBA1C: { fecha: f(5), valor: 6.5 },
+              },
+            });
+            if (!r.plan.anr) continue;
+            conAnr++;
+            const todos = [].concat(r.plan.ordenar || [], r.plan.diferidos || []);
+            const it = todos.find((x) => x.clave === "RAC");
+            if (!it || !it.vence) continue;
+            const gap = Math.round((new Date(it.vence + "T00:00:00") - new Date(r.plan.anr.vence + "T00:00:00")) / 86400000);
+            if (gap > 60) continue;
+            candidatos++;
+            if ((r.plan.diferidos || []).some((x) => x.clave === "RAC")) diferidos++;
+          }
+      t.cierto(conAnr > 0 && candidatos > 0, "el barrido tiene que producir casos, o no prueba nada");
+      t.igual(diferidos, 0, "ni un solo RAC dentro de la ventana puede quedar diferido: ese es el segundo viaje que la cláusula evita");
+    });
+
   },
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.7.4
+// @version     17.7.5
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.4";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.5";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31589,6 +31589,27 @@ _vglOfrecerDeshacer(btn);
       // Decisión del médico (27-ago) tras ver las cifras de arriba: forzarla siempre.
       // El coste es vigencia: se toma hasta ~46 días antes de vencer, de 121 de vigencia.
       if (anr && a.clave === "CREATININA") { cosechados.push(a); continue; }
+      // v17.7.5 — LA CLÁUSULA DEL RAC DEL SPEC, QUE NUNCA SE CONSTRUYÓ. v68 dice, dentro
+      // del mismo bloque del ANR: «RAC sincroniza si venc<=Vc+60d y reinicia». Era la
+      // última rama del spec sin implementar, y no era teórica.
+      //
+      // Medido con el arnés ANTES de escribir esta línea, sobre 2.016 planes: 672 con el
+      // ANR activo, 480 en los que el RAC entra en la ventana Vc+60d — y de esos, **72
+      // salían DIFERIDOS**, o sea el paciente volvía una segunda vez solo por el RAC.
+      // Vector representativo: RAC de hace 10 días con vigencia de 90 (override por
+      // RAC>=30), vence a 49 días de la toma; el margen del 33 % (29,7 d) lo difiere.
+      //
+      // Es la misma forma que la creatinina de v17.6.98 y tiene la misma contención: solo
+      // AÑADE el RAC a la toma que ya existe, nunca mueve `ftl` ni la fecha de control. El
+      // «reinicia» del spec ocurre solo: al tomarse la muestra ese día, los 90 días
+      // vuelven a contar desde ahí.
+      //
+      // El coste es vigencia (se adelanta hasta 60 días), y es justo el canje que el médico
+      // ya decidió para la Cosecha: «en su población el viaje pesa más que la vigencia».
+      if (anr && a.clave === "RAC" && anr.vence && a.vence
+          && Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(anr.vence).getTime()) / 86400000) <= MTR_RAC_SINCRONIA_ANR_DIAS) {
+        cosechados.push(a); continue;
+      }
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
       if (margen <= 0) { cosechados.push(a); continue; }
@@ -35923,6 +35944,11 @@ _vglOfrecerDeshacer(btn);
   // maestra, se FUSIONA (se retoma en la misma toma). Si está más lejos, es una
   // 2ª fecha dedicada y prioritaria. Las fechas dedicadas que caigan a <=7 d
   // entre sí se colapsan a la más temprana (un solo viaje).
+  // v17.7.5 — ventana de sincronía del RAC con el ANR, del spec: «RAC sincroniza si
+  // venc<=Vc+60d y reinicia» (Vc = vencimiento de la creatinina). Se nombra en vez de
+  // dejar un 60 suelto: es un número clínico del promptware, no una constante de conveniencia.
+  const MTR_RAC_SINCRONIA_ANR_DIAS = 60;
+
   const MTR_MTT_FUSION_DIAS = 60;
   const MTR_MTT_COLAPSO_DIAS = 7;
 

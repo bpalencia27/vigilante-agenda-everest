@@ -6,6 +6,76 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.7.5 — 27-ago-2026 (la última rama del spec sin construir, y una que era mejor no construir)
+
+Cierra el MOTOR RCV v68. Dos puntos abiertos, y **solo uno terminó en código** — porque el
+otro, medido, no lo necesitaba.
+
+### El RAC: la cláusula existía, el hueco era real
+
+v68 dice, dentro del bloque del ANR: *«RAC sincroniza si venc<=Vc+60d y reinicia»* (Vc =
+vencimiento de la creatinina). Nunca se construyó.
+
+**Medido con el arnés ANTES de escribir la línea:**
+
+| | |
+|---|---|
+| Planes barridos | 2.016 |
+| Con el ANR activo | 672 |
+| Con el RAC dentro de la ventana Vc+60d | 480 |
+| **De esos, DIFERIDOS** (segundo viaje solo por el RAC) | **72** → después: **0** |
+
+Vector representativo: RAC de hace 10 días con vigencia de 90 (override por RAC≥30), vence a
+49 días de la toma; el margen del 33 % (29,7 d) lo difería.
+
+**Contención, sobre 2.688 planes:**
+
+| | |
+|---|---|
+| Cambian la fecha de toma | **0** |
+| Cambian la fecha de control | **0** |
+| Cambian la lista | 88 — y en los 88 lo único que cambia es que **se añade el RAC** |
+
+Misma forma y misma contención que la creatinina de v17.6.98: solo AÑADE un examen a la toma
+que ya existe. El «reinicia» del spec ocurre solo — al tomarse la muestra ese día, los 90 días
+vuelven a contar desde ahí.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar la sincronía del RAC | *el RAC que vence dentro de Vc+60d entra en la toma*, *no mueve ninguna fecha* y *el barrido* |
+| 2 | Sincronizar el RAC SIEMPRE (ventana a 99999) | *fuera de la ventana de 60 días, el RAC sigue la regla general* |
+| 3 | Sincronizar el RAC sin comprobar el ANR | *fuera de la ventana…* **y** *sin ANR, la cláusula no existe* |
+
+### Las fusiones MTT: la cláusula ya se cumplía, y **no** se escribió código
+
+El spec pide `order_list = incluidos + drivers debidos + pasajeros no bloqueados + MTT
+fusionados`. En el código `order_list` es solo `claves(plan.ordenar)` y las fusiones salen por
+un campo aparte. Sobre el papel, un hueco.
+
+**Medido: 1.440 planes, 128 con fusión, y cero fusiones fuera de `order_list`.** No es
+casualidad, es el mecanismo: una fusión exige que la toma caiga EN O DESPUÉS de la fecha de
+recontrol, y un analito cuyo recontrol ya venció para cuando llega la toma entra al plan por
+su propio pie.
+
+Añadir la unión explícita habría sido **una línea que ninguna mutación puede matar** — no
+cambia nada en ningún caso alcanzable. Este proyecto ya arrastra bastantes ramas inertes, y
+la disciplina de mutación existe justamente para no añadir más. Lo que sí faltaba era la
+prueba: convierte la coincidencia en un invariante que se pondrá rojo el día que la Cosecha
+cambie. Anotado como observación en la tabla del spec.
+
+### El guardián del banco cazó mi propia válvula de escape
+
+La primera versión de la prueba «fuera de la ventana» llevaba un `if` con un
+`t.cierto(true, "este vector no cae fuera de la ventana…")` de reserva. `suite_34` (M4-AST)
+la marcó como **tautología** y puso el banco en rojo, con el número de línea. Tenía razón: una
+prueba que puede pasar sin comprobar nada no es una prueba. Se localizó con el arnés un vector
+real donde el RAC vence 79 días después de la creatinina, y ahí sí se afirma que sigue
+diferido. Segunda tautología, en el caso «sin ANR», cazada por lo mismo y sustituida igual.
+
+Banco completo en **2.408/2.408** con `TZ=America/Bogota`.
+
+---
+
 ## v17.7.4 — 27-ago-2026 (la causa real: Athenea llama «orina» a un examen de sangre)
 
 **El diagnóstico del médico resolvió lo que ningún informe podía adivinar.** La v17.7.1 dijo
