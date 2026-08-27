@@ -6,6 +6,59 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.12.0 — 27-ago-2026 (se escucha lo que Everest CARGA, y el bloque farmacológico se inserta)
+
+### Por qué el diagnóstico de consola capturó CERO
+
+Se le entregó al médico un diagnóstico para descubrir qué carga Everest al abrir un paciente.
+Devolvió **0 respuestas anotadas**. La causa la dio **su propia bitácora**: de 36 cambios de
+URL, **24 arrancan con `from` vacío**, o sea que el script empezó de cero.
+
+**Everest recarga la página de verdad al abrir un paciente**, y eso borra cualquier cosa
+pegada en la consola antes de que la respuesta llegue. Dentro del userscript no pasa:
+Tampermonkey lo reinyecta en cada carga.
+
+*La lección: cuando un diagnóstico devuelve nada, la primera pregunta no es «¿qué falta en el
+código?» sino «¿el instrumento llegó vivo al momento que quería medir?».*
+
+### Y no hubo que adivinar ni un campo
+
+La respuesta se reconoce con el **mismo detector por forma** que ya usa el envío
+(`mtrEsPayloadHcEverest`, que exige ≥2 secciones conocidas). Si Everest la manda, se captura;
+si no, no pasa nada. Pasa por la misma barrera: `datosUsuario` no se lee y el nombre se tacha
+con la identidad del propio paquete, que se descarta sin guardarse.
+
+**Lo que no puede pasar, y está fijado por prueba:** la respuesta se lee sobre un **clon**.
+Leer el cuerpo original dejaría a Everest sin poder leerlo y la historia no cargaría. Es lo
+único que separa esta escucha de romperle la aplicación al médico en consulta.
+
+### El bloque de seguridad farmacológica: calculado y tirado
+
+La auditoría lo puso como ejemplo del patrón *«se calcula y se tira a la basura antes de
+pintar»*. `extraFarmaco` se armaba con `mtrRenderAvisosHtml` —dosis renales, metformina
+contraindicada, estatina insegura— y la variable **moría al final del try**. Hasta el CSS
+(`#vgl-labs-modal .vgl-mtr-bloque`) estaba escrito para ese modal y sin usar. Ahora se
+inserta, **arriba de la tabla**: es lo que puede cambiar una dosis hoy.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Leer la respuesta SIN clonar (rompería Everest) | *la escucha no rompe Everest: no toca peticiones ni consume respuestas* |
+| 2 | Envolver la inserción del bloque en `if (false)` | *el bloque de seguridad farmacológica se INSERTA, no se tira* |
+| 3 | Quitar la lectura de `xhr.responseText` | *la escucha no rompe Everest…* |
+
+### Dos mutaciones no cayeron, y las dos por lo mismo
+
+Las pruebas de texto fuente buscaban **el fragmento** y no **la línea con su guarda**: `if
+(false) cajaF.innerHTML = extraFarmaco` seguía casando con `innerHTML = extraFarmaco`. Y la
+ventana de 3.000 caracteres sobre `mtrHcEnganchar` no llegaba al segundo enganche.
+
+*Una prueba de texto fuente que no fija la condición no fija nada* — es la versión de esta
+sesión de la regla vieja: probar la pieza no es probar que la pieza está conectada.
+
+Banco completo en **2.432/2.432** con `TZ=America/Bogota`.
+
+---
+
 ## v17.11.0 — 27-ago-2026 (auditoría de experiencia: Tanda 2, color con significado)
 
 Patrón A del informe: *«el ámbar señala diez cosas sin relación entre sí; el rojo es a la vez

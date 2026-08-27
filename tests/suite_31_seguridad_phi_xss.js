@@ -549,5 +549,73 @@ module.exports = {
       t.igual(guardado["signosVitales.perimetroAbdominal"], 98, "con sus números");
     });
 
+
+    t.caso("v17.12.0 — la escucha no rompe Everest: no toca peticiones ni consume respuestas", () => {
+      // Lo único que puede hacer daño aquí es interferir con la aplicación del médico
+      // mientras guarda una historia clínica. Dos garantías, fijadas por prueba:
+      //  (1) el cuerpo del envío se lee, no se sustituye;
+      //  (2) la respuesta se lee sobre un CLON — leer el cuerpo original dejaría a Everest
+      //      sin poder leerlo, y la historia no cargaría.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // El bloque entero de la escucha: la ventana tiene que abarcar los dos enganches
+      // (XHR y fetch), no solo el primero — con 3000 caracteres se quedaba corta y la
+      // prueba fallaba sin que el código estuviera mal.
+      const iEng = src.indexOf("function mtrHcEnganchar");
+      const bloque = src.slice(iEng, iEng + 6000);
+      t.cierto(/resp\.clone\(\)\.text\(\)/.test(bloque),
+        "la respuesta se lee sobre un clon: sin esto Everest se queda sin su propio cuerpo");
+      t.cierto(/return XHRsend\.apply\(this, arguments\)/.test(bloque),
+        "el envío original se hace igual, con sus mismos argumentos");
+      t.cierto(/return resp;/.test(bloque), "y la respuesta se devuelve intacta a quien la pidió");
+      t.cierto(/xhr\.responseType && xhr\.responseType !== "text"/.test(bloque),
+        "si Everest pidió otro tipo de respuesta, no se toca: leer responseText ahí lanzaría");
+      // Y que la respuesta del XHR se LEA de verdad. Sin esta aserción, borrar la línea
+      // dejaba la escucha de carga muerta y el banco seguía verde.
+      t.cierto(/mirar\(xhr\.responseText, "carga"\)/.test(bloque),
+        "la respuesta del XHR se pasa al detector: es la mitad de la escucha de carga");
+      t.cierto(/mirar\(t, "carga"\)/.test(bloque), "y la de fetch, la otra mitad");
+    });
+
+    t.caso("v17.12.0 — la carga se reconoce con el MISMO detector que el guardado", () => {
+      // No se ha supuesto ni un campo del endpoint de carga: se reconoce por forma. Si
+      // Everest lo manda, se captura; si no, no pasa nada.
+      const paqueteComoLoMandaAlCargar = {
+        antecedentePatologicos: { hipertension: true, infartoMiocardio: false },
+        examenFisico: { peso: 78.5, circunferenciaAbdominal: 98 },
+        habitosGestionRiesgo: { sedentarismo: true },
+        datosUsuario: { nombre: "NOMBREPRUEBA", identificacion: "80123456" },
+      };
+      t.cierto(api.mtrEsPayloadHcEverest(paqueteComoLoMandaAlCargar),
+        "el mismo detector reconoce la carga sin conocer su ruta");
+      const h = api.mtrHechosDesdeHcEverest(paqueteComoLoMandaAlCargar);
+      t.igual(h.secciones.antecedentePatologicos.infartoMiocardio, false,
+        "y lo descartado por el médico llega igual que lo marcado");
+      const todo = JSON.stringify(h);
+      t.falso(todo.indexOf("NOMBREPRUEBA") >= 0, "la barrera es la misma: la identidad no entra");
+      t.falso(todo.indexOf("80123456") >= 0, "ni la cédula");
+    });
+
+    t.caso("v17.12.0 — el bloque de seguridad farmacológica se INSERTA, no se tira", () => {
+      // La auditoría lo puso como ejemplo del patrón: «extraFarmaco se construye y nunca se
+      // inserta». El CSS (#vgl-labs-modal .vgl-mtr-bloque) estaba escrito para este modal y
+      // sin usar. Es lo que puede cambiar una dosis hoy.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-labs-farmaco"/.test(src), "el contenedor existe en el modal");
+      // La aserción mira la LÍNEA COMPLETA, guarda incluida: una primera versión solo
+      // buscaba «innerHTML = extraFarmaco» y seguía pasando con la línea envuelta en
+      // `if (false)`. Una prueba de texto fuente que no fija la condición no fija nada.
+      t.cierto(/if \(cajaF && vivo\(\)\) cajaF\.innerHTML = extraFarmaco/.test(src),
+        "y lo calculado se escribe DENTRO de él: sin esta línea todo el cálculo era trabajo perdido");
+      // Y produce algo real, incluido el silencio honesto cuando no puede juzgar.
+      const cM = cargar({ silencioso: true, almacen: { vgl_cfg: JSON.stringify({ motorPortado: true }) } });
+      const html = String(cM.api.mtrRenderAvisosHtml({ citaId: "P1", tfgCkdEpi: 25, tfgCockcroftGault: 24 }) || "");
+      t.cierto(html.length > 0, "el bloque produce HTML de verdad");
+      t.cierto(/Seguridad farmacológica/.test(html), "con su rótulo");
+      t.cierto(/No significa que no haya riesgo/.test(html),
+        "y cuando no puede juzgar lo dice, en vez de callarse: la regla de la casa");
+    });
+
   }
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.11.0
+// @version     17.12.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.11.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.12.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -17841,6 +17841,13 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Historial de Paraclínicos (Últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en Everest, no es un error del Vigilante. La etiqueta junto a cada resultado dice si vino directo del laboratorio (Athenea) o quedó registrado a mano.")}</label>
+          <!-- v17.12.0 — AUDITORÍA DE EXPERIENCIA: el bloque de seguridad farmacológica se
+               CALCULABA Y SE TIRABA. La variable extraFarmaco se armaba con mtrRenderAvisosHtml (dosis
+               renales, metformina contraindicada, estatina a dosis insegura) y la variable
+               moría al final del try, sin insertarse en ninguna parte. Hasta el CSS
+               (#vgl-labs-modal .vgl-mtr-bloque) estaba escrito para este modal y sin usar.
+               Va ARRIBA de la tabla a propósito: es lo que puede cambiar una dosis hoy. -->
+          <div id="vgl-labs-farmaco" aria-live="polite"></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámenes de laboratorio en Portal Athenea Soluciones...</div>
           </div>
@@ -17942,6 +17949,11 @@ _vglOfrecerDeshacer(btn);
               tfgCockcroftGault: (r && r.tfg) || null,
             });
           } catch (eF) {}
+          // v17.12.0 — y aquí SE INSERTA. Sin esto, todo lo de arriba era trabajo perdido.
+          try {
+            const cajaF = modal.querySelector("#vgl-labs-farmaco");
+            if (cajaF && vivo()) cajaF.innerHTML = extraFarmaco || "";
+          } catch (eIns) {}
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
           try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
           try { mtrTelemetriaResumen(resumenClinico).forEach((ev) => uxTrack(ev.accion, ev.extra)); }
@@ -36214,7 +36226,26 @@ _vglOfrecerDeshacer(btn);
   function mtrHcEnganchar() {
     if (_vglHcEnganchado) return false;
     _vglHcEnganchado = true;
-    const mirar = (cuerpo) => {
+    // =====================================================================
+    //  v17.12.0 — TAMBIÉN SE ESCUCHA LO QUE EVEREST *CARGA*, no solo lo que envía
+    //  ------------------------------------------------------------------
+    //  Faltaba el único hueco del grounding: lo que Everest tiene guardado en pestañas que
+    //  el médico no ha abierto hoy. El servidor SÍ lo manda —por eso las casillas aparecen
+    //  prellenadas al abrir la historia—, así que basta con escuchar la respuesta.
+    //
+    //  POR QUÉ NO SIRVIÓ UN DIAGNÓSTICO DE CONSOLA. Se le entregó uno y capturó CERO. La
+    //  causa la dio su propia bitácora: de 36 cambios de URL, 24 arrancan con `from` vacío,
+    //  o sea que el script empezó de cero. **Everest recarga la página de verdad al abrir un
+    //  paciente**, y eso borra cualquier cosa pegada en la consola antes de que la respuesta
+    //  llegue. Dentro del userscript no pasa: Tampermonkey lo reinyecta en cada carga.
+    //
+    //  Y NO HAY QUE ADIVINAR NADA. La respuesta se reconoce con el MISMO detector por forma
+    //  que ya usa el envío (mtrEsPayloadHcEverest, que exige ≥2 secciones conocidas). Si
+    //  Everest la manda, se captura; si no, no pasa nada y no se ha supuesto ni un campo.
+    //  Pasa por la misma barrera: `datosUsuario` no se lee, y el nombre se tacha con la
+    //  identidad del propio paquete, que se descarta sin guardarse.
+    // =====================================================================
+    const mirar = (cuerpo, origen) => {
       try {
         if (!cuerpo || typeof cuerpo !== "string" || cuerpo.length < 200) return;
         if (cuerpo.indexOf("antecedentePatologicos") < 0) return;   // criba barata primero
@@ -36226,19 +36257,46 @@ _vglOfrecerDeshacer(btn);
         // una historia al paciente equivocado es el riesgo más alto que ha tenido este proyecto
         // (v14.1.5), y aquí se aplica la misma regla — sin cédula legible, no se escribe.
         const id = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
-        if (id) mtrHcGuardar(id, datos);
+        if (!id) return;
+        const hechos = mtrHcGuardar(id, datos);
+        if (hechos) {
+          try { uxTrack("hc.capturado." + (origen || "envio"), { campos: hechos._campos }); } catch (e) {}
+          try {
+            console.log("%c[Vigilante] historia clínica leída de Everest (" + (origen === "carga" ? "al abrir el paciente" : "al guardar") +
+              "): " + hechos._campos + " campos de contexto para la redacción.", "color:#16a34a;font-weight:bold");
+          } catch (e) {}
+        }
       } catch (e) {}
     };
     try {
       const XHRsend = XMLHttpRequest.prototype.send;
       XMLHttpRequest.prototype.send = function (cuerpo) {
-        try { mirar(cuerpo); } catch (e) {}
+        try { mirar(cuerpo, "envio"); } catch (e) {}
+        // v17.12.0 — Y TAMBIÉN LA RESPUESTA. Ver el bloque grande de abajo.
+        try {
+          const xhr = this;
+          xhr.addEventListener("load", function () {
+            try {
+              if (xhr.responseType && xhr.responseType !== "text") return;
+              mirar(xhr.responseText, "carga");
+            } catch (e) {}
+          });
+        } catch (e) {}
         return XHRsend.apply(this, arguments);
       };
       const fetchOriginal = window.fetch;
       window.fetch = function (entrada, opciones) {
-        try { mirar(opciones && opciones.body); } catch (e) {}
-        return fetchOriginal.apply(this, arguments);
+        try { mirar(opciones && opciones.body, "envio"); } catch (e) {}
+        const p = fetchOriginal.apply(this, arguments);
+        try {
+          return p.then(function (resp) {
+            try {
+              // SE CLONA: leer el cuerpo original dejaría a Everest sin poder leerlo.
+              resp.clone().text().then(function (t) { mirar(t, "carga"); }).catch(function () {});
+            } catch (e) {}
+            return resp;
+          });
+        } catch (e) { return p; }
       };
     } catch (e) { return false; }
     return true;
