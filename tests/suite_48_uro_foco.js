@@ -17,6 +17,7 @@ module.exports = {
     "mtrEducationFlags", "mtrAlertaTrigliceridos",
     "mtrUroGrado", "mtrUroRecuento", "_uroMayorGrado",
     "mtrDebePreguntarEmbarazo", "mtrEmbarazoEdadFertil", "mtrPreguntaEmbarazo", "_vglConfirmacionVigente",
+    "mtrInsumosEmbarazo",
     "_uroToggleAcordeon",
   ],
 
@@ -228,6 +229,86 @@ module.exports = {
     t.caso("acepta los hallazgos como '+' o como texto 'positivo', no solo booleanos", () => {
       t.cierto(api.mtrEvaluarUroanalisis({ nitritos: "+" }, true, false).sugestivo, "'+' cuenta");
       t.cierto(api.mtrEvaluarUroanalisis({ nitritos: "POSITIVO" }, true, false).sugestivo, "'POSITIVO' cuenta");
+    });
+
+    // ===== v17.6.91 — la gestante con bacteriuria no recibía la pregunta de embarazo =====
+    //
+    // `mtrEvaluarUroanalisis` ya tenía bien resuelta la excepción de la norma (`embarazo &&
+    // (sugestivo || bacteriuria)` → urocultivo + antibiograma), pero esa rama era
+    // INALCANZABLE en el camino real: la pregunta de embarazo solo se disparaba con parciales
+    // SUGESTIVOS de ITU, y una bacteriuria franca sin piuria no lo es. Además el motor
+    // calculaba `bacteriuria` internamente y no la exponía, así que el llamador ni siquiera
+    // podía consultarla.
+    //
+    // Importa porque la bacteriuria asintomática no tratada en el embarazo es factor de
+    // pielonefritis y de parto pretérmino — la única excepción que la norma marca en
+    // mayúsculas.
+    t.caso("v17.6.91: el uroanálisis expone la bacteriuria, no solo si es sugestivo", () => {
+      const soloBacterias = { bacterias: "ABUNDANTES", nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const u = api.mtrEvaluarUroanalisis(soloBacterias, null, false);
+      t.falso(u.sugestivo, "bacteriuria SIN piuria no es sugestiva de ITU: eso no cambia");
+      t.cierto(u.bacteriuria, "pero la bacteriuria sí se expone, que es lo que faltaba");
+      const limpio = api.mtrEvaluarUroanalisis({ bacterias: "NEGATIVO", nitritos: "NEGATIVO" }, null, false);
+      t.falso(limpio.bacteriuria, "y una orina limpia no la inventa");
+    });
+
+    t.caso("v17.6.91: a la mujer en edad fértil con bacteriuria SÍ se le pregunta por embarazo", () => {
+      const p = (o) => api.mtrDebePreguntarEmbarazo(o);
+      t.cierto(p({ sexo: "F", edad: 28, uroBacteriuria: true }),
+        "bacteriuria franca basta: en embarazo se trata siempre, haya o no piuria");
+      t.cierto(p({ sexo: "F", edad: 28, uroSugestivo: true }), "y el caso de siempre no se pierde");
+      // Y NO se dispara de más, que sería una pregunta inútil en cada consulta.
+      t.falso(p({ sexo: "F", edad: 28, uroBacteriuria: false, uroSugestivo: false }), "orina limpia: no se pregunta");
+      t.falso(p({ sexo: "M", edad: 28, uroBacteriuria: true }), "a un hombre no se le pregunta");
+      t.falso(p({ sexo: "F", edad: 70, uroBacteriuria: true }), "fuera de edad fértil tampoco");
+      t.falso(p({ sexo: "F", edad: 28, uroBacteriuria: true, yaConfirmado: true }), "ni si ya contestó");
+    });
+
+    // Esta prueba existe por una mutación que NO caía: borrar el insumo `uroBacteriuria` del
+    // cableado del Panel dejaba el banco entero en verde, porque ese armado vivía suelto
+    // dentro de una función de interfaz que el banco no puede ejercitar. Se extrajo a
+    // `mtrInsumosEmbarazo` justamente para poder vigilarlo.
+    t.caso("v17.6.91: los insumos de la pregunta se leen del resumen, sin perder ninguno", () => {
+      const res = {
+        factores: { sexo: "F", edad: 28 },
+        uroanalisis: { sugestivo: false, bacteriuria: true },
+      };
+      const ins = api.mtrInsumosEmbarazo(res, false);
+      t.igual(ins.sexo, "F", "el sexo sale de los factores");
+      t.igual(ins.edad, 28, "y la edad");
+      t.igual(ins.uroSugestivo, false, "lo sugestivo del uroanálisis");
+      t.igual(ins.uroBacteriuria, true, "y LA BACTERIURIA, que es la que faltaba");
+      t.igual(ins.yaConfirmado, false, "más si ya contestó");
+      // Y con esos insumos, la compuerta dice que sí: la cadena completa funciona.
+      t.cierto(api.mtrDebePreguntarEmbarazo(ins), "la compuerta se dispara con lo que se le entrega");
+      // Un resumen vacío no revienta ni inventa nada.
+      const vacio = api.mtrInsumosEmbarazo(null, false);
+      t.igual(vacio.uroBacteriuria, false, "sin resumen, no se inventa bacteriuria");
+      t.falso(api.mtrDebePreguntarEmbarazo(vacio), "y no se pregunta nada");
+    });
+
+    t.caso("v17.6.91: la rama BACTERIURIA EN EMBARAZO ya es alcanzable de punta a punta", () => {
+      const hallazgos = { bacterias: "ABUNDANTES", nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const ctx = {
+        hoyIso: "2026-08-27", edad: 28, sexo: "F", pesoKg: 60, creatinina: 0.7,
+        factores: {}, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.7 } },
+        uroHallazgos: hallazgos,
+      };
+      // 1. El resumen expone la bacteriuria — es de donde el llamador la lee.
+      const r = api.mtrResumenClinico(ctx);
+      t.cierto(r.uroanalisis.bacteriuria, "el resumen la trae");
+      // 2. Con ese insumo, la pregunta se dispara (es la llamada real del Panel).
+      t.cierto(api.mtrDebePreguntarEmbarazo({
+        sexo: "F", edad: 28,
+        uroSugestivo: !!r.uroanalisis.sugestivo,
+        uroBacteriuria: !!r.uroanalisis.bacteriuria,
+        yaConfirmado: false,
+      }), "y la pregunta se dispara con lo que el resumen expone");
+      // 3. Respondida que sí, la conducta cambia.
+      const conEmb = api.mtrResumenClinico(Object.assign({}, ctx, { embarazo: true }));
+      t.igual(conEmb.uroanalisis.estado, "BACTERIURIA EN EMBARAZO", "la rama se alcanza");
+      t.cierto(conEmb.uroanalisis.orden.some((o) => /urocultivo/i.test(o)), "con su urocultivo");
+      t.cierto(/se trata siempre/i.test(conEmb.uroanalisis.conducta), "y la conducta lo dice: " + conEmb.uroanalisis.conducta);
     });
 
     // ============ LA ORDEN DEL UROANÁLISIS LLEGA A LA IA (v17.6.88) ============

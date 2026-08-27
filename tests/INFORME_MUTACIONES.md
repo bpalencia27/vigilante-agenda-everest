@@ -6,6 +6,57 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.91 — 27-ago-2026 (la gestante con bacteriuria no recibía la pregunta de embarazo)
+
+Primer hueco de la Fase 2 (v68 S4 UROANÁLISIS: *"Embarazo: tamizar y tratar"*).
+
+`mtrEvaluarUroanalisis` ya tenía bien resuelta la excepción de la norma —`embarazo &&
+(sugestivo || bacteriuria)` → `BACTERIURIA EN EMBARAZO`, urocultivo con antibiograma— pero esa
+rama era **INALCANZABLE en el camino real**, por dos eslabones rotos a la vez:
+
+1. La pregunta de embarazo solo se disparaba con parciales **sugestivos de ITU**
+   (`mtrDebePreguntarEmbarazo` exigía `uroSugestivo === true`), y una bacteriuria franca **sin
+   piuria** no es sugestiva.
+2. El motor calculaba `bacteriuria` en una variable local y **no la exponía**, así que el
+   llamador ni siquiera podía consultarla.
+
+Reproducido con el harness (bacterias abundantes, sin nitritos, sin esterasa, leucocitos 0-2):
+
+```
+sugestivo                      : false
+¿expone 'bacteriuria'?         : false
+¿se le pregunta si está embarazada? : false
+con embarazo conocido -> estado: BACTERIURIA EN EMBARAZO   <-- el motor SÍ sabe qué hacer
+```
+
+O sea: el motor sabía tratarla y nunca se enteraba de que estaba embarazada. Importa porque la
+bacteriuria asintomática no tratada en el embarazo es factor de pielonefritis y de parto
+pretérmino — la única excepción que la norma marca en mayúsculas.
+
+Se expone `bacteriuria` en el resultado y la compuerta pasa a usar **la misma condición** que la
+rama del motor, para que no puedan volver a separarse. Comprobado que no se dispara de más: ni a
+un hombre, ni fuera de edad fértil, ni con la orina limpia, ni si ya contestó.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **dato no expuesto** | se quitó `bacteriuria` del objeto que devuelve el motor | `suite_48` | *…expone la bacteriuria, no solo si es sugestivo* **y** *…la rama ya es alcanzable de punta a punta* |
+| **compuerta estrecha** | vuelta a exigir solo `uroSugestivo` | `suite_48` | *…SÍ se le pregunta por embarazo* **y** *…alcanzable de punta a punta* |
+| **compuerta abierta** | `return true` (preguntaría en cada consulta) | `suite_48` | la prueba de v16.9.0 **y** *…SÍ se le pregunta* |
+| **insumos incompletos** | `mtrInsumosEmbarazo` deja de leer la bacteriuria | `suite_48` | *…los insumos de la pregunta se leen del resumen, sin perder ninguno* |
+
+Nota, y van seis: la mutación del **cableado** no caía. Borrar el insumo que el Panel le pasa a
+la compuerta dejaba el banco entero en verde, porque ese armado vivía suelto dentro de
+`openPanelPacienteModal` —una función de interfaz que el banco no puede ejercitar— y nada
+comprobaba que la compuerta recibiera lo que necesita. Se extrajo a `mtrInsumosEmbarazo`, que sí
+es probable, y entonces sí cayó.
+
+**Límite conocido que queda, y se anota en vez de disimularlo:** la línea final
+`mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(...))` dentro del Panel **sigue sin cubrir**. Es
+una sola línea, y cubrirla exigiría ejercitar un modal completo. Lo que sí queda defendido es
+todo lo que decide: qué insumos se leen, y qué hace la compuerta con ellos.
+
+Aplicadas de una en una desde copia intacta, restaurado con `diff`. Banco en 2325/2325.
+
 ## v17.6.90 — 26-ago-2026 (el ANR afirmaba en pantalla una agrupación que no ocurría)
 
 Quinto y último hueco de la Fase 1 (v68 S3, ANR / "agujero negro renal").

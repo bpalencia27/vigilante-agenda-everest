@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.90
+// @version     17.6.91
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.90";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.91";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4867,7 +4867,36 @@
     if (d.yaConfirmado) return false;                      // respondido y todavía vigente
     if (!mtrEsSexoFemenino(d.sexo)) return false;          // la pregunta no aplica
     if (!mtrEmbarazoEdadFertil(d.edad)) return false;
-    return d.uroSugestivo === true;                        // solo cuando cambia la conducta
+    // v17.6.91 — antes exigía `uroSugestivo === true` a secas. Pero la conducta también
+    // cambia con BACTERIURIA FRANCA aunque no haya piuria (o sea, aunque el parcial NO sea
+    // sugestivo de ITU): en embarazo la bacteriuria se trata SIEMPRE — es la única excepción
+    // que la norma marca en mayúsculas, porque la bacteriuria asintomática no tratada es
+    // factor de pielonefritis y de parto pretérmino. `mtrEvaluarUroanalisis` ya lo tenía
+    // resuelto (`embarazo && (sugestivo || bacteriuria)`), pero esa rama era INALCANZABLE:
+    // sin la pregunta nunca se sabía que la paciente estaba embarazada. Se usa aquí la MISMA
+    // condición que allí, para que no puedan volver a separarse.
+    return d.uroSugestivo === true || d.uroBacteriuria === true;
+  }
+
+  // v17.6.91 — De un resumen del paciente a los insumos que la compuerta necesita. Existe
+  // por una razón concreta: al mutar el cableado del Panel (borrar el insumo que se le pasa a
+  // mtrDebePreguntarEmbarazo) el banco seguía TODO en verde, porque ese armado vivía suelto
+  // dentro de `openPanelPacienteModal` —una función de interfaz que el banco no puede
+  // ejercitar— y nada comprobaba que la compuerta recibiera lo que necesita. Sacarlo aquí lo
+  // vuelve probable: si alguien deja de leer `bacteriuria` del resumen, una prueba lo caza.
+  // (La llamada final desde el Panel sigue sin cubrir; es una sola línea y está anotada en
+  // INFORME_MUTACIONES.md como límite conocido de esta arquitectura.)
+  function mtrInsumosEmbarazo(res, yaConfirmado) {
+    const r = res || {};
+    const f = r.factores || {};
+    const uro = r.uroanalisis || {};
+    return {
+      sexo: f.sexo,
+      edad: f.edad,
+      uroSugestivo: !!uro.sugestivo,
+      uroBacteriuria: !!uro.bacteriuria,
+      yaConfirmado: !!yaConfirmado,
+    };
   }
 
   // La pregunta, con la forma que ya entiende el modal del reconciliador.
@@ -18638,12 +18667,12 @@ _vglOfrecerDeshacer(btn);
         // caduca a los 30 días (decisión del médico), a diferencia de las demás.
         try {
           const _res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
-          const _f = (_res && _res.factores) || {};
-          if (mtrDebePreguntarEmbarazo({
-            sexo: _f.sexo, edad: _f.edad,
-            uroSugestivo: !!(_res && _res.uroanalisis && _res.uroanalisis.sugestivo),
-            yaConfirmado: _vglConfirmacionVigente(apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS),
-          })) frenan.push(mtrPreguntaEmbarazo());
+          // v17.6.91 — el armado de insumos vive en mtrInsumosEmbarazo para que el banco
+          // pueda probarlo: aquí dentro, en una función de interfaz, era intocable y una
+          // mutación que borrara un insumo no rompía ninguna prueba.
+          if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
+            _res, _vglConfirmacionVigente(apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
+          ))) frenan.push(mtrPreguntaEmbarazo());
         } catch (e) {}
         if (frenan.length) {
           // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
@@ -34543,6 +34572,14 @@ _vglOfrecerDeshacer(btn);
       // v16.7.0 — Hallazgos por debajo del umbral franco (trazas, escasas). No deciden
       // nada, pero el médico tiene que verlos: son justo los que se prestan a discusión.
       leves: leves,
+      // v17.6.91 — la bacteriuria se calculaba aquí dentro y NO SALÍA. Sin ella, quien
+      // decide si preguntar por embarazo (mtrDebePreguntarEmbarazo) solo podía mirar
+      // `sugestivo` — y una bacteriuria franca SIN piuria no es sugestiva. Resultado
+      // verificado: a esa paciente nunca se le preguntaba si estaba embarazada, así que la
+      // rama BACTERIURIA EN EMBARAZO de más abajo —que el propio motor ya tiene bien
+      // resuelta— era INALCANZABLE en el camino real. Se expone el dato para que la
+      // pregunta pueda dispararse con la MISMA condición que usa esa rama.
+      bacteriuria: !!bacteriuria,
       embarazo: !!embarazo,
     };
 
