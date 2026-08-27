@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.8.1
+// @version     17.8.2
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.2";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2962,9 +2962,35 @@
   // usable siempre le gana a uno que no lo es, sin importar la fecha; ver
   // _nuevoReemplazaCandidato.
   function _nuevoReemplazaCandidato(previo, nuevo) {
-      // 1) una fila REAL del panel de orina siempre le gana a un respaldo armado con un
-      //    componente suelto (ver el comentario grande de arriba sobre UROANALISIS).
-      if (previo.viaComponente !== nuevo.viaComponente) return !!previo.viaComponente;
+      // 1) una fila REAL del panel de orina le gana a un respaldo armado con componentes
+      //    sueltos (ver el comentario grande de arriba sobre UROANALISIS)... PERO NUNCA SI ES
+      //    MÁS VIEJA.
+      //
+      // v17.8.2 — REPORTE EN CONSULTA (27-ago-2026), y el médico avisa de que es RECURRENTE:
+      // «el botón Auto-Labs Athenea no está teniendo en cuenta el último uroanálisis
+      // realizado». Reproducido con el arnés: Athenea trae una fila REAL del panel del
+      // 07/05/2026 con Resultado «NORMAL» y, además, los 31 componentes del uroanálisis del
+      // 20/08/2026 —el que la propia tabla marca con «Alteraciones detectadas»—. Esta regla
+      // devolvía «gana la fila real» SIN MIRAR LA FECHA, así que Auto-Labs escribía en la
+      // historia el texto «NORMAL» y la fecha de mayo sobre un parcial de agosto alterado.
+      //
+      // La preferencia por la fila real tiene su razón (es el veredicto del panel completo,
+      // no un fragmento), pero esa razón vale para elegir ENTRE IGUALES DE FECHA, no para
+      // pisar un examen tres meses más nuevo. Y la dirección del daño no es simétrica:
+      // escribir «NORMAL» sobre un uroanálisis alterado es un falso negativo firmado por el
+      // médico.
+      //
+      // Regla nueva: el respaldo por componentes gana cuando TIENE fecha y la fila real es
+      // más vieja — o no tiene fecha con que defenderse. Si no se puede establecer que la
+      // fila real no es más vieja, no se la deja escribir un veredicto de antigüedad
+      // desconocida.
+      if (previo.viaComponente !== nuevo.viaComponente) {
+          const real = previo.viaComponente ? nuevo : previo;
+          const comp = previo.viaComponente ? previo : nuevo;
+          const ganaElComponente = !!(comp.resultDate && (!real.resultDate || real.resultDate < comp.resultDate));
+          if (ganaElComponente) return previo !== comp;
+          return !!previo.viaComponente;
+      }
       // 1.5) [reportado en consultorio, 26-ago-2026, con consola completa] Cuando AMBOS
       // candidatos son respaldo por componente (el caso normal de UROANALISIS: Athenea casi
       // nunca manda una fila del panel completo, manda 20-30 componentes sueltos —
@@ -3284,7 +3310,29 @@
 
       // v12.3.37 — Diagnóstico de orina y componentes por su ruta propia (no whitelist
       // sérico): sigue recorriendo labsArray directamente, sin pasar por el agrupador.
-      labsArray.forEach((lab) => {
+      //
+      // v17.8.2 — ...pero AHORA ORDENADO POR FECHA, de más reciente a más antigua. Toda la
+      // lógica de «el primero reclama la casilla» descansa en un supuesto que estaba escrito
+      // como si fuera un hecho: «las solicitudes llegan de más reciente a más antigua, así
+      // que el primero ES el resultado más reciente». Nada lo garantizaba — ni
+      // `_atheneaExtraerSolicitudes` ni `_getAtheneaLabsAutoNucleo` ordenan: el orden es el
+      // del HTML del portal, y estas 7 casillas NO llevan fecha acompañante, así que un
+      // componente viejo colado ahí es indetectable para el médico.
+      //
+      // Con el orden explícito, «el primero» y «el más reciente» pasan a ser lo mismo por
+      // construcción en vez de por suerte. Los que no traen fecha van AL FINAL: sin fecha no
+      // se puede afirmar que sean recientes, y la dirección segura es que no le ganen a uno
+      // fechado. `slice()` porque el array es del llamador y ordenarlo en el sitio le
+      // cambiaría el orden a todo lo demás que lo lea después.
+      const _ordenadoPorFecha = labsArray.slice().sort((x, y) => {
+          const fx = (_extractAtheneaFecha(x) || {}).iso || "";
+          const fy = (_extractAtheneaFecha(y) || {}).iso || "";
+          if (fx === fy) return 0;
+          if (!fx) return 1;
+          if (!fy) return -1;
+          return fx > fy ? -1 : 1;
+      });
+      _ordenadoPorFecha.forEach((lab) => {
           if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
               try {
                   const deOrinaTodos = labsArray.filter(_esAnalitoDeOrina);

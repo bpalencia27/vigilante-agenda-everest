@@ -1167,13 +1167,45 @@ module.exports = {
       t.igual(candB.resultVal, "NEGATIVO");
     });
 
-    t.caso("_nuevoReemplazaCandidato: REGLA 1 intacta — una fila REAL del panel siempre le gana a un respaldo por componente, sin importar fecha", () => {
+    t.caso("REGLA 1 CORREGIDA (v17.8.2) — la fila real gana a los componentes, pero NUNCA si es más vieja", () => {
+      // REPORTE EN CONSULTA (27-ago-2026), y el médico avisa de que es RECURRENTE: «el botón
+      // Auto-Labs Athenea no está teniendo en cuenta el último uroanálisis realizado».
+      //
+      // ESTA PRUEBA FIJABA EL DEFECTO. Se llamaba «REGLA 1 intacta» y exigía justo el caso
+      // que él reportó: una fila real de enero ganando a un componente de agosto. La regla
+      // existía por una razón buena —una fila real es el veredicto del panel completo, no un
+      // fragmento— pero esa razón sirve para elegir ENTRE IGUALES DE FECHA, no para pisar un
+      // examen siete meses más nuevo.
+      //
+      // Y la dirección del daño no es simétrica: reproducido con el arnés, Auto-Labs escribía
+      // el texto «NORMAL» y la fecha de mayo sobre el uroanálisis de agosto que la propia
+      // tabla marca con «Alteraciones detectadas». Un falso negativo que el médico firma.
       const respaldoReciente = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
       const filaRealVieja = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-01-01" };
-      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
-        "la fila real, aunque más vieja, reemplaza al respaldo por componente");
-      t.falso(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
-        "y un respaldo por componente, aunque más reciente, NUNCA desplaza a una fila real ya asentada");
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
+        "una fila real MÁS VIEJA ya no puede pisar un uroanálisis más reciente");
+      t.cierto(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
+        "y el componente más reciente sí desplaza a la fila real vieja ya asentada");
+
+      // Lo que la regla protegía SIGUE protegido: con fecha igual o más nueva, manda la fila
+      // real, que es el veredicto del panel entero.
+      const filaRealNueva = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-09-01" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealNueva),
+        "una fila real MÁS NUEVA sigue ganando: es el veredicto del panel completo");
+      const mismaFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, mismaFecha),
+        "y con la MISMA fecha también: ahí la preferencia por la fila real es la correcta");
+
+      // Sin fecha con que defenderse, la fila real no escribe un veredicto de antigüedad
+      // desconocida sobre uno fechado. La dirección segura.
+      const filaRealSinFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: null };
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealSinFecha),
+        "una fila real SIN fecha no puede pisar un componente fechado");
+      // Pero si el componente tampoco tiene fecha, no hay con qué desempatar y vuelve a
+      // mandar la fila real: sigue siendo la fuente más completa de las dos.
+      const respaldoSinFecha = { viaComponente: true, resultVal: "NEGATIVO", resultDate: null };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoSinFecha, filaRealSinFecha),
+        "sin fechas en ninguno de los dos, la fila real sigue siendo la mejor fuente");
     });
 
     t.caso("_nuevoReemplazaCandidato: REGLA 2 intacta — cuando NINGUNO es viaComponente (analitos séricos normales), numérico usable sigue ganando sin importar fecha", () => {
@@ -2002,6 +2034,47 @@ module.exports = {
       const bloque = filas.find((f) => Array.isArray(f.__vglGrupoUroComponentes));
       t.igual(bloque.__vglGrupoUroComponentes.length, 2,
         "dentro del bloque quedan SOLO los dos componentes de orina, no los cuatro");
+    });
+
+
+    t.caso("v17.8.2 REPORTE EN CONSULTA — el uroanálisis de AGOSTO no lo pisa la fila «NORMAL» de MAYO", () => {
+      // Reproducción exacta del caso del médico: Athenea trae la fila REAL del panel del
+      // 07/05/2026 con Resultado «NORMAL» y, además, los componentes del uroanálisis del
+      // 20/08/2026 —el que la tabla marca con «Alteraciones detectadas»—. Antes de v17.8.2,
+      // Auto-Labs escribía «NORMAL» y la fecha de mayo en la historia clínica.
+      const MAYO = "2026-05-07", AGOSTO = "2026-08-20";
+      const labs = [
+        { NombreParametro: "UROANALISIS", Resultado: "NORMAL", __vglFechaSolicitud: MAYO },
+        { NombreParametro: "Nitritos", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", __vglFechaSolicitud: AGOSTO },
+        { NombreParametro: "Hematies", NombreParametroPadre: "UROANALISIS", Resultado: "2.90", __vglFechaSolicitud: AGOSTO },
+        { NombreParametro: "Leucocitos", NombreParametroPadre: "UROANALISIS", Resultado: "0-2", __vglFechaSolicitud: AGOSTO },
+      ];
+      const cand = testApi._ultimaFechaPorAnalito(labs, { uroanalisisPorComponentes: true }).candidatos.get("UROANALISIS");
+      t.cierto(!!cand, "tiene que haber candidato, o la prueba no mira nada");
+      t.igual(cand.resultDate, AGOSTO,
+        "manda el uroanálisis de agosto: es el último que se le hizo al paciente");
+      t.cierto(cand.viaComponente === true,
+        "y gana por componentes, así que la casilla de texto NO se pisa con el «NORMAL» de mayo");
+
+      // El orden de llegada no puede cambiar el resultado: el portal no garantiza ninguno.
+      const alReves = testApi._ultimaFechaPorAnalito(labs.slice().reverse(), { uroanalisisPorComponentes: true })
+        .candidatos.get("UROANALISIS");
+      t.igual(alReves.resultDate, AGOSTO, "llegue en el orden que llegue, gana agosto");
+    });
+
+    t.caso("v17.8.2 — el orden por fecha deja de ser un supuesto y pasa a ser un hecho", () => {
+      // Toda la lógica de «el primero reclama la casilla» descansaba en un supuesto escrito
+      // como si fuera un hecho: «las solicitudes llegan de más reciente a más antigua». Nada
+      // lo garantizaba, y estas 7 casillas NO llevan fecha acompañante: un componente viejo
+      // colado ahí es invisible para el médico. Aquí se fija el orden que usa la inyección.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_ordenadoPorFecha\s*=\s*labsArray\.slice\(\)\.sort/.test(src),
+        "la inyección de componentes de orina recorre una copia ORDENADA por fecha");
+      t.cierto(/_ordenadoPorFecha\.forEach/.test(src),
+        "y es esa copia la que se recorre, no el array crudo del portal");
+      t.falso(/\n      labsArray\.forEach\(\(lab\) => \{\n          if \(_esAnalitoDeOrina/.test(src),
+        "el recorrido sin ordenar no puede volver por la puerta de atrás");
     });
 
   }

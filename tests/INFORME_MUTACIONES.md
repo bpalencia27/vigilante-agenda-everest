@@ -6,6 +6,66 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.8.2 — 27-ago-2026 (reportado en consulta: Auto-Labs escribía un uroanálisis viejo)
+
+**El reporte, textual:** *«otra vez el problema de que el botón Auto-Labs Athenea no está
+teniendo en cuenta el último uroanálisis realizado»* — y el «otra vez» es la parte importante.
+
+**Reproducido con el arnés antes de tocar nada.** Athenea trae, para la misma paciente:
+
+    fila REAL del panel   07/05/2026   Resultado: «NORMAL»
+    31 componentes        20/08/2026   el que la tabla marca «Alteraciones detectadas»
+
+Auto-Labs escribía en la historia clínica **el texto «NORMAL» y la fecha de mayo**.
+
+### La causa: una decisión de diseño que era correcta para otra cosa
+
+`_nuevoReemplazaCandidato`, regla 1: *«una fila REAL del panel siempre le gana a un respaldo
+armado con un componente suelto»* — **sin mirar la fecha**, y así estaba escrito y comentado a
+propósito. La razón original es buena: una fila real es el veredicto del panel completo, no un
+fragmento. Pero esa razón sirve para elegir **entre iguales de fecha**, no para pisar un
+examen tres meses más nuevo.
+
+Y la dirección del daño no es simétrica: escribir **«NORMAL» sobre un uroanálisis alterado**
+es un falso negativo que el médico firma.
+
+**Regla nueva:** el respaldo por componentes gana cuando tiene fecha y la fila real es más
+vieja — o no tiene fecha con que defenderse. Con fecha igual o más nueva, la fila real sigue
+mandando, que es lo que la regla protegía de verdad.
+
+### Un supuesto escrito como si fuera un hecho
+
+Segundo defecto, del mismo reporte. Toda la lógica de «el primero reclama la casilla» descansa
+en este comentario: *«las solicitudes llegan de más reciente a más antigua, así que el primero
+ES el resultado más reciente»*. **Nada lo garantizaba**: ni `_atheneaExtraerSolicitudes` ni
+`_getAtheneaLabsAutoNucleo` ordenan, el orden es el del HTML del portal. Y estas 7 casillas
+**no llevan fecha acompañante**, así que un componente viejo colado ahí es invisible.
+
+Ahora la inyección recorre una copia ordenada por fecha descendente (los sin fecha al final:
+sin fecha no se puede afirmar que sean recientes). «El primero» y «el más reciente» pasan a ser
+lo mismo **por construcción en vez de por suerte**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Que la fila real vuelva a ignorar la fecha | *REGLA 1 CORREGIDA* **y** *el uroanálisis de AGOSTO no lo pisa la fila «NORMAL» de MAYO* |
+| 2 | Que una fila real SIN fecha vuelva a poder pisar a un componente fechado | *REGLA 1 CORREGIDA* |
+| 3 | Quitar el orden por fecha de la inyección | *el orden por fecha deja de ser un supuesto y pasa a ser un hecho* |
+
+### La tercera prueba de esta sesión que fijaba el defecto
+
+`suite_08` tenía un caso llamado **«REGLA 1 intacta»** que exigía literalmente *«la fila real,
+aunque más vieja, reemplaza al respaldo por componente»* — con una fila de enero ganando a un
+componente de agosto. Es exactamente el caso que el médico reportó como fallo. Se invirtió,
+dejando escrito el porqué y conservando lo que la regla sí protegía (fecha igual o más nueva).
+
+Van tres en esta misma sesión: `suite_67` (la jerga del papel del paciente), `suite_15` (el
+fallo del portal presentado como hecho del paciente) y esta. **Una prueba puede estar
+protegiendo un defecto, y entonces el banco verde es una promesa falsa.**
+
+Banco completo en **2.418/2.418** con `TZ=America/Bogota`.
+
+---
+
 ## v17.8.1 — 27-ago-2026 (auditoría de experiencia: Tanda 1, todo lo que afirmaba algo falso)
 
 Nueve mensajes que **afirmaban sin haber mirado**. El informe lo llama patrón G —*«el fallo
