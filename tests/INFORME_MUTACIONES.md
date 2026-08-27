@@ -6,6 +6,72 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.7.0 — 27-ago-2026 (reportado en consulta: el cuadro de fuentes no recibía el cambio en tiempo real)
+
+**El reporte, textual:** *«me está mostrando en este módulo que yo no marqué en la historia
+la hipertensión pero sí la marqué, y no recibió el cambio en tiempo real»*.
+
+**Lo que se midió ANTES de tocar nada** (barrido con el arnés sobre los 25 campos de
+`MTR_CAMPOS_FACTORES`, 6 transiciones cada uno = 150):
+
+| | |
+|---|---|
+| Transiciones que NO movían `_tableroFirmaDom` | **18 de 150** |
+| Campos afectados | ECV (las tres casillas, cuando otra ya estaba en «Sí»), autoinmunes, EPOC, alcohol, ejercicio permanente, ronca, somnolencia, cansancio |
+| Tras el arreglo | **0 de 150** |
+
+Corrige de paso mi propia hipótesis inicial: yo esperaba que el flanco perdido fuera
+«blanco → No», y no lo era — ese lo cubría `_documentados`. El que se perdía era **«No → Sí»
+en los campos que no llegan a la salida derivada**. Medir antes de escribir código es lo que
+lo separó.
+
+**Tres causas raíz, tres arreglos:**
+1. `_leidos` no entraba en la firma de pantalla (se descarta por ser objeto).
+2. El reconciliador se calculaba UNA vez, al abrir el Panel, y el HTML del cuadro es
+   estático. **Esta es la causa directa del reporte.**
+3. Una confirmación vieja pisaba la pantalla en silencio, sin caducidad, y contaminaba
+   `_leidos` antes de llegar a `mtrDiscrepanciasDeFuentes`.
+
+**Un bucle que el banco cazó a tiempo:** al hacer que «la pantalla mande», el valor
+*archivado* (de una pestaña visitada hace rato) también contradecía la confirmación, así que
+el cuadro preguntaba lo mismo para siempre. `suite_63` se puso roja y obligó a la precedencia
+correcta: **archivo < confirmación < pantalla en vivo**. Sin esa prueba vieja, esto se habría
+entregado.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | `const L = f._leidos` → `const L = null` (quitar `_leidos` de la firma) | `suite_63` | *la firma de pantalla ve TODAS las casillas* → *marcar EPOC de No a Sí tiene que contar como «algo cambió»* |
+| 2 | `String(L[k])` → `String(!!L[k])` (recolapsar el tri-estado) | `suite_63` | *la firma de pantalla ve TODAS las casillas* → *dos casillas que se cruzan siguen siendo un cambio* |
+| 3 | La confirmación vuelve a pisar la pantalla incondicionalmente | `suite_63` | *la casilla que él acaba de escribir manda sobre una confirmación vieja* **y** *el reconciliador vuelve a preguntar SOLO lo que la historia contradice* |
+| 4 | La confirmación deja de rellenar la casilla vacía | `suite_63` | *la casilla que él acaba de escribir…* → *si la historia no dice nada, su respuesta rellena el hueco* |
+| 5 | El filtro de `frenan` ignora las desfasadas | `suite_63` | *el reconciliador vuelve a preguntar SOLO lo que la historia contradice* |
+| 6 | El cuadro no deja armado su `setInterval` de repaso | `suite_63` | *el cuadro de fuentes deja armado su propio repaso de 20 s* |
+| 7 | `leidos: f._leidos` → `leidos: {}` (el reconciliador deja de mirar la historia) | `suite_63` | *RECONCILIADOR de punta a punta* **y** *el reconciliador vuelve a preguntar SOLO…* |
+| 8 | `cabecera: {…}` → `cabecera: {}` (se pierde la cabecera como fuente) | `suite_63` | las mismas dos |
+
+**Dos mutaciones que NO cayeron a la primera, y qué se hizo con cada una** — porque una
+mutación que no cae es información, no un trámite:
+
+- **La #2, en su primer intento.** `String(L[k])` y `String(!!L[k])` solo se diferencian en
+  `null` vs `false`, y con un único campo cambiando eso ya lo delataba `_documentados`. En vez
+  de dar la mutación por buena, se buscó el caso donde el tri-estado sí es estrictamente más
+  fuerte —dos casillas cruzándose en el mismo repaso— y se le escribió su prueba. Entonces
+  cayó.
+- **Una mutación descartada por ser no-op del entorno.** Pasar `doc: null` a
+  `mtrLeerFactoresRcvDelDom` dentro de `mtrReconciliarAhora` no rompía nada porque la función
+  cae al `document` global, que en el arnés es el mismo objeto que la prueba había montado. No
+  probaba nada: se sustituyó por la #7, que corta la fuente de verdad.
+
+Cada mutación se aplicó sobre el archivo de producción **una a la vez**, restaurando con
+`diff` contra copia intacta antes de la siguiente (las 8 restauraciones verificadas). Banco
+completo en **2.386/2.386** con `TZ=America/Bogota` tras la restauración final.
+
+**Queda anotado, no entregado:** los medicamentos que alimentan el reconciliador salen del
+resumen en caché y `labsPorClave` va en `null`, así que la fuente Laboratorios está apagada en
+esa comparación. Cambiarlo mueve qué discrepancias se emiten y merece su propia medición.
+
+---
+
 ## v17.6.99 — 27-ago-2026 (reportado en consulta: un examen ya hecho se seguía ofreciendo)
 
 Reporte del médico, en vivo: *«me sale que hay que enviarle el antígeno de próstata pero ya se

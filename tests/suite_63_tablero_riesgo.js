@@ -17,6 +17,7 @@ module.exports = {
     "mtrTableroClinico", "mtrRecalcularConFactores", "_tableroFirmaDom",
     "_tableroQueCambio", "openTableroModal", "mtrPanelResumenAlAbrir",
     "mtrJsonV68DesdeResumen", "mtrResumenClinico",
+    "mtrReconciliarAhora",         // v17.7.0 — el reconciliador, sacado a función probable
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -557,6 +558,160 @@ module.exports = {
       t.cierto(htmlEx.includes("Programa que rige las vigencias"), "y el programa rector, explicado");
       t.falso(html.includes("undefined") || html.includes("[object"), "sin restos de programación a la vista");
       t.falso(htmlEx.includes("undefined") || htmlEx.includes("[object"), "tampoco en la sección de exámenes");
+    });
+
+
+    // =================================================================
+    //  v17.7.0 — REPORTE EN CONSULTA (27-ago): «me está mostrando que yo NO marqué en la
+    //  historia la hipertensión pero SÍ la marqué, y no recibió el cambio en tiempo real».
+    //
+    //  Dos causas raíz distintas para ese síntoma, y las dos se prueban aquí:
+    //    (1) la firma de pantalla no veía cambiar 9 de los 25 campos que el médico marca,
+    //        así que la vigilancia de 20 s no se enteraba de que había algo nuevo;
+    //    (2) el cuadro «Las fuentes no coinciden» se calculaba UNA sola vez, al abrir el
+    //        Panel, y su HTML no se volvía a mirar nunca.
+    //  Y de camino, una tercera que salió al medirlo: una confirmación vieja pisaba en
+    //  silencio y para siempre lo que él acababa de escribir en Everest.
+    // =================================================================
+
+    // Un DOM de Everest con solo los radios de comorbilidades. `null` = casilla en blanco.
+    const domRadios = (marcas) => {
+      const nodos = [];
+      for (const n of Object.keys(marcas)) {
+        if (marcas[n] === null) continue;
+        nodos.push({ name: n, value: "true", checked: marcas[n] === true, type: "radio" },
+                   { name: n, value: "false", checked: marcas[n] === false, type: "radio" });
+      }
+      return (sel) => {
+        const m = /^input\[name="(.*)"\]$/.exec(String(sel));
+        return m ? nodos.filter((n) => n.name === m[1]) : [];
+      };
+    };
+    const CAMPO_HTA = "AntecedentePatologicos.Hipertension";
+    const CAMPO_EPOC = "AntecedentePatologicos.EPOC";
+
+    t.caso("v17.7.0 — la firma de pantalla ve TODAS las casillas, no solo las que cambian la categoría", () => {
+      const cF = cargar({ silencioso: true });
+      const d = cF.env.doc;
+      const firma = (marcas) => { d.querySelectorAll = domRadios(marcas); return cF.api._tableroFirmaDom(""); };
+
+      // El flanco que se perdía: EPOC de «No» a «Sí». No cambia la categoría de riesgo, así
+      // que no aparece en la salida derivada — y por eso la firma no se movía. Pero sí
+      // alimenta al reconciliador de fuentes y a la hoja de hechos de la IA.
+      t.cierto(firma({ [CAMPO_EPOC]: false }) !== firma({ [CAMPO_EPOC]: true }),
+        "marcar EPOC de No a Sí tiene que contar como «algo cambió en la historia»");
+
+      // Y lo que ya funcionaba sigue funcionando: los tres flancos de la hipertensión.
+      const enBlanco = firma({ [CAMPO_HTA]: null });
+      const marcadoNo = firma({ [CAMPO_HTA]: false });
+      const marcadoSi = firma({ [CAMPO_HTA]: true });
+      t.cierto(enBlanco !== marcadoNo, "de casilla en blanco a «No» también es un cambio");
+      t.cierto(marcadoNo !== marcadoSi, "y de «No» a «Sí», que es justo lo que él hizo");
+      t.cierto(enBlanco !== marcadoSi, "y de casilla en blanco a «Sí»");
+
+      // El caso que obliga a guardar el tri-estado ENTERO y no un sí/no: si en el mismo
+      // repaso una casilla pasa de blanco a «No» y otra de «No» a blanco, el contador de
+      // casillas documentadas no se mueve y los booleanos derivados tampoco. Solo
+      // distinguir «blanco» de «No» delata que la historia cambió.
+      t.cierto(firma({ [CAMPO_HTA]: null, [CAMPO_EPOC]: false }) !== firma({ [CAMPO_HTA]: false, [CAMPO_EPOC]: null }),
+        "dos casillas que se cruzan siguen siendo un cambio en la historia");
+
+      // La otra mitad de la lección: sin cambios, la firma no puede moverse, o la
+      // vigilancia reclasificaría cada 20 s sin motivo y el aviso perdería su sentido.
+      t.igual(firma({ [CAMPO_HTA]: true }), firma({ [CAMPO_HTA]: true }),
+        "si el médico no tocó nada, la firma no se mueve");
+    });
+
+    t.caso("v17.7.0 — la casilla que él acaba de escribir manda sobre una confirmación vieja", () => {
+      const cP = cargar({ silencioso: true });
+      const d = cP.env.doc;
+      const DOC = "333222111";
+      // Las confirmaciones se guardan POR paciente, así que hace falta una cédula real y
+      // que el paciente figure abierto (guarda anticruce de v14.1.5).
+      const gebP = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+      const conCedula = (radios) => (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel) : (sel === ".text-muted" ? [{ textContent: "CC " + DOC, closest: () => null }] : []));
+      cP.api._vglConfirmacionGuardar(DOC, "hta", true);       // él respondió «Sí» hace tiempo
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: false })); // hoy la historia dice «No»
+      const contra = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(contra._leidos.hta, false, "manda lo que está escrito en la historia de hoy");
+      t.cierto(contra._confirmacionesDesfasadas.indexOf("hta") >= 0,
+        "y el choque se reporta, en vez de pisarlo en silencio");
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: null }));  // casilla en blanco
+      const hueco = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(hueco._leidos.hta, true, "si la historia no dice nada, su respuesta rellena el hueco");
+      t.igual(hueco._confirmacionesDesfasadas.length, 0, "y ahí no hay ningún choque que avisar");
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: true }));  // la historia coincide
+      const igual = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(igual._leidos.hta, true, "cuando coinciden, coinciden");
+      t.igual(igual._confirmacionesDesfasadas.length, 0, "y no se le vuelve a preguntar por gusto");
+    });
+
+    t.caso("v17.7.0 — el reconciliador vuelve a preguntar SOLO lo que la historia contradice", () => {
+      const cR2 = cargar({ silencioso: true });
+      const d = cR2.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+
+      // La cabecera de Everest dice HTA+DM; la historia de hoy dice que NO es hipertenso.
+      const radios = domRadios({ [CAMPO_HTA]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000111", closest: () => null }]
+            : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+
+      const antes = cR2.api.mtrReconciliarAhora("555000111", d);
+      const clavesAntes = antes.frenan.map((x) => x.clave);
+      t.cierto(clavesAntes.indexOf("hta") >= 0, "cabecera contra historia: eso sí frena");
+
+      // Él responde «Sí tiene» — pero la casilla de la historia sigue diciendo «No».
+      cR2.api._vglConfirmacionGuardar("555000111", "hta", true);
+      const conRespuesta = cR2.api.mtrReconciliarAhora("555000111", d);
+      t.cierto(conRespuesta.desfasadas.indexOf("hta") >= 0,
+        "su respuesta ya no coincide con la historia: eso se detecta");
+      t.cierto(conRespuesta.frenan.some((x) => x.clave === "hta" && x.desfasada === true),
+        "y se le vuelve a preguntar UNA vez, marcado como desfasado — no se zanja en silencio");
+
+      // Ahora sí corrige la casilla en Everest. La contradicción desaparece sola.
+      const radios2 = domRadios({ [CAMPO_HTA]: true });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios2(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000111", closest: () => null }]
+            : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+      const despues = cR2.api.mtrReconciliarAhora("555000111", d);
+      t.igual(despues.desfasadas.length, 0, "corregida la casilla, ya no hay desfase");
+      t.falso(despues.frenan.some((x) => x.clave === "hta"),
+        "y el cuadro deja de tener motivo para frenar: es lo que él vio que NO pasaba");
+    });
+
+    t.caso("v17.7.0 — el cuadro de fuentes deja armado su propio repaso de 20 s", () => {
+      const cM = cargar({ silencioso: true });
+      const d = cM.env.doc;
+      const base = d.createElement;
+      d.createElement = function (tag) {
+        const e = base(tag);
+        const memo = new Map();
+        e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, d.createElement("div")); return memo.get(sel); };
+        e.querySelectorAll = () => [];
+        return e;
+      };
+      const vivosAntes = [...cM.env.intervalos.values()].filter((x) => x.vivo).length;
+      const mostrado = cM.api._vglModalConfirmarDatos({ doc_id: "424242" }, [{
+        clave: "hta", etiqueta: "Hipertensión arterial", porQue: "cambia las vigencias",
+        afirman: [{ fuente: "Cabecera de Everest", detalle: "aparece en las marcaciones" }],
+        niegan: [{ fuente: "Historia clínica", detalle: "marcado como No" }],
+        severidad: "alta",
+      }], null);
+      t.cierto(mostrado, "el cuadro se pinta");
+      const repasos = [...cM.env.intervalos.values()].filter((x) => x.vivo && x.ms === 20000);
+      t.cierto(repasos.length > vivosAntes || repasos.length >= 1,
+        "y queda vigilando la pantalla cada 20 s: sin esto vuelve a ser una foto");
     });
 
     t.caso("sin documento del paciente, la ventana no se abre y se dice por qué", () => {

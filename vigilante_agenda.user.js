@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.99
+// @version     17.7.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.99";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5002,6 +5002,63 @@
   // flujo; las medias se muestran pero no bloquean.
   function mtrDiscrepanciasQueFrenan(discrepancias) {
     return (Array.isArray(discrepancias) ? discrepancias : []).filter((d) => d && d.severidad === "alta");
+  }
+
+  // =====================================================================
+  //  v17.7.0 — EL RECONCILIADOR, MIRANDO LA PANTALLA DE AHORA
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago): el cuadro «Las fuentes no coinciden» decía que la
+  //  hipertensión estaba marcada como «No» cuando el médico ya la había marcado, y «no
+  //  recibió el cambio en tiempo real». El cuadro tenía razón sobre lo que leyó y se
+  //  equivocaba sobre CUÁNDO lo leyó: todo este armado vivía dentro de
+  //  openPanelPacienteModal y se ejecutaba UNA sola vez, al abrir el Panel. La vigilancia
+  //  de 20 s recalculaba el resumen pero nunca volvía a pasar por aquí, y el HTML del
+  //  cuadro es estático.
+  //
+  //  Sacarlo a una función propia hace dos cosas a la vez: la vigilancia puede volver a
+  //  llamarlo, y el banco puede probarlo. Mientras vivió dentro de una función de interfaz
+  //  fue intocable —el mismo motivo por el que en v17.6.91 se sacó mtrInsumosEmbarazo—, y
+  //  una mutación que borrara una fuente entera no rompía ninguna prueba.
+  // =====================================================================
+  function mtrReconciliarAhora(docId, doc) {
+    const vacio = { frenan: [], desfasadas: [], leidos: null };
+    try {
+      const d = doc || (typeof document !== "undefined" ? document : null);
+      if (!d) return vacio;
+      const f = (typeof mtrLeerFactoresRcvDelDom === "function")
+        ? mtrLeerFactoresRcvDelDom(docId, d) : null;
+      if (!f || !f._leidos) return vacio;
+
+      const cab = (typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(d) : null;
+      const res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(docId) : null;
+      const meds = (res && Array.isArray(res.medicamentos)) ? mtrMedicamentosRcv(res.medicamentos) : null;
+      const discrepancias = mtrDiscrepanciasDeFuentes({
+        leidos: f._leidos,
+        cabecera: cab ? { hta: cab.hta, diabetes: cab.diabetes, enfermedadRenal: cab.enfermedadRenalDocumentada } : {},
+        medicamentosRcv: meds,
+        labsPorClave: null,
+        textoLibre: (typeof _vglTextoLibreCombinado === "function") ? _vglTextoLibreCombinado(d) : "",
+      });
+
+      const confirmadas = (typeof _vglConfirmacionesLeer === "function") ? _vglConfirmacionesLeer(docId) : {};
+      const desfasadas = Array.isArray(f._confirmacionesDesfasadas) ? f._confirmacionesDesfasadas : [];
+      // Una clave ya confirmada se calla... salvo que la historia de hoy contradiga esa
+      // confirmación. Ahí se vuelve a preguntar UNA vez, porque manda la pantalla.
+      const frenan = mtrDiscrepanciasQueFrenan(discrepancias).filter((x) =>
+        !Object.prototype.hasOwnProperty.call(confirmadas, x.clave) || desfasadas.indexOf(x.clave) >= 0);
+      frenan.forEach((x) => { if (desfasadas.indexOf(x.clave) >= 0) x.desfasada = true; });
+
+      // La pregunta de embarazo entra por aquí, y SOLO cuando cambia la conducta: mujer en
+      // edad fértil con parcial de orina sugestivo. Su respuesta caduca a los 30 días
+      // (decisión del médico), a diferencia de las demás.
+      try {
+        if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
+          res, _vglConfirmacionVigente(docId, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
+        ))) frenan.push(mtrPreguntaEmbarazo());
+      } catch (e) {}
+
+      return { frenan: frenan, desfasadas: desfasadas, leidos: f._leidos };
+    } catch (e) { return vacio; }
   }
 
   // =====================================================================
@@ -18827,44 +18884,18 @@ _vglOfrecerDeshacer(btn);
 
     // Reconciliador de fuentes: si algo de severidad alta se contradice y el
     // médico no lo ha confirmado nunca, el panel se detiene y pregunta UNA vez.
+    // v17.7.0 — el armado vive ahora en mtrReconciliarAhora, para que el banco pueda
+    // probarlo y para que la vigilancia de 20 s del propio cuadro pueda repetirlo.
     try {
-      const _leidosAhora = (typeof mtrLeerFactoresRcvDelDom === "function")
-        ? mtrLeerFactoresRcvDelDom(apt.doc_id, document) : null;
-      if (_leidosAhora && _leidosAhora._leidos) {
-        const _cab = (typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(document) : null;
-        const _resCache = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
-        const _medsRcv = (_resCache && Array.isArray(_resCache.medicamentos)) ? mtrMedicamentosRcv(_resCache.medicamentos) : null;
-        const discrepancias = mtrDiscrepanciasDeFuentes({
-          leidos: _leidosAhora._leidos,
-          cabecera: _cab ? { hta: _cab.hta, diabetes: _cab.diabetes, enfermedadRenal: _cab.enfermedadRenalDocumentada } : {},
-          medicamentosRcv: _medsRcv,
-          labsPorClave: null,
-          textoLibre: _vglTextoLibreCombinado(document),
-        });
-        const confirmadas = _vglConfirmacionesLeer(apt.doc_id);
-        const frenan = mtrDiscrepanciasQueFrenan(discrepancias)
-          .filter((d) => !Object.prototype.hasOwnProperty.call(confirmadas, d.clave));
-        // v16.9.0 — La pregunta de embarazo entra por aquí, y SOLO cuando cambia la
-        // conducta: mujer en edad fértil con parcial de orina sugestivo. Su respuesta
-        // caduca a los 30 días (decisión del médico), a diferencia de las demás.
-        try {
-          const _res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
-          // v17.6.91 — el armado de insumos vive en mtrInsumosEmbarazo para que el banco
-          // pueda probarlo: aquí dentro, en una función de interfaz, era intocable y una
-          // mutación que borrara un insumo no rompía ninguna prueba.
-          if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
-            _res, _vglConfirmacionVigente(apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
-          ))) frenan.push(mtrPreguntaEmbarazo());
-        } catch (e) {}
-        if (frenan.length) {
-          // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
-          // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
-          // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
-          // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
-          const mostrado = _vglModalConfirmarDatos(apt, frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
-          if (mostrado) return;
-          try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
-        }
+      const _rec = mtrReconciliarAhora(apt.doc_id, document);
+      if (_rec.frenan.length) {
+        // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
+        // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
+        // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
+        // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
+        const mostrado = _vglModalConfirmarDatos(apt, _rec.frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
+        if (mostrado) return;
+        try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
       }
     } catch (e) {}
 
@@ -19190,6 +19221,19 @@ _vglOfrecerDeshacer(btn);
         const v = f[k];
         return (v === null || v === undefined || typeof v === "object") ? "" : k + "=" + String(v);
       }).filter(Boolean);
+      // v17.7.0 — misma lección que el peso (v17.6.75) y la cintura (v17.6.97): lo que no
+      // entra en la firma no existe para la vigilancia. Aquí el agujero era otro: `_leidos`
+      // es un objeto, así que la línea de arriba lo descarta a propósito, y de los 25 campos
+      // que el médico marca en Everest solo llegan a la firma los que la salida derivada
+      // publica como booleano suelto. Medido con el arnés: 18 de 150 transiciones no movían
+      // la firma — entre ellas cambiar EPOC, alcohol o autoinmunes de «No» a «Sí», y
+      // cualquiera de las tres casillas de ECV cuando otra ya estaba en «Sí». Esos campos no
+      // cambian la categoría, pero sí alimentan el reconciliador de fuentes y la hoja de
+      // hechos de la IA, así que la pantalla se quedaba atrás sin decirlo.
+      const L = f._leidos;
+      if (L && typeof L === "object") {
+        Object.keys(L).sort().forEach((k) => { partes.push("L." + k + "=" + String(L[k])); });
+      }
       if (t) partes.push("pas=" + (t.pas == null ? "" : t.pas), "pad=" + (t.pad == null ? "" : t.pad));
       partes.push("peso=" + (pDom == null ? "" : pDom));
       partes.push("cintura=" + (cDom == null ? "" : cDom));
@@ -19242,14 +19286,25 @@ _vglOfrecerDeshacer(btn);
       modal.setAttribute("role", "dialog");
       modal.setAttribute("aria-modal", "true");
 
+      // v17.7.0 — cada texto lleva su propio id para poder reescribirlo en el repaso de
+      // 20 s sin volver a montar la fila: repintar el HTML entero borraría los botones que
+      // el médico ya pulsó. Es el mismo patrón que ya usaba #vgl-conf-ok-<clave>.
+      const _dicen = (lst) => (Array.isArray(lst) ? lst : []).map((x) => x.fuente + " (" + x.detalle + ")").join(" · ");
+      const _textoAfavor = (d) => "A favor: " + _dicen(d.afirman);
+      const _textoEnContra = (d) => "En contra: " + _dicen(d.niegan);
+      // Si la respuesta que él dio antes ya no coincide con lo que hay escrito en la
+      // historia de hoy, el cuadro lo dice en lugar de callárselo: manda la historia.
+      const _textoPorque = (d) => (d.desfasada
+        ? "Usted ya respondió esto antes, y la historia de hoy dice lo contrario — mandan las casillas de la historia. Importa porque " + d.porQue + "."
+        : "Importa porque " + d.porQue + ".");
+
       const filas = discrepancias.map((d) => {
-        const dicen = (lst) => lst.map((x) => x.fuente + " (" + x.detalle + ")").join(" · ");
         return `
           <div class="vgl-conf-item" data-clave="${escapeHtml(d.clave)}">
             <div class="vgl-conf-tit">${escapeHtml(d.etiqueta)}</div>
-            <div class="vgl-conf-fuentes">A favor: ${escapeHtml(dicen(d.afirman))}</div>
-            <div class="vgl-conf-fuentes">En contra: ${escapeHtml(dicen(d.niegan))}</div>
-            <div class="vgl-conf-porque">Importa porque ${escapeHtml(d.porQue)}.</div>
+            <div class="vgl-conf-fuentes" id="vgl-conf-af-${escapeHtml(d.clave)}">${escapeHtml(_textoAfavor(d))}</div>
+            <div class="vgl-conf-fuentes" id="vgl-conf-ne-${escapeHtml(d.clave)}">${escapeHtml(_textoEnContra(d))}</div>
+            <div class="vgl-conf-porque" id="vgl-conf-pq-${escapeHtml(d.clave)}">${escapeHtml(_textoPorque(d))}</div>
             <div class="vgl-conf-btns">
               <button class="vgl-agm-btn pri" id="vgl-conf-si-${escapeHtml(d.clave)}">Sí tiene</button>
               <button class="vgl-agm-btn sec" id="vgl-conf-no-${escapeHtml(d.clave)}">No tiene</button>
@@ -19273,7 +19328,7 @@ _vglOfrecerDeshacer(btn);
       document.body.appendChild(modal);
 
       const pendientes = new Set(discrepancias.map((d) => d.clave));
-      const cerrar = () => { try { modal.remove(); } catch (e) {} };
+      let cerrar = () => { try { modal.remove(); } catch (e) {} };
       const responder = (clave, valor) => {
         _vglConfirmacionGuardar(apt.doc_id, clave, valor);
         pendientes.delete(clave);
@@ -19311,6 +19366,53 @@ _vglOfrecerDeshacer(btn);
       const x = modal.querySelector("#vgl-conf-x");
       if (x && x.addEventListener) x.addEventListener("click", _luego);
       modal.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); _luego(); } });
+
+      // =================================================================
+      //  v17.7.0 — EL REPASO: el cuadro mira la pantalla de AHORA, no la de hace un rato
+      //  REPORTE EN CONSULTA (27-ago): «me está mostrando que yo no marqué la hipertensión
+      //  pero sí la marqué, y no recibió el cambio en tiempo real». Este cuadro era una
+      //  foto: se calculaba una sola vez al abrir el Panel y su HTML no volvía a mirarse.
+      //  Si el médico iba a la historia y corregía la casilla, el cuadro seguía
+      //  acusándole de no haberla marcado.
+      //  Decisión suya: que se refresque solo. Misma cadencia que la vigilancia del
+      //  tablero (20 s) — es el ritmo que él ya conoce y no hay motivo para tener dos.
+      // =================================================================
+      let _repaso = null;
+      const _pararRepaso = () => { try { if (_repaso) clearInterval(_repaso); } catch (e) {} _repaso = null; };
+      const _cerrarConRepaso = cerrar;
+      cerrar = () => { _pararRepaso(); _cerrarConRepaso(); };
+      try {
+        _repaso = setInterval(() => {
+          try {
+            // ¿Sigue en pantalla? Si el médico ya lo cerró, no hay nada que repasar.
+            if (document.getElementById("vgl-confirma-modal") !== modal) { _pararRepaso(); return; }
+            if (!pendientes.size) { _pararRepaso(); return; }
+            const rec = mtrReconciliarAhora(apt.doc_id, document);
+            const vivas = rec.frenan.filter((d) => pendientes.has(d.clave));
+            if (!vivas.length) {
+              // La historia ya lo aclara sola: no se le pregunta lo que él acaba de
+              // escribir. Se sigue por la misma puerta que si hubiera respondido.
+              try { mtrCacheResumenBorrar(); } catch (e) {}
+              try { uxTrack("fn.confirmar.resuelto_en_pantalla"); } catch (e) {}
+              cerrar();
+              try { showToast("VERDE", "Fuentes", "La historia ya lo aclara: sigo sin preguntarle.", false); } catch (e) {}
+              try { if (typeof alContinuar === "function") alContinuar(); } catch (e) {}
+              return;
+            }
+            // Sigue habiendo contradicción, pero puede haber cambiado lo que dice cada
+            // fuente. Se reescribe SOLO el texto: los botones ya pulsados se quedan.
+            for (const d of vivas) {
+              const af = modal.querySelector("#vgl-conf-af-" + d.clave);
+              const ne = modal.querySelector("#vgl-conf-ne-" + d.clave);
+              const pq = modal.querySelector("#vgl-conf-pq-" + d.clave);
+              if (af) af.textContent = _textoAfavor(d);
+              if (ne) ne.textContent = _textoEnContra(d);
+              if (pq) pq.textContent = _textoPorque(d);
+            }
+          } catch (e) {}
+        }, TABLERO_VIGILANCIA_MS);
+      } catch (e) {}
+
       try { uxTrack("fn.confirmar.mostrado", { n: discrepancias.length }); } catch (e) {}
       return true;
     } catch (e) { return false; }
@@ -30114,22 +30216,38 @@ _vglOfrecerDeshacer(btn);
     // fuente del clasificador (advertencia del médico: "no siempre son verídicas").
     // La lee aparte, por su cuenta, mtrDiscrepanciasDeFuentes vía su llamador — aquí
     // ya no se consulta (v17.6.10: solo alimentaba un contador muerto).
-    // v16.3.2 — Lo que el médico CONFIRMÓ con un clic en el reconciliador manda sobre
-    // todo lo demás: es la única fuente donde él respondió la pregunta directamente.
-    // Decisión suya: la confirmación vale la jornada Y las siguientes citas. Si la
-    // pantalla contradice una confirmación, gana la confirmación para los cálculos;
-    // la historia es el documento legal y quien debe corregirla es él, no este script
-    // (v17.6.10: el anotador _confirmadoContraHistoria de ese choque se retiró, no lo
-    // leía nada en producción — la reconciliación en sí sigue intacta).
+    // v16.3.2 — Lo que el médico CONFIRMÓ con un clic en el reconciliador rellena lo que
+    // la historia no dice: es la única fuente donde él respondió la pregunta directamente.
+    // Decisión suya: la confirmación vale la jornada Y las siguientes citas.
+    //
+    // v17.7.0 — REPORTE EN CONSULTA (27-ago): «me está mostrando que yo no marqué la
+    // hipertensión pero sí la marqué». Hasta aquí la confirmación pisaba la pantalla SIEMPRE,
+    // en silencio y sin caducidad: el médico corregía la casilla en Everest y el script
+    // seguía usando la respuesta vieja, sin enterarse siquiera de que la pantalla lo
+    // contradecía. Peor: `leidos` salía ya contaminado y era justo lo que recibía
+    // mtrDiscrepanciasDeFuentes, así que el reconciliador terminaba comparando la respuesta
+    // del médico contra la cabecera, no contra la historia real.
+    //
+    // Decisión del médico (27-ago): MANDA LA PANTALLA Y SE AVISA. Es la regla de la casa
+    // —lo que él escribió a mano no se pisa en silencio— aplicada en la dirección que
+    // faltaba. La confirmación solo rellena casilla vacía; si la historia dice otra cosa,
+    // gana la historia y el choque se reporta en `_confirmacionesDesfasadas` para que el
+    // reconciliador vuelva a preguntar UNA vez en lugar de callarse.
     const confirmados = (typeof _vglConfirmacionesLeer === "function")
       ? _vglConfirmacionesLeer(docIdEsperado) : {};
     const leidos = {};
+    const desfasadas = [];
     // v17.6.10 — los contadores de fuente y el mapa `origen` se retiraron con los
     // campos de trazabilidad muertos (_origen/_dePantalla/_deArchivo/_deCabecera/
     // _confirmadoContraHistoria/_sinDocumentar): nada en producción los leía.
     let documentados = 0, total = 0;
     for (const clave of Object.keys(C)) {
       let v = r(clave);
+      // v17.7.0 — lo que está EN PANTALLA ahora mismo, antes de cualquier respaldo. Es lo
+      // único que puede contradecir una confirmación del médico: un valor archivado de una
+      // pestaña que él visitó hace rato no es «la historia que tiene delante», y tratarlo
+      // como tal deja el cuadro preguntando lo mismo para siempre (lo cazó suite_63).
+      const vPantalla = v;
       if (v === null || v === undefined) {
         const a = archivados[clave];
         if (a === true || a === false) { v = a; }
@@ -30142,7 +30260,12 @@ _vglOfrecerDeshacer(btn);
       }
       const conf = confirmados[clave];
       if (conf && (conf.v === true || conf.v === false)) {
-        v = conf.v;
+        if (vPantalla === true || vPantalla === false) {
+          if (vPantalla !== conf.v) desfasadas.push(clave);   // la pantalla manda, y se avisa
+          v = vPantalla;
+        } else {
+          v = conf.v;                 // la historia no dice nada: su respuesta rellena el hueco
+        }
       }
       leidos[clave] = v;
       total++;
@@ -30190,6 +30313,10 @@ _vglOfrecerDeshacer(btn);
       apneaSueno: false,      // nunca se da por diagnosticada desde síntomas
       // --- trazabilidad: qué se pudo leer y qué no ---
       _leidos: leidos,
+      // v17.7.0 — las claves donde una confirmación vieja del médico ya NO coincide con lo
+      // que hay escrito en la historia de hoy. Manda la historia; esta lista existe para que
+      // el reconciliador pueda volver a preguntar por ellas en vez de darlas por zanjadas.
+      _confirmacionesDesfasadas: desfasadas,
       _documentados: documentados,
       _total: total,
       _fuente: "DOM Everest (mapa del 2026-08-14) + contexto archivado de las pestañas ya visitadas",
