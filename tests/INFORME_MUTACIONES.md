@@ -6,6 +6,55 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.7.1 — 27-ago-2026 (reportado en consulta: falta un analito en el historial de paraclínicos)
+
+**El reporte, textual:** *«el módulo de laboratorios no está reportando todos los analitos,
+por ejemplo falta la creatinina en esta paciente que fue tomado también ahora en agosto»*.
+
+**Lo que se encontró, y lo que NO se arregló todavía.** Rastreada la cadena entera de Athenea
+hasta la fila pintada, la tabla del Historial de Paraclínicos llevaba **dos contadores que se
+calculan y no se enseñan nunca**:
+
+| Contador | Dónde se calcula | Quién lo leía |
+|---|---|---|
+| `__vglIncompleto` — solicitudes que Athenea no devolvió | `_getAtheneaLabsAutoNucleo` | solo el aviso de PyM; **la tabla no** |
+| `_labViejasOcultas` — filas con más de 365 días | el propio filtro del modal | **nadie** |
+
+Y un detalle que lo hacía irrecuperable: `__vglIncompleto` viaja como propiedad **no
+enumerable** del array de Athenea, y la línea siguiente copia analito a analito a OTRO array
+— el marcador se perdía justo después de escribirse.
+
+Con los dos callados, una lectura **a medias** se presentaba con el mismo aspecto que una
+completa. En consulta eso no se lee como «faltó una orden»: se lee como **«no se lo
+hicieron»**. Es la regla de la casa —casilla vacía antes que dato inventado— incumplida por
+omisión.
+
+**Lo que esta versión NO afirma.** No se ha demostrado que ESA sea la causa del caso concreto
+que él reportó. Hay tres formas de que una fila desaparezca y desde fuera se ven idénticas:
+(A) una orden que Athenea no devolvió, (B) la fila absorbida dentro del bloque «Uroanálisis»
+—`_agruparUroanalisisParaTabla` sigue sin el segundo filtro `_matchUroComponente` que sí
+tienen los demás llamadores, admitido en el comentario de la propia función—, y (C) más de
+365 días. Se entrega `DIAGNOSTICO_LABS_FALTANTES.js` para que el médico lo corra y lo
+discrimine, en vez de escribir un arreglo a ciegas.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| A | `if (noLeidas > 0)` → `if (false)` | `suite_08` | *una lectura incompleta de Athenea se dice, no se disimula* **y** *las filas ocultas por antigüedad también se dicen* |
+| B | `if (ocultas > 0)` → `if (false)` | `suite_08` | *las filas ocultas por antigüedad también se dicen* |
+| C | Quitar el `return ""` cuando no hay nada que advertir | `suite_08` | *sin nada que advertir, el aviso NO sale* |
+| D | Desconectar `mtrAvisoTablaLabsHtml` de `contentEl.innerHTML` | `suite_08` | *CABLEADO — la tabla pinta el aviso y lo lee antes de copiar* |
+| E | Leer `__vglIncompleto` DESPUÉS del `forEach` que copia | `suite_08` | la misma |
+
+Las mutaciones D y E fijan el **cableado** sobre el texto fuente, no la pieza: el modal es
+asíncrono y depende de la red de Athenea, así que una prueba de comportamiento no lo alcanza.
+Es la lección de v17.6.93/94 —probar la pieza no es probar que la pieza está conectada—
+aplicada con el único instrumento disponible aquí.
+
+Cada mutación aplicada **una a la vez** sobre el archivo de producción, restaurada verificando
+con `diff` contra copia intacta. Banco completo en **2.391/2.391** con `TZ=America/Bogota`.
+
+---
+
 ## v17.7.0 — 27-ago-2026 (reportado en consulta: el cuadro de fuentes no recibía el cambio en tiempo real)
 
 **El reporte, textual:** *«me está mostrando en este módulo que yo no marqué en la historia

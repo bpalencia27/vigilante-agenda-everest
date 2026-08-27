@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.7.0
+// @version     17.7.1
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.1";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -2537,6 +2537,49 @@
     }
     return salida;
   }
+  // =====================================================================
+  //  v17.7.1 — EL AVISO QUE FALTABA EN LA TABLA DE PARACLÍNICOS
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago): «el módulo de laboratorios no está reportando todos
+  //  los analitos, falta la creatinina en esta paciente que fue tomada también ahora en
+  //  agosto».
+  //
+  //  La tabla llevaba DOS contadores que se calculaban y no se enseñaban nunca:
+  //    · las solicitudes de Athenea que no se dejaron leer (`__vglIncompleto`, marcado en
+  //      _getAtheneaLabsAutoNucleo y que hasta hoy solo miraba el aviso de PyM);
+  //    · las filas ocultas por tener más de 365 días (`_labViejasOcultas`).
+  //  Con las dos calladas, una lectura A MEDIAS se presentaba con el mismo aspecto que una
+  //  completa, y un examen que sí existe se lee como «no se lo hicieron». Eso es peor que
+  //  no mostrar la tabla: es la regla de la casa —casilla vacía antes que dato inventado—
+  //  incumplida por omisión.
+  //
+  //  Devuelve "" cuando no hay nada que advertir: un aviso que sale siempre no se lee.
+  // =====================================================================
+  function mtrAvisoTablaLabsHtml(datos) {
+    const d = datos || {};
+    const noLeidas = Number(d.solicitudesNoLeidas) || 0;
+    const ocultas = Number(d.viejasOcultas) || 0;
+    const frases = [];
+    if (noLeidas > 0) {
+      frases.push("Athenea no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
+        + " de este paciente, así que esta lista puede estar incompleta: un examen que no aparezca aquí puede estar hecho igual.");
+      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el Portal Athenea.");
+    }
+    if (ocultas > 0) {
+      frases.push(ocultas === 1
+        ? "Además hay 1 resultado de hace más de un año que no se lista aquí."
+        : "Además hay " + ocultas + " resultados de hace más de un año que no se listan aquí.");
+    }
+    if (!frases.length) return "";
+    // Estilo EN LÍNEA a propósito: este modal se pega a document.body, fuera de #vgl-root,
+    // y una clase nuestra sin !important puede perder contra el CSS de Everest. El inline
+    // gana a cualquier regla que no lleve !important (ver CLAUDE.md).
+    return '<div style="margin:0 0 10px;padding:8px 10px;border-radius:6px;'
+      + 'border:1px solid #b45309;background:rgba(180,83,9,.12);color:#fbbf24 !important;'
+      + 'font-size:12px;line-height:1.45">&#9888;&#65039; '
+      + escapeHtml(frases.join(" ")) + "</div>";
+  }
+
   // Verdadero cuando la lectura de Athenea no se pudo completar: o no se pudo leer
   // nada (null) o faltaron solicitudes. Quien afirme "está todo hecho" debe consultarla.
   function atheneaLecturaIncompleta(labs) {
@@ -17639,11 +17682,16 @@ _vglOfrecerDeshacer(btn);
     const contentEl = modal.querySelector("#vgl-labs-content");
 
     const todosLabs = [];
+    let _labsSolicitudesNoLeidas = 0;
 
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
     // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
     try {
       const labsArr = await getAtheneaLabsAuto(apt.doc_id);
+      // v17.7.1 — el contador de solicitudes no leídas viaja como propiedad NO enumerable
+      // del array que devuelve Athenea, así que la línea de abajo (que copia analito a
+      // analito a OTRO array) lo perdía irremediablemente. Se lee ANTES.
+      try { _labsSolicitudesNoLeidas = (labsArr && labsArr.__vglIncompleto) || 0; } catch (e) {}
       if (labsArr && labsArr.length) {
         labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
       }
@@ -17843,6 +17891,7 @@ _vglOfrecerDeshacer(btn);
 
     if (contentEl) {
       contentEl.innerHTML = `
+        ${mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: _labsSolicitudesNoLeidas, viejasOcultas: _labViejasOcultas })}
         <table class="vgl-labs-table">
           <thead>
             <tr>

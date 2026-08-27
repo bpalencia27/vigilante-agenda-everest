@@ -10,6 +10,7 @@ module.exports = {
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
+    "mtrAvisoTablaLabsHtml", "atheneaLecturaIncompleta",   // v17.7.1
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -1853,5 +1854,76 @@ module.exports = {
       t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, null), normal, "sin dato de TG, no hay razón para preferir el directo");
       t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, { resultVal: "nota de laboratorio" }), normal, "TG ilegible (ni número ni desigualdad): tratado igual que sin dato");
     });
+
+    // =================================================================
+    //  v17.7.1 — REPORTE EN CONSULTA (27-ago): «el módulo de laboratorios no está
+    //  reportando todos los analitos, falta la creatinina en esta paciente que fue tomada
+    //  también ahora en agosto».
+    //
+    //  La tabla de Historial de Paraclínicos llevaba DOS contadores calculados y jamás
+    //  enseñados: las solicitudes que Athenea no devolvió y las filas ocultas por tener
+    //  más de un año. Callados los dos, una lectura A MEDIAS tenía exactamente el mismo
+    //  aspecto que una completa — y un examen que sí se hizo se lee como que no.
+    // =================================================================
+    t.caso("v17.7.1 — una lectura incompleta de Athenea se dice, no se disimula", () => {
+      const html = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 2, viejasOcultas: 0 });
+      t.cierto(html.indexOf("2 de las órdenes") >= 0, "dice cuántas órdenes faltaron, no un vago «puede que falte algo»");
+      t.cierto(html.indexOf("puede estar hecho igual") >= 0,
+        "y dice lo único que importa en consulta: que el examen ausente puede existir de todas formas");
+      t.falso(html.indexOf("undefined") >= 0 || html.indexOf("[object") >= 0, "sin restos de programación a la vista");
+      // El modal se pega a document.body, fuera de #vgl-root: el color va en línea o con
+      // !important, o el CSS de Everest se lo lleva por delante (ver CLAUDE.md).
+      t.cierto(html.indexOf("!important") >= 0, "el color va blindado contra el CSS de Everest");
+
+      const una = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 1, viejasOcultas: 0 });
+      t.cierto(una.indexOf("1 de las órdenes") >= 0, "en singular también se lee bien");
+    });
+
+    t.caso("v17.7.1 — las filas ocultas por antigüedad también se dicen", () => {
+      const html = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 0, viejasOcultas: 3 });
+      t.cierto(html.indexOf("3 resultados") >= 0, "cuántos quedaron fuera de los 365 días");
+      t.falso(html.indexOf("órdenes") >= 0, "y no se inventa un fallo de Athenea que no hubo");
+
+      const ambos = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 1, viejasOcultas: 2 });
+      t.cierto(ambos.indexOf("órdenes") >= 0 && ambos.indexOf("2 resultados") >= 0,
+        "cuando pasan las dos cosas, se cuentan las dos");
+    });
+
+    t.caso("v17.7.1 — sin nada que advertir, el aviso NO sale", () => {
+      t.igual(c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 0, viejasOcultas: 0 }), "",
+        "un aviso que sale siempre deja de leerse");
+      t.igual(c.api.mtrAvisoTablaLabsHtml(null), "", "sin datos tampoco se alarma a nadie");
+      t.igual(c.api.mtrAvisoTablaLabsHtml({}), "", "ni con un objeto vacío");
+    });
+
+    t.caso("v17.7.1 — el marcador de lectura parcial se pierde al copiar: por eso se lee antes", () => {
+      // Es el fallo exacto que había: `__vglIncompleto` viaja como propiedad NO enumerable
+      // del array de Athenea, y el modal copiaba analito a analito a OTRO array — con eso
+      // el marcador se perdía en la línea siguiente a haberse escrito.
+      const arr = [{ NombreParametro: "CREATININA" }];
+      Object.defineProperty(arr, "__vglIncompleto", { value: 2, enumerable: false, configurable: true });
+      t.cierto(c.api.atheneaLecturaIncompleta(arr), "el array marcado se reconoce como lectura parcial");
+      const copiado = arr.map((l) => ({ origen: "Athenea (Principal)", ...l }));
+      t.falso(c.api.atheneaLecturaIncompleta(copiado),
+        "y al copiarlo el marcador desaparece: hay que leerlo ANTES de copiar");
+    });
+
+    t.caso("v17.7.1 CABLEADO — la tabla de paraclínicos pinta el aviso y lo lee antes de copiar", () => {
+      // Probar la pieza no es probar que la pieza está conectada (lección de v17.6.93/94).
+      // El modal es asíncrono y depende de la red de Athenea, así que aquí se fija el
+      // cableado sobre el texto fuente: si alguien lo desconecta, esta prueba cae.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/contentEl\.innerHTML = `[\s\S]{0,160}mtrAvisoTablaLabsHtml\(/.test(src),
+        "el aviso se pinta JUSTO encima de la tabla de paraclínicos, no en cualquier sitio");
+      t.cierto(src.indexOf("viejasOcultas: _labViejasOcultas") >= 0,
+        "y recibe el contador de filas ocultas por antigüedad, que hasta hoy no se enseñaba nunca");
+      // El orden importa: leer el marcador DESPUÉS del forEach que copia lo perdería.
+      const iLee = src.indexOf("_labsSolicitudesNoLeidas = (labsArr && labsArr.__vglIncompleto)");
+      const iCopia = src.indexOf('labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)"');
+      t.cierto(iLee > 0 && iCopia > 0 && iLee < iCopia,
+        "el marcador se lee ANTES de copiar los analitos: al copiarlos se pierde");
+    });
+
   }
 };
