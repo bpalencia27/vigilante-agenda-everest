@@ -12,6 +12,10 @@
 module.exports = {
   nombre: "v16.0.0 — módulo Riesgo y exámenes (clasificación, TFG y vigencias)",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_vglConfirmacionesLeer", "_vglContextoEstado", "_vglTextoContextoFaltante",
     "_vglAvisoContextoFaltante",   // v16.3.0 — compuerta de contexto
     "_vglModalConfirmarDatos",     // v16.3.2 — modal del reconciliador
     "mtrTableroClinico", "mtrRecalcularConFactores", "_tableroFirmaDom",

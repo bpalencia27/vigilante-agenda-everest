@@ -58,6 +58,10 @@ function respuestaJson(data) {
 module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_ajustesGuardar", "_vglAlternarModoProg", "_festivosTablaAgregarParaTest", "_festivosMensajeDiscrepancia", "_festivosAvisarSiVencida",
     "createLabInjectorUI", "createExamenFisicoInjectorUI", "_casillasExamenFisico", "setWinState", "buildOverlay",
     "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openLabSoloModal", "openOrdenamientoModal", "esMedicoRCVActivo",
     "candidatoAdicional",
@@ -3344,6 +3348,41 @@ module.exports = {
       ["vgl-confirma-modal", "vgl-llenar-modal", "vgl-min-bar", "vgl-deshacer-llenado", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
         t.cierto(regla.includes("body.vgl-modo-oculto #" + id), "#" + id + " debe esconderse en modo oculto");
       });
+    });
+
+    t.caso("v17.16.0 — vglMinBarra y el descarte por cambio de paciente, probados de frente", () => {
+      // Estaban en `cubre` sin que ninguna prueba las nombrara. El descarte es la corrección
+      // de la v17.6.71 ante un riesgo real de CONTAMINACIÓN CRUZADA: un panel de Redacción
+      // IA minimizado con la historia de un paciente sobrevivía al cambio de paciente, y al
+      // restaurarlo el médico veía el borrador del anterior.
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+
+      const barra = c.api.vglMinBarra();
+      t.cierto(!!barra, "la barra se crea sola la primera vez");
+      t.igual(barra.id, "vgl-min-bar", "con su id");
+      t.cierto(c.api.vglMinBarra() === barra, "y la segunda llamada devuelve LA MISMA, no una nueva");
+
+      const panel = d.createElement("div");
+      panel.id = "vgl-ia-modal";
+      d.body.appendChild(panel);
+      // La firma es (panel, docId): el título lo deduce vglMinTituloDe del propio panel.
+      t.cierto(c.api.vglMinimizarPanel(panel, "111111111"),
+        "se minimiza anotando de qué paciente es");
+
+      // Sigue siendo el mismo paciente: no se descarta nada.
+      c.api._vglMinDescartarDeOtroPaciente("111111111");
+      t.cierto(!!d.body.children.find((n) => n.id === "vgl-ia-modal"),
+        "con el mismo paciente abierto, el panel minimizado se queda");
+
+      // Cambia el paciente: el panel del anterior se descarta, no solo se avisa.
+      c.api._vglMinDescartarDeOtroPaciente("222222222");
+      t.falso(!!d.body.children.find((n) => n.id === "vgl-ia-modal"),
+        "con otro paciente abierto el panel se DESCARTA: un borrador de otra historia no puede sobrevivir");
+
+      // Sin nada minimizado, la función no revienta ni inventa trabajo.
+      t.noLanza(() => c.api._vglMinDescartarDeOtroPaciente("333333333"),
+        "sin paneles minimizados no hay nada que descartar");
     });
 
   },

@@ -4661,3 +4661,82 @@ El contador de `!important` de `suite_25` sube de 379 a 380: es el `color` de
 y la que añadió la v17.14.0 para los avisos que no se leen). Las de la v17.14.0 conservan sus
 rótulos D1/D2 por estar ya citadas en este informe, y queda anotado en `suite_70` que la D a
 secas es la del enjambre.
+
+---
+
+## v17.16.1 — los cabos sueltos del propio banco
+
+**Sin un solo cambio de comportamiento del script.** Esta entrega no toca producción: cierra
+los huecos que el propio informe de cobertura llevaba señalando y que nadie había atendido.
+
+### 1. El informe de cobertura estaba mintiendo, y hacia abajo
+
+Dos listas del runner venían con contenido desde hace versiones:
+
+- **«declaradas en cubre pero JAMÁS invocadas vía `api.·(...)`» (13)** — funciones que una
+  suite decía cubrir y que ninguna prueba llegaba a llamar. Dos eran mías (`_saludMarca`,
+  `mtrAnalitoQueFijaLaToma`).
+- **«sin cubrir» (107)** — de las cuales **16 SÍ se ejercitaban** en alguna suite y solo
+  faltaban en su `cubre`. Entre ellas, **seis de la barrera de PHI** (`mtrHechosDesdeHcEverest`,
+  `mtrCosecharHcDelDom`, `mtrHcAcumularDelDom`…): la parte más delicada del proyecto figuraba
+  como no probada cuando sí lo estaba.
+
+Un informe que **subestima** engaña igual que uno que exagera: esconde cuáles son los huecos
+de verdad. Declarada la verdad, la cobertura pasó de **88,3 % a 90,1 % sin escribir una sola
+prueba**. Las dos listas quedan hoy **vacías**.
+
+### 2. Lo que de verdad faltaba, probado de frente
+
+Escritas 13 pruebas nuevas, priorizando por consecuencia clínica, no por facilidad:
+
+| Qué | Por qué importaba |
+|---|---|
+| `mtrRutaHcAceptada`, `mtrHcTachaduras`, `mtrHcTachar`, `mtrHcValorLimpio` | **El núcleo de la barrera de PHI**, sin una sola prueba directa. Si fallan, sale el nombre y la cédula del paciente hacia un servicio de terceros. Es exactamente la función que un reinicio del worker dejó desactivada una vez en el árbol de trabajo |
+| `mtrFueraDeMeta`, `_mtrMargenMeta` | El umbral **meta+15 %** con que se declara falla terapéutica y se acorta la vigencia |
+| `mtrStatusV68`, `mtrSolicitudV68` | Lo que impide que la nota clínica hable de una categoría de riesgo **que nunca se calculó** |
+| `_vglGuardarDeshacer`, `_vglEjecutarDeshacer` | La red de la inserción en la historia, incluida la vía de reemplazo de la v17.13.0 |
+| `mtrConsolidarMtt` | La fusión **direccional** de recontroles (v17.6.57): con `Math.abs` un LDL a 42 días se adelantaba por debajo del piso de 4 semanas |
+| `_esMuestraSerica`, `_esUroComponenteAlterado` | La regla que destapó «falta la creatinina de agosto» |
+| `mtrMedsSinGrupo`, `mtrMedsFueraDeGrupoNombres`, `mtrAvisoFueraDeGrupo` | El **punto ciego** del motor farmacológico |
+| `_identidadMedicoCache*`, `_repSello`, `_saludMarca`, `vglMinBarra`, `_vglMinDescartarDeOtroPaciente`, `_apiCorteAbierto`, `_apiMarcarResultado` | Cachés, sellos y guardas con reglas no obvias (caducidad, contaminación cruzada, semáforo pegado) |
+
+Cobertura final: **838 / 917 (91,4 %)**, banco **2.469/2.469**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 6 | Que el aviso de fármaco fuera de grupo sugiriera «ajustar» | `suite_41` | *las tres funciones de «fármaco fuera de grupo»…* |
+| 7 | Que la fusión MTT volviera a ser bidireccional (`Math.abs`) | `suite_46` | *mtrConsolidarMtt, probada de frente…* |
+| 8 | Que `_esMuestraSerica` dejara de reconocer «DIFERENTE A ORINA» | `suite_08` | *_esMuestraSerica y _esUroComponenteAlterado…* |
+| 9 | Que la caché de identidad del médico dejara de caducar | `suite_19` | *la caché de identidad del médico…* |
+| 10 | Que una lectura buena dejara de borrar la ventana de fallo del semáforo | `suite_05` | *_saludMarca, probada de frente…* |
+| 11 | Que el sello de error dejara de guardar la causa | `suite_23` | *_repSello, probada de frente…* |
+| 12 | Que el descarte por cambio de paciente dejara de descartar | `suite_15` | *vglMinBarra y el descarte por cambio de paciente…* |
+| 13 | Que el colapso de recontroles se fuera a la fecha más tardía | `suite_46` | *mtrConsolidarMtt…* |
+| 14 | Que la lista blanca de PHI dejara de anclarse al inicio del nombre | `suite_31` | *mtrRutaHcAceptada: la lista blanca…* |
+| 15 | Que las tachaduras dejaran de ordenarse de más larga a más corta | `suite_31` | *mtrHcTachaduras y mtrHcTachar…* |
+| 16 | Que desapareciera el escape de expresión regular del tachado | `suite_31` | *mtrHcTachaduras y mtrHcTachar…* |
+| 17 | Que el margen de falla volviera a «estrictamente > meta» | `suite_45` | *mtrFueraDeMeta: el umbral de meta+15 %…* |
+| 18 | Que los datos incompletos dejaran de forzar `PENDIENTE` | `suite_45` | *mtrStatusV68 y mtrSolicitudV68…* |
+| 19 | Que desapareciera la guarda de paciente del Deshacer | `suite_31` | *el Deshacer: una sola ranura…* |
+| 20 | Que `mtrHcValorLimpio` dejara pasar objetos anidados | `suite_31` | *mtrHcValorLimpio…* |
+| 21 | Que una lectura buena no cerrara el cortacircuitos | `suite_05` | *el cortacircuitos frena lo especulativo…* |
+
+### 3. Tres aserciones mías nacieron equivocadas, y las tres se corrigieron en el sitio
+
+- Una mutación **mal apuntada** (M6) rozó solo la rama plural del aviso mientras el vector usa
+  la singular: el banco quedó verde y no era mérito de la prueba. Se reapuntó a la rama real.
+- La prueba del Deshacer esperaba `1` donde el código devolvía `0` — y **el código tenía
+  razón**: la guarda de paciente estaba haciendo su trabajo. En vez de relajar la aserción, se
+  reescribió el caso para fijar **esa guarda**, que vale más que lo que yo iba a probar:
+  restaurar «lo que había antes» con otra historia abierta sería escribirle a un paciente el
+  texto de otro.
+- Una comprobación del cortacircuitos, insertada a mitad del caso, **cerraba el corte** e
+  invalidaba las comprobaciones siguientes. Se movió al final, con la razón anotada en el sitio.
+
+### 4. Lo que queda sin cubrir, dicho y no disimulado
+
+Quedan **79** funciones sin prueba. No son un hueco uniforme: **11** son del acompañante,
+**7** de la precarga de laboratorios, **16** de ajustes y ventana (redimensionar, modo oculto,
+alto contraste), **4** del registro de inasistencias. Ninguna decide una conducta clínica ni
+escribe en la historia. Se dice en vez de dejar el número suelto: un 91,4 % con la barrera de
+PHI y los umbrales clínicos cubiertos no es lo mismo que un 91,4 % repartido al azar.

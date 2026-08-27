@@ -208,5 +208,43 @@ module.exports = {
         t.cierto(c.indexOf("!important") >= 0, "declaración de color sin !important: " + c);
       }
     });
+    t.caso("v17.16.0 — las tres funciones de «fármaco fuera de grupo», probadas de frente", () => {
+      // Estaban en `cubre` y solo se ejercitaban a través del render: el informe del banco
+      // las listaba como «declaradas pero nunca nombradas». Son la señal de PUNTO CIEGO del
+      // motor —un fármaco que no cae en ningún grupo no se evalúa ni por interacción ni por
+      // dosis renal— así que merecen estar fijadas de frente y no de refilón.
+      const conocido = "Losartan 50 mg";
+      const raro = "Zyxomicina 10 mg";
+
+      // El conteo (alimenta telemetría: enteros, JAMÁS nombres).
+      t.igual(api.mtrMedsSinGrupo([conocido]), { total: 1, sinGrupo: 0 }, "un fármaco conocido no cuenta como punto ciego");
+      const cuenta = api.mtrMedsSinGrupo([conocido, raro]);
+      t.igual(cuenta.total, 2, "cuenta los dos");
+      t.igual(cuenta.sinGrupo, 1, "y solo el desconocido queda fuera de grupo");
+      t.igual(api.mtrMedsSinGrupo(null), { total: 0, sinGrupo: 0 }, "sin lista no se inventa un conteo");
+      t.igual(api.mtrMedsSinGrupo(["", "   "]), { total: 0, sinGrupo: 0 }, "las entradas vacías no son fármacos");
+
+      // Los nombres (alimentan PANTALLA: aquí sí van los nombres, nunca a telemetría).
+      t.igual(api.mtrMedsFueraDeGrupoNombres([conocido, raro]), [raro],
+        "para la pantalla sí se dice CUÁL es el que el motor no reconoce");
+      t.igual(api.mtrMedsFueraDeGrupoNombres([conocido]), [],
+        "y con todo reconocido, la lista va vacía");
+      // La separación importa: el conteo y los nombres tienen que coincidir SIEMPRE, o una
+      // de las dos vías estaría mintiendo sobre la misma realidad.
+      t.igual(api.mtrMedsFueraDeGrupoNombres([conocido, raro]).length,
+        api.mtrMedsSinGrupo([conocido, raro]).sinGrupo,
+        "el conteo PHI-free y la lista para pantalla no pueden discrepar");
+
+      // El aviso visible.
+      t.igual(api.mtrAvisoFueraDeGrupo([conocido]), null, "sin puntos ciegos NO se pinta un aviso vacío");
+      const aviso = api.mtrAvisoFueraDeGrupo([conocido, raro]);
+      t.cierto(!!aviso, "con un fármaco fuera de grupo sí hay algo que decir");
+      t.cierto(/no se pudo evaluar/.test(aviso.detalle || aviso.texto || JSON.stringify(aviso)),
+        "y lo que dice es que NO se pudo evaluar, no un juicio sobre el fármaco");
+      const txt = JSON.stringify(aviso);
+      t.falso(/suspend|ajust|cambi/i.test(txt),
+        "nunca sugiere suspender ni ajustar: sería inventar un juicio clínico sobre un fármaco que, por definición, no reconoce");
+    });
+
   },
 };

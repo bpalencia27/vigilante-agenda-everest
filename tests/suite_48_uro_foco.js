@@ -13,6 +13,10 @@
 module.exports = {
   nombre: "Uroanálisis, foco clínico, educación y triglicéridos",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_vglConfirmacionGuardar", "mtrDiscrepanciasQueFrenan",
     "mtrEvaluarUroanalisis", "mtrPriorityFocus", "mtrEjesEnFalla",
     "mtrEducationFlags", "mtrAlertaTrigliceridos",
     "mtrUroGrado", "mtrUroRecuento", "_uroMayorGrado",

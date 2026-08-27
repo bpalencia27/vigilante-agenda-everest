@@ -64,6 +64,7 @@ function traducir(entradaPy) {
 module.exports = {
   nombre: "Riesgo CV (4 pasos) y función renal unificada",
   cubre: [
+    "mtrFueraDeMeta", "_mtrMargenMeta", "mtrStatusV68", "mtrSolicitudV68",
     "mtrClasificarRiesgoCv", "mtrContarFrMayores", "mtrContarPotenciadores", "mtrSindromeMetabolico",
     "mtrCriteriosPaso1", "mtrCriteriosPaso2", "mtrAscvdPceCrudo",
     "mtrAscvdFueraDeRangoEtario", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
@@ -784,5 +785,67 @@ module.exports = {
       const h = api.mtrEvaluarErc({ edad: 60, sexo: "Hombre", pesoKg: 70, creatinina: 1.0 });
       t.cierto(m.crcl < h.crcl, "la mujer debía tener menor CrCl por el factor 0.85");
     });
+    t.caso("v17.16.0 — mtrFueraDeMeta: el umbral de meta+15 %, probado de frente", () => {
+      // Estaba entre las «sin cubrir» y decide una conducta: es el umbral con el que se
+      // declara FALLA TERAPÉUTICA y con el que se acorta la vigencia. La decisión del
+      // médico (20-ago, #4 de las ambigüedades) fue UN SOLO umbral —meta+15 %— para las
+      // dos cosas, en vez de «estrictamente > meta» para una y meta+15 % para la otra.
+      t.igual(api._mtrMargenMeta(), 0.15, "el margen es 15 %, no otro");
+
+      // LDL en riesgo muy alto: meta 55 → el corte está en 63,25.
+      const muyAlto = { categoriaRiesgo: "muy alto" };
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 55, muyAlto), "justo en la meta no es falla");
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 63, muyAlto),
+        "dentro del margen del 15 % tampoco: es la franja intermedia que el médico decidió no castigar");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 64, muyAlto), "pasado meta+15 %, sí");
+
+      // La misma cifra cambia de veredicto con la categoría: 80 está en meta para «alto»+15 %
+      // (corte 80,5) y fuera para «muy alto». Por eso la categoría no se puede suponer.
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, { categoriaRiesgo: "alto" }), "80 cabe en «alto»");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, muyAlto), "y no en «muy alto»");
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 200, {}), null,
+        "SIN categoría no se juzga: no se inventa una meta, se devuelve null");
+
+      // Triglicéridos: meta fija 150 → corte 172,5.
+      t.falso(api.mtrFueraDeMeta("TRIGLICERIDOS", 170, {}), "170 está dentro del margen");
+      t.cierto(api.mtrFueraDeMeta("TRIGLICERIDOS", 180, {}), "180 no");
+
+      // HbA1c: solo tiene sentido en diabéticos. Meta 7,0 → corte 8,05.
+      t.igual(api.mtrFueraDeMeta("HBA1C", 12, { esDm2: false }), null,
+        "en un hipertenso sin diabetes la HbA1c NO se mide contra 7,0");
+      t.falso(api.mtrFueraDeMeta("HBA1C", 8, { esDm2: true }), "8,0 está dentro del margen");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.1, { esDm2: true }), "8,1 no");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 7 }), "con meta individual explícita, igual");
+      t.falso(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
+        "y una meta individual más laxa (paciente añoso) se respeta en vez de ignorarse");
+
+      // Sin resultado, y con claves que no tienen meta, no se opina.
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", null, muyAlto), null, "sin cifra no se juzga");
+      t.igual(api.mtrFueraDeMeta("CREATININA", 1.6, muyAlto), null, "la creatinina no tiene «meta» que incumplir");
+    });
+
+    t.caso("v17.16.0 — mtrStatusV68 y mtrSolicitudV68: cuando NO se pudo clasificar, se dice", () => {
+      // Estaban entre las «sin cubrir» y son la pieza que impide que la nota clínica hable
+      // de una categoría de riesgo que nunca se calculó. Sin categoría no hay meta de LDL,
+      // y sin meta no hay falla terapéutica: afirmar una categoría inventada arrastra todo.
+      t.igual(api.mtrStatusV68({ riesgo: {} }), "PENDIENTE", "sin categoría, PENDIENTE");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: null } }), "PENDIENTE", "con categoría null, igual");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "" } }), "PENDIENTE", "y con cadena vacía");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "alto", datosCompletos: false } }), "PENDIENTE",
+        "con la categoría puesta pero los datos incompletos, TAMBIÉN pendiente: una categoría sobre datos a medias no es una clasificación");
+      t.falso(api.mtrStatusV68({ riesgo: { categoria: "alto" }, meta: {} }) === "PENDIENTE",
+        "con categoría y datos, deja de estar pendiente");
+
+      // Y la solicitud dice QUÉ falta, en vez de dejar al médico adivinando.
+      t.cierto(/ASCVD/.test(api.mtrSolicitudV68({ riesgo: { requiereAscvd: true } })),
+        "si los pasos 1-3 no clasificaron, se le pide el ASCVD crudo");
+      t.cierto(/TFG/.test(api.mtrSolicitudV68({ riesgo: { motivo: "tfg_requerida" } })),
+        "si falta la función renal, se le pide");
+      t.cierto(/años/.test(api.mtrSolicitudV68({ riesgo: { dmAniosRequerido: true } })),
+        "y si falta hace cuántos años tiene diabetes, se dice que el ALTO es provisional");
+      t.igual(api.mtrSolicitudV68({ riesgo: {} }), "",
+        "sin nada que pedir, cadena vacía: nunca una solicitud vacía que el modelo copie");
+    });
+
   },
 };

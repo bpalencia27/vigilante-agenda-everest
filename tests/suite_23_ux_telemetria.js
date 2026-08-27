@@ -1338,5 +1338,34 @@ module.exports = {
       c.api.reportar("ux", { clave: "fn.prueba" });
       t.igual(intentos, 1, "con el fallo hace > 3 min se reintenta (la cola no se queda dormida)");
     });
+    t.caso("v17.16.0 — _repSello, probada de frente: el sello de la telemetría", () => {
+      // Estaba en `cubre` sin que ninguna prueba la nombrara. Es lo que el médico lee en
+      // Ajustes («Último envío confirmado» / «último fallo»), y fue la pieza que durante
+      // nueve días de agosto mostró verde con la hoja vacía: por eso importa que un fallo
+      // deje SIEMPRE una causa legible y no solo un estado.
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+
+      c.api._repSello(true);
+      t.cierto(!!ls.getItem("vgl_rep_last_ok"), "un envío bueno deja fecha");
+
+      c.api._repSello(false, "el panel rechazó el token");
+      const err = JSON.parse(ls.getItem("vgl_rep_last_err") || "null");
+      t.cierto(!!err, "un fallo deja su propio registro");
+      t.cierto(/token/.test(err.detalle), "con la CAUSA, no solo con el hecho de que falló");
+      t.cierto(!!err.ts, "y con la hora, para saber si es de hoy");
+
+      // El detalle se acota: un cuerpo de respuesta entero no puede llenar el almacén.
+      c.api._repSello(false, "x".repeat(500));
+      const largo = JSON.parse(ls.getItem("vgl_rep_last_err") || "null");
+      t.igual(largo.detalle.length, 120, "el detalle se corta a 120: un HTML entero no cabe en un sello");
+
+      // Un éxito NO borra el último fallo: los dos sellos conviven a propósito, para que
+      // «funciona ahora» no tape «esta mañana estuvo caído».
+      c.api._repSello(true);
+      t.cierto(!!ls.getItem("vgl_rep_last_err"),
+        "el último fallo sobrevive a un éxito posterior: es historia, no estado");
+    });
+
   }
 };

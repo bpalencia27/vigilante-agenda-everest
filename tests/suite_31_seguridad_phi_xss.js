@@ -16,6 +16,10 @@ const crypto = require("crypto");
 module.exports = {
   nombre: "Seguridad, PHI, XSS e Integridad (M1)",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "mtrRutaHcAceptada", "mtrHcTachaduras", "mtrHcTachar", "mtrHcValorLimpio", "_vglGuardarDeshacer", "_vglDeshacerDisponible", "_vglEjecutarDeshacer", "mtrEsPayloadHcEverest", "mtrHechosDesdeHcEverest", "mtrHcTextoParaHoja", "mtrHcLeer", "mtrCosecharHcDelDom", "mtrHcAcumularDelDom",
     "scrubPII", "sanitizePII", "escapeHtml", "verificarIntegridadArranque",
     "_sanearMensajeError", "mtrSanearTextoLibreAI", "mtrClasificarEstadioTfg",
     "openLaboratoriosModal", "vglExportLogs"
@@ -679,6 +683,139 @@ module.exports = {
         if (h) sucios.push(f + " → " + h.join(", "));
       }
       t.igual(sucios.join(" | "), "", "ninguna captura trae un correo personal real");
+    });
+
+    // =================================================================
+    //  v17.16.0 — EL NÚCLEO DE LA BARRERA DE PHI, PROBADO DE FRENTE
+    //
+    //  Las tres funciones que impiden que el nombre y la cédula del paciente
+    //  lleguen a Gemini estaban SIN una sola prueba directa: el informe de
+    //  cobertura las listaba entre las «sin cubrir». Y son justo las que un
+    //  reinicio del worker dejó desactivadas una vez en el árbol de trabajo,
+    //  en mitad de una mutación (documentado en INFORME_MUTACIONES.md).
+    //
+    //  Aquí no hay ambigüedad sobre qué se está protegiendo: si estas tres
+    //  fallan, sale PHI real del consultorio hacia un servicio de terceros.
+    // =================================================================
+
+    t.caso("v17.16.0 — mtrRutaHcAceptada: la lista blanca no deja pasar los datos del paciente", () => {
+      // Lista BLANCA, no negra: lo que no está nombrado NO pasa. Así, cuando Everest añada
+      // un campo nuevo con datos personales, el comportamiento por defecto es excluirlo.
+      t.cierto(api.mtrRutaHcAceptada("antecedentePatologicos.hipertension"), "los antecedentes sí");
+      t.cierto(api.mtrRutaHcAceptada("ExamenFisico.RuidosCardiacos"), "el examen físico sí, sin importar la caja");
+      t.cierto(api.mtrRutaHcAceptada("hs.habitosGestionRiesgo.sedentarismo"), "los hábitos sí, con su prefijo real");
+
+      // Lo que JAMÁS puede pasar.
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.nombre"), "el nombre del paciente NO");
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.identificacion"), "la cédula NO");
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.celular"), "el celular NO");
+      t.falso(api.mtrRutaHcAceptada("acompanante.nombre"), "ni el acompañante");
+      t.falso(api.mtrRutaHcAceptada(""), "sin nombre de campo, no");
+      t.falso(api.mtrRutaHcAceptada(null), "ni con null");
+      // Y el prefijo se exige AL PRINCIPIO: un campo que solo CONTENGA la palabra no entra.
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.examenfisico.nombre"),
+        "el prefijo se ancla al inicio: si bastara con contenerlo, un campo de datosUsuario colado dentro se llevaría el nombre del paciente");
+    });
+
+    t.caso("v17.16.0 — mtrHcTachaduras y mtrHcTachar: tachar un nombre exige conocerlo", () => {
+      // scrubPII reconoce correos, teléfonos y cédulas porque tienen FORMA. Un nombre propio
+      // no la tiene, y el médico lo escribe a mano en la enfermedad actual. La salida fue
+      // leer la identidad SOLO para construir las tachaduras, y descartarla sin guardarla.
+      const payload = { datosUsuario: {
+        nombre: "MARTHA LUCIA", primer_Apellido: "PEREZ", segundo_Apellido: "GOMEZ",
+        identificacion: "40123456", celular: "3009876543", correo: "m.perez@ejemplo.com",
+      } };
+      const tach = api.mtrHcTachaduras(payload);
+      for (const esperado of ["MARTHA", "LUCIA", "PEREZ", "GOMEZ", "40123456", "3009876543"]) {
+        t.cierto(tach.indexOf(esperado) >= 0, "«" + esperado + "» entra en la lista de tachaduras");
+      }
+      // Las más largas primero, o tachar «MARTHA» dejaría «[CENSURADO] LUCIA» a medias.
+      const ordenado = tach.every((x, i) => i === 0 || tach[i - 1].length >= x.length);
+      t.cierto(ordenado, "ordenadas de más larga a más corta: si no, una tachadura corta parte a la larga");
+
+      // Los fragmentos de menos de 3 caracteres NO entran: tachar «DE» destrozaría el texto.
+      t.falso(api.mtrHcTachaduras({ datosUsuario: { nombre: "ANA DE LA CRUZ" } }).indexOf("DE") >= 0,
+        "las partículas de 2 letras no se tachan: arrasarían con el texto clínico");
+
+      const texto = "PACIENTE MARTHA LUCIA PEREZ GOMEZ, CC 40123456, REFIERE CEFALEA DE 3 DIAS.";
+      const limpio = api.mtrHcTachar(texto, tach);
+      for (const prohibido of ["MARTHA", "LUCIA", "PEREZ", "GOMEZ", "40123456"]) {
+        t.falso(limpio.indexOf(prohibido) >= 0, "«" + prohibido + "» no sobrevive al tachado");
+      }
+      t.cierto(/CEFALEA DE 3 DIAS/.test(limpio), "y lo clínico sí sobrevive: tachar no es borrar la nota");
+
+      // Insensible a mayúsculas: el médico escribe como escribe.
+      t.falso(api.mtrHcTachar("la señora Martha Lucia refiere...", tach).toLowerCase().indexOf("martha") >= 0,
+        "tacha aunque él lo escriba en minúscula");
+
+      // Un nombre con caracteres de expresión regular no puede romper el tachado.
+      t.igual(api.mtrHcTachar("hola (JUAN) adios", ["(JUAN)"]), "hola [CENSURADO] adios",
+        "los paréntesis del nombre se escapan en vez de reventar la expresión regular");
+
+      // Sin identidad no se inventa una tachadura, y el texto pasa igual.
+      t.igual(api.mtrHcTachaduras({}), [], "sin datosUsuario, ninguna tachadura");
+      t.igual(api.mtrHcTachar("texto intacto", []), "texto intacto", "y sin tachaduras el texto no se toca");
+      t.igual(api.mtrHcTachar(null, ["X"]), "", "un texto nulo sale como cadena vacía, nunca como «null»");
+    });
+
+    t.caso("v17.16.0 — mtrHcValorLimpio: lo que NO es un dato clínico simple no viaja", () => {
+      // Última pieza de la cadena de la barrera: normaliza cada valor cosechado antes de
+      // que entre en la hoja de hechos. Su regla es de LISTA BLANCA por tipo — booleano,
+      // número finito y cadena saneada — y todo lo demás sale como null.
+      t.igual(api.mtrHcValorLimpio(true), true, "un booleano pasa: «marcado que sí» es un hecho");
+      t.igual(api.mtrHcValorLimpio(false), false, "y «marcado que no» también, que no es lo mismo que ausente");
+      t.igual(api.mtrHcValorLimpio(72), 72, "un número finito pasa");
+      t.igual(api.mtrHcValorLimpio(Infinity), null, "uno no finito, no");
+      t.igual(api.mtrHcValorLimpio(NaN), null, "NaN tampoco");
+      t.igual(api.mtrHcValorLimpio(null), null, "null sigue siendo null");
+      t.igual(api.mtrHcValorLimpio(undefined), null, "y undefined también");
+      t.igual(api.mtrHcValorLimpio("   "), null, "una cadena en blanco no es un dato: no viaja");
+      t.igual(api.mtrHcValorLimpio({ a: 1 }), null, "un objeto anidado se descarta entero");
+      t.igual(api.mtrHcValorLimpio([1, 2]), null, "una lista también");
+      t.igual(api.mtrHcValorLimpio("x".repeat(500)).length, 300,
+        "el texto se acota a 300: un campo libre entero no puede colarse en la hoja");
+      // Y pasa por el saneador: un dato con forma reconocible se tacha aquí también.
+      t.falso(/3009876543/.test(String(api.mtrHcValorLimpio("llamar al 3009876543"))),
+        "un celular escrito dentro de un campo clínico se sanea antes de viajar");
+    });
+
+    t.caso("v17.16.0 — el Deshacer: una sola ranura, con caducidad y aviso al sustituirla", () => {
+      // Es la red de la inserción en la historia (y de la vía de REEMPLAZO de la v17.13.0).
+      // Estaba entre las «sin cubrir». Su regla incómoda es que la ranura es ÚNICA: guardar
+      // un lote nuevo destruye el anterior, y por eso se avisa antes de hacerlo.
+      const c = cargar({ silencioso: true });
+      t.falso(c.api._vglDeshacerDisponible(), "sin nada guardado, no hay nada que deshacer");
+
+      // Sin dueño anotado: el deshacer corriente.
+      const caja = { value: "TEXTO NUEVO", isConnected: true, dispatchEvent: () => {} };
+      c.api._vglGuardarDeshacer("", [{ el: caja, prev: "LO QUE HABIA ANTES" }], "Redactor IA");
+      t.cierto(c.api._vglDeshacerDisponible(), "guardado un lote, sí se puede deshacer");
+      t.igual(c.api._vglEjecutarDeshacer(), 1, "deshacer devuelve cuántas casillas restauró");
+      t.igual(caja.value, "LO QUE HABIA ANTES", "y la casilla vuelve EXACTAMENTE a lo que el médico tenía");
+
+      // LA GUARDA, que es lo que de verdad hay que fijar y esta prueba descubrió al
+      // escribirse: si la historia abierta ya NO es la del paciente en que se escribió, el
+      // deshacer NO toca nada. Restaurar «lo que había antes» en la casilla de OTRO
+      // paciente sería escribirle el texto de un tercero en su historia clínica.
+      const cOtro = cargar({ silencioso: true });
+      const cajaOtro = { value: "TEXTO NUEVO", isConnected: true, dispatchEvent: () => {} };
+      cOtro.api._vglGuardarDeshacer("111111111", [{ el: cajaOtro, prev: "LO DEL OTRO PACIENTE" }], "Redactor IA");
+      t.igual(cOtro.api._vglEjecutarDeshacer(), 0,
+        "con otra historia abierta no se deshace nada");
+      t.igual(cajaOtro.value, "TEXTO NUEVO",
+        "y la casilla queda intacta: nunca se le escribe a un paciente el texto de otro");
+
+      // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
+      const c2 = cargar({ silencioso: true });
+      c2.api._vglGuardarDeshacer("222", [], "vacío");
+      t.falso(c2.api._vglDeshacerDisponible(), "un lote vacío no arma un Deshacer que no puede deshacer nada");
+
+      // La caducidad: pasados 5 minutos, la promesa deja de estar en pie.
+      const c3 = cargar({ silencioso: true });
+      const caja3 = { value: "X", isConnected: true, dispatchEvent: () => {} };
+      c3.api._vglGuardarDeshacer("", [{ el: caja3, prev: "Y" }], "lote");
+      t.cierto(c3.api._vglDeshacerDisponible(), "recién guardado, disponible");
+      t.igual(c3.api._vglEjecutarDeshacer(), 1, "y se puede ejecutar");
     });
 
   }

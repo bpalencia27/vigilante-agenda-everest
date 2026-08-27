@@ -29,7 +29,7 @@ const respuesta = (data) => ({
 
 module.exports = {
   nombre: "Llamadas a Everest y clínicas",
-  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "_apiCorteEstadoParaTest", "_apiCorteResetParaTest", "_saludEstado", "_saludMarca", "_saludRegParaTest", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "fetchAtheneaLabs"],
+  cubre: ["apiOrdenamientoGuardar", "apiAccesoAsignarTurno", "_pageFetchJsonCore", "pageFetchJson", "extractPatientId", "apiAccesoBuscarPaciente", "_apiCorteEstadoParaTest", "_apiCorteResetParaTest", "_apiCorteAbierto", "_apiMarcarResultado", "_saludEstado", "_saludMarca", "_saludRegParaTest", "apiOrdenamientoObtenerDx", "apiOrdenamientoObtenerCup", "apiOrdenamientoBuscarPaciente", "fetchAtheneaLabs"],
   async pruebas(t, api, env, cargar) {
     await t.casoAsync("apiOrdenamientoGuardar construye payload correctamente y llama al endpoint", async () => {
       let fetchUrl, fetchOpts;
@@ -464,9 +464,13 @@ module.exports = {
         gmxhr: (o) => { peticiones++; setTimeout(() => { try { o.onload({ status: 500, responseText: "" }); } catch (e) {} }, 0); },
       });
       c.api._apiCorteResetParaTest();
+      // v17.16.0 — el estado del corte se consulta por su propia función, no solo de refilón
+      // a través de pageFetchJson: estaba entre las «sin cubrir» del informe del banco.
+      t.falso(c.api._apiCorteAbierto(), "de arranque el corte está cerrado: nada se frena porque sí");
       // Tres fallos seguidos abren el corte.
       for (let i = 0; i < 3; i++) await c.api.apiAccesoBuscarPaciente("4012345" + i, { especulativo: true });
       t.cierto(c.api._apiCorteEstadoParaTest().hasta > 0, "tras 3 fallos seguidos, el corte queda abierto");
+      t.cierto(c.api._apiCorteAbierto(), "y _apiCorteAbierto lo dice");
 
       const antes = peticiones;
       await c.api.apiAccesoBuscarPaciente("40129999", { especulativo: true });
@@ -476,6 +480,13 @@ module.exports = {
       await c.api.apiAccesoBuscarPaciente("40128888");
       t.cierto(peticiones - antes2 > 0,
         "pero lo que el médico pide con un clic se intenta igual: el asistente no puede negarse a hacer lo que le mandaron");
+      // Y una respuesta buena lo cierra: si no, un parpadeo dejaría el asistente a medias
+      // durante cinco minutos aunque Everest ya estuviera contestando. Va AL FINAL a
+      // propósito: cerrar el corte a mitad del caso invalidaría las comprobaciones de
+      // arriba, que es justo lo que pasó al escribirlo.
+      c.api._apiMarcarResultado(true);
+      t.falso(c.api._apiCorteAbierto(), "una lectura buena cierra el corte en el acto");
+      t.igual(c.api._apiCorteEstadoParaTest().fallos, 0, "y borra la cuenta de fallos seguidos");
       c.api._apiCorteResetParaTest();
     });
 
@@ -504,6 +515,37 @@ module.exports = {
       await c2.api.apiAccesoBuscarPaciente("40123456");
       const reg2 = c2.api._saludRegParaTest ? c2.api._saludRegParaTest() : null;
       t.igual(c2.api._saludEstado(reg2.everest, Date.now()), "ok", "una respuesta buena lo devuelve a verde");
+    });
+
+    t.caso("v17.16.0 — _saludMarca, probada de frente: el semáforo no se queda pegado", () => {
+      // Estaba en `cubre` sin que ninguna prueba la nombrara. Es la pieza que decide si el
+      // médico ve «✓ leyendo bien» o «⚠ no se está pudiendo leer», y su regla menos obvia
+      // es que una lectura BUENA borra el historial de fallos: si no, un parpadeo de
+      // Everest dejaría el panel en alerta el resto de la jornada.
+      const c = cargar({ silencioso: true });
+      const reg = c.api._saludRegParaTest();
+      const ahora = Date.now();
+
+      t.igual(c.api._saludEstado(reg.everest, ahora), "nd", "sin actividad todavía: «nd», ni bien ni mal");
+
+      c.api._saludMarca("everest", false);
+      t.cierto(reg.everest.falloDesde > 0, "el primer fallo abre la ventana");
+      t.igual(c.api._saludEstado(reg.everest, ahora), "ok",
+        "pero un fallo suelto NO alarma: los parpadeos de Everest no pueden gritar");
+      t.igual(c.api._saludEstado(reg.everest, reg.everest.falloDesde + 3 * 60 * 1000 + 1), "alerta",
+        "a los 3 minutos de fallo sostenido, sí");
+
+      const abierta = reg.everest.falloDesde;
+      c.api._saludMarca("everest", false);
+      t.igual(reg.everest.falloDesde, abierta,
+        "un segundo fallo NO reinicia el reloj: si no, un fallo cada 2 min nunca llegaría a alertar");
+
+      c.api._saludMarca("everest", true);
+      t.igual(reg.everest.falloDesde, 0, "una lectura buena borra la ventana de fallo");
+      t.igual(c.api._saludEstado(reg.everest, Date.now()), "ok", "y el semáforo vuelve a verde");
+
+      c.api._saludMarca("modulo_que_no_existe", false);
+      t.igual(c.api._saludEstado(null, ahora), "nd", "un módulo desconocido no crea entradas fantasma");
     });
 
   }

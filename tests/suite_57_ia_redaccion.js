@@ -1880,5 +1880,30 @@ module.exports = {
       ]) t.cierto(np.indexOf(regla) >= 0, "Análisis y Plan conserva: «" + regla + "»");
     });
 
+    t.caso("v17.16.0 — mtrAnalitoQueFijaLaToma, probada de frente y no de refilón", () => {
+      // Estaba en `cubre` y solo se ejercitaba a través de mtrHojaDeHechos: el informe del
+      // banco la listaba como «declarada pero nunca nombrada». Probarla de frente cuesta
+      // seis líneas y fija sus tres decisiones, que son las que el modelo acaba leyendo.
+      t.igual(api.mtrAnalitoQueFijaLaToma(null), null, "sin plan no se inventa un dictador");
+      t.igual(api.mtrAnalitoQueFijaLaToma({}), null, "sin fecha de toma cruda tampoco");
+      // La ventana renal manda sobre cualquier otro vencimiento.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ anr: { vence: "2026-08-30" }, ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "COLESTEROL_LDL", estado: "D", vence: "2026-09-10" }] }), "CREATININA",
+        "con la ventana renal activa manda la creatinina, sea cual sea el resto");
+      // Sin ventana renal: el driver cuyo vencimiento SE CONVIRTIÓ en la fecha de toma.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "COLESTEROL_LDL", estado: "D", vence: "2026-09-10" },
+                  { clave: "GLUCOSA", estado: "D", vence: "2026-11-02" }] }), "COLESTEROL_LDL",
+        "manda el que fijó la fecha, no el primero de la lista");
+      // Un vencimiento YA pasado (vencidoBase) no puede fijar nada: CERO VENCIDOS.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "RAC", estado: "R", vence: "2026-09-10", vencidoBase: true }] }), null,
+        "un examen ya vencido no fija la fecha: su «vencimiento» es una fecha pasada");
+      // La fecha salió del piso de 14 días, no de un vencimiento: no hay dictador.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-08-30",
+        drivers: [{ clave: "GLUCOSA", estado: "D", vence: "2026-11-02" }] }), null,
+        "si ningún vencimiento fijó la fecha, se calla en vez de señalar a uno");
+    });
+
   },
 };

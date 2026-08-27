@@ -1118,5 +1118,46 @@ module.exports = {
       t.igual(diferidos, 0, "ni un solo RAC dentro de la ventana puede quedar diferido: ese es el segundo viaje que la cláusula evita");
     });
 
+    t.caso("v17.16.0 — mtrConsolidarMtt, probada de frente (fusión, colapso y la dirección)", () => {
+      // Estaba en `cubre` sin que ninguna prueba la nombrara, y su regla más delicada es
+      // justo la que la v17.6.57 corrigió: la fusión es DIRECCIONAL. Con Math.abs, un
+      // recontrol de LDL a 42 días se fusionaba con una toma de 14-21 y se ADELANTABA por
+      // debajo del piso de 4 semanas que la interpretación de un cambio de estatina exige.
+      const g = (analito, fecha, extra) => Object.assign({ analito: analito, fecha: fecha, gravedad: "grave" }, extra || {});
+
+      // La FTL cae DESPUÉS del recontrol, dentro de 60 días: fusionar es RETRASAR. Se fusiona.
+      const retrasa = api.mtrConsolidarMtt([g("LDL", "2026-09-01")], "2026-09-20");
+      t.igual(retrasa.fusiones.length, 1, "fusiona cuando la toma cae después del recontrol");
+      t.igual(retrasa.fusiones[0].difDias, 19, "y deja escrito cuántos días lo retrasa");
+      t.igual(retrasa.dedicadas.length, 0, "sin cita dedicada aparte");
+
+      // La FTL cae ANTES del recontrol: fusionar lo ADELANTARÍA. NO se fusiona.
+      const adelanta = api.mtrConsolidarMtt([g("LDL", "2026-09-20")], "2026-09-01");
+      t.igual(adelanta.fusiones.length, 0,
+        "NUNCA se fusiona cuando fusionar adelantaría el recontrol: un LDL a las 2 semanas de la dosis nueva no es interpretable");
+      t.igual(adelanta.dedicadas.length, 1, "se queda con su cita propia");
+
+      // Más allá de la ventana de 60 días tampoco se fusiona.
+      t.igual(api.mtrConsolidarMtt([g("LDL", "2026-09-01")], "2026-12-01").fusiones.length, 0,
+        "una espera de 3 meses ya no es «aprovechar el mismo viaje»");
+
+      // Colapso: dos recontroles dedicados a <=7 días se juntan en el más temprano.
+      const col = api.mtrConsolidarMtt([g("LDL", "2026-09-20"), g("HBA1C", "2026-09-24")], "2026-09-01");
+      t.igual(col.dedicadas.length, 1, "dos recontroles a 4 días se colapsan en una sola cita");
+      t.igual(col.dedicadas[0].fecha, "2026-09-20", "en la fecha MÁS TEMPRANA, nunca en la más tardía");
+      t.igual(col.dedicadas[0].analitos, ["LDL", "HBA1C"], "y la cita lleva los dos analitos");
+
+      // A más de 7 días no se colapsan: son dos viajes de verdad.
+      t.igual(api.mtrConsolidarMtt([g("LDL", "2026-09-20"), g("HBA1C", "2026-10-05")], "2026-09-01").dedicadas.length, 2,
+        "a 15 días son dos citas: colapsarlas movería una fecha clínica");
+
+      // Entradas basura no producen citas fantasma.
+      t.igual(api.mtrConsolidarMtt(null, "2026-09-01"), { fusiones: [], dedicadas: [] }, "sin recontroles, nada");
+      t.igual(api.mtrConsolidarMtt([g("LDL", null)], "2026-09-01"), { fusiones: [], dedicadas: [] },
+        "un recontrol sin fecha se descarta en vez de inventarle una");
+      t.igual(api.mtrConsolidarMtt([g("LDL", "2026-09-01")], null).dedicadas.length, 1,
+        "sin fecha de toma no se fusiona nada, pero el recontrol no se pierde");
+    });
+
   },
 };

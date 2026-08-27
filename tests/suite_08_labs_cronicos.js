@@ -2077,5 +2077,31 @@ module.exports = {
         "el recorrido sin ordenar no puede volver por la puerta de atrás");
     });
 
+    t.caso("v17.16.0 — _esMuestraSerica y _esUroComponenteAlterado, probadas de frente", () => {
+      // Las dos estaban en `cubre` sin que ninguna prueba las nombrara. La primera es la
+      // regla del v17.7.4 que destapó el reporte en vivo «falta la creatinina de agosto»:
+      // Athenea tiene analitos DE SANGRE con la palabra «orina» dentro de su nombre.
+      t.cierto(api._esMuestraSerica("CREATININA EN SUERO. ORINA U OTROS"),
+        "«EN SUERO» manda aunque el nombre diga «ORINA» después — es el caso REAL del reporte");
+      t.cierto(api._esMuestraSerica("GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA"),
+        "y «DIFERENTE A ORINA» dice literalmente que no es de orina");
+      t.cierto(api._esMuestraSerica("HEMOGLOBINA EN SANGRE"), "«EN SANGRE» también");
+      t.falso(api._esMuestraSerica("CREATININA EN ORINA PARCIAL"), "una creatinina de orina NO es sérica");
+      t.falso(api._esMuestraSerica(""), "sin nombre no se afirma nada");
+
+      // La segunda decide si un componente del parcial de orina está alterado.
+      t.falso(api._esUroComponenteAlterado(null), "sin componente, no hay alteración");
+      t.falso(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "" }),
+        "un resultado vacío no es un hallazgo: es un hueco");
+      t.falso(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "NEGATIVO" }), "negativo es normal");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "POSITIVO" }), "positivo es alteración");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: "12" }), "12 leucocitos pasan el corte de 5");
+      t.falso(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: "3" }), "3 no lo pasan");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "HEMATIES", resultado: "8" }), "8 hematíes pasan el corte de 3");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "CELULAS TUBULO RENALES", resultado: "1" }),
+        "una sola célula tubular renal ya es hallazgo: es daño de túbulo");
+      t.falso(api._esUroComponenteAlterado({ nombre: "COLOR", resultado: "AMARILLO" }), "el color normal no alarma");
+    });
+
   }
 };

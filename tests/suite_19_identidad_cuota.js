@@ -446,5 +446,32 @@ module.exports = {
       t.igual(JSON.parse(c.env.almacen["vgl_algo"]).x, 1);
       t.cierto(c.env.almacen["vgl_stats"] !== undefined, "la purga de emergencia escribió (al menos) un vgl_stats purgado/vacío");
     });
+    t.caso("v17.16.0 — la caché de identidad del médico, probada de frente", () => {
+      // Estaban en `cubre` sin que ninguna prueba las nombrara. Existen (v17.6.82) para que
+      // un 503 de GetUsuarioPerfil no deje «Médico:» vacío toda la sesión, y su TTL de 12 h
+      // está elegido para cubrir un turno largo pero vencer entre días.
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"), null, "sin nada guardado, null");
+      t.igual(c.api._identidadMedicoCacheLeer(""), null, "sin login tampoco se inventa nada");
+
+      c.api._identidadMedicoCacheGuardar("Dr.Prueba", 594, "MEDICO DE PRUEBA UNO");
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"),
+        { id: 594, name: "MEDICO DE PRUEBA UNO" },
+        "se lee sin importar mayúsculas: el login llega de sitios distintos con distinta caja");
+
+      // Lo que NO se guarda, que es lo que impide firmar una sesión con basura.
+      c.api._identidadMedicoCacheGuardar("otro", 0, "SIN ID");
+      t.igual(c.api._identidadMedicoCacheLeer("otro"), null, "un id 0 no es una identidad");
+      c.api._identidadMedicoCacheGuardar("otro2", 7, "");
+      t.igual(c.api._identidadMedicoCacheLeer("otro2"), null, "un nombre vacío tampoco");
+
+      // El TTL: una entrada rancia no puede firmar la sesión de hoy.
+      // `env.gm` es el almacén plano de GM_setValue en el arnés: se toca directamente
+      // para envejecer la entrada, que es lo único que no se puede provocar esperando.
+      c.env.gm["vgl_identidad_medico_cache"]["dr.prueba"].ts = Date.now() - (13 * 60 * 60 * 1000);
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"), null,
+        "pasadas 12 h la caché caduca: entre días, la identidad se vuelve a confirmar con Everest");
+    });
+
   },
 };
