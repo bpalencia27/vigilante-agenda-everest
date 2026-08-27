@@ -6,6 +6,66 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.10.0 — 27-ago-2026 (la historia se lee mientras se escribe, no al guardarla)
+
+**Rechazo explícito del médico a la v17.9.0, y tenía razón:** *«no me sirve para la siguiente
+cita. La IA y el script completo, todos sus módulos, deben estar alimentados por ese json
+INCLUSO ANTES DE GUARDAR, porque la idea es poder redactar en tiempo real. No acepto tu
+solución. Debe ser algo mucho mejor que se actualice a medida que se vaya llenando la
+historia»*.
+
+La v17.9.0 se enganchaba al **Guardar**, que ocurre al final de la consulta — después de
+redactar. Servía para la cita siguiente, que es justo lo que él no necesita.
+
+### La pista que lo hace posible
+
+Los `name` de las casillas del DOM de Everest **son las mismas rutas del paquete que se
+guarda**: `name="AntecedentePatologicos.Hipertension"` en pantalla es
+`antecedentePatologicos.hipertension` en el envío. **No hay que esperar al guardado para
+conocer la estructura: está escrita en la pantalla, casilla por casilla.**
+
+Así que se cosecha TODA casilla con `name` cuya ruta sea clínica, y se acumula por paciente.
+Lo que él llenó en Antecedentes sigue ahí cuando pasa a Hábitos — Angular destruye la pestaña
+anterior con `*ngIf`, así que releerla daría vacío, y **vacío no es «lo borró»**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | La lista blanca deja pasar todo | *BARRERA — la cosecha en vivo tampoco toca lo que identifica al paciente* |
+| 2 | La cosecha reemplaza en vez de acumular | *lo de la pestaña anterior no se pierde al cambiar de pestaña* |
+| 3 | Una casilla en blanco pasa a valer «no» | *una casilla en blanco NO se convierte en un «no»* |
+| 4 | Desconectar la cosecha del reloj de pantalla | *CABLEADO — el reloj que vigila la pantalla dispara la cosecha de verdad* |
+
+### La mutación 4 no cayó a la primera, y era la de siempre
+
+Ninguna prueba se puso roja al desconectar `mtrHcAcumularDelDom` de
+`_vglCosecharDePantalla`: **todas le pasaban el bloque ya cosechado a mano**. Es, literal, la
+regla que este proyecto lleva ocho versiones repitiendo — *probar la pieza no es probar que
+la pieza está conectada*. Se escribió la prueba que llama al mismo punto que dispara el router
+de Everest y mira el almacén. Entonces cayó.
+
+### Un incidente de proceso que conviene dejar escrito
+
+El proceso de trabajo se reinició **en mitad de la mutación 1**, y esa mutación es la que
+**desactiva la lista blanca de PHI**. Quedó aplicada en el árbol. Lo primero al retomar fue
+comprobarlo (`grep` sobre la función) y restaurar contra la copia intacta, verificando con
+`diff` antes de seguir. Nada de eso llegó a commit ni a producción: lo publicado era la
+v17.9.0, con la barrera entera.
+
+**La lección no es «tuve suerte»:** es que la disciplina de guardar una copia intacta y
+restaurar con `diff` —y no de memoria— es lo que convirtió un reinicio a mitad de mutación en
+un incidente de tres minutos en vez de una fuga de datos de paciente.
+
+### El límite, dicho y no disimulado
+
+Esto ve las pestañas que el médico **ya abrió** en esta consulta, más lo archivado de antes.
+Lo que Everest tiene guardado en pestañas que no ha tocado hoy **no está en el DOM**. Cerrar
+ese hueco exige leer lo que Everest **carga** al abrir el paciente, y ese endpoint todavía no
+está capturado — **no se supone nada**.
+
+Banco completo en **2.427/2.427** con `TZ=America/Bogota`.
+
+---
+
 ## v17.9.0 — 27-ago-2026 (la IA recibe lo que Everest guarda, no lo que asomaba por la pestaña)
 
 **Encargo del médico:** *«necesito que nuestro JSON también guarde todo lo mismo que guarda

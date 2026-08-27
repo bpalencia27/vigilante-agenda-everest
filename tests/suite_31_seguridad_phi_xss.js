@@ -377,5 +377,177 @@ module.exports = {
       t.igual(api.mtrHechosDesdeHcEverest({ hola: 1 }), null, "lo que no es el paquete devuelve null, no un objeto vacío");
     });
 
+
+    // =================================================================
+    //  v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE
+    //  Rechazo explícito del médico a la v17.9.0: «no me sirve para la siguiente cita (…)
+    //  deben estar alimentados por ese json INCLUSO ANTES DE GUARDAR, porque la idea es
+    //  poder redactar en tiempo real (…) que se actualice a medida que se vaya llenando».
+    // =================================================================
+    const _domHc = (campos) => {
+      const nodos = [];
+      for (const n of Object.keys(campos)) {
+        const v = campos[n];
+        if (v === true || v === false) {
+          nodos.push({ name: n, value: "true", checked: v === true, type: "radio" },
+                     { name: n, value: "false", checked: v === false, type: "radio" });
+        } else {
+          nodos.push({ name: n, value: String(v), type: "text" });
+        }
+      }
+      return {
+        querySelectorAll(sel) {
+          const s = String(sel);
+          const m = /^input\[name="(.*)"\]$/.exec(s);
+          if (m) return nodos.filter((x) => x.name === m[1]);
+          if (s.indexOf("[name]") >= 0) return nodos;
+          return [];
+        },
+      };
+    };
+
+    t.caso("v17.10.0 — se cosecha TODA la pantalla, no las 25 casillas de siempre", () => {
+      const d = _domHc({
+        "AntecedentePatologicos.Hipertension": true,
+        "AntecedentePatologicos.infartoMiocardio": false,
+        "AntecedentePatologicos.retinopatiaDiabetica": true,   // NO está en MTR_CAMPOS_FACTORES
+        "signosVitales.peso": "78.5",
+        "signosVitales.perimetroAbdominal": "98",
+        "gineco.fur": "2026-07-14",
+        "hs.HabitosGestionRiesgo.sedentarismo": true,
+      });
+      const c = api.mtrCosecharHcDelDom(d);
+      t.igual(c["AntecedentePatologicos.Hipertension"], true, "lo marcado que sí");
+      t.igual(c["AntecedentePatologicos.infartoMiocardio"], false,
+        "y lo marcado que NO: es un hecho documentado");
+      t.igual(c["AntecedentePatologicos.retinopatiaDiabetica"], true,
+        "incluida una casilla que el clasificador NO conocía: antes era invisible para todo el script");
+      t.igual(c["signosVitales.peso"], 78.5, "los números salen como números, no como texto");
+      t.igual(c["gineco.fur"], "2026-07-14", "y las fechas tal cual");
+      t.cierto(Object.keys(c).length >= 7, "se cosecha la pantalla entera, no una lista corta");
+    });
+
+    t.caso("v17.10.0 BARRERA — la cosecha en vivo tampoco toca lo que identifica al paciente", () => {
+      const d = _domHc({
+        "AntecedentePatologicos.Hipertension": true,
+        "signosVitales.peso": "78.5",
+        // Lo que NO puede entrar, aunque esté en la misma pantalla:
+        "datosUsuario.nombre": "NOMBREPRUEBA",
+        "datosUsuario.identificacion": "80123456",
+        "paciente.celular": "3001234567",
+        "usuario.correo": "prueba@ejemplo.com",
+        "acompanante.parentesco": "HIJA",
+      });
+      const c = api.mtrCosecharHcDelDom(d);
+      const todo = JSON.stringify(c);
+      for (const x of ["NOMBREPRUEBA", "80123456", "3001234567", "prueba@ejemplo.com", "HIJA"]) {
+        t.falso(todo.indexOf(x) >= 0, "«" + x + "» no puede cosecharse de la pantalla");
+      }
+      t.igual(c["signosVitales.peso"], 78.5, "y lo clínico de la misma pantalla sí entra");
+    });
+
+    t.caso("v17.10.0 — una casilla en blanco NO se convierte en un «no»", () => {
+      // Un grupo de radios sin ninguno marcado es una pregunta SIN RESPONDER. Convertirlo
+      // en «no» sería inventar una respuesta que nadie dio — la regla fundacional del
+      // proyecto, aplicada a la cosecha.
+      const d = {
+        querySelectorAll(sel) {
+          const nodos = [
+            { name: "AntecedentePatologicos.epoc", value: "true", checked: false, type: "radio" },
+            { name: "AntecedentePatologicos.epoc", value: "false", checked: false, type: "radio" },
+          ];
+          const m = /^input\[name="(.*)"\]$/.exec(String(sel));
+          if (m) return nodos.filter((x) => x.name === m[1]);
+          if (String(sel).indexOf("[name]") >= 0) return nodos;
+          return [];
+        },
+      };
+      const c = api.mtrCosecharHcDelDom(d);
+      t.igual(c["AntecedentePatologicos.epoc"], undefined,
+        "en blanco es en blanco: no viaja ni como sí ni como no");
+    });
+
+    t.caso("v17.10.0 — lo de la pestaña anterior no se pierde al cambiar de pestaña", () => {
+      // Angular destruye la pestaña anterior con *ngIf: releerla daría vacío, y vacío NO es
+      // «el médico lo borró». Por eso se acumula en vez de reemplazar.
+      const c2 = cargar({ silencioso: true });
+      const DOC = "555444333";
+      const gebP = c2.env.doc.getElementById.bind(c2.env.doc);
+      c2.env.doc.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+
+      const conCedula = (nodos) => (sel) => {
+        const s = String(sel);
+        if (s === ".text-muted") return [{ textContent: "CC " + DOC, closest: () => null }];
+        const m = /^input\[name="(.*)"\]$/.exec(s);
+        if (m) return nodos.filter((x) => x.name === m[1]);
+        if (s.indexOf("[name]") >= 0) return nodos;
+        return [];
+      };
+      const radios = (n, v) => ([{ name: n, value: "true", checked: v === true, type: "radio" },
+                                 { name: n, value: "false", checked: v === false, type: "radio" }]);
+
+      // Pestaña 1: Antecedentes.
+      c2.env.doc.querySelectorAll = conCedula(radios("AntecedentePatologicos.Hipertension", true));
+      c2.api.mtrHcAcumularDelDom(DOC, c2.env.doc);
+      // Pestaña 2: Hábitos. La anterior ya no está en el DOM.
+      c2.env.doc.querySelectorAll = conCedula(radios("hs.HabitosGestionRiesgo.sedentarismo", true));
+      c2.api.mtrHcAcumularDelDom(DOC, c2.env.doc);
+
+      const guardado = (c2.api.mtrHcLeer(DOC) || {}).dom || {};
+      t.igual(guardado["AntecedentePatologicos.Hipertension"], true,
+        "lo de Antecedentes sigue ahí aunque esa pestaña ya no exista en el DOM");
+      t.igual(guardado["hs.HabitosGestionRiesgo.sedentarismo"], true, "y lo de Hábitos también");
+    });
+
+    t.caso("v17.10.0 — lo cosechado en vivo llega al texto que ve la IA", () => {
+      // Probar la pieza no es probar que la pieza está conectada.
+      const hoja = api.mtrHojaDeHechos({ factores: { edad: 66, sexo: "F" } }, {
+        hoyIso: "2026-08-27",
+        hcEverest: { dom: {
+          "AntecedentePatologicos.retinopatiaDiabetica": true,
+          "AntecedentePatologicos.infartoMiocardio": false,
+          "signosVitales.perimetroAbdominal": 98,
+        } },
+      });
+      t.cierto(!!hoja.hcEverest, "el bloque viaja en la hoja aunque solo traiga la cosecha en vivo");
+      const txt = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/escrito en la historia de HOY/.test(txt), "y se marca como lo escrito HOY, no como historia vieja");
+      t.cierto(/retinopatiaDiabetica: sí/.test(txt), "lo marcado llega al modelo");
+      t.cierto(/infartoMiocardio: no/.test(txt), "y lo descartado también");
+      t.cierto(/perimetroAbdominal: 98/.test(txt), "con sus números");
+    });
+
+
+    t.caso("v17.10.0 CABLEADO — el reloj que vigila la pantalla dispara la cosecha de verdad", () => {
+      // Probar la pieza no es probar que la pieza está conectada. La mutación que
+      // desconectaba `mtrHcAcumularDelDom` de `_vglCosecharDePantalla` NO hacía caer ninguna
+      // prueba: todas le pasaban el bloque ya cosechado a mano. Esta lo exige de verdad —
+      // se llama al mismo punto que dispara el router de Everest y se mira el almacén.
+      const cC = cargar({ silencioso: true });
+      const DOC = "777888999";
+      const gebP = cC.env.doc.getElementById.bind(cC.env.doc);
+      cC.env.doc.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+      const nodos = [
+        { name: "AntecedentePatologicos.retinopatiaDiabetica", value: "true", checked: true, type: "radio" },
+        { name: "AntecedentePatologicos.retinopatiaDiabetica", value: "false", checked: false, type: "radio" },
+        { name: "signosVitales.perimetroAbdominal", value: "98", type: "text" },
+      ];
+      cC.env.doc.querySelectorAll = (sel) => {
+        const s = String(sel);
+        if (s === ".text-muted") return [{ textContent: "CC " + DOC, closest: () => null }];
+        const m = /^input\[name="(.*)"\]$/.exec(s);
+        if (m) return nodos.filter((x) => x.name === m[1]);
+        if (s.indexOf("[name]") >= 0) return nodos;
+        return [];
+      };
+
+      t.igual(cC.api.mtrHcLeer(DOC), null, "antes de cosechar no hay nada guardado de este paciente");
+      cC.api._vglCosecharDePantalla(DOC);
+      const guardado = (cC.api.mtrHcLeer(DOC) || {}).dom || {};
+      t.igual(guardado["AntecedentePatologicos.retinopatiaDiabetica"], true,
+        "el reloj de pantalla tiene que dejar la cosecha guardada, o el resto no se entera de nada");
+      t.igual(guardado["signosVitales.perimetroAbdominal"], 98, "con sus números");
+    });
+
   }
 };

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.9.0
+// @version     17.10.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.9.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.10.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4754,6 +4754,13 @@
       if (docId && String(docId) !== String(id)) return null;   // cambió de paciente a mitad: no se adivina
 
       let guardado = null;
+      // v17.10.0 — LO PRIMERO: la cosecha COMPLETA de la pantalla, casilla por casilla.
+      // Va aquí y no en un reloj aparte a propósito — este es el punto que ya se dispara en
+      // cada cambio de ruta de Everest y que ya resolvió, con cicatrices, el problema difícil
+      // de «¿de qué paciente es lo que estoy viendo?» (ver el comentario de arriba: cosechar
+      // bajo el documento equivocado le inventa comorbilidades a otro). Colgar de aquí
+      // hereda esa guarda entera en vez de reescribirla peor.
+      try { mtrHcAcumularDelDom(id, document); } catch (eHc) {}
       // 1) Los cuatro programas de «Ingreso a programa» (solo viven en Ruta Crónicos).
       if (_vglEnPestana("cronicos") !== false) {
         const progs = mtrLeerProgramasRutaCronicos(document);
@@ -32178,7 +32185,7 @@ _vglOfrecerDeshacer(btn);
       // v17.9.0 — la historia clínica tal como Everest la guarda, por secciones. Es lo que
       // el médico escribió de verdad, no la lectura parcial de la pestaña que estuviera
       // abierta. Ver mtrHechosDesdeHcEverest: llega ya desidentificado.
-      hcEverest: (o.hcEverest && o.hcEverest.secciones) ? o.hcEverest : null,
+      hcEverest: (o.hcEverest && (o.hcEverest.secciones || o.hcEverest.dom)) ? o.hcEverest : null,
       // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
       // toda esa información sirve de grounding para redactar una excelente nota clínica».
       // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
@@ -36065,8 +36072,25 @@ _vglOfrecerDeshacer(btn);
 
   // Aplana lo anterior a texto etiquetado para la hoja de hechos. Solo lo que consta.
   function mtrHcTextoParaHoja(hechos) {
-    if (!hechos || !hechos.secciones) return "";
+    if (!hechos) return "";
     const L = [];
+    // v17.10.0 — lo cosechado EN VIVO de la pantalla, que es lo que el médico está
+    // escribiendo ahora mismo. Va PRIMERO: es más fresco que lo capturado en el último
+    // guardado, y cuando los dos hablan del mismo campo manda esto.
+    if (hechos.dom && Object.keys(hechos.dom).length) {
+      const porSeccion = {};
+      for (const ruta of Object.keys(hechos.dom)) {
+        const i = ruta.lastIndexOf(".");
+        const sec = i > 0 ? ruta.slice(0, i) : "(sin sección)";
+        const campo = i > 0 ? ruta.slice(i + 1) : ruta;
+        const v = hechos.dom[ruta];
+        (porSeccion[sec] = porSeccion[sec] || []).push(campo + ": " + (v === true ? "sí" : v === false ? "no" : v));
+      }
+      for (const sec of Object.keys(porSeccion).sort()) {
+        L.push(sec + " (escrito en la historia de HOY): " + porSeccion[sec].join(" · "));
+      }
+    }
+    if (!hechos.secciones) return L.join("\n");
     const rotulo = {
       antecedentePatologicos: "Antecedentes patológicos marcados en la historia",
       antecedenteFamiliar: "Antecedentes familiares",
@@ -36173,6 +36197,105 @@ _vglOfrecerDeshacer(btn);
       };
     } catch (e) { return false; }
     return true;
+  }
+
+  // =====================================================================
+  //  v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE, NO AL GUARDARLA
+  //  ------------------------------------------------------------------
+  //  RECHAZO EXPLÍCITO DEL MÉDICO a la v17.9.0: «no me sirve para la siguiente cita. La IA y
+  //  el script completo, todos sus módulos, deben estar alimentados por ese json INCLUSO
+  //  ANTES DE GUARDAR, porque la idea es poder redactar en tiempo real. Debe ser algo mucho
+  //  mejor que se actualice a medida que se vaya llenando la historia».
+  //
+  //  Tenía razón. La v17.9.0 se enganchaba al Guardar, que ocurre AL FINAL — después de
+  //  redactar. Servía para la cita siguiente, que es justo lo que él no necesita.
+  //
+  //  LA PISTA QUE LO HACE POSIBLE: los nombres de las casillas del DOM de Everest son las
+  //  MISMAS RUTAS del paquete que se guarda. `name="AntecedentePatologicos.Hipertension"` en
+  //  pantalla es `antecedentePatologicos.hipertension` en el envío;
+  //  `name="signosVitales.peso"` es `examenFisico.peso`. No hay que esperar al guardado para
+  //  conocer la estructura: la estructura está escrita en la pantalla, casilla por casilla.
+  //
+  //  Así que se cosecha TODO lo que tenga `name`, con su ruta, en cada repaso — y se acumula
+  //  por paciente. Lo que el médico llenó en Antecedentes sigue ahí cuando pasa a Hábitos
+  //  (Angular destruye la pestaña anterior con *ngIf, por eso hay que acumular y no releer).
+  //  Cada vez que escribe algo, el contexto crece. Eso es «en tiempo real».
+  //
+  //  LÍMITE HONESTO, y no se disimula: esto ve las pestañas que el médico YA ABRIÓ en esta
+  //  consulta, más lo que quedó archivado de antes. Lo que Everest tiene guardado en
+  //  pestañas que él no ha tocado hoy no está en el DOM y no se puede leer de aquí. Cerrar
+  //  ese hueco exige leer lo que Everest CARGA al abrir el paciente, y ese endpoint aún no
+  //  está capturado — no se supone nada.
+  // =====================================================================
+
+  // Prefijos de ruta que SÍ son clínicos. Todo lo demás se descarta sin mirarlo: es la misma
+  // barrera de lista blanca de v17.9.0, aplicada ahora a la pantalla. Un `name` nuevo que no
+  // esté aquí no entra — se prefiere perder un dato a colar uno identificable.
+  const MTR_HC_PREFIJOS_DOM = [
+    "antecedentepatologicos.", "antecedentefamiliar.", "antecedentesrelacionados.",
+    "hs.habitosgestionriesgo.", "habitosgestionriesgo.", "clinicapaciente.",
+    "examenfisico.", "signosvitales.", "revisionsistema.", "gineco.",
+    "antecedenteginecoobstetrico.", "resultadoprograma.", "monitoreoprogramaprenatalmadre.",
+  ];
+
+  function mtrRutaHcAceptada(nombre) {
+    const n = String(nombre || "").trim().toLowerCase();
+    if (!n) return false;
+    return MTR_HC_PREFIJOS_DOM.some((p) => n.indexOf(p) === 0);
+  }
+
+  // Cosecha de la pantalla ACTUAL: toda casilla con `name` cuya ruta sea clínica.
+  // Devuelve { ruta: valor } con los radios ya resueltos a sí/no.
+  function mtrCosecharHcDelDom(doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function") return {};
+    const salida = {};
+    let nodos = [];
+    try { nodos = Array.prototype.slice.call(d.querySelectorAll("input[name],select[name],textarea[name]")); } catch (e) { return {}; }
+    // Los radios se resuelven por grupo: hace falta ver TODOS los del mismo `name` para
+    // saber cuál está marcado. Un grupo sin ninguno marcado NO produce entrada: en blanco
+    // es en blanco, y convertirlo en «no» sería inventar una respuesta que nadie dio.
+    const radios = {};
+    for (const el of nodos) {
+      const nombre = String(el.name || "").trim();
+      if (!mtrRutaHcAceptada(nombre)) continue;
+      const tipo = String(el.type || "").toLowerCase();
+      if (tipo === "radio") {
+        (radios[nombre] = radios[nombre] || []).push(el);
+        continue;
+      }
+      if (tipo === "checkbox") { salida[nombre] = !!el.checked; continue; }
+      if (tipo === "password" || tipo === "file" || tipo === "hidden") continue;
+      const v = String(el.value == null ? "" : el.value).trim();
+      if (!v) continue;
+      const num = Number(v.replace(",", "."));
+      salida[nombre] = (v !== "" && Number.isFinite(num) && /^-?[\d.,]+$/.test(v)) ? num : v.slice(0, 300);
+    }
+    for (const nombre of Object.keys(radios)) {
+      let v = null;
+      try { v = mtrLeerRadioSiNo(nombre, d); } catch (e) { v = null; }
+      if (v === true || v === false) salida[nombre] = v;
+    }
+    return salida;
+  }
+
+  // Acumula lo cosechado sobre lo ya conocido de ESTE paciente. La pantalla manda sobre lo
+  // archivado —es lo que el médico tiene delante— pero lo archivado NO se borra: Angular
+  // destruye la pestaña anterior y releerla daría vacío, que no es lo mismo que «lo borró».
+  function mtrHcAcumularDelDom(docId, doc) {
+    try {
+      const id = String(docId || "");
+      if (!id) return null;
+      const ahora = mtrCosecharHcDelDom(doc);
+      const nuevas = Object.keys(ahora).length;
+      const previo = (mtrHcLeer(id) || {}).dom || {};
+      if (!nuevas && !Object.keys(previo).length) return null;
+      const fusion = Object.assign({}, previo, ahora);
+      const c = _vglCosechaLeer(id) || {};
+      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, ts: Date.now() });
+      _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: bloque });
+      return { campos: Object.keys(fusion).length, nuevos: nuevas };
+    } catch (e) { return null; }
   }
 
   // ---------- BANDERAS DE EDUCACIÓN (education_flags de S5) ----------
