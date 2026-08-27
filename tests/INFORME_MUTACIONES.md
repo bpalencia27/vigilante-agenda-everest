@@ -6,6 +6,93 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.6.98 — 27-ago-2026 (el ANR agrupa de verdad)
+
+Último punto de la Fase 3, y el único que toca la orden de laboratorios de un paciente real.
+Banco antes: 2.369 · después: **2.376**.
+
+El «agujero negro renal» existe para que un paciente con enfermedad renal G3a-G5 no haga dos
+viajes al laboratorio. **No agrupaba.** `mtrPlanParaclinicos` se limitaba a un `Math.min`
+contra la fecha ya calculada; si otro examen vencía antes, el ANR se marcaba igual y la
+creatinina caía en la regla genérica del 33 % y se iba a `plan.diferidos`. v17.6.90 corrigió
+el TEXTO para que dejara de afirmar una agrupación que no ocurría, y dejó anotado que la
+agrupación real iba aparte. Es esta.
+
+### El daño, medido antes de tocar nada
+
+Barrido de **240 planes con el ANR activo** (ERC G3b, creatinina de 40 a 120 días, resto de
+analitos de 10 a 260):
+
+| | antes | después |
+|---|---|---|
+| La creatinina ya mandaba la fecha | 88 | 88 |
+| **Franja de dos viajes** | **26** | **0** |
+
+### Por qué NO se aplicó la regla literal de v68
+
+El spec dice *«HOY<Vc<=HOY+ventana → Vc=FTL Maestra; todos drivers A/D se agrupan en Vc»*:
+mover la toma al vencimiento de la creatinina. Medido: en **0 de esos 240 casos sería
+seguro**. Por construcción, si la creatinina no es ya la primera en vencer es porque algo la
+adelanta, y retrasar la toma hasta Vc o deja vencer otro examen (reproducido: la glicemia se
+pasaría 27 días) o hace esperar más a uno ya vencido. v68 pone CERO VENCIDOS en S0, por
+encima de la logística de S3, así que **su propia jerarquía prohíbe aplicar su regla al pie
+de la letra**. La única vía es la contraria: traer la creatinina a la toma que ya hay —
+divergencia declarada frente al *«Creatinina-ancla no se fuerza»* del spec, decidida por el
+médico el 27-ago tras ver estas cifras.
+
+### Contención, verificada sobre 1.224 planes
+
+| | |
+|---|---|
+| Planes donde cambia la **fecha de toma** | **0** |
+| Planes donde cambia la **fecha de control** | **0** |
+| Planes donde cambia la lista de órdenes | 78 |
+| De esos 78, aquellos en que lo ÚNICO que cambia es que **se añade la creatinina** | **78** |
+
+Nada se quita, ningún otro analito se toca, ningún día se mueve. El cambio vive en el bucle
+de cosecha, que corre DESPUÉS de fijar la fecha.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| **1** | Se quita la línea del forzado | *con el ANR activo la creatinina NO se difiere nunca*, *…SOLO la creatinina…*, *PUNTA A PUNTA: la franja queda cerrada* y *el ANR AGRUPA…* → **4 rojas** |
+| **2** | Se fuerzan **todos** los analitos, no solo la creatinina | *se fuerza SOLO la creatinina, no todo lo que tenga margen* |
+| **3** | Se fuerza la creatinina **sin** comprobar el ANR | *SIN ANR, la creatinina sigue la regla de siempre — el cambio no se desborda* |
+| **4** | `MTR_COSECHA_MARGEN_PROP` vuelve a 0.25 | *el margen de la cosecha es el 33 %…* |
+| **5** | `mtrPriorityFocus` deja de mirar `plan.anr` | *un ANR activo enciende el foco RENAL* |
+
+Las cinco se aplicaron sobre el archivo de producción **una a una**, restaurando con `diff`
+contra copia intacta antes de la siguiente; cada corrida dejó rojo con la aserción exacta
+esperada y el banco volvió a 2.376/2.376 tras cada restauración.
+
+**La mutación 4 tapa un agujero que llevaba abierto desde v17.6.0.** El propio informe
+documentaba que subir la cosecha de 25 % a 33 % estaba protegido por una prueba… **que ya no
+existe**. Se verificó: antes de esta versión se podía cambiar ese número y el banco seguía
+entero en verde. La regla nueva se apoya justo en él, así que se le puso su prueba.
+
+**Una prueba se reescribió a propósito, no se borró.** `suite_47` tenía un caso —*«un ANR que
+no agrupó NO dice que agrupó»*— que **fijaba el defecto**: exigía que la creatinina quedara
+FUERA de la toma. Lo que ese caso protege de verdad es que el texto y el plan nunca se
+contradigan, y eso sigue valiendo; se le dio la vuelta para exigir lo mismo sobre la conducta
+nueva («agrupó y lo dice»). La rama «NO entra en esta toma» de `mtrTextoAnr` se sigue
+probando en su caso unitario, así que no se perdió cobertura de esa frase.
+
+### Lo que NO se entregó, y por qué
+
+El médico autorizó también **cablear la vigilancia estrecha** — el tercer parámetro de
+`mtrVentanaAnrDias`, que fuerza la ventana a 30 días y que ningún llamador de producción usa
+nunca (código muerto reconocido en la auditoría del 25-ago). El plan llevaba una puerta de
+seguridad: medirlo antes de entregarlo. **La puerta se disparó.**
+
+Estrechar la ventana a 30 días hace que el ANR se active MENOS, y con la regla nueva eso
+significa agrupar MENOS. Medido sobre pacientes con sospecha de deterioro agudo de la función
+renal: la creatinina pasaría de agruparse en **180** planes a **90**, y **51 planes perderían
+la agrupación** — justo en los pacientes a los que más conviene medirles la creatinina pronto.
+
+La causa es que la semántica se invirtió con el mecanismo: en v68 el ANR RETRASA la toma
+hasta Vc, y ahí una ventana estrecha protege; aquí el ANR ADELANTA la creatinina, y una
+ventana estrecha desprotege. Queda reportado al médico y sin entregar. (De paso, esto respalda
+su decisión de no bajar las ventanas a las de v68: con este mecanismo, más estrechas es peor.)
+
 ## v17.6.97 — 27-ago-2026 (la cintura era la cadera, y no se podía leer por id)
 
 Cuarto punto de la Fase 3. Banco antes: 2.361 · después: **2.369**.

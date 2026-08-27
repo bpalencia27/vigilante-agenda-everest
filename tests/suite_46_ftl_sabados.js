@@ -318,6 +318,117 @@ module.exports = {
       t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"), "la creatinina que fija la fecha va incluida");
     });
 
+    t.caso("v17.6.98: el margen de la cosecha es el 33 %, y por fin hay una prueba que lo fija", () => {
+      // Este número no tenía NINGUNA prueba: se podía cambiar y el banco seguía verde.
+      // Se descubrió al auditar el ANR, que se apoya justo en él. Vigencia 180 d ->
+      // el corte cae en 59,4 d: 55 se cosecha, 65 se difiere. Con el corte viejo del
+      // 25 % (45 d) el de 55 se habría diferido, así que este caso los distingue.
+      const plan = (fechaCT) => api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "HTA", estadioAdministrativo: "G1",
+        esDm2: false, edad: 60, rac: 10,
+        ultimos: {
+          CREATININA: { fecha: "2026-03-01", valor: 1.0 },        // vence 2026-08-28: fija la toma
+          COLESTEROL_TOTAL: { fecha: fechaCT, valor: 190 },
+          COLESTEROL_HDL: { fecha: fechaCT, valor: 45 },
+          COLESTEROL_LDL: { fecha: fechaCT, valor: 110 },
+          TRIGLICERIDOS: { fecha: fechaCT, valor: 150 },
+          GLUCOSA: { fecha: fechaCT, valor: 95 },
+          UROANALISIS: { fecha: fechaCT, valor: 1 },
+          RAC: { fecha: fechaCT, valor: 10 },
+        },
+      });
+      // Toma el 2026-08-28. Colesterol del 2026-04-27 -> vence 2026-10-24 -> 57 d de margen.
+      const dentro = plan("2026-04-27");
+      t.cierto(dentro.cosechados.some((a) => a.clave === "COLESTEROL_TOTAL"),
+        "57 d de margen sobre 180 de vigencia (31,7 %) entra: por debajo del 33 %");
+      // Colesterol del 2026-04-10 -> vence 2026-10-07 -> 40 d... no: se aleja. Se usa uno más nuevo.
+      const fuera = plan("2026-05-20");   // vence 2026-11-16 -> 80 d de margen (44,4 %)
+      t.cierto(fuera.diferidos.some((a) => a.clave === "COLESTEROL_TOTAL"),
+        "80 d de margen (44,4 %) se difiere: por encima del 33 %");
+    });
+
+    // =====================================================================
+    // v17.6.98 — EL ANR AGRUPA DE VERDAD
+    //
+    // Hasta aquí el «agujero negro renal» solo hacía un Math.min contra la fecha ya
+    // calculada. Si otro examen vencía antes, el ANR se marcaba igual y la creatinina caía
+    // en la regla genérica del 33 % y se iba a `diferidos`: el paciente volvía una segunda
+    // vez justo por ella, que es el viaje que el ANR existe para evitar.
+    //
+    // Medido con el harness sobre 240 planes con el ANR activo: 26 de dos viajes. Y en 0
+    // de esos 240 casos sería seguro aplicar la regla literal de v68 (mover la toma al
+    // vencimiento de la creatinina): siempre deja vencer otro examen o hace esperar más a
+    // uno ya vencido. Por eso se fuerza la creatinina a la toma que ya hay, que es una
+    // divergencia declarada frente al spec («Creatinina-ancla no se fuerza»).
+    // =====================================================================
+
+    const _planAnr = (estadio, creatIso) => api.mtrPlanParaclinicos({
+      hoyIso: "2026-08-26", programa: "ERC", estadioAdministrativo: estadio,
+      categoriaRiesgo: "alto", esDm2: false, edad: 68, rac: 12,
+      ultimos: {
+        CREATININA:       { fecha: creatIso,    valor: 1.7 },
+        COLESTEROL_TOTAL: { fecha: "2026-04-01", valor: 190 },
+        COLESTEROL_HDL:   { fecha: "2026-04-01", valor: 45 },
+        COLESTEROL_LDL:   { fecha: "2026-04-01", valor: 90 },
+        TRIGLICERIDOS:    { fecha: "2026-04-01", valor: 120 },
+        GLUCOSA:          { fecha: "2026-08-01", valor: 95 },
+        UROANALISIS:      { fecha: "2026-08-01", valor: 1 },
+        RAC:              { fecha: "2026-08-01", valor: 12 },
+      },
+    });
+
+    t.caso("v17.6.98: con el ANR activo la creatinina NO se difiere nunca", () => {
+      const plan = _planAnr("G3b", "2026-06-20");
+      t.cierto(!!plan.anr, "el vector es el que debe ser: ANR activo");
+      t.cierto(plan.ftl !== plan.anr.vence, "y la toma la manda otro examen, no la creatinina");
+      t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"), "la creatinina se cosecha igual");
+      t.falso(plan.diferidos.some((a) => a.clave === "CREATININA"), "y no queda diferida");
+      t.cierto((plan.ordenar || []).some((a) => a.clave === "CREATININA"), "entra en la orden");
+    });
+
+    t.caso("v17.6.98: SIN ANR, la creatinina sigue la regla de siempre — el cambio no se desborda", () => {
+      // Mismo vector, estadio G2: el ANR no aplica fuera de G3a-G5. Si esta prueba cae, el
+      // forzado se está aplicando a pacientes a los que la regla no alcanza.
+      const plan = _planAnr("G2", "2026-06-20");
+      t.falso(!!plan.anr, "en G2 no hay agujero negro renal");
+      t.cierto(plan.diferidos.some((a) => a.clave === "CREATININA"),
+        "y la creatinina se difiere como cualquier otro examen con margen de sobra");
+      t.falso((plan.ordenar || []).some((a) => a.clave === "CREATININA"), "no entra en la orden");
+    });
+
+    t.caso("v17.6.98: se fuerza SOLO la creatinina, no todo lo que tenga margen", () => {
+      const plan = _planAnr("G3b", "2026-06-20");
+      t.cierto(!!plan.anr, "ANR activo");
+      // La glicemia del 1-ago tiene 180 d de vigencia y muchísimo margen: debe seguir diferida.
+      t.cierto(plan.diferidos.some((a) => a.clave === "GLUCOSA"),
+        "la glicemia con margen de sobra sigue diferida: el ANR no es una excusa para adelantarlo todo");
+      t.falso(plan.diferidos.some((a) => a.clave === "CREATININA"), "solo la creatinina se salva del margen");
+    });
+
+    t.caso("v17.6.98 PUNTA A PUNTA: la franja de los dos viajes queda cerrada", () => {
+      // Barrido sobre la antigüedad de la creatinina. Antes de esta versión había una
+      // franja (61-67 d en este vector) donde el ANR se declaraba activo —el médico leía
+      // «agujero negro renal» en pantalla— y la creatinina salía igualmente fuera de la
+      // toma. Ni un solo caso puede quedar así.
+      const dosViajes = [];
+      for (let n = 40; n <= 110; n++) {
+        const creatIso = new Date(Date.UTC(2026, 7, 26) - n * 86400000).toISOString().slice(0, 10);
+        const plan = _planAnr("G3b", creatIso);
+        if (!plan.anr) continue;
+        if (!(plan.ordenar || []).some((a) => a.clave === "CREATININA")) dosViajes.push(n);
+      }
+      t.igual(dosViajes, [], "con el ANR activo, la creatinina SIEMPRE va en la toma");
+    });
+
+    t.caso("v17.6.98: forzar la creatinina NO mueve la fecha de toma ni la de control", () => {
+      // El cambio añade un examen a la orden; no cambia el día. La fecha la decide el
+      // bloque de arriba, que corre ANTES de la cosecha y no se ha tocado.
+      const plan = _planAnr("G3b", "2026-06-20");
+      t.igual(plan.ftl, "2026-09-09", "la toma sigue donde la ponen los lípidos vencidos");
+      t.cierto(!!(plan.control && plan.control.fecha), "y el control se sigue calculando desde ella");
+      t.cierto(plan.control.fecha > plan.ftl, "después de la toma, como siempre");
+    });
+
     // =====================================================================
     // v17.6.72 — auditoría 25-ago (1.15): GRUPO DE LÍPIDOS, vigencia = la más corta
     // (decisión del médico). Colesterol Total, HDL, LDL y Triglicéridos salen de UNA

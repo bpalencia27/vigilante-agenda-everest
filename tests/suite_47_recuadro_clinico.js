@@ -169,10 +169,19 @@ module.exports = {
       t.igual(api.mtrTextoAnr(null), "", "sin plan tampoco revienta");
     });
 
-    t.caso("v17.6.90: en pantalla, un ANR que no agrupó NO dice que agrupó", () => {
-      // ERC G3b: la creatinina vence el 19-oct (dentro de la ventana de 60 días) pero los
-      // lípidos están vencidos y fuerzan la toma al 9-sep. Verificado: la creatinina sale
-      // DIFERIDA — el paciente tendría que volver por ella.
+    t.caso("v17.6.98: el ANR AGRUPA — la creatinina entra en la toma y la pantalla lo dice", () => {
+      // Este caso era, hasta v17.6.97, el que FIJABA el defecto: exigía que la creatinina
+      // quedara FUERA de la toma y que la pantalla avisara de que el paciente volvería una
+      // segunda vez. Eso era correcto mientras el ANR no agrupaba; v17.6.98 lo hace agrupar,
+      // así que el vector se conserva y se le da la vuelta a lo que exige.
+      //
+      // Lo que esta prueba protege de verdad NO cambia: que el texto y el plan nunca se
+      // contradigan. Antes se comprobaba sobre «no agrupó y lo dice»; ahora sobre «agrupó y
+      // lo dice». La rama «NO entra en esta toma» de mtrTextoAnr se sigue probando en su
+      // caso unitario de más arriba, así que no se pierde cobertura de esa frase.
+      //
+      // ERC G3b: la creatinina vence el 19-oct (dentro de la ventana de 60 días) y los
+      // lípidos vencidos fuerzan la toma al 9-sep. Antes: creatinina DIFERIDA, dos viajes.
       const plan = api.mtrPlanParaclinicos({
         hoyIso: "2026-08-26", programa: "ERC", estadioAdministrativo: "G3b",
         categoriaRiesgo: "alto", esDm2: false, edad: 68, rac: 12,
@@ -189,15 +198,17 @@ module.exports = {
       });
       t.cierto(!!plan.anr, "el vector es el que debe ser: el ANR está activo");
       t.falso(plan.ftl === plan.anr.vence, "y la toma NO cae en el vencimiento de la creatinina");
-      t.falso((plan.ordenar || []).some((x) => x.clave === "CREATININA"),
-        "la creatinina queda fuera de esta toma");
+      t.cierto((plan.ordenar || []).some((x) => x.clave === "CREATININA"),
+        "la creatinina SÍ entra en esta toma: es el viaje que el ANR existe para evitar");
+      t.falso((plan.diferidos || []).some((x) => x.clave === "CREATININA"),
+        "y no queda diferida a un segundo viaje");
+      t.igual(plan.ftl, "2026-09-09", "la FECHA DE TOMA no se mueve: se añade un examen, no se cambia el día");
 
       const html = api.mtrRenderResumenClinicoHtml({
         factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G3b" }, plan: plan, meta: {},
       });
-      t.falso(/todo se agrupa en la fecha de la creatinina/.test(html),
-        "la pantalla ya NO afirma una agrupación que no ocurrió");
-      t.cierto(/NO entra en esta toma/.test(html), "y avisa de que la creatinina se queda fuera");
+      t.falso(/NO entra en esta toma/.test(html), "la pantalla ya no avisa de un segundo viaje que no va a pasar");
+      t.cierto(/un solo viaje/.test(html), "dice lo que de verdad ocurre");
     });
 
     t.caso("el resumen junta riesgo, función renal y plan sin que falte ninguna pieza", () => {

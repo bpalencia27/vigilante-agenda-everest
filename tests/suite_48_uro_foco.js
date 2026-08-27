@@ -397,6 +397,19 @@ module.exports = {
       plan: { anr: null, drivers: [] },
     }, over || {});
 
+    t.caso("v17.6.98: un ANR activo enciende el foco RENAL — la rama que nunca se probaba", () => {
+      // Hueco reportado al auditar el ANR: mtrPriorityFocus lee `plan.anr` para decidir el
+      // foco «renal», pero TODOS los fixtures de esta suite usan `anr: null`, así que esa
+      // rama no la ejercitaba nadie. Con la agrupación de v17.6.98 el ANR pasa a tener
+      // consecuencias reales sobre la orden, y el foco que viaja al JSON de la IA con él.
+      const sinAnr = api.mtrPriorityFocus(resumen({ plan: { anr: null, drivers: [] } }));
+      const conAnr = api.mtrPriorityFocus(resumen({
+        plan: { anr: { ventanaDias: 60, vence: "2026-10-19" }, drivers: [] },
+      }));
+      t.igual(conAnr, "renal", "con el agujero negro renal activo, el foco es renal");
+      t.cierto(sinAnr !== "renal", "y sin él no lo es (obtuvo " + JSON.stringify(sinAnr) + "): el ANR es quien lo enciende");
+    });
+
     t.caso("paso 4 pendiente manda: el foco es 'clasificación' por encima de todo", () => {
       const r = resumen({ riesgo: { categoria: null, paso: 4, requiereAscvd: true } });
       t.igual(api.mtrPriorityFocus(r), "clasificación", "sin clasificar, eso es lo primero");

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.97
+// @version     17.6.98
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.97";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.98";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -31261,6 +31261,32 @@ _vglOfrecerDeshacer(btn);
       // pasada, no un candidato real de "cosecha por margen futuro").
       if (a.vencidoBase) continue;
       if (!a.vence || !a.vigenciaDias) continue;
+      // v17.6.98 — EL ANR AGRUPA DE VERDAD. Con el agujero negro renal activo, la
+      // creatinina NO se difiere nunca: entra en esta toma pase lo que pase.
+      //
+      // Hasta aquí el ANR solo hacía un `Math.min` contra la fecha ya calculada (más
+      // arriba, `if (creat.vence < ftlCruda)`). Si otro examen vencía antes, el ANR se
+      // marcaba igual y la creatinina caía en la regla genérica del 33 % de abajo, que la
+      // mandaba a `diferidos`: el paciente volvía una segunda vez justo por ella, que es
+      // EXACTAMENTE el viaje que el ANR existe para evitar. v17.6.90 corrigió el texto
+      // para que dejara de afirmar una agrupación que no ocurría; esto la hace ocurrir.
+      //
+      // Medido con el harness sobre 240 planes con el ANR activo: 88 en los que la
+      // creatinina ya mandaba la fecha, y 26 de dos viajes — los que esta línea cierra.
+      //
+      // POR QUÉ NO SE APLICA LA REGLA LITERAL DE v68. El spec dice «Vc=FTL Maestra; todos
+      // drivers A/D se agrupan en Vc», es decir MOVER la toma al vencimiento de la
+      // creatinina. Medido: en 0 de esos 240 casos sería seguro. Por construcción, si la
+      // creatinina no es ya la primera en vencer es porque algo la adelanta, y retrasar la
+      // toma hasta Vc o deja vencer otro examen (reproducido: la glicemia se pasaría 27
+      // días) o hace esperar más a uno ya vencido. v68 pone CERO VENCIDOS en S0, por
+      // encima de la logística de S3, así que su propia jerarquía lo prohíbe. La única vía
+      // es la contraria: traer la creatinina a la toma que ya hay.
+      //
+      // DIVERGENCIA DECLARADA frente al spec, que dice «Creatinina-ancla no se fuerza».
+      // Decisión del médico (27-ago) tras ver las cifras de arriba: forzarla siempre.
+      // El coste es vigencia: se toma hasta ~46 días antes de vencer, de 121 de vigencia.
+      if (anr && a.clave === "CREATININA") { cosechados.push(a); continue; }
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
       if (margen <= 0) { cosechados.push(a); continue; }
