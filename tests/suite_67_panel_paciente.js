@@ -339,7 +339,17 @@ module.exports = {
       }, { nombre: "PACIENTE DE PRUEBA", hoyIso: "2026-08-17" });
       t.cierto(/Signos de alarma/.test(hoja), "riesgo muy alto → sección de signos de alarma");
       t.cierto(/Alimentación/.test(hoja) && /Actividad física/.test(hoja), "programa RCV (DM2) → dieta y actividad");
-      t.cierto(/LDL/.test(hoja) && /RAC/.test(hoja), "los exámenes vencidos y faltantes se listan");
+      // v17.8.0 — esta aserción exigía que en el papel apareciera literalmente «RAC», la
+      // sigla del catálogo. Lo que protege de verdad es que los exámenes pendientes SE
+      // LISTEN, y eso sigue valiendo; lo que ya no vale es exigir la jerga: el paciente se
+      // lleva ese papel a su casa y «RAC» no le dice nada. Ahora lee «Relación
+      // albúmina/creatinina». La sigla clínica que sí es de uso corriente («LDL») se
+      // respeta tal cual — mtrNombreLegibleAnalito no toca lo que no lleva guion bajo.
+      t.cierto(/LDL/.test(hoja), "el LDL vencido se lista, y su sigla se respeta");
+      t.cierto(/Relación albúmina\/creatinina/.test(hoja),
+        "y el RAC faltante también, con el nombre que el paciente puede entender");
+      t.falso(/COLESTEROL_|_LDL|UROANALISIS|HBA1C/.test(hoja),
+        "en el papel que se entrega al paciente no puede quedar ni una clave del catálogo");
       t.cierto(/Su meta de hemoglobina glicosilada/.test(hoja) && /7\s*%/.test(hoja), "la meta de HbA1c del paciente aparece con su valor");
       t.cierto(/MUY ALTO/.test(hoja), "la categoría de riesgo viaja en mayúsculas");
       t.cierto(/PACIENTE DE PRUEBA/.test(hoja), "el nombre va en el encabezado (impresión local, no PHI en el código)");

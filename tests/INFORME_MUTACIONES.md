@@ -6,6 +6,105 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.8.0 — 27-ago-2026 (auditoría de experiencia: Tanda 0, las tres reglas mecánicas)
+
+Arranca el trabajo del enjambre de UI/UX y copywriting (19 agentes, 186 hallazgos brutos →
+**178 sostenidos** tras refutación adversarial; 93 con riesgo clínico, 79 de gravedad alta).
+La Tanda 0 son tres reglas que el proyecto **ya tenía escritas** —dos en CLAUDE.md, una en un
+comentario del propio código— y que hasta hoy dependían de que alguien se acordara.
+
+Nacieron **rojas a propósito**, con sus números exactos:
+
+| Regla | Al nacer | Al cerrar |
+|---|---|---|
+| A — toda bandera emitida declara su propio fondo | 2 sin regla | 0 |
+| B — todo color fuera de `#vgl-root` lleva `!important` | 74 infracciones | 0 |
+| C — el papel del paciente no lleva claves internas | 2 claves crudas | 0 |
+
+### Regla A — dos avisos informativos llevaban meses pintados de rojo de alarma
+
+`.vgl-flag.agpend` («🗓️ SIN TERMINAR») y `.vgl-flag.adic` («➕ CANDIDATO ADICIONAL») **no
+existían en la hoja de estilos**, así que heredaban el fondo rojo de la regla base. El
+comentario del código que las emite ya decía «ámbar, no rojo»; la regla nunca se escribió.
+
+**Verificado en Chromium** con el CSS real y un «Everest» agresivo, antes y después:
+
+    ANTES:   SIN TERMINAR        rgb(255,129,119)  <- el MISMO rojo que «NO CONFIRMADO»
+             CANDIDATO ADICIONAL rgb(255,129,119)  <- idem
+    DESPUÉS: SIN TERMINAR        rgb(255,196,107)  ámbar
+             CANDIDATO ADICIONAL rgb(124,184,255)  azul
+
+Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa todos los demás.
+
+### Regla B — la prueba que protegía la DEUDA en vez de la regla
+
+Aquí la lección es sobre el banco, no sobre el CSS. Escribí la regla en `suite_70` y era
+**más débil que una prueba que ya existía**: `suite_25` (Regla E) parsea el CSS de verdad y
+veía 74 infracciones donde mi barrido por líneas encontraba 25.
+
+Y esa prueba vieja llevaba las 74 anotadas en una `BASE_CONOCIDA`, comprobando que la lista
+saliera **exactamente igual**. Eso no protegía la regla: **protegía la deuda**. Mientras el
+número no se moviera, el banco quedaba verde con 74 declaraciones de color expuestas al CSS
+de Everest — entre ellas `.vgl-ord-sexwarn`, el aviso que impide ordenar una citología a un
+hombre.
+
+Se pagó la deuda entera (55 declaraciones de color, +55 `!important`), la prueba pasa a
+exigir **cero**, y se le añadieron los tres emergentes que nacieron después de escribirla
+(`#vgl-confirma-modal`, `#vgl-ia-modal`, `#vgl-panel-modal`). Mi `suite_70` se retiró: dos
+sitios para la misma regla es peor que uno.
+
+El contador de `!important` (349 → 404) hizo su trabajo: saltó en rojo y obligó a escribir el
+motivo. Se sube a mano, documentado.
+
+### Regla C — un solo traductor de nombre de analito
+
+Patrón C de la auditoría: «cuatro traductores conviviendo con precedencias distintas». Se veía
+en el peor sitio posible — la hoja que el médico **imprime y entrega en la mano** al paciente
+listaba `COLESTEROL_LDL`, `UROANALISIS`, `HBA1C`. Verificado ejecutando la función.
+
+Causa exacta: `x.clave || x.nombre` — la preferencia estaba **invertida**. Ahora hay un
+`mtrNombreLegibleAnalito` con precedencia fija y la Regla C impide que vuelva.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Quitar la regla ámbar de `.vgl-flag.agpend` | `suite_70` | *ninguna bandera se pinta con un fondo que nadie declaró* |
+| 2 | Quitar el `!important` del aviso de sexo | `suite_25` | *Regla E — color con selector de PANEL lleva !important* (y de paso la Regla G) |
+| 3 | Invertir la precedencia del traductor | `suite_70` | *el traductor de analitos: precedencia fija y siglas intactas* |
+| 4 | Que el respaldo vuelva a destrozar las siglas | `suite_70` + `suite_67` | *…siglas intactas* y *mtrHojaEducativaHtml: secciones según el resumen* |
+
+### Cuatro cosas que salieron mal por el camino, y qué enseñó cada una
+
+1. **Un comentario con backticks rompió el script entero.** El bloque CSS vive dentro de una
+   plantilla de JavaScript: escribir `` `.vgl-flag` `` en un comentario CSS cierra la cadena.
+   Sintaxis rota, banco sin arrancar.
+2. **La mutación 3 no cayó dos veces seguidas.** La primera versión de la prueba usaba claves
+   que están en el catálogo, y ahí el resultado sale igual por los dos caminos: la precedencia
+   solo decide cuando la clave es **desconocida** y viene con nombre escrito a mano. Se
+   escribió ese caso y entonces cayó.
+3. **Mi propio respaldo destrozaba las siglas.** Convertía «LDL» en «Ldl». Lo cazó `suite_67`.
+   Ahora, sin guion bajo no se toca nada.
+4. **El banco de verificación en Chromium se daba la razón a sí mismo.** Dos errores a la vez:
+   la sonda que calculaba el color esperado usaba estilo en línea —que **pierde** contra el
+   `!important` de la hoja simulada—, y yo había añadido a la simulación un
+   `background:transparent !important` que ninguna hoja real escribe. Con los dos, todo salía
+   «FALLA» con el mismo valor. Un banco que no puede pasar no mide nada, igual que uno que no
+   puede fallar.
+
+### Una prueba se reescribió a propósito
+
+`suite_67` exigía que en el papel apareciera literalmente «RAC». Lo que protege —que los
+pendientes se listen— sigue valiendo; lo que ya no vale es exigir la jerga: ahora dice
+«Relación albúmina/creatinina», y se le añadió la aserción de que **ninguna** clave del
+catálogo puede quedar en ese papel.
+
+La verificación en Chromium queda como herramienta reutilizable en
+`tools/verificar_color_chromium.js` — fuera de `tests/` a propósito: el banco no puede
+depender de que haya un navegador instalado.
+
+Banco completo en **2.411/2.411** con `TZ=America/Bogota`.
+
+---
+
 ## v17.7.5 — 27-ago-2026 (la última rama del spec sin construir, y una que era mejor no construir)
 
 Cierra el MOTOR RCV v68. Dos puntos abiertos, y **solo uno terminó en código** — porque el

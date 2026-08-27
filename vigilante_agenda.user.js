@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.7.5
+// @version     17.8.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.7.5";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.8.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -13020,6 +13020,18 @@ _vglOfrecerDeshacer(btn);
         box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
       }
       .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
+      /* v17.8.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #1 (gravedad alta). Estas dos reglas
+         NO EXISTÍAN. Sin ellas, la bandera «agpend» (🗓️ SIN TERMINAR) y la bandera «adic»
+         («➕ CANDIDATO ADICIONAL») heredaban el fondo ROJO de la regla base — y ninguna de
+         las dos es una alarma: una es deuda de agendamiento y la otra una sugerencia de
+         cupo. El comentario del código que las emite ya decía «ámbar, no rojo»; la regla
+         nunca se escribió, así que durante meses dos avisos informativos se pintaron con
+         el color reservado para el paciente que no confirmó y para el que abandonó el
+         programa. Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa
+         todos los demás. La suite_70 (REGLA A) impide que vuelva a pasar con cualquier
+         bandera nueva. */
+      .vgl-flag.agpend{background:var(--c-ambar);box-shadow:0 0 12px rgba(var(--rgb-ambar),.30)}
+      .vgl-flag.adic{background:var(--c-azul);box-shadow:0 0 12px rgba(var(--rgb-azul),.28)}
 
       .vgl-cd{
         font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
@@ -13739,7 +13751,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-agm-card::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
       #vgl-agendar-modal.light .vgl-agm-card,#vgl-ordenar-modal.light .vgl-agm-card,#vgl-labs-modal.light .vgl-agm-card{
         background:linear-gradient(160deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 60%),var(--bg-solid);
-        color:var(--fg);
+        color:var(--fg) !important;
         border-color:var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.85)
       }
@@ -13754,27 +13766,27 @@ _vglOfrecerDeshacer(btn);
         font-size:var(--t-title);font-weight:800;color:var(--fg);
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
-      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg) !important}
       .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2)}
-      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2)}
+      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2) !important}
       .vgl-agm-sub b{color:var(--fg);font-weight:800}
-      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg) !important}
       .vgl-agm-sub.med b{color:var(--c-azul)}
-      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul)}
+      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul) !important}
       .vgl-agm-close{
         background:transparent;border:0;color:var(--fg);
         font-size:var(--t-hero);font-weight:700;cursor:pointer;
         opacity:.7;padding:0 6px;border-radius:var(--r-chip);
         transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
-      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg) !important}
       .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
       .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
         font-size:var(--t-micro);font-weight:800;letter-spacing:.7px;text-transform:uppercase;
         display:block;margin-bottom:9px;color:var(--c-azul)
       }
-      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul)}
+      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul) !important}
       .vgl-agm-presets{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
       .vgl-agm-pbtn{
         background:var(--bg2);color:var(--fg);
@@ -13785,7 +13797,7 @@ _vglOfrecerDeshacer(btn);
         box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-pbtn,#vgl-ordenar-modal.light .vgl-agm-pbtn,#vgl-labs-modal.light .vgl-agm-pbtn{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-pbtn:hover{background:var(--bg3);color:var(--fg);border-color:var(--bg4);transform:translateY(-1px)}
       #vgl-agendar-modal.light .vgl-agm-pbtn:hover,#vgl-ordenar-modal.light .vgl-agm-pbtn:hover{background:var(--bg3);border-color:var(--bg4)}
@@ -13889,7 +13901,7 @@ _vglOfrecerDeshacer(btn);
         box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-sbtn,#vgl-ordenar-modal.light .vgl-agm-sbtn,#vgl-labs-modal.light .vgl-agm-sbtn{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-sbtn:hover{background:var(--bg3);border-color:var(--bg4);color:var(--fg)}
       .vgl-agm-sbtn.active{
@@ -13923,7 +13935,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido{
-        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
+        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar) !important;border-color:rgba(var(--rgb-ambar),.55)
       }
       /* v14.0.0 — La FRANJA recomendada completa, no solo la hora elegida como sugerida.
          El encargo del médico pedía las dos cosas ("se deben repintar de otro color Y
@@ -14023,7 +14035,7 @@ _vglOfrecerDeshacer(btn);
         outline:none
       }
       #vgl-agendar-modal.light .vgl-agm-input{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-foot{
         display:flex;justify-content:flex-end;gap:12px;
@@ -14031,9 +14043,9 @@ _vglOfrecerDeshacer(btn);
         border-top:1px solid var(--line);padding-top:16px
       }
       #vgl-agendar-modal.light .vgl-agm-foot{border-top-color:var(--line)}
-      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:var(--fg)}
-      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:var(--fg2)}
-      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde)}
+      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:var(--fg) !important}
+      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:var(--fg2) !important}
+      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde) !important}
       .vgl-agm-btn{
         border:0;border-radius:var(--r-chip);padding:11px 22px;
         font-size:var(--t-body);font-weight:800;cursor:pointer;
@@ -14196,7 +14208,7 @@ _vglOfrecerDeshacer(btn);
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-title {
-        color: var(--fg);
+        color: var(--fg) !important;
       }
       .vgl-ord-cie {
         color: var(--c-azul); /* [UI-CSS] */
@@ -14204,7 +14216,7 @@ _vglOfrecerDeshacer(btn);
         white-space: nowrap;
       }
       #vgl-agendar-modal.light .vgl-ord-cie {
-        color: var(--c-azul);
+        color: var(--c-azul) !important;
       }
       .vgl-ord-cups {
         font-size: var(--t-micro); /* [UI-CSS] */
@@ -14215,7 +14227,7 @@ _vglOfrecerDeshacer(btn);
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-cups {
-        color: var(--fg2);
+        color: var(--fg2) !important;
       }
 
       /* ==== [v12.3.13] CSS del modal de laboratorios — antes inline en openLaboratoriosModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
@@ -14224,19 +14236,19 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-verde);background:rgba(var(--rgb-verde),.12);
+        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.12);
         border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
       }
       #vgl-labs-modal .vgl-labs-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
       }
       #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
       #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
-      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde)}
-      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde)}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde) !important}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde) !important}
 
       /* ---- Celda bento de fuente + botón portal ---- */
       #vgl-labs-modal .vgl-labs-srcbar{
@@ -14246,12 +14258,12 @@ _vglOfrecerDeshacer(btn);
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2);line-height:1.5;min-width:0}
-      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg) !important;font-weight:800}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
         background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul);font-size:var(--t-micro);font-weight:800;
+        color:var(--c-azul) !important;font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -14264,11 +14276,11 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-agm-loading{display:flex;align-items:center;gap:10px;padding:18px 8px;font-size:var(--t-body);animation:vglLabsPulse 1.6s ease-in-out infinite}
       @keyframes vglLabsPulse{0%,100%{opacity:.55}50%{opacity:1}}
       #vgl-labs-modal .vgl-labs-empty{
-        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2);
+        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2) !important;
         border-radius:var(--r-card);padding:22px 20px;text-align:center;
         font-size:var(--t-body);font-weight:600;line-height:1.6;box-shadow:var(--glow-edge)
       }
-      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
+      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg) !important}
 
       /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
       /* v12.8.1 — La tabla salía ilegible en consultorio (capturas del médico): una
@@ -14293,7 +14305,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-table thead th{
         position:sticky;top:0;z-index:2;background:var(--bg-solid);
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
-        color:var(--fg3);text-align:left;padding:12px 12px 9px;
+        color:var(--fg3) !important;text-align:left;padding:12px 12px 9px;
         border-bottom:1px solid var(--edge)
       }
       #vgl-labs-modal .vgl-labs-tr td{
@@ -14303,13 +14315,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
-      #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
-      #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg);overflow-wrap:break-word}
+      #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3) !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
-        font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg);
+        font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg) !important;
         font-variant-numeric:tabular-nums;overflow-wrap:break-word
       }
-      #vgl-labs-modal .vgl-labs-ref{font-size:var(--t-micro);color:var(--fg3);overflow-wrap:break-word}
+      #vgl-labs-modal .vgl-labs-ref{font-size:var(--t-micro);color:var(--fg3) !important;overflow-wrap:break-word}
       /* v12.8.1 — Panel multiparamétrico (uroanálisis): un uroanálisis son ~30 parámetros,
          no un valor único. En rejilla auto-ajustable ocupan 2–4 columnas según el ancho
          disponible y la fila deja de medir varias pantallas. Tipografía de DATO, no de
@@ -14360,7 +14372,7 @@ _vglOfrecerDeshacer(btn);
         padding:3px 0;border-bottom:1px solid var(--line);
         display:flex;justify-content:space-between;gap:8px;font-size:11px;
       }
-      #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3);font-weight:800;font-size:var(--t-micro)}
+      #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3) !important;font-weight:800;font-size:var(--t-micro)}
       /* v14.1.1 (R1b) — recuadro de función renal. Superficie propia para que se lea como
          un resumen y no como una fila más de la tabla de resultados. */
       #vgl-labs-modal .vgl-labs-renal{
@@ -14400,10 +14412,10 @@ _vglOfrecerDeshacer(btn);
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:var(--t-micro);font-weight:800;letter-spacing:.4px;
         padding:4px 10px;border-radius:var(--r-pill);
-        background:var(--bg3);color:var(--fg2);box-shadow:var(--glow-edge)
+        background:var(--bg3);color:var(--fg2) !important;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal .vgl-labs-src.athenea{
-        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
       }
       /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
@@ -14419,7 +14431,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert:hover td{background:rgba(var(--rgb-rojo),.15)}
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td:first-child{box-shadow:inset 3px 0 0 var(--c-rojo)}
-      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo);text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo) !important;text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
       #vgl-labs-modal.light .vgl-labs-alert .vgl-labs-val{text-shadow:none}
       #vgl-labs-modal .vgl-labs-alert .vgl-labs-val::before{content:"▲ ";font-size:var(--t-micro);vertical-align:2px}
 
@@ -14471,13 +14483,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-azul);background:rgba(var(--rgb-azul),.12);
+        color:var(--c-azul) !important;background:rgba(var(--rgb-azul),.12);
         border:1px solid rgba(var(--rgb-azul),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-azul),.10)
       }
       #vgl-agendar-modal .vgl-agm-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-azul),.25)
       }
       #vgl-agendar-modal.light .vgl-agm-patient{text-shadow:none}
@@ -14488,7 +14500,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-step{
         flex:none;display:inline-flex;align-items:center;justify-content:center;
         width:21px;height:21px;border-radius:var(--r-pill);
-        font-size:var(--t-micro);font-weight:900;color:var(--c-azul);
+        font-size:var(--t-micro);font-weight:900;color:var(--c-azul) !important;
         background:rgba(var(--rgb-azul),.15);border:1px solid rgba(var(--rgb-azul),.42);
         box-shadow:0 0 12px rgba(var(--rgb-azul),.14)
       }
@@ -14525,16 +14537,16 @@ _vglOfrecerDeshacer(btn);
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
         display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-        margin-top:8px;font-size:var(--t-micro);color:var(--fg2)
+        margin-top:8px;font-size:var(--t-micro);color:var(--fg2) !important
       }
       #vgl-agendar-modal .vgl-agm-fieldrow>label, #vgl-ordenar-modal .vgl-agm-fieldrow>label{
         flex:none;font-weight:800;font-size:var(--t-micro);letter-spacing:.6px;
-        text-transform:uppercase;color:var(--c-azul)
+        text-transform:uppercase;color:var(--c-azul) !important
       }
-      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
-      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3)}
-      #vgl-agendar-modal .vgl-agm-lab-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3);margin:2px 0 6px}
-      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde) !important}
+      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3) !important}
+      #vgl-agendar-modal .vgl-agm-lab-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3) !important;margin:2px 0 6px}
+      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde) !important}
       #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
       #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
       #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-check-lbl input[type=checkbox]{accent-color:var(--c-verde)}
@@ -14574,24 +14586,24 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-agm-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.12);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.12);
         border:1px solid rgba(var(--rgb-morado),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-morado),.10)
       }
       #vgl-ordenar-modal .vgl-agm-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-morado),.25)
       }
       #vgl-ordenar-modal.light .vgl-agm-patient{text-shadow:none}
       #vgl-ordenar-modal .vgl-agm-sub{margin-top:5px}
 
       /* ---- Rótulo de sección con ficha de conteo ---- */
-      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado)}
+      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado) !important}
       #vgl-ordenar-modal .vgl-agm-step{
         flex:none;display:inline-flex;align-items:center;justify-content:center;
         min-width:21px;height:21px;padding:0 6px;border-radius:var(--r-pill);
-        font-size:var(--t-micro);font-weight:900;color:var(--c-morado);
+        font-size:var(--t-micro);font-weight:900;color:var(--c-morado) !important;
         background:rgba(var(--rgb-morado),.15);border:1px solid rgba(var(--rgb-morado),.42);
         box-shadow:0 0 12px rgba(var(--rgb-morado),.14)
       }
@@ -14625,7 +14637,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-ord-title{font-size:var(--t-body);line-height:1.4}
       #vgl-ordenar-modal .vgl-ord-cie{
         display:inline-block;font-size:var(--t-micro);font-weight:800;letter-spacing:.5px;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.13);
         border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-pill);
         padding:1px 8px;margin-left:2px;white-space:nowrap;vertical-align:1px
       }
@@ -14633,28 +14645,28 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-ord-cups{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px}
       #vgl-ordenar-modal .vgl-ord-cupk{
         flex:none;font-size:var(--t-micro);font-weight:800;letter-spacing:1.2px;
-        text-transform:uppercase;color:var(--fg3)
+        text-transform:uppercase;color:var(--fg3) !important
       }
       #vgl-ordenar-modal .vgl-ord-cup{
         display:inline-flex;align-items:baseline;gap:5px;min-width:0;
-        font-size:var(--t-micro);font-weight:600;line-height:1.35;color:var(--fg2);
+        font-size:var(--t-micro);font-weight:600;line-height:1.35;color:var(--fg2) !important;
         background:var(--bg2);border:1px solid var(--line);
         border-radius:var(--r-field);padding:2px 9px;box-shadow:var(--glow-edge)
       }
-      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
+      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul) !important;font-weight:800;letter-spacing:.3px}
       /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
       /* v12.3.x — Caption de trazabilidad: qué actividad REAL del Excel de PyM disparó
          cada paquete sugerido. Mismo tratamiento visual que .vgl-ord-sexwarn, en acento
          morado informativo (no es una advertencia, es la fuente del dato). */
       #vgl-ordenar-modal .vgl-ord-pymsrc{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.13);
         border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
       }
       #vgl-ordenar-modal .vgl-ord-sexwarn{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
+        color:var(--c-rojo) !important;background:rgba(var(--rgb-rojo),.13);
         border:1px solid rgba(var(--rgb-rojo),.40);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
         box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
@@ -14665,7 +14677,7 @@ _vglOfrecerDeshacer(btn);
          .vgl-ord-sexwarn/.vgl-ord-pymsrc, solo cambia el acento de color. */
       #vgl-ordenar-modal .vgl-ord-vigwarn{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-verde);background:rgba(var(--rgb-verde),.13);
+        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.13);
         border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
       }
@@ -31292,6 +31304,49 @@ _vglOfrecerDeshacer(btn);
     PTH: "PTH intacta", FOSFORO: "Fósforo sérico", ALBUMINA: "Albúmina sérica",
   };
 
+  // =====================================================================
+  //  v17.8.0 — UN SOLO TRADUCTOR DE NOMBRE DE ANALITO
+  //  ------------------------------------------------------------------
+  //  AUDITORÍA DE EXPERIENCIA (27-ago-2026), patrón C: «cuatro traductores de nombre de
+  //  analito distintos conviviendo con precedencias distintas». El resultado se veía en
+  //  el peor sitio posible — hallazgo #61, gravedad alta: la hoja educativa que el médico
+  //  IMPRIME Y ENTREGA EN LA MANO al paciente listaba «COLESTEROL_LDL», «UROANALISIS»,
+  //  «HBA1C». Verificado ejecutando la función, no leyendo el código.
+  //
+  //  Precedencia FIJA, y este es el orden y el porqué:
+  //    1. MTR_NOMBRE_ANALITO — 13 claves, redacción clínica («Creatinina sérica»,
+  //       «Relación albúmina/creatinina»). Es el más completo y el mejor escrito.
+  //    2. RCV_VIGENCIA_NOMBRES — 9 claves, redacción de catálogo con mayúsculas de
+  //       título («Creatinina en Suero», «RAC (Relación Albúmina/Creatinina)»). Solo
+  //       cubre huecos del primero.
+  //    3. Último recurso: quitar los guiones bajos y dejar la primera en mayúscula, para
+  //       que una clave nueva que nadie tradujo salga como «Ferritina» y no «FERRITINA».
+  //
+  //  Nunca devuelve vacío y nunca inventa: si no reconoce la clave, la deja legible.
+  //  La suite_70 (REGLA C) impide que una clave cruda vuelva a llegar al papel.
+  // =====================================================================
+  function mtrNombreLegibleAnalito(x) {
+    if (x == null) return "";
+    if (typeof x === "object") {
+      // Un item de plan: {clave, nombre}. El nombre bonito manda sobre la clave.
+      const n = String(x.nombre == null ? "" : x.nombre).trim();
+      if (n && !/^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(n)) return n;
+      return mtrNombreLegibleAnalito(x.clave || x.key || n);
+    }
+    const clave = String(x).trim();
+    if (!clave) return "";
+    if (typeof MTR_NOMBRE_ANALITO !== "undefined" && MTR_NOMBRE_ANALITO[clave]) return MTR_NOMBRE_ANALITO[clave];
+    if (typeof RCV_VIGENCIA_NOMBRES !== "undefined" && RCV_VIGENCIA_NOMBRES[clave]) return RCV_VIGENCIA_NOMBRES[clave];
+    // Sin guion bajo no se toca NADA. Aquí caben dos cosas y las dos hay que respetarlas:
+    // un nombre ya legible («Colesterol total») y una sigla clínica que el médico usa a
+    // diario («LDL», «RAC», «PTH»). Un primer intento de esta función las pasaba a
+    // minúsculas y convertía «LDL» en «Ldl» — lo cazó suite_67. Destrozar una sigla para
+    // que parezca prosa es peor que dejarla como está.
+    if (!/_/.test(clave)) return clave;
+    const suelto = clave.replace(/_/g, " ").toLowerCase();
+    return suelto.charAt(0).toUpperCase() + suelto.slice(1);
+  }
+
   // Piso de la norma para un examen que hay que pedir de cero: no se cita al
   // paciente antes de HOY+14 días (le tiene que dar tiempo a ir).
   const MTR_PISO_ESTADO_A = 14;
@@ -35694,7 +35749,11 @@ _vglOfrecerDeshacer(btn);
       const nombre = o.nombre || "";
       const fecha = (typeof mtrFechaLegible === "function") ? mtrFechaLegible(o.hoyIso || todayStamp()) : (o.hoyIso || "");
       const pendientes = [].concat(plan.vencidos || [], plan.faltantes || [])
-        .map((x) => (x && (x.clave || x.nombre)) ? (x.clave || x.nombre) : (typeof x === "string" ? x : "")).filter(Boolean);
+        // v17.8.0 — aquí la preferencia estaba INVERTIDA (`x.clave || x.nombre`), así que
+        // cuando el item traía las dos cosas ganaba la clave interna y el paciente se
+        // llevaba a casa un papel que decía «COLESTEROL_LDL». Un solo traductor, con
+        // precedencia fija, y el nombre legible siempre por delante.
+        .map((x) => mtrNombreLegibleAnalito(x)).filter(Boolean);
       const secciones = [];
       if (flags.alarmas) {
         secciones.push('<div class="sec"><h2>🚨 Signos de alarma — vaya de inmediato a urgencias o llame al 123 si presenta:</h2>'

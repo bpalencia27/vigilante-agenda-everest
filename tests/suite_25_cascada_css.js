@@ -312,86 +312,30 @@ module.exports = {
     // en ese formato: la suite quedaba en verde sin verla. BASE_CONOCIDA ahora es la
     // lista real y completa (74 infracciones únicas tras v14.0.0/vgl-ord-vigwarn, filtro quitado).
     t.caso("Regla E - color con selector de PANEL fuera de #vgl-root lleva !important", () => {
-      const BASE_CONOCIDA = [
-        "#vgl-agendar-modal #vgl-agm-sms-nota|color:var(--fg3)",
-        "#vgl-agendar-modal #vgl-lab-date-lbl|color:var(--c-verde)",
-        "#vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label|color:var(--c-verde)",
-        "#vgl-agendar-modal .vgl-agm-fieldrow>label|color:var(--c-azul)",
-        "#vgl-agendar-modal .vgl-agm-fieldrow|color:var(--fg2)",
-        "#vgl-agendar-modal .vgl-agm-kicker|color:var(--c-azul)",
-        "#vgl-agendar-modal .vgl-agm-lab-sms-nota|color:var(--fg3)",
-        "#vgl-agendar-modal .vgl-agm-patient|color:var(--fg)",
-        "#vgl-agendar-modal .vgl-agm-step|color:var(--c-azul)",
-        "#vgl-agendar-modal.light .vgl-agm-card|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-close|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-dinfo b|color:var(--c-verde)",
-        "#vgl-agendar-modal.light .vgl-agm-input|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-lbl|color:var(--c-azul)",
-        "#vgl-agendar-modal.light .vgl-agm-pbtn|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
-        "#vgl-agendar-modal.light .vgl-agm-sbtn|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-sub b|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-agm-sub.med b|color:var(--c-azul)",
-        "#vgl-agendar-modal.light .vgl-agm-sub|color:var(--fg2)",
-        "#vgl-agendar-modal.light .vgl-agm-title|color:var(--fg)",
-        "#vgl-agendar-modal.light .vgl-ord-cie|color:var(--c-azul)",
-        "#vgl-agendar-modal.light .vgl-ord-cups|color:var(--fg2)",
-        "#vgl-agendar-modal.light .vgl-ord-title|color:var(--fg)",
-        "#vgl-labs-modal .vgl-agm-lbl|color:var(--c-verde)",
-        "#vgl-labs-modal .vgl-labs-alert .vgl-labs-val|color:var(--c-rojo)",
-        "#vgl-labs-modal .vgl-labs-date|color:var(--fg3)",
-        "#vgl-labs-modal .vgl-labs-empty b|color:var(--fg)",
-        "#vgl-labs-modal .vgl-labs-empty|color:var(--fg2)",
-        "#vgl-labs-modal .vgl-labs-exam|color:var(--fg)",
-        "#vgl-labs-modal .vgl-labs-kicker|color:var(--c-verde)",
-        "#vgl-labs-modal .vgl-labs-patient|color:var(--fg)",
-        "#vgl-labs-modal .vgl-labs-portal|color:var(--c-azul)",
-        "#vgl-labs-modal .vgl-labs-ref|color:var(--fg3)",
-        "#vgl-labs-modal .vgl-labs-src.athenea|color:var(--c-azul)",
-        "#vgl-labs-modal .vgl-labs-srclbl b|color:var(--fg)",
-        "#vgl-labs-modal .vgl-labs-srclbl|color:var(--fg2)",
-        "#vgl-labs-modal .vgl-labs-src|color:var(--fg2)",
-        "#vgl-labs-modal .vgl-labs-table thead th|color:var(--fg3)",
-        "#vgl-labs-modal .vgl-labs-uro-i b|color:var(--fg3)",
-        "#vgl-labs-modal .vgl-labs-val|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-card|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-close|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-lbl|color:var(--c-azul)",
-        "#vgl-labs-modal.light .vgl-agm-lbl|color:var(--c-verde)",
-        "#vgl-labs-modal.light .vgl-agm-pbtn|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
-        "#vgl-labs-modal.light .vgl-agm-sbtn|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-sub b|color:var(--fg)",
-        "#vgl-labs-modal.light .vgl-agm-sub|color:var(--fg2)",
-        "#vgl-labs-modal.light .vgl-agm-title|color:var(--fg)",
-        "#vgl-ordenar-modal .vgl-agm-fieldrow>label|color:var(--c-azul)",
-        "#vgl-ordenar-modal .vgl-agm-fieldrow|color:var(--fg2)",
-        "#vgl-ordenar-modal .vgl-agm-kicker|color:var(--c-morado)",
-        "#vgl-ordenar-modal .vgl-agm-lbl|color:var(--c-morado)",
-        "#vgl-ordenar-modal .vgl-agm-patient|color:var(--fg)",
-        "#vgl-ordenar-modal .vgl-agm-step|color:var(--c-morado)",
-        "#vgl-ordenar-modal .vgl-ord-cie|color:var(--c-morado)",
-        "#vgl-ordenar-modal .vgl-ord-cup b|color:var(--c-azul)",
-        "#vgl-ordenar-modal .vgl-ord-cupk|color:var(--fg3)",
-        "#vgl-ordenar-modal .vgl-ord-cup|color:var(--fg2)",
-        "#vgl-ordenar-modal .vgl-ord-pymsrc|color:var(--c-morado)",
-        "#vgl-ordenar-modal .vgl-ord-sexwarn|color:var(--c-rojo)",
-        "#vgl-ordenar-modal .vgl-ord-vigwarn|color:var(--c-verde)",
-        "#vgl-ordenar-modal.light .vgl-agm-card|color:var(--fg)",
-        "#vgl-ordenar-modal.light .vgl-agm-close|color:var(--fg)",
-        "#vgl-ordenar-modal.light .vgl-agm-dinfo b|color:var(--c-verde)",
-        "#vgl-ordenar-modal.light .vgl-agm-lbl|color:var(--c-azul)",
-        "#vgl-ordenar-modal.light .vgl-agm-pbtn|color:var(--fg)",
-        "#vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido|color:var(--c-ambar)",
-        "#vgl-ordenar-modal.light .vgl-agm-sbtn|color:var(--fg)",
-        "#vgl-ordenar-modal.light .vgl-agm-sub b|color:var(--fg)",
-        "#vgl-ordenar-modal.light .vgl-agm-sub|color:var(--fg2)",
-        "#vgl-ordenar-modal.light .vgl-agm-title|color:var(--fg)"
-      ];
-
+      // v17.8.0 — ESTA PRUEBA CAMBIÓ DE OFICIO, y conviene saber por qué.
+      //
+      // Hasta hoy llevaba una BASE_CONOCIDA de 74 infracciones y comprobaba que la lista
+      // saliera EXACTAMENTE igual. Eso no protegía la regla: protegía la DEUDA. Mientras
+      // el número no se moviera, el banco quedaba verde con 74 declaraciones de color
+      // expuestas al CSS de Everest — entre ellas `.vgl-ord-sexwarn`, el aviso que impide
+      // ordenar una citología a un hombre.
+      //
+      // La auditoría de experiencia (27-ago-2026) lo listó como patrón B: «la regla de
+      // !important está escrita y no aplicada; al menos trece hallazgos son el mismo bug
+      // de la v12.10.5 esperando a repetirse». Se pagó la deuda entera: las 74 llevan
+      // ahora !important. La prueba pasa a exigir CERO, que es lo que CLAUDE.md dice
+      // desde el principio: «ese color lleva !important. Sin excepción.»
+      //
+      // Con la base en cero ya no hay que mantener una lista a mano, y cualquier regla
+      // nueva que nazca sin !important cae aquí el mismo día que se escribe.
       const paneles = [
         '#vgl-pym-modal', '#vgl-pes-modal', '#vgl-labs-modal',
-        '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal'
+        '#vgl-labsv-modal', '#vgl-postcita-panel', '#vgl-agendar-modal', '#vgl-ordenar-modal',
+        // v17.8.0 — los tres emergentes que nacieron después de que se escribiera esta
+        // lista y nunca se añadieron: el reconciliador de fuentes, el redactor con IA y el
+        // Panel del paciente. Cuelgan de document.body igual que los siete de arriba, así
+        // que la regla les aplica exactamente igual. Verificado: hoy los tres están limpios.
+        '#vgl-confirma-modal', '#vgl-ia-modal', '#vgl-panel-modal'
       ];
 
       const infracciones = new Set();
@@ -401,19 +345,17 @@ module.exports = {
           for (const cd of r.decls) {
             if (!cd.includes('!important')) {
               const normSel = r.selector.trim().replace(/\s+/g, ' ');
-              const normDecl = cd.replace(/\s+/g, ''); // "color:var(--c-azul)"
+              const normDecl = cd.replace(/\s+/g, '');
               infracciones.add(`${normSel}|${normDecl}`);
             }
           }
         }
       }
 
-      const arrInfracciones = Array.from(infracciones).sort();
-      t.cierto(arrInfracciones.length === BASE_CONOCIDA.length, `Deben salir ${BASE_CONOCIDA.length} cadenas únicas. Salieron ${arrInfracciones.length}.`);
-
-      for (let i = 0; i < BASE_CONOCIDA.length; i++) {
-        t.cierto(arrInfracciones[i] === BASE_CONOCIDA[i], `Infracción no coincide:\nEsperada: ${BASE_CONOCIDA[i]}\nObtenida: ${arrInfracciones[i]}`);
-      }
+      const arr = Array.from(infracciones).sort();
+      t.igual(arr.length, 0,
+        "un color sin !important en un emergente pegado a document.body puede perder contra el CSS de Everest, "
+        + "que es una caja negra ajena y cambiante. Infracciones: " + arr.join(" · "));
     });
 
     t.caso("Regla F - paridad de tokens claro/oscuro y un token por cada color de COLORS", () => {
@@ -586,8 +528,16 @@ module.exports = {
       // este paciente» del Redactor IA vive dentro de #vgl-ia-modal (colgado de
       // document.body, Regla E) y antes NO tenía ninguna regla .active: el clic sí cambiaba
       // de modo pero no se veía seleccionado, como si el clic no hubiera hecho efecto.
+      // v17.8.0 (auditoría de experiencia, patrón B): 349 -> 404. +55, y NO son adorno:
+      // son las 55 declaraciones de color que la Regla E exigía desde siempre y que la
+      // propia Regla E llevaba anotadas como «deuda conocida» (74 infracciones, de las
+      // cuales 55 eran declaraciones de color; el resto ya estaban cubiertas por otra vía).
+      // Entre ellas .vgl-ord-sexwarn, el aviso que impide ordenar una citología a un
+      // hombre, que hasta hoy podía perder contra cualquier regla de Everest con
+      // especificidad >=10. Este contador existe para que un salto así no pase inadvertido:
+      // cumple su función y por eso se sube a mano, con el motivo escrito.
       const importantTotal = (css.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 349, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 349, salió ${importantTotal})`);
+      t.cierto(importantTotal === 404, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active) y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 404, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
