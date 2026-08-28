@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.31.0
+// @version     17.32.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.31.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.32.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5607,6 +5607,120 @@
   }
 
   // =====================================================================
+  //  v17.32.0 — BOTÓN "ORDENAR LO PENDIENTE", DEBAJO DEL ANCLA DE #vgl-cw-examenes
+  //  ---------------------------------------------------------------------
+  //  Mismo ancla (mtrBotonOrdenarConducta) que ya usa el widget de arriba, para que los
+  //  dos vivan pegados al mismo botón nativo "Paquetes" — pero DEBAJO de él (el médico
+  //  pidió el suyo "debajo del botón de Paquetes"), no a su derecha como la pastilla de
+  //  qué-ordenar. La lógica de red vive en mtrOrdenarLabsConductaAhora, arriba, junto al
+  //  resto del módulo de Ordenamientos — aquí solo hay DOM y estado de la UI.
+  // =====================================================================
+  // v17.32.0 — sobre esta guarda y por qué es defensa EN PROFUNDIDAD, no la única línea
+  // de defensa contra un duplicado: al mutar esta guarda para verificarla, la red seguía
+  // creando UNA sola orden — porque pageFetchJson ya deduplica peticiones idénticas en
+  // vuelo (GHOST, línea ~16391): dos clics casi simultáneos con el mismo paciente/CUPS
+  // comparten la MISMA promesa de red hasta el POST final. Esa deduplicación es real y
+  // ya protegía esto antes de esta versión — pero es un detalle de implementación de
+  // OTRO módulo, no un contrato que este botón deba asumir. `_cwoEnCurso` es la guarda
+  // PROPIA y explícita: evita recomputar todo (leer el resumen, rearmar los items,
+  // deshabilitar/rehabilitar el botón dos veces) y sigue protegiendo aunque el payload
+  // de la segunda petición llegara a diferir del primero (GHOST solo deduplica bytes
+  // idénticos). Documentado en tests/INFORME_MUTACIONES.md — la mutación de esta guarda
+  // no cae por el camino de red, y ese hallazgo se dejó escrito en vez de escondido.
+  let _cwoDocPrevio = null, _cwoEnCurso = false;
+  function _cwoEstadoParaTest() { return { docPrevio: _cwoDocPrevio, enCurso: _cwoEnCurso }; }
+  function _cwoResetParaTest() { _cwoDocPrevio = null; _cwoEnCurso = false; }
+
+  async function _cwoClic(btn, docId) {
+    if (_cwoEnCurso || !docId) return;
+    _cwoEnCurso = true;
+    btn.disabled = true;
+    const textoPrevio = btn.textContent;
+    btn.textContent = "⏳ Ordenando...";
+    try {
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      let plan = null;
+      try { plan = resumen ? mtrTableroClinico(resumen) : null; } catch (e) { plan = null; }
+      const items = mtrItemsOrdenarConducta(plan ? plan.ordenar : []);
+      if (!items.length) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
+
+      uxTrack("widget.ordenarConducta.clic");
+      const r = await mtrOrdenarLabsConductaAhora(docId, items);
+      if (r.creadas.length) {
+        markOrdenLabsConductaHoy(docId, r.creadas);
+        const nombresOk = r.creadas.map((c) => (items.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+        if (r.fallidas.length) {
+          const nombresMal = r.fallidas.map((f) => f.nombre || f.clave).join(", ");
+          showToast("AMBAR", "Orden parcial", "Se ordenaron: " + nombresOk + ". No se pudo con: " + nombresMal + ".", true);
+        } else {
+          showToast("VERDE", "Orden generada", "Se ordenó: " + nombresOk + ".", false);
+        }
+      } else {
+        showToast("ROJO", "No se generó la orden", r.motivo || "No se pudo completar la orden.", true);
+      }
+    } catch (e) {
+      showToast("ROJO", "No se generó la orden", "Error inesperado al ordenar. Inténtelo de nuevo.", true);
+    } finally {
+      _cwoEnCurso = false;
+      btn.disabled = false;
+      btn.textContent = textoPrevio;
+      try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
+    }
+  }
+
+  function mtrWidgetOrdenarConductaTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-ordenar-btn");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) { if (el) el.style.display = "none"; _cwoDocPrevio = null; return; }
+      if (docId !== _cwoDocPrevio) { _cwoDocPrevio = docId; }
+
+      const boton = mtrBotonOrdenarConducta(d);
+      if (!boton) { if (el) el.style.display = "none"; return; }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+      let plan = null;
+      try { plan = mtrTableroClinico(resumen); } catch (e) { plan = null; }
+      const items = mtrItemsOrdenarConducta(plan ? plan.ordenar : []);
+
+      let btn = el;
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.id = "vgl-cw-ordenar-btn";
+        btn.type = "button";
+        document.body.appendChild(btn);
+      }
+      const r = boton.getBoundingClientRect();
+      btn.style.position = "fixed";
+      btn.style.left = Math.round(r.left) + "px";
+      btn.style.top = Math.round(r.bottom + 8) + "px";
+
+      if (_cwoEnCurso) { btn.style.display = ""; return; }   // no se repinta a mitad de un clic en curso
+
+      const yaOrdenado = isOrdenLabsConductaHoy(docId);
+      if (!items.length && !yaOrdenado) { btn.style.display = "none"; return; }
+
+      btn.className = "vgl-cw-ord-btn" + (isLight() ? " light" : "") + (yaOrdenado ? " vgl-cw-ord-hecho" : "");
+      btn.style.display = "";
+      if (yaOrdenado) {
+        btn.disabled = true;
+        btn.textContent = "✓ Ordenado hoy";
+        btn.title = "Ya se generó una orden de laboratorios pendientes hoy para este paciente.";
+        btn.onclick = null;
+      } else {
+        btn.disabled = false;
+        btn.textContent = "📋 Ordenar pendientes (" + items.length + ")";
+        btn.title = "Genera de una vez la orden de todo lo que toca en la próxima consulta: " + items.map((x) => x.nombre).join(", ") + ".";
+        btn.onclick = (e) => { e.stopPropagation(); return _cwoClic(btn, docId); };
+      }
+    } catch (e) {}
+  }
+
+  // =====================================================================
   //  v17.24.0 — WIDGET DE CONDUCTA: análisis farmacológico (Fase 2)
   //  ---------------------------------------------------------------------
   //  Pedido del médico (28-ago): avisos de seguridad farmacológica junto a donde
@@ -7460,7 +7574,7 @@ _vglOfrecerDeshacer(btn);
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -12862,7 +12976,7 @@ _vglOfrecerDeshacer(btn);
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
         #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *,
-        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *{
+        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *,#vgl-cw-ordenar-btn{
           animation:none !important;transition:none !important;
         }
       }
@@ -12948,7 +13062,7 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
       body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
-      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco{display:none !important}
+      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
@@ -13218,6 +13332,19 @@ _vglOfrecerDeshacer(btn);
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       :where(#vgl-cw-examenes :not([class])){color:inherit}
+      /* v17.32.0 — botón "Ordenar pendientes", debajo del ancla de #vgl-cw-examenes. Vive
+         en document.body, fuera de #vgl-root: cada regla de color con clase propia lleva
+         !important sin excepción (CLAUDE.md, misma regla que #vgl-cw-examenes arriba). */
+      button#vgl-cw-ordenar-btn{
+        position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);
+        max-width:220px;cursor:pointer;user-select:none;
+        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
+        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
+        color:var(--c-verde) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+      }
+      button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.75}
+      button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:var(--fg3) !important}
+      :where(#vgl-cw-ordenar-btn :not([class])){color:inherit}
       /* v17.24.0 — widget de Conducta: análisis farmacológico (Fase 2). Mismo idioma que
          #vgl-cw-examenes (badge/panel/estados/pulso); el contenido del panel lo pintan
          mtrRenderAvisosHtml/mtrRenderDuplicidadesHtml (.vgl-mtr-*/.vgl-dup-*), cuyo CSS se
@@ -23878,6 +24005,169 @@ _vglOfrecerDeshacer(btn);
   }
 
   // =====================================================================
+  //  v17.32.0 — BOTÓN "ORDENAR LO PENDIENTE" DE CONDUCTA (encargo del médico, 28-ago)
+  //  ------------------------------------------------------------------
+  //  Textual: "necesito además el botón debajo del botón de Paquetes en la sección de
+  //  Conducta para agregar en un solo clic los laboratorios que se debe ordenar cada
+  //  paciente en la próxima consulta". Al preguntarle si debía abrir el modal de Ordenar
+  //  ya marcado (un clic más para confirmar) o generar la orden de una vez, sin pantalla
+  //  intermedia, eligió la segunda: "tal cual como lo haría el botón de Paquetes que ya
+  //  trae Everest". Es el caso que CLAUDE.md documenta como excepción puntual (ver
+  //  v12.10.4): un botón que actúa sin cuadro de confirmación porque el propio médico lo
+  //  pidió así — no una decisión unilateral del script.
+  //
+  //  QUÉ SE ORDENA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
+  //  próxima consulta (`resumen.plan.ordenar`, el MISMO dato que ya lee el widget
+  //  #vgl-cw-examenes, v17.18.0) — nunca un paquete fijo. Si el motor no marcó nada
+  //  pendiente, el botón no ordena nada (casilla vacía antes que dato inventado).
+  //
+  //  CÓMO SE ORDENA: reusa el MISMO camino ya probado y en producción desde hace
+  //  versiones — apiOrdenamientoBuscarPaciente / apiOrdenamientoObtenerDx /
+  //  apiOrdenamientoObtenerCup / apiOrdenamientoGuardar, el mismo que usa
+  //  openOrdenamientoModal (arriba) — con el mismo diagnóstico "I10X" (PYM_CATALOG,
+  //  paquete "RCV EXPRÉS") que el médico ya verificó el 2026-08-11 para exactamente esta
+  //  población (crónicos ERC/HTA/DM2). No se inventa ningún CIE-10 ni CUPS nuevo.
+  //
+  //  LO QUE ESTA VERSIÓN DELIBERADAMENTE NO HACE, y por qué: v15.3.0 retiró para siempre
+  //  la escritura simulando clics DENTRO del DOM de Conducta (causó un bucle real en
+  //  consultorio) — este botón NUNCA toca ese DOM, ni lo lee más allá de encontrar el
+  //  botón "Paquetes" como ancla de posición (mtrBotonOrdenarConducta, ya existente). La
+  //  orden se crea por el módulo de Ordenamientos de Everest, exactamente como si el
+  //  médico hubiera hecho el gesto manual — el mismo principio que ya rige
+  //  openOrdenamientoModal desde ese retiro.
+  // =====================================================================
+
+  // Clave del analito (MTR_DRIVERS/MTR_PASAJEROS) -> código(s) CUPS de ESCRITURA.
+  // Todos vienen de fuentes ya verificadas en producción, citadas una por una — ninguno
+  // se adivina aquí:
+  //   · Los 9 drivers: PYM_CATALOG, paquete I10X "RCV EXPRÉS" (línea ~22886-22913),
+  //     confirmado por el médico el 2026-08-11 contra la tabla oficial de CUPS de la IPS.
+  //     RAC lleva DOS códigos a propósito — "van SIEMPRE los dos: uno solo no produce la
+  //     RAC" (comentario original de esa misma línea).
+  //   · Los 4 pasajeros: CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO (línea ~1286), tomados de
+  //     una orden YA GUARDADA en Everest (agrupador 12260710549, ver
+  //     EVIDENCIA_ORDENAMIENTO_CURADO.md). HBA1C aparece en las dos fuentes con el MISMO
+  //     código (903426) — verificación cruzada, no una casualidad.
+  const MTR_CUPS_ORDENAR_POR_ANALITO = {
+    COLESTEROL_TOTAL: ["903818"],
+    COLESTEROL_HDL: ["903815"],
+    COLESTEROL_LDL: ["903817"],   // versión de crónicos (ERC/HTA/DM2) del I10X, no la 903816 de sanos (Z108)
+    TRIGLICERIDOS: ["903868"],
+    GLUCOSA: ["903841"],
+    UROANALISIS: ["907106"],
+    CREATININA: ["903895"],
+    RAC: ["903876", "903026"],    // creatinina en orina + microalbuminuria, siempre juntos
+    HBA1C: ["903426"],
+    HEMOGLOBINA: ["902213"],
+    PTH: ["903890"],
+    FOSFORO: ["903885"],
+    ALBUMINA: ["903803"],
+  };
+
+  // v17.32.0 — mismo patrón day-scoped que isLabAgendadaHoy/markLabAgendadaHoy, en su
+  // PROPIO namespace (`p.labsConducta`): a propósito NO comparte almacén con
+  // isOrdenesCreadasHoy/markOrdenesCreadasHoy (ese es el de las órdenes PyM del botón
+  // "Ordenar" del dock — un paciente puede necesitar las dos cosas el mismo día, y
+  // marcar una no puede apagar el botón de la otra con un mensaje que ya no sería cierto).
+  function isOrdenLabsConductaHoy(docId) {
+    if (!docId) return false;
+    const p = getProcessedToday();
+    return !!(p.labsConducta && p.labsConducta.includes(String(docId)));
+  }
+  function markOrdenLabsConductaHoy(docId, claves) {
+    if (!docId) return;
+    const p = getProcessedToday();
+    const sDoc = String(docId);
+    if (!p.labsConducta) p.labsConducta = [];
+    if (!p.labsConducta.includes(sDoc)) p.labsConducta.push(sDoc);
+    if (Array.isArray(claves) && claves.length) {
+      if (!p.labsConductaDetalle) p.labsConductaDetalle = {};
+      p.labsConductaDetalle[sDoc] = { claves: claves, ts: Date.now() };
+    }
+    writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint();
+  }
+
+  // El diagnóstico ya verificado (ver comentario de arriba) para toda esta familia de
+  // órdenes — el mismo que usa PYM_CATALOG/I10X.
+  const MTR_ORDENAR_CONDUCTA_CIE10 = "I10X";
+
+  // Pura salvo por lo que recibe ya resuelto: dado el `ordenar` crudo de
+  // mtrPlanParaclinicos (o de mtrTableroClinico, que es lo mismo), arma la lista de
+  // {clave, nombre, codigos} a intentar — y ya excluye lo que no tiene CUPS conocido
+  // (nunca debería pasar con los 13 de MTR_CUPS_ORDENAR_POR_ANALITO, pero si el motor
+  // algún día trae una clave nueva, se ignora en vez de tronar).
+  function mtrItemsOrdenarConducta(ordenar) {
+    const lista = Array.isArray(ordenar) ? ordenar : [];
+    const vistos = new Set();
+    const items = [];
+    for (const a of lista) {
+      const clave = a && a.clave;
+      if (!clave || vistos.has(clave)) continue;
+      const codigos = MTR_CUPS_ORDENAR_POR_ANALITO[clave];
+      if (!codigos || !codigos.length) continue;
+      vistos.add(clave);
+      items.push({ clave: clave, nombre: (a.nombre || mtrNombreLegibleAnalito(a) || clave), codigos: codigos });
+    }
+    return items;
+  }
+
+  // El núcleo de red: dado el docId del paciente abierto, ordena TODO lo que
+  // mtrPlanParaclinicos diga que toca ahora mismo, con el mismo camino ya probado que usa
+  // openOrdenamientoModal. Devuelve {ok, creadas:[claves], fallidas:[{clave,motivo}],
+  // motivo} — nunca lanza: cada fallo vuelve como dato, nunca como excepción, para que la
+  // UI pueda avisar con un toast siempre, y nunca con un error de consola mudo.
+  async function mtrOrdenarLabsConductaAhora(docId, itemsPendientes) {
+    const vacio = { ok: false, creadas: [], fallidas: [], agrupador: null, motivo: "" };
+    if (!docId) return Object.assign({}, vacio, { motivo: "Sin paciente identificado." });
+    const items = Array.isArray(itemsPendientes) ? itemsPendientes : [];
+    if (!items.length) return Object.assign({}, vacio, { motivo: "Nada pendiente por ordenar." });
+
+    const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(docId);
+    if (!pacienteIdOrd) {
+      return Object.assign({}, vacio, { fallidas: items.map((x) => ({ clave: x.clave, nombre: x.nombre, motivo: "paciente" })),
+        motivo: "No se encontró al paciente en el sistema de órdenes con la cédula " + docId + "." });
+    }
+    const dxId = await apiOrdenamientoObtenerDx(MTR_ORDENAR_CONDUCTA_CIE10);
+    if (!dxId) {
+      return Object.assign({}, vacio, { fallidas: items.map((x) => ({ clave: x.clave, nombre: x.nombre, motivo: "diagnostico" })),
+        motivo: "No se pudo resolver el diagnóstico de la orden en Everest." });
+    }
+
+    const cupsObjs = [];
+    const fallidas = [];
+    for (const item of items) {
+      // RAC necesita SUS DOS códigos para tener sentido clínico ("uno solo no produce la
+      // RAC", ver el comentario de MTR_CUPS_ORDENAR_POR_ANALITO): si falta cualquiera de
+      // los dos, ninguno de los dos entra a la orden — no se pide media RAC.
+      const resueltos = [];
+      let faltoAlguno = false;
+      for (const codigo of item.codigos) {
+        const cObj = await apiOrdenamientoObtenerCup(pacienteIdOrd, codigo);
+        if (cObj) resueltos.push(cObj); else faltoAlguno = true;
+      }
+      if (faltoAlguno || !resueltos.length) { fallidas.push({ clave: item.clave, nombre: item.nombre, motivo: "cups" }); continue; }
+      cupsObjs.push(...resueltos);
+    }
+    const claveDeItemResuelto = items.filter((x) => !fallidas.some((f) => f.clave === x.clave)).map((x) => x.clave);
+
+    if (!cupsObjs.length) {
+      return Object.assign({}, vacio, { fallidas: fallidas, motivo: "No se pudo resolver ningún examen en el sistema de órdenes." });
+    }
+
+    vglLog("ORDEN", "GuardarOrdenConductaRequested", { pacienteIdOrd, dxId, countCups: cupsObjs.length });
+    const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
+    const agpReal = resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador));
+    if (!resOrd || resOrd.error || !agpReal) {
+      return Object.assign({}, vacio, {
+        fallidas: claveDeItemResuelto.map((c) => ({ clave: c, nombre: (items.find((x) => x.clave === c) || {}).nombre, motivo: "guardar" })).concat(fallidas),
+        motivo: "El sistema de órdenes no confirmó la creación.",
+      });
+    }
+
+    return { ok: true, creadas: claveDeItemResuelto, fallidas: fallidas, agrupador: agpReal, motivo: "" };
+  }
+
+  // =====================================================================
   //  [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró por completo el
   //  bloque "T7 — BANNER PyM SUPERIOR" (`_bannerPymCache`, `_bannerPymEnVuelo`,
   //  `BANNER_PYM_TTL_MS`, `_bannerPymInvalidar`, `_pymYaOrdenadoHoyDesdeElScript`,
@@ -25799,6 +26089,7 @@ _vglOfrecerDeshacer(btn);
         // (mtrWidgetFarmacoTick, análisis farmacológico). Los dos cuelgan del mismo tick
         // de "historia", igual que el resto de los inyectores de esta línea.
         try { mtrWidgetConductaTick(); } catch (e) {}
+        try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
         try { mtrWidgetFarmacoTick(); } catch (e) {}
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {

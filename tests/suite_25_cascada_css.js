@@ -640,8 +640,11 @@ module.exports = {
       // El bloque "Medicamentos actuales" del Panel (.vgl-panel-meds-nota/-nom/-frec, 3
       // reglas con color !important) se retiró por completo (encargo del médico, 28-ago:
       // el Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular).
+      // v17.32.0 — 523 -> 525: el botón "Ordenar pendientes" de Conducta (#vgl-cw-ordenar-btn,
+      // fuera de #vgl-root) suma sus 2 reglas de color con !important (verde normal,
+      // gris "ya ordenado hoy") — misma disciplina que el resto de los widgets flotantes.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 523, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.28.0 sobre el retiro de "Medicamentos actuales", 526 -> 523). Esperado 523, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 525, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.32.0 sobre #vgl-cw-ordenar-btn, 523 -> 525). Esperado 525, salió ${importantTotal}.`);
 
       // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
       // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier
@@ -737,7 +740,8 @@ module.exports = {
       // comparten la misma capa de widget: 2 -> 3 sitios. v17.18.0 — #vgl-cw-examenes (el
       // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios. v17.24.0 —
       // #vgl-cw-farmaco (el widget hermano, Fase 2 del rediseño del Panel): 4 -> 5 sitios.
-      t.cierto(zWidget.length === 5, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, #vgl-cw-examenes y #vgl-cw-farmaco (5 sitios). Salieron ${zWidget.length}.`);
+      // v17.32.0 — #vgl-cw-ordenar-btn (el botón "Ordenar pendientes"): 5 -> 6 sitios.
+      t.cierto(zWidget.length === 6, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, #vgl-cw-examenes, #vgl-cw-farmaco y #vgl-cw-ordenar-btn (6 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);

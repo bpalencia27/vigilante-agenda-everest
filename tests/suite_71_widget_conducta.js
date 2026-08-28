@@ -20,6 +20,22 @@ const RESUMEN_ORDENAR = {
 const RESUMEN_AL_DIA = { programa: "HTA", factores: { hta: true }, plan: { ordenar: [], drivers: [], pasajeros: [] } };
 const RESUMEN_SIN_PROGRAMA = { plan: { ordenar: [], drivers: [], pasajeros: [] } };
 
+// v17.32.0 — claves REALES de MTR_DRIVERS/MTR_PASAJEROS (mayúsculas), a diferencia de
+// RESUMEN_ORDENAR de arriba (que usa "creatinina"/"hemoglobina" en minúscula, inocuo
+// para mtrWidgetExamenesDatos porque ese widget nunca toca `.clave` — pero el botón
+// "Ordenar pendientes" SÍ, para resolver el CUPS de cada uno, así que necesita el
+// formato real que entrega mtrPlanParaclinicos).
+const RESUMEN_ORDENAR_BOTON = {
+  programa: "HTA", factores: { hta: true },
+  plan: {
+    ordenar: [
+      { clave: "CREATININA", nombre: "Creatinina sérica", estado: "D", subestado: "vencido", vence: "2026-08-01" },
+      { clave: "HBA1C", nombre: "Hemoglobina glicosilada", estado: "A", subestado: "pendiente", vence: null },
+    ],
+    drivers: [], pasajeros: [],
+  },
+};
+
 // Mismo patrón de tablero-de-pestañas que suite_64: un objeto "doc" mínimo cuyo
 // querySelector reconoce el ancla ".active"/aria-selected como si fuera la barra
 // real de Everest, más querySelectorAll("button") para el botón "Paquetes" y
@@ -84,9 +100,11 @@ module.exports = {
   cubre: [
     "mtrBotonOrdenarConducta", "mtrWidgetExamenesDatos", "mtrWidgetConductaTick", "_cwEstadoParaTest", "_cwResetParaTest",
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
+    "mtrItemsOrdenarConducta", "mtrOrdenarLabsConductaAhora", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
+    "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
   ],
 
-  pruebas(t, api, env, cargar) {
+  async pruebas(t, api, env, cargar) {
     // ---------- mtrBotonOrdenarConducta ----------
     t.caso("mtrBotonOrdenarConducta: encuentra el botón 'Paquetes' visible dentro de Conducta", () => {
       const d = docConducta([boton("Cancelar"), boton("Paquetes")]);
@@ -384,6 +402,294 @@ module.exports = {
     });
 
     // =====================================================================
+    //  v17.32.0 — BOTÓN "ORDENAR PENDIENTES" (encargo del médico, 28-ago): un solo
+    //  clic, sin pantalla de confirmación intermedia ("tal cual como lo haría el botón
+    //  de Paquetes que ya trae Everest"), genera la orden de todo lo que
+    //  mtrPlanParaclinicos diga que toca ahora — reusando el MISMO camino de red que
+    //  openOrdenamientoModal (apiOrdenamientoBuscarPaciente/ObtenerDx/ObtenerCup/Guardar).
+    // =====================================================================
+
+    // ---------- mtrItemsOrdenarConducta (pura) ----------
+    t.caso("mtrItemsOrdenarConducta: traduce el ordenar crudo a {clave,nombre,codigos}, ignorando claves sin CUPS conocido", () => {
+      const items = api.mtrItemsOrdenarConducta([
+        { clave: "CREATININA", nombre: "Creatinina sérica" },
+        { clave: "ALGO_QUE_NO_EXISTE", nombre: "Rareza" },
+        { clave: "RAC", nombre: "RAC" },
+      ]);
+      t.igual(items.length, 2, "la clave desconocida se ignora, nunca revienta");
+      t.cierto(items.some((x) => x.clave === "CREATININA" && x.codigos.join(",") === "903895"));
+      const rac = items.find((x) => x.clave === "RAC");
+      t.cierto(!!rac, "RAC sí se reconoce");
+      t.igual(rac.codigos.length, 2, "RAC lleva sus dos códigos — creatinina en orina + microalbuminuria");
+    });
+    t.caso("mtrItemsOrdenarConducta: dedup por clave, y sin `ordenar` (null/no-array) no revienta", () => {
+      const items = api.mtrItemsOrdenarConducta([
+        { clave: "GLUCOSA", nombre: "Glicemia" },
+        { clave: "GLUCOSA", nombre: "Glicemia (repetida)" },
+      ]);
+      t.igual(items.length, 1, "una sola entrada por clave");
+      t.igual(api.mtrItemsOrdenarConducta(null).length, 0);
+      t.igual(api.mtrItemsOrdenarConducta(undefined).length, 0);
+    });
+
+    // ---------- mtrOrdenarLabsConductaAhora (red) ----------
+    // Mismo patrón de mock que suite_05/suite_15: una URL por endpoint, con banderas
+    // para simular cada punto de fallo por separado. Se construye ANTES de cargar():
+    // _pageFetchJsonCore captura `window.fetch` en una constante propia (FETCH0) al
+    // ejecutar el script — reasignar c.env.win.fetch DESPUÉS de cargar() no sirve de
+    // nada, el mismo escollo que ya documenta suite_05.
+    function crearFetchOrdenar(opts) {
+      const o = opts || {};
+      const llamadas = [];
+      const fetch = async (url) => {
+        const u = String(url);
+        llamadas.push(u);
+        // v17.32.0 — un retraso real (no solo microtasks) para que dos clics superpuestos
+        // en la prueba de reentrancia se comporten como dos peticiones de red genuinas en
+        // vuelo a la vez — sin esto, la cadena entera de un clic se resuelve en microtasks
+        // antes de que el segundo clic alcance a llamar a la red, y la prueba no distingue
+        // "el guardarraíl funcionó" de "no hubo carrera real que probar".
+        if (o.delayMs) await new Promise((res) => setTimeout(res, o.delayMs));
+        const json = (data) => ({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => data, text: async () => JSON.stringify(data), clone() { return this; } });
+        if (u.indexOf("/api/Paciente/BuscarPaciente") >= 0) {
+          return o.sinPaciente ? json(null) : json({ id: 801848 });
+        }
+        if (u.indexOf("ObtenerListadoDiagnostico") >= 0) {
+          return o.sinDx ? json([]) : json([{ codigo: "I10X", id: 55, nombre: "RCV EXPRÉS" }]);
+        }
+        if (u.indexOf("ObtenerListadoCupsPorPaciente") >= 0) {
+          const m = /filter=([^&]+)/.exec(u);
+          const cod = m ? decodeURIComponent(m[1]) : "";
+          if (o.cupsFallidos && o.cupsFallidos.indexOf(cod) >= 0) return json([]);
+          return json([{ id: "cup_" + cod, codigo: cod, descripcion: "EXAMEN " + cod, nivel: 1 }]);
+        }
+        if (u.indexOf("GuardarOrdenamiento") >= 0) {
+          return o.guardarFalla ? json({ error: true }) : json({ error: false, agrupador: "1226099999" });
+        }
+        return json({});
+      };
+      return { fetch, llamadas };
+    }
+    // Carga una instancia lista para ordenar: fetch mockeado desde el arranque y
+    // médico en sesión (apiOrdenamientoGuardar exige uId, ver v12.0.0).
+    function cargarParaOrdenar(opts) {
+      const mock = crearFetchOrdenar(opts);
+      const c = cargar({ silencioso: true, fetch: mock.fetch });
+      c.api.__state.activeDoctor = { id: 309, name: "MÉDICO DE PRUEBA" };
+      return Object.assign(c, { llamadas: mock.llamadas });
+    }
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: camino feliz — todos los CUPS resuelven, se crea la orden", async () => {
+      const c = cargarParaOrdenar();
+      const items = c.api.mtrItemsOrdenarConducta([{ clave: "CREATININA", nombre: "Creatinina" }, { clave: "HBA1C", nombre: "HbA1c" }]);
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
+      t.cierto(r.ok, "la orden se confirma");
+      t.igual(r.creadas.length, 2);
+      t.igual(r.fallidas.length, 0);
+      t.igual(r.agrupador, "1226099999");
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: RAC exige SUS DOS códigos — si falta uno, RAC entero queda fallida (no se pide media RAC)", async () => {
+      const c = cargarParaOrdenar({ cupsFallidos: ["903026"] });   // solo falla la microalbuminuria
+      const items = c.api.mtrItemsOrdenarConducta([{ clave: "RAC", nombre: "RAC" }, { clave: "CREATININA", nombre: "Creatinina" }]);
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
+      t.cierto(r.ok, "la creatinina sí se ordena aunque RAC falle");
+      t.igual(r.creadas.length, 1);
+      t.cierto(r.creadas.indexOf("RAC") < 0, "RAC no cuenta como creada");
+      t.cierto(r.fallidas.some((f) => f.clave === "RAC" && f.motivo === "cups"), "RAC queda registrada como fallida, con motivo");
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin paciente en el sistema de órdenes, falla completa y visible", async () => {
+      const c = cargarParaOrdenar({ sinPaciente: true });
+      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
+      t.falso(r.ok);
+      t.igual(r.creadas.length, 0);
+      t.cierto(r.motivo.indexOf("paciente") >= 0 || r.motivo.length > 0, "el motivo se explica, nunca queda mudo");
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin diagnóstico resuelto (I10X no aparece), falla completa", async () => {
+      const c = cargarParaOrdenar({ sinDx: true });
+      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
+      t.falso(r.ok);
+      t.igual(r.creadas.length, 0);
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: el servidor no confirma la orden (GuardarOrdenamiento falla) — nada queda marcado como creado", async () => {
+      const c = cargarParaOrdenar({ guardarFalla: true });
+      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
+      t.falso(r.ok);
+      t.igual(r.creadas.length, 0, "sin confirmación del servidor, nada cuenta como ordenado — evita marcar 'hecho' algo que no se sabe si quedó");
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin items pendientes, no sale ni una petición a la red", async () => {
+      const c = cargarParaOrdenar();
+      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", []);
+      t.falso(r.ok);
+      t.igual(c.llamadas.length, 0, "nada pendiente: cero peticiones, no hay motivo para tocar la red");
+    });
+
+    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin docId, falla sin tocar la red", async () => {
+      const c = cargarParaOrdenar();
+      const r = await c.api.mtrOrdenarLabsConductaAhora("", [{ clave: "GLUCOSA", nombre: "Glicemia", codigos: ["903841"] }]);
+      t.falso(r.ok);
+      t.igual(c.llamadas.length, 0);
+    });
+
+    // ---------- isOrdenLabsConductaHoy / markOrdenLabsConductaHoy ----------
+    t.caso("isOrdenLabsConductaHoy/markOrdenLabsConductaHoy: namespace propio, NUNCA comparte almacén con isOrdenesCreadasHoy (el de PyM)", () => {
+      const c = cargar({ silencioso: true });
+      t.falso(c.api.isOrdenLabsConductaHoy("1098765432"));
+      c.api.markOrdenLabsConductaHoy("1098765432", ["CREATININA", "HBA1C"]);
+      t.cierto(c.api.isOrdenLabsConductaHoy("1098765432"), "queda marcado en su propio almacén");
+      t.falso(c.api.isOrdenesCreadasHoy("1098765432"),
+        "marcar el botón de labs de Conducta NO debe apagar el botón «Ordenar» (PyM) del dock con un mensaje que ya no sería cierto");
+      // Y a la inversa.
+      c.api.markOrdenesCreadasHoy("5551234567", ["AGP1"], ["VIH"]);
+      t.falso(c.api.isOrdenLabsConductaHoy("5551234567"), "y viceversa: una orden PyM tampoco marca el botón de labs de Conducta");
+    });
+    t.caso("isOrdenLabsConductaHoy: sin docId, false — nunca revienta", () => {
+      t.falso(api.isOrdenLabsConductaHoy(""));
+      t.falso(api.isOrdenLabsConductaHoy(null));
+    });
+
+    // ---------- mtrWidgetOrdenarConductaTick ----------
+    t.caso("mtrWidgetOrdenarConductaTick: apagado por S.conductaWidgets=false, no pinta ni deja el botón visible", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = false;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.falso(el && el.style.display !== "none", "sin el toggle encendido, no debe quedar visible");
+    });
+
+    t.caso("mtrWidgetOrdenarConductaTick: encendido, con pendientes — botón visible, DEBAJO del ancla (no a su derecha)", () => {
+      const c = cargar({ silencioso: true });
+      const btnPaquetes = boton("Paquetes");
+      cablearHistoriaConducta(c.env, "1098765432", [btnPaquetes]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!!el, "el botón debe existir en el DOM");
+      t.falso(el.style.display === "none", "debe quedar visible");
+      t.igual(el.style.left, Math.round(btnPaquetes.getBoundingClientRect().left) + "px",
+        "se alinea con el borde izquierdo del botón real — el médico pidió «debajo», no «a la derecha»");
+      t.igual(el.style.top, Math.round(btnPaquetes.getBoundingClientRect().bottom + 8) + "px", "queda DEBAJO del ancla, no a su lado");
+      t.cierto(el.textContent.indexOf("2") >= 0, "el rótulo cuenta los pendientes");
+      t.falso(el.disabled, "clicable: todavía no se ha ordenado hoy");
+    });
+
+    t.caso("mtrWidgetOrdenarConductaTick: sin nada pendiente, el botón se oculta (no invita a ordenar la nada)", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_AL_DIA);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.falso(el && el.style.display !== "none");
+    });
+
+    t.caso("mtrWidgetOrdenarConductaTick: sin botón 'Paquetes' visible, el botón nuevo también se oculta — mismo ancla, misma regla", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", []);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.falso(el && el.style.display !== "none");
+    });
+
+    t.caso("mtrWidgetOrdenarConductaTick: ya ordenado hoy — botón deshabilitado, dice «Ordenado hoy», sigue visible (no desaparece sin más)", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.markOrdenLabsConductaHoy("1098765432", ["CREATININA"]);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!!el && el.style.display !== "none", "sigue visible — confirma que el clic surtió efecto, en vez de desaparecer sin decir nada (Regla D)");
+      t.cierto(el.disabled, "ya no se puede volver a ordenar hoy");
+      t.cierto(el.textContent.indexOf("Ordenado") >= 0);
+    });
+
+    t.caso("mtrWidgetOrdenarConductaTick: cambiar de paciente reinicia el estado interno", () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      t.igual(c.api._cwoEstadoParaTest().docPrevio, "1098765432");
+      cablearHistoriaConducta(c.env, "5551234567", [boton("Paquetes")]);
+      c.api.mtrWidgetOrdenarConductaTick();
+      t.igual(c.api._cwoEstadoParaTest().docPrevio, "5551234567");
+    });
+
+    t.caso("_cwoResetParaTest: deja el estado interno exactamente en cero", () => {
+      api._cwoResetParaTest();
+      const st = api._cwoEstadoParaTest();
+      t.igual(st.docPrevio, null);
+      t.igual(st.enCurso, false);
+    });
+
+    // ---------- integración de punta a punta: el clic real ----------
+    await t.casoAsync("Integración: un clic en el botón ordena de verdad y lo deja marcado — sin pantalla intermedia, como pidió el médico", async () => {
+      const c = cargarParaOrdenar();
+      const btnPaquetes = boton("Paquetes");
+      cablearHistoriaConducta(c.env, "1098765432", [btnPaquetes]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.falso(el.disabled, "antes del clic, clicable");
+
+      const clicListo = el.onclick({ stopPropagation() {} });
+      await clicListo;   // _cwoClic es async; el propio onclick devuelve su promesa
+
+      t.cierto(c.api.isOrdenLabsConductaHoy("1098765432"), "el clic de verdad generó la orden y quedó marcado");
+      t.falso(el.disabled === false, "tras el repintado que dispara el propio clic, ya no se puede volver a hacer clic");
+      t.cierto(el.textContent.indexOf("Ordenado") >= 0);
+    });
+
+    // v17.32.0 — dos clics rápidos (doble-clic real, o un dedo lento sobre un trackpad)
+    // antes de que la primera petición termine NO deben generar DOS órdenes del mismo
+    // examen: es exactamente el tipo de duplicado que el guardarraíl de "ya ordenado hoy"
+    // existe para evitar, pero ese solo actúa DESPUÉS de que la primera termine — mientras
+    // está en vuelo, el guardarraíl es `_cwoEnCurso`.
+    await t.casoAsync("Integración: dos clics antes de que termine el primero solo generan UNA petición de guardado", async () => {
+      const c = cargarParaOrdenar({ delayMs: 15 });   // simula latencia real de red
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      const p1 = el.onclick({ stopPropagation() {} });
+      // El primer clic ya está en vuelo (su primera petición salió y está esperando el
+      // delay simulado) cuando llega el segundo — la misma ventana en la que un médico
+      // real podría volver a pulsar mientras la red tarda.
+      await new Promise((res) => setTimeout(res, 5));
+      const p2 = el.onclick({ stopPropagation() {} });
+      await Promise.all([p1, p2]);
+      const guardados = c.llamadas.filter((u) => u.indexOf("GuardarOrdenamiento") >= 0);
+      t.igual(guardados.length, 1, "el segundo clic, mientras el primero seguía en vuelo, no debía tocar la red otra vez");
+    });
+
+    await t.casoAsync("Integración: si la orden falla, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
+      const c = cargarParaOrdenar({ sinPaciente: true });
+      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      await el.onclick({ stopPropagation() {} });
+      t.falso(c.api.isOrdenLabsConductaHoy("1098765432"), "un fallo total no se marca como hecho");
+      t.falso(el.disabled, "queda disponible para que el médico reintente");
+    });
+
+    // =====================================================================
     //  REGRESIÓN — el hallazgo real de esta versión: un widget puede pasar
     //  todas las pruebas de arriba (su lógica pura y su función de tick están
     //  perfectamente probadas) y NUNCA HABERSE LLAMADO desde el reloj real del
@@ -395,7 +701,7 @@ module.exports = {
     //  tests/INFORME_MUTACIONES.md, v17.12.0) — esta prueba existe para que esa
     //  lección no se vuelva a aprender por las malas.
     // =====================================================================
-    t.caso("REGRESIÓN: los dos widgets de Conducta están enganchados de verdad al tick() de la sección «historia»", () => {
+    t.caso("REGRESIÓN: los tres widgets de Conducta están enganchados de verdad al tick() de la sección «historia»", () => {
       const fs = require("fs");
       const path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
@@ -406,6 +712,10 @@ module.exports = {
         "mtrWidgetConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el widget de exámenes volvió a quedar sin pintar en consulta real");
       t.cierto(bloque.indexOf("mtrWidgetFarmacoTick()") >= 0,
         "mtrWidgetFarmacoTick() debe llamarse dentro de la rama de historia — el widget de farmacia, igual que su hermano, no sirve de nada si solo vive en el banco de pruebas");
+      // v17.32.0 — el mismo defecto, una tercera vez, es el que esta prueba existe para
+      // evitar: el botón "Ordenar pendientes" no sirve de nada si solo vive en el banco.
+      t.cierto(bloque.indexOf("mtrWidgetOrdenarConductaTick()") >= 0,
+        "mtrWidgetOrdenarConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
     });
   },
 };

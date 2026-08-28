@@ -6,6 +6,39 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.32.0 — 28-ago-2026 (botón "Ordenar pendientes" en Conducta, un clic sin confirmación)
+
+Cinco cambios de comportamiento verificados, uno documentado como NO caído (con el porqué,
+en vez de escondido). Restaurado y verificado con `diff` contra copia intacta tras cada
+mutación. Banco en verde: **2.554/2.554**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | RAC exige sus dos CUPS: `if (faltoAlguno \|\| !resueltos.length)` → `if (!resueltos.length)` (deja pedir un solo código de RAC) | *RAC exige SUS DOS códigos... no se pide media RAC* (suite_71) |
+| 2 | El corte temprano sin items pendientes: `if (!items.length) return ...` → `if (false) return ...` | *sin items pendientes, no sale ni una petición a la red* (suite_71) |
+| 3 | La confirmación del servidor: `if (!resOrd \|\| resOrd.error \|\| !agpReal)` → `if (false)` | *el servidor no confirma la orden... nada queda marcado como creado* (suite_71) |
+| 4 | El namespace propio del día-guardado: `markOrdenLabsConductaHoy` también empuja a `p.ordenes` (el del botón «Ordenar» PyM del dock) | *namespace propio, NUNCA comparte almacén con isOrdenesCreadasHoy* (suite_71) |
+
+**Mutación #5, documentada como NO caída — información, no un hueco escondido**: quitar
+`_cwoEnCurso` de la guarda de reentrada (`if (_cwoEnCurso || !docId) return` →
+`if (!docId) return`) NO hizo caer la prueba "dos clics antes de que termine el primero
+solo generan UNA petición de guardado", ni siquiera reescribiéndola con un retraso de red
+real (15 ms) para forzar una carrera genuina entre las dos peticiones. Investigado con
+trazas directas (`node -e`, fuera del banco): `_cwoClic` SÍ se invoca dos veces bajo la
+mutación (confirmado con un `console.log` temporal), pero la segunda orden nunca llega a
+la red como una petición aparte — `pageFetchJson` (línea ~16391, "GHOST — Deduplicación de
+Promesas") ya deduplica cualquier petición con la MISMA url+cuerpo mientras la primera
+sigue en vuelo, y como ambos clics arman el mismo paciente/CUPS, la segunda petición se
+resuelve compartiendo la promesa de la primera hasta el POST final. Esa protección es real
+y anterior a esta versión — pero es un detalle de OTRO módulo, no un contrato que este
+botón deba asumir por su cuenta. `_cwoEnCurso` queda en el código como defensa en
+profundidad, documentada en el propio código (línea ~5618): evita recomputar todo dos
+veces y seguiría protegiendo aunque la segunda petición llegara a tener un cuerpo
+distinto, caso en el que GHOST no ayuda. No se inventó una prueba que solo fijara el
+cableado interno del guardarraíl (el propio proyecto ya identificó ese patrón como una
+falta, ver la nota de arriba de este documento) — se dejó escrito qué protege de verdad la
+guarda y qué protege el otro módulo, que es lo honesto.
+
 ## v17.31.0 — 28-ago-2026 (la TFG por Cockcroft-Gault ya calculada resuelve sola la pregunta de ERC)
 
 Un cambio de comportamiento en `mtrDiscrepanciasDeFuentes` (una función nueva,

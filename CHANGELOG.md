@@ -4,6 +4,48 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.32.0] — 2026-08-28 (Botón "Ordenar pendientes" en Conducta: un clic, sin pantalla intermedia)
+
+### 📋 Debajo del botón "Paquetes" de Everest, un botón que ordena todo lo pendiente de un clic
+Encargo del médico: "necesito además el botón debajo del botón de Paquetes en la sección de
+Conducta para agregar en un solo clic los laboratorios que se debe ordenar cada paciente en
+la próxima consulta de manera ágil y fácil". Al preguntarle si debía abrir el modal de
+Ordenar ya marcado (un clic más para confirmar) o generar la orden de una vez sin pantalla
+intermedia, eligió la segunda — "tal cual como lo haría el botón de Paquetes que ya trae
+Everest". Es la excepción documentada que CLAUDE.md prevé (v12.10.4): un botón sin cuadro
+de confirmación porque el propio médico lo pidió así.
+
+**Qué ordena, y por qué es exactamente lo mismo que ya ve en el widget de al lado**: el
+botón lee `resumen.plan.ordenar` a través de `mtrTableroClinico` — el MISMO dato, calculado
+por el MISMO `mtrPlanParaclinicos`, que ya alimenta el widget de solo-lectura "qué ordenar"
+(#vgl-cw-examenes, v17.18.0) que el médico ya usa a diario. El botón no tiene ninguna regla
+propia sobre qué está pendiente: todo lo que decidieron esta semana (drivers y pasajeros,
+el equilibrio ANR/cosecha de v17.30.0, la gracia de 14 días, el grupo de lípidos, la regla
+del 50% por meta, la TFG de v17.31.0) ya vive en `mtrPlanParaclinicos` y llega intacto.
+
+**Cómo ordena**: reusa el mismo camino de red ya probado y en producción que usa el botón
+"Ordenar" del dock (`apiOrdenamientoBuscarPaciente` → `ObtenerDx` → `ObtenerCup` →
+`GuardarOrdenamiento`), con el mismo diagnóstico "I10X" (PYM_CATALOG, "RCV EXPRÉS") que el
+médico ya verificó el 2026-08-11 para exactamente esta población. Los CUPS de cada analito
+vienen de dos fuentes ya verificadas en producción — el propio I10X y
+`CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO` — nada se inventa. RAC exige sus dos códigos
+(creatinina en orina + microalbuminuria) siempre juntos: si falta uno, RAC entera queda sin
+ordenar en vez de pedir la mitad. Un fallo de red o del servidor se avisa con un aviso
+visible y el botón queda disponible para reintentar — nunca se marca como hecho algo que no
+se sabe si quedó. Un "ya se ordenó hoy" propio (namespace separado del botón "Ordenar" PyM
+del dock, para que uno no apague al otro con un mensaje que ya no sería cierto) evita un
+doble pedido si el médico vuelve a entrar a Conducta el mismo día.
+
+**Lo que esta versión deliberadamente NO hace**: no toca la pantalla de Conducta en ningún
+momento — ni para leerla (salvo encontrar el botón "Paquetes" como ancla de posición, igual
+que ya hacía el widget hermano) ni para escribirla. v15.3.0 retiró para siempre la
+automatización que simulaba clics ahí, por un bucle real que causó en consultorio; este
+botón crea la orden por el módulo de Ordenamientos de Everest, exactamente como si el
+médico hubiera hecho el gesto manual — el mismo principio que ya rige el botón "Ordenar"
+desde ese retiro.
+
+---
+
 ## [Versión 17.31.0] — 2026-08-28 (Con la TFG por Cockcroft-Gault ya calculada, ya no pregunta si hay ERC)
 
 ### 🧠 Una TFG<60 ya calculada resuelve la pregunta sola
