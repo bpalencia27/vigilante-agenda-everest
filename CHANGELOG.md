@@ -4,6 +4,31 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.37.0] — 2026-08-28 (Reporte en vivo: el widget ya sigue el scroll, y el botón deja de agregar hemograma)
+
+### 📍 El widget ya no "viaja solo" al desplazarse
+Reporte suyo, con captura real: "el widget no es fijo, viaja contigo al mover el mouse o
+cuando te desplazas... muy anti intuitivo". Causa: los tres widgets de Conducta se
+posicionan con coordenadas de pantalla, pero solo las recalculaban cada varios segundos (el
+reloj de sondeo de fondo) — nunca al desplazarse. Entre una vuelta y la siguiente, el botón
+se quedaba clavado en su posición vieja mientras el formulario se movía por debajo, y de
+golpe se recolocaba en el siguiente ciclo. Ahora los tres widgets se reposicionan en cada
+gesto de scroll (y al cambiar el tamaño de la ventana), igual de livianos que antes.
+
+### ⛔ El botón "Ordenar pendientes" deja de agregar hemograma
+Reporte suyo, mismo mensaje: "agrega hemograma y ese laboratorio no hace parte de los
+analitos permitidos". Tenía razón: el gesto "Paquetes → HTA" que el botón disparaba para el
+perfil lipídico, la glicemia, el uroanálisis y la creatinina trae SIEMPRE, de arrastre, un
+hemograma — un examen que no está entre los que este proyecto vigila ni pide. Se retira por
+completo el disparo de "Paquetes → HTA": el botón ya NO agrega esos cinco (perfil
+lipídico, glicemia, uroanálisis, creatinina); solo sigue agregando, uno por uno, los que
+tienen búsqueda individual confirmada (PTH, fósforo, albúmina, hemoglobina, HbA1c y los dos
+componentes de la RAC). Los que quedaron fuera del botón usted los sigue viendo, igual que
+siempre, en la pastilla de "qué ordenar" — y los agrega usted mismo con su propio botón
+"Paquetes" cuando decida qué hacer con el hemograma que trae de arrastre.
+
+---
+
 ## [Versión 17.36.0] — 2026-08-28 (Corrección del médico: la RAC sola ya NO arrastra el paquete completo)
 
 ### ✅ La RAC ahora se agrega igual de sola que cualquier otro examen suelto

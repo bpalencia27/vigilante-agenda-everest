@@ -25,11 +25,16 @@ const RESUMEN_SIN_PROGRAMA = { plan: { ordenar: [], drivers: [], pasajeros: [] }
 // para mtrWidgetExamenesDatos porque ese widget nunca toca `.clave` — pero el botón
 // "Ordenar pendientes" SÍ, para resolver el CUPS de cada uno, así que necesita el
 // formato real que entrega mtrPlanParaclinicos).
+// v17.37.0 — CREATININA (antes aquí) se retiró del fixture: desde que el botón dejó de
+// disparar "Paquetes → HTA" (retirado por completo — agregaba siempre un hemograma no
+// permitido), CREATININA ya no tiene forma de agregarse desde este botón y simplemente cae
+// fuera de {paquete, individuales}. Se usa PTH en su lugar: otro individual real, para que
+// este fixture siga representando "dos pendientes" sin depender de un mecanismo retirado.
 const RESUMEN_ORDENAR_BOTON = {
   programa: "HTA", factores: { hta: true },
   plan: {
     ordenar: [
-      { clave: "CREATININA", nombre: "Creatinina sérica", estado: "D", subestado: "vencido", vence: "2026-08-01" },
+      { clave: "PTH", nombre: "Hormona paratiroidea", estado: "D", subestado: "vencido", vence: "2026-08-01" },
       { clave: "HBA1C", nombre: "Hemoglobina glicosilada", estado: "A", subestado: "pendiente", vence: null },
     ],
     drivers: [], pasajeros: [],
@@ -128,6 +133,7 @@ module.exports = {
     "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
     "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
     "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
+    "_cwReposicionarEnScroll", "_cwInstalarEscuchaScroll",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -436,20 +442,20 @@ module.exports = {
     // =====================================================================
 
     // ---------- mtrItemsOrdenarConducta (pura) ----------
-    // v17.36.0 — corrección del médico: la RAC NUNCA dispara el paquete, ni siquiera
-    // cuando otro analito del paquete también está pendiente (antes CREATININA sí lo
-    // disparaba, y la RAC "de arrastre" también contaba como agregada por el paquete —
-    // eso ya no existe: la RAC solo entra en `individuales`, con sus DOS búsquedas).
-    t.caso("mtrItemsOrdenarConducta: separa {paquete, individuales} — la RAC NUNCA entra al paquete, solo se busca individual (sus DOS componentes)", () => {
+    // v17.37.0 — corrección del médico, misma tarde que v17.36.0: "Paquetes → HTA" agregaba
+    // SIEMPRE un hemograma no permitido, así que el disparo del paquete se retiró por
+    // completo (MTR_ANALITOS_PAQUETE_CONDUCTA quedó vacía). CREATININA (y el resto de los
+    // siete que antes vivían ahí) ya NO tiene ninguna forma de agregarse desde este botón:
+    // cae fuera de {paquete, individuales} por completo — `items.paquete` queda SIEMPRE
+    // vacío, para cualquier entrada.
+    t.caso("mtrItemsOrdenarConducta: {paquete} queda SIEMPRE vacío (el disparo de Paquetes→HTA se retiró) — la RAC solo se busca individual (sus DOS componentes)", () => {
       const items = api.mtrItemsOrdenarConducta([
         { clave: "CREATININA", nombre: "Creatinina sérica" },
         { clave: "ALGO_QUE_NO_EXISTE", nombre: "Rareza" },
         { clave: "RAC", nombre: "RAC" },
         { clave: "PTH", nombre: "PTH" },
       ]);
-      t.igual(items.paquete.length, 1, "solo CREATININA necesita el paquete — la RAC no");
-      t.cierto(items.paquete.some((x) => x.clave === "CREATININA"));
-      t.falso(items.paquete.some((x) => x.clave === "RAC"), "la RAC no debe disparar el paquete completo por su cuenta");
+      t.igual(items.paquete.length, 0, "CREATININA no tiene forma de agregarse desde este botón: el paquete quedó retirado");
       t.igual(items.individuales.length, 2, "RAC y PTH se buscan una por una");
       const racInd = items.individuales.find((x) => x.clave === "RAC");
       t.cierto(!!racInd, "RAC aparece en individuales");
@@ -468,10 +474,10 @@ module.exports = {
     });
     t.caso("mtrItemsOrdenarConducta: dedup por clave, y sin `ordenar` (null/no-array) no revienta", () => {
       const items = api.mtrItemsOrdenarConducta([
-        { clave: "GLUCOSA", nombre: "Glicemia" },
-        { clave: "GLUCOSA", nombre: "Glicemia (repetida)" },
+        { clave: "HBA1C", nombre: "Hemoglobina glicosilada" },
+        { clave: "HBA1C", nombre: "Hemoglobina glicosilada (repetida)" },
       ]);
-      t.igual(items.paquete.length, 1, "una sola entrada por clave");
+      t.igual(items.individuales.length, 1, "una sola entrada por clave");
       const vacio = api.mtrItemsOrdenarConducta(null);
       t.igual(vacio.paquete.length, 0); t.igual(vacio.individuales.length, 0);
       const vacio2 = api.mtrItemsOrdenarConducta(undefined);
@@ -501,8 +507,8 @@ module.exports = {
       return b;
     }
     function mockLi(texto, alClick) {
-      let clicado = false;
-      return { textContent: texto, click() { clicado = true; if (alClick) alClick(); }, get _clicado() { return clicado; } };
+      let clics = 0;
+      return { textContent: texto, click() { clics++; if (alClick) alClick(); }, get _clicado() { return clics > 0; }, get _clics() { return clics; } };
     }
     function mockFila(codigo) {
       return { querySelector: (sel) => (sel === "td" ? { textContent: codigo } : null) };
@@ -915,31 +921,22 @@ module.exports = {
     });
 
     // ---------- integración de punta a punta: el clic real ----------
-    // v17.35.0 — ya no hay red que mockear (cargarParaOrdenar/GuardarOrdenamiento se
-    // fueron con el enfoque de red): el mismo botón "Paquetes" sirve a la vez de ancla
-    // (mtrAnclaOrdenarPendientes necesita su getBoundingClientRect) y de gesto clicable
-    // (_conductaClicPaqueteHTA necesita su click()) — por eso mockBoton admite `rect`.
-    // cablearHistoriaConducta recibe el mismo array MUTABLE de botones que las pruebas
-    // siguen empujando (HTA/Agregar aparecen ahí, igual que Angular los monta después),
-    // más `extra.tabla`/`extra.lis` para que la tabla de Ordenamientos y el buscador de
-    // exámenes individuales vivan en el MISMO `document` que ve el resto del widget.
-    const RECT_PAQUETES = { left: 10, top: 20, width: 80, height: 30, right: 90 };
-
-    await t.casoAsync("Integración: un clic en el botón agrega de verdad en la tabla de Conducta y lo deja marcado — el mismo gesto de Paquetes, sin pantalla intermedia", async () => {
+    // v17.37.0 — desde que "Paquetes → HTA" se retiró por completo (agregaba siempre un
+    // hemograma no permitido), RESUMEN_ORDENAR_BOTON solo trae analitos individuales (PTH +
+    // HBA1C): el botón "Paquetes" del ancla ya NUNCA se clickea, solo sirve para que
+    // mtrAnclaOrdenarPendientes calcule dónde centrar el botón nuevo — de ahí que baste con
+    // el `boton()` normal de esta suite (sin `rect`/`alClick` especiales).
+    await t.casoAsync("Integración: un clic en el botón agrega de verdad en la tabla de Conducta y lo deja marcado — solo búsquedas individuales, nunca dispara Paquetes", async () => {
       const c = cargar({ silencioso: true });
       const tabla = mockTabla([]);
-      const botones = [botonHistorial()];
-      const li = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
+      const botones = [botonHistorial(), boton("Paquetes")];
+      const liPth = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => {
+        botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903840"), 0) }));
+      });
+      const liHba1c = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
         botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903890"), 0) }));
       });
-      const bPaquetes = mockBoton("Paquetes", {
-        rect: RECT_PAQUETES,
-        alClick: () => setTimeout(() => {
-          botones.push(mockBoton("HTA", { alClick: () => setTimeout(() => tabla._agregarFila("903818"), 0) }));
-        }, 0),
-      });
-      botones.push(bPaquetes);
-      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [li] });
+      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [liPth, liHba1c] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -949,8 +946,7 @@ module.exports = {
       const clicListo = el.onclick({ stopPropagation() {} });
       await clicListo;   // _cwoClic es async; el propio onclick devuelve su promesa
 
-      t.cierto(bPaquetes._clicado, "de verdad clickeó Paquetes, tal cual pidió el médico");
-      t.cierto(li._clicado, "y de verdad buscó y clickeó el examen individual (HBA1C)");
+      t.cierto(liPth._clicado && liHba1c._clicado, "de verdad buscó y clickeó los dos exámenes individuales");
       t.cierto(c.api.isOrdenLabsConductaHoy("1098765432"), "las filas nuevas se vieron en la tabla y quedó marcado");
       t.falso(el.disabled === false, "tras el repintado que dispara el propio clic, ya no se puede volver a hacer clic");
       t.cierto(el.textContent.indexOf("Agregado") >= 0);
@@ -961,40 +957,35 @@ module.exports = {
     // mismo <li>/botón — eso agregaría el mismo examen dos veces. `_cwoEnCurso` es la
     // única barrera (ver comentario junto a su declaración): el segundo clic debe
     // devolver sin tocar nada mientras el primero sigue en vuelo.
-    await t.casoAsync("Integración: dos clics antes de que termine el primero solo disparan UNA vez el clic real en Paquetes", async () => {
+    await t.casoAsync("Integración: dos clics antes de que termine el primero solo disparan UNA vez la búsqueda real", async () => {
       const c = cargar({ silencioso: true });
       const tabla = mockTabla([]);
-      const botones = [botonHistorial()];
-      const bPaquetes = mockBoton("Paquetes", {
-        rect: RECT_PAQUETES,
-        alClick: () => setTimeout(() => {
-          botones.push(mockBoton("HTA", { alClick: () => setTimeout(() => tabla._agregarFila("903818"), 0) }));
-        }, 0),
+      const botones = [botonHistorial(), boton("Paquetes")];
+      const liPth = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => {
+        botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903840"), 0) }));
       });
-      botones.push(bPaquetes);
-      const li = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
+      const liHba1c = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
         botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903890"), 0) }));
       });
-      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [li] });
+      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [liPth, liHba1c] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
       const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
       const p1 = el.onclick({ stopPropagation() {} });
-      // El primer clic ya está en vuelo (Paquetes ya se clickeó, esperando a que Angular
-      // monte HTA) cuando llega el segundo — la misma ventana en la que un médico real
-      // podría volver a pulsar mientras la pantalla tarda en reaccionar.
+      // El primer clic ya está en vuelo (el <li> de PTH ya se clickeó, esperando a que
+      // Angular monte "Agregar") cuando llega el segundo — la misma ventana en la que un
+      // médico real podría volver a pulsar mientras la pantalla tarda en reaccionar.
       const p2 = el.onclick({ stopPropagation() {} });
       await Promise.all([p1, p2]);
-      t.igual(bPaquetes._clics, 1, "el segundo clic, mientras el primero seguía en vuelo, no debía repetir el gesto");
+      t.igual(liPth._clics, 1, "el segundo clic, mientras el primero seguía en vuelo, no debía repetir el gesto");
     });
 
     await t.casoAsync("Integración: si no se encuentra nada que clickear, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
       const c = cargar({ silencioso: true });
-      // Sin "Paquetes" clicable a HTA ni ningún <li> del examen individual: el gesto real
-      // no encuentra nada que hacer, tal como pasaría si Everest cambiara su pantalla.
-      const bPaquetesSinHta = mockBoton("Paquetes", { rect: RECT_PAQUETES });
-      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), bPaquetesSinHta], [], { tabla: mockTabla([]), lis: [] });
+      // Sin ningún <li> de los exámenes individuales: el gesto real no encuentra nada que
+      // hacer, tal como pasaría si Everest cambiara su pantalla.
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")], [], { tabla: mockTabla([]), lis: [] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -1003,6 +994,53 @@ module.exports = {
       t.falso(c.api.isOrdenLabsConductaHoy("1098765432"), "un fallo total no se marca como hecho");
       t.falso(el.disabled, "queda disponible para que el médico reintente");
       t.cierto(el.textContent.indexOf("pendientes") >= 0, "vuelve a invitar a ordenar, no se queda en «Agregando...»");
+    });
+
+    // =====================================================================
+    //  v17.37.0 — REPORTE EN VIVO: "el widget no es fijo, viaja contigo... al desplazarte
+    //  con la rueda del mouse". `_cwReposicionarEnScroll` debe volver a llamar a los tres
+    //  ticks de Conducta cuando hay scroll — pero acotado a UN repintado por fotograma
+    //  (`requestAnimationFrame`), nunca uno por cada evento de scroll (que en un gesto
+    //  continuo dispara decenas).
+    // =====================================================================
+    await t.casoAsync("_cwReposicionarEnScroll: reposiciona los tres widgets, pero UNA sola vez por fotograma aunque se llame varias veces seguidas", async () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")], [botonReformular()]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+
+      // Espía sobre `requestAnimationFrame` real (propiedad de `env.win`, que el script
+      // sandboxed resuelve en cada llamada — a diferencia de espiar `api.mtrWidgetXTick`,
+      // que no vería el cierre interno de `_cwReposicionarEnScroll`).
+      let llamadasRaf = 0;
+      const rafReal = c.env.win.requestAnimationFrame;
+      c.env.win.requestAnimationFrame = (fn) => { llamadasRaf++; return rafReal(fn); };
+
+      // Un gesto de scroll continuo dispara el evento muchas veces: se simulan varias
+      // llamadas seguidas, como haría el listener de `scroll` instalado en fase de captura.
+      c.api._cwReposicionarEnScroll();
+      c.api._cwReposicionarEnScroll();
+      c.api._cwReposicionarEnScroll();
+      t.igual(llamadasRaf, 1, "tres llamadas seguidas solo deben agendar UN fotograma — nunca uno por evento de scroll");
+      // Antes de que corra el fotograma agendado, todavía no se pintó nada.
+      t.igual(c.env.doc.getElementById("vgl-cw-ordenar-btn"), null, "el repintado espera al fotograma, no corre de inmediato");
+
+      await new Promise((r) => setTimeout(r, 5));   // deja correr el `requestAnimationFrame` (capado a 1ms en el arnés)
+
+      const btn = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.cierto(!!btn, "el fotograma corrió y sí llamó a los ticks reales");
+      t.cierto(!!c.env.doc.getElementById("vgl-cw-examenes"));
+      t.cierto(!!c.env.doc.getElementById("vgl-cw-farmaco"));
+
+      // Una vez consumido el fotograma, una llamada nueva debe agendar OTRO (no queda
+      // bloqueado para siempre por el primero).
+      c.api._cwReposicionarEnScroll();
+      t.igual(llamadasRaf, 2, "tras consumirse el primer fotograma, la siguiente llamada agenda uno nuevo");
+    });
+
+    t.caso("_cwInstalarEscuchaScroll: se instala una sola vez (idempotente), sin reventar sin `document`", () => {
+      t.noLanza(() => api._cwInstalarEscuchaScroll());
+      t.noLanza(() => api._cwInstalarEscuchaScroll());   // segunda llamada: no debe duplicar el listener
     });
 
     // =====================================================================
@@ -1032,6 +1070,17 @@ module.exports = {
       // evitar: el botón "Ordenar pendientes" no sirve de nada si solo vive en el banco.
       t.cierto(bloque.indexOf("mtrWidgetOrdenarConductaTick()") >= 0,
         "mtrWidgetOrdenarConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
+    });
+
+    // v17.37.0 — mismo defecto, en su variante de scroll: `_cwReposicionarEnScroll` puede
+    // estar perfectamente escrito y probado y aun así nunca engancharse a un evento real de
+    // scroll si `_cwInstalarEscuchaScroll()` no se llama desde boot().
+    t.caso("REGRESIÓN: el reposicionado por scroll está enganchado de verdad en boot()", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(src.indexOf("_cwInstalarEscuchaScroll();") >= 0,
+        "_cwInstalarEscuchaScroll() debe llamarse desde el arranque real — si esto falla, el widget vuelve a quedar sin seguir el scroll en consulta real");
     });
   },
 };

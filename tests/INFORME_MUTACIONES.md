@@ -6,6 +6,42 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.37.0 — 28-ago-2026 (reporte en vivo: el widget sigue el scroll, y el botón deja de agregar hemograma)
+
+Dos defectos reales, reportados por el médico en consultorio con captura de pantalla y
+consola, la misma tarde de v17.36.0.
+
+**1. El widget "viaja solo" al hacer scroll.** Causa: `position:fixed` (coordenadas de
+pantalla) solo se recalculaba en el tick periódico de fondo (5-30 s), nunca al desplazarse
+— entre una vuelta y la siguiente, el botón quedaba clavado en su posición vieja mientras el
+formulario se movía por debajo. Arreglo: `_cwReposicionarEnScroll` (nueva) reposiciona los
+tres widgets de Conducta en cada evento de scroll/resize, acotado a un solo repintado por
+`requestAnimationFrame` — nunca uno por cada evento de un gesto de scroll continuo.
+`_cwInstalarEscuchaScroll` la engancha una sola vez desde boot(), en fase de captura (para
+enterarse también del scroll de un contenedor interno, que no burbujea hasta `document`).
+
+**2. El botón agregaba hemograma sin que nadie lo pidiera.** El gesto "Paquetes → HTA"
+(disparado para el perfil lipídico/glicemia/uroanálisis/creatinina) trae SIEMPRE, de
+arrastre, "HEMOGRAMA IV ... AUTOMATIZADO" (902210) — confirmado en el catálogo de
+`captura_ordenamiento_paquete_HTA_20260812.json` — un examen fuera de los 13 analitos
+permitidos. El médico lo rechazó de plano. Arreglo: `MTR_ANALITOS_PAQUETE_CONDUCTA` queda
+VACÍA — el disparo de "Paquetes → HTA" se retira por completo; el botón solo agrega los
+analitos con búsqueda individual confirmada.
+
+`requestAnimationFrame`/`cancelAnimationFrame` se añadieron al arnés (`tests/harness.js`):
+sin el navegador real, el sandbox no los tenía y cualquier prueba directa de la coalescencia
+revienta con "no está definido".
+
+Tres cambios de comportamiento verificados con mutación. Restaurado y verificado con `diff`
+contra copia intacta tras cada mutación. Banco completo en verde: **2579/2579** (suite_71
+sola: 79/79).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `MTR_ANALITOS_PAQUETE_CONDUCTA` con CREATININA de vuelta (el paquete vuelve a dispararse) | *{paquete} queda SIEMPRE vacío* (suite_71) |
+| 2 | `_cwReposicionarEnScroll`: quitar la guarda de coalescencia (`if (_cwScrollRaf !== null) return` → `if (false) return`) | *reposiciona los tres widgets, pero UNA sola vez por fotograma* (suite_71) — tres llamadas seguidas debían agendar un solo `requestAnimationFrame`, y con la mutación agendaban tres |
+| 3 | `_cwReposicionarEnScroll`: quitar `_cwScrollRaf = null` dentro del propio fotograma (deja el "cerrojo" puesto para siempre) | la misma prueba, su última aserción: *"tras consumirse el primer fotograma, la siguiente llamada agenda uno nuevo"* — sin resetear la bandera, ninguna llamada posterior vuelve a reposicionar nunca más |
+
 ## v17.36.0 — 28-ago-2026 (corrección del médico: la RAC ya no arrastra el paquete completo)
 
 Corrección en el sitio, la misma tarde del v17.35.0. Esa entrega documentaba como "hueco

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.36.0
+// @version     17.37.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.36.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.37.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5965,6 +5965,45 @@
         }
       } catch (err) {}
     }, true);
+  }
+
+  // =====================================================================
+  //  v17.37.0 — REPORTE EN VIVO: "el widget no es fijo, viaja contigo al mover el mouse
+  //  o cuando te desplazas... muy anti intuitivo".
+  //  ------------------------------------------------------------------
+  //  Causa: los tres widgets de Conducta (#vgl-cw-examenes, #vgl-cw-farmaco,
+  //  #vgl-cw-ordenar-btn) usan `position:fixed` (coordenadas de VENTANA) pero solo
+  //  recalculan esa posición cuando corre su propio tick — enganchado al reloj de
+  //  sondeo de fondo (5-30 s), NUNCA al desplazamiento de la pantalla. Entre un tick y
+  //  el siguiente, el botón se queda clavado en su posición de pantalla vieja mientras
+  //  el formulario de Conducta se desplaza por debajo (Everest lo pinta dentro de un
+  //  contenedor con scroll propio, no la ventana) — y de un salto, en el siguiente
+  //  tick, se recoloca de golpe. Eso es justo lo que se ve como "viaja solo, no es
+  //  fijo": ni queda pegado al botón real, ni queda quieto en la pantalla.
+  //  Arreglo: reposicionar en cada evento de scroll (fase de CAPTURA, para enterarse
+  //  también del scroll de un contenedor interno, que no burbujea hasta `document`) y
+  //  de resize — acotado a un solo repintado por fotograma (`requestAnimationFrame`)
+  //  para no recalcular decenas de veces por el mismo gesto de scroll continuo. Los
+  //  tres ticks ya son baratos y anti-parpadeo (no tocan el contenido si la firma no
+  //  cambió), así que llamarlos en cada fotograma de scroll es seguro.
+  // =====================================================================
+  let _cwScrollRaf = null;
+  function _cwReposicionarEnScroll() {
+    if (_cwScrollRaf !== null) return;
+    _cwScrollRaf = requestAnimationFrame(function () {
+      _cwScrollRaf = null;
+      try { mtrWidgetConductaTick(); } catch (e) {}
+      try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
+      try { mtrWidgetFarmacoTick(); } catch (e) {}
+    });
+  }
+  function _cwInstalarEscuchaScroll() {
+    if (_cwInstalarEscuchaScroll._listo || typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+    _cwInstalarEscuchaScroll._listo = true;
+    document.addEventListener("scroll", _cwReposicionarEnScroll, true);
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("resize", _cwReposicionarEnScroll);
+    }
   }
 
   // v17.1.0 (#136) — último paciente y momento en que el clic de Auto-Labs emitió su
@@ -24106,12 +24145,15 @@ _vglOfrecerDeshacer(btn);
   //  un clic disparado hizo lo que se esperaba.
   //
   //  QUÉ SE AGREGA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
-  //  próxima consulta (`resumen.plan.ordenar`) — nunca el paquete completo por costumbre.
-  //  Los siete analitos que solo existen agrupados en el paquete de Everest (perfil
-  //  lipídico, glicemia, uroanálisis, creatinina sérica) se agregan disparando el paquete
-  //  "HTA" SOLO si alguno de ellos hace falta; los que sí se buscan y agregan uno por uno
-  //  (los 4 pasajeros, HbA1c y los DOS componentes de la RAC) se agregan solo si a CADA
-  //  UNO le toca, nunca de arrastre por venir el paquete.
+  //  próxima consulta (`resumen.plan.ordenar`) — nunca el paquete completo por costumbre. A
+  //  partir de v17.37.0 el botón SOLO agrega analitos que se buscan y agregan uno por uno
+  //  (los 4 pasajeros, HbA1c y los DOS componentes de la RAC): el disparo de "Paquetes →
+  //  HTA" quedó RETIRADO por completo (ver el comentario junto a
+  //  MTR_ANALITOS_PAQUETE_CONDUCTA, ahora vacía) porque agrega SIEMPRE un examen no
+  //  permitido (hemograma) de arrastre. Los analitos que solo existen agrupados en ese
+  //  paquete (perfil lipídico, glicemia, uroanálisis, creatinina sérica) siguen apareciendo
+  //  en la pastilla de solo-lectura "qué ordenar", pero este botón ya no los toca: el
+  //  médico los agrega él mismo con su propio "Paquetes" cuando quiera.
   //
   //  v17.36.0 — CORRECCIÓN DEL MÉDICO: la primera entrega de esta versión disparaba el
   //  paquete completo (8-10 analitos ajenos) solo para conseguir la mitad de la RAC que
@@ -24122,8 +24164,17 @@ _vglOfrecerDeshacer(btn);
   //  analitos sueltos, con el mismo texto exacto que el paquete confirma que existe en el
   //  catálogo de Everest (`captura_ordenamiento_paquete_HTA_20260812.json`, línea del GET
   //  `ObtenerPaqueteProgramasCupsByCitaId`: `"CREATININA EN ORINA PARCIAL"`, código 903876).
-  //  La RAC ya NO pertenece al paquete: si es lo único pendiente, solo dispara sus DOS
-  //  búsquedas individuales — nunca arrastra el resto de la HTA.
+  //
+  //  v17.37.0 — SEGUNDA CORRECCIÓN DEL MÉDICO, misma tarde: reporte en vivo con captura real
+  //  confirmó que "Paquetes → HTA" agrega SIEMPRE "HEMOGRAMA IV ... AUTOMATIZADO" (902210,
+  //  visible en el catálogo de `captura_ordenamiento_paquete_HTA_20260812.json`) — un
+  //  examen que NO está entre los 13 analitos permitidos/monitoreados de este proyecto. El
+  //  botón lo estaba agregando cada vez que disparaba el paquete, sin que el médico lo
+  //  pidiera. Con la RAC ya fuera del paquete (v17.36.0), la única razón que quedaba para
+  //  disparar "Paquetes → HTA" era el perfil lipídico/glicemia/uroanálisis/creatinina — y
+  //  ninguna de esas siete razones justifica agregar un hemograma no pedido. Se retira el
+  //  disparo del paquete por completo: la RAC (sus dos búsquedas individuales, desde
+  //  v17.36.0) nunca arrastra el resto de la HTA, y ahora ningún otro analito lo hace.
   // =====================================================================
 
   // v17.35.0/v17.36.0 — Nombre EXACTO con el que cada analito aparece como <li> en el
@@ -24156,16 +24207,27 @@ _vglOfrecerDeshacer(btn);
     RAC: ["MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", "CREATININA EN ORINA PARCIAL"],
   };
 
-  // v17.36.0 — Los analitos que SOLO existen agrupados en el paquete "HTA" de Everest
-  // (`ObtenerPaqueteProgramasCupsByCitaId`, confirmado real dos veces: 12-ago y 28-ago,
-  // mismo resultado, mismos 10 códigos) y para los que NO hay evidencia de que se puedan
-  // buscar y agregar sueltos. Si CUALQUIERA de estos hace falta, se dispara el paquete una
-  // sola vez. La RAC NO entra aquí (a partir de esta versión): sus dos componentes se
-  // buscan individuales — si es lo único pendiente, el paquete completo nunca se dispara.
-  const MTR_ANALITOS_PAQUETE_CONDUCTA = [
-    "COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
-    "GLUCOSA", "UROANALISIS", "CREATININA",
-  ];
+  // v17.37.0 — REPORTE EN VIVO DEL MÉDICO, con captura real: el paquete "HTA" que dispara
+  // "Paquetes → HTA" (`ObtenerPaqueteProgramasCupsByCitaId`) trae SIEMPRE sus 10 códigos de
+  // catálogo, y uno de ellos es "HEMOGRAMA IV ... AUTOMATIZADO" (902210) — un examen que NO
+  // está entre los analitos permitidos/monitoreados de este proyecto (los 13 de
+  // MTR_DRIVERS/MTR_PASAJEROS). El botón lo estaba agregando SIEMPRE que disparaba el
+  // paquete por cualquiera de los otros siete, sin que el médico lo pidiera ni lo esperara
+  // — "ese laboratorio no hace parte de los analitos permitidos". Everest no ofrece (hasta
+  // donde hay evidencia) una forma de disparar el paquete SIN el hemograma, ni de
+  // deseleccionar un ítem antes de confirmar.
+  //
+  // Por eso esta lista queda VACÍA: el botón deja de disparar "Paquetes → HTA" por
+  // completo, para NUNCA volver a agregar un examen no permitido sin que el médico lo pida.
+  // Los siete analitos que antes vivían aquí (COLESTEROL_TOTAL, COLESTEROL_HDL,
+  // COLESTEROL_LDL, TRIGLICERIDOS, GLUCOSA, UROANALISIS, CREATININA) siguen apareciendo en
+  // la pastilla de solo-lectura "qué ordenar" (mtrWidgetExamenesDatos, que nunca clickea
+  // nada) — el médico los ve igual, y los agrega él mismo con su propio "Paquetes" cuando
+  // decida qué hacer con el hemograma que viene de arrastre. Si en el futuro se confirma
+  // (con evidencia real, nunca adivinada) que alguno de estos siete se puede buscar y
+  // agregar SUELTO —igual que ya se hizo con la RAC en v17.36.0—, vuelve aquí con su propio
+  // texto de `<li>` y sale de esta lista, uno por uno.
+  const MTR_ANALITOS_PAQUETE_CONDUCTA = [];
 
   // Pura: separa el `ordenar` crudo de mtrPlanParaclinicos en {paquete, individuales} —
   // paquete: claves que necesitan el disparo de "Paquetes → HTA"; individuales: claves
@@ -27421,6 +27483,7 @@ _vglOfrecerDeshacer(btn);
     try { _avisarPestanaDescartada(); } catch (e) {}
     try { _vglTipInstalar(); } catch (e) {}   // v14.3.0 — burbujas de información de los modales
     try { _cwfInstalarEscucha(); } catch (e) {}  // v17.24.0 — repinta el widget de farmacia de Conducta tras reformular
+    try { _cwInstalarEscuchaScroll(); } catch (e) {}  // v17.37.0 — los widgets de Conducta siguen el scroll, no solo el reloj de sondeo
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
