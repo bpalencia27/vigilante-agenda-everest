@@ -6,6 +6,27 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.38.0 — 28-ago-2026 (corrección del médico: el botón es ESTÁTICO, no sigue el scroll por JS)
+
+Corrección directa sobre v17.37.0, la misma tarde: "yo no te pedí que siguiera el scroll,
+te pedí que sea un botón estático debajo del botón de historial y paquetes de Everest". Se
+retira `_cwReposicionarEnScroll`/`_cwInstalarEscuchaScroll` por completo. La causa de fondo
+identificada esta vez: los tres widgets usaban `position:fixed` (coordenadas de VENTANA,
+que por diseño del navegador nunca se mueven con el scroll de la página) — la única forma
+de "seguir" al botón real era recalcular todo por JS, exactamente lo que el médico acaba de
+rechazar. Cambiado a `position:absolute` (coordenadas de PÁGINA): el navegador desplaza el
+widget junto con el resto del contenido de forma nativa, sin ningún JavaScript de por
+medio — genuinamente estático respecto a "Historial"/"Paquetes", que es lo que se pidió.
+`_cwCoordX`/`_cwCoordY` solo suman el `pageXOffset`/`pageYOffset` actual al rectángulo que
+ya devuelve `getBoundingClientRect()`.
+
+Un cambio de comportamiento verificado con mutación. Restaurado y verificado con `diff`
+contra copia intacta. Banco completo en verde: **2577/2577** (suite_71 sola: 77/77).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar `_cwCoordX()`/`_cwCoordY()` de la posición del botón (vuelve a ignorar el desplazamiento de la página) | *con la página desplazada, la posición usa coordenadas absolutas — no solo lo visible* (suite_71) |
+
 ## v17.37.0 — 28-ago-2026 (reporte en vivo: el widget sigue el scroll, y el botón deja de agregar hemograma)
 
 Dos defectos reales, reportados por el médico en consultorio con captura de pantalla y

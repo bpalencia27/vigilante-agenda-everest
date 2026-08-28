@@ -4,6 +4,23 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.38.0] — 2026-08-28 (Corrección suya: el botón queda ESTÁTICO, sin seguir el scroll por JavaScript)
+
+### 📌 Se retira el seguimiento por scroll — ahora es de verdad estático
+Su corrección sobre la versión anterior: "yo no te pedí que siguiera el scroll, te pedí
+que sea un botón estático". Tenía razón — el arreglo anterior recalculaba la posición del
+botón con JavaScript cada vez que usted se desplazaba, y eso nunca se siente igual de
+natural que un botón que de verdad forma parte de la página. Se retira ese mecanismo por
+completo. La causa de fondo era otra: el botón se posicionaba con coordenadas de
+**ventana** (`position: fixed`), que por diseño del navegador nunca se mueven con el
+scroll — la única forma de "seguirlo" era recalcular todo el tiempo. Ahora se posiciona
+con coordenadas de **página** (`position: absolute`), igual que cualquier otro elemento
+del formulario: el navegador lo desplaza solo, junto con "Historial" y "Paquetes", sin una
+sola línea de JavaScript de por medio. Aplicado a los tres widgets de Conducta (el botón
+de ordenar, el de exámenes pendientes y el de seguridad farmacológica).
+
+---
+
 ## [Versión 17.37.0] — 2026-08-28 (Reporte en vivo: el widget ya sigue el scroll, y el botón deja de agregar hemograma)
 
 ### 📍 El widget ya no "viaja solo" al desplazarse

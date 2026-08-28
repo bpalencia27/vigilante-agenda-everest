@@ -133,7 +133,6 @@ module.exports = {
     "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
     "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
     "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
-    "_cwReposicionarEnScroll", "_cwInstalarEscuchaScroll",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -997,50 +996,29 @@ module.exports = {
     });
 
     // =====================================================================
-    //  v17.37.0 — REPORTE EN VIVO: "el widget no es fijo, viaja contigo... al desplazarte
-    //  con la rueda del mouse". `_cwReposicionarEnScroll` debe volver a llamar a los tres
-    //  ticks de Conducta cuando hay scroll — pero acotado a UN repintado por fotograma
-    //  (`requestAnimationFrame`), nunca uno por cada evento de scroll (que en un gesto
-    //  continuo dispara decenas).
+    //  v17.38.0 — CORRECCIÓN DEL MÉDICO sobre v17.37.0: "no te pedí que siguiera el
+    //  scroll, te pedí que sea un botón estático". Se retiró el reposicionado por JS
+    //  (_cwReposicionarEnScroll/_cwInstalarEscuchaScroll) y se cambió `position:fixed`
+    //  (coordenadas de ventana) por `position:absolute` (coordenadas de página): el
+    //  navegador mueve el widget solo con el scroll normal, sin ningún JS de por medio.
+    //  Esta prueba fija que el desplazamiento de scroll SÍ se suma a la posición.
     // =====================================================================
-    await t.casoAsync("_cwReposicionarEnScroll: reposiciona los tres widgets, pero UNA sola vez por fotograma aunque se llame varias veces seguidas", async () => {
+    t.caso("mtrWidgetOrdenarConductaTick: con la página desplazada, la posición usa coordenadas absolutas — no solo lo visible", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")], [botonReformular()]);
+      c.env.win.pageXOffset = 50;
+      c.env.win.pageYOffset = 300;
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
-
-      // Espía sobre `requestAnimationFrame` real (propiedad de `env.win`, que el script
-      // sandboxed resuelve en cada llamada — a diferencia de espiar `api.mtrWidgetXTick`,
-      // que no vería el cierre interno de `_cwReposicionarEnScroll`).
-      let llamadasRaf = 0;
-      const rafReal = c.env.win.requestAnimationFrame;
-      c.env.win.requestAnimationFrame = (fn) => { llamadasRaf++; return rafReal(fn); };
-
-      // Un gesto de scroll continuo dispara el evento muchas veces: se simulan varias
-      // llamadas seguidas, como haría el listener de `scroll` instalado en fase de captura.
-      c.api._cwReposicionarEnScroll();
-      c.api._cwReposicionarEnScroll();
-      c.api._cwReposicionarEnScroll();
-      t.igual(llamadasRaf, 1, "tres llamadas seguidas solo deben agendar UN fotograma — nunca uno por evento de scroll");
-      // Antes de que corra el fotograma agendado, todavía no se pintó nada.
-      t.igual(c.env.doc.getElementById("vgl-cw-ordenar-btn"), null, "el repintado espera al fotograma, no corre de inmediato");
-
-      await new Promise((r) => setTimeout(r, 5));   // deja correr el `requestAnimationFrame` (capado a 1ms en el arnés)
-
-      const btn = c.env.doc.getElementById("vgl-cw-ordenar-btn");
-      t.cierto(!!btn, "el fotograma corrió y sí llamó a los ticks reales");
-      t.cierto(!!c.env.doc.getElementById("vgl-cw-examenes"));
-      t.cierto(!!c.env.doc.getElementById("vgl-cw-farmaco"));
-
-      // Una vez consumido el fotograma, una llamada nueva debe agendar OTRO (no queda
-      // bloqueado para siempre por el primero).
-      c.api._cwReposicionarEnScroll();
-      t.igual(llamadasRaf, 2, "tras consumirse el primer fotograma, la siguiente llamada agenda uno nuevo");
-    });
-
-    t.caso("_cwInstalarEscuchaScroll: se instala una sola vez (idempotente), sin reventar sin `document`", () => {
-      t.noLanza(() => api._cwInstalarEscuchaScroll());
-      t.noLanza(() => api._cwInstalarEscuchaScroll());   // segunda llamada: no debe duplicar el listener
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.igual(el.style.position, "absolute", "coordenadas de página, no de ventana — así el navegador lo mueve solo con el scroll");
+      const rH = botonHistorial().getBoundingClientRect();
+      const rP = boton("Paquetes").getBoundingClientRect();
+      const centroEsperado = Math.round((rH.left + rP.right) / 2 + 50);
+      const topEsperado = Math.round(Math.max(rH.bottom, rP.bottom) + 8 + 300);
+      t.igual(el.style.left, centroEsperado + "px", "el desplazamiento horizontal de la página se suma a la posición");
+      t.igual(el.style.top, topEsperado + "px", "el desplazamiento vertical de la página se suma a la posición");
     });
 
     // =====================================================================
@@ -1070,17 +1048,6 @@ module.exports = {
       // evitar: el botón "Ordenar pendientes" no sirve de nada si solo vive en el banco.
       t.cierto(bloque.indexOf("mtrWidgetOrdenarConductaTick()") >= 0,
         "mtrWidgetOrdenarConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
-    });
-
-    // v17.37.0 — mismo defecto, en su variante de scroll: `_cwReposicionarEnScroll` puede
-    // estar perfectamente escrito y probado y aun así nunca engancharse a un evento real de
-    // scroll si `_cwInstalarEscuchaScroll()` no se llama desde boot().
-    t.caso("REGRESIÓN: el reposicionado por scroll está enganchado de verdad en boot()", () => {
-      const fs = require("fs");
-      const path = require("path");
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(src.indexOf("_cwInstalarEscuchaScroll();") >= 0,
-        "_cwInstalarEscuchaScroll() debe llamarse desde el arranque real — si esto falla, el widget vuelve a quedar sin seguir el scroll en consulta real");
     });
   },
 };

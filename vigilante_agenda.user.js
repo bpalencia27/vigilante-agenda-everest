@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.37.0
+// @version     17.38.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.37.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.38.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5641,9 +5641,11 @@
         document.body.appendChild(widget);
       }
       const r = boton.getBoundingClientRect();
-      widget.style.position = "fixed";
-      widget.style.left = mtrPosicionPanelJuntoA(r, 280) + "px";
-      widget.style.top = Math.round(r.top) + "px";
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed` (coordenadas de
+      // VENTANA): así el navegador lo desplaza solo con el scroll normal, sin JS.
+      widget.style.position = "absolute";
+      widget.style.left = (mtrPosicionPanelJuntoA(r, 280) + _cwCoordX()) + "px";
+      widget.style.top = (Math.round(r.top) + _cwCoordY()) + "px";
       widget.style.display = "";
 
       const datos = mtrWidgetExamenesDatos(resumen);
@@ -5756,9 +5758,11 @@
       const rP = ancla.paquetes.getBoundingClientRect();
       const centroX = (rH.left + rP.right) / 2;
       const debajoDeAmbos = Math.max(rH.bottom, rP.bottom) + 8;
-      btn.style.position = "fixed";
-      btn.style.left = Math.round(centroX) + "px";
-      btn.style.top = Math.round(debajoDeAmbos) + "px";
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed`: el navegador lo
+      // desplaza solo con el scroll normal, igual que "Historial"/"Paquetes" — sin JS.
+      btn.style.position = "absolute";
+      btn.style.left = Math.round(centroX + _cwCoordX()) + "px";
+      btn.style.top = Math.round(debajoDeAmbos + _cwCoordY()) + "px";
 
       if (_cwoEnCurso) { btn.style.display = ""; return; }   // no se repinta a mitad de un clic en curso
 
@@ -5902,9 +5906,11 @@
         document.body.appendChild(widget);
       }
       const r = boton.getBoundingClientRect();
-      widget.style.position = "fixed";
-      widget.style.left = mtrPosicionPanelJuntoA(r, 280) + "px";
-      widget.style.top = Math.round(r.top) + "px";
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed`: el navegador lo
+      // desplaza solo con el scroll normal, sin JS.
+      widget.style.position = "absolute";
+      widget.style.left = (mtrPosicionPanelJuntoA(r, 280) + _cwCoordX()) + "px";
+      widget.style.top = (Math.round(r.top) + _cwCoordY()) + "px";
       widget.style.display = "";
 
       const datos = mtrWidgetFarmacoDatos(resumen);
@@ -5968,43 +5974,30 @@
   }
 
   // =====================================================================
-  //  v17.37.0 — REPORTE EN VIVO: "el widget no es fijo, viaja contigo al mover el mouse
-  //  o cuando te desplazas... muy anti intuitivo".
-  //  ------------------------------------------------------------------
-  //  Causa: los tres widgets de Conducta (#vgl-cw-examenes, #vgl-cw-farmaco,
-  //  #vgl-cw-ordenar-btn) usan `position:fixed` (coordenadas de VENTANA) pero solo
-  //  recalculan esa posición cuando corre su propio tick — enganchado al reloj de
-  //  sondeo de fondo (5-30 s), NUNCA al desplazamiento de la pantalla. Entre un tick y
-  //  el siguiente, el botón se queda clavado en su posición de pantalla vieja mientras
-  //  el formulario de Conducta se desplaza por debajo (Everest lo pinta dentro de un
-  //  contenedor con scroll propio, no la ventana) — y de un salto, en el siguiente
-  //  tick, se recoloca de golpe. Eso es justo lo que se ve como "viaja solo, no es
-  //  fijo": ni queda pegado al botón real, ni queda quieto en la pantalla.
-  //  Arreglo: reposicionar en cada evento de scroll (fase de CAPTURA, para enterarse
-  //  también del scroll de un contenedor interno, que no burbujea hasta `document`) y
-  //  de resize — acotado a un solo repintado por fotograma (`requestAnimationFrame`)
-  //  para no recalcular decenas de veces por el mismo gesto de scroll continuo. Los
-  //  tres ticks ya son baratos y anti-parpadeo (no tocan el contenido si la firma no
-  //  cambió), así que llamarlos en cada fotograma de scroll es seguro.
+  //  v17.38.0 — CORRECCIÓN DEL MÉDICO sobre v17.37.0: "yo no te pedí que siguiera el
+  //  scroll, te pedí que sea un botón estático debajo del botón de historial y
+  //  paquetes de Everest". El arreglo de v17.37.0 (reposicionar por JS en cada evento
+  //  de scroll) resolvía el síntoma reportado (el widget "viajaba", desanclado del
+  //  botón real) pero no era lo que él pidió: un botón que reacciona a cada scroll
+  //  con JavaScript se siente distinto de un botón que de verdad está "ahí", como
+  //  cualquier otro elemento de la página. Se retira ese mecanismo por completo
+  //  (_cwReposicionarEnScroll/_cwInstalarEscuchaScroll).
+  //
+  //  RAÍZ DE FONDO: los tres widgets usaban `position:fixed`, que se mide en
+  //  coordenadas de VENTANA — un elemento fijo NUNCA se mueve con el scroll de la
+  //  página por diseño del navegador, así que la única forma de que "siguiera" al
+  //  botón real era recalcular su posición con JS todo el tiempo (justo lo que se
+  //  acaba de rechazar). `position:absolute` es la pieza que faltaba: se mide en
+  //  coordenadas de PÁGINA (documento completo, no solo lo visible), así que el
+  //  navegador lo desplaza solo con el scroll normal — CERO JavaScript de por medio,
+  //  literalmente estático respecto al resto del contenido, que es lo que se pidió.
+  //  `_cwCoordX`/`_cwCoordY` solo suman el desplazamiento de scroll actual
+  //  (`window.pageXOffset`/`pageYOffset`) al rectángulo de pantalla que ya devuelve
+  //  `getBoundingClientRect()` — la misma cuenta que hace cualquier tooltip anclado a
+  //  un elemento que necesita sobrevivir al scroll de la página.
   // =====================================================================
-  let _cwScrollRaf = null;
-  function _cwReposicionarEnScroll() {
-    if (_cwScrollRaf !== null) return;
-    _cwScrollRaf = requestAnimationFrame(function () {
-      _cwScrollRaf = null;
-      try { mtrWidgetConductaTick(); } catch (e) {}
-      try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
-      try { mtrWidgetFarmacoTick(); } catch (e) {}
-    });
-  }
-  function _cwInstalarEscuchaScroll() {
-    if (_cwInstalarEscuchaScroll._listo || typeof document === "undefined" || typeof document.addEventListener !== "function") return;
-    _cwInstalarEscuchaScroll._listo = true;
-    document.addEventListener("scroll", _cwReposicionarEnScroll, true);
-    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("resize", _cwReposicionarEnScroll);
-    }
-  }
+  function _cwCoordX() { try { return window.pageXOffset || document.documentElement.scrollLeft || 0; } catch (e) { return 0; } }
+  function _cwCoordY() { try { return window.pageYOffset || document.documentElement.scrollTop || 0; } catch (e) { return 0; } }
 
   // v17.1.0 (#136) — último paciente y momento en que el clic de Auto-Labs emitió su
   // aviso flotante, para no repetirlo si el médico pulsa dos veces seguidas. Gemelo de
@@ -27483,7 +27476,6 @@ _vglOfrecerDeshacer(btn);
     try { _avisarPestanaDescartada(); } catch (e) {}
     try { _vglTipInstalar(); } catch (e) {}   // v14.3.0 — burbujas de información de los modales
     try { _cwfInstalarEscucha(); } catch (e) {}  // v17.24.0 — repinta el widget de farmacia de Conducta tras reformular
-    try { _cwInstalarEscuchaScroll(); } catch (e) {}  // v17.37.0 — los widgets de Conducta siguen el scroll, no solo el reloj de sondeo
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
