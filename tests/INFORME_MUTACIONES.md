@@ -6,6 +6,42 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.28.0 — 28-ago-2026 (Enfermedad Actual, regla del 50%, retiro de Medicamentos actuales y del toast de laboratorio)
+
+Cuatro cambios de comportamiento, todos restaurados y verificados con `diff` contra copia
+intacta tras cada mutación. Banco en verde: **2.524/2.524**.
+
+### Enfermedad Actual (sin examen físico de hoy)
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Reintroducir "Inventar cifras de signos vitales" (la prohibición condicional vieja) en vez de la nueva incondicional | *v17.28.0 — Enfermedad Actual NUNCA admite signos vitales de hoy...* (suite_57): "aclara que la exclusión aplica AUNQUE la cifra sí conste" |
+| 2 | Reintroducir la regla 6 ("Cifras objetivas con unidades DE HOY: presión arterial, glucometría...") como contenido obligatorio | misma prueba: "la vieja regla 6... ya no existe como contenido obligatorio" |
+
+### Regla del 50% de vigencia (triglicéridos sale, glicemia entra)
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 3 | Devolver TRIGLICERIDOS a `MTR_CLAVES_CON_META` Y a su caso en `mtrFueraDeMeta` (el código viejo completo) | *v17.16.0 — mtrFueraDeMeta: el umbral de meta+15%...* (suite_45): "triglicéridos ya no dispara por su cuenta" |
+| 4 | Quitar GLUCOSA de `MTR_CLAVES_CON_META` | misma prueba: "150 no" (esperaba `cierto`, obtuvo `null`) |
+
+Nota de proceso: mutar solo `MTR_CLAVES_CON_META` (sin tocar el `if` de `mtrFueraDeMeta`)
+NO basta para reproducir el defecto viejo — el gate de la lista y el caso del `switch`
+tienen que fallar JUNTOS. Se verificó explícitamente que cada mitad por separado sigue
+protegida por la otra, antes de mutar las dos a la vez.
+
+### "Medicamentos actuales" retirado del Panel
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 5 | Reinsertar el bloque de medicamentos en `mtrPanelResumenHtml` (`meds` de vuelta en el `return`) | *v17.28.0 — mtrPanelResumenHtml ya NO repite la lista completa...* (suite_67) |
+
+### Toast de "Cita de Laboratorio agendada" retirado
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 6 | Reintroducir el `spToast(...)` de confirmación en `apiLaboratorioAgendarAuto` | *apiLaboratorioAgendarAuto: agenda el turno EXACTO elegido...* (suite_13): "el toast que el médico pidió retirar no debe volver por accidente" |
+
 ## v17.27.0 — 28-ago-2026 (la IA cita ldl_reduction_target en vez de memorizar "50%")
 
 Reporte en vivo, mismo patrón que ldl_target/cno_hdl_target (v17.6.64): un número que el

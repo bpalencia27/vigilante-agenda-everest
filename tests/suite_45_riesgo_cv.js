@@ -806,9 +806,13 @@ module.exports = {
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 200, {}), null,
         "SIN categoría no se juzga: no se inventa una meta, se devuelve null");
 
-      // Triglicéridos: meta fija 150 → corte 172,5.
-      t.falso(api.mtrFueraDeMeta("TRIGLICERIDOS", 170, {}), "170 está dentro del margen");
-      t.cierto(api.mtrFueraDeMeta("TRIGLICERIDOS", 180, {}), "180 no");
+      // v17.28.0 — encargo del médico (28-ago): TRIGLICÉRIDOS SALE de esta regla — no debe
+      // disparar por sí solo, solo arrastrarse con el grupo lipídico (mecanismo aparte,
+      // MTR_GRUPO_LIPIDOS). Ya no tiene meta propia aquí: null pase lo que pase.
+      t.igual(api.mtrFueraDeMeta("TRIGLICERIDOS", 170, {}), null,
+        "triglicéridos ya no dispara por su cuenta — sin meta propia en esta regla");
+      t.igual(api.mtrFueraDeMeta("TRIGLICERIDOS", 500, {}), null,
+        "ni siquiera muy alto: la única vía para triglicéridos es arrastrarse con el grupo, no aquí");
 
       // HbA1c: solo tiene sentido en diabéticos. Meta 7,0 → corte 8,05.
       t.igual(api.mtrFueraDeMeta("HBA1C", 12, { esDm2: false }), null,
@@ -819,9 +823,19 @@ module.exports = {
       t.falso(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
         "y una meta individual más laxa (paciente añoso) se respeta en vez de ignorarse");
 
+      // v17.28.0 — GLICEMIA ENTRA (encargo del médico, 28-ago): meta 130, mismo margen del
+      // 15% que el resto ("una sola vara") → corte en 149,5. Solo en diabéticos, igual que
+      // HbA1c — un hipertenso sin diabetes no tiene "glicemia fuera de meta".
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 200, { esDm2: false }), null,
+        "en un hipertenso sin diabetes la glicemia NO se mide contra 130");
+      t.falso(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true }), "149 está dentro del margen (corte 149,5)");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 150, { esDm2: true }), "150 no");
+
       // Sin resultado, y con claves que no tienen meta, no se opina.
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", null, muyAlto), null, "sin cifra no se juzga");
       t.igual(api.mtrFueraDeMeta("CREATININA", 1.6, muyAlto), null, "la creatinina no tiene «meta» que incumplir");
+      t.igual(api.mtrFueraDeMeta("RAC", 45, muyAlto), null,
+        "el RAC tampoco: tiene su propio mecanismo de acortamiento, no este");
     });
 
     t.caso("v17.16.0 — mtrStatusV68 y mtrSolicitudV68: cuando NO se pudo clasificar, se dice", () => {

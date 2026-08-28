@@ -636,8 +636,12 @@ module.exports = {
       // de 392->490: no se itemizan uno a uno porque nadie los contó mientras eran
       // invisibles, e inventar ese historial sería la falta que esta prueba existe para
       // evitar en otro terreno.
+      // v17.28.0 — 526 -> 523: contenido real esta vez, no un descubrimiento de invisibles.
+      // El bloque "Medicamentos actuales" del Panel (.vgl-panel-meds-nota/-nom/-frec, 3
+      // reglas con color !important) se retiró por completo (encargo del médico, 28-ago:
+      // el Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular).
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 526, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.26.0 sobre el cambio de escala de 495 a 526). Esperado 526, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 523, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.28.0 sobre el retiro de "Medicamentos actuales", 526 -> 523). Esperado 523, salió ${importantTotal}.`);
 
       // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
       // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier

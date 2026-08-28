@@ -98,7 +98,6 @@ module.exports = {
     // esa capacidad (no se tocó su prompt).
     t.caso("Enfermedad Actual ya NO admite labs/paraclínicos ni clasificación de riesgo — eso vive en Análisis y Plan", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      t.cierto(/DE HOY/.test(ea.system), "regla 6 acota las cifras objetivas a HOY, no a un control pasado");
       t.cierto(/laboratorio o paraclínicos/i.test(ea.system), "PROHIBIDO nombra explícitamente labs/paraclínicos");
       t.cierto(/glucosa|creatinina|hemoglobina glicosilada/i.test(ea.system), "y da ejemplos concretos (no una prohibición vaga que el modelo pueda ignorar)");
       t.cierto(/riesgo cardiovascular/i.test(ea.system) && /bajo, moderado, alto/i.test(ea.system), "PROHIBIDO nombra la clasificación de riesgo cardiovascular");
@@ -111,24 +110,31 @@ module.exports = {
     });
 
     // v17.6.3 — IA ALUCINA (reporte del médico en consultorio): la Enfermedad Actual venía
-    // inventando la presión arterial (p. ej. «PA 110/70»). Raíz: las reglas 5 y 6 de
-    // MTR_EA_SYS pedían la PA como contenido OBLIGATORIO incondicional; cuando la TA no
-    // está documentada (o no se leyó del DOM), el modelo «rellenaba» con una cifra típica
-    // en vez de omitirla — exactamente lo que prohíbe la regla del proyecto (casilla vacía
-    // antes que dato inventado). La regla 6 ahora condiciona las cifras objetivas a que
-    // ESTÉN en los bloques entregados, la regla 5 condiciona el automonitoreo de PA, y
-    // PROHIBIDO nombra explícitamente que inventar cifras de signos vitales no se hace.
-    t.caso("Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa", () => {
+    // inventando la presión arterial (p. ej. «PA 110/70»). Primer arreglo (v17.6.3): condicionar
+    // la PA a que constara en los hechos — no bastaba, porque el defecto real no era la
+    // invención sino pedir un hallazgo de examen físico dentro de la anamnesis.
+    // v17.28.0 — reporte en vivo del médico (28-ago): "se sigue colando examen físico en la
+    // enfermedad actual, eso no es permitido". Investigado contra semiología clínica estándar
+    // (anamnesis vs. examen físico como fases separadas del acto médico): la PA/peso de HOY
+    // salen de Enfermedad Actual por completo, sin condición — ni aunque consten. Este caso
+    // se reescribe para fijar la prohibición INCONDICIONAL, no la condicional de v17.6.3.
+    t.caso("v17.28.0 — Enfermedad Actual NUNCA admite signos vitales de hoy, ni siquiera cuando SÍ constan en los hechos", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      // Regla 6: las cifras objetivas se escriben SOLO si están en los bloques entregados.
-      t.cierto(/si (?:esa|la|una) cifra no est[áa]|no la escribas|om[íi]tela/i.test(ea.system),
-        "regla 6 condiciona las cifras objetivas a que estén en los hechos — la PA ausente se omite, no se inventa");
-      // Regla 5: el automonitoreo de PA solo se menciona si consta en los datos.
+      // PROHIBIDO: la exclusión es incondicional — no depende de si la cifra existe o no.
+      t.cierto(/[Nn]unca a Enfermedad Actual/.test(ea.system),
+        "PROHIBIDO dice explícitamente que los signos vitales de hoy nunca van en Enfermedad Actual");
+      t.cierto(/ni siquiera si constan/i.test(ea.system),
+        "y aclara que la exclusión aplica AUNQUE la cifra sí conste en los hechos entregados");
+      t.falso(/# CONTENIDO OBLIGATORIO[\s\S]*?presi[óo]n arterial, glucometr[íi]a/i.test(ea.system),
+        "la vieja regla 6 (\"cifras objetivas DE HOY: presión arterial, glucometría...\") ya no existe como contenido obligatorio");
+      // Regla 5: el automonitoreo DOMICILIARIO de PA (lo que el paciente refiere de su casa)
+      // SÍ sigue siendo anamnesis legítima — no se tocó, y sigue condicionado a que conste.
       t.cierto(/automonitoreo de presión arterial[^\n]*SOLO si|si no consta[^\n]*no se menciona/i.test(ea.system),
-        "regla 5 condiciona el automonitoreo de PA a que el paciente lo reporte");
-      // PROHIBIDO: inventar la PA está prohibido por su nombre (patrón positivo+negativo).
-      t.cierto(/inventar[^\n]*presi[óo]n arterial|presi[óo]n arterial[^\n]*no est[áa]/i.test(ea.system),
-        "PROHIBIDO nombra explícitamente no inventar cifras de presión arterial");
+        "regla 5 (automonitoreo domiciliario referido por el paciente) sigue viva y condicionada");
+      // Y hoy en el ejemplo, la PA/peso de la consulta actual ya no aparecen — solo el
+      // automonitoreo domiciliario referido (que es lo único que sí pertenece a EA).
+      t.falso(/EN LA CONSULTA ACTUAL SE EVIDENCIA PRESI[ÓO]N ARTERIAL/.test(ea.system),
+        "el ejemplo ya no modela una frase de examen físico dentro de Enfermedad Actual");
       // La hoja SIN PA no fabrica la línea de signos vitales (ya era así; queda anclado).
       const hojaSin = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
       t.cierto(api.mtrHojaDeHechosTexto(hojaSin).indexOf("Signos vitales") < 0,
@@ -1897,7 +1903,9 @@ module.exports = {
       // fija las prohibiciones que ya regían antes de esta versión.
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {}).system;
       for (const regla of [
-        "Inventar cifras de signos vitales",
+        // v17.28.0 — la prohibición pasó de condicional ("inventar" la PA cuando no consta)
+        // a incondicional (nunca, ni cuando consta): el texto cambió, la protección no.
+        "Signos vitales o hallazgos de examen físico de HOY",
         "Resultados de laboratorio o paraclínicos",
         "Clasificación de riesgo cardiovascular",
         "Problemas administrativos",

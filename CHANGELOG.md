@@ -4,6 +4,43 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.28.0] — 2026-08-28 (Enfermedad Actual sin examen físico, la regla del 50% se ajusta, y limpieza de Panel/notificaciones)
+
+### 🩺 Enfermedad Actual deja de mezclar anamnesis con examen físico
+Reporte en vivo del médico: "se sigue colando examen físico en la enfermedad actual, eso
+no es permitido". Investigado contra semiología clínica estándar (anamnesis y examen
+físico son fases distintas del acto médico) — la presión arterial y el peso de HOY salían
+como contenido obligatorio de Enfermedad Actual desde v17.6.3 (con la condición de que
+constaran en los hechos). Esa condición no bastaba: el error no era inventar la cifra, era
+pedirla en el lugar equivocado incluso siendo real. Se retira por completo — nunca más en
+Enfermedad Actual, ni siquiera si consta. El automonitoreo domiciliario que el paciente
+refiere de su casa sigue siendo anamnesis legítima y no se toca.
+
+### ⚖️ La regla del 50% de vigencia por fuera de metas se ajusta a lo que el médico confirmó
+- **Triglicéridos** sale de la lista de disparadores independientes — solo se arrastra con
+  el grupo lipídico cuando otro lípido dispara, nunca por su cuenta.
+- **Glicemia >130 mg/dL** entra — antes deliberadamente excluida por falta de meta
+  definida; ahora reusa la misma meta (130) que ya usa el eje de falla terapéutica desde
+  v17.6.84, con el mismo margen del 15% que el resto ("una sola vara").
+- RAC y TFG/creatinina por Cockcroft-Gault, mencionados en la misma regla, **no se tocan
+  todavía**: ambos ya tienen su propio mecanismo de acortamiento (RAC: override a 90 días;
+  TFG: la tabla de vigencias por estadio ERC), y añadirlos a esta lista los reemplazaría en
+  vez de sumarse — pendiente de que el médico confirme si esos mecanismos ya cumplen su
+  regla o si de verdad quiere una capa nueva encima.
+
+### 🧹 "Medicamentos actuales" sale del Panel — solo riesgo cardiovascular
+La lista pasiva completa de medicamentos que el Resumen del Panel ganó en v17.24.0 se
+retira: duplicaba, sin aportar nada, la fila "Medicamentos del programa cardiovascular" ya
+existente en la Ficha (esa sí filtrada a RCV). El Panel solo debe mostrar medicamentos con
+foco de riesgo cardiovascular.
+
+### 🔕 Se retira el toast de "Cita de Laboratorio agendada"
+El aviso en pantalla que confirmaba cada cita de laboratorio agendada (con o sin SMS
+enviado) se retira por pedido del médico. El agendamiento real y el envío del SMS al
+paciente no se tocan — solo se calla el aviso.
+
+---
+
 ## [Versión 17.27.0] — 2026-08-28 (La IA ya no memoriza el "50% de reducción de LDL" — lo cita del motor)
 
 ### 🐛 Corrección en vivo: la meta de reducción de LDL se marcaba como cifra inventada

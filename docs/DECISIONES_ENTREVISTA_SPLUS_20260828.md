@@ -41,19 +41,21 @@ Las 26 preguntas del artefacto `mapa-panel-s-plus` (5 ya respondidas el 28-ago d
 es una decisión firme del médico, no una recomendación mía — implementar en consecuencia,
 sin volver a preguntar salvo que él la reabra.
 
-## Chips de PyM en la tarjeta de la agenda — [IMPLEMENTADO v17.22.0, un punto sin cerrar]
+## Chips de PyM en la tarjeta de la agenda — [IMPLEMENTADO v17.22.0, CERRADO 28-ago noche]
 
-Puntos 1-2-4 implementados tal cual se decidió. **Punto 3 (etiquetas abreviadas) NO se
-implementó como abreviación de texto** — se implementó el tope de 3 chips visibles (que
-cumple el objetivo real detrás del pedido, "no ensanchar la tarjeta"), pero el texto de
-cada chip se dejó completo a propósito: el propio historial de `vigilante_agenda.user.js`
-(comentario de `.vgl-pyms`, v12.4.0) documenta un reporte real de consultorio donde
-truncar/cortar el texto de los chips salió mal, y se corrigió para que SIEMPRE se vea
-completo. Inventar una tabla de abreviaturas clínicas sin una fuente real habría sido
-justo lo que "casilla vacía antes que dato inventado" prohíbe. Pendiente: que el médico
-confirme si el tope de 3 basta, o si de verdad quiere abreviaturas de texto — y en ese
-caso, con qué fuente (¿ya existe una tabla de siglas en alguna parte del proyecto de PyM
-que no se haya revisado?).
+Puntos 1-2-4 implementados tal cual se decidió. **Punto 3 (etiquetas abreviadas): el
+médico CONFIRMÓ (28-ago, noche) que el tope de 3 chips visibles basta — no quiere
+abreviaturas de texto.** Queda como se implementó: cada chip se ve completo (nunca
+truncado; ver el reporte real de consultorio documentado en el comentario de `.vgl-pyms`,
+v12.4.0), con el tope de 3 y un "+N más" para el resto.
+
+El médico agregó una precisión sobre el ALCANCE: **Optometría y Odontología NO deben
+aparecer entre los chips de la tarjeta — solo al abrir la historia.** Verificado en
+código: ya es exactamente así desde v17.22.0 (`isPanelHiddenActivity`/`panelActivities`,
+línea ~7927, filtran AV/OD antes de armar los chips; la tarjeta muestra en su lugar un
+indicador "+ remisión AV/OD" cuando corresponde, y el detalle completo vive en el aviso
+al abrir la historia). Nada que implementar — confirmación de un comportamiento ya
+enviado.
 
 1. Reversión consciente de la decisión de agosto — sí, quiere volver a tenerlos.
 2. Lista completa, no compacta: **3 actividades visibles por tarjeta**, como antes de T4.
@@ -96,9 +98,11 @@ que no se haya revisado?).
     no de nada relacionado con la sala de espera. `S.abandonoPES` nace `true` (encendido) y
     hoy **no tiene ningún interruptor en Ajustes** (confirmado por comentario propio del
     código, ~línea 10863: "sin interruptor en Ajustes").
-    Con esto corregido, la pregunta original SÍ sigue siendo válida y queda abierta para
-    cuando el médico esté despierto: ¿le damos un interruptor visible en Ajustes (como sus
-    hermanos clínicos), o se deja fijo en encendido sin opción, como está hoy?
+    **CERRADO (28-ago, noche): se queda fijo encendido, sin interruptor en Ajustes** —
+    misma decisión que ya regía en código, ahora confirmada explícitamente en vez de
+    heredada por omisión. El médico confirmó también que debe seguir alimentándose del
+    mismo SharePoint que las demás actividades de PyM (`Abandonados_PES`, ya es así hoy:
+    nada que tocar en código).
 15. Nombre/identificador del médico: no se agrega control manual de respaldo — se deja
     solo por consola, como hoy.
 

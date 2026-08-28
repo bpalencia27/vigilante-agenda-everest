@@ -18,10 +18,13 @@
 //  v17.24.0 — «medicamentos» dejó de ser una pestaña (decisión del médico, entrevista
 //  S+ del 28-ago): el juicio farmacológico se muda al widget de Conducta. Resumen gana
 //  un dashboard de 3 tarjetas de estado — MISMO criterio que cada pestaña detallada,
-//  nunca una copia simplificada — y una lista pasiva de "Medicamentos actuales".
-//  mtrPanelMedicamentosHtml sigue viva y probada de frente (línea ~182): la lógica de
-//  avisos/duplicidades que arma se reutilizará en la Fase 2 (el widget), solo que ya no
-//  la llama el Panel.
+//  nunca una copia simplificada. mtrPanelMedicamentosHtml sigue viva y probada de frente
+//  (línea ~182): la lógica de avisos/duplicidades que arma se reutilizará en la Fase 2
+//  (el widget), solo que ya no la llama el Panel.
+//  v17.28.0 — la lista pasiva "Medicamentos actuales" que esa misma entrega le agregó al
+//  Resumen SE RETIRA (encargo del médico, 28-ago): duplicaba, sin aportar nada, la fila
+//  "Medicamentos del programa cardiovascular" de la Ficha (esa sí filtrada a RCV). El
+//  Panel solo debe mostrar medicamentos con foco de riesgo cardiovascular.
 // =====================================================================
 
 const RESUMEN_DEMO = {
@@ -57,7 +60,7 @@ module.exports = {
   cubre: [
     "mtrPanelSeccionValida", "mtrPanelNavHtml", "mtrPanelResumenHtml", "mtrPanelRiesgoRenalHtml",
     "mtrPanelExamenesHtml", "mtrPanelTendenciasHtml", "mtrPanelMedicamentosHtml",
-    "mtrPanelResumenBentoDatos", "mtrPanelResumenBentoHtml", "mtrPanelResumenMedsHtml",
+    "mtrPanelResumenBentoDatos", "mtrPanelResumenBentoHtml",
     "openPanelPacienteModal", "mtrSeriesPorAnalito", "mtrTendenciaDe", "_mtrTendUmbralGrave",
     "mtrMetaHba1cGeneral", "mtrHojaEducativaHtml",
   ],
@@ -168,30 +171,20 @@ module.exports = {
       t.igual(api.mtrPanelResumenBentoHtml([]), "", "sin tarjetas, no se pinta una cuadrícula vacía");
     });
 
-    // v17.24.0 — Medicamentos actuales: archivo pasivo en Resumen, tras retirar la
-    // pestaña Medicamentos. Misma clave de dedup que usaba el conteo de esa pestaña
-    // (v17.1.0, #113): nunca puede divergir de ningún otro conteo del script.
-    t.caso("mtrPanelResumenMedsHtml: lista lo que toma, deduplicado, y distingue «no se pudo leer» de «no toma nada»", () => {
-      const html = api.mtrPanelResumenMedsHtml(RESUMEN_DEMO);
-      t.cierto(html.indexOf("LOSARTAN 50MG") >= 0 && html.indexOf("METFORMINA 850MG") >= 0, "los dos medicamentos, completos");
-      t.cierto(html.indexOf("Medicamentos actuales") >= 0, "con su propio rótulo");
-      t.cierto(html.indexOf("avisos de seguridad") >= 0, "y la nota que dice dónde SÍ viven los avisos (Conducta)");
-      t.falso(/vgl-mtr-|vgl-dup-/.test(html), "nunca avisos ni duplicidades aquí: eso es juicio clínico, no archivo");
-
-      const noLeido = api.mtrPanelResumenMedsHtml({ medicamentos: null });
-      t.cierto(noLeido.indexOf("No se pudo leer") >= 0, "sin lectura, se dice que no se pudo leer");
-
-      const ninguno = api.mtrPanelResumenMedsHtml({ medicamentos: [] });
-      t.cierto(ninguno.indexOf("no reporta medicamentos activos") >= 0, "una lista vacía DE VERDAD se dice como tal, distinta de 'no se pudo leer'");
-    });
-
-    t.caso("mtrPanelResumenHtml: integra el dashboard y la lista pasiva de medicamentos, en ese orden, antes de la ficha", () => {
+    // v17.28.0 — "Medicamentos actuales" (archivo pasivo, v17.24.0) SE RETIRA del Resumen
+    // por encargo del médico (28-ago): el Panel solo debe mostrar medicamentos con foco de
+    // riesgo cardiovascular, y esa lista completa duplicaba, sin aportar nada, la fila
+    // "Medicamentos del programa cardiovascular" ya existente en la Ficha (filtrada a
+    // RCV). Este caso reemplaza al que probaba mtrPanelResumenMedsHtml (retirada por
+    // completo) — ahora fija la AUSENCIA, para que no vuelva a colarse sin decisión.
+    t.caso("v17.28.0 — mtrPanelResumenHtml ya NO repite la lista completa de medicamentos: solo la Ficha (RCV) la tiene", () => {
       const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
       const iDashboard = html.indexOf("vgl-bento-grid");
-      const iMeds = html.indexOf("Medicamentos actuales");
       const iFicha = html.indexOf("Órdenes de Everest");
-      t.cierto(iDashboard >= 0 && iMeds > iDashboard && iFicha > iMeds,
-        "dashboard, luego medicamentos, luego la ficha detallada — nunca en otro orden");
+      t.cierto(iDashboard >= 0 && iFicha > iDashboard, "dashboard, luego la ficha detallada, sin nada entre medio");
+      t.falso(html.indexOf("Medicamentos actuales") >= 0,
+        "el rótulo de la lista pasiva ya no aparece en el Resumen");
+      t.falso(/vgl-panel-meds-/.test(html), "y ninguna de sus clases CSS queda huérfana en el HTML");
     });
 
     // ---------------- Sección 2: riesgo y renal ----------------

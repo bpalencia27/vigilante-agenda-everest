@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.27.0
+// @version     17.28.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.27.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.28.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14353,16 +14353,6 @@ _vglOfrecerDeshacer(btn);
       #vgl-panel-modal .vgl-dup-tope,#vgl-cw-farmaco .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
       #vgl-panel-modal .vgl-dup-cuenta,#vgl-cw-farmaco .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
       #vgl-panel-modal .vgl-dup-fila,#vgl-cw-farmaco .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
-      /* v17.24.0 — Medicamentos actuales, archivo pasivo (Resumen, tras retirar la pestaña
-         Medicamentos). Cuelga de document.body: Regla E, !important en todo color. */
-      #vgl-panel-modal .vgl-panel-meds-nota{font-size:var(--t-micro);color:var(--fg3) !important;margin:2px 0 8px}
-      #vgl-panel-modal .vgl-panel-meds-lista{display:flex;flex-direction:column;gap:6px}
-      #vgl-panel-modal .vgl-panel-meds-fila{
-        display:flex;align-items:baseline;justify-content:space-between;gap:10px;
-        background:var(--bg3);border-radius:var(--r-chip);padding:7px 10px
-      }
-      #vgl-panel-modal .vgl-panel-meds-nom{font-size:var(--t-body);font-weight:700;color:var(--fg) !important}
-      #vgl-panel-modal .vgl-panel-meds-frec{font-size:var(--t-micro);color:var(--fg3) !important;white-space:nowrap}
       /* v17.0.0 — Emergente «faltan antecedentes». Cuelga de document.body como todos
          los módulos: Regla E, y además entra en la lista de paneles que heredan los
          tokens (ver el selector raíz) y la posición fija de los modales. */
@@ -16880,7 +16870,12 @@ _vglOfrecerDeshacer(btn);
         } catch (e) { console.warn("[Vigilante Lab] error enviando SMS de laboratorio:", e); }
       }
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}.` + (smsEnviado ? " Se envió SMS de recordatorio." : " El paciente NO recibe SMS del laboratorio: recuérdeselo."));
+      // v17.28.0 — RETIRADO el toast de confirmación (encargo del médico, 28-ago: "elimina
+      // esa notificación... es cuando se asignan citas de laboratorio"). El agendamiento y
+      // el envío real del SMS al paciente NO se tocan — solo se calla el aviso EN PANTALLA
+      // para el médico. `smsEnviado` se conserva en el valor de retorno (informativo, sin
+      // llamador hoy) por si algún consumidor futuro lo necesita sin tener que reabrir esta
+      // función.
       // v15.9.0 — se devuelve el radicado (objeto TRUTHY: quien solo preguntaba "¿quedó?"
       // sigue funcionando igual) para poder imprimir el recordatorio de la toma.
       return { ok: true, radicado: radicado, fechaIso: fechaIso, hora: horaFinal, smsEnviado: smsEnviado };
@@ -19169,40 +19164,17 @@ _vglOfrecerDeshacer(btn);
     ).join("") + '</div>';
   }
 
-  // ---------- v17.24.0 — MEDICAMENTOS ACTUALES (archivo pasivo, sin juicio clínico) ----------
-  // Sale de la extinta pestaña Medicamentos: sin avisos ni duplicidades (eso vive en
-  // Conducta). Misma clave de dedup que usaba el conteo de esa pestaña (v17.1.0, #113)
-  // — nunca un recuento "por conveniencia" que pueda volver a divergir.
-  function mtrPanelResumenMedsHtml(resumen) {
-    const crudos = (resumen && Array.isArray(resumen.medicamentos)) ? resumen.medicamentos : null;
-    const meds = crudos ? mtrMedicamentosUnicos(crudos) : null;
-    const frecMapa = (resumen && resumen.medicamentosFrecuencia && typeof resumen.medicamentosFrecuencia.get === "function")
-      ? resumen.medicamentosFrecuencia : null;
-    const cuerpo = (meds && meds.length)
-      ? '<div class="vgl-panel-meds-lista">' + meds.map((m) => {
-          const nombre = String(m);
-          const frecuencia = frecMapa ? (frecMapa.get(_mtrClaveDedupMedicamento(nombre)) || "") : "";
-          return '<div class="vgl-panel-meds-fila">'
-            + '<span class="vgl-panel-meds-nom">' + escapeHtml(nombre) + '</span>'
-            + (frecuencia ? '<span class="vgl-panel-meds-frec">' + escapeHtml(frecuencia) + '</span>' : "")
-            + '</div>';
-        }).join("") + '</div>'
-      : (meds === null
-          ? '<div class="vgl-agm-dinfo">No se pudo leer la lista de medicamentos (no respondió el sistema de órdenes).</div>'
-          : '<div class="vgl-agm-dinfo">Everest no reporta medicamentos activos para este paciente.</div>');
-    return '<div class="vgl-agm-sec">'
-      + '<span class="vgl-agm-lbl">Medicamentos actuales</span>'
-      + '<div class="vgl-panel-meds-nota">Solo archivo — avisos de seguridad y duplicidades viven en Conducta.</div>'
-      + cuerpo
-      + '</div>';
-  }
-
   // ---------- SECCIÓN 1: RESUMEN (lo leído y de dónde) ----------
+  // v17.28.0 — "Medicamentos actuales" (archivo pasivo, v17.24.0) SE RETIRA de aquí, por
+  // encargo del médico (28-ago): el Panel solo debe mostrar medicamentos con foco de
+  // riesgo cardiovascular, y esa lista completa duplicaba, sin aportar nada nuevo, la fila
+  // "Medicamentos del programa cardiovascular" ya existente en la Ficha (más abajo,
+  // mtrFichaVivaFilas) — que SÍ está filtrada a RCV. mtrPanelResumenMedsHtml se retira
+  // por completo (nunca queda un llamador huérfano en el proyecto).
   function mtrPanelResumenHtml(resumen) {
     if (!resumen) return '<div class="vgl-agm-sec"><div class="vgl-agm-err">No se pudo leer al paciente ahora (los laboratorios no respondieron). Inténtelo de nuevo en un momento.</div></div>';
     const d = mtrTableroClinico(resumen);
     const bento = mtrPanelResumenBentoHtml(mtrPanelResumenBentoDatos(resumen, d));
-    const meds = mtrPanelResumenMedsHtml(resumen);
     const datos = mtrFichaVivaFilas(resumen);
     const filas = datos.secciones.map((sec) => '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">' + escapeHtml(sec.titulo) + '</span>'
@@ -19215,7 +19187,7 @@ _vglOfrecerDeshacer(btn);
     const aviso = datos.faltantes
       ? '<div class="vgl-ord-vigwarn" style="margin:8px 0">Faltan ' + datos.faltantes + ' dato(s). El asistente NO los inventa: donde diga «sin dato», sus conclusiones van sin ese insumo.</div>'
       : "";
-    return bento + meds + aviso + filas
+    return bento + aviso + filas
       + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y órdenes de Everest, y lo escrito hoy en la historia.</div>';
   }
 
@@ -32286,14 +32258,36 @@ _vglOfrecerDeshacer(btn);
   // real para quien lo lee después. Hoy tienen meta:
   //   · LDL         -> MTR_METAS_LIPIDICAS[categoría de riesgo]
   //   · No-HDL      -> idem (no se evalúa aquí: no es un analito propio)
-  //   · Triglicéridos -> MTR_META_TRIGLICERIDOS (150)
   //   · HbA1c       -> MTR_HBA1C_META_DM2 (7,0) o la meta individual del paciente
-  // NO tienen meta definida y por tanto NO se acortan: glicemia, colesterol
-  // total, HDL, creatinina, hemoglobina, PTH, fósforo, albúmina, uroanálisis.
-  // El RAC queda FUERA a propósito: ya tiene su propio acortamiento por
-  // albuminuria (mtrAcortarRacSiAlbuminuria + MTR_RAC_OVERRIDE_DIAS), y aplicarle
-  // las dos reglas lo partiría dos veces.
-  const MTR_CLAVES_CON_META = ["COLESTEROL_LDL", "TRIGLICERIDOS", "HBA1C"];
+  //   · Glicemia    -> MTR_GLICEMIA_META_DM2 (130), solo en diabéticos (v17.28.0)
+  // NO tienen meta definida y por tanto NO se acortan: colesterol total, HDL,
+  // creatinina, hemoglobina, PTH, fósforo, albúmina, uroanálisis.
+  //
+  // v17.28.0 — ENCARGO DEL MÉDICO (28-ago): «los únicos exámenes que se repiten al 50% de
+  // su vigencia por estar fuera de metas son LDL (arrastra el perfil lipídico completo),
+  // glicemia >130, HbA1c según el grupo etario, RAC >30 y TFG <60 por Cockcroft-Gault; de
+  // resto, ningún otro laboratorio se repite antes de su vigencia natural». Tres cambios
+  // de los cinco:
+  //   1. TRIGLICÉRIDOS SALE de esta lista — el médico fue explícito: no debe disparar por
+  //      sí solo, solo arrastrarse con el grupo lipídico. El arrastre de grupo
+  //      (MTR_GRUPO_LIPIDOS, más abajo en mtrPlanParaclinicos) es un mecanismo
+  //      INDEPENDIENTE de esta lista — quitar TRIGLICERIDOS de aquí no le quita nada al
+  //      arrastre, solo le quita el disparo POR SU CUENTA.
+  //   2. GLICEMIA ENTRA — antes deliberadamente excluida ("no tiene meta definida"); ahora
+  //      sí la tiene (MTR_GLICEMIA_META_DM2, la misma que ya usa el eje de falla
+  //      terapéutica desde v17.6.84), así que entra con el mismo margen del 15% que ya
+  //      usan LDL/HbA1c ("una sola vara", decisión del médico del 20-ago) — dispara sobre
+  //      130*1,15 ≈ 149,5, no sobre 130 exactos. Solo en diabéticos, igual que HbA1c.
+  //   3. RAC y TFG/CREATININA NO ENTRAN todavía — ambos YA tienen su propio mecanismo de
+  //      acortamiento (RAC: override plano a 90 días vía MTR_RAC_OVERRIDE_DIAS, más abajo;
+  //      TFG: la tabla MTR_ERC ya reduce la vigencia de creatinina por estadio G3a-G5). El
+  //      `if` de _vigenciaDiasParaAnalito que consulta esta lista hace un `return`
+  //      temprano (línea ~4076): si RAC/CREATININA entraran aquí, ese `return` se
+  //      adelantaría al de sus mecanismos actuales y los REEMPLAZARÍA por completo, no los
+  //      sumaría — cambiando fechas de cita ya medidas y aprobadas sin que nadie lo pidiera
+  //      así. Pendiente de que el médico confirme si esos mecanismos YA cumplen su regla
+  //      (parece que sí, con otra forma) o si de verdad quiere una capa nueva encima.
+  const MTR_CLAVES_CON_META = ["COLESTEROL_LDL", "HBA1C", "GLUCOSA"];
 
   // Devuelve true (fuera de meta), false (en meta) o null (no hay meta que aplicar).
   // v16.4.0 — UN SOLO UMBRAL con la falla terapéutica (decisión del médico, 20-ago):
@@ -32315,8 +32309,6 @@ _vglOfrecerDeshacer(btn);
     if (MTR_CLAVES_CON_META.indexOf(clave) < 0) return null;
     const margen = 1 + _mtrMargenMeta();
 
-    if (clave === "TRIGLICERIDOS") return v > MTR_META_TRIGLICERIDOS * margen;
-
     if (clave === "COLESTEROL_LDL") {
       const cat = c.categoriaRiesgo || null;
       const metas = cat && MTR_METAS_LIPIDICAS[cat] ? MTR_METAS_LIPIDICAS[cat] : null;
@@ -32329,6 +32321,18 @@ _vglOfrecerDeshacer(btn);
       // no se mide contra 7,0.
       if (!c.esDm2) return null;
       const meta = (c.metaHba1c !== null && c.metaHba1c !== undefined) ? mtrFloat(c.metaHba1c) : mtrMetaHba1cGeneral();
+      if (meta === null) return null;
+      return v > meta * margen;
+    }
+
+    // v17.28.0 — encargo del médico (28-ago): "glicemia >130" entra a la regla del 50%.
+    // Mismo criterio que HbA1c: solo tiene sentido contra una meta glicémica en un
+    // diabético — un hipertenso sin diabetes no tiene "glicemia fuera de meta". Reusa
+    // mtrMetaGlicemiaGeneral() (130 mg/dL), la misma meta que ya usa el eje de falla
+    // terapéutica desde v17.6.84 — un solo número, no dos que puedan divergir.
+    if (clave === "GLUCOSA") {
+      if (!c.esDm2) return null;
+      const meta = (typeof mtrMetaGlicemiaGeneral === "function") ? mtrMetaGlicemiaGeneral() : null;
       if (meta === null) return null;
       return v > meta * margen;
     }
@@ -33473,10 +33477,10 @@ _vglOfrecerDeshacer(btn);
     "Las del bloque de arriba, en ese orden de mando. CERO INFERENCIA: si un dato no está, para ti no existe — no lo inventes, no lo supongas, y no escribas 'no se registró' salvo necesidad clínica.",
     "",
     "# LO QUE SIEMPRE VA (si consta en los bloques)",
-    "Sexo y edad · antecedentes pertinentes en extenso con su tiempo de evolución y su manejo actual · la cronología desde el último control · la semiotecnia de cada síntoma relevante, con sus positivos Y sus negativos pertinentes · la adherencia farmacológica · los estilos de vida cuantificados · las cifras de HOY que consten.",
+    "Sexo y edad · antecedentes pertinentes en extenso con su tiempo de evolución y su manejo actual · la cronología desde el último control · la semiotecnia de cada síntoma relevante, con sus positivos Y sus negativos pertinentes · la adherencia farmacológica · los estilos de vida cuantificados.",
     "",
     "# LO QUE NUNCA VA, AUNQUE TE LLEGUE EN LOS DATOS",
-    "Resultados de laboratorio y paraclínicos · clasificación de riesgo cardiovascular · metas terapéuticas · el plan de exámenes y sus fechas · quejas administrativas · siglas de diagnósticos · frases de relleno · cualquier cifra de signo vital que no conste. (Cada punto está detallado abajo en PROHIBIDO.)",
+    "Resultados de laboratorio y paraclínicos · clasificación de riesgo cardiovascular · metas terapéuticas · el plan de exámenes y sus fechas · quejas administrativas · siglas de diagnósticos · frases de relleno · signos vitales o cualquier hallazgo de examen físico de HOY (presión arterial, peso, frecuencia cardíaca, glucometría capilar, IMC y similares) — pertenecen al Examen Físico, nunca a Enfermedad Actual, aunque consten en los bloques entregados. (Cada punto está detallado abajo en PROHIBIDO.)",
     "",
     "# CONTENIDO OBLIGATORIO (en este orden narrativo)",
     "1. Apertura: sexo, edad, antecedentes pertinentes EN EXTENSO con su tiempo de evolución y el manejo actual (medicamentos con dosis y frecuencia), integrados en la narración, no como lista.",
@@ -33485,17 +33489,28 @@ _vglOfrecerDeshacer(btn);
     "4. Adherencia farmacológica objetiva. La compra de medicamentos por cuenta propia se registra como 'adquisición particular', SIN mencionar causas administrativas.",
     // v17.6.3 — IA ALUCINA (reporte del médico): la Enfermedad Actual inventaba la presión
     // arterial (p. ej. «PA 110/70») cuando la TA no estaba documentada ni en los hechos.
-    // Raíz: esta regla y la 6 pedían la PA como contenido OBLIGATORIO incondicional y el
-    // modelo «rellenaba» el vacío con una cifra típica. Regla del proyecto: casilla vacía
-    // antes que dato inventado. El automonitoreo de PA ahora se condiciona a que conste en
-    // los bloques entregados; la regla 6 y PROHIBIDO refuerzan lo mismo en positivo y
-    // negativo (mismo patrón que la corrección de labs/riesgo de v17.3.0).
+    // Raíz: la regla 6 (retirada en v17.28.0, ver más abajo) y esta pedían la PA como
+    // contenido obligatorio y el modelo «rellenaba» el vacío con una cifra típica.
+    // v17.28.0 — CORRECCIÓN DE FONDO, no solo de alucinación (encargo del médico, 28-ago,
+    // tras un reporte en vivo: "por ejemplo se sigue colando examen físico en la enfermedad
+    // actual, eso no es permitido"). Investigado contra semiología clínica estándar: la
+    // anamnesis (donde vive Enfermedad Actual — lo que el paciente RELATA) y el examen
+    // físico (lo que el médico MIDE) son fases distintas y consecutivas del acto médico; la
+    // Resolución 1995/1999 no fija esto campo por campo, pero delega en la "racionalidad
+    // científica" que sí lo exige. La regla 6 de abajo ("Cifras objetivas DE HOY: presión
+    // arterial, glucometría, peso, frecuencia cardíaca") pedía exactamente lo que la
+    // semiología prohíbe: un hallazgo de examen físico narrado como si fuera anamnesis. No
+    // bastaba con condicionarlo a "si consta" (v17.6.3) — el defecto no era que la IA
+    // inventara la cifra, era que la pedía en el lugar equivocado incluso cuando la cifra
+    // era real. Retirada por completo (regla 6 eliminada, PROHIBIDO reforzado sin
+    // condición, ejemplo recortado). El automonitoreo DOMICILIARIO de PA de la regla 5 NO
+    // se toca: es lo que el paciente refiere de su casa, anamnesis legítima — la medición de
+    // HOY en el consultorio es la que se va, no el relato del paciente sobre la suya.
     "5. Estilos de vida CUANTIFICADOS: actividad física (modalidad, días/semana, min/sesión); dieta y restricciones (sodio/azúcares si aplica); tabaquismo (paquetes/año, o nunca fumador, o exfumador desde cuándo); alcohol (unidades/semana o abstinencia); automonitoreo de presión arterial (frecuencia y cifras) SOLO si el paciente lo reporta en los bloques entregados — si no consta, no se menciona.",
-    "6. Cifras objetivas con unidades DE HOY: SOLO las que aparecen en los bloques entregados (HECHOS DEL PACIENTE, TEXTO YA REGISTRADO o DATOS APORTADOS): presión arterial, glucometría capilar, peso, frecuencia cardíaca… Si una cifra no está en NINGÚN bloque (p. ej. la presión arterial), NO la escribas — el texto queda sin esa cifra. Nunca resultados de laboratorio ni paraclínicos de controles anteriores — esos van en Análisis y Plan, no en Enfermedad Actual.",
     "",
     "# PROHIBIDO",
     "- Problemas administrativos: quejas de EPS, dispensación, autorizaciones, demoras.",
-    "- Inventar cifras de signos vitales: si la presión arterial u otra medida no aparece en los bloques entregados, jamás escribas un valor (ni 'se evidencia PA …', ni cifras de automonitoreo) — el texto simplemente no la menciona.",
+    "- Signos vitales o hallazgos de examen físico de HOY (presión arterial, peso, frecuencia cardíaca, glucometría capilar, IMC y similares): pertenecen al Examen Físico, NUNCA a Enfermedad Actual — ni siquiera si constan en los bloques entregados. (El automonitoreo domiciliario que el paciente REFIERE sí es anamnesis: ver regla 5.)",
     "- Siglas de diagnósticos o términos clínicos: escribe SIEMPRE en extenso (Hipertensión Arterial, Diabetes Mellitus Tipo 2, Enfermedad Renal Crónica, Infarto Agudo de Miocardio, Presión Arterial, Riesgo Cardiovascular, Frecuencia Cardíaca) — nunca HTA, DM2, ERC, IAM, TA, RCV, FC, FR.",
     "- Frases de relleno: 'paciente estable', 'asiste a control rutinario', 'sin cambios', 'evolución satisfactoria', 'en buen estado general'.",
     "- Viñetas, subtítulos, markdown, saludos, preámbulos, explicaciones o notas al pie.",
@@ -33510,7 +33525,7 @@ _vglOfrecerDeshacer(btn);
     "Prosa continua, TODO EN MAYÚSCULAS SOSTENIDAS, terminología médica formal. EXTENSIÓN: cubre TODOS los hechos entregados en narrativa completa — NO comprimas en un resumen; con datos suficientes el texto suele tomar entre 120 y 260 palabras. Responde ÚNICAMENTE con el texto final.",
     "",
     "# EJEMPLO (imita la FORMA y el TONO; el contenido real sale SOLO de los hechos entregados)",
-    "PACIENTE FEMENINA DE 62 AÑOS, CON ANTECEDENTE DE HIPERTENSIÓN ARTERIAL DE 8 AÑOS DE EVOLUCIÓN EN MANEJO CON LOSARTÁN 50 mg CADA 12 HORAS, QUIEN REFIERE QUE DESDE EL ÚLTIMO CONTROL HACE 3 MESES SE HA ENCONTRADO ASINTOMÁTICA DESDE EL PUNTO DE VISTA CARDIOVASCULAR; NIEGA DOLOR TORÁCICO, DISNEA, PALPITACIONES, EDEMA DE MIEMBROS INFERIORES Y CEFALEA. EN CUANTO A LA ADHERENCIA FARMACOLÓGICA REFIERE TOMA REGULAR DE SU ESQUEMA SIN OMISIÓN DE DOSIS. RESPECTO A LOS ESTILOS DE VIDA REALIZA CAMINATA 3 DÍAS POR SEMANA DURANTE 40 MINUTOS POR SESIÓN, REFIERE DIETA CON RESTRICCIÓN DE SODIO, NIEGA TABAQUISMO Y REFIERE ABSTINENCIA ALCOHÓLICA. EL AUTOMONITOREO DOMICILIARIO DE PRESIÓN ARTERIAL REPORTA CIFRAS PROMEDIO DE 125/78 mmHg. EN LA CONSULTA ACTUAL SE EVIDENCIA PRESIÓN ARTERIAL DE 128/80 mmHg Y PESO DE 70 kg.",
+    "PACIENTE FEMENINA DE 62 AÑOS, CON ANTECEDENTE DE HIPERTENSIÓN ARTERIAL DE 8 AÑOS DE EVOLUCIÓN EN MANEJO CON LOSARTÁN 50 mg CADA 12 HORAS, QUIEN REFIERE QUE DESDE EL ÚLTIMO CONTROL HACE 3 MESES SE HA ENCONTRADO ASINTOMÁTICA DESDE EL PUNTO DE VISTA CARDIOVASCULAR; NIEGA DOLOR TORÁCICO, DISNEA, PALPITACIONES, EDEMA DE MIEMBROS INFERIORES Y CEFALEA. EN CUANTO A LA ADHERENCIA FARMACOLÓGICA REFIERE TOMA REGULAR DE SU ESQUEMA SIN OMISIÓN DE DOSIS. RESPECTO A LOS ESTILOS DE VIDA REALIZA CAMINATA 3 DÍAS POR SEMANA DURANTE 40 MINUTOS POR SESIÓN, REFIERE DIETA CON RESTRICCIÓN DE SODIO, NIEGA TABAQUISMO Y REFIERE ABSTINENCIA ALCOHÓLICA. EL AUTOMONITOREO DOMICILIARIO DE PRESIÓN ARTERIAL REPORTA CIFRAS PROMEDIO DE 125/78 mmHg.",
     "",
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas nombres ni identificadores (no los tienes).",
   ].join("\n");

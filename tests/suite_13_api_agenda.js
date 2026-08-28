@@ -520,8 +520,12 @@ module.exports = {
       t.cierto(urlBook.includes("FechaCita=2026-08-14"));
       t.cierto(urlBook.includes("Telefono=0"), "sin teléfono cableado: manda 0 como la app oficial");
       t.cierto(urlBook.includes("NombrePaciente=%20"), "espacio CODIFICADO, igual que la captura real del front (Incidente v12.3.31)");
-      t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "sin celular conocido, el aviso sigue diciéndolo");
+      // v17.28.0 — el toast de confirmación se retiró (encargo del médico, 28-ago: "elimina
+      // esa notificación... es cuando se asignan citas de laboratorio"); el agendamiento y
+      // su resultado real se siguen verificando sobre el valor de retorno, y se fija en
+      // rojo que el aviso NO vuelva a aparecer sin que sea una decisión explícita.
+      t.igual(ok.smsEnviado, false, "sin celular conocido, no hubo SMS que enviar");
+      t.falso(hayTexto(e.c, "Cita de Laboratorio agendada"), "el toast que el médico pidió retirar no debe volver por accidente");
     });
 
     t.caso("normalizeHora: iguala '6:40:00', '06:40:00' y '06:40' al mismo turno (Incidente v12.3.32 — captura real: la hora rechazada aparecía como libre)", () => {
@@ -559,8 +563,11 @@ module.exports = {
       });
       const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3000000000");
       t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
-      t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
+      // v17.28.0 — el toast que anunciaba esto se retiró (encargo del médico, 28-ago); el
+      // incidente real que este caso protege (nunca declarar enviado un SMS que el
+      // servicio rechazó) se sigue fijando sobre el valor de retorno, que es lo que
+      // consume el resto del script (p. ej. el panel de cierre de cita).
+      t.igual(ok.smsEnviado, false, "jamás declarar enviado un SMS que el servicio rechazó (Incidente v12.3.33)");
     });
 
     await t.casoAsync("apiLaboratorioAgendarAuto: usa AgendaId (mayúsculas) del turno — el nombre real confirmado contra el front de AppCita (Incidente v12.3.31)", async () => {
@@ -620,7 +627,9 @@ module.exports = {
         "la sede del SMS sale de mtrSedeIdLab(), no de un literal: un colega de otra sede mandaría a sus pacientes al laboratorio equivocado, por escrito");
       t.falso(/codigoSede=378\b/.test(urlSms) && e.c.api.mtrSedeIdLab() !== 378,
         "y si la sede cambia, el SMS cambia con ella");
-      t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
+      // v17.28.0 — el toast se retiró (encargo del médico); el resultado real se sigue
+      // fijando sobre el valor de retorno.
+      t.igual(ok.smsEnviado, true, "con celular conocido y el servicio aceptando, el SMS sí se envió");
     });
 
     // ---------- apiDigiturnoFinalizarTicket ----------
