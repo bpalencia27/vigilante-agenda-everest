@@ -38,12 +38,19 @@ sin volver a preguntar salvo que él la reabra.
     editable — no hay planes inmediatos de instalar en otra sede.
 13. "Actividades PyM a ocultar" y "Recordatorio de carga PyM" en modo programador: siguen
     en pie exactamente como se decidió el 27-ago.
-14. **Aviso de abandono PES — PREMISA A VERIFICAR, NO DECIDIDA.** El médico corrigió la
-    pregunta: "Abandono PES está ligado al SharePoint y no tiene nada que ver con lo que
-    mencionas" — la caracterización del artefacto (`mapa-panel-s-plus`) sobre este punto
-    es incorrecta o está desactualizada. **No implementar nada aquí sin releer el código
-    real primero** (buscar la relación real con SharePoint antes de tocar cualquier
-    interruptor).
+14. **Aviso de abandono PES — VERIFICADO EN CÓDIGO (28-ago, noche), sigue sin decidir el
+    toggle.** El médico tenía razón: mi pregunta original lo describía mal ("paciente que
+    sale de la sala de espera sin ser atendido") — no tiene nada que ver con eso. Lo real,
+    confirmado leyendo `tieneAbandonoPES` (~línea 24777) y `S.abandonoPES` (~línea 6801):
+    "PES" es el **Programa de riesgo cardiovascular**, y esta alarma avisa cuando el
+    paciente **abandonó el seguimiento de ese programa** — el dato sale de la columna
+    `Abandonados_PES="Si"` del mismo Excel/SharePoint que ya alimenta PyM (`state.pymAbandono`),
+    no de nada relacionado con la sala de espera. `S.abandonoPES` nace `true` (encendido) y
+    hoy **no tiene ningún interruptor en Ajustes** (confirmado por comentario propio del
+    código, ~línea 10863: "sin interruptor en Ajustes").
+    Con esto corregido, la pregunta original SÍ sigue siendo válida y queda abierta para
+    cuando el médico esté despierto: ¿le damos un interruptor visible en Ajustes (como sus
+    hermanos clínicos), o se deja fijo en encendido sin opción, como está hoy?
 15. Nombre/identificador del médico: no se agrega control manual de respaldo — se deja
     solo por consola, como hoy.
 
