@@ -4,6 +4,545 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.16.1] — 2026-08-27 (El banco de pruebas deja de mentir sobre sí mismo)
+
+### 🧪 El informe de cobertura subestimaba lo que sí estaba probado — y ocultaba lo que no
+Sin ningún cambio de comportamiento clínico. El banco de pruebas llevaba dos listas
+desactualizadas: 13 funciones que una suite decía cubrir y ninguna prueba llegaba a
+ejercitar de verdad, y 107 «sin cubrir» de las cuales 16 sí se ejercitaban y solo faltaban
+en su declaración — entre ellas seis de la barrera que impide que el nombre y la cédula
+del paciente lleguen a la IA. Declarada la verdad, la cobertura subió de 88,3 % a 90,1 %
+sin escribir una sola prueba nueva. Después se escribieron 13 pruebas para lo que de
+verdad faltaba: el núcleo de esa barrera de privacidad (que no tenía una sola prueba
+directa), el umbral con que se declara una falla terapéutica, la pieza que evita que la
+nota hable de un riesgo cardiovascular que nunca se calculó, y la red de seguridad del
+botón Deshacer. Cobertura final: 91,4 %.
+
+---
+
+## [Versión 17.16.0] — 2026-08-27 (Tanda 4 de la auditoría: tres mensajes que afirmaban sin haber comprobado nada)
+
+### 🐛 «No hay actividades pendientes para este paciente» a veces significaba «no miré ninguna lista»
+El módulo de Órdenes decía esa misma frase en tres situaciones distintas: cuando de
+verdad no tenía pendientes, cuando el paciente no aparecía en la lista de prevención del
+día, y cuando esa lista sencillamente no se había cargado. En el tercer caso la frase era
+falsa. Ahora dice cuál de las tres es, y en el caso de duda no afirma nada sobre el
+paciente.
+
+### 🐛 El reloj del turno decía "Datos al día" antes de haber leído nada
+Al arrancar la sesión, con la agenda todavía sin leerse una sola vez, el reloj de cabecera
+igual afirmaba que los datos estaban al día. Ahora dice que todavía no ha leído nada.
+
+### 🐛 El cruce con Athenea contra exámenes repetidos fallaba en silencio
+Si el portal de Athenea no respondía al comprobar si un examen de prevención ya se había
+hecho, la lista de órdenes seguía viéndose exactamente igual que cuando sí se pudo
+comprobar — sin ningún aviso de que la comprobación había fallado. Es la misma causa
+detrás del reporte «me sale que hay que enviarle un examen que ya se realizó» (v17.6.99).
+Ahora se avisa cuando la comprobación no se pudo hacer.
+
+---
+
+## [Versión 17.15.0] — 2026-08-27 (La consola deja de sepultarse sola, y el panel de salud aprende a ver lo que falla)
+
+### 🐛 Con Everest caído, una sola tarjeta rozada por el cursor disparaba 16 peticiones y 8 avisos de error
+Reportado en consulta: la consola quedaba enterrada bajo una pared de errores de red. La
+causa era una optimización que se adelanta a buscar los datos de un paciente cuando el
+cursor se detiene sobre su tarjeta — útil cuando todo funciona, pero que insistía igual de
+fuerte que una acción real cuando los servicios estaban caídos. Ahora esa anticipación
+hace un solo intento y no llena la consola de avisos; después de tres fallos seguidos deja
+de intentarlo durante 5 minutos. Lo que usted pide con un clic se sigue intentando
+siempre, sin excepción.
+
+### ✨ "Estado del asistente" ahora vigila también los servicios de Everest
+El panel de salud tenía cuatro indicadores (agenda, historia, laboratorios, prevención) y
+ninguno reflejaba si buscar un paciente o agendar una cita estaba fallando: esos cuatro
+indicadores se alimentan de la lectura de la pantalla, que sigue funcionando aunque los
+servicios estén caídos. Se agrega un quinto indicador que sí lo refleja.
+
+---
+
+## [Versión 17.14.1] — 2026-08-27 (Limpieza de datos de pacientes en archivos internos, y la mamografía se guía por la lista de la sede)
+
+### 🔒 Datos de pacientes reales en archivos internos del proyecto, reemplazados
+Una revisión encontró nombre, cédula, dirección, celular, correo y fecha de nacimiento de
+pacientes reales en archivos de trabajo interno del proyecto (capturas de red guardadas
+para depurar la integración con Everest). Se reemplazaron por datos inventados que
+conservan el mismo formato, y se añadió una verificación automática para que esto no
+vuelva a pasar sin que el banco de pruebas lo note.
+
+### 🐛 La mamografía ahora se guía por la lista de prevención de la sede, no por Athenea
+Para la tamización de cáncer de mama, la lista de prevención de la sede (el archivo de
+SharePoint) pasa a mandar sobre lo que Athenea reporte: si la lista dice que está
+pendiente, se ofrece, así Athenea tenga un resultado antiguo. El resultado de Athenea se
+sigue mostrando con su fecha, para que usted lo tenga presente.
+
+---
+
+## [Versión 17.14.0] — 2026-08-27 (Tres avisos de seguridad que existían y no llegaban a leerse)
+
+### 🐛 El aviso "cifras sin respaldo" en las notas de la IA quedaba fuera de la vista
+El aviso que le dice que la IA pudo haber inventado una cifra se pintaba después del
+borrador completo de la nota — en una nota larga, se podía leer y firmar sin haberlo visto
+nunca. Ahora se pinta antes del texto.
+
+### 🐛 Un aviso importante de la barra de estado se cortaba a la mitad
+La barra de estado corta el texto largo con puntos suspensivos. Cuando el aviso llevaba la
+instrucción de qué hacer al final de la frase ("clic en el candado... y recargue"), esa
+parte era justo la que desaparecía. Ahora los avisos de advertencia o error pueden
+extenderse hasta 3 líneas en vez de cortarse.
+
+### 🐛 En el cuadro de confirmación de datos, un aviso importante se veía igual que uno rutinario
+Cuando algo que usted ya había confirmado antes deja de coincidir con lo que dice la
+historia hoy, el cuadro lo avisaba con la misma letra y el mismo color gris que cualquier
+otra nota. Ahora ese aviso tiene su propio color y va arriba del todo.
+
+---
+
+## [Versión 17.13.0] — 2026-08-27 (Los prompts de redacción aprenden a usar todo el contexto que ya reciben)
+
+### 🐛 La IA no sabía qué hacer con la mayor parte de la información que se le enviaba
+Desde varias versiones atrás la información que se le manda a la IA para redactar creció
+mucho — examen físico, uroanálisis, síndrome metabólico, el plan de exámenes con sus
+fechas, y toda la historia clínica que Everest guarda — pero las instrucciones que recibe
+la IA nunca mencionaban buena parte de ese contenido nuevo. Ahora se le dice explícitamente
+qué fuentes recibe y en qué orden mandan si se contradicen (lo que usted anota en el
+momento manda sobre todo lo demás), que un campo marcado como "no" es un dato tan válido
+como uno marcado "sí", y que términos internos del programa (los nombres técnicos que usa
+el motor de cálculo para organizarse) nunca deben aparecer en lo que se redacta.
+
+### ✨ El texto que usted ya escribió se puede reescribir mejorado, sin perder ningún dato suyo
+Antes la IA solo leía lo que usted ya había escrito, sin tocarlo. Ahora puede ofrecerle una
+versión reescrita según la Resolución 1995 de 1999 y la semiología clínica — conservando
+cada dato que usted anotó y sin alterar ninguna cifra suya. Sigue siendo un borrador: su
+casilla nunca se sobrescribe sin que usted lo confirme primero.
+
+---
+
+## [Versión 17.12.0] — 2026-08-27 (Se escucha lo que Everest carga, y el bloque de avisos de fármacos deja de perderse)
+
+### 🐛 La lectura en tiempo real de la historia no siempre reaccionaba a un cambio de paciente
+La lectura en tiempo real de lo que usted escribe en la historia (v17.10.0) solo se
+actualizaba al detectar que se GUARDÓ algo; si Everest cargaba la historia de otro paciente
+sin recargar la página completa, el asistente seguía mostrando lo que había leído del
+paciente anterior. Ahora también reacciona a la carga de una historia nueva.
+
+### 🐛 El bloque de avisos sobre medicamentos podía desaparecer del todo
+Un error al construir el bloque de avisos farmacológicos podía dejar la sección entera en
+blanco en vez de mostrar los avisos que sí se pudieron calcular.
+
+---
+
+## [Versión 17.11.0] — 2026-08-27 (Tanda 2 de la auditoría: el color vuelve a significar algo)
+
+### 🎨 Un aviso desconocido se pintaba con el color menos grave, no con el más grave
+Cuando varios avisos de distinta gravedad coincidían sobre el mismo dato, el color que se
+mostraba no siempre era el del más grave — en algún caso, un color no reconocido se trataba
+como el menos urgente. Ahora, ante la duda, gana el color más grave.
+
+### 🐛 Una corrida de órdenes a medias no se distinguía de una completa
+Cuando algunas órdenes de un lote se generaban y otras fallaban, el aviso de éxito se veía
+exactamente igual que cuando todo salía bien. Ahora las corridas parciales se marcan en
+ámbar.
+
+---
+
+## [Versión 17.10.0] — 2026-08-27 (La historia se lee mientras se escribe, no al guardarla)
+
+### ✨ La IA recibe la historia clínica en tiempo real, casilla por casilla, sin esperar a que se guarde
+La versión anterior (v17.9.0) leía la historia completa, pero solo al momento de guardarla
+— es decir, después de que ya se redactó la nota. Usted lo señaló: para redactar en tiempo
+real hace falta que el contexto esté disponible ANTES de guardar. Los nombres internos de
+las casillas de Everest coinciden con los nombres que se usan al guardar, así que ahora se
+va acumulando lo que usted marca y escribe, casilla por casilla, a medida que avanza por
+las pestañas de la historia — sin esperar al final de la consulta.
+
+---
+
+## [Versión 17.9.0] — 2026-08-27 (La IA recibe todo lo que Everest guarda de la historia clínica)
+
+### ✨ El contexto que recibe la IA para redactar se multiplica: de 25 casillas a toda la historia
+Hasta ahora la IA solo veía 25 casillas puntuales de la pantalla que estuviera abierta.
+Ahora recibe las mismas secciones completas que Everest guarda al cerrar la historia: 109
+antecedentes patológicos, examen físico, hábitos, antecedentes familiares, revisión por
+sistemas, diagnósticos y el texto libre de la consulta — con la misma barrera de privacidad
+de siempre: los datos de identificación del paciente (nombre, cédula, celular, dirección)
+nunca se leen, bajo ninguna circunstancia. Esta versión quedó superada un día después por
+la v17.10.0, que hace lo mismo sin esperar a que usted guarde la historia.
+
+---
+
+## [Versión 17.8.2] — 2026-08-27 (Reportado en consulta: Auto-Labs escribía un uroanálisis viejo sobre uno alterado)
+
+### 🐛 Auto-Labs podía escribir "NORMAL" sobre un uroanálisis con alteraciones reales
+Reportado en consulta, por segunda vez: "el botón Auto-Labs no está teniendo en cuenta el
+último uroanálisis realizado". La causa: cuando Athenea trae dos versiones del mismo
+uroanálisis (una fila resumida antigua y el detalle completo más reciente), el asistente
+prefería siempre la fila resumida sin mirar cuál era más nueva. Podía terminar escribiendo
+"NORMAL", con la fecha de meses atrás, sobre un resultado con alteraciones reales y mucho
+más reciente. Ahora gana el resultado más nuevo.
+
+---
+
+## [Versión 17.8.1] — 2026-08-27 (Tanda 1 de la auditoría: nueve mensajes que afirmaban sin haber comprobado nada)
+
+### 🐛 Varios avisos presentaban un fallo del sistema como si fuera un hecho del paciente
+Nueve mensajes distintos caían en el mismo error: cuando el asistente no podía comprobar
+algo (el portal de laboratorios estaba caído, faltaba un dato para evaluar, no se había
+podido leer la agenda), el mensaje afirmaba una conclusión sobre el paciente como si sí se
+hubiera comprobado. Ejemplos corregidos: "el paciente está al día con su programa" cuando
+en realidad no había ningún programa que evaluar; "no se encontraron paraclínicos para
+este paciente" cuando el portal de Athenea estaba caído; "falta peso" cuando lo que
+faltaba era la creatinina, con el peso ya escrito dos líneas más arriba; una presión
+arterial mostrada como "165/NaN" o "165/0", cifras imposibles. Cada uno ahora dice
+exactamente qué no se pudo comprobar, en vez de suponer un resultado tranquilizador.
+
+---
+
+## [Versión 17.8.0] — 2026-08-27 (Arranca la auditoría de experiencia: tres reglas que dejan de depender de la memoria)
+
+### 🎨 Dos avisos informativos se pintaban en rojo de alarma, sin serlo
+Dos indicadores puramente informativos ("agenda pendiente de completar" y "candidato
+adicional para un cupo") heredaban por accidente el mismo rojo intenso reservado para las
+alarmas reales, porque nunca se les había declarado un color propio. Se corrige a ámbar y
+azul respectivamente. Gastar el color de alarma donde no hay alarma le resta fuerza a las
+alarmas reales.
+
+### 🐛 74 avisos en ventanas emergentes podían perder su color frente al estilo propio de Everest
+Los recuadros que se abren sobre la pantalla de Everest (confirmaciones, avisos de
+laboratorio, el módulo de órdenes) no heredan protección visual del resto del programa: si
+el estilo propio de Everest cambia, un color sin la protección adecuada puede desaparecer
+sin que nadie lo note en el momento. Se blindan 74 declaraciones de color, incluida la
+advertencia que impide ordenar una citología a un paciente hombre.
+
+### 🐛 La hoja educativa que se le entrega al paciente mostraba nombres técnicos de laboratorio
+El papel que el paciente se lleva a su casa mostraba nombres internos como
+"COLESTEROL_LDL" o "UROANALISIS" en vez de "Colesterol LDL" o "Uroanálisis". Corregido.
+
+---
+
+## [Versión 17.7.5] — 2026-08-27 (Cierra la fidelidad del motor de riesgo cardiovascular al modelo aprobado)
+
+### 🐛 El examen de albúmina/creatinina en orina (RAC) podía obligar a un segundo viaje al laboratorio
+Cuando la vigilancia estrecha de la función renal estaba activa, el examen RAC quedaba
+fuera del grupo de exámenes que se agrupan en la misma toma, aunque su vencimiento cayera
+dentro de la misma ventana que el resto — obligando a un viaje adicional solo por ese
+examen. Medido sobre planes reales de pacientes: 72 de cada 2.016 casos hacían ese viaje de
+más. Corregido sin mover ninguna fecha ya calculada.
+
+---
+
+## [Versión 17.7.3–17.7.4] — 2026-08-27 (Por qué faltaba la creatinina en el historial de agosto)
+
+### 🐛 Dos exámenes de sangre desaparecían de la tabla por tener la palabra "orina" en su nombre
+Reportado en consulta: faltaba una creatinina tomada en agosto. Causa real, encontrada con
+un diagnóstico que usted mismo corrió en la consola: Athenea nombra algunos exámenes de
+SANGRE con la palabra "orina" dentro de su propio nombre de laboratorio — por ejemplo
+"CREATININA EN SUERO. ORINA U OTROS" o uno que dice literalmente "GLUCOSA... DIFERENTE A
+ORINA". El asistente los clasificaba como exámenes de orina por esa sola palabra suelta, y
+desaparecían de la tabla de laboratorios crónicos. Es especialmente grave con la
+creatinina, porque de ella depende el cálculo del estadio de la función renal y las fechas
+de control. Ahora, si el nombre completo declara que la muestra es "en suero", "sérica" o
+"en sangre", esa declaración manda sobre la palabra "orina" suelta en el resto del nombre.
+De paso, la hoja de datos que recibe la IA para redactar se completa con el examen físico
+entero, el uroanálisis y el síndrome metabólico, que hasta ahora no viajaban.
+
+---
+
+## [Versión 17.7.2] — 2026-08-27 (Corrección de comentarios internos: el código dejaba de contradecirse a sí mismo)
+
+### 🧹 Comentarios y documentación interna corregidos, sin cambios de comportamiento
+Tres comentarios del código describían un comportamiento distinto al que el propio código
+tenía desde hacía versiones (un plazo, un rango de estadios renales, una decisión ya
+tomada). Se corrigen los comentarios para que coincidan con lo que el programa realmente
+hace. Ninguna fecha ni ningún cálculo cambia.
+
+---
+
+## [Versión 17.7.1] — 2026-08-27 (Reportado en consulta: la tabla de laboratorios no avisaba cuando venía incompleta)
+
+### 🐛 Una lectura parcial de Athenea se veía exactamente igual que una completa
+Reportado en consulta: faltaba un resultado de laboratorio de una toma de agosto. La
+investigación encontró que la tabla de laboratorios ya sabía, internamente, cuándo Athenea
+no había devuelto todas las solicitudes de un paciente o cuándo se ocultaban resultados por
+tener más de un año — pero nunca se lo decía al médico. Con los dos casos callados, una
+lectura a medias se veía igual que una completa, y en consulta eso no se lee como "faltó
+una solicitud": se lee como "no se lo hicieron". Se agregan los avisos correspondientes.
+
+---
+
+## [Versión 17.7.0] — 2026-08-27 (Reportado en consulta: el cuadro de confirmación de datos no recibía los cambios en tiempo real)
+
+### 🐛 El cuadro "Las fuentes no coinciden" mostraba una foto vieja de la historia
+Reportado en consulta: el cuadro de confirmación de datos decía que la hipertensión estaba
+marcada como "No" cuando usted ya la había marcado como "Sí" hacía un momento. El cuadro
+tenía razón sobre lo que había leído, pero lo había leído solo una vez, al abrir el Panel
+del paciente, y nunca volvía a mirar la pantalla. Ahora se revisa cada 20 segundos: si la
+historia ya aclaró la duda, el cuadro se cierra solo; si el dato sigue distinto, actualiza
+el texto sin borrar lo que usted ya hubiera respondido en los demás campos.
+
+---
+
+## [Versión 17.6.99] — 2026-08-27 (Reportado en consulta: un examen ya realizado se seguía ofreciendo para ordenar)
+
+### 🐛 5 de los 8 paquetes de prevención nunca se comparaban contra los resultados reales en Athenea
+Reportado en consulta: el antígeno prostático (PSA) aparecía hecho en Athenea seis días
+antes, y el módulo de órdenes lo seguía ofreciendo premarcado para pedirlo de nuevo. La
+causa: cinco de los ocho paquetes de prevención (PSA, mamografía, citología, tamización
+cardiometabólica y hemoglobina) no tenían definida una vigencia, y sin ese dato el
+asistente nunca llegaba a comprobar contra Athenea si ya se habían hecho. Se confirmó la
+vigencia del PSA en 2 años y se separó la pregunta "¿ya está hecho?" de "¿sigue vigente?",
+para que un paquete sin vigencia confirmada al menos avise que ya se hizo, aunque no pueda
+decir si conviene repetirlo.
+
+---
+
+## [Versión 17.6.98] — 2026-08-27 (El agujero negro renal ahora agrupa los exámenes de verdad)
+
+### 🐛 La agrupación de exámenes por vigilancia renal estrecha no estaba ocurriendo de verdad
+El mecanismo que evita que un paciente con enfermedad renal avanzada haga dos viajes al
+laboratorio (uno por la creatinina y otro por el resto de sus exámenes) calculaba bien la
+fecha, pero no siempre lograba juntar los exámenes en esa misma fecha. Medido sobre 240
+planes reales: 26 exigían un segundo viaje. Corregido a 0, sin mover ninguna fecha ya
+calculada para el resto de los pacientes.
+
+---
+
+## [Versión 17.6.97] — 2026-08-27 (La circunferencia abdominal se leía como cadera, y no se podía leer por su identificador)
+
+### 🐛 La casilla de "cintura" apuntaba en realidad a la de "cadera"
+Confirmado por usted al revisar su propia pantalla: "circunferencia abdominal" es cintura,
+y "cintura pélvica" en Everest es cadera. La función que leía este dato apuntaba a la
+casilla equivocada. No llegó a afectar ningún cálculo real porque la función todavía no
+tenía ningún uso activo. Se corrige antes de conectarla a nada, junto con la forma de
+localizar esa casilla en la pantalla (varias comparten el mismo identificador interno, así
+que solo se puede ubicar por su rótulo visible).
+
+---
+
+## [Versión 17.6.96] — 2026-08-27 (El paquete de exámenes cardiovasculares no veía una HbA1c vencida hace más de 200 días)
+
+### 🐛 Un paquete de prevención se marcaba "ya cubierto" con una hemoglobina glicosilada vencida
+El paquete de exámenes cardiovasculares (que incluye la hemoglobina glicosilada para
+pacientes diabéticos) comparaba contra Athenea usando una lista de analitos que no incluía
+ese examen. Un paciente diabético con todos sus demás exámenes frescos, pero con una
+hemoglobina glicosilada de 11,2 % tomada hace más de 7 meses, aparecía como "ya cubierto,
+no hace falta pedir nada". Corregido.
+
+---
+
+## [Versión 17.6.95] — 2026-08-27 (Una sola tabla de vigencias — la enfermedad renal en estadio 5 tenía plazos demasiado largos)
+
+### 🐛 Convivían dos tablas de vigencias de laboratorio, y la vieja daba plazos más largos de lo debido
+El aviso de entrada a la historia y la comprobación de "ya está cubierto" usaban una tabla
+de vigencias distinta a la que usa el resto del programa. En 8 de 48 combinaciones posibles
+la diferencia era real, y siempre en la misma dirección: la tabla vieja daba MÁS días de
+vigencia de los que corresponden — hasta el triple, en pacientes con enfermedad renal en su
+estadio más avanzado. Se unifica en una sola tabla en todo el programa.
+
+---
+
+## [Versión 17.6.94] — 2026-08-27 (El paciente diabético clasificaba siempre como riesgo alto, incluso sin dato suficiente)
+
+### 🐛 Un piso de seguridad se aplicaba siempre, tapando la falta de un dato real
+Todo paciente diabético clasificaba automáticamente como mínimo "riesgo alto", sin importar
+el resto de sus datos. La intención original era de seguridad, pero en realidad tapaba que
+nadie estaba registrando desde cuándo el paciente es diabético — un dato que si se
+conociera podría, según la norma, bajar la categoría. Ahora ese piso solo se aplica cuando
+el dato de verdad falta (y lo dice, pidiéndolo), y se agregó una casilla nueva en el Panel
+para registrar los años de evolución de la diabetes.
+
+### ✨ Nueva casilla: años de evolución de la diabetes
+Everest no tiene un campo para este dato. Se agrega en la sección de Riesgo y función
+renal del Panel del paciente, y con él la clasificación de riesgo cardiovascular puede
+calcularse según la norma en vez de recurrir siempre al piso de seguridad.
+
+---
+
+## [Versión 17.6.93] — 2026-08-27 (El grupo de sábados del médico vuelve, pero solo cuando se puede confiar en la deducción)
+
+### 🐛 La deducción del grupo de sábados de un médico podía tacharle sábados en los que sí trabaja
+Al reactivarse el cálculo de a qué grupo de sábados pertenece un médico (1-3 o 2-4), se
+midió contra la agenda real de consulta antes de aplicarlo: en varios casos la deducción
+entraba en conflicto con sábados donde el médico sí tenía agenda propia. Ahora el grupo
+solo se usa cuando la deducción es clara y consistente; ante cualquier duda, se prefiere
+ofrecer un sábado de más (que usted descarta con un vistazo) a esconderle uno donde sí
+puede atender.
+
+---
+
+## [Versión 17.6.92] — 2026-08-27 (El síndrome metabólico se calculaba pero nunca contaba para nada)
+
+### 🐛 Un criterio completo de riesgo cardiovascular estaba desconectado del cálculo final
+El síndrome metabólico —uno de los factores de riesgo mayores del consenso de riesgo
+cardiovascular— se calculaba correctamente en el código, pero el resultado nunca llegaba a
+sumar en la clasificación final del paciente. Un paciente con hipertensión, sedentarismo,
+triglicéridos y glicemia alterados, y colesterol HDL bajo, clasificaba como riesgo BAJO
+cuando le correspondía ALTO. Se conecta el cálculo a la clasificación final.
+
+---
+
+## [Versión 17.6.91] — 2026-08-27 (La bacteriuria en el embarazo no disparaba la pregunta que la norma exige)
+
+### 🐛 Una gestante con bacteriuria no recibía la pregunta obligatoria sobre su embarazo
+La norma exige tratar siempre la bacteriuria en el embarazo, incluso sin síntomas, por el
+riesgo de parto prematuro. El asistente ya sabía aplicar esa excepción, pero la pregunta
+que confirma si la paciente está embarazada solo se disparaba cuando el uroanálisis era
+"sugestivo" de infección — y una bacteriuria franca sin otros signos no siempre calificaba
+como sugestiva. Corregido para que la pregunta se dispare en el mismo caso que la propia
+regla clínica evalúa.
+
+---
+
+## [Versión 17.6.90] — 2026-08-26 (El aviso de agrupación renal afirmaba algo que no estaba ocurriendo)
+
+### 🐛 El recuadro decía "todo se agrupa en la fecha de la creatinina" cuando en realidad no se agrupaba
+El aviso de vigilancia renal estrecha se mostraba siempre que esa vigilancia estuviera
+activa, afirmando que todos los exámenes se agrupaban en la fecha de la creatinina — pero
+eso solo es cierto cuando la creatinina es el examen que vence primero. Si otro examen
+vencía antes, la creatinina en realidad quedaba diferida para una toma posterior, y el
+aviso seguía prometiendo una agrupación que no iba a pasar. Corregido para describir lo que
+de verdad ocurre en cada caso.
+
+---
+
+## [Versión 17.6.89] — 2026-08-26 (El resumen para la IA afirmaba "datos completos" con la clasificación de riesgo sin hacer)
+
+### 🐛 Tres campos del resumen que recibe la IA quedaban vacíos o incorrectos en todo paciente
+El campo que debía decir el estado de la clasificación de riesgo cardiovascular estaba
+apuntando a un nombre de dato que ya no existía en el programa, así que salía vacío
+siempre — incluso en un paciente perfectamente clasificado. Y el campo "datos completos"
+solo miraba la función renal, nunca si el riesgo cardiovascular se pudo calcular. La IA
+podía redactar como si la clasificación estuviera resuelta cuando en realidad seguía
+pendiente por falta de un dato.
+
+---
+
+## [Versión 17.6.88] — 2026-08-26 (El urocultivo que el motor ya decidía pedir no llegaba a la IA)
+
+### 🐛 La orden de urocultivo, ya calculada, no viajaba al resumen que redacta la nota
+Cuando el uroanálisis sugería infección urinaria, el asistente ya sabía que correspondía
+pedir un urocultivo con antibiograma — se veía en pantalla, dentro del texto de conducta.
+Pero ese dato no viajaba de forma explícita al resumen que usa la IA para redactar, así que
+la IA tenía que adivinar si mencionarlo o no. Ahora viaja como un dato propio.
+
+---
+
+## [Versión 17.6.87] — 2026-08-26 ("Nunca se le ha tomado" se decía de un examen que sí tenía resultado)
+
+### 🐛 Un resultado sin fecha se presentaba como si el examen nunca se hubiera hecho
+Cuando un resultado de laboratorio llegaba desde Athenea sin fecha asociada, el asistente
+lo trataba igual que un examen que jamás se ha realizado — mostrando "Nunca se le ha
+tomado" y volviendo a ordenarlo, en vez de mostrar el valor (que puede ser alarmante) y
+explicar por qué, sin la fecha, no se puede confiar en su vigencia. Ahora se distinguen los
+dos casos: sin fecha no es lo mismo que sin historial.
+
+---
+
+## [Versión 17.6.86] — 2026-08-26 (El aviso "dosis no especificada" desaparecía a los 20 segundos)
+
+### 🐛 La advertencia de que falta la posología de un medicamento se apagaba sola
+Cuando el resumen del paciente se recalculaba (por ejemplo, al escribir el peso en el
+Panel), la marca que advierte que a un medicamento le falta su dosis y frecuencia se
+perdía. La nota clínica quedaba entonces sin la frecuencia del medicamento Y sin el aviso
+de que faltaba — sin que nadie lo notara. Corregido para que la marca sobreviva a
+cualquier recálculo del resumen.
+
+---
+
+## [Versión 17.6.85] — 2026-08-26 (El sexo del paciente gana una segunda fuente de respaldo)
+
+### 🐛 El sexo del paciente dependía de una sola fuente, sin respaldo
+El sexo del paciente es un dato del que dependen directamente las fórmulas de función
+renal (Cockcroft-Gault y CKD-EPI). A diferencia del peso y la presión arterial, que ya
+tenían una fuente de respaldo si la primera fallaba, el sexo tenía una única fuente: si
+esa ficha llegaba vacía, ambas fórmulas se calculaban como si el paciente fuera hombre. Se
+agrega como respaldo la cabecera de la historia clínica, donde Everest ya imprime "Sexo:
+FEMENINO" o "Sexo: MASCULINO" en todas las pestañas.
+
+---
+
+## [Versión 17.6.84] — 2026-08-26 (Tres decisiones suyas sobre los hallazgos de la auditoría del motor de riesgo)
+
+### 🧠 Constancia médico-legal, piso de HbA1c en pacientes añosos, y un tercer criterio de falla terapéutica
+Tres respuestas suyas a hallazgos abiertos de la auditoría de fidelidad al modelo de
+riesgo cardiovascular: la nota clínica deja de pedirle a la IA una constancia legal que
+ningún dato del sistema puede respaldar todavía; se define un piso más flexible de
+hemoglobina glicosilada para pacientes de edad avanzada; y se agrega un tercer eje de
+falla terapéutica junto a los dos que ya existían.
+
+---
+
+## [Versión 17.6.83] — 2026-08-26 (Auditoría del motor de riesgo cardiovascular: el foco de la consulta ignoraba un examen renal vencido)
+
+### 🐛 El "foco" que aparece en la nota clínica no consideraba un examen renal vencido y recategorizado
+Un paciente con la relación albúmina/creatinina (RAC) vencida hace más de 4 meses, pero con
+el resto de sus exámenes al día, no aparecía con foco renal en la nota clínica —el sistema
+solo miraba un estado que ese examen ya había dejado de tener, tras haber sido
+recategorizado como prioritario. La nota clínica declaraba entonces un foco distinto al
+que de verdad correspondía atender primero.
+
+---
+
+## [Versión 17.6.82] — 2026-08-26 (El nombre del médico deja de desaparecer cuando Everest falla)
+
+### 🐛 "Médico:" salía vacío cuando el servicio de identificación de Everest fallaba
+Reportado en consulta: el nombre del médico desaparecía del panel y, sin él, el asistente
+no podía encontrar los cupos de agenda propios. La causa no era un error del programa: el
+servicio de Everest que confirma la identidad del médico había estado fallando durante toda
+la sesión. Se agrega una memoria de 12 horas de la última identidad confirmada, para que
+una caída pasajera de ese servicio no deje al médico sin su propio nombre durante el resto
+del turno.
+
+---
+
+## [Versión 17.6.81] — 2026-08-26 (Cockcroft-Gault deja de mostrarse como si fuera CKD-EPI, y las notas largas entran a la rotación de modelos)
+
+### 🐛 Sin el peso del paciente, se mostraba un cálculo de función renal con la etiqueta equivocada
+Cuando faltaba el peso del paciente (necesario para el cálculo de Cockcroft-Gault), el
+Panel mostraba igual una cifra bajo esa etiqueta — pero en realidad era el resultado del
+otro método de cálculo (CKD-EPI), que no necesita el peso. Ahora avisa explícitamente que
+falta el peso para calcular Cockcroft-Gault, en vez de mostrar el número equivocado bajo el
+nombre equivocado.
+
+### 🧠 Las notas largas (Enfermedad Actual y Análisis y Plan) entran a la rotación normal de modelos de IA
+Reportado por usted repetidas veces: "sigue apareciendo el modelo más lento". Esas dos
+casillas usaban siempre el modelo de IA más capaz, aparte de la rotación que evita agotar
+la cuota diaria del resto de casillas — y ese modelo es también el más lento. Ahora entran
+a la misma rotación que las demás.
+
+---
+
+## [Versión 17.6.80] — 2026-08-26 (La caja de advertencia por "cifras inventadas" marcaba dosis renales reales como sospechosas)
+
+### 🐛 Un ajuste de dosis por función renal, calculado por el programa, se marcaba como posible invento de la IA
+La advertencia que revisa si la IA inventó alguna cifra no sabía distinguir un ajuste de
+dosis renal legítimo —calculado por el propio programa y que la IA solo tiene que citar—
+de una cifra puesta por la IA sin respaldo. Cada ajuste de dosis real terminaba marcado
+como sospechoso. Corregido.
+
+---
+
+## [Versión 17.6.79] — 2026-08-26 (Los botones para imprimir una orden ya no muestran un número interno sin sentido)
+
+### 🐛 Con dos o más órdenes generadas a la vez, los botones para imprimirlas no decían cuál era cuál
+Reportado en consulta: al generar varias órdenes de prevención de una vez (por ejemplo VIH
+y PSA juntos), los botones para imprimir cada una decían solo "Orden 483920" — un número
+interno que no permite saber cuál corresponde a cuál examen sin abrirlas primero. Ahora
+cada botón muestra el nombre de la actividad.
+
+---
+
+## [Versión 17.6.78] — 2026-08-26 (Documentación de decisiones ya vigentes, sin cambios de comportamiento)
+
+### 🧹 Se documentan divergencias ya vigentes y se investiga código sin uso real
+Entrega puramente de documentación: se anotan junto al código las divergencias ya
+vigentes respecto al modelo de riesgo cardiovascular de referencia, y se investigan ocho
+funciones candidatas a no tener ningún uso real en producción — siete se confirman sin
+llamador, y se dejan documentadas sin borrar (ninguna decisión de eliminarlas se ha
+tomado todavía).
+
+---
+
 ## [Versión 17.6.46] — 2026-08-26 (Fusión: se recuperan ~31 suites de prueba de `claude/v17-6-2-22ago`)
 
 ### 🧪 Recuperación de suites del Panel del paciente y del motor RCV/fármaco
