@@ -6,6 +6,48 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.23.0 — 28-ago-2026 (los avisos farmacológicos del Panel ya tienen color)
+
+### El hallazgo
+
+La investigación del rediseño S+ del Panel del paciente encontró que `MTR_CSS`
+(`vigilante_agenda.user.js`, ~línea 37546) solo estaba sembrado para `#vgl-labs-modal`.
+Los mismos avisos (`.vgl-mtr-*`, pintados por `mtrPintarAviso`) también se pintan dentro
+de `#vgl-panel-modal` (pestaña Medicamentos), y ahí no había ninguna regla de color
+propia — ni fondo, ni borde, ni el rojo/ámbar/azul de severidad. Se corrigió duplicando
+cada selector a los dos modales, con `!important` en cada uno (Regla E).
+
+### Un problema de instrumento, no solo de código
+
+`tools/verificar_color_chromium.js` extrae el CSS del script leyendo texto plano entre
+`style.textContent = \`` y su cierre — pero el bloque principal *interpola* otras hojas
+con `${_cssSeguro(() => MTR_CSS)}`, que la extracción textual dejaba como texto literal
+(CSS inválido), nunca como el contenido real. Cualquier clase que solo viviera en una de
+esas hojas spliceadas nunca llegaba a Chromium, aunque en producción sí se pinta. Se
+corrigió la herramienta para resolver cada marcador con el valor real de su `const`, y
+solo entonces se pudieron escribir casos de prueba honestos para `.vgl-mtr-*` dentro de
+`#vgl-panel-modal`.
+
+| # | Qué se rompió a propósito | Qué cayó |
+|---|---|---|
+| 1 | Quitar `,#vgl-panel-modal .vgl-mtr-X` de cada selector de `MTR_CSS` (volver al estado original, un solo selector) | `tools/verificar_color_chromium.js`: 3 casos nuevos (`Panel: conducta de aviso CRITICAL/HIGH`, `Panel: título del bloque de avisos`) — de "TODO SOBREVIVE" a "3 FALLAN" |
+
+*Nota: `node tests/runner.js` (suite 41, "el interruptor y su CSS están cableados") **no**
+cae con esta mutación — solo verifica que toda declaración de color lleve `!important`,
+no que ambos modales estén cubiertos. La única prueba que detecta un hueco de *scoping*
+como este es la verificación empírica en Chromium, tal como exige `CLAUDE.md` para
+cualquier panel pegado a `document.body`. Restaurado y verificado con `diff` contra copia
+intacta; banco completo en **2.496/2.497** (la 1 que falla es la preexistente de
+`suite_03`/huso horario, v17.6.39, ajena a este cambio) y Chromium en **TODO SOBREVIVE**.
+
+*Nota aparte, para que no se pierda: las versiones v17.13.0–v17.22.0 de esta misma noche
+del 28-ago no tienen su fila de mutación en este informe. Se hicieron y se verificaron en
+su momento (el banco quedó en verde en cada una), pero el registro escrito aquí no se
+completó antes de que la sesión se resumiera — el detalle exacto de cada mutación de esas
+7 versiones no se reconstruye de memoria para no inventar lo que no se guardó.*
+
+---
+
 ## v17.12.0 — 27-ago-2026 (se escucha lo que Everest CARGA, y el bloque farmacológico se inserta)
 
 ### Por qué el diagnóstico de consola capturó CERO

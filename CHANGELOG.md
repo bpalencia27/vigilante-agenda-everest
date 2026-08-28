@@ -4,6 +4,25 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.23.0] — 2026-08-28 (Los avisos farmacológicos del Panel del paciente ya tienen color)
+
+### 🐛 Hallazgo real, no hipotético
+Durante la investigación del rediseño S+ del Panel del paciente salió un bug concreto:
+el CSS de los avisos de seguridad farmacológica (duplicidad, interacción, dosis renal —
+lo que pinta `mtrPintarAviso`) solo estaba sembrado para el modal de Laboratorios
+(`#vgl-labs-modal`). Los mismos avisos también se pintan dentro de la pestaña
+Medicamentos del Panel del paciente (`#vgl-panel-modal`), y ahí se veían **sin fondo, sin
+borde y sin el color rojo/ámbar/azul de severidad** — no por perder una batalla de
+especificidad contra Everest, sino porque ninguna regla nuestra aplicaba ahí. Con el
+motor de avisos encendido (`S.motorPortado`, apagado de fábrica), un aviso CRITICAL se
+veía visualmente igual que uno informativo. Cada selector de ese bloque ahora apunta a
+los dos modales; verificado en Chromium real contra un CSS de Everest simulado agresivo
+(protocolo del proyecto), y de paso se corrigió la herramienta de verificación misma:
+no estaba resolviendo el CSS que se inserta por interpolación (`${_cssSeguro(...)}`), así
+que un bloque entero de estilos quedaba fuera de lo que en verdad se probaba.
+
+---
+
 ## [Versión 17.22.0] — 2026-08-28 (Los chips de PyM vuelven a la tarjeta)
 
 ### ↩️ Reversión consciente de una decisión de agosto

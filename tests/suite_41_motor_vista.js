@@ -201,7 +201,12 @@ module.exports = {
       t.cierto(src.indexOf("motorPortado: false") >= 0, "la bandera no nace apagada en los valores por defecto");
       t.cierto(src.indexOf("mtrRenderAvisosHtml({") >= 0, "el bloque no se pinta en ningún sitio: sería código sombra");
       // toda declaracion de color del bloque nuevo lleva !important (Regla E, suite 25)
-      const css = src.slice(src.indexOf("const MTR_CSS"), src.indexOf("const MTR_CSS") + 3000);
+      // v17.23.0 — un tope fijo de caracteres se quedó corto en cuanto MTR_CSS creció (se
+      // agregó #vgl-panel-modal a cada selector) y cortaba la última declaración a la mitad,
+      // dejando pasar un falso "sin !important". Se toma el bloque completo hasta su propio
+      // cierre de template literal, no un número arbitrario.
+      const iniMtrCss = src.indexOf("const MTR_CSS");
+      const css = src.slice(iniMtrCss, src.indexOf("`;", iniMtrCss) + 2);
       const colores = css.match(/color:[^;}]+/g) || [];
       t.cierto(colores.length > 5, "no se encontró el CSS del bloque");
       for (const c of colores) {

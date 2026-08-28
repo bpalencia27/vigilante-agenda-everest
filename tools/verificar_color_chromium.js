@@ -11,6 +11,21 @@ for (const l of code.split("\n")) {
   if (inCss) css += l + "\n";
 }
 
+// v17.23.0 — el bloque principal SPLICEA otras hojas con `${_cssSeguro(() => XXX_CSS)}`
+// (MTR_CSS, MTR_RCV_CSS, ...). Esta extracción es textual, no ejecuta JS: sin este paso
+// esos marcadores quedaban como texto literal (CSS inválido) y cualquier clase que solo
+// viviera en una de esas hojas —como .vgl-mtr-* de MTR_CSS— nunca llegaba a Chromium,
+// aunque en producción sí se pinta ahí. Se resuelve cada marcador con el valor real de su
+// const, igual que hace el navegador al evaluar el template literal de verdad.
+for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
+  const nombre = m[1];
+  const ini = code.indexOf("const " + nombre + " = `");
+  if (ini < 0) continue;
+  const desde = ini + ("const " + nombre + " = `").length;
+  const fin = code.indexOf("`;", desde);
+  css = css.replace(m[0], code.slice(desde, fin));
+}
+
 // El adversario: Everest es una SPA ajena y su CSS es una caja negra. Se simula lo PEOR
 // que puede tirar: una regla de tipo con !important sobre todo elemento de texto.
 const EVEREST = `
@@ -54,6 +69,12 @@ const WIDGET_CASOS = [
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-venc"><span class="vgl-cw-nom" data-w="3">CREATININA</span></div></div></div>', sel: '[data-w="3"]', token: "--c-rojo", que: "nombre de examen vencido" },
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-pedir"><span class="vgl-cw-nom" data-w="4">HEMOGLOBINA</span></div></div></div>', sel: '[data-w="4"]', token: "--c-ambar", que: "nombre de examen pendiente" },
   { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><span class="vgl-cw-que" data-w="5">vence en 12 días</span></div></div>', sel: '[data-w="5"]', token: "--fg2", que: "texto secundario de cada fila" },
+  // v17.23.0 — MTR_CSS solo estaba sembrado para #vgl-labs-modal; los mismos avisos
+  // (.vgl-mtr-*) también se pintan dentro de #vgl-panel-modal (mtrPanelMedicamentosHtml).
+  // Selectores compuestos (severidad + descendiente), por eso van aquí y no en CASOS.
+  { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-crit"><span class="vgl-mtr-conducta" data-w="6">Ajustar dosis</span></div></div>', sel: '[data-w="6"]', token: "--c-rojo", que: "Panel: conducta de aviso CRITICAL" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-alto"><span class="vgl-mtr-conducta" data-w="7">Vigilar función renal</span></div></div>', sel: '[data-w="7"]', token: "--c-ambar", que: "Panel: conducta de aviso HIGH" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-bloque"><span class="vgl-mtr-tit" data-w="8">Seguridad farmacológica</span></div></div>', sel: '[data-w="8"]', token: "--fg", que: "Panel: título del bloque de avisos" },
 ];
 
 (async () => {

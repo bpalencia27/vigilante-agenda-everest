@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.22.0
+// @version     17.23.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.22.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.23.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -37543,32 +37543,40 @@ _vglOfrecerDeshacer(btn);
   // CSS del bloque. Mismas convenciones que el recuadro renal: todo cuelga de
   // #vgl-labs-modal y toda declaración de color lleva !important, porque el CSS de
   // Everest pisa lo que no lo lleve (Regla E de la suite 25).
+  // v17.23.0 — HALLAZGO REAL (investigación S+ del Panel del paciente, 28-ago): este
+  // bloque solo se sembró para #vgl-labs-modal, nunca para #vgl-panel-modal — aunque
+  // mtrRenderAvisosHtml/mtrPintarAviso pintan los MISMOS avisos (.vgl-mtr-*) también
+  // dentro de la pestaña Medicamentos del Panel (mtrPanelMedicamentosHtml). Con
+  // S.motorPortado encendido, esos avisos CRITICAL/HIGH/INFO se veían sin fondo, sin
+  // borde y sin color de severidad ahí — no por perder una batalla de especificidad
+  // contra Everest, sino porque ninguna regla nuestra aplicaba en ese modal. Cada
+  // selector gana un segundo destino, #vgl-panel-modal, con el mismo !important.
   const MTR_CSS = `
-        #vgl-labs-modal .vgl-mtr-bloque{
+        #vgl-labs-modal .vgl-mtr-bloque,#vgl-panel-modal .vgl-mtr-bloque{
           background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
           padding:10px 12px;display:flex;flex-direction:column;gap:7px;margin-top:8px
         }
-        #vgl-labs-modal .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-        #vgl-labs-modal .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
-        #vgl-labs-modal .vgl-mtr-aviso{
+        #vgl-labs-modal .vgl-mtr-tope,#vgl-panel-modal .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        #vgl-labs-modal .vgl-mtr-cuenta,#vgl-panel-modal .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-labs-modal .vgl-mtr-aviso,#vgl-panel-modal .vgl-mtr-aviso{
           border-radius:var(--r-chip);padding:7px 9px;display:flex;flex-direction:column;gap:3px;
           box-shadow:inset 0 0 0 1px var(--edge)
         }
-        #vgl-labs-modal .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
-        #vgl-labs-modal .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
-        #vgl-labs-modal .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
-        #vgl-labs-modal .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
-        #vgl-labs-modal .vgl-mtr-ico{font-size:var(--t-body)}
-        #vgl-labs-modal .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
-        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
-        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
-        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
-        #vgl-labs-modal .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
-        #vgl-labs-modal .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
-        #vgl-labs-modal .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
-        #vgl-labs-modal .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-crit,#vgl-panel-modal .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
+        #vgl-labs-modal .vgl-mtr-alto,#vgl-panel-modal .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
+        #vgl-labs-modal .vgl-mtr-info,#vgl-panel-modal .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
+        #vgl-labs-modal .vgl-mtr-cab,#vgl-panel-modal .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
+        #vgl-labs-modal .vgl-mtr-ico,#vgl-panel-modal .vgl-mtr-ico{font-size:var(--t-body)}
+        #vgl-labs-modal .vgl-mtr-tit,#vgl-panel-modal .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
+        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
+        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
+        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
+        #vgl-labs-modal .vgl-mtr-msg,#vgl-panel-modal .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-meds,#vgl-panel-modal .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-mec,#vgl-panel-modal .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
+        #vgl-labs-modal .vgl-mtr-pie,#vgl-panel-modal .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
+        #vgl-labs-modal .vgl-mtr-sinjuicio,#vgl-panel-modal .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-limpio,#vgl-panel-modal .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
   `;
 
   // ---- v14.3.0 — CSS de las burbujas de información y del rediseño UX --------
