@@ -4,6 +4,29 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.22.0] — 2026-08-28 (Los chips de PyM vuelven a la tarjeta)
+
+### ↩️ Reversión consciente de una decisión de agosto
+Decisión firme del médico (entrevista de la noche del 28-ago): en agosto se pidió que el
+panel quedara "solamente para ver la agenda", sacando de la tarjeta los chips de
+actividades de prevención pendientes (PyM). Anoche pidió que vuelvan — no fue un olvido,
+es una reversión consciente. La tarjeta vuelve a mostrar, para cada paciente, qué
+actividades de PyM tiene pendientes (tamizajes, controles), hasta 3 a la vez; si hay más,
+un chip "+N más" resume el resto sin perder el detalle (queda completo al pasar el
+mouse). Si el paciente solo tiene pendiente una remisión de Optometría/Odontología (que
+no se ordenan desde este panel), se avisa aparte en vez de desaparecer en silencio. Y
+cuando no hay nada pendiente, la tarjeta dice honestamente por qué: al día de verdad, sin
+lista de PyM cargada todavía, o sin que la cédula cruce con la base — nunca "al día"
+como frase de relleno cuando en realidad no se pudo comprobar.
+
+Un punto se queda para que el médico lo confirme: pidió "etiquetas abreviadas", pero el
+propio historial de este archivo documenta un reporte real de consultorio (v12.4.0) donde
+truncar el texto de los chips salió mal y se corrigió a propósito para que siempre se vea
+completo. Se optó por el tope de 3 chips (que sí cumple "no ensanchar la tarjeta") en vez
+de inventar una tabla de abreviaturas clínicas sin una fuente real que la respalde.
+
+---
+
 ## [Versión 17.21.0] — 2026-08-28 (El reloj de cabecera dice qué tan seguido está mirando)
 
 ### 👁️ La cadencia de sondeo ahora es visible, sin volverse un control manual

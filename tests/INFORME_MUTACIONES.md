@@ -4870,3 +4870,27 @@ Banco en verde tras la restauración final: **2.489/2.489**.
 | # | Qué se rompió a propósito | Prueba que cayó |
 |---|---|---|
 | 1 | Quitar el cálculo de la cadencia del tooltip | *actualizarRelojCabecera: el tooltip dice la cadencia de sondeo real…* |
+
+---
+
+## v17.22.0 — los chips de PyM vuelven a la tarjeta (reversión consciente de T4)
+
+Recuperadas `panelActivities`/`isPanelHiddenActivity` **textualmente** de su última versión
+viva en el historial de git (commit `46e2076^`, antes de que v17.6.10 las retirara por
+falta de llamador) — no se reinventó el filtro AV/OD, se recuperó el original. Nuevo: tope
+de 3 chips visibles con overflow "+N más" (detalle completo en el `title`, nunca se
+pierde). Se decidió NO abreviar el texto de cada chip — el propio comentario histórico de
+`.vgl-pyms` (v12.4.0) documenta que truncar chips fue un defecto real de consultorio ya
+corregido a propósito; inventar una tabla de siglas sin fuente real habría violado "casilla
+vacía antes que dato inventado". Sin verificación adicional en Chromium: `.vgl-chip`/
+`.vgl-pyms` viven dentro de `#vgl-root` (heredan su blindaje ya verificado) y la única
+regla nueva (`.vgl-chip-mas`) solo toca `opacity`/`cursor`, ningún `color`.
+
+Banco en verde tras la restauración final: **2.497/2.497**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Subir el tope de 3 chips a 30 (sin límite real) | *v17.22.0 — más de 3 actividades: se ven 3 chips y un '+N más'…* |
+| 2 | `isPanelHiddenActivity` deja de reconocer Optometría/Odontología | 5 pruebas caen, incluida *isPanelHiddenActivity: reconoce Optometría/Odontología…* y la de AV/OD oculta aparte del tope |
+| 3 | `enBase` siempre `true` (nunca detecta "no cruza con la base") | *v17.22.0 — con PyM cargado pero SIN cruzar con la base: 'Dato faltante'…* |
+| 4 | Quitar `${pyms}` de la plantilla de la tarjeta | 9 pruebas caen — toda la sección de chips depende de este único punto de inserción |

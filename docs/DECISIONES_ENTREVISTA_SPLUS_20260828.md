@@ -5,7 +5,19 @@ Las 26 preguntas del artefacto `mapa-panel-s-plus` (5 ya respondidas el 28-ago d
 es una decisión firme del médico, no una recomendación mía — implementar en consecuencia,
 sin volver a preguntar salvo que él la reabra.
 
-## Chips de PyM en la tarjeta de la agenda
+## Chips de PyM en la tarjeta de la agenda — [IMPLEMENTADO v17.22.0, un punto sin cerrar]
+
+Puntos 1-2-4 implementados tal cual se decidió. **Punto 3 (etiquetas abreviadas) NO se
+implementó como abreviación de texto** — se implementó el tope de 3 chips visibles (que
+cumple el objetivo real detrás del pedido, "no ensanchar la tarjeta"), pero el texto de
+cada chip se dejó completo a propósito: el propio historial de `vigilante_agenda.user.js`
+(comentario de `.vgl-pyms`, v12.4.0) documenta un reporte real de consultorio donde
+truncar/cortar el texto de los chips salió mal, y se corrigió para que SIEMPRE se vea
+completo. Inventar una tabla de abreviaturas clínicas sin una fuente real habría sido
+justo lo que "casilla vacía antes que dato inventado" prohíbe. Pendiente: que el médico
+confirme si el tope de 3 basta, o si de verdad quiere abreviaturas de texto — y en ese
+caso, con qué fuente (¿ya existe una tabla de siglas en alguna parte del proyecto de PyM
+que no se haya revisado?).
 
 1. Reversión consciente de la decisión de agosto — sí, quiere volver a tenerlos.
 2. Lista completa, no compacta: **3 actividades visibles por tarjeta**, como antes de T4.

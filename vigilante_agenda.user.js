@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.21.0
+// @version     17.22.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.21.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.22.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7731,10 +7731,14 @@ _vglOfrecerDeshacer(btn);
     return CONFIG.EXCLUDE_PYM.some((k) => hay.includes(k));
   }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
-  // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS del panel, por pedido
-  // del consultorio: saturaban la fila y no son órdenes que se generen desde ahí. El
-  // filtro se aplica EN LÍNEA dentro de pymPendientesRestantes (v17.6.10: las funciones
-  // aparte isPanelHiddenActivity/panelActivities no tenían llamador en producción).
+  // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS de la tarjeta, por
+  // pedido del consultorio: saturaban la fila y no son órdenes que se generen desde ahí.
+  // SIGUEN en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra igual.
+  // v17.6.10 retiró estas dos funciones por falta de llamador (T4 había amputado los
+  // chips); v17.22.0 las restaura, textualmente iguales a su última versión viva (commit
+  // 46e2076^), porque el médico pidió reintroducir los chips en la tarjeta.
+  function isPanelHiddenActivity(label) { return /optometr|odontolog/i.test(stripAccents(String(label || ""))); }
+  function panelActivities(list) { return (list || []).filter((l) => !isPanelHiddenActivity(l)); }
   // v12.4.0 — Pendientes que QUEDAN para el aviso de la historia: todo lo del índice PyM
   // menos las actividades cuyas órdenes ya se generaron HOY desde el panel (el detalle
   // por actividad lo guarda markOrdenesCreadasHoy). Si el médico no ha ordenado nada,
@@ -13437,6 +13441,11 @@ _vglOfrecerDeshacer(btn);
       /* Clases migradas de render() T1 */
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
+      /* v17.22.0 — chip de sobrante ("+N más") del tope de 3 chips visibles por tarjeta.
+         Mismo estilo base de .vgl-chip (dentro de #vgl-root, hereda su blindaje), solo
+         más apagado para no competir visualmente con los 3 chips reales — el detalle
+         completo de lo que resume vive en su atributo title, nunca se pierde. */
+      .vgl-chip-mas { opacity:.75; cursor:help; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
       .vgl-card-top.vgl-card-top-t1 { gap:10px; }
       .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
@@ -25118,20 +25127,47 @@ _vglOfrecerDeshacer(btn);
       const candAdic = a.doc_id ? candidatoAdicional(a.doc_id) : null;
       const adicFlag = candAdic
         ? `<span class="vgl-flag adic" title="Perfil sencillo confirmado hoy (hipertensión pura, sin diabetes/renal/falla/riesgo muy alto/PA no controlada): buen candidato para cupos Adicional o sábados con espacio libre.">➕ CANDIDATO ADICIONAL</span>` : ""; // [COPY-UX]
-      // v14.0.0 (T4) — AMPUTACIÓN DEL PANEL: agendar/ordenar/labs (🗓️/📋/🧪) y los chips de
-      // PyM salen de la tarjeta — el panel queda solo como vigía de agenda. Los tres flujos
-      // renacen como widgets sobre la Historia Clínica en T5, reutilizando exactamente las
-      // mismas funciones (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/
-      // openLabSoloModal) y los mismos bloqueos antiduplicado (isCitaAgendadaHoy/
-      // isLabAgendadaHoy/isOrdenesCreadasHoy) — por eso esas funciones NO se tocan aquí, solo
-      // dejan de tener llamador DENTRO de render(). panelActivities/isPanelHiddenActivity se
-      // retiraron en v17.6.10: el filtro AV/OD quedó en línea en pymPendientesRestantes.
-      // v14.0.2 — El botón "Atender" (registrar en Everest la hora de apertura sin navegar
-      // a la historia) se retiró a pedido explícito del médico: usa directamente el botón
-      // nativo "Historias Clínicas" de Everest para entrar a la historia, sin intermediarios.
-      // La fila inferior de la tarjeta (vgl-card-btm) ya no tiene contenido que mostrar —
-      // T4 ya se había llevado los botones de agendar/ordenar/labs y los chips de PyM a los
-      // widgets del dock (T5); este era el último ocupante.
+      // v14.0.0 (T4) — agendar/ordenar/labs (🗓️/📋/🧪) siguen fuera de la tarjeta: viven
+      // como widgets sobre la Historia Clínica (T5), reutilizando las mismas funciones
+      // (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/openLabSoloModal)
+      // y los mismos bloqueos antiduplicado — eso NO cambia aquí.
+      // v14.0.2 — El botón "Atender" tampoco vuelve: usa el nativo "Historias Clínicas".
+      //
+      // v17.22.0 — REVERSIÓN CONSCIENTE de la otra mitad de T4 (decisión del médico,
+      // entrevista del 28-ago): los chips de PyM SÍ vuelven a la tarjeta. Iguales en
+      // esencia a la versión de v12.4.0 (recuperada de 40798bc^), con dos diferencias
+      // pedidas explícitamente esta noche:
+      //  1) Tope de 3 chips visibles (antes no había tope: se envolvía todo). Lo que
+      //     sobra se resume en un chip "+N más" con el detalle completo en el `title`
+      //     — nunca se pierde el dato, solo se compacta la vista.
+      //  2) NO se implementó una abreviación de TEXTO (el médico pidió "etiquetas
+      //     abreviadas"): el propio historial de este archivo (comentario de
+      //     `.vgl-pyms`, v12.4.0) documenta un reporte real de consultorio donde los
+      //     chips truncados/cortados por CSS se veían mal y se corrigió a propósito
+      //     para que el texto SIEMPRE se viera completo. Inventar una tabla de siglas
+      //     clínicas sin una fuente real sería exactamente lo que "casilla vacía antes
+      //     que dato inventado" prohíbe. El tope de 3 (punto 1) ya cumple el objetivo
+      //     real detrás del pedido — "no ensanchar la tarjeta" — sin ese riesgo. Queda
+      //     anotado en docs/DECISIONES_ENTREVISTA_SPLUS_20260828.md para que el médico
+      //     lo confirme o lo corrija.
+      const pymsPanel = panelActivities(a.pym);
+      const pymsVisibles = pymsPanel.slice(0, 3);
+      const pymsDeMas = pymsPanel.length - pymsVisibles.length;
+      const chipDeMas = pymsDeMas > 0
+        ? `<span class="vgl-chip vgl-chip-mas" title="${escapeHtml(pymsPanel.slice(3).join(", "))}">+${pymsDeMas} más</span>` : "";
+      const ocultasAvOd = (a.pym || []).length - pymsPanel.length;
+      const chipOcultas = ocultasAvOd > 0 ? `<span class="vgl-chip vgl-chip-ocultas">+ remisión AV/OD</span>` : "";
+      // Tres lecturas distintas y honestas cuando no hay chips que mostrar: tiene
+      // pendientes sin registrar / está al día / no cruza con la base (paciente nuevo o
+      // cédula que no coincide, hay que revisarlo). Nunca se dice "al día" sin haber
+      // podido comprobarlo (Regla D).
+      const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
+      const pyms = pymsVisibles.length
+        ? `<div class="vgl-pyms">${pymsVisibles.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipDeMas}${chipOcultas}</div>`
+        : ((a.pym || []).length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
+          : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
+          : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
+                   : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
       card.innerHTML = `
         <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"})">
           <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
@@ -25151,6 +25187,9 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-card-mid vgl-card-mid-t1">
           <div class="vgl-name vgl-name-t1" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
           ${a.doc_id ? `<span class="vgl-doc vgl-doc-t1">CC ${highlight(String(a.doc_id))}</span>` : ""}
+        </div>
+        <div class="vgl-card-btm vgl-card-btm-t1">
+          ${pyms}
         </div>`;
       card.__vglKey = a.key;
       fragment.appendChild(card);

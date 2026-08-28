@@ -72,6 +72,7 @@ module.exports = {
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
     "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
     "vglMinimizarPanel", "vglMinBarra", "_vglMinDescartarDeOtroPaciente",
+    "panelActivities", "isPanelHiddenActivity",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -541,39 +542,38 @@ module.exports = {
     });
 
 
-    // v14.0.0 (T4) — "chips PyM" salió del nombre y de las aserciones de esta prueba: los
-    // chips (y el texto "PyM sin cargar"/"Al día"/"Dato faltante" DENTRO de la tarjeta) se
-    // amputaron del panel. El "PyM sin cargar" de la BARRA DE RESUMEN (suma.textContent,
-    // no cardAna.innerHTML) es un sitio DISTINTO — con significado distinto — y se queda
-    // intacto (ver la Regla B4-T4 sobre el literal repetido).
-    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude (sin chips PyM, amputados en T4)", () => {
+    // v17.22.0 — REVERSIÓN CONSCIENTE de T4 (decisión del médico, entrevista del 28-ago):
+    // los chips de PyM vuelven a la tarjeta. Esta prueba, que hasta ahora fijaba la
+    // AUSENCIA de chips como si fuera la regla, ahora fija su PRESENCIA — la barra de
+    // resumen (suma.textContent) sigue siendo un sitio DISTINTO con su propio "PyM sin
+    // cargar" (Regla B4-T4), eso no cambió.
+    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude Y sus chips de PyM (T4 revertido)", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
       t.cierto(suma.textContent.includes("Vigilando la agenda · 2 cita(s)"), "resumen de fuente directa (texto v17.x: 'Vigilando la agenda · N cita(s) · act. HH:MM')");
-      t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen SÍ sigue diciendo esto (no se amputó, es el otro sitio)");
+      t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen sigue diciendo esto — sitio distinto del de la tarjeta");
       t.igual(q("#vgl-dot").className, "bg", "el punto de origen marca API");
       t.igual(lista.children.length, 2, "una tarjeta por cita");
       const [cardAna, cardLuis] = lista.children;
       t.igual(cardAna.__vglKey, "111@07:00 AM");
       t.cierto(cardAna.innerHTML.includes("ANA PEREZ"));
       t.cierto(cardAna.innerHTML.includes("CC 111"));
-      t.falso(cardAna.innerHTML.includes("PyM sin cargar"), "dentro de la TARJETA ya no aparece — ese chip se amputó");
       t.falso(cardAna.innerHTML.includes("NO CONFIRMADO"), "la cita verde no lleva bandera de fraude");
       t.cierto(cardLuis.className.includes("rojo"), "la tarjeta roja lleva su clase");
       t.cierto(cardLuis.innerHTML.includes("⛔ NO CONFIRMADO"), "bandera de fraude explícita, se conserva");
-      t.falso(cardLuis.innerHTML.includes("Tamización de mama"), "el chip de PyM pendiente ya no se pinta en la tarjeta (T4)");
-      t.falso(cardLuis.innerHTML.includes("vgl-pyms") || cardLuis.innerHTML.includes("vgl-chip"), "ningún rastro de la fila de chips en el HTML");
-      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida — no la toca T4");
+      t.cierto(cardLuis.innerHTML.includes("Tamización de mama"), "el chip de PyM pendiente vuelve a pintarse en la tarjeta");
+      t.cierto(cardLuis.innerHTML.includes("vgl-pyms") && cardLuis.innerHTML.includes("vgl-chip"), "la fila de chips está de vuelta en el HTML");
+      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida — no la toca este cambio");
       t.cierto(cardLuis.innerHTML.includes("hace 4:00"), "lleva 4 min pasado de la tolerancia (6 - 10)");
       const stats = q("#vgl-stats");
       t.cierto(stats.innerHTML.includes("En sala <b>1</b>"));
       t.cierto(stats.innerHTML.includes("Sin pres. <b>1</b>"));
     });
 
-    // v14.0.0 (T4) / v14.0.2 — Criterio de aceptación de T4 ("la tarjeta ya no genera esos
-    // tres botones") sigue vigente; el botón Atender que T4 dejaba como único superviviente
-    // se retiró después, a pedido explícito del médico (usa el nativo "Historias Clínicas").
-    t.caso("T4/v14.0.2 — la tarjeta ya NO genera ningún botón de acción (agendar/ordenar/labs/atender)", () => {
+    // v14.0.0 (T4) / v14.0.2 — Criterio de aceptación de T4 sobre los BOTONES sigue vigente
+    // (no se tocó esta noche, solo la mitad de los chips): agendar/ordenar/labs/atender
+    // siguen sin generarse en la tarjeta. Los chips, en cambio, ya vuelven (v17.22.0).
+    t.caso("T4/v14.0.2 — la tarjeta sigue sin botones de acción, pero v17.22.0 le devuelve los chips de PyM", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const pac = { key: "t4-1", doc_id: "999", nombre: "PACIENTE T4", hora_texto: "09:00", estado: "En sala", color: "VERDE", pym: ["MAMOGRAFÍA"], elapsed: 0, citaId: 12345 };
@@ -582,26 +582,121 @@ module.exports = {
       t.falso(card.innerHTML.includes("vgl-btn-agendar"), "sin botón de agendar");
       t.falso(card.innerHTML.includes("vgl-btn-ordenar"), "sin botón de ordenar");
       t.falso(card.innerHTML.includes("vgl-btn-labs"), "sin botón de labs");
-      t.falso(card.innerHTML.includes("vgl-btn-atender"), "sin botón de Atender (retirado en v14.0.2)");
-      t.falso(card.innerHTML.includes("vgl-pyms"), "sin fila de chips PyM");
+      t.falso(card.innerHTML.includes("vgl-btn-atender"), "sin botón de Atender (retirado en v14.0.2, no revive)");
+      t.cierto(card.innerHTML.includes("vgl-pyms"), "la fila de chips PyM sí vuelve a aparecer");
+      t.cierto(card.innerHTML.includes("MAMOGRAFÍA"), "con el nombre real de la actividad pendiente");
     });
 
-    // v14.0.0 — Secuela real de T4: la fila inferior (.vgl-card-btm) llevaba los botones Y
-    // la fila de chips de PyM. T4 se llevó ambos contenidos pero dejó el contenedor, con un
-    // div vacío cobrando su margin-top de 7px. v14.0.2 retiró también el botón Atender (el
-    // último ocupante), así que ahora la fila nunca se emite, con o sin citaId.
-    t.caso("v14.0.2 — la tarjeta nunca emite la fila inferior vacía (hueco muerto al pie), con o sin citaId", () => {
+    // v17.22.0 — la fila inferior (.vgl-card-btm) revive: ahora SIEMPRE lleva algo (un
+    // chip, o uno de los cuatro mensajes honestos de "nada que mostrar"), sin importar
+    // si la cita trae citaId — el hueco muerto que describía esta prueba ya no existe
+    // porque el contenedor ya no puede quedar vacío por construcción.
+    t.caso("v17.22.0 — la fila inferior de la tarjeta SIEMPRE aparece ahora (lleva el estado de PyM), con o sin citaId", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const sinCita = { key: "v14-sin", doc_id: "777", nombre: "PACIENTE SIN CITAID", hora_texto: "09:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
       cv.api.render([sinCita], "api", new Date());
-      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "sin citaId: sin fila inferior");
+      t.cierto(lista.children[0].innerHTML.includes("vgl-card-btm"), "sin citaId: la fila inferior aparece igual, con el estado de PyM");
 
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const conCita = { key: "v14-con", doc_id: "778", nombre: "PACIENTE CON CITAID", hora_texto: "09:30", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4242 };
       cv.api.render([conCita], "api", new Date());
-      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "con citaId: tampoco hay fila inferior — no queda nada que poner ahí");
+      t.cierto(lista.children[0].innerHTML.includes("vgl-card-btm"), "con citaId: también aparece — el contenido depende del PyM, no del citaId");
+    });
+
+    // ---------- isPanelHiddenActivity / panelActivities (restauradas en v17.22.0) ----------
+    t.caso("isPanelHiddenActivity: reconoce Optometría/Odontología con o sin tilde, y nada más", () => {
+      t.cierto(cv.api.isPanelHiddenActivity("Optometría"));
+      t.cierto(cv.api.isPanelHiddenActivity("optometria de control"));
+      t.cierto(cv.api.isPanelHiddenActivity("Odontología general"));
+      t.falso(cv.api.isPanelHiddenActivity("Mamografía"), "otra actividad cualquiera no se confunde con AV/OD");
+      t.falso(cv.api.isPanelHiddenActivity(""), "vacío no es AV/OD");
+      t.falso(cv.api.isPanelHiddenActivity(null), "null no revienta ni cuenta como AV/OD");
+    });
+
+    t.caso("panelActivities: filtra SOLO Optometría/Odontología, conserva el resto en su orden", () => {
+      const lista4 = ["Tamización de mama", "Optometría", "Citología", "Odontología"];
+      t.igual(cv.api.panelActivities(lista4), ["Tamización de mama", "Citología"]);
+      t.igual(cv.api.panelActivities([]), []);
+      t.igual(cv.api.panelActivities(null), [], "sin lista, arreglo vacío — nunca revienta");
+    });
+
+    // ---------- Tope de 3 chips + "remisión AV/OD" oculta (v17.22.0) ----------
+    t.caso("v17.22.0 — más de 3 actividades: se ven 3 chips y un '+N más' con el detalle completo en el title", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = {
+        key: "cap-1", doc_id: "501", nombre: "PACIENTE CON MUCHO PYM", hora_texto: "10:00",
+        estado: "En sala", color: "VERDE", elapsed: 0,
+        pym: ["Tamización de mama", "Citología", "Glicemia", "Perfil lipídico", "Creatinina"],
+      };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.cierto(card.innerHTML.includes("Tamización de mama") && card.innerHTML.includes("Citología") && card.innerHTML.includes("Glicemia"), "los 3 primeros se ven completos, sin recortar el texto");
+      t.falso(card.innerHTML.includes('">Perfil lipídico<') || card.innerHTML.includes('">Creatinina<'), "el 4º y 5º no se listan como CHIP PROPIO (solo pueden aparecer dentro del title del '+2 más')");
+      t.cierto(card.innerHTML.includes("+2 más"), "el sobrante se resume en un solo chip, con el número exacto");
+      t.cierto(card.innerHTML.includes("Perfil lipídico") && card.innerHTML.includes("Creatinina"), "pero el detalle completo del sobrante sigue en el HTML (title del chip '+2 más') — nada se pierde");
+    });
+
+    t.caso("v17.22.0 — Optometría/Odontología ocultas se avisan con su propio chip, aparte del tope de 3", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = { key: "avod-1", doc_id: "502", nombre: "PACIENTE AV OD", hora_texto: "10:10", estado: "En sala", color: "VERDE", elapsed: 0, pym: ["Citología", "Optometría"] };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.cierto(card.innerHTML.includes("Citología"), "la actividad real sí se pinta");
+      t.falso(card.innerHTML.includes("Optometría"), "Optometría no se pinta como chip propio (sigue oculta de la tarjeta, D9)");
+      t.cierto(card.innerHTML.includes("+ remisión AV/OD"), "pero su ausencia se avisa, en vez de desaparecer en silencio");
+    });
+
+    // ---------- Los cuatro mensajes honestos cuando no hay chips que mostrar ----------
+    t.caso("v17.22.0 — sin PyM cargado, la tarjeta lo dice (nunca 'al día' sin haber podido comprobarlo)", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "";
+      const pac = { key: "sc-1", doc_id: "601", nombre: "PACIENTE SIN CARGA", hora_texto: "10:20", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      t.cierto(lista.children[0].innerHTML.includes("PyM sin cargar"));
+    });
+
+    t.caso("v17.22.0 — con PyM cargado y el paciente en la base: 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["602"]);
+      const pac = { key: "ok-1", doc_id: "602", nombre: "PACIENTE AL DIA", hora_texto: "10:30", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      t.cierto(lista.children[0].innerHTML.includes("Al día"));
+    });
+
+    t.caso("v17.22.0 — con PyM cargado pero SIN cruzar con la base: 'Dato faltante', no 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["999999"]);   // el paciente no está en la base
+      const pac = { key: "df-1", doc_id: "603", nombre: "PACIENTE SIN CRUCE", hora_texto: "10:40", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      const html = lista.children[0].innerHTML;
+      t.cierto(html.includes("Dato faltante"), "no cruzar con la base es un hecho distinto de estar al día — nunca se confunden");
+      t.falso(html.includes("Al día"));
+    });
+
+    t.caso("v17.22.0 — solo remisión AV/OD pendiente (nada más): mensaje propio, no 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["604"]);
+      const pac = { key: "avod-solo-1", doc_id: "604", nombre: "PACIENTE SOLO AV OD", hora_texto: "10:50", estado: "En sala", color: "VERDE", elapsed: 0, pym: ["Optometría"] };
+      cv.api.render([pac], "api", new Date());
+      const html = lista.children[0].innerHTML;
+      t.cierto(html.includes("Pendiente: remisión AV/OD"), "el único pendiente real es la remisión — se dice, no se esconde detrás de 'Al día'");
+      t.falso(html.includes("Al día"));
+      // Se restaura el estado de fábrica (pymFile:"", pymTodos:null): las pruebas de
+      // este bloque son las únicas que tocan pymFile/pymTodos en toda esta suite — sin
+      // este reset, cualquier prueba posterior que dependa de "PyM sin cargar" (la
+      // barra de resumen, copySummary) heredaría en silencio el "excel.xlsx" de aquí.
+      cv.api.__state.pymFile = ""; cv.api.__state.pymTodos = null;
     });
 
     t.caso("T4 (D9) — la bandera PES usa el texto nuevo «ABANDONO PROGRAMA RCV»", () => {
