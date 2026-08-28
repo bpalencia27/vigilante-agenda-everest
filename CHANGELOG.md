@@ -4,6 +4,30 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.40.0] — 2026-08-28 (Reporte en vivo: ahora sí avisa aunque esté en otra ventana o programa)
+
+### 🔔 Las notificaciones ya no se quedan calladas cuando Everest está de fondo
+Reporte suyo: "cuando estoy en otra ventana que no sea Everest o en otro programa, no me
+avisa de llegadas, cambios de leyenda, inasistencias". Tenía razón, y encontramos la causa
+exacta: el script solo revisaba si la pestaña estaba minimizada u oculta para decidir cómo
+avisarle — pero el navegador NO considera "oculta" una pestaña que sigue abierta detrás de
+otra ventana, o mientras usted trabaja en otro programa. Solo pasa a "oculta" si la
+minimiza o cambia de pestaña. En esos dos casos que usted describió, el script creía que
+usted seguía mirando la pantalla, así que pintaba el aviso DENTRO de la página — quedando
+tapado detrás de la otra ventana — en vez de mandar la notificación real de Windows, la
+única que sí se ve estando en otro programa. Ahora el script también revisa si la ventana
+tiene el foco, no solo si está oculta: "otra ventana encima" y "minimizado" cuentan igual,
+y en los dos casos sale la notificación real del sistema. El reloj que detecta llegadas y
+cambios de leyenda seguía funcionando bien de fondo — el defecto era solo en cómo avisaba,
+nunca en que dejara de darse cuenta.
+
+**Importante para que esto funcione**: Chrome o Edge le tienen que haber pedido permiso de
+notificaciones para este sitio, y usted haberlo aceptado. Revíselo en el candado junto a la
+barra de direcciones → Notificaciones. Sin ese permiso, ni este arreglo ni ninguna otra
+versión puede mostrarle un aviso mientras está en otro programa.
+
+---
+
 ## [Versión 17.39.0] — 2026-08-28 (El botón "Ordenar pendientes" ya luce igual al "Paquetes" real de Everest)
 
 ### 🎨 Mismo blanco, misma letra, mismo borde — el de verdad

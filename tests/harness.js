@@ -55,6 +55,7 @@ function crearDom() {
   return {
     readyState: "loading",           // clave: impide que boot() se ejecute
     visibilityState: "visible",      // v14.1.5 — el relevo de liderazgo lo consulta
+    hasFocus: () => true,            // v17.40.0 — _pestanaSinAtencion() lo consulta; las pruebas lo pisan a () => false para simular ventana visible pero sin foco
     body, head, documentElement: elem("html"),
     createElement: elem,
     createTextNode: (t) => ({ textContent: t }),

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.39.0
+// @version     17.40.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.39.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.40.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -8033,6 +8033,27 @@ _vglOfrecerDeshacer(btn);
   function _pestanaOculta() {
     try { return document.visibilityState === "hidden"; } catch (e) { return false; }
   }
+  // =====================================================================
+  //  v17.40.0 — REPORTE EN VIVO: "cuando estoy en otra ventana o en otro programa, no me
+  //  avisa de llegadas, cambios de leyenda, inasistencias". Causa confirmada: la decisión
+  //  de canal (toast dentro de la página vs. notificación real de Windows, ver notify()
+  //  más abajo) miraba solo `_pestanaOculta()` — que la API del navegador NO marca "hidden"
+  //  mientras la pestaña siga abierta en pantalla, aunque esté DETRÁS de otra ventana o el
+  //  médico esté usando otro programa. Solo pasa a "hidden" al minimizar o cambiar de
+  //  pestaña. Con Everest de fondo pero no minimizado, el script creía que el médico seguía
+  //  mirando, pintaba el toast DENTRO de la página — tapado por la otra ventana — y nunca
+  //  llegaba a la notificación real del sistema operativo.
+  //
+  //  `_pestanaSinAtencion()` es la pregunta correcta para decidir el CANAL de aviso: además
+  //  de oculta, "ventana visible pero sin el foco" (`!document.hasFocus()`) cuenta igual —
+  //  las dos son "el médico no está mirando esta pantalla ahora mismo". A propósito NO se
+  //  usa para el relevo de liderazgo entre pestañas (`heartbeat()`, más abajo): ese sigue
+  //  usando `_pestanaOculta()` a secas — perder el foco (sin estar oculta) no debe disparar
+  //  un relevo de mando, solo cambiar cómo se avisa.
+  // =====================================================================
+  function _pestanaSinAtencion() {
+    try { return _pestanaOculta() || !document.hasFocus(); } catch (e) { return _pestanaOculta(); }
+  }
   const RELEVO_VISIBILIDAD_MIN_MS = 10000;
   let _ultimoRelevoVisibilidad = 0;
   // v17.17.0 — REPORTE EN VIVO (27-ago): "avisa erróneamente que activaron un paciente
@@ -11626,7 +11647,7 @@ _vglOfrecerDeshacer(btn);
     // GM_notification es la única vía) y el toast SOLO queda como respaldo si ninguna de
     // las dos pudo. Antes la rama sin permiso disparaba GM_notification Y el toast a la
     // vez: dos canales para el mismo aviso.
-    if (!_pestanaOculta()) { showToast(color, title, body, persist); return; }
+    if (!_pestanaSinAtencion()) { showToast(color, title, body, persist); return; }
     if (!_notificarSistema(color, title, body, persist, uid)) showToast(color, title, body, persist);
   }
   function _gmNotify(color, title, body, persist, uid) {
@@ -11713,7 +11734,7 @@ _vglOfrecerDeshacer(btn);
     cola.forEach((p) => {
       if (!p) return;
       if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
-      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaOculta();
+      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
       if (puedePintar) { _dispararAvisoCartel(p); return; }
       if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta: esperará
       // No-ROJO o cartel apagado: jamás se pintará como cartel — su canal ya sonó. Se suelta.
@@ -11776,7 +11797,7 @@ _vglOfrecerDeshacer(btn);
     // que el cartel pendiente se siga encolando para cuando el médico entre a la
     // historia, aunque el silencio ya haya vencido para entonces.
     if (muted()) return true;
-    if (_pestanaOculta()) {
+    if (_pestanaSinAtencion()) {
       if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
         showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
         if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
@@ -11797,13 +11818,13 @@ _vglOfrecerDeshacer(btn);
     // "calla sonido/ventana/cartel", pero el cartel nunca miró muted(): la promesa era
     // falsa. Se cierra la brecha aquí, único punto del que cuelgan los tres llamadores
     // reales de este disparador (inmediato, cola diferida y el de _dispararAvisoReal).
-    if (S.cartel && p.color === "ROJO" && !_pestanaOculta() && !muted()) bigAlert("ROJO", p.title, p.body);
+    if (S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted()) bigAlert("ROJO", p.title, p.body);
   }
   function _dispararAvisoReal(p) {
     // Si el cartel va a salir (ROJO + S.cartel + pestaña visible, y aquí solo se llega
     // estando en la historia), el cartel ES el canal visible: se le indica al disparador
     // para que no pinte también el toast.
-    const conCartel = S.cartel && p.color === "ROJO" && !_pestanaOculta();
+    const conCartel = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
     if (!_dispararAvisoAudible(conCartel ? Object.assign({}, p, { sinToastPorCartel: true }) : p)) return;   // otra pestaña se adelantó: tampoco el cartel
     _dispararAvisoCartel(p);
   }

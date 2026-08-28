@@ -31,7 +31,7 @@ module.exports = {
     "enableOsNotifications", "testNotifications", "updateBell",
     "showToast", "_renderToast", "_dispararAvisoAudible", "_dispararAvisoCartel",
     "fraudesHoy", "renderStats",
-    "_loteId", "_migaPush", "_pestanaOculta", "_getUltimoRelevoParaTest",
+    "_loteId", "_migaPush", "_pestanaOculta", "_pestanaSinAtencion", "_getUltimoRelevoParaTest",
     "uxVentanaNueva", "repEntornoDiario", "_urlDiagnostico", "_tituloDiagnostico",
     "_rumTrack", "_casillasExamenFisico",
   ],
@@ -247,6 +247,44 @@ module.exports = {
       c.api._dispararAvisoAudible({ uid: "vis-2", color: "ROJO", title: "t", body: "b", flashText: "f", persist: true });
       t.igual(os, 0, "cero notificaciones de Windows con la pestaña visible");
       t.igual(gm, 0, "cero notificaciones de la extensión con la pestaña visible");
+    });
+
+    // v17.40.0 — REPORTE EN VIVO: "en otra ventana o en otro programa no me avisa". La
+    // pestaña sigue "visible" (visibilityState) mientras esté detrás de otra ventana, sin
+    // estar minimizada — solo pierde el FOCO (`document.hasFocus()`). Antes de esta versión
+    // `_pestanaOculta()` (solo mira visibilityState) decidía el canal, así que ese caso caía
+    // en la rama "visible" de arriba y el toast se pintaba tapado, sin avisar nada de
+    // verdad. `_pestanaSinAtencion()` también cuenta "visible pero sin foco" como si
+    // estuviera oculta, para que salga la notificación real del sistema.
+    t.caso("v17.40.0: VISIBLE pero SIN FOCO (otra ventana encima, sin minimizar) — cuenta igual que oculta: sale por el sistema", () => {
+      const c = cargar({ silencioso: true });
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.doc.visibilityState = "visible";        // NO minimizada, NO en otra pestaña
+      c.env.doc.hasFocus = () => false;              // pero otra ventana/programa tiene el foco
+      c.api.notify("AMBAR", "t", "b", false, "sinfoco-" + Math.random());
+      t.igual(os, 1, "con la ventana visible pero sin foco, el aviso real de Windows sí debe salir");
+    });
+
+    t.caso("v17.40.0: sin document.hasFocus disponible (navegador raro), no revienta y cae a solo mirar visibilityState", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = undefined;
+      t.noLanza(() => c.api._pestanaSinAtencion());
+      t.falso(c.api._pestanaSinAtencion(), "visible y sin forma de saber el foco: se asume atendida, como antes de esta versión");
+    });
+
+    // El relevo de liderazgo entre pestañas (heartbeat) NUNCA debe activarse solo por
+    // perder el foco — perder el foco cambia el CANAL de aviso, no quién manda. Ver la
+    // prueba dedicada de heartbeat en suite_17_nucleo.js para el caso completo.
+    t.caso("v17.40.0: perder el foco (sin estar oculta) NO cambia _pestanaOculta() — el relevo de liderazgo no debe verse afectado", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => false;
+      t.falso(c.api._pestanaOculta(), "_pestanaOculta() sigue mirando SOLO visibilityState, ajeno al foco");
+      t.cierto(c.api._pestanaSinAtencion(), "pero _pestanaSinAtencion() sí lo cuenta, para el canal de aviso");
     });
 
     t.caso("v15.4.0: pestaña OCULTA con permiso -> Windows, y GM NO se dispara además (uno u otro, nunca ambos)", () => {

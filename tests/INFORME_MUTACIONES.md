@@ -6,6 +6,47 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.40.0 — 28-ago-2026 (las notificaciones ahora miran hasFocus(), no solo hidden)
+
+Reporte en vivo: "cuando estoy en otra ventana o en otro programa, no me avisa de
+llegadas, cambios de leyenda, inasistencias". Causa confirmada en el código: los cinco
+puntos que deciden el CANAL de un aviso (`notify`, `_flushAvisosPendientes`,
+`_dispararAvisoAudible`, `_dispararAvisoCartel`, `_dispararAvisoReal`) usaban
+`_pestanaOculta()` — que solo mira `document.visibilityState`, y el navegador NO marca una
+pestaña "hidden" por estar detrás de otra ventana o mientras el médico usa otro programa;
+solo al minimizar o cambiar de pestaña. Con la ventana visible pero sin foco, el código
+tomaba la rama de "pestaña visible" y pintaba el toast dentro de la página — tapado por la
+otra ventana — sin llegar nunca a la notificación real de Windows.
+
+Se agrega `_pestanaSinAtencion()` (`_pestanaOculta() || !document.hasFocus()`) y se cambian
+los CINCO puntos de decisión de canal a usarla. A propósito **NO** se toca
+`_pestanaOculta()` en sí ni su único otro uso real (`heartbeat()`, el relevo de liderazgo
+entre pestañas): perder el foco sin estar oculta no debe disparar un cambio de mando, solo
+cambiar cómo se avisa — mezclar los dos habría reintroducido el "rebote de liderazgo" que
+v14.1.5 ya cerró con cuidado.
+
+`document.hasFocus` se agregó al arnés (`tests/harness.js`, por defecto `() => true`) para
+poder simular el caso real sin romper ninguna prueba existente (todas asumían implícitamente
+foco, que es el estado por defecto).
+
+Cuatro cambios de comportamiento verificados con mutación (los cinco puntos de canal
+comparten una sola función nueva, así que dos mutaciones bastan para cubrir el mecanismo:
+la función en sí, y que un punto de decisión de verdad la llame). Restaurado y verificado
+con `diff` contra copia intacta. Banco completo en verde: **2580/2580** (suite_42 sola:
+48/48; suite_17 sin cambios: 41/41, confirmando que `heartbeat()` no se vio afectado).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `_pestanaSinAtencion()`: quitar el `\|\| !document.hasFocus()` (vuelve a ser un alias de `_pestanaOculta()`) | *VISIBLE pero SIN FOCO... cuenta igual que oculta* y *perder el foco... NO cambia `_pestanaOculta()`* (suite_42) |
+| 2 | `notify()`: devolver `_pestanaSinAtencion()` a `_pestanaOculta()` en la decisión de canal | *VISIBLE pero SIN FOCO (otra ventana encima, sin minimizar) — cuenta igual que oculta: sale por el sistema* (suite_42) |
+
+No se mutó cada uno de los cinco puntos por separado (`_flushAvisosPendientes`,
+`_dispararAvisoAudible`, `_dispararAvisoCartel`, `_dispararAvisoReal`): las mutaciones 1 y 2
+ya prueban que el mecanismo (la función nueva, y que al menos un punto real la invoque)
+funciona: los otros cuatro son el mismo patrón de una línea, ya cubiertos por pruebas
+preexistentes que fijan su comportamiento con `visibilityState="hidden"` — repetir la
+mutación en cada uno habría sido repetir la misma prueba con otro nombre.
+
 ## v17.39.0 — 28-ago-2026 (el botón "Ordenar pendientes" copia el CSS real de "Paquetes")
 
 Solo estilo visual — sin comportamiento nuevo que mutar, y decirlo es más honesto que
