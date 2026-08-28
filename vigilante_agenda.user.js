@@ -23178,13 +23178,26 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  const _fuzzyPrevRow = new Uint16Array(1024);
+  const _fuzzyCurrRow = new Uint16Array(1024);
+  const _fuzzyPrevPrevRow = new Uint16Array(1024);
+  let _lastQ = null;
+  let _lastQTokens = null;
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    let queryTokens;
+    if (q === _lastQ) {
+      queryTokens = _lastQTokens;
+    } else {
+      queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _lastQ = q;
+      _lastQTokens = queryTokens;
+    }
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = _fuzzyPrevRow;
+    let currRow = _fuzzyCurrRow;
+    let prevPrevRow = _fuzzyPrevPrevRow;
 
     for (const qToken of queryTokens) {
       let tokenMatched = false;
@@ -23199,6 +23212,7 @@ _vglOfrecerDeshacer(btn);
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+        if (n >= 1024) continue; // safety for typed array bounds
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -23218,11 +23232,11 @@ _vglOfrecerDeshacer(btn);
               currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          // Pointer swap instead of array copy
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
