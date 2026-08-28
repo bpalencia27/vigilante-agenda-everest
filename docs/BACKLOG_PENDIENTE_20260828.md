@@ -184,6 +184,69 @@ lentos, dado que MODO LIGERO existe precisamente por ese problema documentado.
 
 ---
 
+## 8. [ABIERTO] Widget de "qué ordenar en el próximo control", en Conducta
+
+Ampliación (28-ago) del widget de Conducta: además del de farmacología, un segundo widget
+con la lista de exámenes que se deben ordenar en el próximo control (ya calculada por
+`mtrPanelExamenesHtml`, Sección 3 del Panel del paciente), anclado junto al botón nativo de
+Everest para ordenar dentro de Conducta.
+
+Grounding mejor que el del widget de fármacos: `captura_ordenamiento_paquete_HTA_20260812.json`
+YA registra el gesto real completo — clic en "Conducta" → clic en "Paquetes" → clic en el
+programa (ej. "HTA") → por cada examen: clic en el `<li>` → clic en "Agregar" → al final
+"Confirmar". Solo 3 XHR en toda la secuencia, ninguno atado a un "Agregar" individual — el
+patrón confirma lo mismo que el widget de fármacos: Everest no persiste nada hasta
+"Confirmar". A diferencia del widget de fármacos, el contenido CORE de este widget no
+necesita leer NADA del DOM en vivo — sale entero de datos que el script ya calcula sin
+tocar Conducta. Leer el DOM (los `<li>` bajo el paquete abierto) sería solo un extra:
+tachar en nuestro widget lo que el médico ya agregó al carrito de Everest antes de
+Confirmar, para que no se vea como pendiente algo que ya está en curso.
+
+Idea S+ (respuesta a "cómo mejorarías esto"): no construir dos widgets independientes —
+un solo mecanismo de "widgets de Conducta" (anclaje, sondeo, anti-parpadeo, aviso) del que
+cuelgan dos tarjetas (💊 Farmacología, 🧪 Exámenes a ordenar). Y un segundo salto: que un
+clic en un examen del widget abra nuestro propio modal de Ordenamiento (ya automatizado y
+probado, ver `openOrdenamientoModal`) en vez de obligar al médico a repetir a mano el gesto
+"Paquetes → buscar → Agregar → Confirmar" dentro de Conducta — convierte este widget en la
+puerta de entrada al módulo que hoy los colegas no usan (ver punto 7 de adopción).
+
+## 9. [ABIERTO] Bugs actuales del módulo de Laboratorios — sin especificar aún
+
+El médico reporta (28-ago) que el módulo de Laboratorios "tiene varios bugs actualmente" y
+pide que funcione lo más parecido a Athenea posible, a un clic. Sin evidencia concreta en
+el repo de cuáles son los bugs vigentes — se le pidió el detalle (capturas/consola) antes de
+tocar código, siguiendo la disciplina de "reproducir antes de arreglar" de todo este
+proyecto.
+
+## 10. [ABIERTO] Nueva dirección para la adopción de Agendamiento
+
+Las ideas de UI de la ronda anterior (beneficio visible en el botón, un clic para el caso
+común, reforzar el acompañante) no convencieron al médico. Nueva dirección propuesta
+(28-ago), pendiente de validar con él: (a) interceptar el punto de entrada NATIVO de
+Everest para agendar con una micro-sugerencia in-situ, en vez de competir con un botón
+nuestro en otro lugar de la pantalla; (b) adopción social — mostrarle a los colegas sus
+propios números reales de ahorro de tiempo, sacados del Tablero de Telemetría de cada uno,
+en vez de solo cambios de interfaz.
+
+## 11. [ABIERTO] Extender la cosecha por paciente para servir de grounding en la MISMA visita
+
+Hallazgo importante (28-ago): el mecanismo que el médico pidió ("guardar esos datos en el
+pc para futuras consultas con el mismo paciente... mejor grounding") **ya existe** —
+`_vglCosechaGuardar`/`_vglCosechaLeer` (`VGL_COSECHA_KEY="vgl_cosecha"`, ~línea 4623) más
+`mtrHcGuardar`/`mtrHcLeer`/`mtrHcAcumularDelDom` (~línea 36597-36803): captura los hechos
+del payload que Everest manda al GUARDAR la historia, los desidentifica ANTES de
+almacenarlos (no después de enviarlos), y los persiste en `localStorage` por paciente
+(cédula), sobreviviendo entre visitas — exactamente lo pedido.
+
+Limitación ya documentada en el propio código: como Everest manda ese payload al final de
+la consulta (al pulsar Guardar), lo capturado sirve de grounding para la visita SIGUIENTE,
+no para la actual — salvo que el médico guarde a mitad de consulta. Para que sirva también
+en la visita de HOY hace falta capturar (con el GRABADOR) el endpoint que Everest usa para
+CARGAR los datos del paciente al abrir su historia — ese endpoint todavía no está
+capturado, y el propio comentario del código ya anticipa que el día que se capture, el
+mecanismo lo reconocerá "sin tocar una línea". Es la extensión natural de este punto, no
+una construcción nueva.
+
 ## 7. [ABIERTO] Adopción de Agendamiento y Laboratorios entre colegas novatos
 
 Petición del 28-ago: los compañeros del médico (poco duchos en tecnología) no usan estos dos
