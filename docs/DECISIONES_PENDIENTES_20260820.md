@@ -11,27 +11,36 @@ Las que ya respondió en la entrevista del 20-ago quedan marcadas.
 
 ## Bloque A — Criterio clínico (las que cambian conductas)
 
-**1. [PREGUNTADA HOY] Dos varas para "vencido".** El aviso de entrada y el bloqueo "ya cubierto
-por Athenea" juzgan con 180 días planos; Agendar y Riesgo usan la tabla por estadio + su regla
-del 50%. Un renal G4 puede ser "ya cubierto" y "vencido" en la misma sesión.
-*Recomendación: una sola vara — la tabla por estadio + 50% en todos los caminos.*
+**1. [RESUELTA, v17.6.95] Dos varas para "vencido".** El aviso de entrada y el bloqueo "ya
+cubierto por Athenea" juzgan con 180 días planos; Agendar y Riesgo usan la tabla por estadio +
+su regla del 50%. Un renal G4 podía ser "ya cubierto" y "vencido" en la misma sesión.
+*Estado real (verificado 28-ago contra el fuente): `_vigenciaDiasParaAnalito` (línea ~4001)
+usa `mtrVigenciaDiasNorma` cuando hay contexto de estadio/programa — una sola vara en todos
+los caminos, tal como recomendaba este documento. `vigenciaPorEstadio`/
+`RCV_VIGENCIA_ESTADIO_TABLA` (la Tabla 50 transcrita) se conservan como documento de
+referencia, con sus propias pruebas, sin ser el camino que usan los avisos.*
 
-**2. [PREGUNTADA HOY] Meta de HbA1c fija en 7,0 para todos.** La individualización que el código
-promete es inalcanzable (nadie alimenta la meta individual, y además hay dos claves distintas
-que nunca se encuentran). A un paciente de 85 años con 7,6 se le acorta la vigencia y se le
-rotula falla.
-*Recomendación: campo por paciente en la Ficha, con 7,0 de fábrica.*
+**2. [RESUELTA, v16.4.0] Meta de HbA1c fija en 7,0 para todos.** La individualización que el
+código prometía era inalcanzable (nadie alimentaba la meta individual, y había dos claves
+distintas que nunca se encontraban).
+*Estado real (verificado 28-ago): una sola clave (`metaHba1c`) viaja desde la Ficha hasta
+`mtrFueraDeMeta`/`mtrResumenClinico` (línea ~35699, comentario "v16.4.0 — una sola clave para
+la meta de HbA1c"); sin dato guardado, usa `mtrMetaHba1cGeneral()` (7,0) de fábrica.*
 
-**3. [PREGUNTADA HOY] La creatinina previa nunca se alimenta.** Sospecha de IRA, "función renal
-inestable" (que colapsaría las vigencias al mínimo del rango) y remisión por caída de TFG están
-escritas, probadas… y apagadas de fábrica, porque nadie entrega la TFG anterior. El dato ya
-viaja en la respuesta de Athenea (365 días de creatininas).
-*Recomendación: cablear la penúltima creatinina de Athenea.*
+**3. [RESUELTA, v17.0.0] La creatinina previa nunca se alimentaba.** Sospecha de IRA, "función
+renal inestable" y remisión por caída de TFG estaban escritas, probadas… y apagadas de fábrica,
+porque nadie entregaba la TFG anterior.
+*Estado real (verificado 28-ago): `mtrResumenClinico` (línea ~35551) calcula `_egfrPrevioInfo`
+vía `mtrEgfrPrevioDeSerie(c.seriesCreatinina, …)` cuando el llamador no trae `egfrPrevio`
+explícito, y los dos llamadores reales (línea ~28114 y ~37076) sí pasan `seriesCreatinina` con
+la serie real de Athenea (`mtrSeriesPorAnalito(labs, …).CREATININA`).*
 
-**4. [PREGUNTADA HOY] "Fuera de meta" tiene dos definiciones.** Para acortar vigencia al 50%:
-estrictamente > meta. Para declarar falla terapéutica: > meta+15%. El paciente de la franja
-intermedia recibe más viajes al laboratorio sin que ninguna pantalla declare falla.
-*Recomendación: un solo umbral (meta+15%) para ambas cosas.*
+**4. [RESUELTA, v16.4.0] "Fuera de meta" tenía dos definiciones.** Para acortar vigencia al
+50%: estrictamente > meta. Para declarar falla terapéutica: > meta+15%. El paciente de la
+franja intermedia recibía más viajes al laboratorio sin que ninguna pantalla declarara falla.
+*Estado real (verificado 28-ago): `mtrFueraDeMeta` (línea ~32864, comentario "v16.4.0 — UN
+SOLO UMBRAL con la falla terapéutica") usa el mismo margen (`MTR_FALLA_UMBRAL`, meta+15%) para
+las dos cosas — exactamente la recomendación de este documento.*
 
 **5. [RESUELTA, v16.9.0] La reducción ≥50% del LDL nunca se podía verificar.** El basal
 ya se alimenta: `mtrLdlBasalDeSerie` toma el LDL más alto de los controles del último año y

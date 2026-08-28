@@ -255,6 +255,18 @@ el repo de cuáles son los bugs vigentes — se le pidió el detalle (capturas/c
 tocar código, siguiendo la disciplina de "reproducir antes de arreglar" de todo este
 proyecto.
 
+**Barrido estático hecho (28-ago, sin tocar código de producción)**: se revisaron las
+funciones clave del módulo (`fetchAtheneaLabs`, `getAtheneaLabsAuto`, `_findLabField`,
+`mtrEvaluarUroanalisis`, `mtrResumenClinico` y su cableado de vigencias/metas) y los cuatro
+puntos que `docs/DECISIONES_PENDIENTES_20260820.md` dejaba como "PREGUNTADA HOY" (dos varas
+para "vencido", meta de HbA1c, creatinina previa sin alimentar, dos umbrales de "fuera de
+meta"). Los cuatro resultaron **ya resueltos** en el código actual (v16.4.0–v17.6.95) — el
+documento estaba desactualizado, no el script; se corrigió ahí mismo, marcándolos RESUELTOS
+con la línea y versión que los cerró. No se encontró, por esta vía, ningún defecto nuevo y
+reproducible en Laboratorios: sigue haciendo falta el caso concreto del médico (una captura
+de consola, o qué exactamente hizo y qué esperaba) antes de escribir cualquier arreglo —
+adivinar aquí sería justo lo que este proyecto prohíbe.
+
 ## 10. [ABIERTO] Nueva dirección para la adopción de Agendamiento
 
 Las ideas de UI de la ronda anterior (beneficio visible en el botón, un clic para el caso
