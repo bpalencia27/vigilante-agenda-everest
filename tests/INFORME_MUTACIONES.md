@@ -4838,3 +4838,21 @@ de "notificaciones repetidas" se revisó a fondo (toda la cadena de deduplicaci�
 compartida) sin encontrar una vía nueva y reproducible más allá de lo que ya cubren seis
 arreglos anteriores. Queda como investigación abierta en el CHANGELOG, no como mutación
 falsa.
+
+---
+
+## v17.20.0 — cuatro ajustes muertos, retirados
+
+Decisión del médico. **Sin mutación, y se dice en vez de inventar una**: `tolerancia`,
+`labsVencidos`, `avisoPymModal` y `bannerPym` se confirmaron 100 % muertas ANTES de tocar
+nada (`grep -n "S\.<clave>\b"` contra el archivo completo: cero resultados en los tres
+últimos casos, y el único uso de `tolerancia` fuera de la declaración era el propio
+`CONFIG.TOLERANCIA_MIN`, ya fijo en 6 sin depender del ajuste). Al no haber ningún código
+que las leyera, no hay ningún comportamiento observable que una mutación pueda romper —
+inventar una sería simular una prueba que no prueba nada. Se retiraron también sus dos
+pruebas asociadas en `suite_15_interfaz_avanzada.js` (probaban exactamente la migración
+que se retiró) y la etiqueta "(en pruebas)" del interruptor de avisos farmacológicos (puro
+copy, sin lógica).
+
+Banco en verde tras la restauración final: **2.488/2.488** (2.490 menos las 2 pruebas de
+la migración retirada).

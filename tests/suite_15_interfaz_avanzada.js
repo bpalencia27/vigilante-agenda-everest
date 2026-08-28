@@ -3054,25 +3054,13 @@ module.exports = {
     // `pymCubiertoPorOrdenVigente` siguen vivos (el modal de PyM del panel los sigue usando)
     // y conservan su cobertura arriba. Ver CHANGELOG.
 
-    t.caso("v15: el banner viene APAGADO de fábrica, y el aviso modal también", () => {
-      const c = cargar({ silencioso: true });
-      t.igual(c.api.__S.bannerPym, false, "de fábrica ya no hay franja fija arriba de la historia");
-      t.igual(c.api.__S.avisoPymModal, false, "ni ventana que bloquee: el canal es el recuadro del modal");
-      // v17.6.10 — la clave `recordatorioPym` se retiró: nada en producción la leía
-      // (el canal del recordatorio lo decide hoy avisoPymModal + el chip del dock).
-    });
-
-    t.caso("la migración de v15 apaga el banner en los equipos que YA lo tenían guardado en true", () => {
-      // Sin esta migración el cambio no llegaría a ningún consultorio:
-      // writeJSON guarda el objeto ENTERO de ajustes, así que los veinte equipos
-      // tienen `bannerPym: true` en disco y ese valor le gana al de fábrica.
-      const c = cargar({
-        silencioso: true,
-        localStorage: { vgl_cfg: JSON.stringify({ bannerPym: true, avisoPymModal: true }) },
-      });
-      t.igual(c.api.__S.bannerPym, false, "la migración lo apagó pese al valor guardado");
-      t.igual(c.env.win.localStorage.getItem("vgl_v15_banner"), "1", "y dejó su marca para no repetirse");
-    });
+    // [v17.19.0 — decisión del médico, entrevista del 28-ago] Se retiraron las dos
+    // pruebas de esta sección ("el banner viene apagado de fábrica" y "la migración de
+    // v15 apaga el banner en equipos con true guardado"): `bannerPym`/`avisoPymModal` se
+    // confirmaron 100% muertas (ningún código activo las leía) y se retiraron de
+    // DEFAULTS junto con su migración de una sola vez (`vgl_v15_banner`), que ya había
+    // corrido hace docenas de versiones en toda instalación real. `pymPaquetesDelPaciente`
+    // y `pymCubiertoPorOrdenVigente` siguen vivos y conservan su cobertura arriba.
 
     // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró la prueba "tick: sin la
     // clave bannerPym tampoco se pinta el banner" — dependía de `_refrescarBannerPym`/

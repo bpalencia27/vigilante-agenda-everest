@@ -4,6 +4,20 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.20.0] — 2026-08-28 (Limpieza: cuatro ajustes que ya no hacían nada)
+
+### 🧹 Sin ningún cambio de comportamiento clínico
+Decisión del médico (entrevista de la noche del 28-ago): retirar cuatro ajustes internos
+confirmados 100 % muertos — `tolerancia`, `labsVencidos`, `avisoPymModal` y `bannerPym` —
+ninguno lo leía ya ningún código activo (el tiempo de gracia real, por ejemplo, siempre
+estuvo fijo en 6 minutos, sin importar lo que dijera el ajuste `tolerancia`). Se retiró
+también, junto con ellos, la migración de una sola vez que los apagaba en instalaciones
+antiguas (ya había corrido hace docenas de versiones en todo equipo real). Y se retiró la
+etiqueta "(en pruebas)" del interruptor de avisos de seguridad farmacológica, ahora que el
+bloque se pinta de verdad en el Panel del paciente y en Laboratorios.
+
+---
+
 ## [Versión 17.19.0] — 2026-08-28 (Silenciar 15 min ahora sí silencia todo)
 
 ### 🔇 "Silenciar 15 min" pasa a callar el toast y la notificación de Windows, no solo el tono

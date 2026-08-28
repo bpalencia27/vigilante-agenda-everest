@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.19.0
+// @version     17.20.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.19.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.20.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -6767,7 +6767,6 @@ _vglOfrecerDeshacer(btn);
   // =====================================================================
   const SETTINGS_KEY = "vgl_cfg";
   const DEFAULTS = {
-    tolerancia: 6.0,          // minutos de gracia antes de marcar inasistencia
     refresco: 5,              // segundos entre lecturas
     tema: "oscuro",           // oscuro | claro | auto (sigue a Windows)
     sonido: true,             // tonos por color
@@ -6784,22 +6783,7 @@ _vglOfrecerDeshacer(btn);
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
-    avisoPymModal: false,     // v15.0.0 — el aviso MODAL de PyM (el que bloquea hasta
-                              // reconocerlo). Apagado: su trabajo lo hace ahora el recuadro
-                              // dentro del modal de laboratorios más el chip del dock.
-    bannerPym: false,         // v15.0.0 — APAGADO POR DEFECTO. Encargo del médico del
-                              // 16-08-2026: "el script debe ser amigable y no molesto".
-                              // El banner era una franja fija arriba de la Historia Clínica
-                              // que empujaba el contenido de Everest durante TODA la consulta
-                              // y no se podía cerrar mientras algo siguiera pendiente.
-                              // LO REEMPLAZA: el recuadro clínico completo dentro del modal
-                              // (clasificación, qué falta, fecha de toma y de control), que
-                              // aparece en el momento en que sirve; y el chip discreto del
-                              // dock, que mantiene el recuento visible para que la alerta no
-                              // pueda desaparecer en silencio (D4).
-                              // En true vuelve el banner de v14 tal cual, sin tocar nada más.
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
-    labsVencidos: true,       // aviso ROJO de laboratorios RCV sin resultado en los últimos 180 días (v12.5.7)
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     tamanoLetra: "normal",    // v15.8.0 — tamaño de letra del asistente: normal | grande | muygrande (N5)
@@ -6984,16 +6968,12 @@ _vglOfrecerDeshacer(btn);
       delete S.popup;
       writeJSON(SETTINGS_KEY, S);
     }
-    // Migración v15.0 RETIRO DEL BANNER (una sola vez). Sin esto el cambio no llega
-    // a ningún equipo: `writeJSON(SETTINGS_KEY, S)` guarda el objeto ENTERO, así que
-    // los veinte consultorios ya tienen `bannerPym: true` en disco y ese valor
-    // guardado le gana al nuevo valor de fábrica. Es el mismo patrón que la
-    // migración de v7.3, y por la misma razón.
-    if (localStorage.getItem("vgl_v15_banner") !== "1") {
-      localStorage.setItem("vgl_v15_banner", "1");
-      S.bannerPym = false; S.avisoPymModal = false;
-      writeJSON(SETTINGS_KEY, S);
-    }
+    // v17.19.0 — RETIRADA la migración "v15.0 RETIRO DEL BANNER": bannerPym/avisoPymModal
+    // se confirmaron 100% muertas (ningún código activo las lee, ver auditoría del
+    // 28-ago) y se retiraron de DEFAULTS. Esta migración ya corrió hace docenas de
+    // versiones en toda instalación real (su propia marca vgl_v15_banner lo impedía
+    // repetirse) — quitarla no cambia nada para nadie; solo deja de escribir a dos
+    // claves que ya no existen como default.
     // Migración v14.2.0 ESTRENO (decisión del médico para el arranque con 3 consultorios).
     // Enciende, UNA sola vez, las funciones nuevas y la telemetría de mejora del servicio.
     // Los valores de FÁBRICA siguen en false (arranque conservador para instalaciones
@@ -24451,7 +24431,7 @@ _vglOfrecerDeshacer(btn);
         <!-- v15.5.0 — Barrido de Ajustes (decidido en entrevista): controles técnicos y de identidad manual retirados; los valores quedan en fábrica y la identidad se detecta sola. -->
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
-        <div class="vgl-fld"><label>Avisos de seguridad farmacológica <b>(en pruebas)</b><span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
         <div class="vgl-fld"><label>Aviso de exámenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón de ordenar de Everest, qué exámenes hacen falta para el próximo control. <b>Solo avisa: no toca ni escribe nada dentro de Conducta.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
