@@ -623,13 +623,14 @@ module.exports = {
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "sin caché: null");
       c.api.mtrCacheResumenGuardar("111", { programa: "HTA" });
       t.igual(c.api.mtrCacheResumenEdadMin("111"), 0, "recién guardada: 0 minutos");
-      // v17.6.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS, bajado de 20 a
-      // 10 min): pasado el nuevo corte, la edad también debe darse por vencida (null),
-      // no seguir informando una edad de una caché que ya nadie va a usar.
-      c.api.__envejecerCacheResumen(9 * 60000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), 9, "a los 9 min, con el TTL nuevo, informa 9 minutos de edad");
-      c.api.__envejecerCacheResumen(10 * 60000 + 1000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 10 min y 1 s, el TTL nuevo ya la da por vencida: null, no una edad enorme");
+      // v17.6.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS). v17.29.0 lo bajó
+      // otra vez, de 10 a 3 min (encargo del médico, decisión #23): pasado el nuevo
+      // corte, la edad también debe darse por vencida (null), no seguir informando una
+      // edad de una caché que ya nadie va a usar.
+      c.api.__envejecerCacheResumen(2 * 60000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), 2, "a los 2 min, con el TTL nuevo, informa 2 minutos de edad");
+      c.api.__envejecerCacheResumen(3 * 60000 + 1000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 3 min y 1 s, el TTL nuevo ya la da por vencida: null, no una edad enorme");
       c.api.mtrCacheResumenBorrar();
       t.igual(c.api.mtrCacheResumenLeer("111"), null, "borrada: no hay resumen");
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "ni edad");

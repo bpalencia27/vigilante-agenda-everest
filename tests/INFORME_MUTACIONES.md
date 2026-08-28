@@ -6,6 +6,28 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.29.0 — 28-ago-2026 (arrastre por gracia medido, reloj de 3 min, meta de triglicéridos, color del RAC vencido)
+
+Cinco cambios de comportamiento, todos restaurados y verificados con `diff` contra copia
+intacta tras cada mutación. Banco en verde: **2.528/2.528**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `MTR_GRACIA_COSECHA_DIAS = 0` (sin gracia) | *ARRASTRE POR GRACIA (1.16): la creatinina que se pasó del 33%...* (suite_46) |
+| 2 | `MTR_GRACIA_COSECHA_DIAS = 30` (gracia excesiva) | *ARRASTRE POR GRACIA (1.16): un diferido que se pasa por MÁS de 14 días...* (suite_46) |
+| 3 | `MTR_CACHE_TTL_MS` de vuelta a 10 min | *v17.29.0 — el TTL del resumen bajó de 10 a 3 min...* (suite_50) y *caché del resumen: edad en minutos...* (suite_57) — las dos cayeron, confirmando que el mismo TTL protege dos consumidores distintos |
+| 4 | `MTR_META_TRIGLICERIDOS` de vuelta a 150 | *v17.29.0 — meta de triglicéridos sube a 400...* (suite_67) |
+| 5 | Quitar `(x.subestado === "vencido" \|\| x.vencidoBase)` → volver a `x.subestado === "vencido"` en `mtrPanelExamenesHtml` | *v17.29.0 — un RAC≥30 vencido se pinta en rojo...* (suite_67) |
+| 6 | Quitar `vencidoBase: !!a.vencidoBase` del `fila()` de `mtrTableroClinico` | misma prueba, otra aserción: "mtrTableroClinico expone que de verdad está vencida" — confirma que el dato y su consumo son dos puntos de fallo independientes, cada uno con su propia mutación |
+
+Nota sobre el hallazgo del RAC: no hay una función `mtrAcortarPorFueraDeMeta`/similar
+involucrada — es un defecto de VISUALIZACIÓN puro (dos renderizadores HTML, el widget
+flotante `mtrWidgetExamenesDatos` y la pestaña del Panel `mtrPanelExamenesHtml`, ambos
+consumían `subestado` sin saber que un RAC vencido cambia de subestado al reclasificarse
+por albuminuria). `mtrEstadoAnalito`/`mtrPlanParaclinicos` siempre calcularon bien
+—`vencidoBase` ya existía como la verdad de terreno— el hueco era que ese dato no viajaba
+hasta las dos pantallas.
+
 ## v17.28.0 — 28-ago-2026 (Enfermedad Actual, regla del 50%, retiro de Medicamentos actuales y del toast de laboratorio)
 
 Cuatro cambios de comportamiento, todos restaurados y verificados con `diff` contra copia

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.28.0
+// @version     17.29.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.28.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.29.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5494,7 +5494,16 @@
           : '<div class="vgl-cw-ok-msg">Al día con el programa de ' + escapeHtml(String(d.programa.rotulo || d.programa.rector)) + '.</div>',
       };
     }
-    const html = ordenar.map((x) => '<div class="vgl-cw-fila ' + (x.subestado === "vencido" ? "vgl-cw-venc" : "vgl-cw-pedir") + '">'
+    // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido se veía en ámbar ("por
+    // pedir"), no en rojo ("vencido"), mientras la LDL vencida del mismo paciente sí
+    // salía roja — pese a que la RAC estaba igual de vencida (o más: albuminuria es
+    // "vigilancia estrecha", nunca menos urgente). Causa: un RAC≥30 vencido se
+    // reclasifica a estado "R"/subestado "albuminuria" (mtrEstadoAnalito, ver
+    // vencidoBase) para darle su propia señal — pero `subestado === "vencido"` nunca
+    // contempló ese caso, así que caía en el color por defecto. `vencidoBase` es la
+    // verdad de terreno de que YA venció (se usa así en todo el resto del motor); se
+    // usa aquí también, sin inventar un color nuevo para "vigilancia estrecha".
+    const html = ordenar.map((x) => '<div class="vgl-cw-fila ' + ((x.subestado === "vencido" || x.vencidoBase) ? "vgl-cw-venc" : "vgl-cw-pedir") + '">'
       + '<span class="vgl-cw-nom">' + escapeHtml(x.nombre) + '</span>'
       + '<span class="vgl-cw-que">' + escapeHtml(x.quePasa) + '</span>'
       + '</div>').join("");
@@ -19376,8 +19385,13 @@ _vglOfrecerDeshacer(btn);
       + '<span class="vgl-tab-que">' + escapeHtml(x.quePasa) + '</span>'
       + '<span class="vgl-tab-fecha">' + (x.vence ? escapeHtml(mtrFechaLegible(x.vence)) : "—") + ((typeof x.dias === "number" && x.dias >= 0) ? ' <i>(' + x.dias + ' d)</i>' : "") + '</span>'
       + '</div>';
+    // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido (estado "R"/subestado
+    // "albuminuria") se veía en ámbar, no en rojo, mientras la LDL vencida del mismo
+    // paciente sí salía roja — pese a estar igual de vencida (o más urgente: la
+    // albuminuria es "vigilancia estrecha"). `vencidoBase` es la verdad de terreno de
+    // que YA venció; ver mtrTableroClinico.
     const listaOrdenar = d.ordenar.length
-      ? d.ordenar.map((x) => filaHtml(x, x.subestado === "vencido" ? "vgl-tab-venc" : "vgl-tab-pedir")).join("")
+      ? d.ordenar.map((x) => filaHtml(x, (x.subestado === "vencido" || x.vencidoBase) ? "vgl-tab-venc" : "vgl-tab-pedir")).join("")
       // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #12 (gravedad alta, riesgo clínico).
       // Aquí se afirmaba «el paciente está al día con su programa» CADA VEZ que la lista de
       // ordenar quedaba vacía — incluido el caso en que no hay ningún programa identificado
@@ -27480,6 +27494,13 @@ _vglOfrecerDeshacer(btn);
       dias: (typeof a.diasParaVencer === "number") ? a.diasParaVencer : null,
       vigenciaDias: a.vigenciaDias == null ? null : a.vigenciaDias,
       estado: a.estado, subestado: a.subestado || "", quePasa: quePasa,
+      // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido se veía en ámbar, no en
+      // rojo, porque se reclasifica a estado "R"/subestado "albuminuria" y ningún
+      // consumidor de esta fila podía distinguirlo de un examen que de verdad todavía
+      // no vence — `vencidoBase` (la verdad de terreno) no viajaba en el objeto. Se
+      // agrega para que cualquier pantalla que pinte "vencido = rojo" pueda hacerlo
+      // también para la RAC relabeleada, sin inventar un color nuevo para ella.
+      vencidoBase: !!a.vencidoBase,
     });
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
@@ -30811,7 +30832,15 @@ _vglOfrecerDeshacer(btn);
     "moderado": { ldl: 100, cnoHdl: 130, reduccion: null },
     "bajo": { ldl: 116, cnoHdl: 150, reduccion: null },
   };
-  const MTR_META_TRIGLICERIDOS = 150;
+  // v17.29.0 — ENCARGO DEL MÉDICO (28-ago): "vamos a repetir los triglicéridos mayor a
+  // 400, ya no en 200" — la meta base de 150 (con el margen del 15-30% que ya usa el
+  // resto del motor) hacía que "grave" cayera cerca de 195-200. Sube a 400: con el
+  // mismo +30% de siempre, el rojo de tendencias (_mtrTendUmbralGrave) queda cerca de
+  // 520, alineado con el umbral clínico de riesgo de pancreatitis (TG≥500) que ya
+  // menciona el prompt de la IA. Ya NO dispara por sí solo la regla del 50% de
+  // vigencia (v17.28.0, mismo día) — esto solo afecta dónde se pinta "fuera de meta"/
+  // "grave" en la tendencia y en mtrFueraDeMeta si algún día vuelve a usarse.
+  const MTR_META_TRIGLICERIDOS = 400;
 
   function mtrEsSexoFemenino(sexo) {
     const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
@@ -32795,6 +32824,37 @@ _vglOfrecerDeshacer(btn);
         cosechados.push(diferidos[i]);
         diferidos.splice(i, 1);
       }
+    }
+
+    // ---- 1.16 — ARRASTRE POR GRACIA: un diferido que casi entró, entra ----
+    // ENCARGO DEL MÉDICO (28-ago): reporte en vivo con creatinina (vence a 83 días,
+    // margen 69) y glicemia (vence a 68 días, margen 54, sí cosechada) de la MISMA
+    // visita — la creatinina se pasó de su propio corte del 33% (59,4 d de una
+    // vigencia de 180) por apenas 9,6 días, y aun así el paciente habría tenido que
+    // volver por ella sola. Medido con `tools/medir_cercania.js` sobre 10.000
+    // pacientes sintéticos ANTES de fijar el número: a 14 días de gracia, 18,6% de
+    // los pacientes con algún diferido se ahorran un viaje completo, con un costo
+    // promedio de ~62,5 días de vigencia gastados antes de tiempo en lo arrastrado —
+    // el médico vio la tabla completa (7/14/21/30 días) y eligió 14, el mismo piso
+    // que ya usa el motor para Estado A (MTR_PISO_ESTADO_A), no un número nuevo.
+    //
+    // MTR_GRACIA_COSECHA_DIAS es DÍAS DE GRACIA SOBRE EL CORTE, no sobre la vigencia
+    // completa: un diferido entra si (margenDias − 33% de su vigencia) <= 14, así que
+    // un examen de vigencia larga y un examen de vigencia corta reciben el mismo trato
+    // relativo — nunca compara la fecha de un examen contra la de otro directamente
+    // (eso sería una "ventana de agrupación" que este proyecto no tiene y que ya se le
+    // explicó al médico que no existe). Nunca mueve `ftl` ni retrasa nada: solo
+    // adelanta la toma de lo que ya estaba a punto de entrar por su cuenta.
+    const MTR_GRACIA_COSECHA_DIAS = 14;
+    for (let i = diferidos.length - 1; i >= 0; i--) {
+      const d = diferidos[i];
+      if (typeof d.margenDias !== "number" || typeof d.vigenciaDias !== "number") continue;
+      const exceso = d.margenDias - d.vigenciaDias * MTR_COSECHA_MARGEN_PROP;
+      if (exceso > MTR_GRACIA_COSECHA_DIAS) continue;
+      // Se conserva margenDias en el objeto (ya lo trae, de la cosecha normal) para que
+      // quien lea `cosechados` pueda seguir distinguiendo esto de un faltante/vencido.
+      cosechados.push(d);
+      diferidos.splice(i, 1);
     }
 
     // ---- QUÉ SE ORDENA ----
@@ -37958,7 +38018,12 @@ _vglOfrecerDeshacer(btn);
   // resuelven un problema distinto: VGL_PRECON_TTL_MS (6 h, prefetch de TODA la
   // agenda del día, no de un paciente que se está mirando ahora) y
   // LABS_PREFETCH_TTL_MS (ya estaba en 10 min).
-  const MTR_CACHE_TTL_MS = 10 * 60000;
+  // v17.29.0 — ENCARGO DEL MÉDICO (28-ago, decisión #23 de la entrevista S+):
+  // «pasa a un reloj más corto» — 10 min podía dejar que Agendamiento/Ordenamiento
+  // mostraran una fecha de control calculada con datos que ya cambiaron durante una
+  // consulta activa. Se le explicó el mecanismo y eligió 3 minutos: se recalcula
+  // bastante más seguido sin disparar una llamada de red en cada clic.
+  const MTR_CACHE_TTL_MS = 3 * 60000;
 
   function mtrCacheResumenGuardar(docId, resumen) {
     if (!docId || !resumen) return false;

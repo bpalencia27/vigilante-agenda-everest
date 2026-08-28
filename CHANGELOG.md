@@ -4,6 +4,44 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.29.0] — 2026-08-28 (Menos viajes al laboratorio: arrastre por gracia, medido antes de construir)
+
+### 🚗 Un examen que se pasa por poco de su corte ya no obliga a un viaje aparte
+Reporte en vivo: creatinina (margen 69 días de una vigencia de 180) y glicemia (margen
+54 días, ya se cosechaba) en la misma visita — 15 días de diferencia, y aun así la
+creatinina quedaba para otro viaje. Investigado: no es un bug del ANR ni de una "ventana
+de agrupación" — cada examen se evalúa solo contra el 33% de su propia vigencia. El
+médico pidió una propuesta y aprobó medir antes de tocar código (`tools/medir_cercania.js`,
+10.000 pacientes sintéticos): con 14 días de gracia sobre ese corte, 18,6% de los
+pacientes con algún examen diferido se ahorran un viaje completo. El médico vio la tabla
+completa (7/14/21/30 días) y eligió 14 — el mismo piso que ya usa el motor para Estado A.
+La regla nunca compara la fecha de un examen contra la de otro ni mueve la fecha de la
+toma: solo adelanta un examen que ya estaba a punto de entrar por su cuenta.
+
+### ⏱️ El resumen clínico compartido se refresca cada 3 minutos, no cada 10
+Agendamiento y Ordenamiento reutilizan el resumen que calculó Laboratorios (labs, función
+renal, riesgo, fecha de control) para no repetir la consulta por red. Esa copia se
+consideraba válida por 10 minutos — suficiente para que, en una consulta activa, un dato
+que acababa de cambiar no se reflejara a tiempo. Baja a 3 minutos.
+
+### 🩸 La meta de triglicéridos sube a 400 mg/dL
+Encargo del médico: "vamos a repetir los triglicéridos mayor a 400, ya no en 200". La
+meta base pasa de 150 a 400 — con el mismo margen del 30% que ya usa el resto del motor
+para marcar "grave" en las tendencias, el corte queda cerca de 520, alineado con el
+umbral clínico de riesgo de pancreatitis (TG≥500) que ya menciona el prompt de la IA.
+
+### 🐛 Un RAC vencido ya no se veía en ámbar mientras la LDL vencida sí se veía en rojo
+Reporte en vivo, con pantallazo: en el mismo paciente, la LDL vencida salía roja y el RAC
+≥30 (también vencido, y con albuminuria — "vigilancia estrecha") salía en el color de
+"por pedir", como si no fuera urgente. Causa: un RAC≥30 vencido se reclasifica
+internamente a un estado propio para señalar la albuminuria, y el chequeo de color de dos
+pantallas distintas (el widget flotante de Conducta y la pestaña Exámenes del Panel) solo
+reconocía el estado "vencido" normal, nunca ese caso. Corregido en las dos: un RAC
+vencido con albuminuria se ve igual de rojo que cualquier otro examen vencido — nunca
+menos urgente.
+
+---
+
 ## [Versión 17.28.0] — 2026-08-28 (Enfermedad Actual sin examen físico, la regla del 50% se ajusta, y limpieza de Panel/notificaciones)
 
 ### 🩺 Enfermedad Actual deja de mezclar anamnesis con examen físico

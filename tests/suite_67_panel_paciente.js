@@ -217,6 +217,39 @@ module.exports = {
       t.cierto(api.mtrPanelExamenesHtml(null).indexOf("Sin datos suficientes") >= 0, "sin datos, se dice");
     });
 
+    // v17.29.0 — REPORTE EN VIVO (28-ago): pantallazo real donde la LDL vencida salía
+    // roja ("vgl-tab-venc") y una RAC≥30 TAMBIÉN vencida salía en el color de "por
+    // pedir" ("vgl-tab-pedir") — pese a estar igual de vencida, o más urgente
+    // (albuminuria = vigilancia estrecha). Causa: la RAC vencida se reclasifica a
+    // estado "R"/subestado "albuminuria", y el chequeo de color solo miraba
+    // subestado==="vencido", que nunca es cierto para ella.
+    t.caso("v17.29.0 — un RAC≥30 vencido se pinta en rojo (vencido), igual que cualquier otro examen vencido", () => {
+      // mtrTableroClinico lee `resumen.plan` YA CALCULADO (no invoca mtrPlanParaclinicos
+      // por su cuenta) — se construye con la API real, como lo haría el resto del script,
+      // en vez de fabricar un plan a mano que podría no reflejar la forma real de los datos.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-28", programa: "HTA", esDm2: true, edad: 66, rac: 45,
+        categoriaRiesgo: "alto",
+        ultimos: {
+          RAC: { valor: 45, fecha: "2025-01-01" },            // vencido hace mucho, ≥30: albuminuria
+          COLESTEROL_LDL: { valor: 130, fecha: "2025-01-01" }, // vencido, para comparar
+        },
+      });
+      const resumen = { programa: "HTA", factores: { edad: 66, sexo: "F" }, erc: {}, riesgo: { categoria: "alto" }, plan: plan };
+      const d = api.mtrTableroClinico(resumen);
+      const rac = d.ordenar.find((x) => x.clave === "RAC");
+      t.cierto(!!rac, "la RAC aparece en qué ordenar");
+      t.cierto(rac.vencidoBase, "y mtrTableroClinico expone que de verdad está vencida (no solo en vigilancia estrecha)");
+      const html = api.mtrPanelExamenesHtml(d);
+      const iRac = html.indexOf("Relación albúmina/creatinina");
+      const iLdl = html.indexOf("Colesterol LDL");
+      t.cierto(iRac >= 0 && iLdl >= 0, "las dos filas están en el HTML");
+      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iRac - 60), iRac + 20)),
+        "la fila de la RAC lleva la clase de vencido (roja), no la de 'por pedir' (ámbar)");
+      t.cierto(/vgl-tab-venc/.test(html.slice(Math.max(0, iLdl - 60), iLdl + 20)),
+        "la LDL, vencida por la vía normal, sigue roja como siempre (control del escenario)");
+    });
+
     // v17.0.3 — REPORTE DE CAMPO (pantallazo): "MIRA QUE SALE SIN EXAMENES VIGENTES
     // REGISTRADOS POR LO QUE ESO ME CONFUNDE" — el médico vio "Sin exámenes vigentes
     // registrados" justo debajo de una lista de 8 exámenes ya listados en "Qué ordenar",
@@ -494,8 +527,17 @@ module.exports = {
       ], "FOSFORO").gravedad, null, "un rango degenerado (0–0) no es un rango");
     });
 
+    // v17.29.0 — ENCARGO DEL MÉDICO (28-ago): "vamos a repetir los triglicéridos mayor a
+    // 400, ya no en 200" — la meta base sube de 150 a 400; con el mismo +30% que ya usa
+    // el resto del motor, el corte "grave" queda en 520 (150*1,3=195≈200 antes).
+    t.caso("v17.29.0 — meta de triglicéridos sube a 400 (antes 150): el corte grave queda cerca de 520, no de 200", () => {
+      const u = api._mtrTendUmbralGrave("TRIGLICERIDOS", {});
+      t.igual(u.meta, 400, "la meta base es 400, no 150");
+      t.igual(u.tope, 520, "el corte grave (+30%) es 520, no ~195");
+    });
+
     t.caso("_mtrTendUmbralGrave: solo conoce los cinco analitos con umbral propio", () => {
-      t.cierto(!!api._mtrTendUmbralGrave("TRIGLICERIDOS", {}), "triglicéridos: meta 150 fija");
+      t.cierto(!!api._mtrTendUmbralGrave("TRIGLICERIDOS", {}), "triglicéridos: meta fija (v17.29.0: 400)");
       t.cierto(!!api._mtrTendUmbralGrave("HBA1C", {}), "HbA1c: 7,0 por defecto");
       t.cierto(!!api._mtrTendUmbralGrave("RAC", {}), "RAC: corte 300");
       t.cierto(!!api._mtrTendUmbralGrave("COLESTEROL_LDL", { categoriaRiesgo: "alto" }), "LDL: según riesgo");

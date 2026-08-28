@@ -515,6 +515,46 @@ module.exports = {
       t.cierto(plan.ordenar.some((a) => a.clave === "COLESTEROL_TOTAL"), "y el colesterol total también");
     });
 
+    // =====================================================================
+    // ARRASTRE POR GRACIA (1.16) — ENCARGO DEL MÉDICO (28-ago): reporte en vivo con
+    // creatinina (margen 69 d de una vigencia de 180) y glicemia (margen 54 d, SÍ
+    // cosechada) en la misma visita — 15 días de diferencia entre ellas, y aun así el
+    // paciente habría vuelto una segunda vez solo por la creatinina. Medido con
+    // tools/medir_cercania.js sobre 10.000 pacientes sintéticos ANTES de fijar el
+    // número: el médico vio la tabla completa (7/14/21/30 días de gracia) y eligió 14
+    // — el mismo piso que ya usa el motor para Estado A, no un número nuevo. La regla:
+    // un diferido entra si se pasó de SU PROPIO corte del 33% por 14 días o menos —
+    // nunca compara la fecha de un examen contra la de otro.
+    t.caso("ARRASTRE POR GRACIA (1.16): la creatinina que se pasó del 33% por 9,6 días entra en la misma visita que la glicemia", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "HTA", esDm2: false, edad: 60,
+        ultimos: {
+          GLUCOSA: { fecha: "2026-04-26", valor: 95 },      // vence 2026-10-23: margen 54 d (cosecha normal)
+          CREATININA: { fecha: "2026-05-11", valor: 1.0 },  // vence 2026-11-07: margen 69 d (exceso 9,6 d)
+        },
+      });
+      t.igual(plan.ftl, "2026-08-29", "FTL en el piso de 14 días, retrocedido un día hábil (30-ago cae domingo)");
+      t.cierto(plan.cosechados.some((a) => a.clave === "GLUCOSA"), "la glicemia se cosecha por su propio 33% (control del escenario)");
+      t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"),
+        "y la creatinina AHORA TAMBIÉN — se pasó de su corte por solo 9,6 días, dentro de la gracia de 14");
+      t.falso(plan.diferidos.some((a) => a.clave === "CREATININA"), "ya no queda diferida");
+      t.cierto(plan.ordenar.some((a) => a.clave === "CREATININA"), "y se ordena en esta misma visita: un solo viaje, no dos");
+    });
+
+    t.caso("ARRASTRE POR GRACIA (1.16): un diferido que se pasa por MÁS de 14 días sigue esperando a su propio viaje", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "HTA", esDm2: false, edad: 60,
+        ultimos: {
+          GLUCOSA: { fecha: "2026-04-26", valor: 95 },      // vence 2026-10-23: margen 54 d (cosecha normal)
+          CREATININA: { fecha: "2026-05-18", valor: 1.0 },  // vence 2026-11-14: margen 76 d (exceso 16,6 d)
+        },
+      });
+      t.igual(plan.ftl, "2026-08-29", "mismo FTL que el caso anterior (control del escenario)");
+      t.cierto(plan.diferidos.some((a) => a.clave === "CREATININA"),
+        "16,6 días de exceso es MÁS que los 14 de gracia: sigue diferida, no se arrastra a la fuerza");
+      t.falso(plan.ordenar.some((a) => a.clave === "CREATININA"), "y no se ordena en esta visita");
+    });
+
     t.caso("los exámenes bloqueados por estadio no entran en la orden", () => {
       const plan = api.mtrPlanParaclinicos(Object.assign({}, ctxErc, {
         estadioAdministrativo: "G1", ultimos: {},
