@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.26.0
+// @version     17.27.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.26.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.27.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -33103,6 +33103,12 @@ _vglOfrecerDeshacer(btn);
         cinturaCm: (typeof f.cinturaCm === "number") ? f.cinturaCm : null,
       },
       metaLdl: (r.meta && r.meta.metas) ? r.meta.metas.ldl : null,
+      // v17.26.0 — mismo criterio que metaLdl (el número real viaja calculado, para que la
+      // IA solo lo cite): faltaba el porcentaje de reducción de LDL exigido desde el basal
+      // (riesgo alto/muy alto), y el prompt de Análisis y plan lo tenía cableado como "50%"
+      // fijo en la instrucción en vez de leerlo de aquí. Ver mtrJsonV68DesdeResumen
+      // (ldl_reduction_target) para el mismo dato en el canal JSON.
+      metaReduccionLdl: (r.meta && r.meta.metas) ? r.meta.metas.reduccion : null,
       // v17.6.64 — auditoría 25-ago (sección 4): cNoHDL (colesterol no-HDL = CT − HDL) NO
       // se calculaba en ningún lado, pese a que el prompt de Análisis y Plan (línea ~30783)
       // le pide a la IA "menciona cNoHDL junto al LDL" — el modelo tenía que INVENTARLO o
@@ -33201,7 +33207,7 @@ _vglOfrecerDeshacer(btn);
     if (rn.tfgCkdepi != null) L.push("Función renal: TFG (CKD-EPI 2021) " + rn.tfgCkdepi + " mL/min/1.73m2" + (rn.estadioClinico ? " (estadio " + rn.estadioClinico + ")" : "") + (rn.crcl != null ? "; depuración Cockcroft-Gault " + rn.crcl + " mL/min" : "") + (rn.remitirNefrologia ? "; criterio de remisión a nefrología" : "") + (rn.sospechaIra ? "; sospecha de deterioro agudo" : ""));
     const rg = h.riesgo || {};
     if (rg.categoria) L.push("Riesgo cardiovascular: " + rg.categoria + (rg.framinghamPuntos != null ? " (Framingham oficial " + rg.framinghamPuntos + " puntos)" : ""));
-    if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL");
+    if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL" + (h.metaReduccionLdl != null ? " y reducción ≥" + h.metaReduccionLdl + " % desde el basal" : ""));
     if (h.cNoHDL != null) L.push("Colesterol no-HDL: " + h.cNoHDL + " mg/dL" + (h.metaCnoHdl != null ? " (meta: <" + h.metaCnoHdl + " mg/dL)" : ""));
     const an = h.antropometria || {};
     // v17.7.3 — el examen físico completo: peso y cintura además de PA e IMC. Cada dato
@@ -33608,7 +33614,13 @@ _vglOfrecerDeshacer(btn);
     "# ESTRUCTURA DE SALIDA (genera la nota completa de una vez, exactamente en este orden, en texto plano y mayúsculas)",
     "#PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]",
     "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== párrafo con edad, sexo, programa de riesgo cardiovascular, motivo de consulta y anamnesis según lo anotado; integra la evolución vs el control previo NOMBRANDO el cambio concreto en los campos que sí traiga el JSON o lo anotado (función renal, RAC, perfil lipídico, glicemia/HbA1c si hay diabetes, ajustes farmacológicos) — nunca 'evolución favorable' o 'sin cambios significativos' sin decir en qué; menciona si niega síntomas de alarma, adherencia aparente y estilo de vida si se dispone.",
-    "===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS; :: CLASIFICACIÓN DE RIESGO CARDIOVASCULAR (cv_risk); :: JUSTIFICACIÓN CLÍNICA (criterio del paso, edad, estadio clínico, RAC alterado, eventos previos); :: META TERAPÉUTICA DE LDL (menor a ldl_target, y reducción ≥50% del basal si riesgo alto/muy alto); :: FOCO CLÍNICO PRIORITARIO (según priority_focus).",
+    // v17.26.0 — "reducción ≥50% del basal si riesgo alto/muy alto" era un número FIJO
+    // escrito en la instrucción, no derivado de ldl_reduction_target — el mismo tipo de
+    // defecto que ldl_target/cno_hdl_target ya evitan (el JSON es la única fuente numérica,
+    // el prompt nunca declara un número que el modelo deba recordar de memoria). Ahora cita
+    // el campo, y calla la mitad de la reducción cuando ldl_reduction_target es null (riesgo
+    // moderado/bajo, donde la norma no exige un porcentaje de reducción).
+    "===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS; :: CLASIFICACIÓN DE RIESGO CARDIOVASCULAR (cv_risk); :: JUSTIFICACIÓN CLÍNICA (criterio del paso, edad, estadio clínico, RAC alterado, eventos previos); :: META TERAPÉUTICA DE LDL (menor a ldl_target, y si ldl_reduction_target no es null, reducción igual o mayor a ese porcentaje desde el basal — si es null, no menciones ningún porcentaje de reducción); :: FOCO CLÍNICO PRIORITARIO (según priority_focus).",
     // v17.6.89 — sin esta regla el campo `status` nace muerto: podría emitirse PENDIENTE y el
     // modelo redactaría igual, como si el paciente estuviera estratificado. Es el mismo
     // patrón de "la función existe, nadie la cablea" que ya dejó inertes a otros campos.
@@ -34080,7 +34092,7 @@ _vglOfrecerDeshacer(btn);
       const an = h.antropometria || {};
       sumar([an.imc, an.paSistolica, an.paDiastolica]);
       const rn = h.renal || {};
-      sumar([rn.tfgCkdepi, rn.crcl, rn.framinghamPuntos, h.metaLdl]);
+      sumar([rn.tfgCkdepi, rn.crcl, rn.framinghamPuntos, h.metaLdl, h.metaReduccionLdl]);
       if (Array.isArray(h.labs)) for (const x of h.labs) sumar(x && x.valor);
       if (Array.isArray(h.medicamentos)) for (const m of h.medicamentos) sumar(m);
       // 2. Cifras de MEDIDA en el borrador: unidad de medida pegada al número, fracción
@@ -34798,6 +34810,17 @@ _vglOfrecerDeshacer(btn);
       // JSON es lo que la IA trata como fuente de verdad.
       cv_risk: riesgo.categoria || null,
       ldl_target: meta.ldl != null ? meta.ldl : null,
+      // v17.26.0 — REPORTE EN VIVO (28-ago, paciente real): el prompt le ORDENABA al modelo
+      // escribir "reducción ≥50% del basal si riesgo alto/muy alto" como regla fija de
+      // redacción (ver la instrucción de la sección DIAGNÓSTICOS Y PERFIL DE RIESGO, más
+      // abajo) — un número que el motor SÍ calcula (mtrMetasLipidicas.reduccion, la misma
+      // tabla que da ldl_target) pero que nunca viajaba como dato: el modelo lo citaba de
+      // memoria del prompt, no del JSON. Mismo principio que ldl_target/cno_hdl_target: el
+      // número real viaja calculado para que la IA solo lo cite, nunca lo recuerde de la
+      // instrucción. Consecuencia práctica del defecto viejo: mtrVerificarCifrasIA no
+      // conocía ese "50" por ningún canal, así que lo marcaba en rojo como cifra sin
+      // respaldo aunque el modelo lo hubiera escrito bien.
+      ldl_reduction_target: meta.reduccion != null ? meta.reduccion : null,
       // v17.6.64 (sección 4) — mismo criterio que ldl_target: el número real y su meta
       // viajan calculados, para que la IA solo los cite (nunca los calcule/invente).
       cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,

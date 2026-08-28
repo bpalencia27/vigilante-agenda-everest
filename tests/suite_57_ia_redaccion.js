@@ -1090,6 +1090,38 @@ module.exports = {
       t.igual(j.nota_clinica.justificacion_riesgo_meta, "", "la prosa la escribe el LLM, no el motor");
     });
 
+    t.caso("v17.26.0 — ldl_reduction_target viaja calculado (bug real: el prompt tenía '≥50%' fijo, la IA lo citaba y el verificador de cifras lo marcaba en rojo)", () => {
+      // Reporte en vivo (28-ago, paciente real): "META TERAPÉUTICA DE LDL: MENOR A 70
+      // MG/DL Y REDUCCIÓN MAYOR O IGUAL AL 50% DEL BASAL" salió con el 50 marcado como
+      // cifra sin respaldo, porque ese 50 vivía SOLO en la instrucción del prompt, nunca
+      // en el JSON que la IA recibe como fuente de verdad. Mismo criterio que ldl_target.
+      const resumenAlto = {
+        _hoyIso: "2026-08-23", programa: "HTA",
+        erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70, reduccion: 50 } }, foco: "renal",
+        plan: { faltantes: [], vencidos: [], ordenar: [] },
+      };
+      const jAlto = api.mtrJsonV68DesdeResumen(resumenAlto, {});
+      t.igual(jAlto.ldl_reduction_target, 50, "riesgo alto: viaja el 50% real, no un texto fijo");
+
+      // Riesgo moderado/bajo: mtrMetasLipidicas no exige reducción (reduccion: null en la
+      // tabla) — CERO INFERENCIA, nunca se inventa un porcentaje que la norma no exige.
+      const resumenModerado = Object.assign({}, resumenAlto, {
+        riesgo: { categoria: "moderado" }, meta: { metas: { ldl: 100, reduccion: null } },
+      });
+      const jModerado = api.mtrJsonV68DesdeResumen(resumenModerado, {});
+      t.igual(jModerado.ldl_reduction_target, null, "riesgo moderado: null, nunca un 50% que no aplica");
+
+      // Y el mismo número, ahora por el canal de la hoja de hechos (mtrHojaDesdeResumen /
+      // mtrHojaDeHechosTexto), que es lo que mtrVerificarCifrasIA escanea para saber qué
+      // cifras son legítimas: el "50" debe quedar reconocido sin declarar extraConocido.
+      const hoja = { metaLdl: 70, metaReduccionLdl: 50 };
+      const texto = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/reducci.n .?50 ?%/i.test(texto), "la hoja de hechos en texto plano también dice el porcentaje");
+      const marcadas = api.mtrVerificarCifrasIA("META TERAPÉUTICA DE LDL: MENOR A 70 MG/DL Y REDUCCIÓN MAYOR O IGUAL AL 50% DEL BASAL.", hoja);
+      t.igual(marcadas.length, 0, "el 50% ya no se marca como cifra sin respaldo: viaja grounded en la hoja");
+    });
+
     // [auditoría 25-ago, hallazgo 1.14] order_list armaba faltantes+vencidos crudos, sin
     // pasar por plan.ordenar — que SÍ incluye lo cosechado (un examen vigente que se
     // adelanta a esta misma toma porque le queda poca vigencia) y los pasajeros en A. Un

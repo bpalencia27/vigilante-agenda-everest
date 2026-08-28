@@ -6,6 +6,22 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.27.0 — 28-ago-2026 (la IA cita ldl_reduction_target en vez de memorizar "50%")
+
+Reporte en vivo, mismo patrón que ldl_target/cno_hdl_target (v17.6.64): un número que el
+motor calcula (`mtrEvaluarMetaLdl` → `metas.reduccion`) vivía SOLO como regla fija en el
+texto del prompt ("reducción ≥50% del basal si riesgo alto/muy alto"), así que el
+verificador de cifras (`mtrVerificarCifrasIA`) lo marcaba como inventado aunque el modelo
+lo hubiera citado bien. Dos puntos de origen se corrigen (el JSON del motor y la hoja de
+hechos en texto plano), cada uno con su propia mutación.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `ldl_reduction_target: null` fijo en `mtrJsonV68DesdeResumen` (ignora `meta.reduccion`) | *v17.26.0 — ldl_reduction_target viaja calculado...* (suite_57): "riesgo alto: viaja el 50% real, no un texto fijo" |
+| 2 | `metaReduccionLdl: null` fijo en `mtrHojaDeHechos` (ignora `r.meta.metas.reduccion`) | *la lista blanca sí conserva lo CLÍNICO* (suite_56): "meta de reducción de LDL desde el basal" — la prueba del JSON (#1) NO cae con esta mutación, confirmando que son dos canales independientes que necesitaban su propia mutación cada uno |
+
+Restauradas y verificadas con `diff` contra copia intacta. Banco en verde: **2.525/2.525**.
+
 ## v17.26.0 — 28-ago-2026 (Laboratorios: migración de la seguridad farmacológica y limpieza de redacción)
 
 Cinco cambios de comportamiento, cinco mutaciones — todas restauradas y verificadas

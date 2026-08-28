@@ -4,6 +4,24 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.27.0] — 2026-08-28 (La IA ya no memoriza el "50% de reducción de LDL" — lo cita del motor)
+
+### 🐛 Corrección en vivo: la meta de reducción de LDL se marcaba como cifra inventada
+El médico probó "Análisis y plan" contra un paciente real y la caja roja de "cifras sin
+respaldo" marcó el "50" de "REDUCCIÓN MAYOR O IGUAL AL 50% DEL BASAL" — pese a que el
+modelo lo escribió bien. Causa real: ese porcentaje SÍ es un valor que el motor calcula
+(la misma tabla de metas que da la meta de LDL <70 mg/dL), pero el prompt lo tenía escrito
+como una regla fija ("...si riesgo alto/muy alto") en vez de pasarlo como dato — el modelo
+lo citaba de memoria de la instrucción, no de ningún campo del JSON, así que el verificador
+de cifras nunca lo reconoció como legítimo. Mismo principio que ya protegía la meta de LDL
+y el cNoHDL ("el número real viaja calculado para que la IA solo lo cite, nunca lo
+recuerde"): se agrega `ldl_reduction_target` al JSON del motor y a la hoja de hechos en
+texto plano, y el prompt pasa a citar el campo en vez de declarar un número fijo. Cuando el
+riesgo es moderado/bajo (la norma no exige reducción), el campo queda vacío y el prompt
+calla ese porcentaje — nunca inventa uno que no aplica.
+
+---
+
 ## [Versión 17.26.0] — 2026-08-28 (Laboratorios: la seguridad farmacológica se muda a Conducta, y su redacción se limpia)
 
 ### 🐛 Corrección en vivo: códigos crudos en los avisos de seguridad farmacológica
