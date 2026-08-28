@@ -92,6 +92,15 @@ const WIDGET_CASOS = [
   // decida, no el orden de la hoja.
   { html: '<div id="vgl-ordenar-modal"><div class="vgl-rcv-aviso vgl-rcv-aviso-alto" data-w="15">⚠ Falla terapéutica</div></div>', sel: '[data-w="15"]', token: "--c-ambar", que: "RCV: aviso-alto (modificador compuesto) gana sobre aviso base" },
   { html: '<div id="vgl-labs-modal"><ul class="vgl-rcv-lista vgl-rcv-lista-orden"><li data-w="16">Creatinina</li></ul></div>', sel: '[data-w="16"]', token: "--fg", que: "RCV: lista-orden (modificador compuesto) gana sobre lista base" },
+  // v17.24.0 — widget de farmacia en Conducta (Fase 2): badge de 3 estados, y su
+  // contenido reusa .vgl-mtr-*/.vgl-dup-*, cuyos selectores se extendieron para
+  // cubrir también #vgl-cw-farmaco (verificado arriba con id vgl-panel-modal;
+  // aquí se repite con vgl-cw-farmaco para confirmar el tercer destino real).
+  { html: '<div id="vgl-cw-farmaco" class="vgl-cw-pend"><div class="vgl-cw-badge" data-w="17">💊 2</div></div>', sel: '[data-w="17"]', token: "--c-ambar", que: "farmaco: badge estado pendiente" },
+  { html: '<div id="vgl-cw-farmaco" class="vgl-cw-ok"><div class="vgl-cw-badge" data-w="18">💊</div></div>', sel: '[data-w="18"]', token: "--c-verde", que: "farmaco: badge estado al día" },
+  { html: '<div id="vgl-cw-farmaco" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="19">💊</div></div>', sel: '[data-w="19"]', token: "--fg3", que: "farmaco: badge sin juicio todavía" },
+  { html: '<div id="vgl-cw-farmaco"><div class="vgl-mtr-crit"><span class="vgl-mtr-conducta" data-w="20">Ajustar dosis</span></div></div>', sel: '[data-w="20"]', token: "--c-rojo", que: "farmaco: conducta de aviso CRITICAL dentro del widget" },
+  { html: '<div id="vgl-cw-farmaco"><div class="vgl-dup-bloque"><div class="vgl-dup-tope" data-w="21">Posible duplicidad</div></div></div>', sel: '[data-w="21"]', token: "--c-ambar", que: "farmaco: tope de duplicidad terapéutica" },
 ];
 
 (async () => {

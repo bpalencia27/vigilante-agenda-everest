@@ -4,6 +4,42 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.25.0] — 2026-08-28 (Widget de farmacia en Conducta — Fase 2, y un hallazgo grave)
+
+### 💊 Widget de análisis farmacológico en Conducta (Fase 2 del rediseño del Panel)
+Junto al botón "+" de reformular un medicamento, un aviso propio con el mismo lenguaje
+que el widget de exámenes: insignia, panel al abrir, 3 estados honestos. Con el motor
+de avisos apagado (su estado de fábrica), el widget **aparece con un aviso neutro** —
+nunca oculto, nunca como si ya se hubiera revisado y no hubiera nada (decisión del
+médico, entrevista de anoche). La duplicidad terapéutica se ve siempre, dependa o no
+del motor.
+
+Se repinta después de una acción real de prescribir (un clic en "+" o en confirmar del
+modal de reformular), releyendo los medicamentos por la misma vía que ya usa el resto
+del script. **No es repintado por cada tecla** — el pedido original era "en tiempo real
+mientras receta", y esta entrega no llega del todo a eso: la estructura interna de
+cómo Everest muestra cada medicamento en pantalla no se pudo capturar sin arriesgarse
+a inventar un dato que nadie verificó. Dos grabaciones reales de consulta (28-ago)
+confirmaron el botón de anclaje y el gesto de reformular con detalle; una segunda
+grabación reveló además la tabla donde se agrega un medicamento nuevo — información
+valiosa para una futura entrega, pero todavía no verificada lo suficiente como para
+construir sobre ella sin adivinar.
+
+### 🐛 Hallazgo grave: el widget de exámenes de Conducta nunca se había pintado
+Investigando cómo enganchar el widget nuevo se descubrió que su hermano — el widget de
+"qué ordenar en el próximo control" (Conducta, v17.18.0) — **jamás se conectó al reloj
+real del script**. Su lógica estaba escrita y probada de punta a punta desde que se
+entregó, pero la línea que debía llamarlo en cada revisión de la historia nunca se
+escribió. En la práctica, ese widget no ha aparecido en ninguna consulta real desde que
+el registro de cambios lo dio por entregado. Corregido: los dos widgets de Conducta
+(exámenes y farmacia) ahora sí se enganchan al mismo reloj que ya usan el resto de los
+avisos automáticos de la historia. Se añadió una prueba de regresión que lee el propio
+código fuente para confirmar que la llamada existe — la misma lección que ya dejó
+escrita `tests/INFORME_MUTACIONES.md` en v17.12.0: "probar la pieza no es probar que
+la pieza está conectada".
+
+---
+
 ## [Versión 17.24.0] — 2026-08-28 (Panel del paciente, Fase 1: dashboard de estado y medicamentos pasivos)
 
 ### 🧾 Rediseño S+ del Panel del paciente — Fase 1

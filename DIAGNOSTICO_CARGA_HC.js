@@ -71,6 +71,18 @@
     "ultimaEnfermedad", "analisisYplan", "diagnosticos", "farmacologicos"
   ];
 
+  // v17.24.0 — rutas que una grabación real (DIAGNOSTICO_CONDUCTA_DOM.js, 28-ago-2026)
+  // confirmó que SÍ se llaman al abrir el paciente (en la misma ráfaga que labs y
+  // consultas previas) o al entrar a Conducta — pero cuyo CONTENIDO no va a traer
+  // ninguna de las claves de SECCIONES_CONOCIDAS (esas son del guardado de la historia;
+  // esta es la lista de medicamentos, otro dominio). Sin esto, esa respuesta pasaría
+  // por aquí sin marcarse candidata aunque sea justo la que el punto #11 del backlog
+  // necesita: medicamentos disponibles desde que se abre el paciente, no solo en
+  // Conducta. Coincidencia por RUTA, no por contenido — ver `esCandidataPorRuta` abajo.
+  var RUTAS_CONOCIDAS = [
+    "MedicamentoPorPaciente", "HistoricoMedicamentoHCM",
+  ];
+
   // --------------------------------------------------------------------
   //  LA FORMA, NUNCA EL CONTENIDO  (misma función del diagnóstico de guardado)
   // --------------------------------------------------------------------
@@ -127,6 +139,13 @@
       for (var i = 0; i < SECCIONES_CONOCIDAS.length; i++) {
         if (texto.indexOf('"' + SECCIONES_CONOCIDAS[i] + '"') >= 0) encontradas.push(SECCIONES_CONOCIDAS[i]);
       }
+      // v17.24.0 — candidata por RUTA (ver RUTAS_CONOCIDAS arriba): no depende del
+      // contenido, así que una respuesta de medicamentos con campos que no conocemos
+      // todavía se marca igual, en vez de perderse entre las descartadas.
+      var rutaConocida = null;
+      for (var j = 0; j < RUTAS_CONOCIDAS.length; j++) {
+        if (ruta.indexOf(RUTAS_CONOCIDAS[j]) >= 0) { rutaConocida = RUTAS_CONOCIDAS[j]; break; }
+      }
 
       capturas.push({
         t: new Date().toISOString(),
@@ -134,13 +153,18 @@
         ruta: ruta,
         tamanoRespuesta: texto.length,
         seccionesConocidasQueTrae: encontradas,
-        esCandidataFuerte: encontradas.length >= 2,
+        esCandidataFuerte: encontradas.length >= 2 || !!rutaConocida,
+        rutaConocidaComo: rutaConocida,
         forma: forma(datos, 0),
       });
 
       if (encontradas.length >= 2) {
         console.log("%c[Diag Carga] ¡CANDIDATA! " + ruta + " trae: " + encontradas.join(", "),
           "background:#16a34a;color:#fff;padding:4px 8px;border-radius:4px;font-weight:bold");
+      }
+      if (rutaConocida) {
+        console.log("%c[Diag Carga] ¡CANDIDATA POR RUTA! " + ruta + " (" + rutaConocida + ") — confirmada por grabación real del 28-ago",
+          "background:#2563eb;color:#fff;padding:4px 8px;border-radius:4px;font-weight:bold");
       }
     } catch (e) {}
   }

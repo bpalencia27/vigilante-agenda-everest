@@ -6,6 +6,44 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.25.0 — 28-ago-2026 (widget de farmacia en Conducta, y el hallazgo del reloj desconectado)
+
+### El hallazgo más grave de la noche: un widget entregado que nunca se pintó
+
+Investigando cómo enganchar `mtrWidgetFarmacoTick` al reloj de producción, se encontró
+que su hermano — `mtrWidgetConductaTick` (v17.18.0) — **nunca se llamó desde `tick()`**.
+Confirmado con `git log -p -S "mtrWidgetConductaTick()"`: ni el commit original de
+v17.18.0 ni ningún commit posterior agregó esa llamada. La función estaba escrita,
+probada de punta a punta (`suite_71`), y nunca conectada — el widget de "qué ordenar en
+el próximo control" no ha aparecido en ninguna consulta real desde que se entregó.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar `mtrWidgetConductaTick()`/`mtrWidgetFarmacoTick()` de la rama `if (secc === "historia")` de `tick()` | *REGRESIÓN: los dos widgets de Conducta están enganchados de verdad al tick() de la sección «historia»* |
+
+Restaurada y verificada con `diff` contra copia intacta. Esta prueba nueva no ejercita
+lógica: lee el código fuente y confirma que la llamada existe — la única forma de
+proteger contra este defecto exacto, porque toda la lógica INTERNA de ambos widgets ya
+estaba (y sigue estando) perfectamente probada. Ver el comentario extenso junto a la
+prueba en `tests/suite_71_widget_conducta.js` — la misma lección de v17.12.0 ("probar
+la pieza no es probar que la pieza está conectada"), aprendida una segunda vez por no
+haberla generalizado la primera.
+
+### El widget de farmacia, probado como su hermano
+
+`mtrBotonFarmacoConducta`, `mtrWidgetFarmacoDatos` y `mtrWidgetFarmacoTick` reciben el
+mismo banco de pruebas que `mtrBotonOrdenarConducta`/`mtrWidgetExamenesDatos`/
+`mtrWidgetConductaTick` — mismos casos (ancla visible/oculta/ausente, apagado por
+`S.conductaWidgets`, anti-parpadeo, reset entre pacientes) más los propios de la
+decisión del médico sobre el motor apagado (aviso neutro, nunca oculto). Verificado en
+Chromium (`tools/verificar_color_chromium.js`, 5 casos nuevos) que `#vgl-cw-farmaco`
+sobrevive al CSS agresivo simulado, incluyendo los avisos/duplicidades que reutiliza de
+`.vgl-mtr-*`/`.vgl-dup-*` (extendidos con un tercer destino, sin quitarle nada a los
+otros dos). Banco completo en 2.520/2.521 (la 1 que falla es la preexistente de huso
+horario de `suite_03`, v17.6.39, ajena a esta entrega).
+
+---
+
 ## v17.24.0 — 28-ago-2026 (Panel del paciente, Fase 1: dashboard de estado y medicamentos pasivos)
 
 ### El dashboard nunca puede opinar distinto que su pestaña detallada

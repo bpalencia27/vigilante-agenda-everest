@@ -585,8 +585,14 @@ module.exports = {
       // para datos clínicos, aplicada aquí a datos de commits. A partir de esta versión, el
       // historial de "N -> M" que sigue abajo (los saltos de 349 en adelante) vuelve a
       // significar exactamente lo que dice: cada entrega real, sobre el total COMPLETO.
+      // v17.24.0 (mismo commit, después del cambio de escala): 490 -> 495. +5 del widget
+      // de Conducta #vgl-cw-farmaco (Fase 2 del rediseño del Panel): 3 estados del badge
+      // (.ok/.pend/.nd) + err-msg/ok-msg + el pulso .vgl-cw-atencion no lleva color, así
+      // que no cuenta. El resto de su panel (avisos/duplicidades) reusa `!important` ya
+      // contado en MTR_CSS/.vgl-dup-* — extender su selector no crea una declaración
+      // nueva, solo un destino más para la misma.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 490, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.24.0 sobre el cambio de escala de 392 a 490 al dejar de ser ciego a las cuatro hojas spliceadas). Esperado 490, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 495, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y las notas de v17.24.0 sobre el cambio de escala de 392 a 490 y el widget de Conducta de 490 a 495). Esperado 495, salió ${importantTotal}.`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -667,8 +673,9 @@ module.exports = {
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios. v15.6.0 — #vgl-acomp-burbuja (la
       // burbuja de la guía paso a paso) y v17.1.0 — .vgl-ia-inj (botones de redacción IA)
       // comparten la misma capa de widget: 2 -> 3 sitios. v17.18.0 — #vgl-cw-examenes (el
-      // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios.
-      t.cierto(zWidget.length === 4, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y #vgl-cw-examenes (4 sitios). Salieron ${zWidget.length}.`);
+      // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios. v17.24.0 —
+      // #vgl-cw-farmaco (el widget hermano, Fase 2 del rediseño del Panel): 4 -> 5 sitios.
+      t.cierto(zWidget.length === 5, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja, #vgl-cw-examenes y #vgl-cw-farmaco (5 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);

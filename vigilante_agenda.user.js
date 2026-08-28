@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.24.0
+// @version     17.25.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.24.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.25.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5563,6 +5563,191 @@
     } catch (e) {}
   }
 
+  // =====================================================================
+  //  v17.24.0 — WIDGET DE CONDUCTA: análisis farmacológico (Fase 2)
+  //  ---------------------------------------------------------------------
+  //  Pedido del médico (28-ago): avisos de seguridad farmacológica junto a donde
+  //  receta en Conducta, en vez de escondidos en la pestaña Medicamentos del Panel
+  //  (retirada en la Fase 1, v17.24.0). Mismo patrón que #vgl-cw-examenes: badge +
+  //  panel, 3 estados honestos, ancla real vía getBoundingClientRect, firma barata
+  //  anti-parpadeo, reset duro entre pacientes.
+  //
+  //  ANCLA CONFIRMADA POR GRABACIÓN REAL (28-ago, DIAGNOSTICO_CONDUCTA_DOM.js, sin
+  //  datos de paciente — solo estructura): el botón "+" de cada tarjeta de
+  //  medicamento (`.btn-reformular`, dentro de `.med-card` en un modal Angular
+  //  propio, `app-modal-reformular`) es la única evidencia real que existe. Si el
+  //  paciente no tiene medicamentos activos ese botón puede no existir todavía y el
+  //  widget simplemente no aparece — nunca flota a ciegas, mismo principio que la
+  //  Fase 1 del widget de exámenes.
+  //
+  //  LO QUE ESTA VERSIÓN NO LOGRA, Y POR QUÉ: el pedido original era "en tiempo
+  //  real mientras receta". La grabación real confirmó el gesto de REFORMULAR
+  //  (renovar/ajustar dosis de un medicamento ya activo) con total detalle, pero
+  //  nunca capturó el de AGREGAR uno nuevo, ni la estructura interna de una
+  //  `.med-card` (nombre/dosis/vía) — el propio script de captura redacta todo
+  //  texto por diseño (cero PHI), así que esa estructura sigue siendo desconocida.
+  //  Escribir un lector de esa estructura sería adivinar la forma del dato, justo
+  //  lo que "casilla vacía antes que dato inventado" prohíbe. En su lugar, el
+  //  widget se repinta tras una acción REAL y confirmada — un clic en "+" o en el
+  //  botón de confirmar del modal de reformular — releyendo los medicamentos por
+  //  la misma vía que ya usa el resto del script (mtrRefrescarMedicamentos, la API
+  //  de Everest). No es por tecla; es lo más cerca de "en vivo" que se puede
+  //  construir hoy sin inventar una estructura de DOM que nadie verificó.
+  // =====================================================================
+  function mtrBotonFarmacoConducta(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll(".btn-reformular"));
+      const visibles = botones.filter(_vglVisibleDeVerdad);
+      return visibles.length ? visibles[0] : null;
+    } catch (e) { return null; }
+  }
+
+  // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
+  // mostrar. Reusa mtrAvisosFarmacologicos/mtrDuplicidadesTerapeuticas, el mismo
+  // motor que ya pinta la sección de Medicamentos del Redactor y (hasta la Fase 1)
+  // pintaba la extinta pestaña del Panel — nunca un cálculo propio que diverja.
+  function mtrWidgetFarmacoDatos(resumen) {
+    if (!resumen) return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo evaluar todavía.</div>' };
+    const crudos = Array.isArray(resumen.medicamentos) ? resumen.medicamentos : null;
+    const meds = crudos ? mtrMedicamentosUnicos(crudos) : null;
+    if (meds === null) {
+      return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo leer la lista de medicamentos todavía.</div>' };
+    }
+    const dups = mtrDuplicidadesTerapeuticas(meds);
+    const dupsHtml = mtrRenderDuplicidadesHtml(meds) || "";
+
+    // Decisión del médico (28-ago): con el motor de avisos apagado (su estado de
+    // fábrica), el widget aparece con un aviso NEUTRO — nunca oculto, nunca como si
+    // no hubiera nada que evaluar. La duplicidad terapéutica no depende del motor
+    // (mtrPanelMedicamentosHtml ya la trataba así) y sigue viéndose igual.
+    if (!mtrMotorEncendido()) {
+      return {
+        n: dups.length, sinJuicio: !dups.length,
+        html: '<div class="vgl-cw-err-msg">Motor de avisos apagado — actívelo en Ajustes para evaluar interacciones y dosis renal aquí.</div>' + dupsHtml,
+      };
+    }
+
+    let avisosHtml = "", nAvisos = 0, sinJuicioAvisos = false;
+    try {
+      const ctx = {
+        medicamentos: meds,
+        tfgCkdEpi: (resumen.erc && resumen.erc.egfr != null) ? resumen.erc.egfr : null,
+        tfgCockcroftGault: (resumen.erc && resumen.erc.crcl != null) ? resumen.erc.crcl : null,
+        potasio: (resumen._ultimos && resumen._ultimos.POTASIO && resumen._ultimos.POTASIO.valor) || null,
+        medicamentosFrecuencia: resumen.medicamentosFrecuencia || undefined,
+      };
+      const r = mtrAvisosFarmacologicos(ctx);
+      const todo = Array.isArray(r.todo) ? r.todo : [];
+      nAvisos = todo.length;
+      sinJuicioAvisos = !todo.length && (r.motivo === "SIN_LISTA_DE_MEDICAMENTOS" || r.motivo === "SIN_FUNCION_RENAL");
+      avisosHtml = mtrRenderAvisosHtml(ctx) || "";
+    } catch (e) { avisosHtml = ""; }
+
+    return { n: nAvisos + dups.length, sinJuicio: sinJuicioAvisos && !dups.length, html: avisosHtml + dupsHtml };
+  }
+
+  let _cwfDocPrevio = null, _cwfFirmaPrevia = "", _cwfNPrevio = 0, _cwfAbierto = false;
+  function _cwfEstadoParaTest() { return { docPrevio: _cwfDocPrevio, firma: _cwfFirmaPrevia, nPrevio: _cwfNPrevio }; }
+  function _cwfResetParaTest() { _cwfDocPrevio = null; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false; }
+
+  function mtrWidgetFarmacoTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-farmaco");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) {
+        if (el) el.style.display = "none";
+        _cwfDocPrevio = null; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false;
+        return;
+      }
+      if (docId !== _cwfDocPrevio) { _cwfDocPrevio = docId; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false; }
+      const boton = mtrBotonFarmacoConducta(d);
+      if (!boton) { if (el) el.style.display = "none"; return; }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+
+      let widget = el;
+      if (!widget) {
+        widget = document.createElement("div");
+        widget.id = "vgl-cw-farmaco";
+        widget.addEventListener("click", (e) => {
+          e.stopPropagation();
+          _cwfAbierto = !_cwfAbierto;
+          widget.classList.toggle("vgl-cw-abierto", _cwfAbierto);
+          widget.classList.remove("vgl-cw-atencion");
+        });
+        document.body.appendChild(widget);
+      }
+      const r = boton.getBoundingClientRect();
+      widget.style.position = "fixed";
+      widget.style.left = Math.round(r.right + 10) + "px";
+      widget.style.top = Math.round(r.top) + "px";
+      widget.style.display = "";
+
+      const datos = mtrWidgetFarmacoDatos(resumen);
+      const firma = docId + "|" + datos.n + "|" + datos.sinJuicio + "|" + datos.html.length;
+      if (firma === _cwfFirmaPrevia) return;
+      const subeDeSeveridad = _cwfFirmaPrevia !== "" && _cwfNPrevio === 0 && datos.n > 0;
+      _cwfFirmaPrevia = firma; _cwfNPrevio = datos.n;
+      const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
+      widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwfAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
+      widget.innerHTML = '<div class="vgl-cw-badge">💊' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+    } catch (e) {}
+  }
+
+  // Repinta tras una acción REAL de prescribir — ver el comentario grande de arriba
+  // sobre por qué no es por tecla. Los dos selectores (.btn-reformular, el botón de
+  // confirmar de app-modal-reformular) son los únicos confirmados por la grabación
+  // real; si Everest los cambia, este disparador simplemente deja de dispararse —
+  // nunca bloquea ni rompe el flujo del médico.
+  let _cwfRefrescoPendiente = null;
+  function _cwfProgramarRefresco() {
+    try {
+      if (!S.conductaWidgets) return;
+      const docId = extractPacienteAbierto();
+      if (!docId) return;
+      if (_cwfRefrescoPendiente) clearTimeout(_cwfRefrescoPendiente);
+      _cwfRefrescoPendiente = setTimeout(function () {
+        _cwfRefrescoPendiente = null;
+        Promise.resolve()
+          .then(function () {
+            mtrMedsInvalidar();
+            return mtrRefrescarMedicamentos(docId);
+          })
+          .then(function (lista) {
+            if (lista === null) return;
+            try {
+              const resumen = mtrCacheResumenLeer(docId);
+              if (resumen) {
+                resumen.medicamentos = lista;
+                try { resumen.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
+                mtrCacheResumenGuardar(docId, resumen);
+              }
+            } catch (e) {}
+          })
+          .catch(function () {})
+          .then(function () { mtrWidgetFarmacoTick(); });
+      }, 1200);
+    } catch (e) {}
+  }
+  function _cwfInstalarEscucha() {
+    if (_cwfInstalarEscucha._listo || typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+    _cwfInstalarEscucha._listo = true;
+    document.addEventListener("click", function (e) {
+      try {
+        const t = e && e.target;
+        if (!t || !t.closest) return;
+        if (t.closest(".btn-reformular") || t.closest("app-modal-reformular .footer-actions button")) {
+          _cwfProgramarRefresco();
+        }
+      } catch (err) {}
+    }, true);
+  }
+
   // v17.1.0 (#136) — último paciente y momento en que el clic de Auto-Labs emitió su
   // aviso flotante, para no repetirlo si el médico pulsa dos veces seguidas. Gemelo de
   // _labsAvisoDoc/_labsAvisoTs, que la v17.0.3 puso en el robot de pre-carga por este
@@ -7232,7 +7417,7 @@ _vglOfrecerDeshacer(btn);
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -12411,7 +12596,7 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -12498,7 +12683,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -12624,7 +12809,7 @@ _vglOfrecerDeshacer(btn);
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
         #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *,
-        #vgl-cw-examenes,#vgl-cw-examenes *{
+        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *{
           animation:none !important;transition:none !important;
         }
       }
@@ -12710,7 +12895,7 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
       body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
-      body.vgl-modo-oculto #vgl-cw-examenes{display:none !important}
+      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
@@ -12980,6 +13165,30 @@ _vglOfrecerDeshacer(btn);
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
       #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       :where(#vgl-cw-examenes :not([class])){color:inherit}
+      /* v17.24.0 — widget de Conducta: análisis farmacológico (Fase 2). Mismo idioma que
+         #vgl-cw-examenes (badge/panel/estados/pulso); el contenido del panel lo pintan
+         mtrRenderAvisosHtml/mtrRenderDuplicidadesHtml (.vgl-mtr-*/.vgl-dup-*), cuyo CSS se
+         extiende más abajo para cubrir también este widget — Regla E, cuelga de
+         document.body. */
+      #vgl-cw-farmaco{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:320px}
+      #vgl-cw-farmaco .vgl-cw-badge{
+        display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
+        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
+        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
+        color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+      }
+      #vgl-cw-farmaco.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
+      #vgl-cw-farmaco.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important;opacity:.85}
+      #vgl-cw-farmaco.vgl-cw-ok .vgl-cw-badge{color:var(--c-verde) !important}
+      #vgl-cw-farmaco .vgl-cw-panel{
+        display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
+        border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
+        max-height:320px;overflow-y:auto;
+      }
+      #vgl-cw-farmaco.vgl-cw-abierto .vgl-cw-panel{display:block}
+      #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      :where(#vgl-cw-farmaco :not([class])){color:inherit}
       /* =====================================================================
          v16.1.0 — REGLA E APLICADA A LA FICHA Y AL MÓDULO DE RIESGO
          ---------------------------------------------------------------------
@@ -14120,15 +14329,18 @@ _vglOfrecerDeshacer(btn);
       #vgl-panel-modal .vgl-meta-act{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-panel-modal .vgl-meta-fila.ok .vgl-meta-act{color:var(--c-verde) !important}
       #vgl-panel-modal .vgl-meta-fila.falla .vgl-meta-act{color:var(--c-ambar) !important}
-      /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color. */
-      #vgl-panel-modal .vgl-dup-bloque{
+      /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color.
+         v17.24.0 — se suma #vgl-cw-farmaco (widget de Conducta, Fase 2): mismo contenido
+         (mtrRenderDuplicidadesHtml), misma disciplina de !important por colgar de
+         document.body. */
+      #vgl-panel-modal .vgl-dup-bloque,#vgl-cw-farmaco .vgl-dup-bloque{
         margin-top:10px;padding:10px 12px;
         border:1px solid rgba(var(--rgb-ambar),.45);border-radius:var(--r-field);
         background:rgba(var(--rgb-ambar),.09)
       }
-      #vgl-panel-modal .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
-      #vgl-panel-modal .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
-      #vgl-panel-modal .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
+      #vgl-panel-modal .vgl-dup-tope,#vgl-cw-farmaco .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
+      #vgl-panel-modal .vgl-dup-cuenta,#vgl-cw-farmaco .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
+      #vgl-panel-modal .vgl-dup-fila,#vgl-cw-farmaco .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
       /* v17.24.0 — Medicamentos actuales, archivo pasivo (Resumen, tras retirar la pestaña
          Medicamentos). Cuelga de document.body: Regla E, !important en todo color. */
       #vgl-panel-modal .vgl-panel-meds-nota{font-size:var(--t-micro);color:var(--fg3) !important;margin:2px 0 8px}
@@ -25546,6 +25758,14 @@ _vglOfrecerDeshacer(btn);
       // su guarda de una-vez-por-paciente (lastAutoFetchedAt).
       if (secc === "historia") {
         createLabInjectorUI(); createExamenFisicoInjectorUI(); createIaInjectorUI(); checkRacGuardia(); /* v15.3.0 — el drenado automático hacia la historia se retiró con el paso que lo alimentaba */
+        // v17.24.0 — HALLAZGO REAL: mtrWidgetConductaTick (v17.18.0, "qué ordenar en el
+        // próximo control") se escribió y se probó de frente (suite_71), pero JAMÁS se
+        // enganchó aquí — el widget nunca se pintó en ninguna consulta real desde que se
+        // "entregó". Se descubrió al enganchar el widget hermano de esta misma versión
+        // (mtrWidgetFarmacoTick, análisis farmacológico). Los dos cuelgan del mismo tick
+        // de "historia", igual que el resto de los inyectores de esta línea.
+        try { mtrWidgetConductaTick(); } catch (e) {}
+        try { mtrWidgetFarmacoTick(); } catch (e) {}
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {
           const dockEl = document.getElementById("vgl-acciones-dock");
@@ -26668,6 +26888,7 @@ _vglOfrecerDeshacer(btn);
     // sugiere al médico, una vez al día, la excepción "mantener siempre activo este sitio".
     try { _avisarPestanaDescartada(); } catch (e) {}
     try { _vglTipInstalar(); } catch (e) {}   // v14.3.0 — burbujas de información de los modales
+    try { _cwfInstalarEscucha(); } catch (e) {}  // v17.24.0 — repinta el widget de farmacia de Conducta tras reformular
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
@@ -37731,31 +37952,31 @@ _vglOfrecerDeshacer(btn);
   // contra Everest, sino porque ninguna regla nuestra aplicaba en ese modal. Cada
   // selector gana un segundo destino, #vgl-panel-modal, con el mismo !important.
   const MTR_CSS = `
-        #vgl-labs-modal .vgl-mtr-bloque,#vgl-panel-modal .vgl-mtr-bloque{
+        #vgl-labs-modal .vgl-mtr-bloque,#vgl-panel-modal .vgl-mtr-bloque,#vgl-cw-farmaco .vgl-mtr-bloque{
           background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
           padding:10px 12px;display:flex;flex-direction:column;gap:7px;margin-top:8px
         }
-        #vgl-labs-modal .vgl-mtr-tope,#vgl-panel-modal .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-        #vgl-labs-modal .vgl-mtr-cuenta,#vgl-panel-modal .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
-        #vgl-labs-modal .vgl-mtr-aviso,#vgl-panel-modal .vgl-mtr-aviso{
+        #vgl-labs-modal .vgl-mtr-tope,#vgl-panel-modal .vgl-mtr-tope,#vgl-cw-farmaco .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        #vgl-labs-modal .vgl-mtr-cuenta,#vgl-panel-modal .vgl-mtr-cuenta,#vgl-cw-farmaco .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-labs-modal .vgl-mtr-aviso,#vgl-panel-modal .vgl-mtr-aviso,#vgl-cw-farmaco .vgl-mtr-aviso{
           border-radius:var(--r-chip);padding:7px 9px;display:flex;flex-direction:column;gap:3px;
           box-shadow:inset 0 0 0 1px var(--edge)
         }
-        #vgl-labs-modal .vgl-mtr-crit,#vgl-panel-modal .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
-        #vgl-labs-modal .vgl-mtr-alto,#vgl-panel-modal .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
-        #vgl-labs-modal .vgl-mtr-info,#vgl-panel-modal .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
-        #vgl-labs-modal .vgl-mtr-cab,#vgl-panel-modal .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
-        #vgl-labs-modal .vgl-mtr-ico,#vgl-panel-modal .vgl-mtr-ico{font-size:var(--t-body)}
-        #vgl-labs-modal .vgl-mtr-tit,#vgl-panel-modal .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
-        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
-        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
-        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
-        #vgl-labs-modal .vgl-mtr-msg,#vgl-panel-modal .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-meds,#vgl-panel-modal .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-mec,#vgl-panel-modal .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
-        #vgl-labs-modal .vgl-mtr-pie,#vgl-panel-modal .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
-        #vgl-labs-modal .vgl-mtr-sinjuicio,#vgl-panel-modal .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
-        #vgl-labs-modal .vgl-mtr-limpio,#vgl-panel-modal .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-crit,#vgl-panel-modal .vgl-mtr-crit,#vgl-cw-farmaco .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
+        #vgl-labs-modal .vgl-mtr-alto,#vgl-panel-modal .vgl-mtr-alto,#vgl-cw-farmaco .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
+        #vgl-labs-modal .vgl-mtr-info,#vgl-panel-modal .vgl-mtr-info,#vgl-cw-farmaco .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
+        #vgl-labs-modal .vgl-mtr-cab,#vgl-panel-modal .vgl-mtr-cab,#vgl-cw-farmaco .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
+        #vgl-labs-modal .vgl-mtr-ico,#vgl-panel-modal .vgl-mtr-ico,#vgl-cw-farmaco .vgl-mtr-ico{font-size:var(--t-body)}
+        #vgl-labs-modal .vgl-mtr-tit,#vgl-panel-modal .vgl-mtr-tit,#vgl-cw-farmaco .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
+        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
+        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
+        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
+        #vgl-labs-modal .vgl-mtr-msg,#vgl-panel-modal .vgl-mtr-msg,#vgl-cw-farmaco .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-meds,#vgl-panel-modal .vgl-mtr-meds,#vgl-cw-farmaco .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-mec,#vgl-panel-modal .vgl-mtr-mec,#vgl-cw-farmaco .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
+        #vgl-labs-modal .vgl-mtr-pie,#vgl-panel-modal .vgl-mtr-pie,#vgl-cw-farmaco .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
+        #vgl-labs-modal .vgl-mtr-sinjuicio,#vgl-panel-modal .vgl-mtr-sinjuicio,#vgl-cw-farmaco .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-limpio,#vgl-panel-modal .vgl-mtr-limpio,#vgl-cw-farmaco .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
   `;
 
   // ---- v14.3.0 — CSS de las burbujas de información y del rediseño UX --------
