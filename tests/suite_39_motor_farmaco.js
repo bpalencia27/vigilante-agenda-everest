@@ -324,6 +324,18 @@ module.exports = {
       t.igual(api.mtrReglaMetformina("METFORMINA", 45, null), null);
     });
 
+    t.caso("v17.26.0 — 'CAP_DOSIS' no se pinta crudo: se traduce a 'TOPE DE DOSIS' en pantalla", () => {
+      // Bug reportado en vivo (28-ago) contra un paciente real: el código interno de
+      // conducta de los 18 sitios que llaman mtrAlerta(...,"CAP_DOSIS",...) se veía tal
+      // cual, en snake_case, en el bloque de seguridad farmacológica. La lógica (los 18
+      // sitios) no se toca — sigue devolviendo "CAP_DOSIS" — solo se traduce al pintar.
+      const a = api.mtrReglaMetformina("METFORMINA", 30, null);
+      t.igual(a.conducta, "CAP_DOSIS", "la lógica interna no cambia");
+      const html = api.mtrPintarAviso(a);
+      t.falso(/CAP_DOSIS/.test(html), "el código crudo ya no llega a la pantalla");
+      t.cierto(/TOPE DE DOSIS/.test(html), "se ve la traducción legible");
+    });
+
     t.caso("la linagliptina se excluye del ajuste renal y las demás gliptinas no", () => {
       t.igual(api.mtrReglaDpp4("LINAGLIPTINA 5 MG", 20, null), null);
       t.cierto(!!api.mtrReglaDpp4("SITAGLIPTINA 100 MG", 20, null));

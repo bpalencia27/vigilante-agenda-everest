@@ -6,6 +6,40 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.26.0 — 28-ago-2026 (Laboratorios: migración de la seguridad farmacológica y limpieza de redacción)
+
+Cinco cambios de comportamiento, cinco mutaciones — todas restauradas y verificadas
+contra copia intacta (`diff` limpio tras cada restauración).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar `a.titulo = r.titulo;` de `mtrEvaluarConCatalogoRcv` | *v17.26.0 — el aviso lleva el título legible del catálogo, no el código crudo* (suite_69) |
+| 2 | Quitar la preferencia por `a.titulo` en `mtrEtiquetaAviso` (vuelve al mapa de códigos) | misma prueba — la aserción sobre `mtrEtiquetaAviso(a)` cae, la de `a.titulo` no (aísla cuál de las dos mitades del fix falló) |
+| 3 | Vaciar `MTR_CONDUCTA_ETIQUETA` (sin la entrada `CAP_DOSIS`) | *v17.26.0 — 'CAP_DOSIS' no se pinta crudo: se traduce a 'TOPE DE DOSIS' en pantalla* (suite_39) |
+| 4 | Reinsertar `<div id="vgl-labs-farmaco">` en la plantilla de `openLaboratoriosModal` | *v17.26.0 — el bloque de seguridad farmacológica SE FUE de Laboratorios (vive solo en Conducta)* (suite_31, M1) |
+| 5 | Devolver el regex de `MTR_RCV_CSS_TODOS_LOS_MODALES` a la forma que no soporta selectores de clase compuestos (`.vgl-rcv-aviso.vgl-rcv-aviso-alto`) | *el modificador compuesto de aviso-alto debe llegar también a #vgl-riesgo-modal* (suite_25) |
+
+### Defecto aparte, encontrado arreglando la prueba de la mutación #5
+
+Al mutar la #5 se descubrió que la propia `tests/suite_25_cascada_css.js` tenía el MISMO
+defecto de fondo que ya se había corregido tres veces esta semana en otros archivos
+(`tools/verificar_color_chromium.js`, `tests/suite_41_motor_vista.js`, y en esta misma
+suite para las otras tres hojas): la extracción textual de `${_cssSeguro(() => XXX)}`
+buscaba literalmente `const NOMBRE = \`...\`;` y `MTR_RCV_CSS_TODOS_LOS_MODALES` NO es un
+literal de plantilla puro — es `MTR_RCV_CSS.replace(/regex/g, cb) + \`...cola...\`;`. La
+búsqueda fallaba en silencio (`continue`) y el marcador quedaba sin resolver: **la
+regla A (regex compuesto) de arriba pasaba en producción pero la prueba nunca la vio**,
+así que ni siquiera medía lo que decía medir. En vez de reescribir el `.replace()` a mano
+en la prueba (arriesgando que el regex de la prueba divergiera del real sin que nada lo
+note), se resuelve `MTR_RCV_CSS` primero y se EJECUTA el fragmento real de código fuente
+con `new Function(...)`, verificando el comportamiento real en vez de una copia. Efecto
+colateral honesto, no un defecto nuevo: `importantTotal` sube de 495 a 526 porque ahora
+cuenta `!important` que YA estaban en la hoja real y esta prueba nunca había visto — mismo
+patrón que el salto de 392→490 en v17.24.0, documentado en el propio comentario de la
+prueba.
+
+Banco en verde tras la restauración final: **2.524/2.524**.
+
 ## v17.25.0 — 28-ago-2026 (widget de farmacia en Conducta, y el hallazgo del reloj desconectado)
 
 ### El hallazgo más grave de la noche: un widget entregado que nunca se pintó

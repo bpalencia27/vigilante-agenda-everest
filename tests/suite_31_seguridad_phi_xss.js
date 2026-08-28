@@ -600,25 +600,52 @@ module.exports = {
       t.falso(todo.indexOf("80123456") >= 0, "ni la cédula");
     });
 
-    t.caso("v17.12.0 — el bloque de seguridad farmacológica se INSERTA, no se tira", () => {
-      // La auditoría lo puso como ejemplo del patrón: «extraFarmaco se construye y nunca se
-      // inserta». El CSS (#vgl-labs-modal .vgl-mtr-bloque) estaba escrito para este modal y
-      // sin usar. Es lo que puede cambiar una dosis hoy.
+    t.caso("v17.26.0 — el bloque de seguridad farmacológica SE FUE de Laboratorios (vive solo en Conducta)", () => {
+      // Historia del contenedor: v17.12.0 lo insertó en el modal de Laboratorios (antes
+      // se calculaba y se tiraba). El médico lo probó en vivo el 28-ago contra un
+      // paciente real y reportó que ese lugar es erróneo: el juicio farmacológico debe
+      // vivir en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de resultados de
+      // laboratorio. Esta prueba invierte la de v17.12.0 a propósito — ahora vigila que
+      // el contenedor NO vuelva a aparecer en Laboratorios, para que una futura edición
+      // no reintroduzca por accidente el mismo error que el médico ya reportó.
       const fs = require("fs"), path = require("path");
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      t.cierto(/id="vgl-labs-farmaco"/.test(src), "el contenedor existe en el modal");
-      // La aserción mira la LÍNEA COMPLETA, guarda incluida: una primera versión solo
-      // buscaba «innerHTML = extraFarmaco» y seguía pasando con la línea envuelta en
-      // `if (false)`. Una prueba de texto fuente que no fija la condición no fija nada.
-      t.cierto(/if \(cajaF && vivo\(\)\) cajaF\.innerHTML = extraFarmaco/.test(src),
-        "y lo calculado se escribe DENTRO de él: sin esta línea todo el cálculo era trabajo perdido");
-      // Y produce algo real, incluido el silencio honesto cuando no puede juzgar.
+      t.falso(/id="vgl-labs-farmaco"/.test(src),
+        "el contenedor de avisos farmacológicos ya no existe en el modal de Laboratorios");
+      t.falso(/cajaF\.innerHTML = extraFarmaco/.test(src),
+        "y tampoco queda código de inserción huérfano apuntando a él");
+      // mtrRenderAvisosHtml sigue viva: la usan el widget de Conducta (#vgl-cw-farmaco,
+      // ver tests/suite_71_widget_conducta.js) y el panel de Medicamentos del Ordenar —
+      // solo se le retiró UN llamador (el de Laboratorios), no la función.
       const cM = cargar({ silencioso: true, almacen: { vgl_cfg: JSON.stringify({ motorPortado: true }) } });
       const html = String(cM.api.mtrRenderAvisosHtml({ citaId: "P1", tfgCkdEpi: 25, tfgCockcroftGault: 24 }) || "");
-      t.cierto(html.length > 0, "el bloque produce HTML de verdad");
+      t.cierto(html.length > 0, "el bloque sigue produciendo HTML de verdad para sus llamadores actuales");
       t.cierto(/Seguridad farmacológica/.test(html), "con su rótulo");
       t.cierto(/No significa que no haya riesgo/.test(html),
         "y cuando no puede juzgar lo dice, en vez de callarse: la regla de la casa");
+    });
+
+    t.caso("v17.25.0 — el recuadro de función renal del modal de Laboratorios se INSERTA, no se tira (mismo patrón que #603, otra vez)", () => {
+      // Auditoría del módulo de Laboratorios (28-ago, noche): _renderEstadioRenalHtml
+      // (R1b, v14.1.1) calculaba TFG/estadio/discordancia con su propio CSS ya escrito
+      // (.vgl-labs-renal-*) y probado de punta a punta — y nunca se insertaba en ningún
+      // sitio: no había ni un contenedor en la plantilla del modal para recibirlo. El
+      // propio catch de más abajo ("recuadro renal no disponible") ya hablaba de un
+      // recuadro que nunca llegó a pintarse.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-labs-renal"/.test(src), "el contenedor existe en el modal");
+      t.cierto(/if \(cajaR && vivo\(\)\) cajaR\.innerHTML = _renderEstadioRenalHtml\(r\)/.test(src),
+        "y lo calculado se escribe DENTRO de él: sin esta línea el cálculo de función renal era trabajo perdido");
+      // Y produce algo real, incluidos los estados vacíos honestos que ya tenía.
+      const html = String(api._renderEstadioRenalHtml({
+        estadio: "G2", tfg: 72, formula: "CKD-EPI 2021",
+        entradas: { creatininaCruda: 1.0, peso: 68, edad: 55, sexo: "F" },
+      }) || "");
+      t.cierto(html.indexOf("vgl-labs-renal-tfg") >= 0, "pinta la TFG");
+      t.cierto(html.indexOf("72") >= 0 && html.indexOf("G2") >= 0, "con el valor y el estadio reales");
+      const vacio = String(api._renderEstadioRenalHtml({ faltan: ["edad_pediatrica"] }) || "");
+      t.cierto(vacio.indexOf("menores de 18") >= 0, "y el caso pediátrico sigue diciendo por qué, no inventa un estadio");
     });
 
     // =================================================================

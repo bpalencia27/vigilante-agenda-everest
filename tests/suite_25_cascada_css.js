@@ -25,13 +25,48 @@ module.exports = {
     // en producción sí se aplica (confirmado real al construir el dashboard del Panel del
     // paciente: la Regla G de abajo no vio ni un solo !important de esas hojas). Mismo fix
     // que ya se le aplicó a tools/verificar_color_chromium.js en esta misma versión.
+    //
+    // v17.26.0 — CUARTA VUELTA DEL MISMO DEFECTO. La búsqueda de arriba exige la forma
+    // exacta `const NOMBRE = \`...\`;` — pero MTR_RCV_CSS_TODOS_LOS_MODALES NO es un
+    // literal de plantilla puro: es `MTR_RCV_CSS.replace(/regex/g, cb) + \`...cola...\`;`.
+    // `code.indexOf("const MTR_RCV_CSS_TODOS_LOS_MODALES = \`")` daba -1 (no hay backtick
+    // justo después del "="), así que el `continue` de abajo lo saltaba en silencio: el
+    // marcador quedaba como texto literal sin resolver, y CUALQUIER regla generada por el
+    // `.replace()` — como el modificador compuesto de `#vgl-riesgo-modal` que esta prueba
+    // verifica más abajo — era invisible aquí, aunque en producción sí se genera. Reescribir
+    // el `.replace()` a mano en la prueba arriesgaría que el regex de la prueba diverja del
+    // real sin que nada lo note; en vez de eso se EJECUTA el mismo trozo de código fuente
+    // (con MTR_RCV_CSS ya resuelto como variable de entrada), así la prueba verifica el
+    // comportamiento real, no una copia que podría quedarse desactualizada.
+    const resolverConstPlano = (nombreConst) => {
+      const marcador = "const " + nombreConst + " = `";
+      const ini = code.indexOf(marcador);
+      if (ini < 0) return null;
+      const desde = ini + marcador.length;
+      const fin = code.indexOf("`;", desde);
+      return code.slice(desde, fin);
+    };
+    const mtrRcvCssResuelto = resolverConstPlano("MTR_RCV_CSS");
     for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
       const nombre = m[1];
-      const ini = code.indexOf("const " + nombre + " = `");
-      if (ini < 0) continue;
-      const desde = ini + ("const " + nombre + " = `").length;
-      const fin = code.indexOf("`;", desde);
-      css = css.replace(m[0], code.slice(desde, fin));
+      let resuelto = resolverConstPlano(nombre);
+      if (resuelto === null && nombre === "MTR_RCV_CSS_TODOS_LOS_MODALES" && mtrRcvCssResuelto !== null) {
+        const marcador = "const " + nombre + " = ";
+        const ini = code.indexOf(marcador);
+        if (ini >= 0) {
+          const inicioExpr = ini + marcador.length;
+          const primerBacktick = code.indexOf("`", inicioExpr);
+          const finCola = code.indexOf("`;", primerBacktick + 1);
+          if (primerBacktick >= 0 && finCola >= 0) {
+            const expr = code.slice(inicioExpr, finCola + 1); // incluye el backtick de cierre
+            try {
+              resuelto = new Function("MTR_RCV_CSS", "return (" + expr + ")")(mtrRcvCssResuelto);
+            } catch (e) { resuelto = null; }
+          }
+        }
+      }
+      if (resuelto === null) continue;
+      css = css.replace(m[0], resuelto);
     }
 
     const combos = [];
@@ -591,8 +626,31 @@ module.exports = {
       // que no cuenta. El resto de su panel (avisos/duplicidades) reusa `!important` ya
       // contado en MTR_CSS/.vgl-dup-* — extender su selector no crea una declaración
       // nueva, solo un destino más para la misma.
+      // v17.26.0 — SEGUNDO CAMBIO DE ESCALA, otra vez no de contenido: 495 -> 526. La
+      // resolución de MTR_RCV_CSS_TODOS_LOS_MODALES (ver el comentario junto al bucle de
+      // arriba) era, hasta esta versión, la ÚNICA de las cuatro hojas spliceadas que
+      // seguía sin resolverse — el `continue` silencioso la dejaba como texto literal, así
+      // que sus `!important` (los que MTR_RCV_CSS.replace() duplica hacia #vgl-riesgo-modal
+      // más los 8 propios de ese modal, líneas 12434-12448) nunca entraron a este contador.
+      // Los 31 de diferencia (526-495) YA estaban en la hoja real; misma regla que el salto
+      // de 392->490: no se itemizan uno a uno porque nadie los contó mientras eran
+      // invisibles, e inventar ese historial sería la falta que esta prueba existe para
+      // evitar en otro terreno.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 495, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y las notas de v17.24.0 sobre el cambio de escala de 392 a 490 y el widget de Conducta de 490 a 495). Esperado 495, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 526, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.26.0 sobre el cambio de escala de 495 a 526). Esperado 526, salió ${importantTotal}.`);
+
+      // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
+      // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier
+      // regla con un SEGUNDO selector de clase pegado sin espacio (el patrón
+      // ".vgl-rcv-aviso.vgl-rcv-aviso-alto" que esta misma versión introdujo en Regla A) —
+      // esas dos reglas nunca llegaban a #vgl-riesgo-modal. Latente hoy (ese modal no
+      // existe en el DOM: openRiesgoModal se retiró en v17.6.29), pero real: si algún día
+      // se reconecta mtrRenderResumenClinicoHtml a un modal con ese id, el aviso ámbar de
+      // "Criterio de remisión a nefrología" habría salido sin color.
+      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto") >= 0,
+        "el modificador compuesto de aviso-alto debe llegar también a #vgl-riesgo-modal");
+      t.cierto(css.indexOf("#vgl-riesgo-modal .vgl-rcv-lista.vgl-rcv-lista-orden li") >= 0,
+        "el modificador compuesto de lista-orden debe llegar también a #vgl-riesgo-modal");
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del

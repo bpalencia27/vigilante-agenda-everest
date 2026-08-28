@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.25.0
+// @version     17.26.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -56,8 +56,10 @@
      · Agendamiento ................... openAgendamientoModal (sugerencias + MODO MANUAL)
      · Toma de muestras ............... openLabSoloModal, renderLabDayChips
      · Anulación real ................. _anularCitaAsignadaReal (CancelarCita)
-     · Ficha del paciente ............. mtrFichaVivaFilas / openFichaPacienteModal
-     · Riesgo CV (beta cerrada) ....... openRiesgoModal (bloqueado)
+     · Panel del paciente ............. openPanelPacienteModal (fusionó Ficha/Riesgo/Tablero, v16.8.0)
+     · Riesgo CV · Redacción IA ....... mtrRenderResumenClinicoHtml (lógica viva y probada,
+                                         sin modal propio desde que se retiró openRiesgoModal
+                                         en v17.6.29 — ver INFORME_MUTACIONES.md v17.25.0)
      · Redactor IA .................... mtrAbrirPanelRedaccion, MTR_CASILLAS_REDACTOR
      · Guía paso a paso ............... _acomp* (modo acompañado)
      · Modos oculto y programador ..... Ctrl+Shift+V / Ctrl+Shift+D
@@ -1005,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.25.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.26.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12418,7 +12420,17 @@ _vglOfrecerDeshacer(btn);
         #vgl-ordenar-modal .vgl-rcv-pie,#vgl-labs-modal .vgl-rcv-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
   `;
 
-  const MTR_RCV_CSS_TODOS_LOS_MODALES = MTR_RCV_CSS.replace(/#vgl-labs-modal (\.vgl-rcv-[\w-]+(?: [\w-]+)*)\{/g, (m, sel) => "#vgl-labs-modal " + sel + ",#vgl-riesgo-modal " + sel + "{") + `
+  // v17.25.0 — AUDITORÍA DE LABORATORIOS: este regex se saltaba 2 de sus reglas.
+  // `(?: [\w-]+)*` capturaba un descendiente separado por espacio (" b", " li"), pero
+  // no un SEGUNDO SELECTOR DE CLASE pegado sin espacio (".vgl-rcv-aviso.vgl-rcv-aviso-alto")
+  // — el patrón de "modificador que siempre convive con su base" que esta misma versión
+  // introdujo en MTR_RCV_CSS (Regla A, ver el comentario junto a esas dos reglas). Con el
+  // regex viejo, esas dos reglas nunca llegaban a #vgl-riesgo-modal: la más grave, el
+  // aviso ámbar "Criterio de remisión a nefrología", habría salido sin color si ese modal
+  // (retirado, ver mtrRenderResumenClinicoHtml) alguna vez se reconecta. `(?:\.[\w-]+)*`
+  // agrega esa segunda forma sin quitarle nada a la primera — verificado en Node que las
+  // 37 reglas de #vgl-labs-modal terminan siendo 37 en #vgl-riesgo-modal, ni una de más ni de menos.
+  const MTR_RCV_CSS_TODOS_LOS_MODALES = MTR_RCV_CSS.replace(/#vgl-labs-modal (\.vgl-rcv-[\w-]+(?:\.[\w-]+)*(?: [\w-]+)*)\{/g, (m, sel) => "#vgl-labs-modal " + sel + ",#vgl-riesgo-modal " + sel + "{") + `
         #vgl-riesgo-modal .vgl-agm-kicker{color:var(--c-rojo) !important}
         #vgl-riesgo-modal .vgl-agm-lbl{color:var(--c-rojo) !important}
         #vgl-riesgo-modal .vgl-agm-patient{color:var(--fg) !important}
@@ -18450,13 +18462,20 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Historial de Paraclínicos (Últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en Everest, no es un error del Vigilante. La etiqueta junto a cada resultado dice si vino directo del laboratorio (Athenea) o quedó registrado a mano.")}</label>
-          <!-- v17.12.0 — AUDITORÍA DE EXPERIENCIA: el bloque de seguridad farmacológica se
-               CALCULABA Y SE TIRABA. La variable extraFarmaco se armaba con mtrRenderAvisosHtml (dosis
-               renales, metformina contraindicada, estatina a dosis insegura) y la variable
-               moría al final del try, sin insertarse en ninguna parte. Hasta el CSS
-               (#vgl-labs-modal .vgl-mtr-bloque) estaba escrito para este modal y sin usar.
-               Va ARRIBA de la tabla a propósito: es lo que puede cambiar una dosis hoy. -->
-          <div id="vgl-labs-farmaco" aria-live="polite"></div>
+          <!-- v17.25.0 — AUDITORÍA DE LABORATORIOS: _renderEstadioRenalHtml (R1b, v14.1.1)
+               calculaba el recuadro de función renal — TFG, estadio, discordancia entre
+               fórmulas, paciente pediátrico, creatinina fuera de rango — con su propio CSS
+               ya escrito (.vgl-labs-renal-*), probado de punta a punta (suite_29/suite_32),
+               y JAMÁS insertado en ningún sitio: no había ni un contenedor para él en esta
+               plantilla. El catch de más abajo ("recuadro renal no disponible") ya hablaba
+               de un recuadro que nunca llegó a pintarse. -->
+          <!-- v17.26.0 — el bloque de seguridad farmacológica (#vgl-labs-farmaco,
+               extraFarmaco, v17.12.0) SE FUE de aquí: el médico lo probó en vivo el 28-ago
+               contra un paciente real y reportó que su lugar es erróneo — el juicio
+               farmacológico vive en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de
+               resultados de laboratorio. La función renal de arriba se queda: la queja fue
+               puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
+          <div id="vgl-labs-renal" aria-live="polite"></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámenes de laboratorio en Portal Athenea Soluciones...</div>
           </div>
@@ -18543,26 +18562,23 @@ _vglOfrecerDeshacer(btn);
       try {
         const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
         if (!vivo()) return;
+        // v17.25.0 — y AQUÍ SE INSERTA el recuadro renal: calcular y no pintar es trabajo
+        // perdido (ver el comentario de la plantilla más arriba).
         try {
+          const cajaR = modal.querySelector("#vgl-labs-renal");
+          if (cajaR && vivo()) cajaR.innerHTML = _renderEstadioRenalHtml(r) || "";
+        } catch (eR) {}
+        try {
+          // v17.26.0 — se sigue refrescando en segundo plano (el widget de Conducta,
+          // #vgl-cw-farmaco, y el modal de Ordenar dependen de este dato ya cargado),
+          // pero ya no se pinta nada de seguridad farmacológica en Laboratorios: ver el
+          // comentario de la plantilla más arriba.
           if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") {
             await mtrRefrescarMedicamentos(pacienteIdLabs);
           }
         } catch (eMeds) { console.warn("[Vigilante] no se pudo refrescar medicamentos:", eMeds); }
         if (!vivo()) return;
         try {
-          let extraFarmaco = "";
-          try {
-            extraFarmaco = mtrRenderAvisosHtml({
-              citaId: pacienteIdLabs,
-              tfgCkdEpi: (r && (r.tfgCkdEpi || r.tfg)) || null,
-              tfgCockcroftGault: (r && r.tfg) || null,
-            });
-          } catch (eF) {}
-          // v17.12.0 — y aquí SE INSERTA. Sin esto, todo lo de arriba era trabajo perdido.
-          try {
-            const cajaF = modal.querySelector("#vgl-labs-farmaco");
-            if (cajaF && vivo()) cajaF.innerHTML = extraFarmaco || "";
-          } catch (eIns) {}
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
           try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
           try { mtrTelemetriaResumen(resumenClinico).forEach((ev) => uxTrack(ev.accion, ev.extra)); }
@@ -30575,6 +30591,7 @@ _vglOfrecerDeshacer(btn);
       const a = mtrAlertaInteraccion(mtrUnirFarmacos.apply(null, pares),
         r.codigo, r.conducta, r.mensaje, r.severidad, r.mecanismo);
       a.fuente = r.fuente;
+      a.titulo = r.titulo;
       alertas.push(a);
     }
 
@@ -30716,12 +30733,24 @@ _vglOfrecerDeshacer(btn);
     FUERA_DE_GRUPO: "Fuera de grupo reconocido",
   };
 
+  // v17.26.0 — bug reportado en vivo (28-ago): los 17 códigos del catálogo RCV
+  // (mtrEvaluarConCatalogoRcv) no estaban en el mapa de arriba y se veía el código
+  // crudo (p. ej. "AINE_RAAS") en la UI. El catálogo YA trae un `titulo` legible y
+  // con fuente (BNF) por cada interacción — mtrEvaluarConCatalogoRcv lo copia al
+  // aviso (`a.titulo = r.titulo`) y aquí se prefiere sobre el mapa de códigos, que
+  // queda como respaldo para los avisos del Copiloto original (sin `titulo` propio).
   function mtrEtiquetaAviso(a) {
+    if (a.titulo) return String(a.titulo);
     if (a.tipo_interaccion) {
       return MTR_ETIQUETA_INTERACCION[a.tipo_interaccion] || String(a.tipo_interaccion);
     }
     return String(a.medicamento_detectado || a.principio_activo || "");
   }
+
+  // v17.26.0 — mismo bug: "CAP_DOSIS" (conducta interna de mtrAlerta, 18 sitios en
+  // el Copiloto de dosis renal) se veía crudo en la UI. Traducción solo para
+  // mostrar — ninguno de los 18 sitios que pasan "CAP_DOSIS" como lógica se toca.
+  const MTR_CONDUCTA_ETIQUETA = { CAP_DOSIS: "TOPE DE DOSIS" };
 
   // Pinta un aviso. `escapeHtml` en TODO lo que venga de fuera.
   function mtrPintarAviso(a) {
@@ -30737,7 +30766,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-mtr-cab">
           <span class="vgl-mtr-ico">${icono}</span>
           <span class="vgl-mtr-tit">${escapeHtml(mtrEtiquetaAviso(a))}</span>
-          <span class="vgl-mtr-conducta">${escapeHtml(String(a.conducta || ""))}</span>
+          <span class="vgl-mtr-conducta">${escapeHtml(MTR_CONDUCTA_ETIQUETA[String(a.conducta || "")] || String(a.conducta || ""))}</span>
         </div>
         <div class="vgl-mtr-msg">${escapeHtml(String(a.mensaje || ""))}</div>
         ${pares}${mecanismo}

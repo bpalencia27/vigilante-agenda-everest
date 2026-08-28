@@ -4,6 +4,40 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.26.0] — 2026-08-28 (Laboratorios: la seguridad farmacológica se muda a Conducta, y su redacción se limpia)
+
+### 🐛 Corrección en vivo: códigos crudos en los avisos de seguridad farmacológica
+El médico probó el motor contra un paciente real en el modal de Laboratorios y reportó
+dos defectos de redacción en el mismo bloque:
+
+- Las 17 interacciones del catálogo RCV (`AINE_RAAS`, `ISRS_ISRN_AINE`,
+  `TRAMADOL_ISRS_ISRN`...) se veían en pantalla con su **código interno crudo** en vez de
+  un título legible. El catálogo ya trae ese título (con fuente citada, BNF) desde que se
+  incorporó — solo faltaba pasarlo del catálogo al aviso que se pinta. Corregido:
+  `mtrEvaluarConCatalogoRcv` copia `titulo` al aviso y `mtrEtiquetaAviso` lo prefiere sobre
+  el código.
+- La conducta `"CAP_DOSIS"` (18 sitios del Copiloto de dosis renal — metformina,
+  rosuvastatina, furosemida, DOAC...) se veía tal cual, en snake_case, junto al resto de
+  conductas ya legibles (AJUSTAR, EVITAR, CONTRAINDICADA...). Se traduce a "TOPE DE DOSIS"
+  solo al pintar — ninguno de los 18 sitios que deciden la conducta se toca.
+
+### 🚚 El bloque de seguridad farmacológica sale de Laboratorios
+Reporte del médico, mismo hallazgo en vivo: ese bloque **no debería estar en el modal de
+resultados de laboratorio** — el juicio farmacológico ya vive en su propio widget en
+Conducta (`#vgl-cw-farmaco`, v17.25.0), y tenerlo repetido en Laboratorios era, en sus
+palabras, "erróneo". Se retira el contenedor y el cálculo de Laboratorios; el recuadro de
+función renal (TFG, estadio) se queda — la observación fue puntual sobre seguridad
+farmacológica, no sobre ese recuadro.
+
+### 🩺 El recuadro de función renal de Laboratorios, por fin visible (auditoría propia)
+Mismo patrón que el hallazgo de v17.12.0, encontrado en una auditoría del módulo de
+Laboratorios: `_renderEstadioRenalHtml` (TFG, estadio, discordancia entre fórmulas,
+paciente pediátrico, creatinina fuera de rango) estaba escrita, probada de punta a punta
+y con su propio CSS — y nunca se insertaba en ningún sitio: no había ni un contenedor
+para ella en la plantilla del modal. Corregido junto con lo anterior.
+
+---
+
 ## [Versión 17.25.0] — 2026-08-28 (Widget de farmacia en Conducta — Fase 2, y un hallazgo grave)
 
 ### 💊 Widget de análisis farmacológico en Conducta (Fase 2 del rediseño del Panel)
