@@ -4813,3 +4813,28 @@ Banco en verde tras la restauración final: **2.488/2.488**.
 **Sin mutación, y se dice en vez de inventar una:** las 21 decisiones de la entrevista S+
 de esta noche (`docs/DECISIONES_ENTREVISTA_SPLUS_20260828.md`) no tocan código de
 producción en esta versión — son la base para el trabajo que sigue.
+
+---
+
+## v17.19.0 — "Silenciar 15 min" ahora sí silencia todo
+
+Decisión del médico: el silencio temporal debía callar el toast y la notificación de
+Windows además del tono. `_dispararAvisoAudible` gana un `if (muted()) return true;`
+(devuelve `true`, no `false`, para no perder el encolado del cartel pendiente cuando el
+silencio ya haya vencido) y `_dispararAvisoCartel` gana `&& !muted()` — cierra de paso una
+brecha real: su propio comentario ya prometía "calla... cartel" desde antes, sin que el
+código lo hiciera.
+
+Banco en verde tras la restauración final: **2.490/2.490**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar el `muted()` de `_dispararAvisoAudible` | *v17.19.0: el silencio temporal también calla el toast y la notificación de Windows…* |
+| 2 | Quitar el `!muted()` de `_dispararAvisoCartel` | *v17.19.0: el silencio temporal también calla el cartel dentro de la página* |
+
+**Investigado, sin mutación porque no hubo cambio de comportamiento que fijar:** el reporte
+de "notificaciones repetidas" se revisó a fondo (toda la cadena de deduplicación —
+`state.notified`, `bumpStatCita`/`state.contadas`, `state.alertedFraud`, la siembra
+compartida) sin encontrar una vía nueva y reproducible más allá de lo que ya cubren seis
+arreglos anteriores. Queda como investigación abierta en el CHANGELOG, no como mutación
+falsa.

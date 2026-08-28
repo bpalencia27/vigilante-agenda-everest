@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.18.0
+// @version     17.19.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.18.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.19.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -11345,6 +11345,14 @@ _vglOfrecerDeshacer(btn);
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     if (p.color === "ROJO") startNag("ROJO");
     else if (p.color === "MORADO") playTone("MORADO");
+    // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): "Silenciar 15 min" callaba solo el tono
+    // (beep() ya mira muted()); toast y notificación de Windows seguían saliendo igual,
+    // justo el ruido que pidió apagar ("mejor dejarlo lo más minimalista posible"). El
+    // hecho se sigue contando y registrando igual — eso ya pasó en colorAndAlert/
+    // maybeNotify, antes de llegar aquí — y devolver `true` (no `false`) deja intacto
+    // que el cartel pendiente se siga encolando para cuando el médico entre a la
+    // historia, aunque el silencio ya haya vencido para entonces.
+    if (muted()) return true;
     if (_pestanaOculta()) {
       if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
         showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
@@ -11362,7 +11370,11 @@ _vglOfrecerDeshacer(btn);
   // El cartel dentro de la página: solo ROJO, solo si el médico lo activó, y solo con la
   // pestaña visible (oculta, el canal ya fue la notificación del sistema).
   function _dispararAvisoCartel(p) {
-    if (S.cartel && p.color === "ROJO" && !_pestanaOculta()) bigAlert("ROJO", p.title, p.body);
+    // v17.19.0 — el comentario original de "Silencio temporal" (línea ~10364) ya prometía
+    // "calla sonido/ventana/cartel", pero el cartel nunca miró muted(): la promesa era
+    // falsa. Se cierra la brecha aquí, único punto del que cuelgan los tres llamadores
+    // reales de este disparador (inmediato, cola diferida y el de _dispararAvisoReal).
+    if (S.cartel && p.color === "ROJO" && !_pestanaOculta() && !muted()) bigAlert("ROJO", p.title, p.body);
   }
   function _dispararAvisoReal(p) {
     // Si el cartel va a salir (ROJO + S.cartel + pestaña visible, y aquí solo se llega

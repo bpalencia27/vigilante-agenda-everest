@@ -4,6 +4,34 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.19.0] — 2026-08-28 (Silenciar 15 min ahora sí silencia todo)
+
+### 🔇 "Silenciar 15 min" pasa a callar el toast y la notificación de Windows, no solo el tono
+Decisión del médico (entrevista de la noche del 28-ago): antes, silenciar solo apagaba el
+tono — el aviso dentro de la página y la notificación de Windows seguían saliendo igual, y
+eso es justo el ruido que pidió reducir ("mejor dejarlo lo más minimalista posible"). Ahora
+los tres canales obedecen el silencio temporal. El hecho se sigue contando y quedando
+registrado exactamente igual — nada de esto toca la auditoría ni el panel del asistente —
+solo se calla el ruido hacia afuera.
+
+De paso se cerró una brecha real entre lo que el código decía y lo que hacía: el
+comentario de "Silencio temporal" ya prometía desde hace tiempo que callaba "sonido,
+ventana y cartel", pero el cartel nunca miró si estaba silenciado.
+
+### 🔍 Investigación: notificaciones que se repiten
+El médico también reportó que el toast de confirmación/inasistencia y el aviso de fraude
+se le repetían, con sonido, para hechos que ya habían aparecido. Se revisó a fondo toda la
+cadena de deduplicación existente (`state.notified`, `state.contadas`/`bumpStatCita`,
+`state.alertedFraud`, la siembra compartida entre pestañas) — es una cadena que ya
+absorbió varios reportes reales anteriores (v12.4.0, v14.1.5, v16.2.4, v17.1.0, v17.6.21,
+v17.6.52, v17.6.74) y no se encontró, con el tiempo disponible esta noche, ninguna vía
+nueva y reproducible de duplicado que esa cadena no cubra ya. No se inventa una causa sin
+evidencia: queda documentado como investigación abierta, y el arreglo de esta versión
+(silencio real de verdad) atiende directamente la parte del reporte que sí se pudo
+confirmar y corregir.
+
+---
+
 ## [Versión 17.18.0] — 2026-08-28 (Qué ordenar en el próximo control, junto al botón de Everest)
 
 ### ✨ Nuevo: widget de "qué ordenar" dentro de Conducta

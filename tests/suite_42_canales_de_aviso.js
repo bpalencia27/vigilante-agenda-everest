@@ -63,7 +63,7 @@ module.exports = {
       t.igual(tonos.length, 1, "no sonó con el sonido encendido");
     });
 
-    t.caso("el silencio temporal calla el sonido pero NO desactiva nada más", () => {
+    t.caso("el silencio temporal calla el sonido, y se levanta solo al vencer", () => {
       const c = cargar({ silencioso: true });
       const tonos = conAudio(c);
       c.api.__S.sonido = true;
@@ -73,6 +73,44 @@ module.exports = {
       c.api.__state.muteUntil = 0;
       c.api.beep(1000, 380, 0);
       t.igual(tonos.length, 1, "no volvió a sonar al levantar el silencio");
+    });
+
+    // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): antes "Silenciar 15 min" solo callaba el
+    // tono (arriba) — el toast y la notificación de Windows seguían saliendo igual, que
+    // es justo el ruido que pidió apagar. Ahora los tres canales obedecen muteUntil.
+    t.caso("v17.19.0: el silencio temporal también calla el toast y la notificación de Windows, no solo el tono", () => {
+      const c = cargar({ silencioso: true });
+      conAudio(c);
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.win.document.visibilityState = "hidden";   // el canal candidato es el de Windows
+      c.api.__S.sonido = true;
+      c.api.__state.muteUntil = Date.now() + 60000;
+
+      const res = c.api._dispararAvisoAudible({ uid: "mute-1", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false });
+      t.cierto(res, "sigue devolviendo true: la cola de cartel pendiente no debe perderse aunque esté silenciado");
+      t.igual(os, 0, "ninguna notificación de Windows mientras está silenciado");
+
+      c.api.__state.muteUntil = 0;   // se levanta el silencio
+      c.api._dispararAvisoAudible({ uid: "mute-2", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false });
+      t.igual(os, 1, "al levantar el silencio, la siguiente sí sale por Windows");
+    });
+
+    t.caso("v17.19.0: el silencio temporal también calla el cartel dentro de la página", () => {
+      const c = cargar({ silencioso: true });
+      conAudio(c);
+      c.api.__S.cartel = true;
+      c.api.__state.muteUntil = Date.now() + 60000;
+      let pintado = 0;
+      const nodosAntes = c.env.win.document._nodos.length;
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-1", color: "ROJO", title: "t", body: "b" });
+      t.igual(c.env.win.document._nodos.filter(n => n.id === "vgl-modal").length, 0, "silenciado: el cartel no debe montarse");
+
+      c.api.__state.muteUntil = 0;
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-2", color: "ROJO", title: "t", body: "b" });
+      t.cierto(c.env.win.document._nodos.some(n => n.id === "vgl-modal"), "al levantar el silencio, el cartel sí se monta");
     });
 
     t.caso("playTone emite DOS tonos, y cada color tiene los suyos", () => {
