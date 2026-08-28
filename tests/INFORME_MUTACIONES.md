@@ -6,6 +6,24 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.39.0 — 28-ago-2026 (el botón "Ordenar pendientes" copia el CSS real de "Paquetes")
+
+Solo estilo visual — sin comportamiento nuevo que mutar, y decirlo es más honesto que
+inventar una fila (mismo criterio que v17.33.0). El médico obtuvo el `getComputedStyle`
+real del botón "Paquetes" desde la consola de Everest y lo pegó; el CSS de
+`#vgl-cw-ordenar-btn` se reescribió con esos valores literales (fondo blanco, texto
+`rgba(0,0,0,.87)`, sin borde, radio 13px, sin sombra, 36px de alto, tipografía real) en vez
+del estilo propio (verde, con sombra). `font-size` usa `var(--t-micro)` (ya vale 12px) en
+vez de un literal, para no romper la Regla G de `suite_25_cascada_css.js` (font-size
+literales prohibidos fuera de la escala tipográfica) — sin cambiar el tamaño real.
+
+**Verificado en Chromium real** (no solo la copia recortada que exige CLAUDE.md para reglas
+de color nuevas fuera de `#vgl-root`): se montó el CSS exacto de este botón en una página
+con un CSS "Everest" simulado agresivo (`div,span,p,b,small,label,button{color:red
+!important}`) — el `color:rgba(0,0,0,.87) !important` sobrevive.
+
+Sin mutación asociada. Banco en verde: **2577/2577**.
+
 ## v17.38.0 — 28-ago-2026 (corrección del médico: el botón es ESTÁTICO, no sigue el scroll por JS)
 
 Corrección directa sobre v17.37.0, la misma tarde: "yo no te pedí que siguiera el scroll,

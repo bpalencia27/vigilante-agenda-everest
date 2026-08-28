@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.38.0
+// @version     17.39.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.38.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.39.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5770,7 +5770,10 @@
       const yaOrdenado = isOrdenLabsConductaHoy(docId);
       if (!todos.length && !yaOrdenado) { btn.style.display = "none"; return; }
 
-      btn.className = "vgl-cw-ord-btn" + (isLight() ? " light" : "") + (yaOrdenado ? " vgl-cw-ord-hecho" : "");
+      // v17.39.0 — sin `isLight()`: este botón siempre se ve como Everest (fondo blanco,
+      // texto casi negro, literal), nunca según el tema del propio Vigilante — la clase
+      // "light" tampoco la usaba ninguna regla de CSS (quedó viva sin dueño desde v17.32.0).
+      btn.className = "vgl-cw-ord-btn" + (yaOrdenado ? " vgl-cw-ord-hecho" : "");
       btn.style.display = "";
       if (yaOrdenado) {
         btn.disabled = true;
@@ -13428,17 +13431,29 @@ _vglOfrecerDeshacer(btn);
       :where(#vgl-cw-examenes :not([class])){color:inherit}
       /* v17.32.0 — botón "Ordenar pendientes", debajo del ancla de #vgl-cw-examenes. Vive
          en document.body, fuera de #vgl-root: cada regla de color con clase propia lleva
-         !important sin excepción (CLAUDE.md, misma regla que #vgl-cw-examenes arriba). */
+         !important sin excepción (CLAUDE.md, misma regla que #vgl-cw-examenes arriba).
+         v17.39.0 — a pedido del médico ("hazlo igual al CSS de Everest para que se vea
+         natural"), el estilo copia EXACTAMENTE el computed style real del botón nativo
+         "Paquetes" (obtenido de la propia consola de Everest, no adivinado): fondo blanco,
+         texto casi negro, sin borde, radio 13px, sin sombra, 36px de alto, la tipografía y
+         el letter-spacing reales. A diferencia de los otros dos widgets (que sí siguen el
+         tema claro/oscuro del propio Vigilante, porque viven en un panel flotante propio),
+         este botón se sienta directamente en la barra de Everest — SIEMPRE debe verse como
+         un botón más de Everest, nunca como el nuestro, así que sus colores son literales,
+         no las variables de tema del script. */
       button#vgl-cw-ordenar-btn{
-        position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);
-        max-width:220px;white-space:nowrap;cursor:pointer;user-select:none;
-        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
-        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
-        color:var(--c-verde) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+        position:absolute;z-index:var(--z-widget,2147480000);
+        font-family:"adineue PRO",var(--font-stack, sans-serif);
+        display:inline-flex;align-items:center;justify-content:center;
+        white-space:nowrap;cursor:pointer;user-select:none;
+        background:#fff;border:0;border-radius:13px;
+        padding:0 16px;height:36px;min-width:64px;box-sizing:border-box;
+        font-size:var(--t-micro);font-weight:500;letter-spacing:1.33333px;text-transform:none;
+        color:rgba(0,0,0,.87) !important;box-shadow:none;
         transform:translateX(-50%);   /* v17.34.0 — centrado exacto sobre el punto medio que ya calcula JS */
       }
-      button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.75}
-      button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:var(--fg3) !important}
+      button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.6}
+      button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:rgba(0,0,0,.5) !important}
       :where(#vgl-cw-ordenar-btn :not([class])){color:inherit}
       /* v17.24.0 — widget de Conducta: análisis farmacológico (Fase 2). Mismo idioma que
          #vgl-cw-examenes (badge/panel/estados/pulso); el contenido del panel lo pintan

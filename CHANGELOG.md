@@ -4,6 +4,18 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.39.0] — 2026-08-28 (El botón "Ordenar pendientes" ya luce igual al "Paquetes" real de Everest)
+
+### 🎨 Mismo blanco, misma letra, mismo borde — el de verdad
+A pedido suyo: sacó del propio navegador el estilo real del botón "Paquetes" (consola,
+`getComputedStyle`) y lo pegó aquí. El botón "Ordenar pendientes" ahora usa exactamente
+esos valores — fondo blanco, letra casi negra, sin borde, esquinas redondeadas iguales,
+sin sombra, mismo alto y la misma tipografía de Everest — en vez de nuestro estilo propio
+(verde, con sombra). Verificado en Chromium real contra un CSS agresivo simulado para
+confirmar que el color no se lo come ninguna regla de Everest.
+
+---
+
 ## [Versión 17.38.0] — 2026-08-28 (Corrección suya: el botón queda ESTÁTICO, sin seguir el scroll por JavaScript)
 
 ### 📌 Se retira el seguimiento por scroll — ahora es de verdad estático
