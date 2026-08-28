@@ -9896,7 +9896,7 @@ _vglOfrecerDeshacer(btn);
       ov.innerHTML = `<div class="vgl-modal-card" style="--ac:var(--c-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},${c});--ac-rgb:var(--rgb-${String(color || "AZUL").replace(/[^a-zA-Z]/g, "").toLowerCase()},124,184,255)">
           <div class="vgl-modal-dot"></div>
           <div class="vgl-modal-t">${escapeHtml(title)}</div><div class="vgl-modal-b">${escapeHtml(body)}</div>
-          <button class="vgl-modal-ok">Entendido</button>
+          <button class="vgl-modal-ok" aria-label="Entendido, cerrar aviso">Entendido</button>
         </div>`;
       const tEl = ov.querySelector ? ov.querySelector(".vgl-modal-t") : null;
       if (tEl) tEl.textContent = title;
@@ -10021,7 +10021,7 @@ _vglOfrecerDeshacer(btn);
         secciones.join("") +
         '<div class="vgl-pym-foot">Este aviso no volverá a mostrarse durante la jornada para este paciente.</div>' +
         acciones +
-        '<button class="vgl-pym-ok">Entendido</button>' +
+        '<button class="vgl-pym-ok" aria-label="Entendido, cerrar aviso de pendientes">Entendido</button>' +
         "</div>";
       const nEl = ov.querySelector ? ov.querySelector(".vgl-pym-n") : null;
       if (nEl) nEl.textContent = nombre || "Paciente";
@@ -24763,7 +24763,7 @@ _vglOfrecerDeshacer(btn);
       b.dataset.vglDoc = (apt && apt.doc_id) || "";
       b.innerHTML = '<div class="vgl-acomp-txt">' + escapeHtml(hint.texto) + '</div>'
         + '<div class="vgl-acomp-botones">'
-        + '<button class="vgl-agm-btn pri" data-acomp="ok">Entendido</button>'
+        + '<button class="vgl-agm-btn pri" data-acomp="ok" aria-label="Entendido, cerrar ayuda">Entendido</button>'
         + '<button class="vgl-acomp-nomas" data-acomp="nomas">No volver a mostrar esta ayuda</button>'
         + '</div>';
       // Pegada al botón que toca usar (a su derecha) — ya se confirmó arriba que es
