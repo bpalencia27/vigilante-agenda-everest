@@ -6,6 +6,16 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.33.0 — 28-ago-2026 (el interruptor de Ajustes ya describe el botón que sí actúa)
+
+Solo texto de interfaz (la descripción del interruptor "Exámenes y órdenes en Conducta"):
+no hay comportamiento nuevo que mutar, y decirlo es más honesto que inventar una fila. El
+interruptor y su lógica de encendido/apagado ya estaban cubiertos por las pruebas de
+v17.18.0/v17.24.0/v17.32.0 (`S.conductaWidgets`); esta versión solo corrige que su
+descripción decía "Solo avisa" cuando, desde v17.32.0, el mismo interruptor también
+enciende un botón que genera órdenes reales sin confirmación. Banco en verde: 2.554/2.554
+(sin pruebas nuevas ni rotas).
+
 ## v17.32.0 — 28-ago-2026 (botón "Ordenar pendientes" en Conducta, un clic sin confirmación)
 
 Cinco cambios de comportamiento verificados, uno documentado como NO caído (con el porqué,

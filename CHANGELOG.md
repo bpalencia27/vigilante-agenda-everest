@@ -4,6 +4,21 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.33.0] — 2026-08-28 (El interruptor de Ajustes ya dice que el botón nuevo SÍ actúa)
+
+### 🏷️ "Solo avisa" dejó de ser cierto para este interruptor, y el texto ya lo dice
+Reporte en vivo: el médico encendió Conducta y no vio ni el botón nuevo de v17.32.0 ni el
+aviso de seguridad farmacológica — los tres widgets de Conducta (el de exámenes, el de
+farmacia y el botón "Ordenar pendientes") cuelgan del MISMO interruptor de Ajustes
+("Exámenes y órdenes en Conducta"), apagado de fábrica desde que existe. No es un defecto:
+así se diseñó desde v17.18.0, para que nadie reciba un widget nuevo sin haberlo pedido. Pero
+su descripción decía "Solo avisa: no toca ni escribe nada dentro de Conducta" — cierto
+cuando se escribió, y ya no: el mismo interruptor ahora también enciende un botón que SÍ
+actúa, sin pantalla de confirmación. El texto se corrige para decir las dos cosas por
+separado — lo que solo avisa, y lo que sí ordena — antes de que el médico decida encenderlo.
+
+---
+
 ## [Versión 17.32.0] — 2026-08-28 (Botón "Ordenar pendientes" en Conducta: un clic, sin pantalla intermedia)
 
 ### 📋 Debajo del botón "Paquetes" de Everest, un botón que ordena todo lo pendiente de un clic

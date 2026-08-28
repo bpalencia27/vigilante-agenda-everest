@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.32.0
+// @version     17.33.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.32.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.33.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -25156,7 +25156,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
         <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
-        <div class="vgl-fld"><label>Aviso de exámenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón de ordenar de Everest, qué exámenes hacen falta para el próximo control. <b>Solo avisa: no toca ni escribe nada dentro de Conducta.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
+        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
