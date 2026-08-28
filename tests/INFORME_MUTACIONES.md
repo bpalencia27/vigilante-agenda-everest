@@ -6,6 +6,38 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.35.0 — 28-ago-2026 (el botón "Ordenar pendientes" simula el gesto real de "Paquetes", no el módulo de Ordenamientos)
+
+Reversión puntual y documentada de una parte del retiro v15.7.0 (ver el encabezado de
+`tests/suite_53_conducta_codigo.js` y el bloque de comentarios junto a
+`_conductaBuscarYAgregarExamen` en el fuente, línea ~24086): el botón de v17.32.0 creaba
+una orden real por el módulo de Ordenamientos, pero esa orden no aparecía en la tabla de
+Conducta como sí aparece con "Paquetes" — confirmado con un diagnóstico en vivo
+(`DIAGNOSTICO_PAQUETES_CONDUCTA.js`) que el médico corrió en consulta real. El médico, ya
+visto las dos alternativas que no tocaban el DOM, pidió explícitamente lo contrario de lo
+que se decidió el 20-ago: simular el clic real de "Paquetes" tal cual. El texto de cada
+`<li>`/botón es literal, capturado dos veces en consultorio real (12-ago y 28-ago, 16 días
+aparte, mismo resultado) — nunca adivinado.
+
+Cuatro cambios de comportamiento verificados con mutación. Restaurado y verificado con
+`diff` contra copia intacta tras cada mutación. Banco completo en verde: **2572/2572**
+(suite_71 sola: 72/72).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `_conductaBuscarYAgregarExamen`: coincidencia exacta (`_canonTexto(el.textContent) === claveObjetivo`) → `.indexOf(claveObjetivo) >= 0` (substring) | *coincidencia EXACTA, nunca por substring — examen parecido no se clickea (en ninguna de las dos direcciones)* (suite_71) — el primer intento de esta prueba usaba un `<li>` más CORTO que el buscado, y no cazó la mutación (un `indexOf` en el sentido "el texto del `<li>` contiene lo buscado" nunca puede fallar con un texto más corto); se corrigió añadiendo un segundo `<li>` MÁS LARGO (con un calificador extra) para cazar la dirección real del `indexOf` que la mutación introduce |
+| 2 | `mtrConductaAgregarPendientes`: verificación del paquete leyendo la tabla (`if (huboFilasNuevas \|\| antes.size !== trasPaquete.size)`) → siempre cuenta como agregado, sin leer la tabla | *si el paquete no logra disparar (sin 'Paquetes'), esas claves quedan fallidas* y *paquete + individual juntos, verificado leyendo la tabla* (suite_71) |
+| 3 | `mtrItemsOrdenarConducta`: RAC deja de entrar en los DOS grupos (`if (enPaquete)... if (liTexto)...` → `if (enPaquete)... else if (liTexto)...`) | *separa {paquete, individuales} — RAC entra en LOS DOS* (suite_71) |
+| 4 | `_cwoClic`: la guarda de reentrada (`if (_cwoEnCurso \|\| !docId) return` → `if (!docId) return`) — a diferencia de v17.32.0 (por red, donde GHOST de `pageFetchJson` deduplicaba por debajo sin que `_cwoEnCurso` tuviera que hacerlo), aquí NO hay ninguna capa de deduplicación de otro módulo: sin la guarda, dos clics casi simultáneos disparan DOS secuencias de clics reales sobre el mismo botón/`<li>` | *dos clics antes de que termine el primero solo disparan UNA vez el clic real en Paquetes* (suite_71) |
+
+**Un hueco conocido, dicho en vez de escondido** (sin mutación asociada — es una ausencia
+deliberada de cobertura, no un comportamiento a proteger): si la RAC es el ÚNICO analito
+pendiente, igual hace falta disparar el paquete completo "HTA" para la mitad de la RAC que
+solo viene ahí (creatinina en orina, 903876) — no hay evidencia real de que ese examen se
+pueda buscar y agregar individualmente, y adivinar un texto de `<li>` sin haberlo visto es
+justo lo que este proyecto se prohíbe. Documentado en el comentario junto a
+`MTR_ANALITOS_PAQUETE_CONDUCTA` en el fuente.
+
 ## v17.34.0 — 28-ago-2026 (panel angosto corregido, botón centrado entre Historial y Paquetes, "Generar todo" retirado)
 
 Tres cambios de comportamiento verificados con mutación (más la retirada de "Generar

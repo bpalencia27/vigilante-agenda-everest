@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.34.0
+// @version     17.35.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.34.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.35.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5665,26 +5665,19 @@
   }
 
   // =====================================================================
-  //  v17.32.0 — BOTÓN "ORDENAR LO PENDIENTE", DEBAJO DEL ANCLA DE #vgl-cw-examenes
+  //  v17.32.0/v17.35.0 — BOTÓN "ORDENAR LO PENDIENTE", ENTRE "HISTORIAL" Y "PAQUETES"
   //  ---------------------------------------------------------------------
-  //  Mismo ancla (mtrBotonOrdenarConducta) que ya usa el widget de arriba, para que los
-  //  dos vivan pegados al mismo botón nativo "Paquetes" — pero DEBAJO de él (el médico
-  //  pidió el suyo "debajo del botón de Paquetes"), no a su derecha como la pastilla de
-  //  qué-ordenar. La lógica de red vive en mtrOrdenarLabsConductaAhora, arriba, junto al
-  //  resto del módulo de Ordenamientos — aquí solo hay DOM y estado de la UI.
+  //  Ancla propia (mtrAnclaOrdenarPendientes) — los dos botones nativos, no solo
+  //  "Paquetes" como la pastilla de qué-ordenar. El gesto real (clics/DOM) vive en
+  //  mtrConductaAgregarPendientes y sus ayudantes, arriba, junto al resto del módulo de
+  //  Ordenamientos — aquí solo hay DOM y estado de la UI del botón mismo.
+  //
+  //  `_cwoEnCurso` es AHORA la ÚNICA línea de defensa contra un doble disparo — a
+  //  diferencia de la primera entrega (v17.32.0, por red), aquí NO hay ninguna capa de
+  //  deduplicación de otro módulo por debajo: dos clics casi simultáneos ejecutarían dos
+  //  secuencias de clics reales, independientes, sobre el mismo <li>/botón. Sin esta
+  //  guarda, un doble clic agregaría el mismo examen dos veces.
   // =====================================================================
-  // v17.32.0 — sobre esta guarda y por qué es defensa EN PROFUNDIDAD, no la única línea
-  // de defensa contra un duplicado: al mutar esta guarda para verificarla, la red seguía
-  // creando UNA sola orden — porque pageFetchJson ya deduplica peticiones idénticas en
-  // vuelo (GHOST, línea ~16391): dos clics casi simultáneos con el mismo paciente/CUPS
-  // comparten la MISMA promesa de red hasta el POST final. Esa deduplicación es real y
-  // ya protegía esto antes de esta versión — pero es un detalle de implementación de
-  // OTRO módulo, no un contrato que este botón deba asumir. `_cwoEnCurso` es la guarda
-  // PROPIA y explícita: evita recomputar todo (leer el resumen, rearmar los items,
-  // deshabilitar/rehabilitar el botón dos veces) y sigue protegiendo aunque el payload
-  // de la segunda petición llegara a diferir del primero (GHOST solo deduplica bytes
-  // idénticos). Documentado en tests/INFORME_MUTACIONES.md — la mutación de esta guarda
-  // no cae por el camino de red, y ese hallazgo se dejó escrito en vez de escondido.
   let _cwoDocPrevio = null, _cwoEnCurso = false;
   function _cwoEstadoParaTest() { return { docPrevio: _cwoDocPrevio, enCurso: _cwoEnCurso }; }
   function _cwoResetParaTest() { _cwoDocPrevio = null; _cwoEnCurso = false; }
@@ -5694,31 +5687,33 @@
     _cwoEnCurso = true;
     btn.disabled = true;
     const textoPrevio = btn.textContent;
-    btn.textContent = "⏳ Ordenando...";
+    btn.textContent = "⏳ Agregando...";
     try {
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
       let plan = null;
       try { plan = resumen ? mtrTableroClinico(resumen) : null; } catch (e) { plan = null; }
       const items = mtrItemsOrdenarConducta(plan ? plan.ordenar : []);
-      if (!items.length) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
+      const total = items.paquete.length + items.individuales.length;
+      if (!total) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
 
       uxTrack("widget.ordenarConducta.clic");
-      const r = await mtrOrdenarLabsConductaAhora(docId, items);
-      if (r.creadas.length) {
-        markOrdenLabsConductaHoy(docId, r.creadas);
-        const nombresOk = r.creadas.map((c) => (items.find((x) => x.clave === c) || {}).nombre || c).join(", ");
-        if (r.fallidas.length) {
-          const nombresMal = r.fallidas.map((f) => f.nombre || f.clave).join(", ");
-          showToast("AMBAR", "Orden parcial", "Se ordenaron: " + nombresOk + ". No se pudo con: " + nombresMal + ".", true);
+      const r = await mtrConductaAgregarPendientes(items);
+      const todos = items.paquete.concat(items.individuales);
+      if (r.agregados.length) {
+        markOrdenLabsConductaHoy(docId, r.agregados);
+        const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+        if (r.fallidos.length) {
+          const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
+          showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
         } else {
-          showToast("VERDE", "Orden generada", "Se ordenó: " + nombresOk + ".", false);
+          showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
         }
       } else {
-        showToast("ROJO", "No se generó la orden", r.motivo || "No se pudo completar la orden.", true);
+        showToast("ROJO", "No se pudo agregar", "No se encontraron los botones o la lista de exámenes en la pantalla. Inténtelo de nuevo, o agréguelo a mano.", true);
       }
     } catch (e) {
-      showToast("ROJO", "No se generó la orden", "Error inesperado al ordenar. Inténtelo de nuevo.", true);
+      showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
     } finally {
       _cwoEnCurso = false;
       btn.disabled = false;
@@ -5767,20 +5762,21 @@
 
       if (_cwoEnCurso) { btn.style.display = ""; return; }   // no se repinta a mitad de un clic en curso
 
+      const todos = items.paquete.concat(items.individuales);
       const yaOrdenado = isOrdenLabsConductaHoy(docId);
-      if (!items.length && !yaOrdenado) { btn.style.display = "none"; return; }
+      if (!todos.length && !yaOrdenado) { btn.style.display = "none"; return; }
 
       btn.className = "vgl-cw-ord-btn" + (isLight() ? " light" : "") + (yaOrdenado ? " vgl-cw-ord-hecho" : "");
       btn.style.display = "";
       if (yaOrdenado) {
         btn.disabled = true;
-        btn.textContent = "✓ Ordenado hoy";
-        btn.title = "Ya se generó una orden de laboratorios pendientes hoy para este paciente.";
+        btn.textContent = "✓ Agregado hoy";
+        btn.title = "Ya se agregaron a Conducta los laboratorios pendientes hoy para este paciente. Recuerde guardar la consulta.";
         btn.onclick = null;
       } else {
         btn.disabled = false;
-        btn.textContent = "📋 Ordenar pendientes (" + items.length + ")";
-        btn.title = "Genera de una vez la orden de todo lo que toca en la próxima consulta: " + items.map((x) => x.nombre).join(", ") + ".";
+        btn.textContent = "📋 Ordenar pendientes (" + todos.length + ")";
+        btn.title = "Agrega de una vez, en la tabla de Ordenamientos, todo lo que toca en la próxima consulta: " + todos.map((x) => x.nombre).join(", ") + ".";
         btn.onclick = (e) => { e.stopPropagation(); return _cwoClic(btn, docId); };
       }
     } catch (e) {}
@@ -24072,66 +24068,117 @@ _vglOfrecerDeshacer(btn);
   }
 
   // =====================================================================
-  //  v17.32.0 — BOTÓN "ORDENAR LO PENDIENTE" DE CONDUCTA (encargo del médico, 28-ago)
+  //  v17.32.0/v17.35.0 — BOTÓN "ORDENAR LO PENDIENTE" DE CONDUCTA (encargo del médico)
   //  ------------------------------------------------------------------
-  //  Textual: "necesito además el botón debajo del botón de Paquetes en la sección de
-  //  Conducta para agregar en un solo clic los laboratorios que se debe ordenar cada
-  //  paciente en la próxima consulta". Al preguntarle si debía abrir el modal de Ordenar
-  //  ya marcado (un clic más para confirmar) o generar la orden de una vez, sin pantalla
-  //  intermedia, eligió la segunda: "tal cual como lo haría el botón de Paquetes que ya
-  //  trae Everest". Es el caso que CLAUDE.md documenta como excepción puntual (ver
-  //  v12.10.4): un botón que actúa sin cuadro de confirmación porque el propio médico lo
-  //  pidió así — no una decisión unilateral del script.
+  //  Textual (28-ago): "necesito además el botón debajo del botón de Paquetes en la
+  //  sección de Conducta para agregar en un solo clic los laboratorios que se debe
+  //  ordenar cada paciente en la próxima consulta". La primera entrega (v17.32.0) creaba
+  //  una orden real por el módulo de Ordenamientos de Everest (GuardarOrdenamiento) — el
+  //  mismo camino que las órdenes de PyM. Reporte en vivo: esa orden no aparecía en la
+  //  tabla de Conducta > Ordenamientos, porque es un mecanismo DISTINTO al que usa el
+  //  botón nativo "Paquetes".
   //
-  //  QUÉ SE ORDENA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
-  //  próxima consulta (`resumen.plan.ordenar`, el MISMO dato que ya lee el widget
-  //  #vgl-cw-examenes, v17.18.0) — nunca un paquete fijo. Si el motor no marcó nada
-  //  pendiente, el botón no ordena nada (casilla vacía antes que dato inventado).
+  //  DIAGNÓSTICO EN VIVO (el médico corrió DIAGNOSTICO_PAQUETES_CONDUCTA.js en consulta
+  //  real, 28-ago): "Paquetes" + "Agregar" hacen UNA sola petición de red (un GET que
+  //  trae el catálogo del paquete) — el resto, las diez filas que aparecen en la tabla,
+  //  lo arma Everest ENTERAMENTE en el navegador. No hay ningún POST que "guarde" esa
+  //  fila: queda pendiente hasta que el médico usa el "Guardar" de toda la consulta.
   //
-  //  CÓMO SE ORDENA: reusa el MISMO camino ya probado y en producción desde hace
-  //  versiones — apiOrdenamientoBuscarPaciente / apiOrdenamientoObtenerDx /
-  //  apiOrdenamientoObtenerCup / apiOrdenamientoGuardar, el mismo que usa
-  //  openOrdenamientoModal (arriba) — con el mismo diagnóstico "I10X" (PYM_CATALOG,
-  //  paquete "RCV EXPRÉS") que el médico ya verificó el 2026-08-11 para exactamente esta
-  //  población (crónicos ERC/HTA/DM2). No se inventa ningún CIE-10 ni CUPS nuevo.
+  //  Encargo explícito, tras ver las dos alternativas (simular u orden por Ordenamientos)
+  //  y rechazar las dos que se le propusieron sin simular: "quiero que simules
+  //  exactamente lo que hace ese botón de paquetes, tal cual. ni más ni menos... debes
+  //  simular exactamente lo que hace Everest y así no tendrás problemas". Es la excepción
+  //  puntual que CLAUDE.md documenta (v12.10.4): un botón que actúa sin cuadro de
+  //  confirmación, y ahora también simulando un gesto real, porque el propio médico lo
+  //  pidió así con las dos alternativas ya vistas — no una decisión unilateral del script.
   //
-  //  LO QUE ESTA VERSIÓN DELIBERADAMENTE NO HACE, y por qué: v15.3.0 retiró para siempre
-  //  la escritura simulando clics DENTRO del DOM de Conducta (causó un bucle real en
-  //  consultorio) — este botón NUNCA toca ese DOM, ni lo lee más allá de encontrar el
-  //  botón "Paquetes" como ancla de posición (mtrBotonOrdenarConducta, ya existente). La
-  //  orden se crea por el módulo de Ordenamientos de Everest, exactamente como si el
-  //  médico hubiera hecho el gesto manual — el mismo principio que ya rige
-  //  openOrdenamientoModal desde ese retiro.
+  //  POR QUÉ ESTO ES DISTINTO DE LO QUE v15.3.0/v15.7.0 RETIRARON: aquello se retiró por
+  //  un bug real — una cola que reintentaba en CADA vuelta del reloj de sondeo (5-30 s) un
+  //  clic que nunca calzaba, reteclando sin parar. Esta vez: (1) el gesto corre UNA sola
+  //  vez, disparado por el clic explícito del médico — nunca desde el reloj de sondeo ni
+  //  con reintento automático; (2) cada texto de <li>/botón es LITERAL, capturado por el
+  //  propio médico en consultorio real, dos veces, 16 días aparte, con el mismo resultado
+  //  (`captura_ordenamiento_paquete_HTA_20260812.json`, `EVIDENCIA_ORDENAMIENTO_CURADO.md`,
+  //  y el diagnóstico de hoy) — nunca se adivina un texto; (3) coincidencia EXACTA, nunca
+  //  por substring, mismo principio que ya tenía _conductaBuscarYAgregarExamen (v14.0.3,
+  //  retirado junto con todo lo demás y restaurado aquí); (4) cada fila que se cuenta como
+  //  "agregada" se VERIFICA leyendo la propia tabla después del clic — nunca se asume que
+  //  un clic disparado hizo lo que se esperaba.
+  //
+  //  QUÉ SE AGREGA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
+  //  próxima consulta (`resumen.plan.ordenar`) — nunca el paquete completo por costumbre.
+  //  Los ocho analitos que solo existen agrupados en el paquete de Everest (perfil
+  //  lipídico, glicemia, uroanálisis, las dos creatininas) se agregan disparando el
+  //  paquete "HTA" SOLO si alguno de ellos hace falta; los seis que sí se buscan y
+  //  agregan uno por uno (los 4 pasajeros, HbA1c y la microalbuminuria automatizada de la
+  //  RAC) se agregan solo si a CADA UNO le toca, nunca de arrastre por venir el paquete.
+  //
+  //  UN HUECO CONOCIDO, dicho en vez de escondido: si la RAC es lo ÚNICO pendiente, igual
+  //  hace falta disparar el paquete completo para la mitad de la RAC que solo viene ahí
+  //  (creatinina en orina, 903876) — no hay evidencia real de que ese examen se pueda
+  //  buscar y agregar solo, y adivinar un texto de <li> sin haberlo visto es justo lo que
+  //  este proyecto se prohíbe.
   // =====================================================================
 
-  // Clave del analito (MTR_DRIVERS/MTR_PASAJEROS) -> código(s) CUPS de ESCRITURA.
-  // Todos vienen de fuentes ya verificadas en producción, citadas una por una — ninguno
-  // se adivina aquí:
-  //   · Los 9 drivers: PYM_CATALOG, paquete I10X "RCV EXPRÉS" (línea ~22886-22913),
-  //     confirmado por el médico el 2026-08-11 contra la tabla oficial de CUPS de la IPS.
-  //     RAC lleva DOS códigos a propósito — "van SIEMPRE los dos: uno solo no produce la
-  //     RAC" (comentario original de esa misma línea).
-  //   · Los 4 pasajeros: CUPS_ESCRITURA_RENAL_PENDIENTE_ESTADIO (línea ~1286), tomados de
-  //     una orden YA GUARDADA en Everest (agrupador 12260710549, ver
-  //     EVIDENCIA_ORDENAMIENTO_CURADO.md). HBA1C aparece en las dos fuentes con el MISMO
-  //     código (903426) — verificación cruzada, no una casualidad.
-  const MTR_CUPS_ORDENAR_POR_ANALITO = {
-    COLESTEROL_TOTAL: ["903818"],
-    COLESTEROL_HDL: ["903815"],
-    COLESTEROL_LDL: ["903817"],   // versión de crónicos (ERC/HTA/DM2) del I10X, no la 903816 de sanos (Z108)
-    TRIGLICERIDOS: ["903868"],
-    GLUCOSA: ["903841"],
-    UROANALISIS: ["907106"],
-    CREATININA: ["903895"],
-    RAC: ["903876", "903026"],    // creatinina en orina + microalbuminuria, siempre juntos
-    HBA1C: ["903426"],
-    HEMOGLOBINA: ["902213"],
-    PTH: ["903890"],
-    FOSFORO: ["903885"],
-    ALBUMINA: ["903803"],
+  // v17.35.0 — Nombre EXACTO con el que cada analito aparece como <li> en el buscador
+  // nativo de Conducta de Everest (Paquetes → HTA → agregar examen individual). Texto
+  // LITERAL capturado por el grabador de clics del proyecto en consultorio el 12-08-2026
+  // (`captura_ordenamiento_paquete_HTA_20260812.json`, ver también
+  // `EVIDENCIA_ORDENAMIENTO_CURADO.md` §2 y §4) — HBA1C y la microalbuminuria automatizada
+  // de la RAC se re-confirmaron el 28-08-2026 con un diagnóstico nuevo en consulta real,
+  // mismo texto, 16 días después. NO son inventados ni tomados del catálogo del Copiloto
+  // (esas son descripciones cortas, p. ej. "HEMOGLOBINA GLICOSILADA" sin "AUTOMATIZADA").
+  // Usados por _conductaBuscarYAgregarExamen (más abajo), coincidencia EXACTA de texto,
+  // nunca por substring — un match parcial en un catálogo clínico real podría clickear el
+  // examen equivocado.
+  const CONDUCTA_LI_TEXTO_POR_ANALITO = {
+    PTH: "HORMONA PARATIROIDEA MOLECULA INTACTA",
+    ALBUMINA: "ALBUMINA EN SUERO U OTROS FLUIDOS",
+    FOSFORO: "FOSFORO EN SUERO U OTROS FLUIDOS",
+    HEMOGLOBINA: "HEMOGLOBINA",
+    HBA1C: "HEMOGLOBINA GLICOSILADA AUTOMATIZADA",
+    // v17.35.0 — la RAC nunca la produce el paquete solo: trae la variante SEMIAUTOMATIZADA
+    // (903028) donde esta población necesita la AUTOMATIZADA (903026) — EVIDENCIA_
+    // ORDENAMIENTO_CURADO.md §3. Se agrega SIEMPRE por su cuenta, aunque el paquete
+    // también se dispare por los otros analitos.
+    RAC: "MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL",
   };
 
-  // v17.32.0 — mismo patrón day-scoped que isLabAgendadaHoy/markLabAgendadaHoy, en su
+  // v17.35.0 — Los analitos que SOLO existen agrupados en el paquete "HTA" de Everest
+  // (`ObtenerPaqueteProgramasCupsByCitaId`, confirmado real dos veces: 12-ago y 28-ago,
+  // mismo resultado, mismos 10 códigos). Si CUALQUIERA de estos hace falta, se dispara el
+  // paquete una sola vez — nunca uno por uno, porque no hay evidencia de que se puedan
+  // buscar sueltos. RAC entra aquí TAMBIÉN (por su mitad de creatinina en orina, 903876)
+  // y ADEMÁS en CONDUCTA_LI_TEXTO_POR_ANALITO (por su mitad de microalbuminuria) — las dos
+  // mitades son necesarias, ninguna sustituye a la otra.
+  const MTR_ANALITOS_PAQUETE_CONDUCTA = [
+    "COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
+    "GLUCOSA", "UROANALISIS", "CREATININA", "RAC",
+  ];
+
+  // Pura: separa el `ordenar` crudo de mtrPlanParaclinicos en {paquete, individuales} —
+  // paquete: claves que necesitan el disparo de "Paquetes → HTA"; individuales: claves
+  // con su texto de <li> propio. Una clave sin ninguna de las dos formas conocidas
+  // (nunca debería pasar con los 13 analitos de hoy) se ignora, no truena.
+  function mtrItemsOrdenarConducta(ordenar) {
+    const lista = Array.isArray(ordenar) ? ordenar : [];
+    const vistos = new Set();
+    const paquete = [], individuales = [];
+    for (const a of lista) {
+      const clave = a && a.clave;
+      if (!clave || vistos.has(clave)) continue;
+      const enPaquete = MTR_ANALITOS_PAQUETE_CONDUCTA.indexOf(clave) >= 0;
+      const liTexto = CONDUCTA_LI_TEXTO_POR_ANALITO[clave];
+      if (!enPaquete && !liTexto) continue;
+      vistos.add(clave);
+      const nombre = a.nombre || mtrNombreLegibleAnalito(a) || clave;
+      if (enPaquete) paquete.push({ clave: clave, nombre: nombre });
+      if (liTexto) individuales.push({ clave: clave, nombre: nombre, liTexto: liTexto });
+    }
+    return { paquete: paquete, individuales: individuales };
+  }
+
+  // v17.35.0 — mismo patrón day-scoped que isLabAgendadaHoy/markLabAgendadaHoy, en su
   // PROPIO namespace (`p.labsConducta`): a propósito NO comparte almacén con
   // isOrdenesCreadasHoy/markOrdenesCreadasHoy (ese es el de las órdenes PyM del botón
   // "Ordenar" del dock — un paciente puede necesitar las dos cosas el mismo día, y
@@ -24154,84 +24201,157 @@ _vglOfrecerDeshacer(btn);
     writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint();
   }
 
-  // El diagnóstico ya verificado (ver comentario de arriba) para toda esta familia de
-  // órdenes — el mismo que usa PYM_CATALOG/I10X.
-  const MTR_ORDENAR_CONDUCTA_CIE10 = "I10X";
+  // =====================================================================
+  //  v17.35.0 — EL GESTO REAL: encontrar la tabla, encontrar y clickear los botones/<li>,
+  //  y VERIFICAR después leyendo la propia tabla — nunca asumir que un clic hizo lo que
+  //  se esperaba.
+  // =====================================================================
 
-  // Pura salvo por lo que recibe ya resuelto: dado el `ordenar` crudo de
-  // mtrPlanParaclinicos (o de mtrTableroClinico, que es lo mismo), arma la lista de
-  // {clave, nombre, codigos} a intentar — y ya excluye lo que no tiene CUPS conocido
-  // (nunca debería pasar con los 13 de MTR_CUPS_ORDENAR_POR_ANALITO, pero si el motor
-  // algún día trae una clave nueva, se ignora en vez de tronar).
-  function mtrItemsOrdenarConducta(ordenar) {
-    const lista = Array.isArray(ordenar) ? ordenar : [];
-    const vistos = new Set();
-    const items = [];
-    for (const a of lista) {
-      const clave = a && a.clave;
-      if (!clave || vistos.has(clave)) continue;
-      const codigos = MTR_CUPS_ORDENAR_POR_ANALITO[clave];
-      if (!codigos || !codigos.length) continue;
-      vistos.add(clave);
-      items.push({ clave: clave, nombre: (a.nombre || mtrNombreLegibleAnalito(a) || clave), codigos: codigos });
-    }
-    return items;
+  // Encuentra la tabla de Ordenamientos por su encabezado ("Código"+"Cantidad"), no por
+  // id/clase — no hay evidencia de que sean estables (mismo criterio que
+  // mtrBotonOrdenarConducta con el botón "Paquetes"). Devuelve null si no está a la vista.
+  function _conductaTablaOrdenamientos(doc) {
+    try {
+      const d = doc || document;
+      const tablas = Array.from(d.querySelectorAll("table"));
+      for (const t of tablas) {
+        const enc = _canonTexto(t.textContent).slice(0, 400);
+        if (enc.indexOf("CODIGO") >= 0 && enc.indexOf("CANTIDAD") >= 0) return t;
+      }
+      return null;
+    } catch (e) { return null; }
   }
 
-  // El núcleo de red: dado el docId del paciente abierto, ordena TODO lo que
-  // mtrPlanParaclinicos diga que toca ahora mismo, con el mismo camino ya probado que usa
-  // openOrdenamientoModal. Devuelve {ok, creadas:[claves], fallidas:[{clave,motivo}],
-  // motivo} — nunca lanza: cada fallo vuelve como dato, nunca como excepción, para que la
-  // UI pueda avisar con un toast siempre, y nunca con un error de consola mudo.
-  async function mtrOrdenarLabsConductaAhora(docId, itemsPendientes) {
-    const vacio = { ok: false, creadas: [], fallidas: [], agrupador: null, motivo: "" };
-    if (!docId) return Object.assign({}, vacio, { motivo: "Sin paciente identificado." });
-    const items = Array.isArray(itemsPendientes) ? itemsPendientes : [];
-    if (!items.length) return Object.assign({}, vacio, { motivo: "Nada pendiente por ordenar." });
-
-    const pacienteIdOrd = await apiOrdenamientoBuscarPaciente(docId);
-    if (!pacienteIdOrd) {
-      return Object.assign({}, vacio, { fallidas: items.map((x) => ({ clave: x.clave, nombre: x.nombre, motivo: "paciente" })),
-        motivo: "No se encontró al paciente en el sistema de órdenes con la cédula " + docId + "." });
-    }
-    const dxId = await apiOrdenamientoObtenerDx(MTR_ORDENAR_CONDUCTA_CIE10);
-    if (!dxId) {
-      return Object.assign({}, vacio, { fallidas: items.map((x) => ({ clave: x.clave, nombre: x.nombre, motivo: "diagnostico" })),
-        motivo: "No se pudo resolver el diagnóstico de la orden en Everest." });
-    }
-
-    const cupsObjs = [];
-    const fallidas = [];
-    for (const item of items) {
-      // RAC necesita SUS DOS códigos para tener sentido clínico ("uno solo no produce la
-      // RAC", ver el comentario de MTR_CUPS_ORDENAR_POR_ANALITO): si falta cualquiera de
-      // los dos, ninguno de los dos entra a la orden — no se pide media RAC.
-      const resueltos = [];
-      let faltoAlguno = false;
-      for (const codigo of item.codigos) {
-        const cObj = await apiOrdenamientoObtenerCup(pacienteIdOrd, codigo);
-        if (cObj) resueltos.push(cObj); else faltoAlguno = true;
+  // Códigos CUPS que YA están en la tabla ahora mismo (primera columna de cada fila) —
+  // se usa ANTES y DESPUÉS de cada clic para saber si de verdad apareció algo nuevo.
+  function _conductaCodigosEnTabla(doc) {
+    try {
+      const t = _conductaTablaOrdenamientos(doc);
+      if (!t) return new Set();
+      const filas = Array.from(t.querySelectorAll("tr"));
+      const set = new Set();
+      for (const f of filas) {
+        const celda = f.querySelector("td");
+        if (celda) { const c = celda.textContent.trim(); if (/^\d{5,6}$/.test(c)) set.add(c); }
       }
-      if (faltoAlguno || !resueltos.length) { fallidas.push({ clave: item.clave, nombre: item.nombre, motivo: "cups" }); continue; }
-      cupsObjs.push(...resueltos);
-    }
-    const claveDeItemResuelto = items.filter((x) => !fallidas.some((f) => f.clave === x.clave)).map((x) => x.clave);
+      return set;
+    } catch (e) { return new Set(); }
+  }
 
-    if (!cupsObjs.length) {
-      return Object.assign({}, vacio, { fallidas: fallidas, motivo: "No se pudo resolver ningún examen en el sistema de órdenes." });
+  function _conductaEsperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // Espera hasta `maxMs` a que la tabla tenga AL MENOS un código nuevo respecto a
+  // `codigosPrevios` — sondeando cada 150ms en vez de un solo `sleep` ciego, para no
+  // sobre-esperar cuando Angular ya terminó, y para no quedarse corto cuando tarda más de
+  // lo normal. Nunca reintenta el CLIC — solo espera a que el que ya se dio surta efecto.
+  async function _conductaEsperarFilasNuevas(doc, codigosPrevios, maxMs) {
+    const limite = Date.now() + maxMs;
+    while (Date.now() < limite) {
+      const ahora = _conductaCodigosEnTabla(doc);
+      for (const c of ahora) if (!codigosPrevios.has(c)) return ahora;
+      await _conductaEsperar(150);
+    }
+    return _conductaCodigosEnTabla(doc);
+  }
+
+  // v17.35.0 — dispara el paquete "HTA" (Paquetes → HTA), confirmado real dos veces
+  // (12-ago y 28-ago) como el gesto que agrega los 8-10 analitos que no se buscan sueltos.
+  // UN SOLO intento — si "Paquetes" o "HTA" no aparecen, devuelve false sin insistir; la
+  // guarda de reentrada (_cwoEnCurso) y el hecho de que esto solo corre por un clic
+  // explícito del médico son las mismas dos barreras que ya evitan el bucle de antes.
+  async function _conductaClicPaqueteHTA(doc) {
+    try {
+      const d = doc || document;
+      const botones = Array.from(d.querySelectorAll("button"));
+      const bPaquetes = botones.find((b) => _vglVisibleDeVerdad(b) && _canonTexto(b.textContent) === "PAQUETES");
+      if (!bPaquetes) return false;
+      bPaquetes.click();
+      await _conductaEsperar(400);   // Angular monta los botones de programa (HTA/DM/…)
+      const botones2 = Array.from(d.querySelectorAll("button"));
+      const bHta = botones2.find((b) => _vglVisibleDeVerdad(b) && _canonTexto(b.textContent) === "HTA");
+      if (!bHta) return false;
+      bHta.click();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // v17.35.0/v14.0.3 — restaurada: reproduce en el DOM real de Everest el mismo gesto que
+  // el médico ya hace a mano en Conducta — clic en el <li> del examen (coincidencia EXACTA
+  // de texto, nunca parcial) y, tras darle a Angular un instante, clic en "Agregar". Si
+  // aparece un cuadro de confirmación opcional ("Repetirlo"/"Confirmar" o "Entendido" —
+  // vistos en la captura real, no siempre los dos mismos) se reconoce y se cierra; si no
+  // aparece ninguno, sigue de largo sin esperarlo. Fallo seguro: si el <li> no está en la
+  // pantalla actual, o el texto no casó exacto, no se clickea nada por aproximación —
+  // "casilla vacía antes que clic inventado".
+  async function _conductaBuscarYAgregarExamen(nombreLiExacto, doc) {
+    try {
+      const d = doc || document;
+      const claveObjetivo = _canonTexto(nombreLiExacto);
+      const items = Array.from(d.querySelectorAll("li"));
+      let li = null;
+      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; } }
+      if (!li) return false;
+      li.click();
+      await _conductaEsperar(700);   // cadencia real observada: ~700-1500ms entre <li> y "Agregar"
+      const botones = Array.from(d.querySelectorAll("button"));
+      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled);
+      if (!btnAgregar) return false;
+      btnAgregar.click();
+      // Cuadro opcional (visto en la captura real para algunos analitos, no todos): se
+      // reconoce si aparece, nunca se espera a la fuerza si no aparece.
+      await _conductaEsperar(400);
+      const botones2 = Array.from(d.querySelectorAll("button"));
+      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO");
+      if (btnRepetir) {
+        btnRepetir.click();
+        await _conductaEsperar(300);
+        const botones3 = Array.from(d.querySelectorAll("button"));
+        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR");
+        if (btnConfirmar) btnConfirmar.click();
+      } else {
+        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO");
+        if (btnEntendido) btnEntendido.click();
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // v17.35.0 — el orquestador: dado {paquete, individuales} de mtrItemsOrdenarConducta,
+  // dispara el paquete UNA vez si hace falta, agrega cada individual por su cuenta, y
+  // VERIFICA leyendo la tabla al final — nunca cuenta como "agregado" algo que no se ve en
+  // pantalla. Devuelve {agregados:[claves], fallidos:[{clave,nombre}]}. Nunca lanza.
+  async function mtrConductaAgregarPendientes(items, doc) {
+    const d = doc || document;
+    const paquete = (items && items.paquete) || [];
+    const individuales = (items && items.individuales) || [];
+    const agregados = [], fallidos = [];
+    if (!paquete.length && !individuales.length) return { agregados, fallidos };
+
+    const antes = _conductaCodigosEnTabla(d);
+    if (paquete.length) {
+      const disparado = await _conductaClicPaqueteHTA(d);
+      if (disparado) await _conductaEsperarFilasNuevas(d, antes, 4000);
+    }
+    // Las filas que YA aparecieron (por el paquete, o porque ya estaban) cuentan para
+    // TODOS los analitos del paquete a la vez — no hay una clave por fila que verificar
+    // uno por uno, así que se da por agregado el grupo completo si algo nuevo apareció.
+    const trasPaquete = _conductaCodigosEnTabla(d);
+    const huboFilasNuevas = trasPaquete.size > antes.size;
+    for (const it of paquete) {
+      if (huboFilasNuevas || antes.size !== trasPaquete.size) agregados.push(it.clave);
+      else fallidos.push({ clave: it.clave, nombre: it.nombre });
     }
 
-    vglLog("ORDEN", "GuardarOrdenConductaRequested", { pacienteIdOrd, dxId, countCups: cupsObjs.length });
-    const resOrd = await apiOrdenamientoGuardar(pacienteIdOrd, dxId, cupsObjs);
-    const agpReal = resOrd && (resOrd.agrupador || (resOrd.data && resOrd.data.agrupador));
-    if (!resOrd || resOrd.error || !agpReal) {
-      return Object.assign({}, vacio, {
-        fallidas: claveDeItemResuelto.map((c) => ({ clave: c, nombre: (items.find((x) => x.clave === c) || {}).nombre, motivo: "guardar" })).concat(fallidas),
-        motivo: "El sistema de órdenes no confirmó la creación.",
-      });
+    for (const it of individuales) {
+      const previos = _conductaCodigosEnTabla(d);
+      const disparado = await _conductaBuscarYAgregarExamen(it.liTexto, d);
+      if (!disparado) { fallidos.push({ clave: it.clave, nombre: it.nombre }); continue; }
+      const despues = await _conductaEsperarFilasNuevas(d, previos, 2500);
+      if (despues.size > previos.size) agregados.push(it.clave);
+      else fallidos.push({ clave: it.clave, nombre: it.nombre });
     }
 
-    return { ok: true, creadas: claveDeItemResuelto, fallidas: fallidas, agrupador: agpReal, motivo: "" };
+    return { agregados, fallidos };
   }
 
   // =====================================================================

@@ -13,6 +13,26 @@ const path = require("path");
 //   2. Que el camino oficial (GuardarOrdenamiento) siga presente.
 //   3. El comparador de versiones del aviso de actualización.
 //   4. _deshacerOrdenesPyM sin las colas: revierte marcas y no lanza.
+//
+//  v17.35.0 — REVERSIÓN PUNTUAL, EXPLÍCITA Y DOCUMENTADA de UNA parte de
+//  ese retiro: el botón "Ordenar pendientes" de Conducta (v17.32.0) creaba
+//  una orden real por el módulo de Ordenamientos, pero esa orden no
+//  aparecía en la tabla de Conducta como sí aparece con "Paquetes" — un
+//  mecanismo distinto, confirmado con un diagnóstico en vivo. El médico,
+//  viendo las dos alternativas restantes, pidió explícitamente lo
+//  contrario de lo que decidió el 20-08: "quiero que simules exactamente
+//  lo que hace ese botón de paquetes, tal cual... debes simular
+//  exactamente lo que hace Everest". `_conductaBuscarYAgregarExamen` y
+//  `CONDUCTA_LI_TEXTO_POR_ANALITO` (v14.0.3) SÍ volvieron — con el mismo
+//  texto de <li> ya verificado entonces y RE-confirmado en vivo el
+//  28-ago, 16 días después. Lo que causó el bug real de v15.3.0/v15.7.0
+//  NO volvió: la cola que reintentaba en cada vuelta del reloj de sondeo
+//  (`_PENDIENTE_MAX_INTENTOS`, `_pendienteAutoCompletarEn`,
+//  `_pendienteAgregarEn`, `_conductaPendienteAgregar`,
+//  `_dxPendienteAgregar`) sigue retirada — el gesto nuevo corre UNA sola
+//  vez, por el clic explícito del médico, nunca desde el sondeo. Ver
+//  la prueba "SOLO volvió el gesto..." más abajo, que fija exactamente
+//  esa distinción.
 // =====================================================================
 
 module.exports = {
@@ -27,19 +47,40 @@ module.exports = {
     // ================= PERMANENCIA DEL RETIRO (v15.7.0) =================
     const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
-    t.caso("v15.7.0: la maquinaria de clic-en-Conducta está FUERA del código (funciones, catálogos y colas)", () => {
+    t.caso("v15.7.0: la maquinaria de COLA/REINTENTO del clic-en-Conducta sigue FUERA del código — la causa real del bug de entonces", () => {
+      // v17.35.0 — esta lista YA NO incluye _conductaBuscarYAgregarExamen ni
+      // CONDUCTA_LI_TEXTO_POR_ANALITO: esos dos volvieron a propósito (ver el encabezado
+      // de esta suite). Lo que sigue prohibido es justo lo que causó el bug real: una
+      // cola que reintentaba SOLA, en cada vuelta del reloj de sondeo, un clic que nunca
+      // calzaba. El gesto nuevo de v17.35.0 corre UNA vez, por un clic explícito — nunca
+      // desde una cola ni desde el sondeo — y esta prueba es la que lo fija.
       const declaraciones = [
-        /function\s+_msBuscarCodigoYAgregar/, /function\s+_conductaBuscarYAgregarExamen/,
+        /function\s+_msBuscarCodigoYAgregar/,
         /function\s+_conductaBuscarPorCodigoYAgregar/, /function\s+_conductaLiMatch/,
         /function\s+_conductaInputBusqueda/, /function\s+_dxAgregarPorCodigo/,
         /function\s+_pendienteAutoCompletarEn/, /function\s+_pendienteAgregarEn/,
         /function\s+_conductaPendienteAgregar/, /function\s+_dxPendienteAgregar/,
         /function\s+mtrExamenesParaConducta/,
-        /CONDUCTA_LI_TEXTO_POR_ANALITO\s*=/, /CIE10_DESC_PYM\s*=/, /CONDUCTA_CUPS_POR_ANALITO\s*=/,
+        /CIE10_DESC_PYM\s*=/, /CONDUCTA_CUPS_POR_ANALITO\s*=/,
         /_PENDIENTE_MAX_INTENTOS\s*=/,
       ];
       const vivas = declaraciones.filter((re) => re.test(src)).map(String);
-      t.igual(vivas, [], "ninguna declaración de la maquinaria retirada puede volver al fuente");
+      t.igual(vivas, [], "ninguna declaración de la maquinaria de cola/reintento puede volver al fuente");
+    });
+
+    // v17.35.0 — la reversión puntual, fijada por su nombre: SÍ debe existir, con el texto
+    // de <li> real (no un catálogo distinto adivinado), y el gesto debe correr fuera de
+    // cualquier cola — nunca enganchado al reloj de sondeo (tick/setInterval propio del
+    // reloj de fondo, distinto del setTimeout interno del propio gesto).
+    t.caso("v17.35.0: SOLO volvió el gesto <li>→Agregar, verificado y de un solo disparo — no la cola que causó el bug real", () => {
+      t.cierto(/function\s+_conductaBuscarYAgregarExamen/.test(src), "el gesto restaurado sí existe");
+      t.cierto(/CONDUCTA_LI_TEXTO_POR_ANALITO\s*=/.test(src), "con su catálogo de texto real de <li>");
+      t.cierto(/function\s+mtrConductaAgregarPendientes/.test(src), "y su orquestador");
+      t.falso(/function\s+_pendienteAutoCompletarEn/.test(src), "sin la cola que reintentaba sola");
+      t.falso(/_PENDIENTE_MAX_INTENTOS/.test(src), "sin el contador de reintentos de esa cola");
+      const c = cargar({ silencioso: true });
+      t.cierto(typeof c.api._conductaBuscarYAgregarExamen === "function", "alcanzable en el API");
+      t.cierto(typeof c.api.mtrConductaAgregarPendientes === "function", "alcanzable en el API");
     });
 
     t.caso("v15.7.0: el botón «Agregar a Conducta» del modal de Ordenamiento también se fue", () => {

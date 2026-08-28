@@ -4,6 +4,31 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.35.0] — 2026-08-28 (El botón "Ordenar pendientes" ahora hace lo mismo que el botón "Paquetes" de Everest)
+
+### 🖱️ El botón ya no crea una orden aparte: ahora clickea la pantalla igual que usted
+El diagnóstico en vivo de la versión anterior confirmó que "Paquetes" no manda nada a un
+módulo distinto: agrega las filas directo en la tabla de Conducta que usted ve en
+pantalla, sin ninguna petición extra de por medio. El botón nuevo, hasta ahora, sí creaba
+una orden real pero por otro camino — por eso usted no la veía en la tabla. A partir de
+esta versión, el botón hace exactamente lo que usted haría a mano: clickea "Paquetes" y
+luego el programa correspondiente para los exámenes que vienen agrupados, y busca y
+agrega uno por uno los que se piden sueltos (PTH, fósforo, albúmina, hemoglobina,
+hemoglobina glicosilada y la microalbuminuria de la RAC). Cada texto que busca es el texto
+real que usted mismo ve en pantalla — capturado dos veces en su consultorio, 16 días
+aparte, con el mismo resultado las dos veces. Sigue sin pedir confirmación, como usted
+pidió, y sigue verificando en la propia tabla que la fila apareció antes de darla por
+agregada — nunca asume que un clic funcionó solo porque se dio.
+
+**Un límite que hay que saber**: si la RAC es el único examen pendiente, el botón igual
+agrega el paquete completo de 8-10 exámenes, porque la mitad de la RAC (la creatinina en
+orina) solo existe agrupada ahí — no hay manera confirmada de pedirla sola.
+
+Pruébelo con calma las primeras veces y revise que las filas correctas queden en la tabla
+de Ordenamientos antes de guardar la consulta.
+
+---
+
 ## [Versión 17.34.0] — 2026-08-28 (Reporte en vivo: el panel angosto, el botón mal ubicado, y "Generar todo" fuera)
 
 ### 🩹 El panel de exámenes ya no se abre angosto y partido letra por letra

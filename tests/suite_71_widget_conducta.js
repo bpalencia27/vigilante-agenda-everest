@@ -93,8 +93,14 @@ function botonReformular(visible) {
 // nada más del arnés (getElementById/querySelectorAll caen al comportamiento real
 // para cualquier id/selector que esta prueba no necesite, incluidos los propios
 // "vgl-cw-examenes"/"vgl-cw-farmaco" que cada widget crea con document.createElement real).
-function cablearHistoriaConducta(env, cedula, botonesPaquetes, botonesReformular) {
+// v17.35.0 — `extra.tabla`/`extra.lis` son opcionales: solo los usan las pruebas de
+// integración de punta a punta, que necesitan que el MISMO `document` sirva tanto al
+// ancla (botón "Paquetes") como al gesto real (tabla de Ordenamientos, <li> del
+// buscador) — `botonesPaquetes` debe ser el mismo array MUTABLE que la prueba sigue
+// empujando (HTA/Agregar aparecen ahí), no una copia.
+function cablearHistoriaConducta(env, cedula, botonesPaquetes, botonesReformular, extra) {
   const doc = env.doc;
+  const ex = extra || {};
   const getByIdReal = doc.getElementById.bind(doc);
   const qsAllReal = doc.querySelectorAll.bind(doc);
   doc.getElementById = (id) => (id === "anamesis" ? { textContent: "" } : getByIdReal(id));
@@ -107,6 +113,8 @@ function cablearHistoriaConducta(env, cedula, botonesPaquetes, botonesReformular
     if (sel === ".text-muted") return [{ textContent: "  C.C.  " + cedula + " ", closest: () => null }];
     if (sel === "button") return botonesPaquetes || [];
     if (sel === ".btn-reformular") return botonesReformular || [];
+    if (sel === "table") return ex.tabla ? [ex.tabla] : [];
+    if (sel === "li") return ex.lis || [];
     return qsAllReal(sel);
   };
 }
@@ -116,9 +124,10 @@ module.exports = {
   cubre: [
     "mtrBotonOrdenarConducta", "mtrWidgetExamenesDatos", "mtrWidgetConductaTick", "_cwEstadoParaTest", "_cwResetParaTest",
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
-    "mtrItemsOrdenarConducta", "mtrOrdenarLabsConductaAhora", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
+    "mtrItemsOrdenarConducta", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
     "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
     "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
+    "_conductaBuscarYAgregarExamen", "mtrConductaAgregarPendientes",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -427,132 +436,231 @@ module.exports = {
     // =====================================================================
 
     // ---------- mtrItemsOrdenarConducta (pura) ----------
-    t.caso("mtrItemsOrdenarConducta: traduce el ordenar crudo a {clave,nombre,codigos}, ignorando claves sin CUPS conocido", () => {
+    t.caso("mtrItemsOrdenarConducta: separa {paquete, individuales} — RAC entra en LOS DOS (creatinina en orina viene del paquete, la microalbuminuria automatizada se busca sola)", () => {
       const items = api.mtrItemsOrdenarConducta([
         { clave: "CREATININA", nombre: "Creatinina sérica" },
         { clave: "ALGO_QUE_NO_EXISTE", nombre: "Rareza" },
         { clave: "RAC", nombre: "RAC" },
+        { clave: "PTH", nombre: "PTH" },
       ]);
-      t.igual(items.length, 2, "la clave desconocida se ignora, nunca revienta");
-      t.cierto(items.some((x) => x.clave === "CREATININA" && x.codigos.join(",") === "903895"));
-      const rac = items.find((x) => x.clave === "RAC");
-      t.cierto(!!rac, "RAC sí se reconoce");
-      t.igual(rac.codigos.length, 2, "RAC lleva sus dos códigos — creatinina en orina + microalbuminuria");
+      t.igual(items.paquete.length, 2, "CREATININA y RAC necesitan el paquete");
+      t.cierto(items.paquete.some((x) => x.clave === "CREATININA"));
+      t.cierto(items.paquete.some((x) => x.clave === "RAC"));
+      t.igual(items.individuales.length, 2, "RAC (microalbuminuria) y PTH se buscan una por una");
+      const racInd = items.individuales.find((x) => x.clave === "RAC");
+      t.cierto(!!racInd, "RAC también aparece en individuales");
+      t.igual(racInd.liTexto, "MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL");
+      const pth = items.individuales.find((x) => x.clave === "PTH");
+      t.igual(pth.liTexto, "HORMONA PARATIROIDEA MOLECULA INTACTA");
     });
     t.caso("mtrItemsOrdenarConducta: dedup por clave, y sin `ordenar` (null/no-array) no revienta", () => {
       const items = api.mtrItemsOrdenarConducta([
         { clave: "GLUCOSA", nombre: "Glicemia" },
         { clave: "GLUCOSA", nombre: "Glicemia (repetida)" },
       ]);
-      t.igual(items.length, 1, "una sola entrada por clave");
-      t.igual(api.mtrItemsOrdenarConducta(null).length, 0);
-      t.igual(api.mtrItemsOrdenarConducta(undefined).length, 0);
+      t.igual(items.paquete.length, 1, "una sola entrada por clave");
+      const vacio = api.mtrItemsOrdenarConducta(null);
+      t.igual(vacio.paquete.length, 0); t.igual(vacio.individuales.length, 0);
+      const vacio2 = api.mtrItemsOrdenarConducta(undefined);
+      t.igual(vacio2.paquete.length, 0); t.igual(vacio2.individuales.length, 0);
     });
 
-    // ---------- mtrOrdenarLabsConductaAhora (red) ----------
-    // Mismo patrón de mock que suite_05/suite_15: una URL por endpoint, con banderas
-    // para simular cada punto de fallo por separado. Se construye ANTES de cargar():
-    // _pageFetchJsonCore captura `window.fetch` en una constante propia (FETCH0) al
-    // ejecutar el script — reasignar c.env.win.fetch DESPUÉS de cargar() no sirve de
-    // nada, el mismo escollo que ya documenta suite_05.
-    function crearFetchOrdenar(opts) {
+    // ---------- el gesto real: mocks de DOM mínimos, por función ----------
+    // No se usa el DOM de bolsillo del arnés (no convierte innerHTML en hijos reales, ver
+    // nota de suite_42): se construyen objetos mínimos que implementan justo lo que cada
+    // función lee (querySelectorAll("table"/"button"/"li"), textContent, click(),
+    // disabled) — mismo patrón que docConducta()/boton() de esta misma suite.
+    // o.rect: opcional — para el par de pruebas de integración que necesitan que el MISMO
+    // botón "Paquetes" sirva a la vez de ancla (mtrAnclaOrdenarPendientes, que sí lee
+    // getBoundingClientRect) y de gesto clicable (_conductaClicPaqueteHTA).
+    function mockBoton(texto, opts) {
       const o = opts || {};
-      const llamadas = [];
-      const fetch = async (url) => {
-        const u = String(url);
-        llamadas.push(u);
-        // v17.32.0 — un retraso real (no solo microtasks) para que dos clics superpuestos
-        // en la prueba de reentrancia se comporten como dos peticiones de red genuinas en
-        // vuelo a la vez — sin esto, la cadena entera de un clic se resuelve en microtasks
-        // antes de que el segundo clic alcance a llamar a la red, y la prueba no distingue
-        // "el guardarraíl funcionó" de "no hubo carrera real que probar".
-        if (o.delayMs) await new Promise((res) => setTimeout(res, o.delayMs));
-        const json = (data) => ({ ok: true, status: 200, headers: { get: () => "application/json" }, json: async () => data, text: async () => JSON.stringify(data), clone() { return this; } });
-        if (u.indexOf("/api/Paciente/BuscarPaciente") >= 0) {
-          return o.sinPaciente ? json(null) : json({ id: 801848 });
-        }
-        if (u.indexOf("ObtenerListadoDiagnostico") >= 0) {
-          return o.sinDx ? json([]) : json([{ codigo: "I10X", id: 55, nombre: "RCV EXPRÉS" }]);
-        }
-        if (u.indexOf("ObtenerListadoCupsPorPaciente") >= 0) {
-          const m = /filter=([^&]+)/.exec(u);
-          const cod = m ? decodeURIComponent(m[1]) : "";
-          if (o.cupsFallidos && o.cupsFallidos.indexOf(cod) >= 0) return json([]);
-          return json([{ id: "cup_" + cod, codigo: cod, descripcion: "EXAMEN " + cod, nivel: 1 }]);
-        }
-        if (u.indexOf("GuardarOrdenamiento") >= 0) {
-          return o.guardarFalla ? json({ error: true }) : json({ error: false, agrupador: "1226099999" });
-        }
-        return json({});
+      let clics = 0;
+      const b = {
+        textContent: texto,
+        offsetParent: o.visible === false ? null : {},
+        disabled: !!o.disabled,
+        click() { clics++; if (o.alClick) o.alClick(); },
+        get _clicado() { return clics > 0; },
+        get _clics() { return clics; },
       };
-      return { fetch, llamadas };
+      if (o.rect) b.getBoundingClientRect = () => o.rect;
+      return b;
     }
-    // Carga una instancia lista para ordenar: fetch mockeado desde el arranque y
-    // médico en sesión (apiOrdenamientoGuardar exige uId, ver v12.0.0).
-    function cargarParaOrdenar(opts) {
-      const mock = crearFetchOrdenar(opts);
-      const c = cargar({ silencioso: true, fetch: mock.fetch });
-      c.api.__state.activeDoctor = { id: 309, name: "MÉDICO DE PRUEBA" };
-      return Object.assign(c, { llamadas: mock.llamadas });
+    function mockLi(texto, alClick) {
+      let clicado = false;
+      return { textContent: texto, click() { clicado = true; if (alClick) alClick(); }, get _clicado() { return clicado; } };
+    }
+    function mockFila(codigo) {
+      return { querySelector: (sel) => (sel === "td" ? { textContent: codigo } : null) };
+    }
+    function mockTabla(codigosIniciales) {
+      const filas = (codigosIniciales || []).map(mockFila);
+      return {
+        textContent: "Código Nombre Cantidad Nota Fecha de consulta Acción",
+        querySelectorAll: (sel) => (sel === "tr" ? filas.slice() : []),
+        _agregarFila(codigo) { filas.push(mockFila(codigo)); },
+      };
+    }
+    // El doc mock delega a listas MUTABLES (arrays que las pruebas pueden seguir
+    // empujando) para que un click() disparado por la propia prueba pueda, con un
+    // setTimeout real, hacer aparecer un botón/fila nueva — igual que Angular monta el
+    // botón "Agregar" un instante después del clic en el <li> real.
+    function mockDocConducta(o) {
+      const opts = o || {};
+      const tabla = opts.tabla || mockTabla([]);
+      let botones = opts.botonesIniciales ? opts.botonesIniciales.slice() : [];
+      let lis = opts.lis ? opts.lis.slice() : [];
+      return {
+        _tabla: tabla,
+        _agregarBoton(b) { botones.push(b); },
+        _quitarBoton(b) { botones = botones.filter((x) => x !== b); },
+        querySelectorAll(sel) {
+          if (sel === "table") return opts.sinTabla ? [] : [tabla];
+          if (sel === "button") return botones.slice();
+          if (sel === "li") return lis.slice();
+          return [];
+        },
+      };
     }
 
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: camino feliz — todos los CUPS resuelven, se crea la orden", async () => {
-      const c = cargarParaOrdenar();
-      const items = c.api.mtrItemsOrdenarConducta([{ clave: "CREATININA", nombre: "Creatinina" }, { clave: "HBA1C", nombre: "HbA1c" }]);
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
-      t.cierto(r.ok, "la orden se confirma");
-      t.igual(r.creadas.length, 2);
-      t.igual(r.fallidas.length, 0);
-      t.igual(r.agrupador, "1226099999");
+    // ---------- _conductaClicPaqueteHTA ----------
+    await t.casoAsync("_conductaClicPaqueteHTA: camino feliz — clic en Paquetes, luego en HTA (Angular monta HTA 400ms después)", async () => {
+      const d = mockDocConducta({});
+      const bPaquetes = mockBoton("Paquetes", {
+        alClick: () => setTimeout(() => d._agregarBoton(mockBoton("HTA", {})), 0),
+      });
+      d._agregarBoton(bPaquetes);
+      const ok = await api._conductaClicPaqueteHTA(d);
+      t.cierto(ok, "encontró y clickeó los dos botones");
+      t.cierto(bPaquetes._clicado, "Paquetes se clickeó");
+    });
+    await t.casoAsync("_conductaClicPaqueteHTA: sin 'Paquetes' visible, false, sin tocar nada más", async () => {
+      const d = mockDocConducta({ botonesIniciales: [mockBoton("Paquetes", { visible: false })] });
+      const ok = await api._conductaClicPaqueteHTA(d);
+      t.falso(ok);
+    });
+    await t.casoAsync("_conductaClicPaqueteHTA: 'Paquetes' existe pero 'HTA' nunca aparece, false", async () => {
+      const d = mockDocConducta({ botonesIniciales: [mockBoton("Paquetes", {})] });
+      const ok = await api._conductaClicPaqueteHTA(d);
+      t.falso(ok, "sin HTA tras el clic, no hay nada más que hacer");
     });
 
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: RAC exige SUS DOS códigos — si falta uno, RAC entero queda fallida (no se pide media RAC)", async () => {
-      const c = cargarParaOrdenar({ cupsFallidos: ["903026"] });   // solo falla la microalbuminuria
-      const items = c.api.mtrItemsOrdenarConducta([{ clave: "RAC", nombre: "RAC" }, { clave: "CREATININA", nombre: "Creatinina" }]);
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
-      t.cierto(r.ok, "la creatinina sí se ordena aunque RAC falle");
-      t.igual(r.creadas.length, 1);
-      t.cierto(r.creadas.indexOf("RAC") < 0, "RAC no cuenta como creada");
-      t.cierto(r.fallidas.some((f) => f.clave === "RAC" && f.motivo === "cups"), "RAC queda registrada como fallida, con motivo");
+    // ---------- _conductaBuscarYAgregarExamen ----------
+    await t.casoAsync("_conductaBuscarYAgregarExamen: camino feliz — <li> exacto, luego 'Agregar' (Angular lo monta 700ms después)", async () => {
+      const d = mockDocConducta({});
+      const li = mockLi("HORMONA PARATIROIDEA MOLÉCULA INTACTA", () => {   // con tilde real, como en la captura
+        setTimeout(() => d._agregarBoton(mockBoton("Agregar", {})), 0);
+      });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HORMONA PARATIROIDEA MOLECULA INTACTA", d);
+      t.cierto(ok, "coincide sin tilde por _canonTexto, y encuentra Agregar");
+      t.cierto(li._clicado);
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: coincidencia EXACTA, nunca por substring — examen parecido no se clickea (en ninguna de las dos direcciones)", async () => {
+      // El catálogo real de Everest podría traer una entrada más CORTA (le falta
+      // "AUTOMATIZADA": prefijo del buscado) o una MÁS LARGA (con un calificador extra:
+      // el buscado es prefijo de ella) — ninguna de las dos es el mismo examen, y un
+      // `indexOf` en cualquiera de los dos sentidos las clickearía por error.
+      const liMasCorto = mockLi("HEMOGLOBINA GLICOSILADA");
+      const liMasLargo = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA FRACCIONADA");
+      const d = mockDocConducta({ lis: [liMasCorto, liMasLargo] });
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", d);
+      t.falso(ok);
+      t.falso(liMasCorto._clicado, "un match parcial (más corto que lo buscado) podría ordenar el examen equivocado");
+      t.falso(liMasLargo._clicado, "un match parcial (más largo, con calificador extra) también podría ordenar el examen equivocado");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: el <li> no está en pantalla, false sin clickear nada", async () => {
+      const d = mockDocConducta({});
+      const ok = await api._conductaBuscarYAgregarExamen("ALBUMINA EN SUERO U OTROS FLUIDOS", d);
+      t.falso(ok);
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: 'Agregar' nunca aparece (o queda deshabilitado), false", async () => {
+      const d = mockDocConducta({});
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(mockBoton("Agregar", { disabled: true })));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.falso(ok, "un Agregar deshabilitado no cuenta como disponible");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: el cuadro opcional Repetirlo→Confirmar se reconoce y se cierra", async () => {
+      const d = mockDocConducta({});
+      const btnConfirmar = mockBoton("Confirmar", {});
+      const btnRepetir = mockBoton("Repetirlo", { alClick: () => d._agregarBoton(btnConfirmar) });
+      const btnAgregar = mockBoton("Agregar", { alClick: () => d._agregarBoton(btnRepetir) });
+      const li = mockLi("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", d);
+      t.cierto(ok);
+      t.cierto(btnRepetir._clicado && btnConfirmar._clicado, "el cuadro de confirmación, visto en la captura real, se cierra solo");
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: el cuadro opcional 'Entendido' (sin Repetirlo) también se reconoce", async () => {
+      const d = mockDocConducta({});
+      const btnEntendido = mockBoton("Entendido", {});
+      const btnAgregar = mockBoton("Agregar", { alClick: () => d._agregarBoton(btnEntendido) });
+      const li = mockLi("FOSFORO EN SUERO U OTROS FLUIDOS", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("FOSFORO EN SUERO U OTROS FLUIDOS", d);
+      t.cierto(ok);
+      t.cierto(btnEntendido._clicado);
+    });
+    await t.casoAsync("_conductaBuscarYAgregarExamen: sin ningún cuadro opcional, sigue de largo sin esperarlo a la fuerza", async () => {
+      const d = mockDocConducta({});
+      const btnAgregar = mockBoton("Agregar", {});
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.cierto(ok, "el gesto se completa igual, sin cuadro de por medio");
     });
 
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin paciente en el sistema de órdenes, falla completa y visible", async () => {
-      const c = cargarParaOrdenar({ sinPaciente: true });
-      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
-      t.falso(r.ok);
-      t.igual(r.creadas.length, 0);
-      t.cierto(r.motivo.indexOf("paciente") >= 0 || r.motivo.length > 0, "el motivo se explica, nunca queda mudo");
+    // ---------- mtrConductaAgregarPendientes (orquestador) ----------
+    await t.casoAsync("mtrConductaAgregarPendientes: nada pendiente, no toca el DOM en absoluto", async () => {
+      const d = { querySelectorAll() { throw new Error("no debía llamarse"); } };
+      const r = await api.mtrConductaAgregarPendientes({ paquete: [], individuales: [] }, d);
+      t.igual(r.agregados.length, 0); t.igual(r.fallidos.length, 0);
     });
+    await t.casoAsync("mtrConductaAgregarPendientes: paquete + individual juntos, verificado leyendo la tabla — no por asumir que el clic funcionó", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });
+      const bPaquetes = mockBoton("Paquetes", {
+        alClick: () => setTimeout(() => {
+          d._agregarBoton(mockBoton("HTA", {
+            alClick: () => setTimeout(() => { tabla._agregarFila("903818"); tabla._agregarFila("903895"); }, 0),
+          }));
+        }, 0),
+      });
+      d._agregarBoton(bPaquetes);
+      const btnAgregar = mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903890"), 0) });
+      const li = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
 
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin diagnóstico resuelto (I10X no aparece), falla completa", async () => {
-      const c = cargarParaOrdenar({ sinDx: true });
-      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
-      t.falso(r.ok);
-      t.igual(r.creadas.length, 0);
+      const items = { paquete: [{ clave: "CREATININA", nombre: "Creatinina" }], individuales: [{ clave: "PTH", nombre: "PTH", liTexto: "HORMONA PARATIROIDEA MOLECULA INTACTA" }] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.cierto(r.agregados.indexOf("CREATININA") >= 0, "el paquete se disparó y se vieron filas nuevas");
+      t.cierto(r.agregados.indexOf("PTH") >= 0, "el individual se agregó y se verificó en la tabla");
+      t.igual(r.fallidos.length, 0);
     });
+    await t.casoAsync("mtrConductaAgregarPendientes: si el paquete no logra disparar (sin 'Paquetes'), esas claves quedan fallidas — pero los individuales siguen su propio camino", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });   // sin botón "Paquetes"
+      const btnAgregar = mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("902213"), 0) });
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
 
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: el servidor no confirma la orden (GuardarOrdenamiento falla) — nada queda marcado como creado", async () => {
-      const c = cargarParaOrdenar({ guardarFalla: true });
-      const items = c.api.mtrItemsOrdenarConducta([{ clave: "GLUCOSA", nombre: "Glicemia" }]);
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", items);
-      t.falso(r.ok);
-      t.igual(r.creadas.length, 0, "sin confirmación del servidor, nada cuenta como ordenado — evita marcar 'hecho' algo que no se sabe si quedó");
+      const items = { paquete: [{ clave: "GLUCOSA", nombre: "Glicemia" }], individuales: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", liTexto: "HEMOGLOBINA" }] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.cierto(r.fallidos.some((f) => f.clave === "GLUCOSA"), "sin Paquetes, el grupo del paquete no se puede confirmar");
+      t.cierto(r.agregados.indexOf("HEMOGLOBINA") >= 0, "el individual no depende del paquete");
     });
-
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin items pendientes, no sale ni una petición a la red", async () => {
-      const c = cargarParaOrdenar();
-      const r = await c.api.mtrOrdenarLabsConductaAhora("1098765432", []);
-      t.falso(r.ok);
-      t.igual(c.llamadas.length, 0, "nada pendiente: cero peticiones, no hay motivo para tocar la red");
-    });
-
-    await t.casoAsync("mtrOrdenarLabsConductaAhora: sin docId, falla sin tocar la red", async () => {
-      const c = cargarParaOrdenar();
-      const r = await c.api.mtrOrdenarLabsConductaAhora("", [{ clave: "GLUCOSA", nombre: "Glicemia", codigos: ["903841"] }]);
-      t.falso(r.ok);
-      t.igual(c.llamadas.length, 0);
+    await t.casoAsync("mtrConductaAgregarPendientes: un individual que no se encuentra en pantalla queda fallido, sin detener a los demás", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla, lis: [] });   // ningún <li> disponible
+      const items = { paquete: [], individuales: [
+        { clave: "ALBUMINA", nombre: "Albúmina", liTexto: "ALBUMINA EN SUERO U OTROS FLUIDOS" },
+        { clave: "FOSFORO", nombre: "Fósforo", liTexto: "FOSFORO EN SUERO U OTROS FLUIDOS" },
+      ] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.igual(r.agregados.length, 0);
+      t.igual(r.fallidos.length, 2, "los dos quedan fallidos, cada uno registrado — ninguno bloquea al otro");
     });
 
     // ---------- isOrdenLabsConductaHoy / markOrdenLabsConductaHoy ----------
@@ -704,7 +812,7 @@ module.exports = {
       t.falso(el && el.style.display !== "none");
     });
 
-    t.caso("mtrWidgetOrdenarConductaTick: ya ordenado hoy — botón deshabilitado, dice «Ordenado hoy», sigue visible (no desaparece sin más)", () => {
+    t.caso("mtrWidgetOrdenarConductaTick: ya ordenado hoy — botón deshabilitado, dice «Agregado hoy», sigue visible (no desaparece sin más)", () => {
       const c = cargar({ silencioso: true });
       cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
@@ -714,7 +822,7 @@ module.exports = {
       const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
       t.cierto(!!el && el.style.display !== "none", "sigue visible — confirma que el clic surtió efecto, en vez de desaparecer sin decir nada (Regla D)");
       t.cierto(el.disabled, "ya no se puede volver a ordenar hoy");
-      t.cierto(el.textContent.indexOf("Ordenado") >= 0);
+      t.cierto(el.textContent.indexOf("Agregado") >= 0);
     });
 
     t.caso("mtrWidgetOrdenarConductaTick: cambiar de paciente reinicia el estado interno", () => {
@@ -737,9 +845,31 @@ module.exports = {
     });
 
     // ---------- integración de punta a punta: el clic real ----------
-    await t.casoAsync("Integración: un clic en el botón ordena de verdad y lo deja marcado — sin pantalla intermedia, como pidió el médico", async () => {
-      const c = cargarParaOrdenar();
-      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+    // v17.35.0 — ya no hay red que mockear (cargarParaOrdenar/GuardarOrdenamiento se
+    // fueron con el enfoque de red): el mismo botón "Paquetes" sirve a la vez de ancla
+    // (mtrAnclaOrdenarPendientes necesita su getBoundingClientRect) y de gesto clicable
+    // (_conductaClicPaqueteHTA necesita su click()) — por eso mockBoton admite `rect`.
+    // cablearHistoriaConducta recibe el mismo array MUTABLE de botones que las pruebas
+    // siguen empujando (HTA/Agregar aparecen ahí, igual que Angular los monta después),
+    // más `extra.tabla`/`extra.lis` para que la tabla de Ordenamientos y el buscador de
+    // exámenes individuales vivan en el MISMO `document` que ve el resto del widget.
+    const RECT_PAQUETES = { left: 10, top: 20, width: 80, height: 30, right: 90 };
+
+    await t.casoAsync("Integración: un clic en el botón agrega de verdad en la tabla de Conducta y lo deja marcado — el mismo gesto de Paquetes, sin pantalla intermedia", async () => {
+      const c = cargar({ silencioso: true });
+      const tabla = mockTabla([]);
+      const botones = [botonHistorial()];
+      const li = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
+        botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903890"), 0) }));
+      });
+      const bPaquetes = mockBoton("Paquetes", {
+        rect: RECT_PAQUETES,
+        alClick: () => setTimeout(() => {
+          botones.push(mockBoton("HTA", { alClick: () => setTimeout(() => tabla._agregarFila("903818"), 0) }));
+        }, 0),
+      });
+      botones.push(bPaquetes);
+      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [li] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -749,37 +879,52 @@ module.exports = {
       const clicListo = el.onclick({ stopPropagation() {} });
       await clicListo;   // _cwoClic es async; el propio onclick devuelve su promesa
 
-      t.cierto(c.api.isOrdenLabsConductaHoy("1098765432"), "el clic de verdad generó la orden y quedó marcado");
+      t.cierto(bPaquetes._clicado, "de verdad clickeó Paquetes, tal cual pidió el médico");
+      t.cierto(li._clicado, "y de verdad buscó y clickeó el examen individual (HBA1C)");
+      t.cierto(c.api.isOrdenLabsConductaHoy("1098765432"), "las filas nuevas se vieron en la tabla y quedó marcado");
       t.falso(el.disabled === false, "tras el repintado que dispara el propio clic, ya no se puede volver a hacer clic");
-      t.cierto(el.textContent.indexOf("Ordenado") >= 0);
+      t.cierto(el.textContent.indexOf("Agregado") >= 0);
     });
 
-    // v17.32.0 — dos clics rápidos (doble-clic real, o un dedo lento sobre un trackpad)
-    // antes de que la primera petición termine NO deben generar DOS órdenes del mismo
-    // examen: es exactamente el tipo de duplicado que el guardarraíl de "ya ordenado hoy"
-    // existe para evitar, pero ese solo actúa DESPUÉS de que la primera termine — mientras
-    // está en vuelo, el guardarraíl es `_cwoEnCurso`.
-    await t.casoAsync("Integración: dos clics antes de que termine el primero solo generan UNA petición de guardado", async () => {
-      const c = cargarParaOrdenar({ delayMs: 15 });   // simula latencia real de red
-      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+    // v17.35.0 — dos clics rápidos (doble-clic real, o un dedo lento sobre un trackpad)
+    // antes de que termine el primero NO deben disparar DOS veces el gesto real sobre el
+    // mismo <li>/botón — eso agregaría el mismo examen dos veces. `_cwoEnCurso` es la
+    // única barrera (ver comentario junto a su declaración): el segundo clic debe
+    // devolver sin tocar nada mientras el primero sigue en vuelo.
+    await t.casoAsync("Integración: dos clics antes de que termine el primero solo disparan UNA vez el clic real en Paquetes", async () => {
+      const c = cargar({ silencioso: true });
+      const tabla = mockTabla([]);
+      const botones = [botonHistorial()];
+      const bPaquetes = mockBoton("Paquetes", {
+        rect: RECT_PAQUETES,
+        alClick: () => setTimeout(() => {
+          botones.push(mockBoton("HTA", { alClick: () => setTimeout(() => tabla._agregarFila("903818"), 0) }));
+        }, 0),
+      });
+      botones.push(bPaquetes);
+      const li = mockLi("HEMOGLOBINA GLICOSILADA AUTOMATIZADA", () => {
+        botones.push(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903890"), 0) }));
+      });
+      cablearHistoriaConducta(c.env, "1098765432", botones, [], { tabla, lis: [li] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
       const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
       const p1 = el.onclick({ stopPropagation() {} });
-      // El primer clic ya está en vuelo (su primera petición salió y está esperando el
-      // delay simulado) cuando llega el segundo — la misma ventana en la que un médico
-      // real podría volver a pulsar mientras la red tarda.
-      await new Promise((res) => setTimeout(res, 5));
+      // El primer clic ya está en vuelo (Paquetes ya se clickeó, esperando a que Angular
+      // monte HTA) cuando llega el segundo — la misma ventana en la que un médico real
+      // podría volver a pulsar mientras la pantalla tarda en reaccionar.
       const p2 = el.onclick({ stopPropagation() {} });
       await Promise.all([p1, p2]);
-      const guardados = c.llamadas.filter((u) => u.indexOf("GuardarOrdenamiento") >= 0);
-      t.igual(guardados.length, 1, "el segundo clic, mientras el primero seguía en vuelo, no debía tocar la red otra vez");
+      t.igual(bPaquetes._clics, 1, "el segundo clic, mientras el primero seguía en vuelo, no debía repetir el gesto");
     });
 
-    await t.casoAsync("Integración: si la orden falla, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
-      const c = cargarParaOrdenar({ sinPaciente: true });
-      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
+    await t.casoAsync("Integración: si no se encuentra nada que clickear, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
+      const c = cargar({ silencioso: true });
+      // Sin "Paquetes" clicable a HTA ni ningún <li> del examen individual: el gesto real
+      // no encuentra nada que hacer, tal como pasaría si Everest cambiara su pantalla.
+      const bPaquetesSinHta = mockBoton("Paquetes", { rect: RECT_PAQUETES });
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), bPaquetesSinHta], [], { tabla: mockTabla([]), lis: [] });
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -787,6 +932,7 @@ module.exports = {
       await el.onclick({ stopPropagation() {} });
       t.falso(c.api.isOrdenLabsConductaHoy("1098765432"), "un fallo total no se marca como hecho");
       t.falso(el.disabled, "queda disponible para que el médico reintente");
+      t.cierto(el.textContent.indexOf("pendientes") >= 0, "vuelve a invitar a ordenar, no se queda en «Agregando...»");
     });
 
     // =====================================================================
