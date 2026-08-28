@@ -13,7 +13,7 @@ module.exports = {
     "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
     "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
-    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes"
+    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes", "actualizarRelojCabecera"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -385,6 +385,25 @@ module.exports = {
       t.igual(c.api.apiCadencia(), 20000, "lejos de la tolerancia, antes del cruce: 20 s");
       st.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL + 60 }] };
       t.igual(c.api.apiCadencia(), 10000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 10 s");
+    });
+
+    // v17.21.0 — decisión del médico: el "Refresco" ya no es un control manual, pero
+    // el reloj de cabecera debe decir qué cadencia real está usando apiCadencia() en
+    // cada momento — sin eso, "automático" es indistinguible de "no sé qué está haciendo".
+    t.caso("actualizarRelojCabecera: el tooltip dice la cadencia de sondeo real, no un número fijo", () => {
+      const c = cargar({ silencioso: true });
+      const clock = c.env.doc.createElement("span");
+      clock.id = "vgl-clock";
+      c.env.doc.body.appendChild(clock);
+      const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
+
+      c.api.__state.lastSnapshot = null;
+      c.api.actualizarRelojCabecera();
+      t.cierto(clock.title.indexOf("cada 30 s") >= 0, "sin nada pendiente: reposo de 30 s, tal como devuelve apiCadencia()");
+
+      c.api.__state.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
+      c.api.actualizarRelojCabecera();
+      t.cierto(clock.title.indexOf("cada 5 s") >= 0, "en la ventana crítica, el tooltip refleja los 5 s reales — no el mismo texto de antes");
     });
 
     // ---------- tickApi ----------

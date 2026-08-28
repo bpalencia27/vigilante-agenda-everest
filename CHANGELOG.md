@@ -4,6 +4,17 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.21.0] — 2026-08-28 (El reloj de cabecera dice qué tan seguido está mirando)
+
+### 👁️ La cadencia de sondeo ahora es visible, sin volverse un control manual
+Decisión del médico: el "Refresco" se retiró como ajuste editable (ya era automático y
+adaptativo — entre 5 y 30 segundos según qué tan cerca esté una cita del momento crítico —
+y un número fijo solo lo habría desconfigurado). Pero pidió poder VER qué está haciendo en
+cada momento. El tooltip del reloj de la cabecera ahora dice, además de si los datos están
+al día, cada cuántos segundos está sondeando la agenda ahora mismo.
+
+---
+
 ## [Versión 17.20.0] — 2026-08-28 (Limpieza: cuatro ajustes que ya no hacían nada)
 
 ### 🧹 Sin ningún cambio de comportamiento clínico

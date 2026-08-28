@@ -4856,3 +4856,17 @@ copy, sin lógica).
 
 Banco en verde tras la restauración final: **2.488/2.488** (2.490 menos las 2 pruebas de
 la migración retirada).
+
+---
+
+## v17.21.0 — el reloj de cabecera dice qué tan seguido está mirando
+
+Decisión del médico: el tooltip del reloj de cabecera anota la cadencia real de sondeo
+(`apiCadencia()`, 5–30 s) además de si los datos están al día. Nueva prueba directa de
+`actualizarRelojCabecera` (función sin ninguna cobertura hasta ahora).
+
+Banco en verde tras la restauración final: **2.489/2.489**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Quitar el cálculo de la cadencia del tooltip | *actualizarRelojCabecera: el tooltip dice la cadencia de sondeo real…* |

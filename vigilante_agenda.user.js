@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.20.0
+// @version     17.21.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.20.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.21.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -24990,10 +24990,13 @@ _vglOfrecerDeshacer(btn);
       const fresco = _hubo && (Date.now() - state.ultimaLectura) <= 30000;
       c.classList.toggle("vgl-stale", _hubo && !fresco);
       c.textContent = hh + ":" + mm + " · " + h + "h" + (m < 10 ? "0" : "") + m + "m";
-      c.title = !_hubo
+      // v17.21.0 — cadencia visible en el tooltip (automática, sin control manual).
+      let _cadTxt = "";
+      try { _cadTxt = " Sondeando la agenda cada " + Math.round(apiCadencia() / 1000) + " s."; } catch (e2) {}
+      c.title = (!_hubo
         ? "Hora actual y tiempo de turno. Todavía no he leído la agenda en esta sesión: no sé si los datos están al día."
         : fresco ? "Hora actual y tiempo de turno. Datos al día."
-        : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".";
+        : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".") + _cadTxt;
     } catch (e) {}
   }
   // ===== [v17.6.7] Cierre de turno: checklist y adherencia.
