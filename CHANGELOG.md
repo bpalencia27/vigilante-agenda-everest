@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.17.0] — 2026-08-28 (El vigilante de la agenda ya no acusa a quien llegó a tiempo)
+
+### 🐛 Falso positivo de fraude cuando se usan varias pestañas de Citas del día
+Reporte en vivo: el asistente avisaba, algunas veces, que un paciente había llegado tarde
+cuando en realidad había llegado puntual — no una demora, una acusación equivocada. Causa
+real: cuando se tienen varias pestañas de Citas del día abiertas (algo rutinario para
+usted y sus colegas) y una pestaña en segundo plano toma el mando de la vigilancia justo
+al volver a mirarla, su primera lectura puede venir de una copia de la pantalla que quedó
+atrás mientras estaba oculta. Si esa copia todavía decía "Sin presentarse" y ya había
+pasado el tiempo de gracia, el asistente lo tomaba por cierto y marcaba fraude — una marca
+que después se comparte con todas sus pestañas.
+
+Ahora, justo después de tomar el mando de una pestaña que estaba oculta, el asistente
+espera unos segundos antes de poder ACUSAR de fraude (nunca antes de pintar el color que
+corresponde ni de mostrar la hora exacta — eso no cambia). Si en esos segundos la lectura
+resulta estar atrasada, queda igual anotada en la bitácora para que usted la revise, pero
+no se convierte en una acusación. Pasada esa breve espera, o si nunca hubo relevo de por
+medio (por ejemplo con una sola pestaña abierta), el asistente sigue marcando el fraude
+real exactamente igual que antes — esto no debilita ni retrasa la detección de una
+inasistencia genuina.
+
+Nada de esto necesitó tocar ninguna fecha, ningún cálculo de vigencia ni el mecanismo que
+permite trabajar con varias pestañas de Everest a la vez (eso ya funcionaba y sigue igual).
+
+---
+
 ## [Versión 17.16.1] — 2026-08-27 (El banco de pruebas deja de mentir sobre sí mismo)
 
 ### 🧪 El informe de cobertura subestimaba lo que sí estaba probado — y ocultaba lo que no

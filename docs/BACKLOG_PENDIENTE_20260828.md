@@ -9,7 +9,18 @@ Estado de cada ítem: `[ABIERTO]` · `[EN DISEÑO]` · `[EN CURSO]` · `[CERRADO
 
 ---
 
-## 1. [EN CURSO] Falso positivo en el vigilante de agenda (bug en vivo, máxima prioridad)
+## 1. [CERRADO — v17.17.0] Falso positivo en el vigilante de agenda (bug en vivo, máxima prioridad)
+
+Causa raíz confirmada con dos revisores independientes intentando refutarla sin lograrlo:
+una pestaña que recupera el liderazgo tras estar oculta (`relevoPorVisibilidad`) podía
+originar una marca de fraude con su primera lectura, potencialmente estancada. Se descartó
+el primer arreglo propuesto (habría suprimido detecciones legítimas de arranque tardío o
+perdido evidencia de fraude real) y se implementó uno calibrado sobre la señal correcta
+(`_ultimoRelevoVisibilidad`, que solo se activa en un relevo real, nunca en un arranque
+normal). Detalle completo, con las tres mutaciones verificadas, en
+`tests/INFORME_MUTACIONES.md` (sección v17.17.0) y `CHANGELOG.md`.
+
+Sección original del reporte, conservada como referencia:
 
 Petición original (27-ago): el encargado de vigilar los cambios de leyenda en Citas del día
 avisa tarde o avisa **erróneamente** que activaron a un paciente tarde cuando no fue así — un
@@ -43,7 +54,19 @@ verificada + arreglo mínimo, sin tocar fechas/cálculos de otros módulos.
 
 ---
 
-## 2. [ABIERTO] Refactorización S+ del "Panel del paciente" (`#vgl-panel-modal`)
+## 2. [MAPEADO, listo para diseño visual] Refactorización S+ del "Panel del paciente" (`#vgl-panel-modal`)
+
+Mapeo completo hecho (28-ago): función real `openPanelPacienteModal` (líneas 19316-19640,
+NO `openFichaPacienteModal` — ese nombre solo sobrevive como comentario desactualizado),
+sus 5 secciones con rangos de línea/CSS/pruebas, y 8 acoplamientos peligrosos documentados
+— el más importante: la sección "Resumen" (`mtrFichaVivaFilas`) TAMBIÉN muestra un listado
+de medicamentos por separado, así que sacar la pestaña "Medicamentos" no basta para que la
+farmacología desaparezca del panel; hay que decidirlo a propósito. También hay una prueba
+frágil (`suite_63_tablero_riesgo.js` ~línea 380) que delimita un recorte de código buscando
+una función que ya no existe — hay que arreglarla ANTES de reordenar nada, no después de que
+algo se rompa por debajo. Detalle completo pedido a quien retome este punto.
+
+Petición original:
 
 Petición del 27-ago, ampliada el 28-ago: refactorización total — diseño, código y
 funcionalidad — a nivel "top tier S+ insuperable". Incluye:
@@ -71,7 +94,32 @@ usado en cada refactorización de este proyecto.
 
 ---
 
-## 3. [EN DISEÑO] Widget de análisis farmacológico en vivo, en la pestaña Conducta
+## 3. [DISEÑADO, BLOQUEADO en un punto — necesita al médico] Widget de análisis farmacológico en vivo, en la pestaña Conducta
+
+Diseño técnico completo hecho (28-ago): anclaje fijo fuera del árbol de Angular (mismo
+patrón ya endurecido de `_acompMostrar`), fuente de datos = lectura del DOM en vivo (la API
+`CargarMedicamentosPaciente` NO sirve para tiempo real — solo se dispara una vez al cargar
+la pantalla, evidencia en `captura_ordenamiento_nativo_20260810.json`), sondeo enganchado al
+`tick()` ya existente sin timers nuevos, diseño anti-parpadeo de dos firmas (fina/gruesa) y
+señal de atención con ventana acotada (reutilizando `vglPulse`, con las guardas `.perf` y
+`prefers-reduced-motion` obligatorias desde el día uno).
+
+**Bloqueo real, no se puede resolver sin el médico:** no existe ninguna captura real del
+gesto de buscar/agregar un medicamento dentro de Conducta — sin eso no hay selector DOM
+verificado para leer "qué se acaba de agregar" (violaría la regla de "casilla vacía antes
+que dato inventado"). Se necesita correr el GRABADOR del proyecto (mismo método que produjo
+`captura_ordenamiento_paquete_HTA_20260812.json`) sobre ese gesto concreto, redactando
+cualquier dato identificable, antes de escribir el código de lectura del widget. El resto
+del diseño (anclaje, sondeo, anti-parpadeo, atención) no depende de esta captura y puede
+implementarse ya.
+
+Preguntas abiertas menores para el médico, sin bloquear lo demás: si baja la severidad debe
+reflejarse de inmediato o con un pequeño margen para no "parpadear"; si el widget debe verse
+(colapsado) también en Anamnesis/Impresión Diagnóstica o solo en Conducta como pidió; y si
+el motor farmacológico (hoy apagado por defecto) debe encenderse de fábrica para este widget
+en particular.
+
+Petición original:
 
 Petición original (27-ago): activar las alertas de seguridad farmacológica desde ya, al menos
 con los medicamentos del programa de RCV, basadas en TFG y en contraindicaciones por

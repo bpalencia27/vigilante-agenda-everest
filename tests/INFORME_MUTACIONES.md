@@ -4740,3 +4740,50 @@ Quedan **79** funciones sin prueba. No son un hueco uniforme: **11** son del aco
 alto contraste), **4** del registro de inasistencias. Ninguna decide una conducta clínica ni
 escribe en la historia. Se dice en vez de dejar el número suelto: un 91,4 % con la barrera de
 PHI y los umbrales clínicos cubiertos no es lo mismo que un 91,4 % repartido al azar.
+
+---
+
+## v17.17.0 — el vigilante de la agenda ya no acusa a quien llegó a tiempo
+
+Reporte en vivo (27-ago): "avisa erróneamente que activaron un paciente tarde y no fue así"
+— un falso positivo de CONTENIDO, no una demora ni un duplicado (los dos ya cerrados en
+v17.6.21 y v17.6.74).
+
+**Causa raíz confirmada antes de tocar código**, con dos revisores independientes intentando
+refutarla sin lograrlo: la única compuerta para ORIGINAR una marca de fraude era
+`state.leader` (v17.6.74) — sin exigir que la lectura fuera fresca. Con varias pestañas de
+Citas del día del mismo médico, una pestaña oculta y estrangulada por el navegador que
+recupera el liderazgo por `relevoPorVisibilidad` puede hacerlo con su PRIMERA lectura, que
+puede venir de una copia estancada (su propio DOM sin refrescar, o `state.apiCitas` con hasta
+180 s de antigüedad) — y como `elapsed` se calcula siempre contra el reloj real, esa lectura
+vieja puede ya superar la gracia y originar fraude para un paciente que otra pestaña ya había
+confirmado a tiempo.
+
+**El primer arreglo propuesto (gatear por `!eraLider`, o exigir una segunda lectura en el
+primer vistazo) fue descartado por un tercer revisor antes de escribirse**: `!eraLider` es
+verdadero en CUALQUIER arranque de sesión (no distingue un relevo real de un inicio de una
+sola pestaña) y habría suprimido la detección legítima del arranque tardío que ya protegen
+`suite_04` y `suite_32`; exigir segunda lectura contradice el contrato explícito de
+`colorAndAlert` ("la primera vez que se ve una cita nunca se demora") y puede perder evidencia
+de un fraude genuino que se resuelve dentro de la espera artificial.
+
+**El arreglo que sí se implementó** reutiliza una señal que ya existía y ya distingue
+exactamente lo correcto: `_ultimoRelevoVisibilidad`, que solo se actualiza cuando ESTA
+pestaña de verdad le quita el mando a otra pestaña ajena, oculta y con latido fresco — nunca
+en un arranque de sesión sin relevo (empieza en 0 y una sesión de una sola pestaña jamás lo
+toca). Durante `RELEVO_GRACIA_FRAUDE_MS` (8 s) tras un relevo así, la pestaña líder sigue
+pintando el color de siempre pero NO origina la marca de fraude — la lectura sospechosa
+queda igual en la bitácora (`LECTURA_TRAS_RELEVO_SIN_CONFIRMAR`) en vez de perderse. Pasada
+la ventana, o sin relevo de por medio, origina exactamente igual que antes.
+
+Banco en verde tras la restauración final: **2.473/2.473**.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| 1 | Quitar la gracia por completo (volver a originar con el solo `state.leader`) | `suite_04` | *v17.17.0: la pestaña líder NO origina fraudWatch en la ventana de gracia…* **y** *v17.17.0: reproducción de dos pestañas…* |
+| 2 | Invertir la condición (originar SOLO durante la gracia, nunca fuera de ella) | `suite_04` | 5 pruebas de `suite_04` caen, incluida la v17.6.74 preexistente — la gracia no puede convertirse en la única vía |
+| 3 | Quitar el `logEvent` de la lectura suprimida | `suite_04` | *v17.17.0: la pestaña líder NO origina fraudWatch… pero deja constancia* |
+
+**Sin mutación, y se dice en vez de inventar una:** el mapeo completo del Panel del paciente
+y el diseño del widget de Conducta (`docs/BACKLOG_PENDIENTE_20260828.md`) no tocan código de
+producción en esta versión — son insumo para la refactorización S+ pendiente.

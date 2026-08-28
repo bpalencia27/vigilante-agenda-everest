@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.16.1
+// @version     17.17.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.16.1";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.17.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7478,6 +7478,23 @@ _vglOfrecerDeshacer(btn);
   }
   const RELEVO_VISIBILIDAD_MIN_MS = 10000;
   let _ultimoRelevoVisibilidad = 0;
+  // v17.17.0 — REPORTE EN VIVO (27-ago): "avisa erróneamente que activaron un paciente
+  // tarde y no fue así" — un FALSO POSITIVO de contenido, no una demora. Causa real
+  // (reproducida con el arnés, dos pestañas del MISMO médico compartiendo storage):
+  // cuando esta pestaña toma el mando por `relevoPorVisibilidad` (una pestaña ajena
+  // quedó oculta y estrangulada), su PRIMERA lectura — venga del DOM propio (que Everest
+  // pudo no haber refrescado mientras estuvo oculta) o de `state.apiCitas` (que puede
+  // traer hasta 180 s de antigüedad, ver tick()) — no tiene ninguna garantía de reflejar
+  // el estado ACTUAL. Si esa lectura estancada dice "Sin presentarse" y el reloj real ya
+  // superó la gracia, la v17.6.74 la deja originar fraudWatch igual (`state.leader` era
+  // la única condición) — acusando de tardanza a un paciente que otra pestaña ya había
+  // confirmado A TIEMPO minutos antes. La ventana de gracia de abajo NO toca `esNueva`
+  // (que sigue sin demorarse nunca — lo exige el propio comentario de colorAndAlert y dos
+  // pruebas ya existentes) ni el camino API por separado: se aplica UNA vez, por pestaña,
+  // solo en los milisegundos que siguen a un relevo por visibilidad genuino — un arranque
+  // de sesión normal (sin relevo ajeno de por medio) nunca la toca, porque
+  // `_ultimoRelevoVisibilidad` empieza en 0 y jamás se actualiza sin un latido ajeno real.
+  const RELEVO_GRACIA_FRAUDE_MS = 8000;
   // vN — write-condicional del latido: último instante/visibilidad con que se escribió
   // LEADER_KEY. Ver heartbeat() para el porqué del umbral de 10 s.
   const BEAT_WRITE_MIN_MS = 10000;
@@ -10161,7 +10178,19 @@ _vglOfrecerDeshacer(btn);
         // sin estrangulamiento, la fuente de verdad del resto del archivo) puede
         // ORIGINAR la marca; las demás pestañas la siguen pintando si ya existe (leída
         // vía state.fraudWatch más abajo/arriba), pero nunca la crean por su cuenta.
-        if (state.leader && !state.fraudWatch.has(key)) { state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id); }
+        // v17.17.0 — ver el comentario junto a RELEVO_GRACIA_FRAUDE_MS: una pestaña recién
+        // ascendida por relevo de visibilidad no origina fraude con su primer vistazo,
+        // sea cual sea la fuente del dato. La evidencia no se pierde: queda igual en la
+        // bitácora, marcada como no confirmada, para que una lectura futura (ya sin la
+        // sospecha de estar estancada) sea la que de verdad origine la marca.
+        const _relevoReciente = (Date.now() - _ultimoRelevoVisibilidad) < RELEVO_GRACIA_FRAUDE_MS;
+        if (state.leader && !state.fraudWatch.has(key)) {
+          if (_relevoReciente) {
+            logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+          } else {
+            state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
+          }
+        }
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
     }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
