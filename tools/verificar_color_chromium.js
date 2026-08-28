@@ -43,6 +43,19 @@ const BANDERAS = [
   { cls: "",       que: "⛔ NO CONFIRMADO", debeSer: "--c-rojo" },
 ];
 
+// v17.18.0 — el widget de Conducta (#vgl-cw-examenes) usa selectores compuestos
+// (estado del contenedor + clase descendiente: ".vgl-cw-pend .vgl-cw-badge",
+// ".vgl-cw-venc .vgl-cw-nom") que el arreglo CASOS de arriba (una sola clase por
+// caso) no puede representar. Cada caso trae su propio HTML y su propio selector.
+const WIDGET_CASOS = [
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-pend"><div class="vgl-cw-badge" data-w="0">🧪 2</div></div>', sel: '[data-w="0"]', token: "--c-ambar", que: "badge: estado pendiente" },
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-ok"><div class="vgl-cw-badge" data-w="1">🧪</div></div>', sel: '[data-w="1"]', token: "--c-verde", que: "badge: estado al día" },
+  { html: '<div id="vgl-cw-examenes" class="vgl-cw-nd"><div class="vgl-cw-badge" data-w="2">🧪</div></div>', sel: '[data-w="2"]', token: "--fg3", que: "badge: sin juicio todavía" },
+  { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-venc"><span class="vgl-cw-nom" data-w="3">CREATININA</span></div></div></div>', sel: '[data-w="3"]', token: "--c-rojo", que: "nombre de examen vencido" },
+  { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><div class="vgl-cw-fila vgl-cw-pedir"><span class="vgl-cw-nom" data-w="4">HEMOGLOBINA</span></div></div></div>', sel: '[data-w="4"]', token: "--c-ambar", que: "nombre de examen pendiente" },
+  { html: '<div id="vgl-cw-examenes"><div class="vgl-cw-panel"><span class="vgl-cw-que" data-w="5">vence en 12 días</span></div></div>', sel: '[data-w="5"]', token: "--fg2", que: "texto secundario de cada fila" },
+];
+
 (async () => {
   const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] });
   const p = await b.newPage();
@@ -52,6 +65,7 @@ const BANDERAS = [
   </head><body>
     ${CASOS.map((c, i) => `<div id="${c.id}"><div class="${c.cls}" data-i="${i}">texto de prueba</div></div>`).join("")}
     <div id="vgl-root">${BANDERAS.map((f, i) => `<span class="vgl-flag ${f.cls}" data-f="${i}">${f.que}</span>`).join("")}</div>
+    ${WIDGET_CASOS.map((w) => w.html).join("")}
   </body></html>`);
 
   const val = (sel, prop) => p.$eval(sel, (el, pr) => getComputedStyle(el).getPropertyValue(pr), prop);
@@ -87,6 +101,14 @@ const BANDERAS = [
     const ok = real === esperado;
     if (!ok) fallos++;
     console.log(`${ok ? "OK  " : "FALLA"}  ${f.que.padEnd(34)} real=${real}  esperado=${esperado} (${f.debeSer})`);
+  }
+  console.log("--- Widget de Conducta (#vgl-cw-examenes, selectores compuestos) ---");
+  for (const w of WIDGET_CASOS) {
+    const real = await val(w.sel, "color");
+    const esperado = await esperadoDe(w.sel, w.token);
+    const ok = real === esperado;
+    if (!ok) fallos++;
+    console.log(`${ok ? "OK  " : "FALLA"}  ${w.que.padEnd(34)} real=${real}  esperado=${esperado}`);
   }
   console.log(fallos === 0 ? "\nTODO SOBREVIVE" : `\n${fallos} FALLAN`);
   await b.close();

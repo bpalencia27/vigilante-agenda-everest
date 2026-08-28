@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.17.0
+// @version     17.18.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.17.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.18.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5349,6 +5349,10 @@
     // "anamesis" va con la errata de Everest a propósito: es el id REAL de su DOM,
     // confirmado en las capturas del consultorio, y corregirlo aquí sería no encontrarlo.
     anamnesis: { textos: ["anamnesis"], ids: ["anamesis"] },
+    // v17.18.0 — captura real (captura_ordenamiento_paquete_HTA_20260812.json):
+    // {"tag":"a#conducta","text":"Conducta"}. Único ancla de esta lista con id Y texto
+    // verificados contra el DOM real de Everest, no supuestos.
+    conducta: { textos: ["conducta"], ids: ["conducta"] },
     impresion: { textos: ["impresion diagnostica", "impresión diagnóstica"], ids: ["impDiagnostica"] },
   };
 
@@ -5429,6 +5433,134 @@
       }
       return true;
     } catch (e) { return true; }   // duda razonable: no esconder un botón por un fallo de lectura
+  }
+
+  // =====================================================================
+  //  v17.18.0 — WIDGET DE CONDUCTA: "qué ordenar en el próximo control"
+  //  ---------------------------------------------------------------------
+  //  Pedido del médico (28-ago): que la lista de exámenes a ordenar salga en un widget
+  //  propio, junto al botón de ordenar de Everest dentro de Conducta — no metido en el
+  //  Panel del paciente, que hay que abrir aparte.
+  //
+  //  POR QUÉ NO HACE FALTA LEER NADA DEL DOM DE CONDUCTA PARA EL CONTENIDO: la lista
+  //  "qué ordenar" ya la calcula el motor entero (mtrTableroClinico, el mismo que pinta
+  //  la Sección 3 del Panel del paciente) a partir del resumen clínico que el auto-fetch
+  //  de laboratorios ya deja caliente en cuanto se abre la historia. Este widget solo
+  //  LEE esa caché (mtrCacheResumenLeer) — cero peticiones nuevas, cero escritura en
+  //  Conducta. Lo único que SÍ se lee del DOM es la posición del botón ancla, para saber
+  //  dónde flotar — nunca su contenido, y nunca se le escribe ni se le simula un clic
+  //  (la razón exacta por la que v15.3.0 retiró la automatización anterior en esta misma
+  //  pestaña: simular gestos ahí causó un bucle real en consultorio).
+  //
+  //  ANCLA SIN CAPTURA CON SELECTOR PROPIO: la única evidencia real de esta zona
+  //  (captura_ordenamiento_paquete_HTA_20260812.json) solo registra tag+texto de los
+  //  clics, no ids ni clases: {"tag":"button","text":"Paquetes"}. Se busca por texto,
+  //  igual que ya hace mtrCasillaAnalisis con el placeholder de Impresión Diagnóstica —
+  //  no es una excepción a "casilla vacía antes que dato inventado": es el mismo patrón
+  //  defensivo ya establecido para cuando no hay un id estable, aplicado con la única
+  //  evidencia real que existe. Si Everest cambia el texto del botón, o si el médico no
+  //  ha entrado a Conducta, el widget simplemente no aparece — nunca flota a ciegas.
+  // =====================================================================
+  function mtrBotonOrdenarConducta(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll("button"));
+      for (const b of botones) {
+        if (!_vglVisibleDeVerdad(b)) continue;
+        const t = stripAccents(String(b.textContent || "").trim().toLowerCase());
+        if (t === "paquetes") return b;
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
+  // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
+  // mostrar. Nunca decide nada nuevo — reusa mtrTableroClinico, el mismo motor que ya
+  // pinta la Sección 3 del Panel del paciente, para que las dos vistas nunca diverjan.
+  function mtrWidgetExamenesDatos(resumen) {
+    let d = null;
+    try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
+    if (!d) return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo evaluar todavía.</div>' };
+    const ordenar = Array.isArray(d.ordenar) ? d.ordenar : [];
+    if (!ordenar.length) {
+      const sinPrograma = !(d.programa && d.programa.rector);
+      return {
+        n: 0, sinJuicio: sinPrograma,
+        html: sinPrograma
+          ? '<div class="vgl-cw-err-msg">No se identificó el programa del paciente: no se evaluó qué ordenar.</div>'
+          : '<div class="vgl-cw-ok-msg">Al día con el programa de ' + escapeHtml(String(d.programa.rotulo || d.programa.rector)) + '.</div>',
+      };
+    }
+    const html = ordenar.map((x) => '<div class="vgl-cw-fila ' + (x.subestado === "vencido" ? "vgl-cw-venc" : "vgl-cw-pedir") + '">'
+      + '<span class="vgl-cw-nom">' + escapeHtml(x.nombre) + '</span>'
+      + '<span class="vgl-cw-que">' + escapeHtml(x.quePasa) + '</span>'
+      + '</div>').join("");
+    return { n: ordenar.length, sinJuicio: false, html: html };
+  }
+
+  let _cwDocPrevio = null, _cwFirmaPrevia = "", _cwNPrevio = 0, _cwAbierto = false;
+  // Solo para el banco: sin esto, una mutación que rompiera el reinicio entre pacientes
+  // (la de más consecuencia posible aquí: pintar el juicio del paciente ANTERIOR sobre
+  // la pantalla del actual) no tendría cómo caer en rojo desde fuera del cierre.
+  function _cwEstadoParaTest() { return { docPrevio: _cwDocPrevio, firma: _cwFirmaPrevia, nPrevio: _cwNPrevio }; }
+  function _cwResetParaTest() { _cwDocPrevio = null; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false; }
+
+  function mtrWidgetConductaTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-examenes");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) {
+        if (el) el.style.display = "none";
+        _cwDocPrevio = null; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false;   // nunca arrastrar el juicio de un paciente a otro
+        return;
+      }
+      if (docId !== _cwDocPrevio) { _cwDocPrevio = docId; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false; }
+      const boton = mtrBotonOrdenarConducta(d);
+      if (!boton) {
+        if (el) el.style.display = "none";
+        return;
+      }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+
+      let widget = el;
+      if (!widget) {
+        widget = document.createElement("div");
+        widget.id = "vgl-cw-examenes";
+        widget.addEventListener("click", (e) => {
+          e.stopPropagation();
+          _cwAbierto = !_cwAbierto;
+          widget.classList.toggle("vgl-cw-abierto", _cwAbierto);
+          widget.classList.remove("vgl-cw-atencion");   // el clic reconoce el aviso
+        });
+        document.body.appendChild(widget);
+      }
+      const r = boton.getBoundingClientRect();
+      widget.style.position = "fixed";
+      widget.style.left = Math.round(r.right + 10) + "px";
+      widget.style.top = Math.round(r.top) + "px";
+      widget.style.display = "";
+
+      const datos = mtrWidgetExamenesDatos(resumen);
+      // Firma barata: si nada de esto cambió desde el último tick, no se toca el
+      // contenido — es lo que evita el parpadeo de un repintado sin diferencia real.
+      const firma = docId + "|" + datos.n + "|" + datos.sinJuicio + "|" + datos.html.length;
+      if (firma === _cwFirmaPrevia) return;
+      // "Llama la atención" solo al SUBIR de severidad (0 pendientes -> 1+) — nunca al
+      // bajar, y nunca en el primer pintado del paciente (evita animar solo por abrir
+      // la historia). Comparar el CONTEO, no la firma completa: la firma cambia con
+      // cualquier detalle (p.ej. el texto de "quePasa"), y no toda diferencia es un
+      // ascenso real de severidad.
+      const subeDeSeveridad = _cwFirmaPrevia !== "" && _cwNPrevio === 0 && datos.n > 0;
+      _cwFirmaPrevia = firma; _cwNPrevio = datos.n;
+      const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
+      widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
+      widget.innerHTML = '<div class="vgl-cw-badge">🧪' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+    } catch (e) {}
   }
 
   // v17.1.0 (#136) — último paciente y momento en que el clic de Auto-Labs emitió su
@@ -6685,6 +6817,12 @@ _vglOfrecerDeshacer(btn);
     motorPortado: false,      // v14.2.0 — avisos de seguridad farmacologica. NACE APAGADO:
                               // el calculo esta verificado contra el Copiloto, pero nadie lo
                               // ha visto en consulta real. Lo enciende el medico, uno a uno.
+    conductaWidgets: false,   // v17.18.0 — widgets flotantes anclados a un boton real de
+                              // Everest en la pestana Conducta (hoy: examenes a ordenar).
+                              // NACE APAGADO, mismo criterio que motorPortado: es la primera
+                              // vez que este script pinta algo propio DENTRO del espacio
+                              // visual de Conducta, con un ancla ubicada por texto (sin
+                              // captura con selector real de esa zona todavia).
     iaRedaccion: false,       // v14.2.0 — redacción asistida por IA (Gemini). NACE APAGADO:
                               // manda datos clínicos DESIDENTIFICADOS a un tercero; lo activa
                               // el médico y configura su clave. El motor está probado; la UI
@@ -7114,7 +7252,7 @@ _vglOfrecerDeshacer(btn);
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -12246,7 +12384,7 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -12333,7 +12471,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -12458,7 +12596,8 @@ _vglOfrecerDeshacer(btn);
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
-        #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *{
+        #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *,
+        #vgl-cw-examenes,#vgl-cw-examenes *{
           animation:none !important;transition:none !important;
         }
       }
@@ -12543,7 +12682,8 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica,
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
-      body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an{display:none !important}
+      body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
+      body.vgl-modo-oculto #vgl-cw-examenes{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
@@ -12780,6 +12920,39 @@ _vglOfrecerDeshacer(btn);
       .vgl-salud-fila b{display:inline-block;width:14px}
       .vgl-salud-alerta{color:var(--c-ambar)}
       .vgl-salud-nd{opacity:.75}
+      /* =====================================================================
+         v17.18.0 — WIDGETS DE CONDUCTA. Cuelgan de document.body, junto a un botón real
+         de Everest (nunca dentro de su árbol — Regla dura, ver mtrWidgetConductaTick):
+         fuera de #vgl-root no hay NINGÚN blindaje heredado, así que todo color con clase
+         propia lleva !important sin excepción (CLAUDE.md), y el texto suelto usa el
+         patrón :where(...:not([class])), nunca "selector b,span,div" a pelo (bug #1 del
+         proyecto: una regla de tipo le gana en especificidad a una clase de acento).
+         ===================================================================== */
+      #vgl-cw-examenes{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:280px}
+      #vgl-cw-examenes .vgl-cw-badge{
+        display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
+        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
+        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
+        color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+      }
+      #vgl-cw-examenes.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
+      #vgl-cw-examenes.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important;opacity:.85}
+      #vgl-cw-examenes.vgl-cw-ok .vgl-cw-badge{color:var(--c-verde) !important}
+      #vgl-cw-examenes .vgl-cw-panel{
+        display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
+        border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
+        max-height:260px;overflow-y:auto;
+      }
+      #vgl-cw-examenes.vgl-cw-abierto .vgl-cw-panel{display:block}
+      #vgl-cw-examenes .vgl-cw-fila{margin:5px 0;line-height:1.4}
+      #vgl-cw-examenes .vgl-cw-fila:not(:last-child){border-bottom:1px solid var(--line);padding-bottom:5px}
+      #vgl-cw-examenes .vgl-cw-nom{display:block;font-size:var(--t-micro);font-weight:700;color:var(--fg) !important}
+      #vgl-cw-examenes .vgl-cw-que{display:block;font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-cw-examenes .vgl-cw-venc .vgl-cw-nom{color:var(--c-rojo) !important}
+      #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
+      #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      :where(#vgl-cw-examenes :not([class])){color:inherit}
       /* =====================================================================
          v16.1.0 — REGLA E APLICADA A LA FICHA Y AL MÓDULO DE RIESGO
          ---------------------------------------------------------------------
@@ -24267,6 +24440,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
         <div class="vgl-fld"><label>Avisos de seguridad farmacológica <b>(en pruebas)</b><span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Aviso de exámenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón de ordenar de Everest, qué exámenes hacen falta para el próximo control. <b>Solo avisa: no toca ni escribe nada dentro de Conducta.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
@@ -24410,6 +24584,8 @@ _vglOfrecerDeshacer(btn);
     if (volSlider) volSlider.addEventListener("change", () => { const v = clampNum(volSlider.value, 2, 60, 15) / 100; _ajustesPonBorrador("volumen", v); const prev = S.volumen; try { S.volumen = v; playTone("AZUL"); } catch (e) {} S.volumen = prev; });
     const motorBtn = q("#c-motor");
     if (motorBtn) motorBtn.addEventListener("change", () => _ajustesPonBorrador("motorPortado", motorBtn.checked));
+    const cwBtn = q("#c-cw-examenes");
+    if (cwBtn) cwBtn.addEventListener("change", () => _ajustesPonBorrador("conductaWidgets", cwBtn.checked));
     // v17.6.3 — Meta general de HbA1c (Ajustes). Fuera de rango o vacío → 7,0: el mismo
     // contrato de mtrMetaHba1cGeneral; la meta individual del paciente gana siempre.
     const hba1cMetaEl = q("#c-hba1c-meta");

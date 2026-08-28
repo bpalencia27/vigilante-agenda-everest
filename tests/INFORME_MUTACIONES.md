@@ -4787,3 +4787,29 @@ Banco en verde tras la restauración final: **2.473/2.473**.
 **Sin mutación, y se dice en vez de inventar una:** el mapeo completo del Panel del paciente
 y el diseño del widget de Conducta (`docs/BACKLOG_PENDIENTE_20260828.md`) no tocan código de
 producción en esta versión — son insumo para la refactorización S+ pendiente.
+
+---
+
+## v17.18.0 — el widget de Conducta: "qué ordenar en el próximo control"
+
+Primer widget flotante anclado a un botón real de Everest dentro de la pestaña Conducta
+(`#vgl-cw-examenes`). Reusa `mtrTableroClinico` (el mismo motor de la Sección 3 del Panel
+del paciente) para el contenido — cero cálculo nuevo — y ancla por texto sobre el botón
+"Paquetes" (única evidencia real disponible: `captura_ordenamiento_paquete_HTA_20260812.json`
+solo trae tag+texto de los clics, no selectores). Verificado en Chromium real contra un
+CSS "Everest" agresivo (`tools/verificar_color_chromium.js`, 6 casos nuevos de selectores
+compuestos): los 6 sobreviven.
+
+Banco en verde tras la restauración final: **2.488/2.488**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Que el interruptor `S.conductaWidgets` dejara de apagar el widget | *mtrWidgetConductaTick: apagado por S.conductaWidgets=false…* |
+| 2 | Que un cambio de paciente NO reiniciara la firma/conteo previos | *mtrWidgetConductaTick: cambiar de paciente reinicia el estado…* |
+| 3 | Que el widget repintara su contenido aunque la firma no hubiera cambiado (parpadeo) | *mtrWidgetConductaTick: anti-parpadeo…* |
+| 4 | Que `mtrBotonOrdenarConducta` dejara de filtrar botones no visibles de verdad | *mtrBotonOrdenarConducta: un botón 'Paquetes' oculto… no cuenta como visible* |
+| 5 | Que "sin programa identificado" se confundiera con "al día" | *mtrWidgetExamenesDatos: sin programa identificado…* |
+
+**Sin mutación, y se dice en vez de inventar una:** las 21 decisiones de la entrevista S+
+de esta noche (`docs/DECISIONES_ENTREVISTA_SPLUS_20260828.md`) no tocan código de
+producción en esta versión — son la base para el trabajo que sigue.

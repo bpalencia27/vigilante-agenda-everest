@@ -544,7 +544,7 @@ module.exports = {
       // ya construye para las demás reglas— y el número baja de 404 a 378 SIN que haya
       // cambiado una sola declaración: los 26 de diferencia siempre fueron prosa.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 380, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), el 1 del aviso de desfase del reconciliador del v17.14.0 (.vgl-conf-desfase) y el 1 del aviso de «no pude cruzar contra Athenea» del v17.16.0 (.vgl-ord-nocruce), los dos exigidos por la Regla E por colgar de document.body y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 380 declaraciones reales, sin contar comentarios, salió ${importantTotal})`);
+      t.cierto(importantTotal === 389, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), el 1 del aviso de desfase del reconciliador del v17.14.0 (.vgl-conf-desfase), el 1 del aviso de «no pude cruzar contra Athenea» del v17.16.0 (.vgl-ord-nocruce) y los 9 del widget de Conducta del v17.18.0 (#vgl-cw-examenes: badge, estados pend/nd/ok, fila venc/pedir, nom/que, ok-msg/err-msg), los dos exigidos por la Regla E por colgar de document.body y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 389 declaraciones reales, sin contar comentarios, salió ${importantTotal})`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del
@@ -624,8 +624,9 @@ module.exports = {
       // v14.0.0 (T5) — #vgl-acciones-dock (el dock de widgets) también usa var(--z-widget):
       // 1 sitio (.vgl-lab-inj,.vgl-exf-btn) -> 2 sitios. v15.6.0 — #vgl-acomp-burbuja (la
       // burbuja de la guía paso a paso) y v17.1.0 — .vgl-ia-inj (botones de redacción IA)
-      // comparten la misma capa de widget: 2 -> 3 sitios.
-      t.cierto(zWidget.length === 3, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock y #vgl-acomp-burbuja (3 sitios). Salieron ${zWidget.length}.`);
+      // comparten la misma capa de widget: 2 -> 3 sitios. v17.18.0 — #vgl-cw-examenes (el
+      // widget de Conducta) también cuelga de document.body: 3 -> 4 sitios.
+      t.cierto(zWidget.length === 4, `var(--z-widget) debe usarse en .vgl-lab-inj,.vgl-exf-btn,.vgl-ia-inj, #vgl-acciones-dock, #vgl-acomp-burbuja y #vgl-cw-examenes (4 sitios). Salieron ${zWidget.length}.`);
       // v15.6.0 — la regla nueva de los modales de flujo (riesgo, IA, datos, ficha, tablero,
       // confirmar, panel, llenar) comparte la misma capa: 1 selector compuesto -> 2 sitios.
       t.cierto(zModal.length === 2, `var(--z-modal) debe usarse en #vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal y en la lista de modales de flujo de v15.6.0 (2 sitios). Salieron ${zModal.length}.`);

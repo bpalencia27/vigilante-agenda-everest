@@ -4,6 +4,28 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.18.0] — 2026-08-28 (Qué ordenar en el próximo control, junto al botón de Everest)
+
+### ✨ Nuevo: widget de "qué ordenar" dentro de Conducta
+Pedido del médico: en vez de tener que abrir el Panel del paciente para ver qué exámenes
+hacen falta para el próximo control, ahora una pastilla flotante junto al botón de
+"Paquetes" de Everest (dentro de Conducta) lo muestra directamente — 🧪 con el número de
+pendientes, en ámbar si hay algo por ordenar y en verde si el paciente está al día. Un
+clic la despliega con el detalle (nombre del examen y qué le pasa a cada uno).
+
+No inventa ningún dato nuevo: usa exactamente el mismo cálculo que ya usa el Panel del
+paciente, así que las dos vistas nunca pueden decir cosas distintas. Tampoco toca nada
+dentro de Conducta — solo lee, nunca escribe ni simula clics (la misma disciplina que ya
+se estableció en v15.3.0 para esa pestaña). Viene **apagado de fábrica**: se enciende
+desde Ajustes → "Aviso de exámenes en Conducta (en pruebas)".
+
+Si Everest no tiene el botón "Paquetes" visible en ese momento (otra sub-pantalla, u otra
+versión del formulario), el widget simplemente no aparece — nunca flota en una posición
+inventada. Y nunca arrastra el juicio de un paciente a la pantalla del siguiente: cambiar
+de historia clínica reinicia el widget por completo.
+
+---
+
 ## [Versión 17.17.0] — 2026-08-28 (El vigilante de la agenda ya no acusa a quien llegó a tiempo)
 
 ### 🐛 Falso positivo de fraude cuando se usan varias pestañas de Citas del día
