@@ -1,5 +1,42 @@
 # Backlog pendiente — 28-ago-2026
 
+## Resumen de la noche (autorización explícita del médico, hasta 7h sin su presencia)
+
+Trabajo seguro agotado — todo lo que quedaba en la cola sin necesitar el criterio del
+médico en tiempo real está cerrado. Seis versiones, todas con prueba/mutación/CHANGELOG:
+
+- **v17.17.0** — falso positivo de fraude en la agenda (causa raíz confirmada por dos
+  revisores independientes; el primer arreglo propuesto se descartó por insuficiente).
+- **v17.18.0** — widget "qué ordenar en el próximo control" en Conducta.
+- **v17.19.0** — "Silenciar 15 min" ahora silencia tono+toast+Windows+cartel de verdad.
+- **v17.20.0** — 4 ajustes muertos retirados, etiqueta "(en pruebas)" retirada del motor.
+- **v17.21.0** — reloj de cabecera con la cadencia de sondeo visible.
+- **v17.22.0** — chips de PyM de vuelta en la tarjeta (reversión consciente de T4).
+
+Banco: **2.497/2.497**, cobertura 91,6 %. PR #101 actualizado con el resumen completo.
+
+**Lo que NO se tocó, a propósito — necesita al médico despierto:**
+- El toggle de abandono PES (la naturaleza real ya se verificó en código — Programa de
+  riesgo cardiovascular vía SharePoint, no sala de espera — pero la decisión del toggle
+  sigue sin responder).
+- Comorbilidades del motor farmacológico (NYHA, insuficiencia hepática) y los dos gaps de
+  insulinas/furosemida — necesitan verificar contra Everest qué campos existen de verdad.
+- Extender la reconciliación de Agendar a comorbilidades/medicamentos, y el "reloj más
+  corto" de frescura — decidido en dirección, pero sin el número exacto.
+- Alergias/quirúrgicos/traumáticos/transfusiones al grounding de la IA: los NOMBRES reales
+  de los campos SÍ están documentados (`MAPA_GUARDADO_HC.md`: `quirurgicos`, `traumaticos`,
+  `transfusiones`, `alergicos`), pero su documento propio advierte explícitamente que la
+  FORMA interna de cada lista no se conoce todavía ("no se sabe qué valores admite cada
+  campo... suponerlo sería repetir v12.3.30") — hace falta una captura de valores real,
+  desidentificada, antes de tocar el código.
+- Correr el diagnóstico de "carga" de v17.12.0 en una consulta real (solo el médico puede).
+- El widget de fármacos en Conducta (diseñado, bloqueado en la lectura en vivo por falta
+  de una captura del GRABADOR sobre el gesto de agregar un medicamento).
+- Los bugs de Laboratorios sin especificar, y toda decisión de diseño visual S+.
+
+---
+
+
 Este documento existe por una lección concreta: el 27-ago se perdió la lista completa de 178
 hallazgos de un enjambre porque nunca se versionó. Esta vez cada petición abierta del médico
 queda escrita aquí, con fecha y contexto, ANTES de seguir acumulando trabajo nuevo encima. Se
