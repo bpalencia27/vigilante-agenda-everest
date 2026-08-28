@@ -6,6 +6,27 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.30.0 — 28-ago-2026 (con el ANR activo, la cosecha genérica y la gracia se apagan)
+
+Un cambio de comportamiento, dos guardarraíles independientes en `mtrPlanParaclinicos`
+(el de la cosecha base del 33% y el de la gracia de 14 días), cada uno con su propia
+mutación y su propia prueba — confirmando que son dos puntos de fallo distintos, no uno
+solo. Restaurado y verificado con `diff` contra copia intacta tras cada mutación. Banco
+en verde: **2.531/2.531**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `if (anr) { diferidos.push(...); continue; }` → `if (false) {...}` en el bucle base de cosecha (33%) | *v17.30.0: con el ANR activo, un examen ajeno a lo renal tampoco se arrastra por el 33% BASE (sin gracia de por medio)* (suite_46) — el uroanálisis (margen 50 d de 180, 27,8%, ya calificaba solo para el 33% sin necesitar gracia) volvía a cosecharse |
+| 2 | `if (!anr) {...}` → `if (true) {...}` en el bucle de arrastre por gracia | *v17.30.0: con el ANR activo, un examen ajeno a lo renal NO se arrastra aunque su margen quepa en el 33%+gracia* (suite_46) — la glicemia (margen 65 d, solo calificaba sumando la gracia de 14 días) volvía a cosecharse |
+
+Nota: la primera mutación (bucle base) NO se pudo verificar con el mismo escenario de
+glicemia usado para la prueba de gracia — con margen 65 d y vigencia 180 d (33% = 59,4 d),
+la glicemia ya excede el 33% base por sí sola, así que romper solo el guardarraíl del
+bucle base no la afecta (cae por la gracia de todos modos, o queda diferida en ambos
+casos). Se necesitó un segundo vector (uroanálisis, margen 50 d, que SÍ calza dentro del
+33% base) para que la mutación #1 quedara realmente cubierta — confirmando que ambos
+guardarraíles son necesarios y ninguno sustituye al otro.
+
 ## v17.29.0 — 28-ago-2026 (arrastre por gracia medido, reloj de 3 min, meta de triglicéridos, color del RAC vencido)
 
 Cinco cambios de comportamiento, todos restaurados y verificados con `diff` contra copia

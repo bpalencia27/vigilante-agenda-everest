@@ -406,6 +406,73 @@ module.exports = {
       t.falso(plan.diferidos.some((a) => a.clave === "CREATININA"), "solo la creatinina se salva del margen");
     });
 
+    // =====================================================================
+    // v17.30.0 — ENCARGO DEL MÉDICO (28-ago), reporte en vivo: un paciente con ERC en el
+    // que la creatinina forzaba la toma a solo 6 días (ANR activo) traía además glicemia,
+    // uroanálisis y HbA1c —cada una a ~65 días de SU PROPIO vencimiento, sin relación con
+    // lo renal— porque con la toma tan adelantada por el ANR, el margen del 33% (59,4 d
+    // de 180 de vigencia) y encima la gracia de 14 días (v17.29.0, el mismo día) seguían
+    // siendo suficientes para arrastrarlas. El médico: "no puedes activar ANR y a su vez
+    // los vencidos [la cosecha genérica], trata de equilibrar" — con el ANR gobernando la
+    // fecha, SOLO la creatinina y el RAC sincronizado se agrupan de forma automática; el
+    // resto de los drivers necesita estar vencido/faltante POR SU CUENTA para entrar. El
+    // caso de arriba (v17.6.98, margen de sobra) ya probaba el 33% base; este caso prueba
+    // específicamente el margen AJUSTADO — el que antes SÍ se colaba por la gracia.
+    // =====================================================================
+    t.caso("v17.30.0: con el ANR activo, un examen ajeno a lo renal NO se arrastra aunque su margen quepa en el 33%+gracia", () => {
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-28", programa: "ERC", estadioAdministrativo: "G3a", categoriaRiesgo: "moderado",
+        esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-05-05", valor: 1.3 },  // vence a 6 d: fuerza la toma vía ANR
+          GLUCOSA: { fecha: "2026-05-11", valor: 95 },      // vence a 65 d: 33%(59,4)+gracia(14)=73,4 — habría entrado
+        },
+      });
+      t.cierto(!!plan.anr, "ANR activo (control del escenario)");
+      t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"), "la creatinina se agrupa, como siempre");
+      t.falso(plan.cosechados.some((a) => a.clave === "GLUCOSA"),
+        "la glicemia, sin relación con lo renal, ya NO se arrastra solo porque el ANR adelantó la fecha");
+      t.cierto(plan.diferidos.some((a) => a.clave === "GLUCOSA"), "queda diferida, para su propio viaje cuando de verdad haga falta");
+      t.falso((plan.ordenar || []).some((a) => a.clave === "GLUCOSA"), "y no se ordena en esta visita");
+    });
+
+    t.caso("v17.30.0: con el ANR activo, un examen ajeno a lo renal tampoco se arrastra por el 33% BASE (sin gracia de por medio)", () => {
+      // A diferencia de la prueba anterior (que dependía de la gracia de 14 días), aquí el
+      // margen de UROANALISIS (50 d de 180 = 27,8%) YA califica para la cosecha genérica del
+      // 33% por sí solo, sin necesitar la gracia. Si el guardarraíl del bucle base
+      // (`if (anr) {...continue}`) se rompe, esta prueba —y solo esta— cae, aunque la de
+      // arriba (que ejercita la gracia) siga en verde: son dos guardarraíles distintos.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-28", programa: "ERC", estadioAdministrativo: "G3a", categoriaRiesgo: "moderado",
+        esDm2: false, edad: 60, rac: 12,
+        ultimos: {
+          CREATININA: { fecha: "2026-05-05", valor: 1.3 },   // vence a 6 d: fuerza la toma vía ANR
+          UROANALISIS: { fecha: "2026-04-26", valor: null }, // vence a 50 d: 33% de 180 = 59,4 d — ya calificaba solo
+        },
+      });
+      t.cierto(!!plan.anr, "ANR activo (control del escenario)");
+      t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"), "la creatinina se agrupa, como siempre");
+      t.falso(plan.cosechados.some((a) => a.clave === "UROANALISIS"),
+        "el uroanálisis, sin relación con lo renal, ya NO se arrastra por el 33% base solo porque el ANR adelantó la fecha");
+      t.cierto(plan.diferidos.some((a) => a.clave === "UROANALISIS"), "queda diferido, para su propio viaje cuando de verdad haga falta");
+    });
+
+    t.caso("v17.30.0: SIN ANR, la gracia sigue funcionando exactamente igual que en v17.29.0", () => {
+      // Mismo vector que la prueba de ARRASTRE POR GRACIA de más abajo (creatinina en
+      // margen normal, sin forzar nada vía ANR): confirma que el guardarraíl nuevo no le
+      // quitó nada a la gracia para el caso normal, sin ANR, que es el que existía antes.
+      const plan = api.mtrPlanParaclinicos({
+        hoyIso: "2026-08-16", programa: "HTA", esDm2: false, edad: 60,
+        ultimos: {
+          GLUCOSA: { fecha: "2026-04-26", valor: 95 },
+          CREATININA: { fecha: "2026-05-11", valor: 1.0 },
+        },
+      });
+      t.falso(!!plan.anr, "sin ANR (HTA puro, sin estadio ERC): control del escenario");
+      t.cierto(plan.cosechados.some((a) => a.clave === "CREATININA"),
+        "la creatinina sigue entrando por gracia cuando no hay ANR de por medio");
+    });
+
     t.caso("v17.6.98 PUNTA A PUNTA: la franja de los dos viajes queda cerrada", () => {
       // Barrido sobre la antigüedad de la creatinina. Antes de esta versión había una
       // franja (61-67 d en este vector) donde el ANR se declaraba activo —el médico leía

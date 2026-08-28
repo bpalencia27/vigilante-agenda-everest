@@ -4,6 +4,26 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.30.0] — 2026-08-28 (Con el ANR activo, solo se vale UNA regla — no dos apiladas)
+
+### 🔀 Ya no se pueden activar el ANR y la cosecha genérica a la vez
+Reporte en vivo, con pantallazo: en un paciente con ERC, la creatinina forzaba la toma a
+solo 6 días (agujero negro renal activo) y arrastraba con ella glicemia, uroanálisis y
+HbA1c — cada una a unos 65 días de SU PROPIO vencimiento, sin relación alguna con lo
+renal — porque con la toma tan adelantada, el 33% de margen de esos exámenes (y encima
+la gracia de 14 días, v17.29.0, del mismo día) seguían cabiendo igual. El médico: "no
+puedes activar ANR y a su vez los vencidos [la cosecha genérica], trata de equilibrar,
+proponme otra alternativa". La alternativa: con el ANR gobernando la fecha de la visita,
+solo la creatinina (siempre) y el RAC sincronizado (si cae dentro de la ventana) se
+agrupan de forma automática — el resto de los drivers vuelve a necesitar estar vencido o
+faltante por su propia cuenta para entrar en esa visita, tanto por la regla base del 33%
+como por la gracia de 14 días. Nada de esto toca el grupo de lípidos (que sigue
+arrastrando LDL/HDL/colesterol total/triglicéridos entre sí cuando alguno falla) ni la
+regla del 33% o la gracia cuando NO hay ANR activo — solo se apaga la superposición de
+las dos reglas cuando el ANR ya está gobernando la fecha.
+
+---
+
 ## [Versión 17.29.0] — 2026-08-28 (Menos viajes al laboratorio: arrastre por gracia, medido antes de construir)
 
 ### 🚗 Un examen que se pasa por poco de su corte ya no obliga a un viaje aparte

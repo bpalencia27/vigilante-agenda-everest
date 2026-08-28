@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.29.0
+// @version     17.30.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.29.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.30.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32800,6 +32800,19 @@ _vglOfrecerDeshacer(btn);
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
       if (margen <= 0) { cosechados.push(a); continue; }
+      // v17.30.0 — ENCARGO DEL MÉDICO (28-ago), reporte en vivo: un paciente con la
+      // creatinina forzando la toma a 6 días (ANR activo) traía además glicemia,
+      // uroanálisis y HbA1c —cada una a ~65 días de SU PROPIO vencimiento, sin relación
+      // con lo renal— porque el margen del 33% (59,4 d de 180 de vigencia) seguía
+      // siendo generoso incluso con la toma tan adelantada. El médico: "no puedes
+      // activar ANR y a su vez los vencidos [la cosecha genérica], trata de
+      // equilibrar" — con el ANR activo, solo la creatinina y el RAC que sincroniza
+      // con ella (las dos ramas de arriba) se agrupan de forma automática; el resto de
+      // los drivers SOLO entran si ya están vencidos/faltantes por su cuenta (evaluado
+      // aparte, antes de este bucle) — la cosecha genérica del 33% se apaga mientras el
+      // ANR gobierna la fecha, para no combinar dos motivos de adelanto distintos sobre
+      // el mismo examen. Sin ANR activo (el caso de casi todos los planes), nada cambia.
+      if (anr) { diferidos.push(Object.assign({}, a, { margenDias: margen })); continue; }
       if (margen <= a.vigenciaDias * MTR_COSECHA_MARGEN_PROP) cosechados.push(a);
       else diferidos.push(Object.assign({}, a, { margenDias: margen }));
     }
@@ -32845,16 +32858,24 @@ _vglOfrecerDeshacer(btn);
     // (eso sería una "ventana de agrupación" que este proyecto no tiene y que ya se le
     // explicó al médico que no existe). Nunca mueve `ftl` ni retrasa nada: solo
     // adelanta la toma de lo que ya estaba a punto de entrar por su cuenta.
+    // v17.30.0 — CON EL ANR ACTIVO, LA GRACIA TAMBIÉN SE APAGA. Sin este guardarraíl, la
+    // gracia (que solo mira margenDias/vigenciaDias, sin saber nada del ANR) volvía a
+    // arrastrar exactamente lo que el bucle de arriba acababa de excluir a propósito —
+    // el mismo defecto que el médico reportó, colándose por la puerta de al lado. Mismo
+    // principio: con el ANR gobernando la fecha, solo creatinina y el RAC sincronizado
+    // se agrupan de forma automática.
     const MTR_GRACIA_COSECHA_DIAS = 14;
-    for (let i = diferidos.length - 1; i >= 0; i--) {
-      const d = diferidos[i];
-      if (typeof d.margenDias !== "number" || typeof d.vigenciaDias !== "number") continue;
-      const exceso = d.margenDias - d.vigenciaDias * MTR_COSECHA_MARGEN_PROP;
-      if (exceso > MTR_GRACIA_COSECHA_DIAS) continue;
-      // Se conserva margenDias en el objeto (ya lo trae, de la cosecha normal) para que
-      // quien lea `cosechados` pueda seguir distinguiendo esto de un faltante/vencido.
-      cosechados.push(d);
-      diferidos.splice(i, 1);
+    if (!anr) {
+      for (let i = diferidos.length - 1; i >= 0; i--) {
+        const d = diferidos[i];
+        if (typeof d.margenDias !== "number" || typeof d.vigenciaDias !== "number") continue;
+        const exceso = d.margenDias - d.vigenciaDias * MTR_COSECHA_MARGEN_PROP;
+        if (exceso > MTR_GRACIA_COSECHA_DIAS) continue;
+        // Se conserva margenDias en el objeto (ya lo trae, de la cosecha normal) para que
+        // quien lea `cosechados` pueda seguir distinguiendo esto de un faltante/vencido.
+        cosechados.push(d);
+        diferidos.splice(i, 1);
+      }
     }
 
     // ---- QUÉ SE ORDENA ----
