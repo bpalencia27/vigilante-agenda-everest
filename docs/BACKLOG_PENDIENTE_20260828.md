@@ -136,6 +136,33 @@ lentos, dado que MODO LIGERO existe precisamente por ese problema documentado.
 
 ---
 
+## 7. [ABIERTO] Adopción de Agendamiento y Laboratorios entre colegas novatos
+
+Petición del 28-ago: los compañeros del médico (poco duchos en tecnología) no usan estos dos
+módulos — prefieren el agendamiento nativo de Everest y consultar directamente en Athenea.
+El médico quiere que usen TODOS los módulos del script. Grounding ya reunido:
+
+- Ya existe telemetría local real (`uxTrack`, `UX_KEY`, `mtrTableroTelemetria` ~línea 9182) que
+  mide exactamente el embudo de agendamiento (`fn.agendar.open` vs `cita.creada.*`, con
+  `abandono` en %) y el conteo de `widget.labs.abrir` / `widget.agendar.abrir` — antes de
+  rediseñar a ciegas, medir en las instalaciones de los compañeros (si tienen `S.uxTelemetria`
+  encendida) para saber si el problema es que NUNCA abren el botón (descubrimiento) o que lo
+  abren y abandonan (confianza/fricción del flujo).
+- Ya existe un "acompañante" (`ACOMP_KEY`, ~línea 25946) que celebra flujos completados
+  (`fn.agendar.complete`, `labs.autollenado.casillas`, etc.) hasta que el usuario "aprende"
+  (`ACOMP_FLUJOS_META=5`) — es infraestructura de onboarding ya construida, candidata a
+  reforzar en vez de inventar algo nuevo.
+- Hipótesis de diseño (sin implementar): en Laboratorios, la queja "se van directo a Athenea a
+  consultarlo" sugiere que solo quieren MIRAR, no actuar — mismo principio que la reintroducción
+  de chips de PyM en la tarjeta (punto 2): mostrar el estado de labs (al día / cuántos
+  pendientes) directamente en la tarjeta, sin clic, y reservar el modal para lo que Athenea no
+  ofrece (auto-llenado de casillas, vigencias por estadio). En Agendamiento, reducir a un clic
+  el caso más común y hacer visible el beneficio concreto (menos clics, evita duplicar cita) en
+  vez de pedir un acto de fe.
+
+Depende de: qué tan encendida está la telemetría en las instalaciones de los compañeros (esto
+sí lo puede verificar el médico).
+
 ## 6. [CERRADO — sin acción, ya se decidió] Sábado con tres reglas
 
 Medido con `tools/medir_sabados.js` (v17.15.0). Pendiente: volver a preguntar con los números en
