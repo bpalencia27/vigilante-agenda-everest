@@ -19,11 +19,22 @@ resueltas por el médico el 28-ago (noche):
    pestaña Medicamentos).
 3. **Dashboard de 3 tarjetas en Resumen**: **aprobado**, implementado en v17.24.0.
 
-**Fase 2 (widget de Conducta) sigue bloqueada**: no basta con capturar el botón
-"Recetar" — hace falta ver el formulario de prescripción mientras se llena (borrador
-antes de guardar), porque las funciones que leen medicamentos hoy son 100% vía la API
-de Everest. El médico ya grabó una consulta real con `DIAGNOSTICO_CONDUCTA_DOM.js`; su
-análisis es el siguiente paso.
+**Fase 2 — IMPLEMENTADA v17.25.0** (widget `#vgl-cw-farmaco`, ancla en `.btn-reformular`,
+confirmada por dos grabaciones reales del 28-ago). No repinta por tecla — la estructura
+interna del formulario de medicamentos no se pudo capturar sin arriesgarse a inventar
+un dato — se repinta tras una acción real de prescribir, releyendo por la API. La
+segunda grabación reveló la tabla real de "agregar medicamento nuevo"
+(`#TablaFarmacologico`/`#formFarmacologico`, filas `tr.align-middle`, primer campo un
+`<select>` — probablemente el medicamento, sin confirmar el texto real de las
+opciones): pista fuerte para una futura Fase 3 de lectura verdaderamente en vivo, no
+construida todavía por la misma razón — no se conoce el formato real del texto de esas
+opciones y alimentarlo sin verificar al motor de avisos podría dar un falso "sin
+interacciones".
+
+**Hallazgo aparte, encontrado en el camino**: `mtrWidgetConductaTick` (el widget
+hermano de "qué ordenar en el próximo control", v17.18.0) nunca se enganchó al reloj
+de producción — nunca se pintó en ninguna consulta real desde que se "entregó".
+Corregido en v17.25.0, junto con el widget nuevo.
 
 Las 26 preguntas del artefacto `mapa-panel-s-plus` (5 ya respondidas el 28-ago de día,
 21 respondidas esta noche antes de que el médico durmiera) quedan cerradas aquí. Cada una
