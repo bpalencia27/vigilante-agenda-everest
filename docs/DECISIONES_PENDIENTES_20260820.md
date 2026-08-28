@@ -33,32 +33,30 @@ estrictamente > meta. Para declarar falla terapéutica: > meta+15%. El paciente 
 intermedia recibe más viajes al laboratorio sin que ninguna pantalla declare falla.
 *Recomendación: un solo umbral (meta+15%) para ambas cosas.*
 
-**5. La reducción ≥50% del LDL nunca se puede verificar.** En riesgo alto/muy alto la norma
-exige meta absoluta Y reducción desde el basal; como el basal jamás se alimenta, todo paciente
-alto/muy alto en meta queda en "meta parcial" perpetuo.
-*Recomendación: declarar la reducción como "no evaluable" ya (que la meta absoluta clasifique
-sola), y como mejora tomar de basal el LDL más alto del histórico de Athenea.*
+**5. [RESUELTA, v16.9.0] La reducción ≥50% del LDL nunca se podía verificar.** El basal
+ya se alimenta: `mtrLdlBasalDeSerie` toma el LDL más alto de los controles del último año y
+lo inyecta a `mtrEvaluarMetaLdl`. Sin serie, la interfaz dice «reducción ≥X % no evaluable:
+sin LDL previo del último año» en vez de castigar. Prueba en `suite_45`.
 
-**6. El sábado tiene CUATRO reglas distintas según el módulo.** Hábil en un cálculo, no hábil
-en otro, "solo el sábado de su grupo 1-3/2-4" en el control clásico, "cualquier sábado" en
-labs-primero — y el 5.º sábado del mes no existe para nadie. Sobrevive además un modelo
-quincenal muerto anclado a una fecha fija.
-*Recomendación: regla única — solo los sábados de su grupo, el 5.º sábado como "por confirmar"
-visible, y borrar el modelo muerto.*
+**6. [CERRADO, v17.15.0] El sábado tiene tres reglas distintas según el módulo.** Esta
+entrada original (20-ago) recomendaba unificarlas. **Esa recomendación NO se siguió**: se
+midió primero (`tools/medir_sabados.js`) y la medición la contradijo — ver «La #6 medida»
+más abajo en este mismo documento. Lo que sí se cerró de la descripción original: el modelo
+quincenal muerto se retiró y el 5.º sábado ya existe como «por confirmar» visible (ambos en
+v16.9.0/v17.6.93). Lo que queda es DIVERGENCIA DOCUMENTADA, no deuda: no se toca.
 
-**7. La distancia toma→control es +4 días por un camino y +7 por otro.** Y la ventana de toma
-es 14–22 días en el motor pero 14–21 en labs-primero. Además el "modo estable" (citar lo más
-tarde posible para maximizar vigencia) existe, está probado y nadie puede activarlo.
-*Recomendación: unificar en toma 14–21 y control a +7 (el número que usted ya dictó el 19-ago).*
+**7. [RESUELTA, v16.9.0] La distancia toma→control era +4 días por un camino y +7 por
+otro.** Objetivo único +7 en todos los caminos, ventana de toma 14–21. El "modo estable"
+(citar lo más tarde posible) se retiró: con un objetivo único ya no tenía sentido.
 
-**10. El embarazo no se lee de ninguna parte.** La conducta "en embarazo la bacteriuria se
-trata siempre" es inalcanzable; a toda paciente se le asume no gestante sin decirlo.
-*Recomendación: añadirlo a las confirmaciones del reconciliador (el mecanismo ya existe desde
-v16.3.2), solo en mujer en edad fértil con parcial sugestivo.*
+**10. [RESUELTA, v16.9.0 / v17.0.2] El embarazo no se leía de ninguna parte.**
+`mtrDebePreguntarEmbarazo` pregunta por el reconciliador (solo en mujer en edad fértil con
+parcial sugestivo, como se recomendaba), con confirmación de 30 días de vigencia, consumida
+por `mtrEvaluarUroanalisis`. Prueba en `suite_48`.
 
-**12. La discordancia entre las dos TFG solo alerta con >2 estadios de diferencia.** G2 contra
-G4 (frontera de metformina, albúmina y fósforo) pasa como nota discreta.
-*Recomendación: alerta fuerte desde ≥2 estadios; ≥3 es casi siempre dato corrupto, no paciente.*
+**12. [RESUELTA, v16.9.0] La discordancia entre las dos TFG solo alertaba con >2 estadios
+de diferencia.** El umbral bajó a 2 estadios en `evaluarDiscrepanciaTFG`, con «REVISE EL
+DATO» desde 3 (posible dato corrupto, no paciente). Prueba en `suite_27`.
 
 **13. [PREGUNTADA HOY] Fuera de 40–79 años la escala ASCVD clasifica por extrapolación.** El
 propio código lo declara "no validado"… y aun así la categoría (y la meta de LDL) sale de ahí.
@@ -71,13 +69,12 @@ Es el caso de sus pacientes añosos.
 cupo del día) con el botón ya habilitado. La guarda "elija un horario" solo aplica tras un fallo.
 *Recomendación: exigir elección explícita siempre.*
 
-**11. La "cosecha" adelanta un examen vigente a la misma toma solo si le queda <25% de
-vigencia.** Con más margen, el paciente hace un segundo viaje meses después.
-*Recomendación: subir el corte a 33% — en su población el viaje pesa más que la vigencia.*
+**11. [RESUELTA] La "cosecha" adelantaba un examen vigente a la misma toma solo con <25%
+de vigencia restante.** El margen subió a 33 %, con prueba desde v17.7.x: en su población el
+viaje pesa más que la vigencia.
 
-**15. Sin datos del paciente, el plazo de control nace en "1 mes".** En un programa cuyas
-vigencias base son de 180 días, el defecto ciego acerca controles sin razón clínica.
-*Recomendación: sin datos, ningún chip activo — elegir es obligatorio.*
+**15. [RESUELTA] Sin datos del paciente, el plazo de control nacía en "1 mes".** Sin
+datos, ningún chip activo: elegir es obligatorio, como se recomendaba.
 
 **16. [PREGUNTADA HOY] Si el día elegido solo tiene agenda de otro médico, el script cambia
 solo de día** para quedarse con la suya. Prioriza continuidad sobre oportunidad sin preguntar.
@@ -86,24 +83,24 @@ día suyo?").*
 
 ## Bloque C — Configuración y mantenimiento
 
-**8. La sede del laboratorio (378) está cableada en seis sitios.** Si un colega de otra sede
-instala el script, sus pacientes quedan citados al laboratorio equivocado.
-*Recomendación: constante de instalación por equipo, con 378 de fábrica.*
+**8. [CERRADA, v17.15.0] La sede del laboratorio (378) estaba cableada en seis sitios.**
+La v17.6.3 ya había sacado el literal de cinco URLs a la constante única `mtrSedeIdLab()`
+(378 de fábrica); quedaba **una** sin migrar — la del SMS que le llega al celular del
+paciente diciéndole a qué laboratorio ir. Ya no.
 
-**14. La tabla de festivos se agota el 31-dic-2027** y desde ahí los festivos cuentan como
-hábiles, con aviso solo en consola (o sin aviso en el camino del motor).
-*Recomendación: calcular por la regla de la Ley Emiliani (algoritmo, sin tabla) con aviso
-visible de respaldo.*
+**14. [RESUELTA, v16.9.0] La tabla de festivos se agotaba el 31-dic-2027.** `mtrEsFestivoCO`
+calcula por la regla de la Ley Emiliani (algoritmo, sin tabla, sin techo); la tabla `FESTIVOS`
+queda solo de 2024-2027 como atajo y delega al algoritmo fuera de ese rango.
 
-**17. Dos decisiones clínicas viven escondidas en modo programador:** la lista de tamizajes
-PyM que el panel oculta ("meta cumplida en la IPS") y la hora del recordatorio de carga (07:30).
-Si la meta de sífilis/hepatitis deja de estar cumplida, usted no tiene cómo enterarse.
-*Recomendación: rótulo visible "N actividades ocultas por configuración" sin recargar el menú.*
+**17. [DECIDIDA por el médico, 27-ago] Dos decisiones clínicas viven escondidas en modo
+programador:** la lista de tamizajes PyM que el panel oculta ("meta cumplida en la IPS") y la
+hora del recordatorio de carga (07:30). La recomendación original era un rótulo visible de
+cuántas actividades quedan ocultas. **El médico decidió: «dejarlo exactamente como está».**
+No es un pendiente: es una decisión tomada, y se respeta.
 
-**18. Cuatro relojes de frescura distintos** (medicamentos 5 min, labs y órdenes 10, resumen
-20, tabla oficial 30): la fecha de control puede salir de un resumen que se apoya en insumos
-que el propio script ya declaró caducos.
-*Recomendación: un solo reloj de 10 minutos para todo.*
+**18. [RESUELTA, v17.6.0] Había cuatro relojes de frescura distintos** (medicamentos 5 min,
+labs y órdenes 10, resumen 20, tabla oficial 30). Un solo TTL de 10 minutos rige hoy en
+resumen, medicamentos, labs y tabla oficial, como se recomendaba.
 
 ---
 
@@ -117,8 +114,10 @@ Hoja de Google vía Apps Script. SharePoint NO es salida de telemetría (solo en
 mismo día (`reporte:false`, `uxTelemetria:false`); (2) la versión que lo re-enciende (v14.2.0+)
 y el diagnóstico (v15.7.0) posiblemente nunca llegaron a los PC — la última verificada en
 consultorio fue v14.1.6 y hay ~30 versiones sin publicar en el Gist; (3) transporte roto con el
-fallo anotado en un localStorage que nadie ha mirado; (4) rotación del token con acuse falso
-(el servidor dice "no" y el cliente lo cuenta como entregado — defecto real por corregir).
+fallo anotado en un localStorage que nadie ha mirado; (4) [RESUELTA, v16.4.0 — con prueba
+desde v17.16.1] rotación del token con acuse falso: el servidor dice "no" y el cliente lo
+cuenta como entregado. `repPost` ya excluye del `ok` la respuesta `"no"`; el caso solo
+estaba sin fijar en una prueba, y ahora lo está.
 
 **Brechas frente a "nivel grandes":** sin alerta de silencio del lado servidor (los 9 días de
 mudez sin que nadie se enterara son la prueba), sin id de sesión, sin esquema versionado, sin
@@ -130,8 +129,9 @@ una cuenta de Google personal (pendiente #7 de siempre: ¿se queda, se retira, o
 «Buscar actualizaciones» en cada PC; (4) abrir la Hoja con su cuenta y mirar la fecha de la
 última fila + que la implementación del Apps Script siga en "cualquier usuario, incluso anónimo"
 y el token siga siendo el mismo; (5) encender los interruptores en cada PC (o decidir retirar
-el canal). Del lado mío, cuando decida: acuse real del servidor (corregir el "no" contado como
-éxito), `Codigo.gs` de vuelta al repo, y el disparador de correo "si pasan 24 h sin filas".
+el canal). Del lado mío, cuando decida: [HECHO] el acuse real del servidor ya no cuenta el
+"no" como éxito (v16.4.0, con prueba desde v17.16.1); quedan `Codigo.gs` de vuelta al repo y
+el disparador de correo "si pasan 24 h sin filas".
 
 ---
 
