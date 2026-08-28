@@ -1,0 +1,424 @@
+<title>Agendar, Rediseñado</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --ink:#12161c; --ink-2:#5b6472; --ink-3:#8b93a1;
+    --paper:#f4f6fa; --card:#ffffff; --line:#e3e8ef; --line-2:#eef1f6;
+    --accent:#3452ff; --accent-ink:#ffffff; --accent-soft:#eaefff;
+    --teal:#0ea894; --teal-soft:#e3faf5;
+    --amber:#c9820a; --amber-soft:#fdf3e0;
+    --shadow: 0 1px 2px rgba(18,22,28,.04), 0 8px 24px -12px rgba(18,22,28,.18);
+    --shadow-lg: 0 2px 4px rgba(18,22,28,.04), 0 24px 48px -16px rgba(18,22,28,.28);
+    --radius: 20px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#eef1f6; --ink-2:#a6afc0; --ink-3:#7a8394;
+      --paper:#0d1117; --card:#161b24; --line:#262d3a; --line-2:#1d2330;
+      --accent:#7d95ff; --accent-ink:#0d1117; --accent-soft:#1b2245;
+      --teal:#3fd8c4; --teal-soft:#0f2a28;
+      --amber:#f0b64d; --amber-soft:#2c2210;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+      --shadow-lg: 0 2px 4px rgba(0,0,0,.3), 0 24px 48px -16px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#eef1f6; --ink-2:#a6afc0; --ink-3:#7a8394;
+    --paper:#0d1117; --card:#161b24; --line:#262d3a; --line-2:#1d2330;
+    --accent:#7d95ff; --accent-ink:#0d1117; --accent-soft:#1b2245;
+    --teal:#3fd8c4; --teal-soft:#0f2a28;
+    --amber:#f0b64d; --amber-soft:#2c2210;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    --shadow-lg: 0 2px 4px rgba(0,0,0,.3), 0 24px 48px -16px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+    line-height:1.5; padding:0 0 80px;
+  }
+  h1,h2,h3{font-family:'Sora',system-ui,sans-serif; margin:0; letter-spacing:-.01em; text-wrap:balance}
+  .mono{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums}
+
+  .wrap{max-width:1180px; margin:0 auto; padding:0 28px}
+
+  /* ---------- Header ---------- */
+  .hero{
+    padding:56px 0 40px; border-bottom:1px solid var(--line);
+    background:
+      radial-gradient(600px 240px at 85% -10%, var(--accent-soft), transparent 70%),
+      var(--paper);
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-size:12.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--accent); background:var(--accent-soft);
+    padding:6px 12px; border-radius:999px; margin-bottom:18px;
+  }
+  .eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .hero h1{font-size:clamp(28px,4vw,42px); font-weight:800; max-width:15ch}
+  .hero p{color:var(--ink-2); font-size:16.5px; max-width:56ch; margin-top:14px}
+  .hero-meta{display:flex; gap:28px; margin-top:32px; flex-wrap:wrap}
+  .hero-meta div{display:flex; flex-direction:column; gap:2px}
+  .hero-meta b{font-size:20px; font-family:'Sora',sans-serif}
+  .hero-meta span{font-size:12.5px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em}
+
+  section{padding:56px 0}
+  section > h2{font-size:26px; font-weight:700}
+  section > .lede{color:var(--ink-2); max-width:62ch; margin-top:10px; font-size:15.5px}
+
+  /* ---------- Antes / Después cards ---------- */
+  .grid5{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px; margin-top:32px}
+  .fix-card{
+    background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:20px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:12px;
+  }
+  .fix-num{
+    width:30px; height:30px; border-radius:9px; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-family:'Sora',sans-serif; font-weight:700; font-size:14px;
+  }
+  .fix-card h3{font-size:14.5px; font-weight:700}
+  .fix-before{font-size:12.5px; color:var(--ink-3); text-decoration:line-through; text-decoration-color:var(--line)}
+  .fix-after{font-size:13px; color:var(--teal); font-weight:600; display:flex; gap:6px; align-items:flex-start}
+  .fix-after svg{flex:none; margin-top:2px}
+
+  /* ---------- Tabs ---------- */
+  .tabbar{display:flex; gap:6px; margin:32px 0 28px; background:var(--card); border:1px solid var(--line); padding:5px; border-radius:14px; width:fit-content}
+  .tabbtn{
+    border:0; background:transparent; color:var(--ink-2); font:inherit; font-weight:600; font-size:14px;
+    padding:10px 18px; border-radius:10px; cursor:pointer; transition:.15s ease;
+  }
+  .tabbtn[aria-selected="true"]{background:var(--accent); color:var(--accent-ink)}
+  .tabbtn:not([aria-selected="true"]):hover{background:var(--line-2)}
+
+  .stage{display:none}
+  .stage.active{display:block; animation:rise .35s ease both}
+  @keyframes rise{from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:translateY(0)}}
+
+  /* ---------- Phone/panel mock frame ---------- */
+  .demo-shell{
+    display:grid; grid-template-columns:minmax(0,460px) 1fr; gap:40px; align-items:start;
+  }
+  @media (max-width:900px){.demo-shell{grid-template-columns:1fr}}
+
+  .modal-mock{
+    background:var(--card); border-radius:var(--radius); border:1px solid var(--line);
+    box-shadow:var(--shadow-lg); overflow:hidden;
+  }
+  .modal-head{padding:22px 24px 18px; border-bottom:1px solid var(--line-2); display:flex; justify-content:space-between; align-items:flex-start}
+  .modal-head h4{font-family:'Sora',sans-serif; font-size:17px; font-weight:700}
+  .modal-head p{font-size:12.5px; color:var(--ink-3); margin-top:3px}
+  .xbtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink-3);display:flex;align-items:center;justify-content:center;font-size:14px;cursor:default}
+
+  .modal-body{padding:24px}
+
+  .quickcard{
+    border:1.5px solid var(--accent); background:var(--accent-soft); border-radius:16px; padding:20px;
+    display:flex; flex-direction:column; gap:14px; position:relative; overflow:hidden;
+  }
+  .quickcard::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.35),transparent 60%);pointer-events:none}
+  .quickcard .tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+  .quickcard .datebig{font-family:'Sora',sans-serif; font-size:22px; font-weight:800}
+  .quickcard .subline{font-size:13px; color:var(--ink-2)}
+  .chiprow{display:flex; gap:8px; flex-wrap:wrap}
+  .chip{font-size:12px; font-weight:600; padding:6px 11px; border-radius:999px; background:var(--card); border:1px solid var(--line); color:var(--ink-2)}
+  .chip.on{background:var(--teal-soft); color:var(--teal); border-color:transparent}
+
+  .btn{
+    border:0; border-radius:12px; padding:13px 18px; font:inherit; font-weight:700; font-size:14.5px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px; width:100%; transition:.15s ease;
+  }
+  .btn-primary{background:var(--accent); color:var(--accent-ink)}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-ghost{background:transparent; color:var(--ink-2); border:1px solid var(--line)}
+  .btn-ghost:hover{background:var(--line-2)}
+
+  .divider-or{display:flex; align-items:center; gap:12px; color:var(--ink-3); font-size:12px; margin:18px 0; text-transform:uppercase; letter-spacing:.05em}
+  .divider-or::before,.divider-or::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .steplist{display:flex; gap:8px; margin-bottom:18px}
+  .stepdot{flex:1; height:4px; border-radius:99px; background:var(--line)}
+  .stepdot.done{background:var(--teal)}
+  .stepdot.now{background:var(--accent)}
+
+  .field-label{font-size:12.5px; font-weight:700; color:var(--ink-2); margin-bottom:8px; display:block}
+  .datepick{
+    border:1px solid var(--line); border-radius:14px; padding:14px; background:var(--card); margin-bottom:16px;
+  }
+  .datepick-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px}
+  .datepick-row b{font-size:13.5px}
+  .dow{display:grid; grid-template-columns:repeat(7,1fr); gap:5px; font-size:11px; color:var(--ink-3); text-align:center; margin-bottom:6px}
+  .dgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px}
+  .dcell{aspect-ratio:1; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:12.5px; font-family:'IBM Plex Mono',monospace; color:var(--ink-2)}
+  .dcell.mut{color:var(--ink-3); opacity:.35}
+  .dcell.sel{background:var(--accent); color:var(--accent-ink); font-weight:700}
+  .dcell.rec{background:var(--teal-soft); color:var(--teal); font-weight:700}
+
+  .slotgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:18px}
+  .slot{border:1px solid var(--line); border-radius:10px; padding:9px 4px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--ink-2)}
+  .slot.sel{border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:700}
+
+  .labsrow{
+    border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:flex; gap:12px; align-items:flex-start; margin-bottom:8px;
+  }
+  .swtoggle{width:38px;height:22px;border-radius:99px;background:var(--line);flex:none;position:relative;margin-top:2px}
+  .swtoggle.off::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .swtoggle.on{background:var(--teal)}
+  .swtoggle.on::after{content:"";position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .labs-copy b{font-size:13.5px; display:block; margin-bottom:2px}
+  .labs-copy span{font-size:12px; color:var(--ink-3)}
+
+  .loading-mock{display:flex; flex-direction:column; align-items:center; gap:16px; padding:34px 10px; text-align:center}
+  .spinner{width:34px;height:34px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .loading-mock b{font-size:14px}
+  .loading-mock span{font-size:12.5px; color:var(--ink-3)}
+  .progressbar{width:100%; height:5px; border-radius:99px; background:var(--line-2); overflow:hidden}
+  .progressbar i{display:block; height:100%; width:62%; background:var(--accent); border-radius:99px}
+
+  /* ---------- Annotations column ---------- */
+  .annlist{display:flex; flex-direction:column; gap:18px}
+  .ann{display:flex; gap:14px}
+  .ann .dot{width:26px;height:26px;border-radius:50%;background:var(--teal-soft);color:var(--teal);flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;font-family:'Sora',sans-serif}
+  .ann h4{font-size:14.5px; font-weight:700; margin-bottom:3px}
+  .ann p{font-size:13.5px; color:var(--ink-2)}
+
+  .callout{
+    margin-top:28px; border-radius:14px; border:1px solid var(--amber); background:var(--amber-soft);
+    padding:16px 18px; display:flex; gap:12px; font-size:13.5px; color:var(--ink);
+  }
+  .callout b{color:var(--amber)}
+
+  /* ---------- Checklist / plan ---------- */
+  .plan{display:flex; flex-direction:column; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:var(--card); margin-top:28px}
+  .plan-row{display:grid; grid-template-columns:44px 1fr auto; gap:16px; align-items:center; padding:16px 20px; border-bottom:1px solid var(--line-2)}
+  .plan-row:last-child{border-bottom:0}
+  .plan-ico{width:34px;height:34px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-family:'Sora',sans-serif;font-size:13px}
+  .plan-row h5{font-size:14.5px;font-weight:700}
+  .plan-row p{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+  .badge{font-size:11px;font-weight:700;padding:5px 10px;border-radius:99px;white-space:nowrap}
+  .badge.crit{background:var(--amber-soft); color:var(--amber)}
+  .badge.norm{background:var(--accent-soft); color:var(--accent)}
+
+  footer{padding:40px 0 0; color:var(--ink-3); font-size:12.5px; border-top:1px solid var(--line); margin-top:20px}
+</style>
+
+<div class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Propuesta de diseño · sin código todavía</span>
+    <h1>Agendar en un vistazo, no en tres pasos</h1>
+    <p>Maqueta del rediseño del módulo de Agendamiento — bonito, dinámico e intuitivo, con los 5 puntos de fricción reales que encontramos en el código ya resueltos. Nada de esto está programado aún: es para que usted lo vea y lo apruebe antes de tocar producción.</p>
+    <div class="hero-meta">
+      <div><b>3 → 1</b><span>Clics para el caso común</span></div>
+      <div><b>5 / 5</b><span>Fricciones resueltas</span></div>
+      <div><b>0</b><span>Cambios de lógica clínica</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section>
+    <h2>Lo que se corrige</h2>
+    <p class="lede">Cada tarjeta viene del código real de <span class="mono">openAgendamientoModal</span>, no de una opinión — la línea exacta está en el informe que ya le mandé.</p>
+    <div class="grid5">
+      <div class="fix-card">
+        <span class="fix-num">1</span>
+        <h3>Tres pasos siempre</h3>
+        <span class="fix-before">Control + Labs + Medicina General, y aun así 3 pantallas</span>
+        <span class="fix-after"><svg width="14" height="14" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Una tarjeta lista para confirmar, con lo de siempre ya puesto</span>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">2</span>
+        <h3>Texto de ayuda repetido</h3>
+        <span class="fix-before">El mismo párrafo largo, cada vez que abre el modal</span>
+        <span class="fix-after"><svg width="14" height="14" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Solo aparece la primera vez; después queda un ícono "¿Qué es esto?"</span>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">3</span>
+        <h3>Carga sin avisar cuánto falta</h3>
+        <span class="fix-before">"Consultando horarios..." sin barra ni cancelar</span>
+        <span class="fix-after"><svg width="14" height="14" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Barra de progreso real y botón para cancelar si Everest está lento</span>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">4</span>
+        <h3>Fecha manual escondida</h3>
+        <span class="fix-before">Un clic extra para destapar el calendario</span>
+        <span class="fix-after"><svg width="14" height="14" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>El calendario ya está a la vista, con el mejor día resaltado</span>
+      </div>
+      <div class="fix-card">
+        <span class="fix-num">5</span>
+        <h3 style="color:var(--amber)">Contradicción de seguridad</h3>
+        <span class="fix-before">Labs marcado solo, pero el texto promete "nunca sin decidir"</span>
+        <span class="fix-after"><svg width="14" height="14" viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>Apagado de fábrica: usted lo prende con un toque, nunca al revés</span>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <h2>Cómo se vería</h2>
+    <p class="lede">Dos maquetas interactivas — cambie entre ellas. Datos de ejemplo, ningún paciente real.</p>
+
+    <div class="tabbar" role="tablist">
+      <button class="tabbtn" role="tab" aria-selected="true" data-target="rapido">Flujo de un clic</button>
+      <button class="tabbtn" role="tab" aria-selected="false" data-target="personalizado">Personalizar fecha</button>
+      <button class="tabbtn" role="tab" aria-selected="false" data-target="carga">Mientras carga</button>
+    </div>
+
+    <!-- ===== STAGE 1: flujo rápido ===== -->
+    <div class="stage active" id="stage-rapido">
+      <div class="demo-shell">
+        <div class="modal-mock">
+          <div class="modal-head">
+            <div>
+              <h4>Agendar próximo control</h4>
+              <p>Paciente de ejemplo · Programa HTA</p>
+            </div>
+            <div class="xbtn">✕</div>
+          </div>
+          <div class="modal-body">
+            <div class="quickcard">
+              <span class="tag">⭐ Sugerido para hoy</span>
+              <div class="datebig">Mar. 15 de sept · 7:40 a.m.</div>
+              <div class="subline">Control + Laboratorios, con su médico de siempre</div>
+              <div class="chiprow">
+                <span class="chip on">Control</span>
+                <span class="chip">Labs (toque para incluir)</span>
+                <span class="chip">Medicina General</span>
+              </div>
+              <button class="btn btn-primary">Confirmar esta cita →</button>
+            </div>
+            <div class="divider-or">o elija distinto</div>
+            <button class="btn btn-ghost">✏️ Personalizar fecha, turno o programa</button>
+          </div>
+        </div>
+        <div class="annlist">
+          <div class="ann"><div class="dot">A</div><div><h4>Una sola tarjeta, una sola decisión</h4><p>Ya trae el programa correcto, el primer cupo razonable y "Labs" visible — pero <b>apagado</b> hasta que usted lo toque (arregla la contradicción #5).</p></div></div>
+          <div class="ann"><div class="dot">B</div><div><h4>La fecha manda, no el paso</h4><p>Nada de "Paso 1 de 3": el caso de todos los días se resuelve con un clic, y el camino largo queda un nivel más abajo, no desaparecido.</p></div></div>
+          <div class="ann"><div class="dot">C</div><div><h4>El texto de ayuda ya no estorba</h4><p>Un médico que ya lo usó cien veces no vuelve a leer el párrafo explicativo — solo la primera vez, o si lo pide con el ícono ⓘ.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== STAGE 2: personalizar ===== -->
+    <div class="stage" id="stage-personalizado">
+      <div class="demo-shell">
+        <div class="modal-mock">
+          <div class="modal-head">
+            <div>
+              <h4>Elegir fecha y turno</h4>
+              <p>Control · Medicina General</p>
+            </div>
+            <div class="xbtn">✕</div>
+          </div>
+          <div class="modal-body">
+            <div class="steplist"><div class="stepdot done"></div><div class="stepdot now"></div><div class="stepdot"></div></div>
+
+            <span class="field-label">Calendario — ya visible, sin clic extra</span>
+            <div class="datepick">
+              <div class="datepick-row"><b>Septiembre 2026</b><span class="mono" style="color:var(--ink-3);font-size:12px">‹ ›</span></div>
+              <div class="dow"><span>D</span><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span></div>
+              <div class="dgrid">
+                <div class="dcell mut">30</div><div class="dcell mut">31</div><div class="dcell">1</div><div class="dcell">2</div><div class="dcell">3</div><div class="dcell">4</div><div class="dcell">5</div>
+                <div class="dcell">6</div><div class="dcell">7</div><div class="dcell">8</div><div class="dcell">9</div><div class="dcell">10</div><div class="dcell">11</div><div class="dcell">12</div>
+                <div class="dcell">13</div><div class="dcell">14</div><div class="dcell rec">15</div><div class="dcell">16</div><div class="dcell">17</div><div class="dcell">18</div><div class="dcell">19</div>
+                <div class="dcell">20</div><div class="dcell sel">21</div><div class="dcell">22</div><div class="dcell">23</div><div class="dcell">24</div><div class="dcell">25</div><div class="dcell">26</div>
+              </div>
+            </div>
+
+            <span class="field-label">Turnos del 21 de septiembre</span>
+            <div class="slotgrid">
+              <div class="slot">7:00</div><div class="slot sel">7:40</div><div class="slot">8:20</div>
+              <div class="slot">9:00</div><div class="slot">9:40</div><div class="slot">10:20</div>
+            </div>
+
+            <button class="btn btn-primary">Continuar →</button>
+          </div>
+        </div>
+        <div class="annlist">
+          <div class="ann"><div class="dot">D</div><div><h4>El calendario ya no se esconde</h4><p>Antes hacía falta un botón "Elegir fecha manual" para revelar el selector — ahora está siempre a la vista, con el día sugerido ya resaltado en verde.</p></div></div>
+          <div class="ann"><div class="dot">E</div><div><h4>Menos pasos, mismos datos</h4><p>Bajamos de 3 pantallas a 2 fusionando fecha+turno en una sola vista, sin quitarle al médico ninguna opción que ya tenía.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== STAGE 3: carga ===== -->
+    <div class="stage" id="stage-carga">
+      <div class="demo-shell">
+        <div class="modal-mock">
+          <div class="modal-head">
+            <div><h4>Buscando turnos disponibles</h4><p>Esto puede tardar unos segundos</p></div>
+            <div class="xbtn">✕</div>
+          </div>
+          <div class="modal-body">
+            <div class="loading-mock">
+              <div class="spinner"></div>
+              <b>Consultando la agenda en Everest…</b>
+              <div class="progressbar"><i></i></div>
+              <span>Normalmente tarda 2-4 segundos. Si Everest está lento, puede tardar más.</span>
+              <button class="btn btn-ghost" style="width:auto;padding:9px 16px">Cancelar</button>
+            </div>
+          </div>
+        </div>
+        <div class="annlist">
+          <div class="ann"><div class="dot">F</div><div><h4>Ya no es una caja negra</h4><p>Antes el texto era fijo y sin salida: si Everest se ponía lento no había forma de saber si seguir esperando o si algo se colgó.</p></div></div>
+          <div class="ann"><div class="dot">G</div><div><h4>Cancelar es seguro</h4><p>Cancelar solo interrumpe la CONSULTA de horarios — nunca cancela una cita ya confirmada. El botón de esta pantalla nunca toca lo ya agendado.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <span>⚠️</span>
+      <div><b>Antes de programar nada:</b> el punto 5 (labs apagado de fábrica) es un cambio de seguridad clínica, no solo de estética — necesita su confirmación explícita aparte, aunque el resto del diseño le guste tal cual.</div>
+    </div>
+  </section>
+
+  <section style="padding-top:0">
+    <h2>Orden de entrega</h2>
+    <p class="lede">Cada fila es una versión con su propia prueba, mutación verificada y captura suya antes del siguiente paso — como todo lo demás en este proyecto.</p>
+    <div class="plan">
+      <div class="plan-row">
+        <div class="plan-ico">1</div>
+        <div><h5>Apagar la casilla de labs por defecto</h5><p>Corrige la contradicción de seguridad — se hace primero, sola, para que Ordenar no espere al resto del diseño.</p></div>
+        <span class="badge crit">Seguridad</span>
+      </div>
+      <div class="plan-row">
+        <div class="plan-ico">2</div>
+        <div><h5>Tarjeta de un clic para el caso común</h5><p>Detecta Control + Medicina General (el caso de siempre) y arma la tarjeta lista para confirmar.</p></div>
+        <span class="badge norm">UX</span>
+      </div>
+      <div class="plan-row">
+        <div class="plan-ico">3</div>
+        <div><h5>Calendario siempre visible + turnos en grilla</h5><p>Fusiona fecha y turno en una sola pantalla; quita el botón que hoy esconde el selector manual.</p></div>
+        <span class="badge norm">UX</span>
+      </div>
+      <div class="plan-row">
+        <div class="plan-ico">4</div>
+        <div><h5>Progreso real + cancelar en las cargas</h5><p>Reemplaza los textos fijos "Consultando..." por una barra de verdad y un botón de cancelar que nunca toca una cita ya hecha.</p></div>
+        <span class="badge norm">UX</span>
+      </div>
+      <div class="plan-row">
+        <div class="plan-ico">5</div>
+        <div><h5>Texto de ayuda solo la primera vez</h5><p>Se guarda "ya lo vio" por médico; después queda un ícono ⓘ para volver a leerlo si hace falta.</p></div>
+        <span class="badge norm">UX</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="wrap" style="padding:0">
+    Maqueta sin datos reales — solo para aprobar el diseño. Nada de esto toca producción hasta que usted lo confirme.
+  </footer>
+</div>
+
+<script>
+  document.querySelectorAll('.tabbtn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.tabbtn').forEach(b=>b.setAttribute('aria-selected','false'));
+      btn.setAttribute('aria-selected','true');
+      document.querySelectorAll('.stage').forEach(s=>s.classList.remove('active'));
+      document.getElementById('stage-'+btn.dataset.target).classList.add('active');
+    });
+  });
+</script>
