@@ -732,6 +732,67 @@ module.exports = {
         "y el cuadro deja de tener motivo para frenar: es lo que él vio que NO pasaba");
     });
 
+    const CAMPO_ERC = "AntecedentePatologicos.enfermedadRenal";
+
+    // v17.31.0 — encargo del médico (28-ago), textual: "el script no consulta la TFG porque
+    // muchas veces la TFG es menor a 60 y aun así me pregunta [si tiene ERC], el script debe
+    // ser inteligente en estos casos" — y, al recordárselo, "RECUERDA COCKCROFT GAULT": la
+    // TFG que decide aquí es la administrativa (Cockcroft-Gault), no la CKD-EPI.
+    t.caso("v17.31.0 — con TFG por Cockcroft-Gault <60 ya calculada, el reconciliador NO pregunta por ERC", () => {
+      const cErc = cargar({ silencioso: true });
+      const d = cErc.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+
+      // La cabecera de Everest dice NEFROPROTECCIÓN (afirma ERC); la historia de hoy dice
+      // que NO (niega ERC) — la misma contradicción que antes SIEMPRE frenaba el módulo.
+      const radios = domRadios({ [CAMPO_ERC]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000222", closest: () => null }]
+            : [{ textContent: "Marcaciones: NEFROPROTECCION", innerText: "Marcaciones: NEFROPROTECCION" }]));
+
+      // Sin TFG cacheada, la contradicción se ve igual que siempre: sigue frenando. Esto
+      // deja constancia de que el guardarraíl solo se activa CON el dato, no por defecto.
+      const sinTfg = cErc.api.mtrReconciliarAhora("555000222", d);
+      t.cierto(sinTfg.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "sin TFG en caché, la contradicción cabecera/historia sigue preguntando — el guardarraíl no cambia el caso de siempre");
+
+      // Con la TFG por Cockcroft-Gault ya calculada y <60 (resumenBase: creatinina 1.3,
+      // 66 años, 70 kg, mujer → crcl 47), la pregunta desaparece: ya está establecida por
+      // un cálculo objetivo, no hay nada que confirmarle al médico.
+      cErc.api.mtrCacheResumenGuardar("555000222", resumenBase);
+      const conTfg = cErc.api.mtrReconciliarAhora("555000222", d);
+      t.falso(conTfg.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "con TFG<60 ya calculada, la pregunta de ERC ya no sale");
+    });
+
+    t.caso("v17.31.0 — una TFG por Cockcroft-Gault ≥60 (o no evaluable) NO apaga la pregunta de ERC", () => {
+      const cErc2 = cargar({ silencioso: true });
+      const d = cErc2.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+      const radios = domRadios({ [CAMPO_ERC]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000333", closest: () => null }]
+            : [{ textContent: "Marcaciones: NEFROPROTECCION", innerText: "Marcaciones: NEFROPROTECCION" }]));
+
+      // Función renal normal: crcl 92 (misma fórmula, con una creatinina normal).
+      const resumenSano = a.mtrResumenClinico({
+        hoyIso: "2026-08-20", edad: 40, sexo: "F", pesoKg: 65, creatinina: 0.7,
+        factores: { hta: true, diabetes: false, tabaquismo: false, enfermedadRenalDocumentada: true },
+        ultimos: { CREATININA: { fecha: "2026-07-01", valor: 0.7 } },
+      });
+      t.cierto(resumenSano.erc && resumenSano.erc.crcl >= 60, "control del escenario: TFG normal");
+      cErc2.api.mtrCacheResumenGuardar("555000333", resumenSano);
+      const conTfgSana = cErc2.api.mtrReconciliarAhora("555000333", d);
+      t.cierto(conTfgSana.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "con TFG≥60, una TFG normal NO resuelve la duda por sí sola: se sigue preguntando");
+    });
+
     t.caso("v17.7.0 — el cuadro de fuentes deja armado su propio repaso de 20 s", () => {
       const cM = cargar({ silencioso: true });
       const d = cM.env.doc;

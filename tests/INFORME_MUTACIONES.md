@@ -6,6 +6,23 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.31.0 — 28-ago-2026 (la TFG por Cockcroft-Gault ya calculada resuelve sola la pregunta de ERC)
+
+Un cambio de comportamiento en `mtrDiscrepanciasDeFuentes` (una función nueva,
+`mtrTfgConfirmaErc`, y un `continue` de un solo caso dentro del bucle existente), cada
+punto de fallo con su propia mutación. Restaurado y verificado con `diff` contra copia
+intacta tras cada mutación. Banco en verde: **2.533/2.533**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `mtrTfgConfirmaErc` devuelve siempre `false` (`return false && ...`) | *v17.31.0 — con TFG por Cockcroft-Gault <60 ya calculada, el reconciliador NO pregunta por ERC* (suite_63) |
+| 2 | El `continue` de `enfermedadRenal` en el bucle de `mtrDiscrepanciasDeFuentes` nunca se ejecuta (`if (h.clave === "enfermedadRenal" && false)`) | misma prueba — confirma que el guardarraíl vive en dos puntos (la función que decide y el punto donde se usa esa decisión), cada uno necesario |
+
+Nota: la segunda prueba de la pareja (*una TFG≥60 (o no evaluable) NO apaga la pregunta*)
+no se mutó aparte — es el control negativo que ya prueba, sin romper nada, que el
+guardarraíl no se activa de más; su valor está en que sigue en verde después de las dos
+mutaciones de arriba, confirmando que ninguna de las dos las volvió permisivas por error.
+
 ## v17.30.0 — 28-ago-2026 (con el ANR activo, la cosecha genérica y la gracia se apagan)
 
 Un cambio de comportamiento, dos guardarraíles independientes en `mtrPlanParaclinicos`

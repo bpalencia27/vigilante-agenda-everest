@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.30.0
+// @version     17.31.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.30.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.31.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4986,10 +4986,35 @@
     } catch (e) { return null; }
   }
 
+  // v17.31.0 — LA TFG (COCKCROFT-GAULT) YA CONFIRMA ERC: NO HAY NADA QUE PREGUNTAR
+  // ---------------------------------------------------------------------------
+  // Encargo del médico (28-ago), textual: "cuando entro al Panel del paciente a veces me
+  // pregunta que si el paciente tiene enfermedad renal crónica y el script no consulta la
+  // TFG porque muchas veces la TFG es menor a 60 y aun así me pregunta, el script debe ser
+  // inteligente en estos casos" — y, al recordárselo, "RECUERDA COCKCROFT GAULT": la TFG
+  // que decide aquí es la administrativa (Cockcroft-Gault, `resumen.erc.crcl`), la misma
+  // que ya rige vigencias y estadio en todo el resto del script (R1a, línea ~4215) —
+  // NUNCA la CKD-EPI.
+  // Causa: `mtrDiscrepanciasDeFuentes` nunca recibía la TFG — el único llamador en vivo
+  // (`mtrReconciliarAhora`) pasaba `labsPorClave: null` a propósito, y de todos modos
+  // `enfermedadRenal` en `MTR_HECHOS_SENSIBLES` declara `labs: []` porque la TFG no es un
+  // resultado de laboratorio con clave propia, es un CÁLCULO. Con TFG<60 sin marcar en la
+  // historia y algo más (texto, medicamento, cabecera) afirmándolo, el reconciliador
+  // preguntaba por un dato que el propio script ya tenía calculado y confirmado.
+  // Con TFG por Cockcroft-Gault <60 ml/min, ERC queda establecida por evidencia objetiva
+  // — un cálculo, no una inferencia de prosa — así que esa pregunta puntual se salta por
+  // completo (ni afirma ni niega: se resuelve sola). El resto de hechos sensibles
+  // (diabetes, HTA, tabaquismo, ECV) no se toca.
+  function mtrTfgConfirmaErc(tfgCockcroftGault) {
+    const v = mtrFloat(tfgCockcroftGault);
+    return v !== null && v > 0 && v < 60;
+  }
+
   function mtrDiscrepanciasDeFuentes(ctx) {
     const c = ctx || {};
     const leidos = c.leidos || {};
     const cabecera = c.cabecera || {};
+    const tfgConfirmaErc = mtrTfgConfirmaErc(c.tfgCockcroftGault);
     // v16.3.1 — "No pude leerlo" NO es "no lo tiene". Un medicamento o un laboratorio
     // solo pueden NEGAR algo si esa fuente de verdad se cargó: si los laboratorios no han
     // llegado, la ausencia de HbA1c no dice nada del paciente. Es la misma regla que se
@@ -5004,6 +5029,9 @@
     const salida = [];
 
     for (const h of MTR_HECHOS_SENSIBLES) {
+      // La TFG ya la establece objetivamente: no hay contradicción que resolver.
+      if (h.clave === "enfermedadRenal" && tfgConfirmaErc) continue;
+
       const afirman = [], niegan = [];
 
       const enHistoria = Object.prototype.hasOwnProperty.call(leidos, h.clave) ? leidos[h.clave] : null;
@@ -5191,6 +5219,10 @@
         medicamentosRcv: meds,
         labsPorClave: null,
         textoLibre: (typeof _vglTextoLibreCombinado === "function") ? _vglTextoLibreCombinado(d) : "",
+        // v17.31.0 — mismo campo que ya usa el resto del script para el estadio
+        // administrativo (resumen.erc.crcl, Cockcroft-Gault): con TFG<60, ERC ya está
+        // establecida y la pregunta de "¿tiene ERC?" no debe salir.
+        tfgCockcroftGault: (res && res.erc && res.erc.crcl != null) ? res.erc.crcl : null,
       });
 
       const confirmadas = (typeof _vglConfirmacionesLeer === "function") ? _vglConfirmacionesLeer(docId) : {};

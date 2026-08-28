@@ -4,6 +4,25 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.31.0] — 2026-08-28 (Con la TFG por Cockcroft-Gault ya calculada, ya no pregunta si hay ERC)
+
+### 🧠 Una TFG<60 ya calculada resuelve la pregunta sola
+Reporte en vivo: al entrar al Panel del paciente, a veces pregunta si el paciente tiene
+enfermedad renal crónica aunque la TFG ya esté por debajo de 60 — "el script no consulta
+la TFG... el script debe ser inteligente en estos casos" (y, al recordárselo: "RECUERDA
+COCKCROFT GAULT" — la TFG que decide aquí es la administrativa, Cockcroft-Gault, la misma
+que rige vigencias en todo el resto del script, NUNCA la CKD-EPI). Causa: el reconciliador
+de fuentes nunca recibía la TFG — el único llamador en vivo no traía los laboratorios a
+propósito, y de todos modos ERC en la lista de hechos sensibles no tenía ningún laboratorio
+asociado, porque la TFG no es un resultado de laboratorio con clave propia, es un cálculo.
+Con una TFG por Cockcroft-Gault ya calculada y por debajo de 60 ml/min, la enfermedad renal
+crónica queda establecida por evidencia objetiva y esa pregunta puntual se salta por
+completo — el resto de hechos sensibles (diabetes, hipertensión, tabaquismo, enfermedad
+cardiovascular) no se toca, y sin la TFG en caché (o con TFG≥60) la pregunta sigue
+saliendo exactamente igual que antes.
+
+---
+
 ## [Versión 17.30.0] — 2026-08-28 (Con el ANR activo, solo se vale UNA regla — no dos apiladas)
 
 ### 🔀 Ya no se pueden activar el ANR y la cosecha genérica a la vez
