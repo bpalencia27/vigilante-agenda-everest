@@ -1,5 +1,30 @@
 # Decisiones de la entrevista S+ — noche del 28-ago-2026
 
+## Rediseño del Panel del paciente — [Fase 1 IMPLEMENTADA v17.24.0, Fase 2 bloqueada]
+
+Plan sintetizado tras investigar la arquitectura real (7 agentes) y presentar una maqueta
+visual antes de tocar código: la pestaña Medicamentos sale del Panel (queda en 4:
+Resumen, Riesgo y función renal, Exámenes y vigencias, Tendencias); todo el juicio
+farmacológico se muda a un widget nuevo en Conducta (#vgl-cw-farmaco). Tres preguntas
+resueltas por el médico el 28-ago (noche):
+
+1. **Motor de avisos apagado (su estado de fábrica)**: el futuro widget de Conducta debe
+   **aparecer con un aviso neutro** (nunca oculto, nunca silencioso como si no hubiera
+   nada que evaluar) — pendiente de construir en Fase 2.
+2. **Lista de "Medicamentos actuales" en Resumen**: el médico delegó la decisión de
+   UX. Se implementó que **se queda** en Resumen como archivo pasivo (v17.24.0) — no
+   duplica la fila ya existente "Medicamentos del programa cardiovascular" de la Ficha
+   (esa es un subconjunto filtrado a lo cardiovascular, con otro propósito; la nueva es
+   la lista completa de lo que el paciente toma, reemplazando lo que mostraba la extinta
+   pestaña Medicamentos).
+3. **Dashboard de 3 tarjetas en Resumen**: **aprobado**, implementado en v17.24.0.
+
+**Fase 2 (widget de Conducta) sigue bloqueada**: no basta con capturar el botón
+"Recetar" — hace falta ver el formulario de prescripción mientras se llena (borrador
+antes de guardar), porque las funciones que leen medicamentos hoy son 100% vía la API
+de Everest. El médico ya grabó una consulta real con `DIAGNOSTICO_CONDUCTA_DOM.js`; su
+análisis es el siguiente paso.
+
 Las 26 preguntas del artefacto `mapa-panel-s-plus` (5 ya respondidas el 28-ago de día,
 21 respondidas esta noche antes de que el médico durmiera) quedan cerradas aquí. Cada una
 es una decisión firme del médico, no una recomendación mía — implementar en consecuencia,
