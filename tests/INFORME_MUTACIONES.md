@@ -6,6 +6,21 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.41.0 — 28-ago-2026 (el badge de exámenes se ancla y se ve igual que Historial/Paquetes)
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | `mtrWidgetConductaTick`: el ancla vuelve a ser solo un botón (`mtrBotonOrdenarConducta`), no el par Historial+Paquetes (`mtrAnclaOrdenarPendientes`) | 4 pruebas de `suite_71` (las que dependen del nuevo ancla) | Sí — 77/77 |
+| 2 | El desplazamiento vertical `MTR_ALTO_FILA_CONDUCTA + MTR_HUECO_FILA_CONDUCTA` se quita del cálculo del `top` | "encendido, con paciente/resumen/ancla — crea el widget centrado en una segunda fila..." | Sí — 77/77 |
+| 3 | `centroX` deja de ser el punto medio `(rH.left+rP.right)/2` y pasa a ser solo `rP.right` | misma prueba de arriba | Sí — 77/77 |
+
+Las mutaciones 2 y 3 **no cayeron en el primer intento** — la razón, y el fix del arnés que
+lo permitió, están documentados en el CHANGELOG de esta versión y no se repiten aquí:
+`boton()`/`botonHistorial()` no declaraban `.bottom` en su `getBoundingClientRect()`
+simulado, así que `Math.max(rH.bottom, rP.bottom)` daba `NaN` en ambos lados de la
+comparación y la prueba pasaba pasara lo que pasara con la fórmula. Con `.bottom` añadido
+a los dos fixtures, las mutaciones 2 y 3 sí tumban la prueba como debían.
+
 ## v17.40.0 — 28-ago-2026 (las notificaciones ahora miran hasFocus(), no solo hidden)
 
 Reporte en vivo: "cuando estoy en otra ventana o en otro programa, no me avisa de

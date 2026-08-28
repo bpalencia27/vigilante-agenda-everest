@@ -643,8 +643,14 @@ module.exports = {
       // v17.32.0 — 523 -> 525: el botón "Ordenar pendientes" de Conducta (#vgl-cw-ordenar-btn,
       // fuera de #vgl-root) suma sus 2 reglas de color con !important (verde normal,
       // gris "ya ordenado hoy") — misma disciplina que el resto de los widgets flotantes.
+      // v17.41.0 — 525 -> 527: encargo del médico, el badge de #vgl-cw-examenes pasa a
+      // compartir una única regla CSS con button#vgl-cw-ordenar-btn (mismo aspecto que los
+      // botones nativos Historial/Paquetes de Everest). La regla compartida trae 4
+      // !important propios (display, font-family, color, background-color) más los que ya
+      // tenía el selector del botón solo (border-radius, letter-spacing) — 2 de más frente
+      // a la regla vieja de solo-badge, que no llevaba ninguno.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 525, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.32.0 sobre #vgl-cw-ordenar-btn, 523 -> 525). Esperado 525, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 527, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.41.0 sobre #vgl-cw-examenes, 525 -> 527). Esperado 527, salió ${importantTotal}.`);
 
       // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
       // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier

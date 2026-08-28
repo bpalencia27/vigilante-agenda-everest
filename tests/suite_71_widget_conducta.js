@@ -63,7 +63,7 @@ function boton(texto, visible) {
   return {
     textContent: texto,
     offsetParent: visible === false ? null : {},
-    getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: 10, top: 20, width: 80, height: 30, right: 90 }),
+    getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: 10, top: 20, width: 80, height: 30, right: 90, bottom: 50 }),
   };
 }
 // v17.34.0 — "Historial" a la izquierda de "Paquetes", MISMO renglón (top:20, igual que
@@ -79,7 +79,7 @@ function botonHistorial(visible) {
     // individual de los dos botones — si una prueba solo comprobara "coincide con
     // rP.left" o "con rH.left", una mutación que centrara sobre el botón equivocado
     // podría colar sin que la prueba lo notara.
-    getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: -130, top: 20, width: 70, height: 30, right: -60 }),
+    getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: -130, top: 20, width: 70, height: 30, right: -60, bottom: 50 }),
   };
 }
 // v17.24.0 — el ancla del widget de farmacia no es texto, es la clase real confirmada
@@ -205,10 +205,14 @@ module.exports = {
       t.falso(el && el.style.display !== "none", "sin el interruptor encendido, el widget no debe quedar visible");
     });
 
-    t.caso("mtrWidgetConductaTick: encendido, con paciente/resumen/botón — crea el widget anclado y con el conteo correcto", () => {
+    // v17.41.0 — encargo del médico: el widget ahora se ancla igual que "Ordenar
+    // pendientes" (Historial+Paquetes, centrado, en una SEGUNDA fila justo debajo), en vez
+    // de solo a la derecha de "Paquetes".
+    t.caso("mtrWidgetConductaTick: encendido, con paciente/resumen/ancla — crea el widget centrado en una segunda fila, con el conteo correcto", () => {
       const c = cargar({ silencioso: true });
+      const btnHistorial = botonHistorial();
       const btnPaquetes = boton("Paquetes");
-      cablearHistoriaConducta(c.env, "1098765432", [btnPaquetes]);
+      cablearHistoriaConducta(c.env, "1098765432", [btnHistorial, btnPaquetes]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
       c.api.mtrWidgetConductaTick();
@@ -216,7 +220,12 @@ module.exports = {
       t.cierto(!!el, "el widget debe existir en el DOM");
       t.falso(el.style.display === "none", "debe quedar visible");
       t.cierto(el.innerHTML.indexOf("2") >= 0, "dos exámenes pendientes: el badge debe mostrar el conteo");
-      t.igual(el.style.left, Math.round(btnPaquetes.getBoundingClientRect().right + 10) + "px", "se ancla a la derecha del botón real, no a una posición inventada");
+      const rH = btnHistorial.getBoundingClientRect();
+      const rP = btnPaquetes.getBoundingClientRect();
+      const centroEsperado = Math.round((rH.left + rP.right) / 2);
+      const topEsperado = Math.round(Math.max(rH.bottom, rP.bottom) + 8 + 36 + 8);
+      t.igual(el.style.left, centroEsperado + "px", "centrado sobre el mismo punto medio que 'Ordenar pendientes', no a la derecha de Paquetes");
+      t.igual(el.style.top, topEsperado + "px", "en una segunda fila, debajo de donde iría 'Ordenar pendientes'");
     });
 
     t.caso("mtrWidgetConductaTick: sin botón 'Paquetes' visible (otra sub-pantalla de Conducta), el widget se oculta", () => {
@@ -232,7 +241,7 @@ module.exports = {
 
     t.caso("mtrWidgetConductaTick: anti-parpadeo — un segundo tick sin cambios no reescribe el contenido", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
       c.api.mtrWidgetConductaTick();
@@ -244,14 +253,14 @@ module.exports = {
 
     t.caso("mtrWidgetConductaTick: cambiar de paciente reinicia el estado — nunca arrastra el juicio del anterior", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR);
       c.api.mtrWidgetConductaTick();
       t.igual(c.api._cwEstadoParaTest().docPrevio, "1098765432");
 
       // Nuevo paciente: distinta cédula, sin resumen cacheado todavía para él.
-      cablearHistoriaConducta(c.env, "5551234567", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "5551234567", [botonHistorial(), boton("Paquetes")]);
       c.api.mtrWidgetConductaTick();
       const st = c.api._cwEstadoParaTest();
       t.igual(st.docPrevio, "5551234567", "el paciente activo cambió de verdad");

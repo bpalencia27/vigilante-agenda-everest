@@ -4,6 +4,41 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.41.0] — 2026-08-28 (El botón de exámenes se viste igual que Historial y Paquetes)
+
+### 🧪 El widget de "exámenes a ordenar" ahora se ve y se ubica igual que los botones nativos de Everest
+Encargo suyo, tras corregirle mal el primer intento: "quiero que se vea igual que sus
+hermanos Historial y Paquetes [nativos de Everest], quiero que este botón se vea igual y
+esté justamente debajo de estos de Everest". El badge 🧪 vivía anclado solo al botón
+"Paquetes" y con su propio estilo (fondo de color según el estado, sin relación visual con
+Everest). Ahora:
+- **Se ancla igual que "Ordenar pendientes"**: al mismo punto medio entre "Historial" y
+  "Paquetes" (`mtrAnclaOrdenarPendientes`, no ya `mtrBotonOrdenarConducta`), en una
+  **segunda fila** justo debajo de donde iría "Ordenar pendientes" — nunca se solapan,
+  aunque ese día no haya nada que ordenar.
+- **Comparte una sola hoja CSS con `#vgl-cw-ordenar-btn`**, copiada del CSS real declarado
+  del botón "Paquetes" que usted mismo pegó de la consola: mismo `border-radius`,
+  `letter-spacing`, `line-height`, tipografía y color — así los dos NUNCA pueden divergir
+  visualmente por accidente.
+- Verificado en Chromium real contra un CSS "Everest" simulado agresivo
+  (`div,span,p,b,small,label,button{color:red !important;background-color:blue
+  !important}`): el `color` y el `background-color` del badge y del botón sobreviven los
+  dos, porque las dos declaraciones llevan `!important` (regla del proyecto para todo lo
+  que vive fuera de `#vgl-root`).
+
+### 🔧 Un defecto de arnés de pruebas, encontrado al mutar el cambio de arriba
+Al romper a propósito la fórmula de posición para confirmar que la prueba la detectaba,
+la prueba **no la detectó** — ni con el ancla rota ni con el desplazamiento vertical
+quitado. La causa: los objetos de botón simulados de `tests/suite_71_widget_conducta.js`
+(`boton()`, `botonHistorial()`) nunca declaraban `.bottom` en su `getBoundingClientRect()`
+simulado — solo `top`/`height`. `Math.max(rH.bottom, rP.bottom)` daba `NaN` tanto en el
+valor real como en el esperado, y `"NaNpx" === "NaNpx"` pasaba sin que el código roto
+importara. Se les añadió `bottom` (coherente con `top + height`) a los dos; con eso, romper
+la fórmula de posición SÍ tumba la prueba. No cambia ningún comportamiento del script, solo
+la capacidad del arnés de detectar una regresión real.
+
+---
+
 ## [Versión 17.40.0] — 2026-08-28 (Reporte en vivo: ahora sí avisa aunque esté en otra ventana o programa)
 
 ### 🔔 Las notificaciones ya no se quedan calladas cuando Everest está de fondo

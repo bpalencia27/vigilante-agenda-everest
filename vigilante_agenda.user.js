@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.40.0
+// @version     17.41.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.40.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.41.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5600,6 +5600,11 @@
     return { n: ordenar.length, sinJuicio: false, html: html };
   }
 
+  // v17.41.0 — alto real del botón "Ordenar pendientes" (36px, copiado del botón nativo
+  // "Paquetes") + el hueco de siempre entre filas: la segunda fila de widgets de Conducta
+  // (#vgl-cw-examenes) se apila justo debajo de la primera (#vgl-cw-ordenar-btn) sin
+  // solaparse, midan lo que midan las dos en cada paciente.
+  const MTR_ALTO_FILA_CONDUCTA = 36, MTR_HUECO_FILA_CONDUCTA = 8;
   let _cwDocPrevio = null, _cwFirmaPrevia = "", _cwNPrevio = 0, _cwAbierto = false;
   // Solo para el banco: sin esto, una mutación que rompiera el reinicio entre pacientes
   // (la de más consecuencia posible aquí: pintar el juicio del paciente ANTERIOR sobre
@@ -5619,8 +5624,12 @@
         return;
       }
       if (docId !== _cwDocPrevio) { _cwDocPrevio = docId; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false; }
-      const boton = mtrBotonOrdenarConducta(d);
-      if (!boton) {
+      // v17.41.0 — encargo del médico: "quiero que este [widget] se vea igual [al CSS real
+      // de Everest] y esté justamente debajo de estos [Historial y Paquetes]" — mismo
+      // ancla de los dos botones nativos que ya usa el botón "Ordenar pendientes"
+      // (mtrAnclaOrdenarPendientes), no solo "Paquetes" como hacía esta versión hasta hoy.
+      const ancla = mtrAnclaOrdenarPendientes(d);
+      if (!ancla) {
         if (el) el.style.display = "none";
         return;
       }
@@ -5640,12 +5649,19 @@
         });
         document.body.appendChild(widget);
       }
-      const r = boton.getBoundingClientRect();
+      // v17.41.0 — centrado EXACTO entre "Historial" y "Paquetes", en una SEGUNDA fila,
+      // justo debajo de "Ordenar pendientes" (mismo punto medio, un alto de botón + el
+      // hueco de siempre más abajo) — nunca se solapan, aunque "Ordenar pendientes" esté
+      // oculto ese día (sin pendientes que ordenar): esta fila no depende de esa otra.
+      const rH = ancla.historial.getBoundingClientRect();
+      const rP = ancla.paquetes.getBoundingClientRect();
+      const centroX = (rH.left + rP.right) / 2;
+      const debajoDeAmbos = Math.max(rH.bottom, rP.bottom) + 8;
       // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed` (coordenadas de
       // VENTANA): así el navegador lo desplaza solo con el scroll normal, sin JS.
       widget.style.position = "absolute";
-      widget.style.left = (mtrPosicionPanelJuntoA(r, 280) + _cwCoordX()) + "px";
-      widget.style.top = (Math.round(r.top) + _cwCoordY()) + "px";
+      widget.style.left = Math.round(centroX + _cwCoordX()) + "px";
+      widget.style.top = Math.round(debajoDeAmbos + MTR_ALTO_FILA_CONDUCTA + MTR_HUECO_FILA_CONDUCTA + _cwCoordY()) + "px";
       widget.style.display = "";
 
       const datos = mtrWidgetExamenesDatos(resumen);
@@ -13425,16 +13441,8 @@ _vglOfrecerDeshacer(btn);
          patrón :where(...:not([class])), nunca "selector b,span,div" a pelo (bug #1 del
          proyecto: una regla de tipo le gana en especificidad a una clase de acento).
          ===================================================================== */
-      #vgl-cw-examenes{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:280px}
-      #vgl-cw-examenes .vgl-cw-badge{
-        display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
-        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
-        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
-        color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
-      }
-      #vgl-cw-examenes.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
-      #vgl-cw-examenes.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important;opacity:.85}
-      #vgl-cw-examenes.vgl-cw-ok .vgl-cw-badge{color:var(--c-verde) !important}
+      #vgl-cw-examenes{position:absolute;z-index:var(--z-widget,2147480000);font-family:"adineue PRO",var(--font-stack, sans-serif);max-width:280px;transform:translateX(-50%)}
+      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       #vgl-cw-examenes .vgl-cw-panel{
         display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
         border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
@@ -13448,29 +13456,41 @@ _vglOfrecerDeshacer(btn);
       #vgl-cw-examenes .vgl-cw-venc .vgl-cw-nom{color:var(--c-rojo) !important}
       #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
       #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
-      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
       :where(#vgl-cw-examenes :not([class])){color:inherit}
-      /* v17.32.0 — botón "Ordenar pendientes", debajo del ancla de #vgl-cw-examenes. Vive
-         en document.body, fuera de #vgl-root: cada regla de color con clase propia lleva
-         !important sin excepción (CLAUDE.md, misma regla que #vgl-cw-examenes arriba).
-         v17.39.0 — a pedido del médico ("hazlo igual al CSS de Everest para que se vea
-         natural"), el estilo copia EXACTAMENTE el computed style real del botón nativo
-         "Paquetes" (obtenido de la propia consola de Everest, no adivinado): fondo blanco,
-         texto casi negro, sin borde, radio 13px, sin sombra, 36px de alto, la tipografía y
-         el letter-spacing reales. A diferencia de los otros dos widgets (que sí siguen el
-         tema claro/oscuro del propio Vigilante, porque viven en un panel flotante propio),
-         este botón se sienta directamente en la barra de Everest — SIEMPRE debe verse como
-         un botón más de Everest, nunca como el nuestro, así que sus colores son literales,
-         no las variables de tema del script. */
+      /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
+         ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
+         Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
+         color con clase propia lleva !important sin excepción (CLAUDE.md).
+         v17.39.0/v17.41.0 — a pedido del médico ("hazlo igual al CSS de Everest para que
+         se vea natural" / "quiero que este botón se vea igual [a Historial y Paquetes]"),
+         el estilo copia EXACTAMENTE las reglas reales del botón nativo "Paquetes" — no
+         solo el computed style final, sino la hoja de estilos real de Everest, pegada por
+         el médico desde su propia consola (getComputedStyle primero, las reglas
+         declaradas después): mismo display:inline-block, line-height en vez de flexbox
+         para centrar el texto, el mismo letter-spacing:1pt, el mismo margen mínimo. Se
+         comparte UNA sola regla entre los dos elementos para que nunca puedan divergir
+         por accidente — si Everest cambia su botón, se actualiza una vez.
+         A diferencia del widget de farmacia (que sí sigue el tema claro/oscuro del propio
+         Vigilante, porque vive en un panel flotante propio), estos dos se sientan
+         directamente en la barra de Everest — SIEMPRE deben verse como un botón más de
+         Everest, nunca como el nuestro, así que sus colores son literales, no las
+         variables de tema del script. */
+      button#vgl-cw-ordenar-btn, #vgl-cw-examenes .vgl-cw-badge{
+        display:inline-block !important;
+        font-family:"adineue PRO",var(--font-stack, sans-serif) !important;
+        color:rgba(0,0,0,.87) !important;
+        background-color:#fff !important;
+        border:none; outline:0 !important;
+        border-radius:13px !important;
+        font-size:var(--t-micro); font-weight:500; letter-spacing:1.33333px !important; text-transform:none;
+        box-sizing:border-box; position:relative; user-select:none;
+        -webkit-tap-highlight-color:transparent;
+        white-space:nowrap; text-decoration:none; vertical-align:baseline; text-align:center;
+        margin:.1% .1% .1% 0; min-width:64px; line-height:36px; padding:0 16px;
+        overflow:visible; cursor:pointer; box-shadow:none;
+      }
       button#vgl-cw-ordenar-btn{
         position:absolute;z-index:var(--z-widget,2147480000);
-        font-family:"adineue PRO",var(--font-stack, sans-serif);
-        display:inline-flex;align-items:center;justify-content:center;
-        white-space:nowrap;cursor:pointer;user-select:none;
-        background:#fff;border:0;border-radius:13px;
-        padding:0 16px;height:36px;min-width:64px;box-sizing:border-box;
-        font-size:var(--t-micro);font-weight:500;letter-spacing:1.33333px;text-transform:none;
-        color:rgba(0,0,0,.87) !important;box-shadow:none;
         transform:translateX(-50%);   /* v17.34.0 — centrado exacto sobre el punto medio que ya calcula JS */
       }
       button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.6}
