@@ -8,12 +8,20 @@
 //  paciente había que abrir las dos y compararlas de memoria.
 //
 //  Lo que hay que defender aquí:
-//   · que las cinco secciones existan y que cambiar de una a otra no
+//   · que las cuatro secciones existan y que cambiar de una a otra no
 //     pida NADA por red (una sola lectura alimenta el módulo entero);
 //   · que los dos puntos de entrada viejos aterricen donde el médico
 //     espera, sin romperle el camino a los llamadores internos;
 //   · que la sección de tendencias no invente una línea con un solo
 //     punto ni llame «cambio» al ruido del laboratorio.
+//
+//  v17.24.0 — «medicamentos» dejó de ser una pestaña (decisión del médico, entrevista
+//  S+ del 28-ago): el juicio farmacológico se muda al widget de Conducta. Resumen gana
+//  un dashboard de 3 tarjetas de estado — MISMO criterio que cada pestaña detallada,
+//  nunca una copia simplificada — y una lista pasiva de "Medicamentos actuales".
+//  mtrPanelMedicamentosHtml sigue viva y probada de frente (línea ~182): la lógica de
+//  avisos/duplicidades que arma se reutilizará en la Fase 2 (el widget), solo que ya no
+//  la llama el Panel.
 // =====================================================================
 
 const RESUMEN_DEMO = {
@@ -49,30 +57,35 @@ module.exports = {
   cubre: [
     "mtrPanelSeccionValida", "mtrPanelNavHtml", "mtrPanelResumenHtml", "mtrPanelRiesgoRenalHtml",
     "mtrPanelExamenesHtml", "mtrPanelTendenciasHtml", "mtrPanelMedicamentosHtml",
+    "mtrPanelResumenBentoDatos", "mtrPanelResumenBentoHtml", "mtrPanelResumenMedsHtml",
     "openPanelPacienteModal", "mtrSeriesPorAnalito", "mtrTendenciaDe", "_mtrTendUmbralGrave",
     "mtrMetaHba1cGeneral", "mtrHojaEducativaHtml",
   ],
 
   async pruebas(t, api, env, cargar) {
     // ---------------- Navegación ----------------
-    t.caso("mtrPanelSeccionValida: acepta las cinco secciones y cae en Resumen ante cualquier cosa rara", () => {
-      ["resumen", "renal", "examenes", "tendencias", "medicamentos"].forEach((s) => {
+    t.caso("mtrPanelSeccionValida: acepta las cuatro secciones y cae en Resumen ante cualquier cosa rara", () => {
+      ["resumen", "renal", "examenes", "tendencias"].forEach((s) => {
         t.igual(api.mtrPanelSeccionValida(s), s, "sección válida: " + s);
       });
+      // v17.24.0 — "medicamentos" ya no es una sección del Panel: un llamador viejo con
+      // esa cadena debe caer a "resumen" como cualquier id desconocido, no romperse.
+      t.igual(api.mtrPanelSeccionValida("medicamentos"), "resumen", "medicamentos ya no es una sección: cae a Resumen");
       t.igual(api.mtrPanelSeccionValida("inventada"), "resumen", "una sección que no existe no deja el panel en blanco");
       t.igual(api.mtrPanelSeccionValida(null), "resumen", "null tampoco");
       t.igual(api.mtrPanelSeccionValida(undefined), "resumen", "ni undefined");
     });
 
-    t.caso("mtrPanelNavHtml: las cinco secciones, con la activa marcada para el lector de pantalla", () => {
+    t.caso("mtrPanelNavHtml: las cuatro secciones, con la activa marcada para el lector de pantalla", () => {
       const html = api.mtrPanelNavHtml("tendencias");
-      ["Resumen", "Riesgo y función renal", "Exámenes y vigencias", "Tendencias", "Medicamentos"].forEach((r) => {
+      ["Resumen", "Riesgo y función renal", "Exámenes y vigencias", "Tendencias"].forEach((r) => {
         t.cierto(html.indexOf(r) >= 0, "está la sección: " + r);
       });
+      t.falso(html.indexOf("Medicamentos") >= 0, "v17.24.0 — Medicamentos ya no es una pestaña de navegación");
       t.cierto(html.indexOf('data-panel-sec="tendencias"') >= 0, "cada chip sabe a qué sección lleva");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="tendencias"/.test(html), "la pedida sale activa");
       t.igual((html.match(/aria-selected="true"/g) || []).length, 1, "solo UNA está seleccionada");
-      t.igual((html.match(/role="tab"/g) || []).length, 5, "las cinco son pestañas de verdad para accesibilidad");
+      t.igual((html.match(/role="tab"/g) || []).length, 4, "las cuatro son pestañas de verdad para accesibilidad");
       t.cierto(/class="vgl-panel-tab active" data-panel-sec="resumen"/.test(api.mtrPanelNavHtml("cualquiera")),
         "una sección inválida no deja la navegación sin activa");
     });
@@ -87,6 +100,98 @@ module.exports = {
       t.cierto(vacio.indexOf("sin dato") >= 0, "sin datos se dice «sin dato», jamás se inventa un valor");
       t.cierto(api.mtrPanelResumenHtml(null).indexOf("No se pudo leer al paciente") >= 0,
         "y sin resumen se explica, en vez de dejar la sección en blanco");
+    });
+
+    // v17.24.0 — Dashboard "de un vistazo": 3 tarjetas, MISMO criterio que la pestaña
+    // detallada. La prueba fija el criterio contra los campos reales de mtrTableroClinico,
+    // no contra un número mágico — si algún día el criterio de la tarjeta diverge del de
+    // su pestaña, es aquí donde tiene que caer roja.
+    t.caso("mtrPanelResumenBentoDatos: riesgo alto/muy alto o alerta renal → «pend»; bajo/moderado sin alerta → «ok»; sin categoría → «nd»", () => {
+      const dSinCat = api.mtrTableroClinico({});
+      const cSinCat = api.mtrPanelResumenBentoDatos({}, dSinCat).find((c) => c.id === "renal");
+      t.igual(cSinCat.estado, "nd", "sin categoría de riesgo, no se opina");
+
+      const dBajo = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: {} });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dBajo).find((c) => c.id === "renal").estado, "ok", "riesgo bajo, sin alertas renales: al día");
+
+      const dAlto = api.mtrTableroClinico({ riesgo: { categoria: "alto" }, erc: {} });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dAlto).find((c) => c.id === "renal").estado, "pend", "riesgo alto: siempre a revisar, aunque el riñón esté callado");
+
+      // Riesgo bajo pero con sospecha de injuria renal: la tarjeta SÍ debe alertar —
+      // el criterio no es solo la categoría, es el mismo conjunto de alertas que ya
+      // pinta mtrPanelRiesgoRenalHtml.
+      const dIra = api.mtrTableroClinico({ riesgo: { categoria: "bajo" }, erc: { sospechaIra: true } });
+      const cIra = api.mtrPanelResumenBentoDatos({}, dIra).find((c) => c.id === "renal");
+      t.igual(cIra.estado, "pend", "sospecha de injuria renal pesa aunque la categoría sea baja");
+      t.cierto(cIra.sub.indexOf("injuria renal") >= 0, "y el motivo se nombra, no solo el color");
+    });
+
+    t.caso("mtrPanelResumenBentoDatos: exámenes — sin programa identificado → «nd»; con pendientes → «pend»; al día → «ok»", () => {
+      const dSinPrograma = api.mtrTableroClinico({ plan: { ordenar: [], drivers: [], pasajeros: [] } });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dSinPrograma).find((c) => c.id === "examenes").estado, "nd",
+        "sin programa rector, no se evaluó nada — no puede decir 'al día'");
+
+      const dPendiente = api.mtrTableroClinico({
+        programa: "HTA", factores: { hta: true },
+        plan: { ordenar: [{ clave: "creatinina", nombre: "CREATININA", estado: "D", subestado: "vencido", vence: "2026-08-01" }], drivers: [], pasajeros: [] },
+      });
+      const cPend = api.mtrPanelResumenBentoDatos({}, dPendiente).find((c) => c.id === "examenes");
+      t.igual(cPend.estado, "pend");
+      t.igual(cPend.dato, "1 examen");
+
+      const dAlDia = api.mtrTableroClinico({ programa: "HTA", factores: { hta: true }, plan: { ordenar: [], drivers: [], pasajeros: [] } });
+      t.igual(api.mtrPanelResumenBentoDatos({}, dAlDia).find((c) => c.id === "examenes").estado, "ok", "programa identificado, nada por ordenar: al día");
+    });
+
+    t.caso("mtrPanelResumenBentoDatos: tendencias — sin serie de 2+ puntos → «nd»; con analito que empeora/grave → «pend»; el resto → «ok»", () => {
+      const dCualquiera = api.mtrTableroClinico({});
+      t.igual(api.mtrPanelResumenBentoDatos({}, dCualquiera).find((c) => c.id === "tendencias").estado, "nd", "sin _series, sin tendencia que mostrar");
+
+      const conUnSolo = { _series: { CREATININA: [{ fecha: "2026-08-01", valor: 1.1 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conUnSolo, dCualquiera).find((c) => c.id === "tendencias").estado, "nd",
+        "un solo control no es tendencia todavía, igual que en la pestaña detallada");
+
+      const conMejora = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 7.1 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conMejora, dCualquiera).find((c) => c.id === "tendencias").estado, "ok", "mejorando, sin nada grave: al día");
+
+      const conEmpeora = { _series: { COLESTEROL_LDL: [{ fecha: "2026-02-01", valor: 100 }, { fecha: "2026-08-01", valor: 130 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conEmpeora, dCualquiera).find((c) => c.id === "tendencias").estado, "pend", "empeorar 30% es justo lo que la pestaña de tendencias marca en rojo");
+    });
+
+    t.caso("mtrPanelResumenBentoHtml: cada tarjeta lleva data-panel-sec para saltar a SU pestaña — mismo mecanismo de swap, sin pedir nada por red", () => {
+      const cards = api.mtrPanelResumenBentoDatos(RESUMEN_DEMO, api.mtrTableroClinico(RESUMEN_DEMO));
+      const html = api.mtrPanelResumenBentoHtml(cards);
+      ["renal", "examenes", "tendencias"].forEach((id) => {
+        t.cierto(html.indexOf('data-panel-sec="' + id + '"') >= 0, "la tarjeta de " + id + " sabe a qué pestaña salta");
+      });
+      t.cierto(/role="button"/.test(html), "es accionable para el lector de pantalla");
+      t.igual(api.mtrPanelResumenBentoHtml([]), "", "sin tarjetas, no se pinta una cuadrícula vacía");
+    });
+
+    // v17.24.0 — Medicamentos actuales: archivo pasivo en Resumen, tras retirar la
+    // pestaña Medicamentos. Misma clave de dedup que usaba el conteo de esa pestaña
+    // (v17.1.0, #113): nunca puede divergir de ningún otro conteo del script.
+    t.caso("mtrPanelResumenMedsHtml: lista lo que toma, deduplicado, y distingue «no se pudo leer» de «no toma nada»", () => {
+      const html = api.mtrPanelResumenMedsHtml(RESUMEN_DEMO);
+      t.cierto(html.indexOf("LOSARTAN 50MG") >= 0 && html.indexOf("METFORMINA 850MG") >= 0, "los dos medicamentos, completos");
+      t.cierto(html.indexOf("Medicamentos actuales") >= 0, "con su propio rótulo");
+      t.cierto(html.indexOf("avisos de seguridad") >= 0, "y la nota que dice dónde SÍ viven los avisos (Conducta)");
+      t.falso(/vgl-mtr-|vgl-dup-/.test(html), "nunca avisos ni duplicidades aquí: eso es juicio clínico, no archivo");
+
+      const noLeido = api.mtrPanelResumenMedsHtml({ medicamentos: null });
+      t.cierto(noLeido.indexOf("No se pudo leer") >= 0, "sin lectura, se dice que no se pudo leer");
+
+      const ninguno = api.mtrPanelResumenMedsHtml({ medicamentos: [] });
+      t.cierto(ninguno.indexOf("no reporta medicamentos activos") >= 0, "una lista vacía DE VERDAD se dice como tal, distinta de 'no se pudo leer'");
+    });
+
+    t.caso("mtrPanelResumenHtml: integra el dashboard y la lista pasiva de medicamentos, en ese orden, antes de la ficha", () => {
+      const html = api.mtrPanelResumenHtml(RESUMEN_DEMO);
+      const iDashboard = html.indexOf("vgl-bento-grid");
+      const iMeds = html.indexOf("Medicamentos actuales");
+      const iFicha = html.indexOf("Órdenes de Everest");
+      t.cierto(iDashboard >= 0 && iMeds > iDashboard && iFicha > iMeds,
+        "dashboard, luego medicamentos, luego la ficha detallada — nunca en otro orden");
     });
 
     // ---------------- Sección 2: riesgo y renal ----------------
@@ -435,7 +540,7 @@ module.exports = {
     });
 
     // ---------------- El módulo entero ----------------
-    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cinco secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
+    await t.casoAsync("openPanelPacienteModal: un solo módulo con las cuatro secciones, y los caminos viejos aterrizan donde el médico espera", async () => {
       const c = await cargar({ silencioso: true });
       // El DOM del arnés devuelve null en querySelector: se le presta uno memoizado por
       // selector, igual que hacen las suites de los otros modales.
@@ -455,7 +560,7 @@ module.exports = {
       const modal = c.env.doc.body.children.find((n) => n.id === "vgl-panel-modal");
       t.cierto(!!modal, "el módulo unificado abre");
       const nav = String((modal.querySelector("#vgl-panel-nav-slot") || {}).innerHTML || "");
-      t.igual((nav.match(/data-panel-sec=/g) || []).length, 5, "con sus cinco secciones");
+      t.igual((nav.match(/data-panel-sec=/g) || []).length, 4, "con sus cuatro secciones");
       t.cierto(/data-panel-sec="tendencias"[^>]*aria-selected="true"|active" data-panel-sec="tendencias"/.test(nav),
         "y aterriza en la sección pedida");
       const cuerpo = String((modal.querySelector("#vgl-panel-cuerpo") || {}).innerHTML || "");

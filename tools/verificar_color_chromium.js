@@ -50,6 +50,9 @@ const CASOS = [
   { id: "vgl-confirma-modal", cls: "vgl-conf-desfase", que: "aviso: su respuesta anterior quedó desactualizada", token: "--c-ambar" },
   // v17.16.0 — el aviso de que no se pudo cruzar contra Athenea (Tanda 4).
   { id: "vgl-ordenar-modal", cls: "vgl-ord-nocruce", que: "aviso: no se pudo cruzar contra Athenea", token: "--c-ambar" },
+  // v17.24.0 — «Medicamentos actuales» (archivo pasivo, Panel del paciente → Resumen).
+  { id: "vgl-panel-modal", cls: "vgl-panel-meds-nom", que: "medicamentos actuales: nombre", token: "--fg" },
+  { id: "vgl-panel-modal", cls: "vgl-panel-meds-frec", que: "medicamentos actuales: frecuencia", token: "--fg3" },
 ];
 const BANDERAS = [
   { cls: "agpend", que: "🗓️ SIN TERMINAR", debeSer: "--c-ambar" },
@@ -75,6 +78,20 @@ const WIDGET_CASOS = [
   { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-crit"><span class="vgl-mtr-conducta" data-w="6">Ajustar dosis</span></div></div>', sel: '[data-w="6"]', token: "--c-rojo", que: "Panel: conducta de aviso CRITICAL" },
   { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-alto"><span class="vgl-mtr-conducta" data-w="7">Vigilar función renal</span></div></div>', sel: '[data-w="7"]', token: "--c-ambar", que: "Panel: conducta de aviso HIGH" },
   { html: '<div id="vgl-panel-modal"><div class="vgl-mtr-bloque"><span class="vgl-mtr-tit" data-w="8">Seguridad farmacológica</span></div></div>', sel: '[data-w="8"]', token: "--fg", que: "Panel: título del bloque de avisos" },
+  // v17.24.0 — dashboard "Estado de un vistazo" (Panel del paciente → Resumen). Los 3
+  // estados honestos del badge son selectores compuestos (.vgl-bento-badge.ok/.pend/.nd).
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-badge ok" data-w="9">Al día</div></div>', sel: '[data-w="9"]', token: "--c-verde", que: "bento: badge estado ok" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-badge pend" data-w="10">Revisar</div></div>', sel: '[data-w="10"]', token: "--c-ambar", que: "bento: badge estado pend" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-badge nd" data-w="11">Sin dato</div></div>', sel: '[data-w="11"]', token: "--fg3", que: "bento: badge estado nd" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-head" data-w="12">❤️ Riesgo cardiovascular</div></div>', sel: '[data-w="12"]', token: "--c-azul", que: "bento: título de la tarjeta" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-row"><span class="vgl-bento-sub" data-w="13">estable o mejorando</span></div></div>', sel: '[data-w="13"]', token: "--fg3", que: "bento: texto secundario" },
+  { html: '<div id="vgl-panel-modal"><div class="vgl-bento-pie" data-w="14">Toque para ver el detalle →</div></div>', sel: '[data-w="14"]', token: "--fg3", que: "bento: pie de la tarjeta" },
+  // v17.24.0 — hallazgo real en MTR_RCV_CSS (Regla A): .vgl-rcv-aviso-alto y
+  // .vgl-rcv-lista-orden son modificadores que siempre conviven con su clase base en el
+  // mismo elemento — se combinaron en selectores compuestos para que la especificidad
+  // decida, no el orden de la hoja.
+  { html: '<div id="vgl-ordenar-modal"><div class="vgl-rcv-aviso vgl-rcv-aviso-alto" data-w="15">⚠ Falla terapéutica</div></div>', sel: '[data-w="15"]', token: "--c-ambar", que: "RCV: aviso-alto (modificador compuesto) gana sobre aviso base" },
+  { html: '<div id="vgl-labs-modal"><ul class="vgl-rcv-lista vgl-rcv-lista-orden"><li data-w="16">Creatinina</li></ul></div>', sel: '[data-w="16"]', token: "--fg", que: "RCV: lista-orden (modificador compuesto) gana sobre lista base" },
 ];
 
 (async () => {

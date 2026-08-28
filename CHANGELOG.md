@@ -4,6 +4,67 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.24.0] — 2026-08-28 (Panel del paciente, Fase 1: dashboard de estado y medicamentos pasivos)
+
+### 🧾 Rediseño S+ del Panel del paciente — Fase 1
+Primera de dos entregas del rediseño decidido en la entrevista de anoche: la pestaña
+**Medicamentos desaparece** del Panel (queda en 4 pestañas: Resumen, Riesgo y función
+renal, Exámenes y vigencias, Tendencias). Todo el juicio farmacológico accionable
+(avisos de seguridad, duplicidades) se muda a un widget nuevo en Conducta —Fase 2,
+todavía bloqueada, ver más abajo. Resumen gana dos piezas nuevas:
+
+- **«Estado de un vistazo»**: 3 tarjetas (Riesgo cardiovascular, Exámenes y vigencias,
+  Tendencias) con el mismo semáforo de 3 estados honestos que ya usa el widget de
+  exámenes de Conducta — nunca "no sé" disfrazado de "está bien". Cada tarjeta usa
+  literalmente los mismos datos que su pestaña detallada (nunca un criterio propio que
+  pueda divergir), y un clic salta directo a esa pestaña sin pedir nada por red.
+- **«Medicamentos actuales»**: lista simple de lo que el paciente toma, sin avisos ni
+  duplicidades — un archivo de consulta rápida, no una decisión clínica.
+
+Antes de tocar el Panel se investigó su arquitectura real con una tanda de agentes (7
+en total): confirmó que `#vgl-ficha-modal`/`#vgl-tablero-modal` son ids fósiles sin
+consumidor real (todo pasa por `openPanelPacienteModal`), y que separar el juicio
+farmacológico del Panel evita el riesgo de que dos superficies (Panel y widget)
+cuenten algo distinto para el mismo paciente — el mismo defecto que ya se corrigió en
+v17.1.0 para el conteo de medicamentos.
+
+Se le presentó al médico una maqueta visual (HTML, sin lógica, con la paleta real del
+script) antes de escribir una sola línea de producción — nada de esto se implementó a
+ciegas.
+
+### 🐛 Dos bugs de CSS reales, encontrados investigando (no hipótesis)
+- El CSS de los avisos farmacológicos (`.vgl-mtr-*`) solo estaba sembrado para el
+  modal de Laboratorios: dentro de la extinta pestaña Medicamentos del Panel, esos
+  avisos se pintaban sin color de severidad. Corregido en la v17.23.0 (anoche), antes
+  de esta entrega.
+- En el recuadro de "Riesgo cardiovascular" que comparten Ordenar y Laboratorios, 6
+  reglas de color solo llevaban el descendiente real (`b`, `li`, `summary`) del lado
+  de Laboratorios — el lado de Ordenar apuntaba a la clase sola y ese texto (TFG en
+  negrita, cada ítem de examen, el analito vencido en ámbar) nunca recibía su color
+  ahí. Corregido con simetría entre los dos modales.
+- Dos modificadores (`.vgl-rcv-aviso-alto`, `.vgl-rcv-lista-orden`) competían con su
+  clase base por la misma especificidad: cuál ganaba dependía del orden de la hoja,
+  no de la intención. Ahora son selectores compuestos (`.base.modificador`), como ya
+  se hace en el resto del script para este mismo patrón.
+
+### 🔧 El instrumento de prueba dejó de ser ciego a media hoja de estilos
+`tests/suite_25_cascada_css.js` extraía el CSS real con un escaneo de texto que no
+evaluaba las interpolaciones (`${_cssSeguro(() => XXX)}`) con las que el script
+"empalma" cuatro hojas completas (declaradas como const separadas para evitar un
+error de inicialización). Esas cuatro hojas —una de ellas la que sostiene el
+dashboard nuevo de esta versión— eran invisibles para el banco de regresión de CSS
+desde siempre, aunque sí se aplican en el navegador real. Corregido con el mismo fix
+que ya llevaba `tools/verificar_color_chromium.js` desde anoche.
+
+### 🔒 Fase 2 — todavía bloqueada, sin cambios
+El widget de análisis farmacológico en vivo (Conducta, junto al botón de recetar)
+sigue sin construirse: hace falta ver el formulario de prescripción mientras se
+llena, no solo el botón — las funciones que leen medicamentos hoy son 100% vía API y
+no sirven para eso. El médico ya grabó una consulta real con el script de captura de
+la pantalla de Conducta; su análisis es el siguiente paso.
+
+---
+
 ## [Versión 17.23.0] — 2026-08-28 (Los avisos farmacológicos del Panel del paciente ya tienen color)
 
 ### 🐛 Hallazgo real, no hipotético

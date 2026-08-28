@@ -16,6 +16,24 @@ module.exports = {
     }
     t.cierto(css.length > 0, "Se extrajo el bloque CSS de buildOverlay");
 
+    // v17.24.0 — buildOverlay() SPLICEA otras cuatro hojas con `${_cssSeguro(() => XXX)}`
+    // (MTR_CSS, MTR_RCV_CSS, MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS — declaradas antes
+    // como consts, ver el comentario "CONSTANTES CSS GLOBALES" junto a MTR_RCV_CSS). La
+    // extracción de arriba es textual, no evalúa JS: hasta esta versión esos marcadores
+    // quedaban como texto literal y CUALQUIER clase que solo viviera en una de esas cuatro
+    // hojas —como .vgl-bento-* de VGL_UX_CSS— era invisible para esta suite entera, aunque
+    // en producción sí se aplica (confirmado real al construir el dashboard del Panel del
+    // paciente: la Regla G de abajo no vio ni un solo !important de esas hojas). Mismo fix
+    // que ya se le aplicó a tools/verificar_color_chromium.js en esta misma versión.
+    for (const m of css.matchAll(/\$\{_cssSeguro\(\(\) => (\w+)\)\}/g)) {
+      const nombre = m[1];
+      const ini = code.indexOf("const " + nombre + " = `");
+      if (ini < 0) continue;
+      const desde = ini + ("const " + nombre + " = `").length;
+      const fin = code.indexOf("`;", desde);
+      css = css.replace(m[0], code.slice(desde, fin));
+    }
+
     const combos = [];
     const combosVistos = new Set();
     const addCombo = (arr) => {
@@ -470,8 +488,16 @@ module.exports = {
       t.cierto(bodyUsos.length >= 14, `var(--t-body) debe aparecer en la escala. Salieron ${bodyUsos.length}.`);
       t.cierto(leadUsos.length >= 6, `var(--t-lead) debe aparecer 6 veces (base 5 + .vgl-dock-btn de T5; el banner no usa --t-lead). Salieron ${leadUsos.length}.`);
 
+      // v17.24.0 — 1 -> 2. El segundo sitio es #vgl-tip-pop (VGL_UX_CSS, ~línea 12274):
+      // ya existía, con su propia reserva en TODOS los tokens de esa regla (--bg-solid,
+      // --edge, --shadow-float, --font-stack), invisible para esta suite hasta que se
+      // resolvió el punto ciego de la extracción sobre las hojas spliceadas por
+      // buildOverlay() (ver la nota junto a `importantTotal`, más abajo en este archivo).
+      // A diferencia de .vgl-lab-inj,.vgl-exf-btn, #vgl-tip-pop SÍ está en la lista de
+      // ids con tokens (línea ~12383): su reserva es defensiva, no estrictamente
+      // necesaria, y no hay motivo para retirarla.
       const conReserva = css.match(/var\(--t-micro,12px\)/g) || [];
-      t.cierto(conReserva.length === 1, `El caso especial .vgl-lab-inj,.vgl-exf-btn debe conservar la reserva var(--t-micro,12px) exactamente 1 vez (salieron ${conReserva.length}) — sin ella, el botón #vgl-examen-normalidad (fuera de las listas de tokens) heredaría el font-size de Everest`);
+      t.cierto(conReserva.length === 2, `La reserva var(--t-micro,12px) debe aparecer exactamente 2 veces: el caso especial .vgl-lab-inj,.vgl-exf-btn (fuera de las listas de tokens — sin ella, #vgl-examen-normalidad heredaría el font-size de Everest) y #vgl-tip-pop (reserva defensiva, v17.24.0). Salieron ${conReserva.length}.`);
 
       // v14.0.0 (T5) — el interruptor de modo rendimiento del dock de widgets
       // (#vgl-acciones-dock.perf,#vgl-acciones-dock.perf *{transition:none
@@ -543,8 +569,24 @@ module.exports = {
       // cuenta sobre el CSS con los comentarios quitados —`cssClean`, que esta misma suite
       // ya construye para las demás reglas— y el número baja de 404 a 378 SIN que haya
       // cambiado una sola declaración: los 26 de diferencia siempre fueron prosa.
+      // v17.24.0 — CAMBIO DE ESCALA, no de contenido: 392 -> 490. Hasta aquí este contador
+      // solo veía el bloque principal de buildOverlay(); las cuatro hojas que se splicean
+      // por interpolación (`${_cssSeguro(() => MTR_CSS)}` y las tres hermanas — MTR_RCV_CSS,
+      // MTR_RCV_CSS_TODOS_LOS_MODALES, VGL_UX_CSS, ver el comentario "CONSTANTES CSS
+      // GLOBALES" junto a MTR_RCV_CSS en vigilante_agenda.user.js) eran invisibles para la
+      // extracción textual de arriba (línea 13, corta en el primer `` `; `` tras
+      // `style.textContent = \`` ``, y una interpolación no es texto). Se corrigió
+      // resolviendo cada marcador con el valor real de su const (mismo fix que ya llevaba
+      // tools/verificar_color_chromium.js desde v17.23.0) — no se AÑADIÓ ni una declaración
+      // nueva por esto: las 98 de diferencia YA estaban en la hoja real que llega al
+      // navegador, contadas por primera vez. Itemizarlas una por una, versión por versión,
+      // no es honesto: nadie llevó ese historial mientras eran invisibles, e inventarlo
+      // ahora sería la misma falta que "casilla vacía antes que dato inventado" prohíbe
+      // para datos clínicos, aplicada aquí a datos de commits. A partir de esta versión, el
+      // historial de "N -> M" que sigue abajo (los saltos de 349 en adelante) vuelve a
+      // significar exactamente lo que dice: cada entrega real, sobre el total COMPLETO.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 389, `El total de !important en la hoja no debe cambiar por este cableado, salvo el interruptor .perf de T5, los 6 del recuadro renal de R1b, los 2 del chip de sábado propio de v15, el 1 del marcador "prioritario" del PyM de v15.3, los 3 del blindaje v17.6.3 (.sec, .pri, #vgl-head), los 23 del blindaje v17.6.4 del Resumen del turno (#vgl-sheet y .vgl-btn), los 9 del v17.6.5 (reloj de cabecera, botón de alto contraste y modo .vgl-hc), los 3 del badge de inasistencias del v17.6.7 (.vgl-adh), los 2 del contador de palabras del v17.6.11 (.vgl-ia-meta), los 2 del botón «Preguntar» activo del v17.6.24 (.vgl-agm-btn.sec.active), el 1 del aviso de desfase del reconciliador del v17.14.0 (.vgl-conf-desfase), el 1 del aviso de «no pude cruzar contra Athenea» del v17.16.0 (.vgl-ord-nocruce) y los 9 del widget de Conducta del v17.18.0 (#vgl-cw-examenes: badge, estados pend/nd/ok, fila venc/pedir, nom/que, ok-msg/err-msg), los dos exigidos por la Regla E por colgar de document.body y todos los que la Regla E exige a los módulos v15.6+/v16/v17 colgados de document.body (esperado 389 declaraciones reales, sin contar comentarios, salió ${importantTotal})`);
+      t.cierto(importantTotal === 490, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.24.0 sobre el cambio de escala de 392 a 490 al dejar de ser ciego a las cuatro hojas spliceadas). Esperado 490, salió ${importantTotal}.`);
     });
 
     // [auditoría 25-ago, hallazgo 1.22] _pintarCriticos (la caja roja de "faltan datos" del

@@ -6,6 +6,45 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.24.0 — 28-ago-2026 (Panel del paciente, Fase 1: dashboard de estado y medicamentos pasivos)
+
+### El dashboard nunca puede opinar distinto que su pestaña detallada
+
+`mtrPanelResumenBentoDatos` lee literalmente los mismos campos de `d = mtrTableroClinico(resumen)`
+que ya consumen `mtrPanelRiesgoRenalHtml`/`mtrPanelExamenesHtml`/`mtrPanelTendenciasHtml` — no
+un criterio propio. Dos mutaciones, cada una en su propia zona:
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Invertir `alerta ? "pend" : "ok"` a `alerta ? "ok" : "pend"` en la tarjeta de riesgo CV | *mtrPanelResumenBentoDatos: riesgo alto/muy alto o alerta renal → «pend»…* — "riesgo bajo, sin alertas renales: al día" esperaba "ok" y obtuvo "pend" |
+| 2 | Colapsar `meds = crudos ? ... : null` a `crudos ? ... : []` en la lista pasiva de medicamentos (mismo defecto que v17.0.2 ya corrigió una vez para la pestaña Medicamentos) | *mtrPanelResumenMedsHtml: lista lo que toma… distingue «no se pudo leer» de «no toma nada»* — "sin lectura, se dice que no se pudo leer" |
+
+Restauradas y verificadas con `diff` contra copia intacta; banco completo en 2.502/2.503
+(la 1 que falla es la preexistente de huso horario de `suite_03`, v17.6.39, ajena a esta
+entrega).
+
+### Los dos bugs de CSS de MTR_RCV_CSS (Regla A + asimetría Ordenar/Laboratorios)
+
+No se mutaron a propósito por separado: la propia extensión de `tools/verificar_color_chromium.js`
+(casos "RCV: aviso-alto"/"RCV: lista-orden") ES la mutación-inversa — se escribieron
+primero contra el código roto (confirmado FALLA con el estado previo a este commit,
+visible en el historial de edición de esta sesión), y pasan a OK solo tras el fix. La
+combinación `#vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li` (el
+selector viejo, asimétrico) sigue documentada en el propio comentario del CSS junto al
+fix, para quien audite el diff.
+
+### El punto ciego de suite_25 sobre las hojas CSS spliceadas
+
+| # | Qué se rompió a propósito | Qué cayó |
+|---|---|---|
+| 3 | Revertir la resolución de `${_cssSeguro(() => XXX)}` en `tests/suite_25_cascada_css.js` (volver al escaneo textual ingenuo) | Los tres contadores que dependen de ver las 4 hojas spliceadas: `importantTotal` (490→392, mucho más bajo de lo real), la reserva `var(--t-micro,12px)` (2→1, deja de ver `#vgl-tip-pop`), y las colisiones de Regla A de `.vgl-rcv-aviso-alto`/`.vgl-rcv-lista-orden` (dejan de detectarse) |
+
+Mismo fix que ya llevaba `tools/verificar_color_chromium.js` desde v17.23.0 — no es una
+mutación nueva de comportamiento del script, es cerrar un punto ciego del INSTRUMENTO que
+ya se había verificado en un sitio y faltaba en el otro.
+
+---
+
 ## v17.23.0 — 28-ago-2026 (los avisos farmacológicos del Panel ya tienen color)
 
 ### El hallazgo

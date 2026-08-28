@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.23.0
+// @version     17.24.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1005,7 +1005,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.23.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.24.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -12195,17 +12195,32 @@ _vglOfrecerDeshacer(btn);
         #vgl-ordenar-modal .vgl-rcv-falta,#vgl-labs-modal .vgl-rcv-falta{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
         #vgl-ordenar-modal .vgl-rcv-renal,#vgl-labs-modal .vgl-rcv-renal{display:flex;flex-direction:column;gap:5px}
         #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:var(--t-micro);color:var(--fg2) !important}
-        #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-tfg b,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
         #vgl-ordenar-modal .vgl-rcv-aviso,#vgl-labs-modal .vgl-rcv-aviso{font-size:var(--t-micro);color:var(--c-azul) !important;line-height:1.45}
-        #vgl-ordenar-modal .vgl-rcv-aviso-alto,#vgl-labs-modal .vgl-rcv-aviso-alto{color:var(--c-ambar) !important;font-weight:700}
+        /* v17.24.0 — dos bugs reales, hallados al resolver el punto ciego de suite_25 sobre
+           el CSS que buildOverlay() splicea (${_cssSeguro(() => MTR_RCV_CSS)}, invisible
+           para esa suite hasta esta versión):
+           (1) las 6 reglas de aquí abajo (tfg b, lista li, lista li b, vencido-item b,
+           lista-orden li, det summary) solo llevaban el descendiente real del lado de
+           #vgl-labs-modal — el lado de #vgl-ordenar-modal apuntaba a la clase sola, así que
+           ese texto (TFG en negrita, cada ítem de la lista, el analito vencido en ámbar, el
+           resumen plegable) nunca recibía su color dentro del modal de Ordenar. Simetría
+           restaurada en los dos lados.
+           (2) .vgl-rcv-aviso-alto y .vgl-rcv-lista-orden son MODIFICADORES que siempre
+           conviven con su clase base en el mismo elemento (class="vgl-rcv-aviso
+           vgl-rcv-aviso-alto", class="vgl-rcv-lista vgl-rcv-lista-orden") — con la misma
+           especificidad que la base, cuál gana dependía del orden de la hoja (Regla A). Se
+           combinan en un solo selector compuesto (.base.modificador) para que la
+           especificidad decida siempre, no el orden. */
+        #vgl-ordenar-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto,#vgl-labs-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto{color:var(--c-ambar) !important;font-weight:700}
         #vgl-ordenar-modal .vgl-rcv-subtit,#vgl-labs-modal .vgl-rcv-subtit{font-size:var(--t-micro);color:var(--fg) !important;font-weight:700}
         #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista{margin:4px 0 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
-        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.4}
-        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li b{color:var(--fg) !important}
-        #vgl-ordenar-modal .vgl-rcv-vencido-item,#vgl-labs-modal .vgl-rcv-vencido-item b{color:var(--c-ambar) !important}
+        #vgl-ordenar-modal .vgl-rcv-lista li,#vgl-labs-modal .vgl-rcv-lista li{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.4}
+        #vgl-ordenar-modal .vgl-rcv-lista li b,#vgl-labs-modal .vgl-rcv-lista li b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-vencido-item b,#vgl-labs-modal .vgl-rcv-vencido-item b{color:var(--c-ambar) !important}
         #vgl-ordenar-modal .vgl-rcv-bloq-item,#vgl-labs-modal .vgl-rcv-bloq-item{opacity:.75}
-        #vgl-ordenar-modal .vgl-rcv-lista-orden,#vgl-labs-modal .vgl-rcv-lista-orden li{color:var(--fg) !important}
-        #vgl-ordenar-modal .vgl-rcv-det,#vgl-labs-modal .vgl-rcv-det summary{font-size:var(--t-micro);color:var(--fg3) !important;cursor:pointer}
+        #vgl-ordenar-modal .vgl-rcv-lista.vgl-rcv-lista-orden li,#vgl-labs-modal .vgl-rcv-lista.vgl-rcv-lista-orden li{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-det summary,#vgl-labs-modal .vgl-rcv-det summary{font-size:var(--t-micro);color:var(--fg3) !important;cursor:pointer}
         #vgl-ordenar-modal .vgl-rcv-fechas,#vgl-labs-modal .vgl-rcv-fechas{display:flex;gap:10px;flex-wrap:wrap}
         #vgl-ordenar-modal .vgl-rcv-fecha,#vgl-labs-modal .vgl-rcv-fecha{
           flex:1 1 140px;background:var(--bg3);border-radius:var(--r-chip);padding:7px 9px;
@@ -12306,9 +12321,9 @@ _vglOfrecerDeshacer(btn);
         .vgl-prod-fila.casi{border-color:rgba(var(--rgb-ambar),.42);background:rgba(var(--rgb-ambar),.07)}
         .vgl-prod-fila.bajo{border-color:rgba(var(--rgb-rojo),.38);background:rgba(var(--rgb-rojo),.06)}
         .vgl-prod-rot{font-size:11.5px;font-weight:800;min-width:62px;color:var(--fg) !important}
-        .vgl-prod-num{font-size:15px;font-weight:800;color:var(--fg) !important}
+        .vgl-prod-num{font-size:var(--t-strong);font-weight:800;color:var(--fg) !important}
         .vgl-prod-num i{font-size:11px;font-weight:600;opacity:.65;font-style:normal}
-        .vgl-prod-pct{font-size:12px;font-weight:800;margin-left:auto;color:var(--fg2) !important}
+        .vgl-prod-pct{font-size:var(--t-micro);font-weight:800;margin-left:auto;color:var(--fg2) !important}
         .vgl-prod-fila.ok .vgl-prod-pct{color:var(--c-verde) !important}
         .vgl-prod-fila.casi .vgl-prod-pct{color:var(--c-ambar) !important}
         .vgl-prod-fila.bajo .vgl-prod-pct{color:var(--c-rojo) !important}
@@ -12328,13 +12343,29 @@ _vglOfrecerDeshacer(btn);
         .vgl-summary-grid b{color:var(--fg) !important}
 
         /* ==== [v15.1.0] Bento Grid y Aislamiento CSS Total ==== */
+        /* v17.24.0 — este bloque se escribió en 15.1.0 y quedó SIN CONSUMIDOR (ningún HTML
+           usaba class="vgl-bento-*" hasta hoy: el Panel del paciente es el primer uso real).
+           Nunca se verificó contra un CSS de Everest agresivo porque nunca hizo falta — y
+           en efecto le faltaba !important en cada declaración de color, el defecto #2 que
+           documenta CLAUDE.md. Se corrige aquí, antes de que este bloque pinte algo de
+           verdad, en vez de después de que el médico lo reporte en consulta. */
         .vgl-bento-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:10px 0 16px}
-        .vgl-bento-card{background:var(--bg2,#121826);border:1px solid var(--edge,rgba(255,255,255,.14));border-radius:var(--r-card,12px);padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--glow-edge)}
+        .vgl-bento-card{background:var(--bg2,#121826);border:1px solid var(--edge,rgba(255,255,255,.14));border-radius:var(--r-card,12px);padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--glow-edge);cursor:pointer;transition:transform .15s var(--ease-out,ease-out),border-color .15s}
+        .vgl-bento-card:hover,.vgl-bento-card:focus-visible{transform:translateY(-2px);border-color:var(--edge)}
+        .vgl-bento-card:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
         .vgl-bento-card.full{grid-column:1 / -1}
-        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--c-azul,#38bdf8);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
-        .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--fg2,#94a3b8);line-height:1.4}
-        .vgl-bento-row b{color:var(--fg,#f8fafc);font-weight:700}
-        .vgl-bento-badge{background:rgba(var(--rgb-azul),.15);color:var(--c-azul);padding:2px 8px;border-radius:var(--r-chip,6px);font-weight:800;font-size:11px}
+        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#38bdf8) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
+        .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--t-micro);color:var(--fg2,#94a3b8) !important;line-height:1.4}
+        .vgl-bento-row b{color:var(--fg,#f8fafc) !important;font-weight:700}
+        .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
+        .vgl-bento-badge{background:rgba(var(--rgb-azul),.15);color:var(--c-azul) !important;padding:2px 8px;border-radius:var(--r-chip,6px);font-weight:800;font-size:11px}
+        /* v17.24.0 — estados del dashboard "de un vistazo" del Panel del paciente: 3
+           estados honestos, mismo idioma que #vgl-cw-examenes (nunca colapsar "no sé"
+           con "está bien"). */
+        .vgl-bento-badge.ok{background:rgba(var(--rgb-verde),.15);color:var(--c-verde) !important}
+        .vgl-bento-badge.pend{background:rgba(var(--rgb-ambar),.15);color:var(--c-ambar) !important}
+        .vgl-bento-badge.nd{background:rgba(255,255,255,.08);color:var(--fg3) !important}
+        .vgl-bento-sub{font-size:11px;color:var(--fg3) !important}
 
         /* Aislamiento CSS estricto para Uroanálisis y Tablas de Laboratorios */
         #vgl-labs-modal .vgl-labs-uro-panel{background:var(--bg2,#121826) !important;border:1px solid var(--edge,rgba(255,255,255,.16)) !important;border-radius:var(--r-card,12px) !important;padding:12px 14px !important;color:var(--fg,#f8fafc) !important}
@@ -14098,6 +14129,16 @@ _vglOfrecerDeshacer(btn);
       #vgl-panel-modal .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
       #vgl-panel-modal .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
       #vgl-panel-modal .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
+      /* v17.24.0 — Medicamentos actuales, archivo pasivo (Resumen, tras retirar la pestaña
+         Medicamentos). Cuelga de document.body: Regla E, !important en todo color. */
+      #vgl-panel-modal .vgl-panel-meds-nota{font-size:var(--t-micro);color:var(--fg3) !important;margin:2px 0 8px}
+      #vgl-panel-modal .vgl-panel-meds-lista{display:flex;flex-direction:column;gap:6px}
+      #vgl-panel-modal .vgl-panel-meds-fila{
+        display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+        background:var(--bg3);border-radius:var(--r-chip);padding:7px 10px
+      }
+      #vgl-panel-modal .vgl-panel-meds-nom{font-size:var(--t-body);font-weight:700;color:var(--fg) !important}
+      #vgl-panel-modal .vgl-panel-meds-frec{font-size:var(--t-micro);color:var(--fg3) !important;white-space:nowrap}
       /* v17.0.0 — Emergente «faltan antecedentes». Cuelga de document.body como todos
          los módulos: Regla E, y además entra en la lista de paneles que heredan los
          tokens (ver el selector raíz) y la posición fija de los modales. */
@@ -18786,12 +18827,19 @@ _vglOfrecerDeshacer(btn);
   //  HTML) para poder fijarla en el banco sin montar un navegador.
   // =====================================================================
 
+  // v17.24.0 — «medicamentos» sale de aquí (decisión del médico, entrevista S+ del
+  // 28-ago): el juicio clínico farmacológico (avisos + duplicidades) se muda por
+  // completo al widget de Conducta (#vgl-cw-farmaco, bloqueado hasta capturar el DOM
+  // real del formulario de prescripción). El Panel se queda como archivo pasivo — una
+  // sola fuente de verdad para lo accionable, nunca dos que puedan divergir (el mismo
+  // defecto de v17.1.0 con el conteo de medicamentos, ahora evitado por diseño).
+  // mtrPanelSeccionValida sigue cayendo a "resumen" ante cualquier id desconocido, así
+  // que un llamador viejo con seccion:"medicamentos" no se rompe.
   const MTR_PANEL_SECCIONES = [
     { id: "resumen",      icono: "🧾", rotulo: "Resumen" },
     { id: "renal",        icono: "❤️", rotulo: "Riesgo y función renal" },
     { id: "examenes",     icono: "🧪", rotulo: "Exámenes y vigencias" },
     { id: "tendencias",   icono: "📈", rotulo: "Tendencias" },
-    { id: "medicamentos", icono: "💊", rotulo: "Medicamentos" },
   ];
   // Los puntos de entrada viejos siguen existiendo (el agendamiento abre el
   // tablero, el dock abría la ficha): cada uno aterriza en SU sección.
@@ -18812,9 +18860,121 @@ _vglOfrecerDeshacer(btn);
       + '</div>';
   }
 
+  // ---------- v17.24.0 — ESTADO DE UN VISTAZO (dashboard de 3 tarjetas) ----------
+  // Pura, y a propósito NO recalcula ningún criterio propio: lee los MISMOS campos que
+  // ya consumen mtrPanelRiesgoRenalHtml/mtrPanelExamenesHtml/mtrPanelTendenciasHtml (el
+  // mismo `d = mtrTableroClinico(resumen)`, la misma `resumen._series`). Si algún día
+  // diverge de su pestaña detallada es porque alguien cambió una de las dos sin la otra
+  // — exactamente el defecto que v17.1.0 tuvo que corregir para el conteo de
+  // medicamentos, aquí evitado por construcción en vez de por disciplina.
+  function mtrPanelResumenBentoDatos(resumen, d) {
+    const cards = [];
+
+    // -- Riesgo cardiovascular / función renal --
+    {
+      const cat = d && d.riesgo && d.riesgo.categoria;
+      let estado = "nd", dato = "Sin clasificar", sub = "";
+      if (cat) {
+        const discordanciaSeria = !!(d.renal && d.renal.discordancia && d.renal.discordancia.hayDiscrepancia && d.renal.discordancia.diferenciaEstadios >= 2);
+        const alerta = discordanciaSeria || (d.renal && (d.renal.sospechaIra || d.renal.remitirNefrologia)) || cat === "alto" || cat === "muy alto";
+        estado = alerta ? "pend" : "ok";
+        dato = cat.charAt(0).toUpperCase() + cat.slice(1);
+        sub = (d.renal && d.renal.sospechaIra) ? "sospecha de injuria renal"
+          : (d.renal && d.renal.remitirNefrologia) ? "cumple criterio de remisión"
+          : discordanciaSeria ? "discordancia entre fórmulas"
+          : "";
+      }
+      cards.push({ id: "renal", icono: "❤️", rotulo: "Riesgo cardiovascular", estado: estado, dato: dato, sub: sub,
+        pie: estado === "nd" ? "Toque para ver por qué falta →" : "Toque para ver los criterios completos →" });
+    }
+
+    // -- Exámenes y vigencias --
+    {
+      const tieneProg = !!(d && d.programa && d.programa.rector);
+      const nOrdenar = (d && Array.isArray(d.ordenar)) ? d.ordenar.length : 0;
+      const estado = !tieneProg ? "nd" : (nOrdenar > 0 ? "pend" : "ok");
+      cards.push({ id: "examenes", icono: "🧪", rotulo: "Exámenes y vigencias", estado: estado,
+        dato: !tieneProg ? "Sin programa" : (nOrdenar + (nOrdenar === 1 ? " examen" : " exámenes")),
+        sub: !tieneProg ? "" : (nOrdenar > 0 ? "por ordenar hoy" : "al día"),
+        pie: !tieneProg ? "Ningún programa identificado →" : "Toque para ver el detalle →" });
+    }
+
+    // -- Tendencias --
+    {
+      const series = (resumen && resumen._series) || {};
+      const claves = Object.keys(series).filter((k) => (series[k] || []).length >= 1);
+      const conSerie = claves.filter((k) => series[k].length >= 2);
+      let estado = "nd", dato = "—", sub = claves.length ? (claves.length + (claves.length === 1 ? " analito con un solo control" : " analitos con un solo control")) : "";
+      if (conSerie.length) {
+        const ctxTend = {
+          categoriaRiesgo: (resumen && resumen.riesgo && resumen.riesgo.categoria) || null,
+          metaHba1c: (resumen && resumen.hba1c && typeof resumen.hba1c.meta === "number") ? resumen.hba1c.meta : null,
+        };
+        let peor = false;
+        conSerie.forEach((k) => {
+          try {
+            const t = mtrTendenciaDe(series[k], k, ctxTend);
+            if (t.gravedad === "grave" || t.sentido === "empeora") peor = true;
+          } catch (e) {}
+        });
+        estado = peor ? "pend" : "ok";
+        dato = conSerie.length + (conSerie.length === 1 ? " analito" : " analitos");
+        sub = peor ? "con cambio a vigilar" : "estable o mejorando";
+      }
+      cards.push({ id: "tendencias", icono: "📈", rotulo: "Tendencias", estado: estado, dato: dato, sub: sub,
+        pie: estado === "nd" ? "Hace falta un segundo control para trazar dirección →" : "Toque para ver la serie completa →" });
+    }
+
+    return cards;
+  }
+
+  function mtrPanelResumenBentoHtml(cards) {
+    if (!cards || !cards.length) return "";
+    const rotuloEstado = { ok: "Al día", pend: "Revisar", nd: "Sin dato" };
+    return '<div class="vgl-bento-grid">' + cards.map((c) =>
+      '<div class="vgl-bento-card" data-panel-sec="' + escapeHtml(c.id) + '" role="button" tabindex="0" aria-label="Ir a ' + escapeHtml(c.rotulo) + '">'
+        + '<div class="vgl-bento-head">' + c.icono + ' ' + escapeHtml(c.rotulo) + '</div>'
+        + '<div class="vgl-bento-row"><span class="vgl-bento-badge ' + c.estado + '">' + rotuloEstado[c.estado] + '</span></div>'
+        + '<div class="vgl-bento-row"><b>' + escapeHtml(c.dato) + '</b>' + (c.sub ? '<span class="vgl-bento-sub">' + escapeHtml(c.sub) + '</span>' : "") + '</div>'
+        + '<div class="vgl-bento-pie">' + escapeHtml(c.pie) + '</div>'
+      + '</div>'
+    ).join("") + '</div>';
+  }
+
+  // ---------- v17.24.0 — MEDICAMENTOS ACTUALES (archivo pasivo, sin juicio clínico) ----------
+  // Sale de la extinta pestaña Medicamentos: sin avisos ni duplicidades (eso vive en
+  // Conducta). Misma clave de dedup que usaba el conteo de esa pestaña (v17.1.0, #113)
+  // — nunca un recuento "por conveniencia" que pueda volver a divergir.
+  function mtrPanelResumenMedsHtml(resumen) {
+    const crudos = (resumen && Array.isArray(resumen.medicamentos)) ? resumen.medicamentos : null;
+    const meds = crudos ? mtrMedicamentosUnicos(crudos) : null;
+    const frecMapa = (resumen && resumen.medicamentosFrecuencia && typeof resumen.medicamentosFrecuencia.get === "function")
+      ? resumen.medicamentosFrecuencia : null;
+    const cuerpo = (meds && meds.length)
+      ? '<div class="vgl-panel-meds-lista">' + meds.map((m) => {
+          const nombre = String(m);
+          const frecuencia = frecMapa ? (frecMapa.get(_mtrClaveDedupMedicamento(nombre)) || "") : "";
+          return '<div class="vgl-panel-meds-fila">'
+            + '<span class="vgl-panel-meds-nom">' + escapeHtml(nombre) + '</span>'
+            + (frecuencia ? '<span class="vgl-panel-meds-frec">' + escapeHtml(frecuencia) + '</span>' : "")
+            + '</div>';
+        }).join("") + '</div>'
+      : (meds === null
+          ? '<div class="vgl-agm-dinfo">No se pudo leer la lista de medicamentos (no respondió el sistema de órdenes).</div>'
+          : '<div class="vgl-agm-dinfo">Everest no reporta medicamentos activos para este paciente.</div>');
+    return '<div class="vgl-agm-sec">'
+      + '<span class="vgl-agm-lbl">Medicamentos actuales</span>'
+      + '<div class="vgl-panel-meds-nota">Solo archivo — avisos de seguridad y duplicidades viven en Conducta.</div>'
+      + cuerpo
+      + '</div>';
+  }
+
   // ---------- SECCIÓN 1: RESUMEN (lo leído y de dónde) ----------
   function mtrPanelResumenHtml(resumen) {
     if (!resumen) return '<div class="vgl-agm-sec"><div class="vgl-agm-err">No se pudo leer al paciente ahora (los laboratorios no respondieron). Inténtelo de nuevo en un momento.</div></div>';
+    const d = mtrTableroClinico(resumen);
+    const bento = mtrPanelResumenBentoHtml(mtrPanelResumenBentoDatos(resumen, d));
+    const meds = mtrPanelResumenMedsHtml(resumen);
     const datos = mtrFichaVivaFilas(resumen);
     const filas = datos.secciones.map((sec) => '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">' + escapeHtml(sec.titulo) + '</span>'
@@ -18827,7 +18987,7 @@ _vglOfrecerDeshacer(btn);
     const aviso = datos.faltantes
       ? '<div class="vgl-ord-vigwarn" style="margin:8px 0">Faltan ' + datos.faltantes + ' dato(s). El asistente NO los inventa: donde diga «sin dato», sus conclusiones van sin ese insumo.</div>'
       : "";
-    return aviso + filas
+    return bento + meds + aviso + filas
       + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y órdenes de Everest, y lo escrito hoy en la historia.</div>';
   }
 
@@ -19624,8 +19784,6 @@ _vglOfrecerDeshacer(btn);
         dentro = mtrPanelResumenHtml(_resumen);
       } else if (seccion === "tendencias") {
         dentro = mtrPanelTendenciasHtml(_resumen);
-      } else if (seccion === "medicamentos") {
-        dentro = mtrPanelMedicamentosHtml(_resumen);
       } else {
         const d = mtrTableroClinico(_resumen);
         dentro = (seccion === "examenes")
@@ -19661,6 +19819,21 @@ _vglOfrecerDeshacer(btn);
           pintar("");                                  // sin una sola petición nueva
         }));
       }
+      // v17.24.0 — las tarjetas de "Estado de un vistazo" (Resumen) son un atajo visual
+      // al MISMO swap de siempre, no una navegación nueva: mismo mtrPanelSeccionValida,
+      // mismo pintar(""). Solo viven en `cuerpo` (nunca en `nav`), así que este selector
+      // no puede pisar el wiring de las pestañas de arriba.
+      cuerpo.querySelectorAll("[data-panel-sec]").forEach((b) => {
+        const ir = () => {
+          const id = mtrPanelSeccionValida(b.getAttribute("data-panel-sec"));
+          if (id === seccion) return;
+          seccion = id;
+          try { uxTrack("fn.panel.seccion", { s: id, origen: "bento" }); } catch (e) {}
+          pintar("");
+        };
+        b.addEventListener("click", ir);
+        b.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ir(); } });
+      });
       const bl = cuerpo.querySelector("#vgl-panel-labs");
       if (bl) bl.addEventListener("click", async () => {
         bl.disabled = true;
@@ -23106,7 +23279,13 @@ _vglOfrecerDeshacer(btn);
           <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
 
-        <div class="vgl-ux-caption" style="font-size:12px;color:#a0aec0;margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
+        <!-- v17.24.0 — el inline font-size/color de aquí abajo NUNCA tuvo efecto: la clase
+             .vgl-ux-caption ya declara ambos con !important (Regla E), así que el inline
+             quedaba muerto desde que se escribió — hallado al resolver el punto ciego de
+             suite_25 sobre VGL_UX_CSS (Regla B lo señaló). Se retira lo muerto; el
+             margin-bottom SÍ tenía efecto (la clase no lo lleva con !important) y se
+             conserva para no mover ni un píxel lo que sí se veía. -->
+        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
 
         <div class="vgl-agm-sec">
           ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
