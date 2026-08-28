@@ -4,6 +4,22 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.36.0] — 2026-08-28 (Corrección del médico: la RAC sola ya NO arrastra el paquete completo)
+
+### ✅ La RAC ahora se agrega igual de sola que cualquier otro examen suelto
+Corrección suya, en el sitio: la versión anterior, si la RAC era lo único pendiente,
+igual disparaba el paquete completo de la HTA (8-10 exámenes ajenos) para conseguir la
+mitad de la RAC que el paquete también trae. Usted lo señaló de inmediato: "jamás debes
+hacer eso, solamente ordenar lo que se debe" — y con razón, porque los dos exámenes de la
+RAC (microalbuminuria en orina parcial y creatinina en orina parcial) sí se pueden buscar
+y agregar sueltos, uno por uno, igual que PTH, fósforo o albúmina. A partir de ahora, si
+la RAC es lo único pendiente, el botón solo busca y agrega esos dos exámenes — nunca el
+paquete completo. El botón sigue verificando cada uno en la propia tabla antes de darlo
+por agregado, y si solo uno de los dos aparece, no cuenta la RAC como completa: se
+avisa para que la revise a mano.
+
+---
+
 ## [Versión 17.35.0] — 2026-08-28 (El botón "Ordenar pendientes" ahora hace lo mismo que el botón "Paquetes" de Everest)
 
 ### 🖱️ El botón ya no crea una orden aparte: ahora clickea la pantalla igual que usted
@@ -20,9 +36,10 @@ aparte, con el mismo resultado las dos veces. Sigue sin pedir confirmación, com
 pidió, y sigue verificando en la propia tabla que la fila apareció antes de darla por
 agregada — nunca asume que un clic funcionó solo porque se dio.
 
-**Un límite que hay que saber**: si la RAC es el único examen pendiente, el botón igual
+~~**Un límite que hay que saber**: si la RAC es el único examen pendiente, el botón igual
 agrega el paquete completo de 8-10 exámenes, porque la mitad de la RAC (la creatinina en
-orina) solo existe agrupada ahí — no hay manera confirmada de pedirla sola.
+orina) solo existe agrupada ahí — no hay manera confirmada de pedirla sola.~~ **Corregido
+en la v17.36.0** (ver más arriba): sí hay manera de pedirla sola, y así quedó.
 
 Pruébelo con calma las primeras veces y revise que las filas correctas queden en la tabla
 de Ordenamientos antes de guardar la consulta.

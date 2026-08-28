@@ -6,6 +6,34 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.36.0 — 28-ago-2026 (corrección del médico: la RAC ya no arrastra el paquete completo)
+
+Corrección en el sitio, la misma tarde del v17.35.0. Esa entrega documentaba como "hueco
+conocido" que, si la RAC era lo único pendiente, el botón igual disparaba el paquete "HTA"
+completo (8-10 analitos ajenos) para conseguir la mitad de la RAC que el catálogo del
+paquete también trae (creatinina en orina, 903876). El médico lo rechazó de plano: "jamás
+debes hacer eso, solamente ordenar lo que se debe" — y aportó la corrección: la creatinina
+en orina parcial SÍ se busca y agrega individual, con el mismo texto exacto que ya constaba
+en la propia evidencia capturada (`captura_ordenamiento_paquete_HTA_20260812.json`, la
+respuesta de `ObtenerPaqueteProgramasCupsByCitaId`: `"CREATININA EN ORINA PARCIAL"`, código
+903876) — no es un texto adivinado, solo no se había reconocido que ese mismo nombre sirve
+también para una búsqueda individual. La RAC salió por completo de
+`MTR_ANALITOS_PAQUETE_CONDUCTA`: sus dos componentes (microalbuminuria automatizada +
+creatinina en orina parcial) ahora viven en `CONDUCTA_LI_TEXTO_POR_ANALITO.RAC` como un
+arreglo de dos textos, y `mtrConductaAgregarPendientes` exige que las DOS búsquedas tengan
+éxito para dar la RAC por agregada (ya establecido desde v17.32.0: "no se pide media RAC").
+
+Dos cambios de comportamiento verificados con mutación, más una tercera mutación que no
+cazó a la primera y forzó una prueba nueva (ver abajo). Restaurado y verificado con `diff`
+contra copia intacta tras cada mutación. Banco completo en verde: **2576/2576** (suite_71
+sola: 76/76).
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Devolver RAC a `MTR_ANALITOS_PAQUETE_CONDUCTA` (vuelve a disparar el paquete completo) | *la RAC NUNCA entra al paquete, solo se busca individual* y *si la RAC es lo ÚNICO pendiente, no queda nada en `paquete`* (suite_71) |
+| 2 | `mtrConductaAgregarPendientes`: quitar la verificación de fila nueva por cada texto de `liTextos` (`if (despues.size <= previos.size)` → `if (false)`) | **no cazó ninguna prueba existente** — todas las pruebas de RAC-con-dos-búsquedas usaban escenarios donde la búsqueda fallida lo era por `<li>` no encontrado (`disparado=false`), nunca por "se clickeó pero la fila no apareció". Se agregó *el clic se dispara pero ninguna fila nueva aparece — queda fallido, nunca se asume que sirvió* (caso general, no solo RAC) — con ella, la misma mutación SÍ cae |
+| 3 | (repetida tras el fix de la prueba #2) confirmación de que la mutación #2 cae con la nueva prueba en su lugar | *el clic se dispara pero ninguna fila nueva aparece…* (suite_71) |
+
 ## v17.35.0 — 28-ago-2026 (el botón "Ordenar pendientes" simula el gesto real de "Paquetes", no el módulo de Ordenamientos)
 
 Reversión puntual y documentada de una parte del retiro v15.7.0 (ver el encabezado de
@@ -30,13 +58,15 @@ Cuatro cambios de comportamiento verificados con mutación. Restaurado y verific
 | 3 | `mtrItemsOrdenarConducta`: RAC deja de entrar en los DOS grupos (`if (enPaquete)... if (liTexto)...` → `if (enPaquete)... else if (liTexto)...`) | *separa {paquete, individuales} — RAC entra en LOS DOS* (suite_71) |
 | 4 | `_cwoClic`: la guarda de reentrada (`if (_cwoEnCurso \|\| !docId) return` → `if (!docId) return`) — a diferencia de v17.32.0 (por red, donde GHOST de `pageFetchJson` deduplicaba por debajo sin que `_cwoEnCurso` tuviera que hacerlo), aquí NO hay ninguna capa de deduplicación de otro módulo: sin la guarda, dos clics casi simultáneos disparan DOS secuencias de clics reales sobre el mismo botón/`<li>` | *dos clics antes de que termine el primero solo disparan UNA vez el clic real en Paquetes* (suite_71) |
 
-**Un hueco conocido, dicho en vez de escondido** (sin mutación asociada — es una ausencia
+~~**Un hueco conocido, dicho en vez de escondido** (sin mutación asociada — es una ausencia
 deliberada de cobertura, no un comportamiento a proteger): si la RAC es el ÚNICO analito
 pendiente, igual hace falta disparar el paquete completo "HTA" para la mitad de la RAC que
 solo viene ahí (creatinina en orina, 903876) — no hay evidencia real de que ese examen se
 pueda buscar y agregar individualmente, y adivinar un texto de `<li>` sin haberlo visto es
-justo lo que este proyecto se prohíbe. Documentado en el comentario junto a
-`MTR_ANALITOS_PAQUETE_CONDUCTA` en el fuente.
+justo lo que este proyecto se prohíbe.~~ **Corregido en v17.36.0**: el médico rechazó este
+comportamiento de plano y aportó la corrección — sí se puede buscar y agregar individual,
+con el mismo texto que ya constaba en la evidencia capturada. Ver la entrada de v17.36.0
+arriba.
 
 ## v17.34.0 — 28-ago-2026 (panel angosto corregido, botón centrado entre Historial y Paquetes, "Generar todo" retirado)
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.35.0
+// @version     17.36.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.35.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.36.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -24107,59 +24107,71 @@ _vglOfrecerDeshacer(btn);
   //
   //  QUÉ SE AGREGA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
   //  próxima consulta (`resumen.plan.ordenar`) — nunca el paquete completo por costumbre.
-  //  Los ocho analitos que solo existen agrupados en el paquete de Everest (perfil
-  //  lipídico, glicemia, uroanálisis, las dos creatininas) se agregan disparando el
-  //  paquete "HTA" SOLO si alguno de ellos hace falta; los seis que sí se buscan y
-  //  agregan uno por uno (los 4 pasajeros, HbA1c y la microalbuminuria automatizada de la
-  //  RAC) se agregan solo si a CADA UNO le toca, nunca de arrastre por venir el paquete.
+  //  Los siete analitos que solo existen agrupados en el paquete de Everest (perfil
+  //  lipídico, glicemia, uroanálisis, creatinina sérica) se agregan disparando el paquete
+  //  "HTA" SOLO si alguno de ellos hace falta; los que sí se buscan y agregan uno por uno
+  //  (los 4 pasajeros, HbA1c y los DOS componentes de la RAC) se agregan solo si a CADA
+  //  UNO le toca, nunca de arrastre por venir el paquete.
   //
-  //  UN HUECO CONOCIDO, dicho en vez de escondido: si la RAC es lo ÚNICO pendiente, igual
-  //  hace falta disparar el paquete completo para la mitad de la RAC que solo viene ahí
-  //  (creatinina en orina, 903876) — no hay evidencia real de que ese examen se pueda
-  //  buscar y agregar solo, y adivinar un texto de <li> sin haberlo visto es justo lo que
-  //  este proyecto se prohíbe.
+  //  v17.36.0 — CORRECCIÓN DEL MÉDICO: la primera entrega de esta versión disparaba el
+  //  paquete completo (8-10 analitos ajenos) solo para conseguir la mitad de la RAC que
+  //  el catálogo del paquete también trae (creatinina en orina, 903876) — "documentado
+  //  como hueco conocido" en vez de evitado. El médico lo rechazó de plano: "jamás debes
+  //  hacer eso, solamente ordenar lo que se debe" — y aportó la corrección de fondo: la
+  //  creatinina en orina parcial SÍ se busca y agrega individual, igual que los demás
+  //  analitos sueltos, con el mismo texto exacto que el paquete confirma que existe en el
+  //  catálogo de Everest (`captura_ordenamiento_paquete_HTA_20260812.json`, línea del GET
+  //  `ObtenerPaqueteProgramasCupsByCitaId`: `"CREATININA EN ORINA PARCIAL"`, código 903876).
+  //  La RAC ya NO pertenece al paquete: si es lo único pendiente, solo dispara sus DOS
+  //  búsquedas individuales — nunca arrastra el resto de la HTA.
   // =====================================================================
 
-  // v17.35.0 — Nombre EXACTO con el que cada analito aparece como <li> en el buscador
-  // nativo de Conducta de Everest (Paquetes → HTA → agregar examen individual). Texto
-  // LITERAL capturado por el grabador de clics del proyecto en consultorio el 12-08-2026
+  // v17.35.0/v17.36.0 — Nombre EXACTO con el que cada analito aparece como <li> en el
+  // buscador nativo de Conducta de Everest (Paquetes → HTA → agregar examen individual).
+  // Cada valor es una LISTA de textos (casi siempre de un solo elemento) porque la RAC
+  // necesita DOS búsquedas independientes, ninguna sustituye a la otra. Texto LITERAL
+  // capturado por el grabador de clics del proyecto en consultorio el 12-08-2026
   // (`captura_ordenamiento_paquete_HTA_20260812.json`, ver también
   // `EVIDENCIA_ORDENAMIENTO_CURADO.md` §2 y §4) — HBA1C y la microalbuminuria automatizada
   // de la RAC se re-confirmaron el 28-08-2026 con un diagnóstico nuevo en consulta real,
-  // mismo texto, 16 días después. NO son inventados ni tomados del catálogo del Copiloto
-  // (esas son descripciones cortas, p. ej. "HEMOGLOBINA GLICOSILADA" sin "AUTOMATIZADA").
-  // Usados por _conductaBuscarYAgregarExamen (más abajo), coincidencia EXACTA de texto,
-  // nunca por substring — un match parcial en un catálogo clínico real podría clickear el
-  // examen equivocado.
+  // mismo texto, 16 días después; la creatinina en orina parcial de la RAC viene del
+  // catálogo del paquete de esa misma captura (nunca de un botón "Agregar" propio — no
+  // hay evidencia de ese clic exacto, pero el nombre de examen SÍ es real y textual, no
+  // adivinado). NO son inventados ni tomados del catálogo del Copiloto (esas son
+  // descripciones cortas, p. ej. "HEMOGLOBINA GLICOSILADA" sin "AUTOMATIZADA"). Usados por
+  // _conductaBuscarYAgregarExamen (más abajo), coincidencia EXACTA de texto, nunca por
+  // substring — un match parcial en un catálogo clínico real podría clickear el examen
+  // equivocado.
   const CONDUCTA_LI_TEXTO_POR_ANALITO = {
-    PTH: "HORMONA PARATIROIDEA MOLECULA INTACTA",
-    ALBUMINA: "ALBUMINA EN SUERO U OTROS FLUIDOS",
-    FOSFORO: "FOSFORO EN SUERO U OTROS FLUIDOS",
-    HEMOGLOBINA: "HEMOGLOBINA",
-    HBA1C: "HEMOGLOBINA GLICOSILADA AUTOMATIZADA",
-    // v17.35.0 — la RAC nunca la produce el paquete solo: trae la variante SEMIAUTOMATIZADA
-    // (903028) donde esta población necesita la AUTOMATIZADA (903026) — EVIDENCIA_
-    // ORDENAMIENTO_CURADO.md §3. Se agrega SIEMPRE por su cuenta, aunque el paquete
-    // también se dispare por los otros analitos.
-    RAC: "MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL",
+    PTH: ["HORMONA PARATIROIDEA MOLECULA INTACTA"],
+    ALBUMINA: ["ALBUMINA EN SUERO U OTROS FLUIDOS"],
+    FOSFORO: ["FOSFORO EN SUERO U OTROS FLUIDOS"],
+    HEMOGLOBINA: ["HEMOGLOBINA"],
+    HBA1C: ["HEMOGLOBINA GLICOSILADA AUTOMATIZADA"],
+    // v17.36.0 — los DOS componentes de la RAC, cada uno buscado y agregado por su cuenta.
+    // La microalbuminuria pide la variante AUTOMATIZADA (903026), no la SEMIAUTOMATIZADA
+    // (903028) que trae el catálogo del paquete — EVIDENCIA_ORDENAMIENTO_CURADO.md §3. Las
+    // dos búsquedas deben tener éxito para dar la RAC por agregada — "no se pide media RAC"
+    // (regla ya fijada desde v17.32.0, ver tests/INFORME_MUTACIONES.md).
+    RAC: ["MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", "CREATININA EN ORINA PARCIAL"],
   };
 
-  // v17.35.0 — Los analitos que SOLO existen agrupados en el paquete "HTA" de Everest
+  // v17.36.0 — Los analitos que SOLO existen agrupados en el paquete "HTA" de Everest
   // (`ObtenerPaqueteProgramasCupsByCitaId`, confirmado real dos veces: 12-ago y 28-ago,
-  // mismo resultado, mismos 10 códigos). Si CUALQUIERA de estos hace falta, se dispara el
-  // paquete una sola vez — nunca uno por uno, porque no hay evidencia de que se puedan
-  // buscar sueltos. RAC entra aquí TAMBIÉN (por su mitad de creatinina en orina, 903876)
-  // y ADEMÁS en CONDUCTA_LI_TEXTO_POR_ANALITO (por su mitad de microalbuminuria) — las dos
-  // mitades son necesarias, ninguna sustituye a la otra.
+  // mismo resultado, mismos 10 códigos) y para los que NO hay evidencia de que se puedan
+  // buscar y agregar sueltos. Si CUALQUIERA de estos hace falta, se dispara el paquete una
+  // sola vez. La RAC NO entra aquí (a partir de esta versión): sus dos componentes se
+  // buscan individuales — si es lo único pendiente, el paquete completo nunca se dispara.
   const MTR_ANALITOS_PAQUETE_CONDUCTA = [
     "COLESTEROL_TOTAL", "COLESTEROL_HDL", "COLESTEROL_LDL", "TRIGLICERIDOS",
-    "GLUCOSA", "UROANALISIS", "CREATININA", "RAC",
+    "GLUCOSA", "UROANALISIS", "CREATININA",
   ];
 
   // Pura: separa el `ordenar` crudo de mtrPlanParaclinicos en {paquete, individuales} —
   // paquete: claves que necesitan el disparo de "Paquetes → HTA"; individuales: claves
-  // con su texto de <li> propio. Una clave sin ninguna de las dos formas conocidas
-  // (nunca debería pasar con los 13 analitos de hoy) se ignora, no truena.
+  // con su(s) texto(s) de <li> propio(s) (`liTextos`, un arreglo — casi siempre de un solo
+  // elemento, dos para la RAC). Una clave sin ninguna de las dos formas conocidas (nunca
+  // debería pasar con los 13 analitos de hoy) se ignora, no truena.
   function mtrItemsOrdenarConducta(ordenar) {
     const lista = Array.isArray(ordenar) ? ordenar : [];
     const vistos = new Set();
@@ -24168,12 +24180,12 @@ _vglOfrecerDeshacer(btn);
       const clave = a && a.clave;
       if (!clave || vistos.has(clave)) continue;
       const enPaquete = MTR_ANALITOS_PAQUETE_CONDUCTA.indexOf(clave) >= 0;
-      const liTexto = CONDUCTA_LI_TEXTO_POR_ANALITO[clave];
-      if (!enPaquete && !liTexto) continue;
+      const liTextos = CONDUCTA_LI_TEXTO_POR_ANALITO[clave];
+      if (!enPaquete && !liTextos) continue;
       vistos.add(clave);
       const nombre = a.nombre || mtrNombreLegibleAnalito(a) || clave;
       if (enPaquete) paquete.push({ clave: clave, nombre: nombre });
-      if (liTexto) individuales.push({ clave: clave, nombre: nombre, liTexto: liTexto });
+      if (liTextos) individuales.push({ clave: clave, nombre: nombre, liTextos: liTextos });
     }
     return { paquete: paquete, individuales: individuales };
   }
@@ -24342,12 +24354,20 @@ _vglOfrecerDeshacer(btn);
       else fallidos.push({ clave: it.clave, nombre: it.nombre });
     }
 
+    // v17.36.0 — `liTextos` es un arreglo (dos elementos para la RAC, uno para el resto):
+    // TODAS sus búsquedas deben tener éxito para dar la clave por agregada — "no se pide
+    // media RAC" (regla fijada desde v17.32.0). Cada búsqueda se verifica por su cuenta
+    // leyendo la tabla, igual que el resto de este orquestador.
     for (const it of individuales) {
-      const previos = _conductaCodigosEnTabla(d);
-      const disparado = await _conductaBuscarYAgregarExamen(it.liTexto, d);
-      if (!disparado) { fallidos.push({ clave: it.clave, nombre: it.nombre }); continue; }
-      const despues = await _conductaEsperarFilasNuevas(d, previos, 2500);
-      if (despues.size > previos.size) agregados.push(it.clave);
+      let todasOk = true;
+      for (const texto of it.liTextos) {
+        const previos = _conductaCodigosEnTabla(d);
+        const disparado = await _conductaBuscarYAgregarExamen(texto, d);
+        if (!disparado) { todasOk = false; break; }
+        const despues = await _conductaEsperarFilasNuevas(d, previos, 2500);
+        if (despues.size <= previos.size) { todasOk = false; break; }
+      }
+      if (todasOk) agregados.push(it.clave);
       else fallidos.push({ clave: it.clave, nombre: it.nombre });
     }
 

@@ -436,22 +436,35 @@ module.exports = {
     // =====================================================================
 
     // ---------- mtrItemsOrdenarConducta (pura) ----------
-    t.caso("mtrItemsOrdenarConducta: separa {paquete, individuales} — RAC entra en LOS DOS (creatinina en orina viene del paquete, la microalbuminuria automatizada se busca sola)", () => {
+    // v17.36.0 — corrección del médico: la RAC NUNCA dispara el paquete, ni siquiera
+    // cuando otro analito del paquete también está pendiente (antes CREATININA sí lo
+    // disparaba, y la RAC "de arrastre" también contaba como agregada por el paquete —
+    // eso ya no existe: la RAC solo entra en `individuales`, con sus DOS búsquedas).
+    t.caso("mtrItemsOrdenarConducta: separa {paquete, individuales} — la RAC NUNCA entra al paquete, solo se busca individual (sus DOS componentes)", () => {
       const items = api.mtrItemsOrdenarConducta([
         { clave: "CREATININA", nombre: "Creatinina sérica" },
         { clave: "ALGO_QUE_NO_EXISTE", nombre: "Rareza" },
         { clave: "RAC", nombre: "RAC" },
         { clave: "PTH", nombre: "PTH" },
       ]);
-      t.igual(items.paquete.length, 2, "CREATININA y RAC necesitan el paquete");
+      t.igual(items.paquete.length, 1, "solo CREATININA necesita el paquete — la RAC no");
       t.cierto(items.paquete.some((x) => x.clave === "CREATININA"));
-      t.cierto(items.paquete.some((x) => x.clave === "RAC"));
-      t.igual(items.individuales.length, 2, "RAC (microalbuminuria) y PTH se buscan una por una");
+      t.falso(items.paquete.some((x) => x.clave === "RAC"), "la RAC no debe disparar el paquete completo por su cuenta");
+      t.igual(items.individuales.length, 2, "RAC y PTH se buscan una por una");
       const racInd = items.individuales.find((x) => x.clave === "RAC");
-      t.cierto(!!racInd, "RAC también aparece en individuales");
-      t.igual(racInd.liTexto, "MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL");
+      t.cierto(!!racInd, "RAC aparece en individuales");
+      t.igual(racInd.liTextos.length, 2, "la RAC necesita DOS búsquedas: microalbuminuria y creatinina en orina");
+      t.cierto(racInd.liTextos.indexOf("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL") >= 0);
+      t.cierto(racInd.liTextos.indexOf("CREATININA EN ORINA PARCIAL") >= 0);
       const pth = items.individuales.find((x) => x.clave === "PTH");
-      t.igual(pth.liTexto, "HORMONA PARATIROIDEA MOLECULA INTACTA");
+      t.igual(pth.liTextos.length, 1);
+      t.igual(pth.liTextos[0], "HORMONA PARATIROIDEA MOLECULA INTACTA");
+    });
+    t.caso("mtrItemsOrdenarConducta: si la RAC es lo ÚNICO pendiente, no queda nada en `paquete` — nunca se arrastra el resto de la HTA", () => {
+      const items = api.mtrItemsOrdenarConducta([{ clave: "RAC", nombre: "RAC" }]);
+      t.igual(items.paquete.length, 0, "con la RAC sola, el paquete completo (8-10 analitos ajenos) nunca se dispara");
+      t.igual(items.individuales.length, 1);
+      t.igual(items.individuales[0].liTextos.length, 2);
     });
     t.caso("mtrItemsOrdenarConducta: dedup por clave, y sin `ordenar` (null/no-array) no revienta", () => {
       const items = api.mtrItemsOrdenarConducta([
@@ -633,7 +646,7 @@ module.exports = {
       const li = mockLi("HORMONA PARATIROIDEA MOLECULA INTACTA", () => d._agregarBoton(btnAgregar));
       d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
 
-      const items = { paquete: [{ clave: "CREATININA", nombre: "Creatinina" }], individuales: [{ clave: "PTH", nombre: "PTH", liTexto: "HORMONA PARATIROIDEA MOLECULA INTACTA" }] };
+      const items = { paquete: [{ clave: "CREATININA", nombre: "Creatinina" }], individuales: [{ clave: "PTH", nombre: "PTH", liTextos: ["HORMONA PARATIROIDEA MOLECULA INTACTA"] }] };
       const r = await api.mtrConductaAgregarPendientes(items, d);
       t.cierto(r.agregados.indexOf("CREATININA") >= 0, "el paquete se disparó y se vieron filas nuevas");
       t.cierto(r.agregados.indexOf("PTH") >= 0, "el individual se agregó y se verificó en la tabla");
@@ -646,7 +659,7 @@ module.exports = {
       const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(btnAgregar));
       d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
 
-      const items = { paquete: [{ clave: "GLUCOSA", nombre: "Glicemia" }], individuales: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", liTexto: "HEMOGLOBINA" }] };
+      const items = { paquete: [{ clave: "GLUCOSA", nombre: "Glicemia" }], individuales: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", liTextos: ["HEMOGLOBINA"] }] };
       const r = await api.mtrConductaAgregarPendientes(items, d);
       t.cierto(r.fallidos.some((f) => f.clave === "GLUCOSA"), "sin Paquetes, el grupo del paquete no se puede confirmar");
       t.cierto(r.agregados.indexOf("HEMOGLOBINA") >= 0, "el individual no depende del paquete");
@@ -655,12 +668,69 @@ module.exports = {
       const tabla = mockTabla([]);
       const d = mockDocConducta({ tabla, lis: [] });   // ningún <li> disponible
       const items = { paquete: [], individuales: [
-        { clave: "ALBUMINA", nombre: "Albúmina", liTexto: "ALBUMINA EN SUERO U OTROS FLUIDOS" },
-        { clave: "FOSFORO", nombre: "Fósforo", liTexto: "FOSFORO EN SUERO U OTROS FLUIDOS" },
+        { clave: "ALBUMINA", nombre: "Albúmina", liTextos: ["ALBUMINA EN SUERO U OTROS FLUIDOS"] },
+        { clave: "FOSFORO", nombre: "Fósforo", liTextos: ["FOSFORO EN SUERO U OTROS FLUIDOS"] },
       ] };
       const r = await api.mtrConductaAgregarPendientes(items, d);
       t.igual(r.agregados.length, 0);
       t.igual(r.fallidos.length, 2, "los dos quedan fallidos, cada uno registrado — ninguno bloquea al otro");
+    });
+
+    // Distinto del caso de arriba: aquí el <li> SÍ existe y el clic SÍ se dispara, pero la
+    // fila nunca aparece en la tabla — nunca se debe dar por agregado un clic que no se
+    // verificó de verdad.
+    await t.casoAsync("mtrConductaAgregarPendientes: el clic se dispara pero ninguna fila nueva aparece — queda fallido, nunca se asume que sirvió", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });
+      const btnAgregar = mockBoton("Agregar", {});   // clic real, pero no toca la tabla
+      const li = mockLi("HEMOGLOBINA", () => d._agregarBoton(btnAgregar));
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+
+      const items = { paquete: [], individuales: [{ clave: "HEMOGLOBINA", nombre: "Hemoglobina", liTextos: ["HEMOGLOBINA"] }] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.cierto(li._clicado && btnAgregar._clicado, "el gesto sí se disparó de punta a punta");
+      t.igual(r.agregados.length, 0, "pero sin fila nueva en la tabla, no cuenta como agregado");
+      t.cierto(r.fallidos.some((f) => f.clave === "HEMOGLOBINA"));
+    });
+
+    // v17.36.0 — la RAC exige sus DOS búsquedas: si una tiene éxito y la otra no, la clave
+    // entera queda fallida ("no se pide media RAC") — nunca se cuenta como agregada con
+    // solo un componente en la tabla.
+    await t.casoAsync("mtrConductaAgregarPendientes: RAC con sus DOS búsquedas exitosas cuenta como agregada — nunca dispara el paquete", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });   // sin botón "Paquetes": si algo lo necesitara, fallaría
+      // Cada "Agregar" se deshabilita a sí mismo tras su propio clic: sin esto, la segunda
+      // búsqueda encontraría el "Agregar" ya usado de la primera (mismo `document`, mismo
+      // botón nunca se quita) en vez del suyo propio — igual que un botón real deshabilitado
+      // tras usarse una vez.
+      const liMicro = mockLi("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", () => {
+        let btn; btn = mockBoton("Agregar", { alClick: () => { btn.disabled = true; setTimeout(() => tabla._agregarFila("903026"), 0); } });
+        d._agregarBoton(btn);
+      });
+      const liCreatOrina = mockLi("CREATININA EN ORINA PARCIAL", () => {
+        let btn; btn = mockBoton("Agregar", { alClick: () => { btn.disabled = true; setTimeout(() => tabla._agregarFila("903876"), 0); } });
+        d._agregarBoton(btn);
+      });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [liMicro, liCreatOrina] : base(sel)))(d.querySelectorAll);
+
+      const items = { paquete: [], individuales: [{ clave: "RAC", nombre: "RAC", liTextos: ["MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", "CREATININA EN ORINA PARCIAL"] }] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.cierto(r.agregados.indexOf("RAC") >= 0, "las dos búsquedas se vieron en la tabla");
+      t.igual(r.fallidos.length, 0);
+    });
+    await t.casoAsync("mtrConductaAgregarPendientes: RAC con solo UNA de sus dos búsquedas exitosas queda fallida entera — no se pide media RAC", async () => {
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });
+      const liMicro = mockLi("MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", () => {
+        d._agregarBoton(mockBoton("Agregar", { alClick: () => setTimeout(() => tabla._agregarFila("903026"), 0) }));
+      });
+      // "CREATININA EN ORINA PARCIAL" no está en pantalla: su búsqueda falla.
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [liMicro] : base(sel)))(d.querySelectorAll);
+
+      const items = { paquete: [], individuales: [{ clave: "RAC", nombre: "RAC", liTextos: ["MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", "CREATININA EN ORINA PARCIAL"] }] };
+      const r = await api.mtrConductaAgregarPendientes(items, d);
+      t.igual(r.agregados.length, 0, "una sola de las dos búsquedas no basta");
+      t.cierto(r.fallidos.some((f) => f.clave === "RAC"));
     });
 
     // ---------- isOrdenLabsConductaHoy / markOrdenLabsConductaHoy ----------
