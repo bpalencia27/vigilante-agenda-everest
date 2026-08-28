@@ -61,6 +61,22 @@ function boton(texto, visible) {
     getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: 10, top: 20, width: 80, height: 30, right: 90 }),
   };
 }
+// v17.34.0 — "Historial" a la izquierda de "Paquetes", MISMO renglón (top:20, igual que
+// boton("Paquetes")), pegado (right:90 de Historial = left:90 de Paquetes en boton()). Con
+// esto mtrAnclaOrdenarPendientes encuentra el par real y descarta cualquier otro
+// "Historial" que no comparta el renglón (p. ej. el de Medicamentos, más abajo).
+function botonHistorial(visible) {
+  return {
+    textContent: "Historial",
+    offsetParent: visible === false ? null : {},
+    // v17.34.0 — a propósito NO pegado a boton("Paquetes") (left:10): con un hueco de por
+    // medio, el punto medio real ((rH.left+rP.right)/2) queda lejos de CUALQUIER borde
+    // individual de los dos botones — si una prueba solo comprobara "coincide con
+    // rP.left" o "con rH.left", una mutación que centrara sobre el botón equivocado
+    // podría colar sin que la prueba lo notara.
+    getBoundingClientRect: () => (visible === false ? { width: 0, height: 0 } : { left: -130, top: 20, width: 70, height: 30, right: -60 }),
+  };
+}
 // v17.24.0 — el ancla del widget de farmacia no es texto, es la clase real confirmada
 // por la grabación del 28-ago (DIAGNOSTICO_CONDUCTA_DOM.js): el botón "+" de reformular.
 function botonReformular(visible) {
@@ -102,6 +118,7 @@ module.exports = {
     "mtrBotonFarmacoConducta", "mtrWidgetFarmacoDatos", "mtrWidgetFarmacoTick", "_cwfEstadoParaTest", "_cwfResetParaTest",
     "mtrItemsOrdenarConducta", "mtrOrdenarLabsConductaAhora", "isOrdenLabsConductaHoy", "markOrdenLabsConductaHoy",
     "mtrWidgetOrdenarConductaTick", "_cwoEstadoParaTest", "_cwoResetParaTest",
+    "mtrAnclaOrdenarPendientes", "mtrPosicionPanelJuntoA",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -555,10 +572,72 @@ module.exports = {
       t.falso(api.isOrdenLabsConductaHoy(null));
     });
 
+    // ---------- mtrAnclaOrdenarPendientes ----------
+    t.caso("mtrAnclaOrdenarPendientes: encuentra el par Historial+Paquetes del MISMO renglón, no cualquiera", () => {
+      const historialCorrecto = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: -70, top: 20, width: 70, height: 30, right: 0 }) };
+      const historialDeMedicamentos = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: 10, top: 500, width: 70, height: 30, right: 80 }) };
+      const d = docConducta([historialDeMedicamentos, historialCorrecto, boton("Paquetes")]);
+      const ancla = api.mtrAnclaOrdenarPendientes(d);
+      t.cierto(!!ancla, "encuentra el ancla");
+      t.igual(ancla.historial, historialCorrecto, "elige el Historial del mismo renglón que Paquetes, no el de Medicamentos");
+    });
+    t.caso("mtrAnclaOrdenarPendientes: sin 'Paquetes' visible, null", () => {
+      const d = docConducta([botonHistorial()]);
+      t.igual(api.mtrAnclaOrdenarPendientes(d), null);
+    });
+    t.caso("mtrAnclaOrdenarPendientes: 'Paquetes' visible pero sin ningún 'Historial' en el mismo renglón, null", () => {
+      const historialLejano = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: 10, top: 500, width: 70, height: 30, right: 80 }) };
+      const d = docConducta([historialLejano, boton("Paquetes")]);
+      t.igual(api.mtrAnclaOrdenarPendientes(d), null);
+    });
+    t.caso("mtrAnclaOrdenarPendientes: fuera de Conducta, null aunque los botones existan", () => {
+      const d = { querySelector: () => null, querySelectorAll: (sel) => (sel === "button" ? [botonHistorial(), boton("Paquetes")] : []) };
+      t.igual(api.mtrAnclaOrdenarPendientes(d), null);
+    });
+    t.caso("mtrAnclaOrdenarPendientes: doc ilegible no revienta, devuelve null", () => {
+      t.noLanza(() => api.mtrAnclaOrdenarPendientes({ querySelector() { throw new Error("boom"); } }));
+    });
+
+    // ---------- mtrPosicionPanelJuntoA ----------
+    t.caso("mtrPosicionPanelJuntoA: con espacio de sobra, se abre a la DERECHA del ancla", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 1024;
+      const left = c.api.mtrPosicionPanelJuntoA({ left: 10, right: 90, top: 20 }, 280);
+      t.igual(left, 100, "right(90) + 10, con espacio de sobra hasta 1024");
+    });
+    t.caso("mtrPosicionPanelJuntoA: reportado en consultorio — sin espacio a la derecha, se abre a la IZQUIERDA en vez de encogerse", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 400;   // "Paquetes" cerca del borde derecho de una ventana angosta
+      const rect = { left: 300, right: 380, top: 20 };
+      const left = c.api.mtrPosicionPanelJuntoA(rect, 280);
+      // A la derecha no cabe (380+10+280=670 > 400-8): se abre a la izquierda del ancla.
+      t.igual(left, 300 - 280 - 10, "left(300) - anchoPanel(280) - 10, nunca deja que el navegador lo encoja");
+    });
+    t.caso("mtrPosicionPanelJuntoA: cae a la izquierda del ancla, pero AÚN ASÍ se sale por la derecha — el segundo recorte lo trae de vuelta", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 295;
+      // No cabe a la derecha (320+10+280=610 > 287), así que cae a la izquierda del ancla
+      // (300-280-10=10) — un valor ya positivo, que el primer recorte (contra el borde
+      // izquierdo) no toca. Pero 10+280=290 SÍ se sale del borde derecho (295-8=287): hace
+      // falta el SEGUNDO recorte para traerlo de vuelta a 8. Vector elegido a propósito
+      // para que ningún recorte por sí solo explique el resultado.
+      const left = c.api.mtrPosicionPanelJuntoA({ left: 300, right: 320, top: 20 }, 280);
+      t.igual(left, 8, "el recorte contra el borde derecho debe ganar, aunque la izquierda ya diera un valor positivo");
+    });
+    t.caso("mtrPosicionPanelJuntoA: si el panel es más ancho que toda la ventana, prioriza no salirse por la izquierda (caso degenerado, sin solución perfecta)", () => {
+      const c = cargar({ silencioso: true });
+      c.env.win.innerWidth = 200;   // más angosto que el panel mismo: no hay dónde quepa completo
+      const left = c.api.mtrPosicionPanelJuntoA({ left: 50, right: 130, top: 20 }, 280);
+      t.igual(left, 8, "se ancla al margen izquierdo — el panel se saldrá por la derecha, pero nunca por la izquierda");
+    });
+    t.caso("mtrPosicionPanelJuntoA: sin window.innerWidth disponible, usa un ancho de reserva sensato (1024) sin reventar", () => {
+      t.noLanza(() => api.mtrPosicionPanelJuntoA({ left: 10, right: 90, top: 20 }, 280));
+    });
+
     // ---------- mtrWidgetOrdenarConductaTick ----------
     t.caso("mtrWidgetOrdenarConductaTick: apagado por S.conductaWidgets=false, no pinta ni deja el botón visible", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = false;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -566,26 +645,34 @@ module.exports = {
       t.falso(el && el.style.display !== "none", "sin el toggle encendido, no debe quedar visible");
     });
 
-    t.caso("mtrWidgetOrdenarConductaTick: encendido, con pendientes — botón visible, DEBAJO del ancla (no a su derecha)", () => {
+    // v17.34.0 — encargo del médico: "literal en medio del botón de Historial y Paquetes,
+    // justo debajo". El punto medio va del borde izquierdo de Historial al borde derecho
+    // de Paquetes; el botón se centra ahí con `transform:translateX(-50%)` (ver CSS), así
+    // que `left` en el estilo ES el punto medio, no el borde izquierdo del botón.
+    t.caso("mtrWidgetOrdenarConductaTick: encendido, con pendientes — botón visible, CENTRADO entre Historial y Paquetes, debajo de los dos", () => {
       const c = cargar({ silencioso: true });
+      const btnHistorial = botonHistorial();
       const btnPaquetes = boton("Paquetes");
-      cablearHistoriaConducta(c.env, "1098765432", [btnPaquetes]);
+      cablearHistoriaConducta(c.env, "1098765432", [btnHistorial, btnPaquetes]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
       const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
       t.cierto(!!el, "el botón debe existir en el DOM");
       t.falso(el.style.display === "none", "debe quedar visible");
-      t.igual(el.style.left, Math.round(btnPaquetes.getBoundingClientRect().left) + "px",
-        "se alinea con el borde izquierdo del botón real — el médico pidió «debajo», no «a la derecha»");
-      t.igual(el.style.top, Math.round(btnPaquetes.getBoundingClientRect().bottom + 8) + "px", "queda DEBAJO del ancla, no a su lado");
+      const rH = btnHistorial.getBoundingClientRect();
+      const rP = btnPaquetes.getBoundingClientRect();
+      const centroEsperado = Math.round((rH.left + rP.right) / 2);
+      const topEsperado = Math.round(Math.max(rH.bottom, rP.bottom) + 8);
+      t.igual(el.style.left, centroEsperado + "px", "el punto medio entre Historial y Paquetes, no el borde de uno solo");
+      t.igual(el.style.top, topEsperado + "px", "queda DEBAJO de los dos, no a su lado");
       t.cierto(el.textContent.indexOf("2") >= 0, "el rótulo cuenta los pendientes");
       t.falso(el.disabled, "clicable: todavía no se ha ordenado hoy");
     });
 
     t.caso("mtrWidgetOrdenarConductaTick: sin nada pendiente, el botón se oculta (no invita a ordenar la nada)", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_AL_DIA);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -595,7 +682,21 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: sin botón 'Paquetes' visible, el botón nuevo también se oculta — mismo ancla, misma regla", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", []);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial()]);
+      c.api.__S.conductaWidgets = true;
+      c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
+      c.api.mtrWidgetOrdenarConductaTick();
+      const el = c.env.doc.getElementById("vgl-cw-ordenar-btn");
+      t.falso(el && el.style.display !== "none");
+    });
+
+    // v17.34.0 — el ancla ahora exige LOS DOS botones: si falta "Historial" (o si el único
+    // "Historial" visible es el de otra sección, como Medicamentos, en otro renglón), el
+    // botón se oculta en vez de adivinar dónde ponerse.
+    t.caso("mtrWidgetOrdenarConductaTick: 'Paquetes' sin su 'Historial' en el mismo renglón, se oculta — nunca ancla a un botón de otra sección", () => {
+      const c = cargar({ silencioso: true });
+      const historialDeOtroRenglon = { textContent: "Historial", offsetParent: {}, getBoundingClientRect: () => ({ left: 10, top: 500, width: 70, height: 30, right: 80 }) };
+      cablearHistoriaConducta(c.env, "1098765432", [historialDeOtroRenglon, boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -605,7 +706,7 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: ya ordenado hoy — botón deshabilitado, dice «Ordenado hoy», sigue visible (no desaparece sin más)", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.markOrdenLabsConductaHoy("1098765432", ["CREATININA"]);
@@ -618,12 +719,12 @@ module.exports = {
 
     t.caso("mtrWidgetOrdenarConductaTick: cambiar de paciente reinicia el estado interno", () => {
       const c = cargar({ silencioso: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
       t.igual(c.api._cwoEstadoParaTest().docPrevio, "1098765432");
-      cablearHistoriaConducta(c.env, "5551234567", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "5551234567", [botonHistorial(), boton("Paquetes")]);
       c.api.mtrWidgetOrdenarConductaTick();
       t.igual(c.api._cwoEstadoParaTest().docPrevio, "5551234567");
     });
@@ -638,8 +739,7 @@ module.exports = {
     // ---------- integración de punta a punta: el clic real ----------
     await t.casoAsync("Integración: un clic en el botón ordena de verdad y lo deja marcado — sin pantalla intermedia, como pidió el médico", async () => {
       const c = cargarParaOrdenar();
-      const btnPaquetes = boton("Paquetes");
-      cablearHistoriaConducta(c.env, "1098765432", [btnPaquetes]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -661,7 +761,7 @@ module.exports = {
     // está en vuelo, el guardarraíl es `_cwoEnCurso`.
     await t.casoAsync("Integración: dos clics antes de que termine el primero solo generan UNA petición de guardado", async () => {
       const c = cargarParaOrdenar({ delayMs: 15 });   // simula latencia real de red
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();
@@ -679,7 +779,7 @@ module.exports = {
 
     await t.casoAsync("Integración: si la orden falla, el botón queda disponible para reintentar — nunca bloqueado por un fallo", async () => {
       const c = cargarParaOrdenar({ sinPaciente: true });
-      cablearHistoriaConducta(c.env, "1098765432", [boton("Paquetes")]);
+      cablearHistoriaConducta(c.env, "1098765432", [botonHistorial(), boton("Paquetes")]);
       c.api.__S.conductaWidgets = true;
       c.api.mtrCacheResumenGuardar("1098765432", RESUMEN_ORDENAR_BOTON);
       c.api.mtrWidgetOrdenarConductaTick();

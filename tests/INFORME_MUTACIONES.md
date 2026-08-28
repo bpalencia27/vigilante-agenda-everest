@@ -6,6 +6,20 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.34.0 — 28-ago-2026 (panel angosto corregido, botón centrado entre Historial y Paquetes, "Generar todo" retirado)
+
+Tres cambios de comportamiento verificados con mutación (más la retirada de "Generar
+todo", que no tiene mutación propia — es código eliminado, no lógica nueva). Restaurado y
+verificado con `diff` contra copia intacta tras cada mutación. Banco en verde:
+**2.564/2.564**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `mtrAnclaOrdenarPendientes`: la tolerancia de "mismo renglón" (`Math.abs(rb.top - rPaquetes.top) > 12`) → `if (false)` (acepta cualquier "Historial", de cualquier sección) | *mtrAnclaOrdenarPendientes: encuentra el par Historial+Paquetes del MISMO renglón, no cualquiera* y *'Paquetes' visible pero sin ningún 'Historial' en el mismo renglón, null* (suite_71) |
+| 2 | `mtrPosicionPanelJuntoA`: `cabeADerecha` forzado a `true` siempre (nunca voltea a la izquierda) | *reportado en consultorio — sin espacio a la derecha, se abre a la IZQUIERDA* (suite_71) |
+| 3 | `mtrPosicionPanelJuntoA`: el segundo recorte (contra el borde derecho tras caer a la izquierda) → `if (false)` | *cae a la izquierda del ancla, pero AÚN ASÍ se sale por la derecha — el segundo recorte lo trae de vuelta* (suite_71) — vector elegido a propósito (300/320, ventana 295) para que el primer recorte por sí solo NO explicara el resultado |
+| 4 | `mtrWidgetOrdenarConductaTick`: `centroX = (rH.left + rP.right) / 2` → `centroX = rP.left` (centra sobre "Paquetes" solo, ignora "Historial") | *encendido, con pendientes — botón visible, CENTRADO entre Historial y Paquetes* (suite_71) — con la primera geometría de prueba (Historial pegado a Paquetes) esta mutación NO caía por coincidencia numérica (el punto medio y `rP.left` daban el mismo valor); se corrigió la geometría del `botonHistorial()` de prueba (con un hueco real entre los dos botones, como en la pantalla real) para que ambos valores diverjan y la mutación quedara genuinamente cazada |
+
 ## v17.33.0 — 28-ago-2026 (el interruptor de Ajustes ya describe el botón que sí actúa)
 
 Solo texto de interfaz (la descripción del interruptor "Exámenes y órdenes en Conducta"):

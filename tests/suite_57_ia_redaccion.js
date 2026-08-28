@@ -888,7 +888,9 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
       const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
-      t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
+      // v17.34.0 — "Generar todo" se retiró (encargo del médico: "casi ni lo uso, más bien
+      // estorba"); queda un solo disparador de generación.
+      t.igual(usos, 1, "el disparador de generación lee fresco en el momento del clic");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
@@ -1609,20 +1611,6 @@ module.exports = {
       t.cierto(/if \(modoGen === modo\) \{[\s\S]{0,200}salida\.value = _borradores\[modoGen\]\.texto/.test(fn), "solo pinta la pantalla si el chip activo sigue siendo el que generó");
     });
 
-    // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
-    // deshabilitaba "Generar" al arrancar, pero "Generar" no hacía lo mismo con
-    // "Generar todo" — dos cadenas de generación podían correr solapadas, y la primera
-    // en terminar rehabilitaba ambos botones a mitad de la cadena del lote de la otra,
-    // rompiendo el candado que v17.6.11 puso a propósito. Vive dentro del cierre de
-    // mtrAbrirPanelRedaccion — se protege por texto fuente.
-    t.caso("v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)", () => {
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen)');
-      const fn = src.slice(idx - 100, idx + 400);
-      t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
-      t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
-    });
-
     // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el nombre real del paciente
     // (resumen._nombrePaciente, tomado de la cita de la agenda) tiene que LLEGAR a los
     // 4 sitios que envían texto libre a Gemini para que el censor de mayúsculas
@@ -1633,7 +1621,8 @@ module.exports = {
       t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
       const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
-      t.igual(ocurrenciasOpts, 2, "los dos objetos opts (Generar y Generar todo) deben incluir el nombre");
+      // v17.34.0 — "Generar todo" se retiró; queda un solo objeto opts.
+      t.igual(ocurrenciasOpts, 1, "el objeto opts de Generar debe incluir el nombre");
       t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
     });
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.33.0
+// @version     17.34.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.33.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.34.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5509,6 +5509,64 @@
     } catch (e) { return null; }
   }
 
+  // v17.34.0 — encargo del médico: el botón "Ordenar pendientes" debe quedar EXACTAMENTE
+  // centrado entre "Historial" y "Paquetes", justo debajo de los dos, sin tapar nada.
+  // OJO: la pantalla de Conducta tiene DOS botones de texto "Historial" (el de Ordenamientos
+  // y el de Medicamentos, más abajo) — se descarta cualquiera que no esté en el MISMO
+  // renglón que "Paquetes" (mismo `top`, con 12px de tolerancia por redondeo de layout), en
+  // vez de tomar el primero que aparezca en el DOM. Si no se encuentran los dos, el botón se
+  // oculta — mismo principio que mtrBotonOrdenarConducta: nunca se adivina un ancla.
+  function mtrAnclaOrdenarPendientes(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll("button"));
+      const paquetes = botones.find((b) => _vglVisibleDeVerdad(b)
+        && stripAccents(String(b.textContent || "").trim().toLowerCase()) === "paquetes");
+      if (!paquetes) return null;
+      const rPaquetes = paquetes.getBoundingClientRect();
+      let historial = null, mejorDist = Infinity;
+      for (const b of botones) {
+        if (b === paquetes || !_vglVisibleDeVerdad(b)) continue;
+        if (stripAccents(String(b.textContent || "").trim().toLowerCase()) !== "historial") continue;
+        const rb = b.getBoundingClientRect();
+        if (Math.abs(rb.top - rPaquetes.top) > 12) continue;   // descarta el de Medicamentos
+        const dist = Math.abs(rb.left - rPaquetes.left);
+        if (dist < mejorDist) { mejorDist = dist; historial = b; }
+      }
+      if (!historial) return null;
+      return { historial: historial, paquetes: paquetes };
+    } catch (e) { return null; }
+  }
+
+  // =====================================================================
+  //  v17.34.0 — REPORTE EN VIVO: el panel de #vgl-cw-examenes se abrió pegado al borde
+  //  derecho de la pantalla y el texto quedó partido letra por letra, ilegible.
+  //  ------------------------------------------------------------------
+  //  Causa: `left: r.right + 10` sin límite. Un `<div>` con `position:fixed` y solo
+  //  `left` fijado (sin `right`, sin `width` propio, solo `max-width`) se dimensiona por
+  //  "shrink-to-fit" contra el CSS 2.1 §10.3.7 — si el espacio libre entre ese `left` y el
+  //  borde derecho de la ventana es menor que el `max-width`, el navegador ENCOGE el panel
+  //  a ese espacio en vez de dejarlo salirse de pantalla. Con el botón "Paquetes" cerca del
+  //  borde derecho (layout real de Everest, nunca visto así en el arnés), el panel se
+  //  reducía a esa franja angosta.
+  //  Arreglo: decidir el lado en JS, no dejarlo al navegador. Si no cabe a la derecha del
+  //  ancla, se abre a la IZQUIERDA; si tampoco cabe ahí (ventana angosta), se recorta contra
+  //  los dos bordes — nunca más ancho de lo que hay, nunca negativo. `anchoPanel` es el
+  //  mismo valor que la hoja de estilos ya usa como `width` fijo (ver la regla de
+  //  #vgl-cw-examenes/#vgl-cw-farmaco): con un `width` real (no solo `max-width`) y un
+  //  `left` ya garantizado seguro, el shrink-to-fit deja de tener margen para actuar.
+  // =====================================================================
+  function mtrPosicionPanelJuntoA(rect, anchoPanel, margenBorde) {
+    const m = (typeof margenBorde === "number") ? margenBorde : 8;
+    const anchoVentana = (typeof window !== "undefined" && window.innerWidth) ? window.innerWidth : 1024;
+    const cabeADerecha = (rect.right + 10 + anchoPanel) <= (anchoVentana - m);
+    let left = cabeADerecha ? (rect.right + 10) : (rect.left - anchoPanel - 10);
+    if (left < m) left = m;
+    if (left + anchoPanel > anchoVentana - m) left = Math.max(m, anchoVentana - m - anchoPanel);
+    return Math.round(left);
+  }
+
   // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
   // mostrar. Nunca decide nada nuevo — reusa mtrTableroClinico, el mismo motor que ya
   // pinta la Sección 3 del Panel del paciente, para que las dos vistas nunca diverjan.
@@ -5584,7 +5642,7 @@
       }
       const r = boton.getBoundingClientRect();
       widget.style.position = "fixed";
-      widget.style.left = Math.round(r.right + 10) + "px";
+      widget.style.left = mtrPosicionPanelJuntoA(r, 280) + "px";
       widget.style.top = Math.round(r.top) + "px";
       widget.style.display = "";
 
@@ -5678,8 +5736,8 @@
       if (!docId) { if (el) el.style.display = "none"; _cwoDocPrevio = null; return; }
       if (docId !== _cwoDocPrevio) { _cwoDocPrevio = docId; }
 
-      const boton = mtrBotonOrdenarConducta(d);
-      if (!boton) { if (el) el.style.display = "none"; return; }
+      const ancla = mtrAnclaOrdenarPendientes(d);
+      if (!ancla) { if (el) el.style.display = "none"; return; }
       let resumen = null;
       try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
       if (!resumen) { if (el) el.style.display = "none"; return; }
@@ -5694,10 +5752,18 @@
         btn.type = "button";
         document.body.appendChild(btn);
       }
-      const r = boton.getBoundingClientRect();
+      // v17.34.0 — centrado EXACTO entre "Historial" y "Paquetes", justo debajo de los
+      // dos (encargo del médico): el punto medio va del borde izquierdo de Historial al
+      // borde derecho de Paquetes, y el botón se centra sobre ese punto con `transform`
+      // (ver CSS) — así no hace falta medir el ancho propio del botón, que cambia según
+      // el texto ("Ordenar pendientes (3)" vs "✓ Ordenado hoy").
+      const rH = ancla.historial.getBoundingClientRect();
+      const rP = ancla.paquetes.getBoundingClientRect();
+      const centroX = (rH.left + rP.right) / 2;
+      const debajoDeAmbos = Math.max(rH.bottom, rP.bottom) + 8;
       btn.style.position = "fixed";
-      btn.style.left = Math.round(r.left) + "px";
-      btn.style.top = Math.round(r.bottom + 8) + "px";
+      btn.style.left = Math.round(centroX) + "px";
+      btn.style.top = Math.round(debajoDeAmbos) + "px";
 
       if (_cwoEnCurso) { btn.style.display = ""; return; }   // no se repinta a mitad de un clic en curso
 
@@ -5841,7 +5907,7 @@
       }
       const r = boton.getBoundingClientRect();
       widget.style.position = "fixed";
-      widget.style.left = Math.round(r.right + 10) + "px";
+      widget.style.left = mtrPosicionPanelJuntoA(r, 280) + "px";
       widget.style.top = Math.round(r.top) + "px";
       widget.style.display = "";
 
@@ -13337,10 +13403,11 @@ _vglOfrecerDeshacer(btn);
          !important sin excepción (CLAUDE.md, misma regla que #vgl-cw-examenes arriba). */
       button#vgl-cw-ordenar-btn{
         position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);
-        max-width:220px;cursor:pointer;user-select:none;
+        max-width:220px;white-space:nowrap;cursor:pointer;user-select:none;
         background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
         padding:6px 12px;font-size:var(--t-micro);font-weight:700;
         color:var(--c-verde) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+        transform:translateX(-50%);   /* v17.34.0 — centrado exacto sobre el punto medio que ya calcula JS */
       }
       button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.75}
       button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:var(--fg3) !important}
@@ -35873,7 +35940,6 @@ _vglOfrecerDeshacer(btn);
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
         + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
-        + '<button id="vgl-ia-generar-todo" class="vgl-agm-btn sec" title="Genera los borradores de las TRES casillas en cadena (las notas largas con el modelo potente, las cortas con la rotación). Después usted las revisa e inserta una por una.">✨ Generar todo (3)</button>'
         + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
         + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
@@ -36124,94 +36190,6 @@ _vglOfrecerDeshacer(btn);
         }
       })();
 
-      const _generarPara = async (modoX) => {
-        const optsX = {
-          estiloEjemplos: mtrEstiloLeer(),
-          nombrePaciente: resumen._nombrePaciente,
-          pregunta: scrubPII($("#vgl-ia-pregunta").value),
-          indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
-          datosExtra: mtrDatosExtraLeer(resumen._docId),
-          contextoLibre: libreAhora().combinado,
-          jsonV68: (modoX === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
-          // v17.0.0 — ancla del control anterior (solo Enfermedad Actual, y solo si el
-          // médico tiene carpeta local con historial de este paciente).
-          anclaControlAnterior: (modoX === "enfermedad_actual") ? _anclaPrevia : null,
-        };
-        const r = await mtrGeminiRedactar(hoja, modoX, optsX);
-        if (r.ok && modoX === "analisis_plan") {
-          try {
-            const d = new Date();
-            const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
-            // v17.8.1 — hallazgo #59. Sin documento del paciente, el encabezado que se
-            // inserta EN LA HISTORIA CLÍNICA quedaba literalmente «#PACIENTE_SIN_ID_#...».
-            // Una palabra de programador dentro de un documento clínico firmado. Si no hay
-            // documento, no se escribe encabezado: es la regla de la casa (casilla vacía
-            // antes que dato inventado) aplicada al documento legal.
-            if (resumen._docId) {
-              r.texto = r.texto.replace(/\[ID\]/g, String(resumen._docId)).replace(/\[A[NÑ]O_MES\]/g, anioMes);
-            } else {
-              // Sin documento se quita LA LÍNEA del encabezado, no el texto. (Un primer
-              // intento vaciaba `r.texto` entero: eso habría borrado el análisis y plan
-              // completo, que es justo lo que el médico va a firmar. Un arreglo que destruye
-              // trabajo es peor que el defecto que arregla.)
-              r.texto = String(r.texto).split("\n")
-                .filter((l) => l.indexOf("[ID]") < 0)
-                .join("\n").replace(/^\n+/, "");
-              r.sinEncabezado = true;
-            }
-          } catch (e) {}
-        }
-        return r;
-      };
-
-      // v16.6.1 — «Generar todo»: las tres casillas EN CADENA (secuencial a propósito:
-      // la cuota gratuita castiga las ráfagas y la cadena de modelos ya rota sola en cada
-      // llamada). Si faltan los datos críticos del Análisis y plan, esa casilla se SALTA
-      // con nota y las otras tres salen igual — el cuadro de críticos aparece al final.
-      const btnTodo = $("#vgl-ia-generar-todo");
-      if (btnTodo) btnTodo.addEventListener("click", async () => {
-        if (!mtrLeerClaveGemini()) { estado.textContent = "Falta la clave de Gemini (Ajustes → Redacción IA)."; return; }
-        _congelarChips(true);   // v17.6.11 — la cadena entera corre sin cambiar de casilla
-        const ordenTodo = ["enfermedad_actual", "analisis_plan", "recomendaciones"];
-        // El único crítico BLOQUEANTE del lote es la categoría de riesgo (TFG y
-        // medicamentos son blandos: la nota los declara). Se evalúa directo — no vía
-        // _criticosFaltantes(), que responde por el MODO ACTIVO y aquí el activo puede
-        // ser otra casilla.
-        let faltanCrit = [];
-        try {
-          const extra = mtrDatosExtraLeer(resumen._docId) || {};
-          if (!(resumen.riesgo && resumen.riesgo.categoria) && !extra.categoriaRiesgoConfirmada) faltanCrit.push("riesgo");
-        } catch (e) {}
-        btnTodo.disabled = true; btnGen.disabled = true;
-        let hechas = 0, saltadas = 0;
-        try { uxTrack("fn.ia.gen.todo"); } catch (e) {}
-        for (let i = 0; i < ordenTodo.length; i++) {
-          const m = ordenTodo[i];
-          const etiq = (MTR_CASILLAS_REDACTOR[m] || {}).etiqueta || m;
-          if (m === "analisis_plan" && faltanCrit.length) {
-            _borradores[m] = { texto: "", original: "", estado: "Saltado: falta la categoría de riesgo (genérelo individual y complete el cuadro)." };
-            saltadas++;
-            continue;
-          }
-          estado.textContent = "Generando " + (i + 1) + "/3: " + etiq + " (" + mtrModeloGemini(m) + ")…";
-          _ultimoModelo = mtrModeloGemini(m);
-          const r = await _generarPara(m);
-          if (r.ok) {
-            _borradores[m] = { texto: r.texto, original: r.texto, estado: mtrEstadoBorrador(r) };
-            hechas++;
-          } else {
-            _borradores[m] = { texto: "", original: "", estado: "No se generó (" + (r.motivo || "desconocido") + ")." };
-          }
-          if (m === modo) { salida.value = _borradores[m].texto; textoGeneradoOriginal = _borradores[m].original; habilitarPost(salida.value); _pintarCifras(); }
-        }
-        _congelarChips(false);
-        btnTodo.disabled = false; btnGen.disabled = false;
-        estado.textContent = "✓ " + hechas + " borrador(es) listos" + (saltadas ? " · 1 saltado (Análisis y plan: complete los datos críticos)" : "") + ". Revise casilla por casilla e inserte — cada chip guarda el suyo.";
-        const b = _borradores[modo];
-        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); _pintarCifras(); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/3 listas."; }
-        _pintarMeta();
-      });
-
       btnGen.addEventListener("click", async () => {
         const modoGen = modo;   // v17.6.11 — el borrador va a SU casilla aunque el chip cambie a mitad de llamada
         _congelarChips(true);
@@ -36242,17 +36220,11 @@ _vglOfrecerDeshacer(btn);
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
-        // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
-        // deshabilita "Generar" al arrancar (línea de arriba), pero "Generar" no hacía
-        // lo mismo con "Generar todo" — el médico podía disparar las dos cadenas a la
-        // vez, y la que terminara primero llamaba _congelarChips(false) y rehabilitaba
-        // ambos botones A MITAD de la cadena del lote, rompiendo el candado que
-        // v17.6.11 puso a propósito.
-        btnGen.disabled = true; if (btnTodo) btnTodo.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
+        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
         const r = await mtrGeminiRedactar(hoja, modoGen, opts);
-        btnGen.disabled = false; if (btnTodo) btnTodo.disabled = false;
+        btnGen.disabled = false;
         _congelarChips(false);
         if (r.ok) {
           let textoFinal = r.texto;

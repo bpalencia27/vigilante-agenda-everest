@@ -4,6 +4,50 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.34.0] — 2026-08-28 (Reporte en vivo: el panel angosto, el botón mal ubicado, y "Generar todo" fuera)
+
+### 🩹 El panel de exámenes ya no se abre angosto y partido letra por letra
+Reporte en vivo, con pantallazo: al abrir el aviso de "qué ordenar" junto al botón
+"Paquetes", el panel salió pegado al borde derecho de la pantalla, tan angosto que el
+texto se leía partido letra por letra. Causa: el panel se posicionaba con
+`izquierda = borde derecho del botón + 10`, sin límite — cuando ese punto queda cerca del
+borde de la ventana, el navegador ENCOGE el panel al espacio que queda en vez de dejarlo
+salirse (así calcula el ancho cualquier caja con posición fija que solo fija un lado).
+Ahora la posición se decide en el propio script: si no cabe a la derecha, se abre a la
+izquierda del botón; si tampoco cabe ahí, se recorta contra el borde — nunca más angosto
+de lo que hace falta. Corregido en los dos paneles que comparten el mismo patrón (el de
+exámenes y el de seguridad farmacológica).
+
+### 🎯 El botón "Ordenar pendientes" queda literal en medio de "Historial" y "Paquetes"
+Encargo del médico: "quiero que literal esté en medio del botón de historial y paquetes,
+justo debajo, sin afectar la visibilidad de lo demás". El botón (v17.32.0) se ancla ahora
+al punto medio entre los dos botones nativos de Everest, justo debajo de ambos — no solo
+al de "Paquetes" como en la primera entrega. Ojo con el detalle real: la pantalla de
+Conducta tiene DOS botones de texto "Historial" (el de Ordenamientos y el de
+Medicamentos, más abajo); el ancla nuevo descarta cualquiera que no esté en el MISMO
+renglón que "Paquetes", para no terminar centrado contra el botón equivocado.
+
+### 🔬 Diagnóstico en vivo: así es como Everest agrega un paquete — y por qué el botón nuevo no llenaba la misma tabla
+Reporte en vivo: "tampoco pega los laboratorios así como lo hace el botón de Paquetes".
+Diagnóstico corrido por el médico en consulta real (solo forma: método+ruta de red, texto
+de botón, y código/nombre/cantidad de examen — nunca nada del paciente) confirma que
+"Paquetes" + "Agregar" hacen **una sola** petición de red (un `GET` que trae el catálogo
+del paquete) y el resto — las diez filas que aparecen en la tabla — lo arma Everest
+enteramente en el navegador, sin ninguna otra petición; la fila queda pendiente de
+guardarse hasta que el médico use el "Guardar" propio de Everest para toda la consulta.
+Es un mecanismo DISTINTO del que usa el botón nuevo (que crea una orden real, ya guardada,
+por el módulo de Ordenamientos de Everest — el mismo que ya usan las órdenes de PyM desde
+hace meses). Con esa evidencia en la mano, qué hacer con el botón queda como decisión
+pendiente del médico — documentado, no adivinado.
+
+### 🧹 Se retira "Generar todo" del Redactor IA
+Encargo del médico: "casi ni lo uso, más bien estorba". El botón que generaba las tres
+casillas del Redactor (Enfermedad Actual, Análisis y plan, Recomendaciones) en cadena, con
+un solo clic, se retira junto con su lógica exclusiva. Queda "Generar" (una casilla a la
+vez, la de siempre) sin cambios.
+
+---
+
 ## [Versión 17.33.0] — 2026-08-28 (El interruptor de Ajustes ya dice que el botón nuevo SÍ actúa)
 
 ### 🏷️ "Solo avisa" dejó de ser cierto para este interruptor, y el texto ya lo dice

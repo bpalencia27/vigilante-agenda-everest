@@ -167,7 +167,9 @@ module.exports = {
       });
       t.falso(html.indexOf('data-modo="motivo_consulta"') >= 0, "Motivo ya no está: se eliminó del módulo");
       t.falso(html.indexOf('data-modo="comentarios_cronicos"') >= 0, "Ruta Crónicos ya no está: orden del médico del 20-ago");
-      t.cierto(html.indexOf("Generar todo (3)") >= 0, "y el botón de cadena cuenta TRES, no cuatro");
+      // v17.34.0 — "Generar todo" se retiró (encargo del médico: "casi ni lo uso, más
+      // bien estorba"); queda un solo botón de generación.
+      t.falso(html.indexOf("Generar todo") >= 0, "el botón de cadena ya no existe");
       // Y el campo de indicaciones del médico existe
       t.cierto(html.indexOf("vgl-ia-indicaciones") >= 0, "el campo 'Indicaciones para este borrador' está en el panel");
     });
