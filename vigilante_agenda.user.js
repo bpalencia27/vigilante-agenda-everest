@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.6.82
+// @version     17.56.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -29,8 +29,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_notification
-// @updateURL    https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
-// @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt
+// @updateURL    https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt
+// @downloadURL  https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt
 // ==/UserScript==
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -56,8 +56,10 @@
      · Agendamiento ................... openAgendamientoModal (sugerencias + MODO MANUAL)
      · Toma de muestras ............... openLabSoloModal, renderLabDayChips
      · Anulación real ................. _anularCitaAsignadaReal (CancelarCita)
-     · Ficha del paciente ............. mtrFichaVivaFilas / openFichaPacienteModal
-     · Riesgo CV (beta cerrada) ....... openRiesgoModal (bloqueado)
+     · Panel del paciente ............. openPanelPacienteModal (fusionó Ficha/Riesgo/Tablero, v16.8.0)
+     · Riesgo CV · Redacción IA ....... mtrRenderResumenClinicoHtml (lógica viva y probada,
+                                         sin modal propio desde que se retiró openRiesgoModal
+                                         en v17.6.29 — ver INFORME_MUTACIONES.md v17.25.0)
      · Redactor IA .................... mtrAbrirPanelRedaccion, MTR_CASILLAS_REDACTOR
      · Guía paso a paso ............... _acomp* (modo acompañado)
      · Modos oculto y programador ..... Ctrl+Shift+V / Ctrl+Shift+D
@@ -1005,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.6.82";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.56.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -1346,12 +1348,47 @@
   // mayúsculas y con los espacios colapsados ("Resultado  Hematíes " → "RESULTADO HEMATIES").
   const _canonTexto = (s) => stripAccents(String(s || "")).toUpperCase().replace(/\s+/g, " ").trim();
 
+  // =====================================================================
+  //  v17.7.4 — LA MUESTRA VA DECLARADA EN EL NOMBRE, Y MANDA
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago) + DIAGNÓSTICO REAL DE LA PACIENTE: «el módulo de
+  //  laboratorios no está reportando todos los analitos, falta la creatinina». El
+  //  diagnóstico lo cazó: Athenea nombra los exámenes con la nomenclatura del laboratorio,
+  //  y dos analitos DE SANGRE llevan la palabra «orina» DENTRO de su propio nombre:
+  //
+  //      CREATININA EN SUERO. ORINA U OTROS
+  //      GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA
+  //
+  //  El segundo dice literalmente «diferente a orina» y el patrón /\bORINA\b/ se quedaba
+  //  con la palabra suelta. Consecuencia doble y silenciosa: los dos desaparecían de la
+  //  tabla de paraclínicos (absorbidos dentro del bloque «Uroanálisis», 31 analitos
+  //  contados en la paciente real) y, además, la guarda de orina de _matchLabInWhitelist
+  //  los dejaba SIN casar con ninguna casilla — la creatinina sérica, que es la que manda
+  //  el estadio renal, las vigencias y el ANR.
+  //
+  //  Regla: si el nombre declara la muestra («EN SUERO», «SÉRICA», «EN SANGRE», «PLASMA»,
+  //  «DIFERENTE A ORINA»), esa declaración MANDA sobre cualquier mención suelta de orina.
+  //  El laboratorio es explícito a propósito; ignorarlo para quedarse con una subcadena es
+  //  justo el error que este proyecto ya cometió al revés (hemoglobina de orina cayendo en
+  //  la casilla sérica, v12.3.37).
+  // =====================================================================
+  const MTR_MUESTRA_SERICA_RE = /\bEN SUERO\b|\bSERICA\b|\bSERICO\b|\bEN SANGRE\b|\bPLASMA\b|DIFERENTE A ORINA/;
+  function _esMuestraSerica(nombre) {
+    return MTR_MUESTRA_SERICA_RE.test(_canonTexto(nombre));
+  }
+
   // v12.3.37 — ¿Este analito pertenece al panel de ORINA? Primero por su padre
   // (NombreParametroPadre, el campo con que Athenea agrupa los hijos de un panel);
   // como respaldo, por nombre propio SOLO cuando el nombre existe únicamente en orina.
   // Jamás por "LEUCOCITOS"/"HEMATIES"/"HEMOGLOBINA" a secas: esos también son del
   // hemograma EN SANGRE, y confundirlos escribiría sangre en las casillas de orina.
   function _esAnalitoDeOrina(lab) {
+      // v17.7.4 — si el propio nombre declara que la muestra es SUERO/SANGRE/PLASMA, no es
+      // de orina, pase lo que pase con el resto de patrones. Va lo primero a propósito: es
+      // la única señal EXPLÍCITA de muestra que da el laboratorio, y todo lo demás aquí son
+      // inferencias por subcadena. La dirección también importa: tratar un examen de sangre
+      // como si fuera de orina lo hace DESAPARECER de la tabla y de las casillas.
+      if (_esMuestraSerica(lab && (lab.NombreParametro || lab.nombre || lab.examen))) return false;
       const padre = _canonTexto(lab && (lab.NombreParametroPadre || lab.nombreParametroPadre));
       // [confirmado con informe real de laboratorio y captura de pantalla real, aportados
       // en consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel DISTINTO (creatinina en
@@ -1647,7 +1684,16 @@
       if (hayFalla) badges.push("Falla terapéutica");
       const pas = Number(factores.paSistolica), pad = Number(factores.paDiastolica);
       const paDescontrolada = (Number.isFinite(pas) && pas >= 160) || (Number.isFinite(pad) && pad >= 100);
-      if (paDescontrolada) badges.push("PA Descontrolada (" + pas + "/" + pad + ")");
+      // v17.8.1 — hallazgo #87. Esto imprimía literalmente «PA Descontrolada (165/NaN)»
+      // cuando solo se había podido leer la sistólica, y «(165/0)» cuando la diastólica
+      // llegaba en cero — una tensión imposible. «NaN» es una palabra de programador y un
+      // 0 es un dato falso: los dos hacen dudar de la cifra que SÍ es real.
+      if (paDescontrolada) {
+        const dosCifras = Number.isFinite(pas) && Number.isFinite(pad) && pad > 0;
+        badges.push(dosCifras
+          ? "PA Descontrolada (" + pas + "/" + pad + ")"
+          : "PA Descontrolada (" + (Number.isFinite(pas) && pas > 0 ? "sistólica " + pas : "diastólica " + pad) + ")");
+      }
 
       const sinResumen = !resumen;
       const dmSinVerificar = sinResumen && esDiabetico;   // no se puede saber si usa insulina
@@ -2537,6 +2583,49 @@
     }
     return salida;
   }
+  // =====================================================================
+  //  v17.7.1 — EL AVISO QUE FALTABA EN LA TABLA DE PARACLÍNICOS
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago): «el módulo de laboratorios no está reportando todos
+  //  los analitos, falta la creatinina en esta paciente que fue tomada también ahora en
+  //  agosto».
+  //
+  //  La tabla llevaba DOS contadores que se calculaban y no se enseñaban nunca:
+  //    · las solicitudes de Athenea que no se dejaron leer (`__vglIncompleto`, marcado en
+  //      _getAtheneaLabsAutoNucleo y que hasta hoy solo miraba el aviso de PyM);
+  //    · las filas ocultas por tener más de 365 días (`_labViejasOcultas`).
+  //  Con las dos calladas, una lectura A MEDIAS se presentaba con el mismo aspecto que una
+  //  completa, y un examen que sí existe se lee como «no se lo hicieron». Eso es peor que
+  //  no mostrar la tabla: es la regla de la casa —casilla vacía antes que dato inventado—
+  //  incumplida por omisión.
+  //
+  //  Devuelve "" cuando no hay nada que advertir: un aviso que sale siempre no se lee.
+  // =====================================================================
+  function mtrAvisoTablaLabsHtml(datos) {
+    const d = datos || {};
+    const noLeidas = Number(d.solicitudesNoLeidas) || 0;
+    const ocultas = Number(d.viejasOcultas) || 0;
+    const frases = [];
+    if (noLeidas > 0) {
+      frases.push("Athenea no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
+        + " de este paciente, así que esta lista puede estar incompleta: un examen que no aparezca aquí puede estar hecho igual.");
+      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el Portal Athenea.");
+    }
+    if (ocultas > 0) {
+      frases.push(ocultas === 1
+        ? "Además hay 1 resultado de hace más de un año que no se lista aquí."
+        : "Además hay " + ocultas + " resultados de hace más de un año que no se listan aquí.");
+    }
+    if (!frases.length) return "";
+    // Estilo EN LÍNEA a propósito: este modal se pega a document.body, fuera de #vgl-root,
+    // y una clase nuestra sin !important puede perder contra el CSS de Everest. El inline
+    // gana a cualquier regla que no lleve !important (ver CLAUDE.md).
+    return '<div style="margin:0 0 10px;padding:8px 10px;border-radius:6px;'
+      + 'border:1px solid #b45309;background:rgba(180,83,9,.12);color:#fbbf24 !important;'
+      + 'font-size:12px;line-height:1.45">&#9888;&#65039; '
+      + escapeHtml(frases.join(" ")) + "</div>";
+  }
+
   // Verdadero cuando la lectura de Athenea no se pudo completar: o no se pudo leer
   // nada (null) o faltaron solicitudes. Quien afirme "está todo hecho" debe consultarla.
   function atheneaLecturaIncompleta(labs) {
@@ -2613,7 +2702,16 @@
           // casaría aquí con la entrada general UROANALISIS y jamás llegaría a su casilla
           // de componente: si el analito mapea a un componente, se deja pasar a esa ruta.
           if (deOrina && item.key === "UROANALISIS" && _matchUroComponente(lab)) continue;
-          if (item.excluye && item.excluye.some((x) => name.includes(_canonNombreLab(x)))) continue;
+          // v17.7.4 — «CREATININA EN SUERO. ORINA U OTROS» contiene «ORINA» y la exclusión
+          // de la creatinina lo tumbaba, dejando la creatinina SÉRICA sin casar con nada.
+          // Cuando el nombre declara la muestra, la exclusión por «ORINA» no aplica; las
+          // demás (CREATINURIA, DEPURAC, 24 H) siguen intactas porque describen OTRO examen,
+          // no otra muestra del mismo.
+          const _serica = _esMuestraSerica(lab && (lab.NombreParametro || lab.nombre || lab.examen));
+          if (item.excluye && item.excluye.some((x) => {
+              if (_serica && _canonNombreLab(x) === _canonNombreLab("ORINA")) return false;
+              return name.includes(_canonNombreLab(x));
+          })) continue;
           for (const n of item.names) {
               if (name.includes(_canonNombreLab(n))) return item;
           }
@@ -2866,9 +2964,35 @@
   // usable siempre le gana a uno que no lo es, sin importar la fecha; ver
   // _nuevoReemplazaCandidato.
   function _nuevoReemplazaCandidato(previo, nuevo) {
-      // 1) una fila REAL del panel de orina siempre le gana a un respaldo armado con un
-      //    componente suelto (ver el comentario grande de arriba sobre UROANALISIS).
-      if (previo.viaComponente !== nuevo.viaComponente) return !!previo.viaComponente;
+      // 1) una fila REAL del panel de orina le gana a un respaldo armado con componentes
+      //    sueltos (ver el comentario grande de arriba sobre UROANALISIS)... PERO NUNCA SI ES
+      //    MÁS VIEJA.
+      //
+      // v17.8.2 — REPORTE EN CONSULTA (27-ago-2026), y el médico avisa de que es RECURRENTE:
+      // «el botón Auto-Labs Athenea no está teniendo en cuenta el último uroanálisis
+      // realizado». Reproducido con el arnés: Athenea trae una fila REAL del panel del
+      // 07/05/2026 con Resultado «NORMAL» y, además, los 31 componentes del uroanálisis del
+      // 20/08/2026 —el que la propia tabla marca con «Alteraciones detectadas»—. Esta regla
+      // devolvía «gana la fila real» SIN MIRAR LA FECHA, así que Auto-Labs escribía en la
+      // historia el texto «NORMAL» y la fecha de mayo sobre un parcial de agosto alterado.
+      //
+      // La preferencia por la fila real tiene su razón (es el veredicto del panel completo,
+      // no un fragmento), pero esa razón vale para elegir ENTRE IGUALES DE FECHA, no para
+      // pisar un examen tres meses más nuevo. Y la dirección del daño no es simétrica:
+      // escribir «NORMAL» sobre un uroanálisis alterado es un falso negativo firmado por el
+      // médico.
+      //
+      // Regla nueva: el respaldo por componentes gana cuando TIENE fecha y la fila real es
+      // más vieja — o no tiene fecha con que defenderse. Si no se puede establecer que la
+      // fila real no es más vieja, no se la deja escribir un veredicto de antigüedad
+      // desconocida.
+      if (previo.viaComponente !== nuevo.viaComponente) {
+          const real = previo.viaComponente ? nuevo : previo;
+          const comp = previo.viaComponente ? previo : nuevo;
+          const ganaElComponente = !!(comp.resultDate && (!real.resultDate || real.resultDate < comp.resultDate));
+          if (ganaElComponente) return previo !== comp;
+          return !!previo.viaComponente;
+      }
       // 1.5) [reportado en consultorio, 26-ago-2026, con consola completa] Cuando AMBOS
       // candidatos son respaldo por componente (el caso normal de UROANALISIS: Athenea casi
       // nunca manda una fila del panel completo, manda 20-30 componentes sueltos —
@@ -3188,7 +3312,29 @@
 
       // v12.3.37 — Diagnóstico de orina y componentes por su ruta propia (no whitelist
       // sérico): sigue recorriendo labsArray directamente, sin pasar por el agrupador.
-      labsArray.forEach((lab) => {
+      //
+      // v17.8.2 — ...pero AHORA ORDENADO POR FECHA, de más reciente a más antigua. Toda la
+      // lógica de «el primero reclama la casilla» descansa en un supuesto que estaba escrito
+      // como si fuera un hecho: «las solicitudes llegan de más reciente a más antigua, así
+      // que el primero ES el resultado más reciente». Nada lo garantizaba — ni
+      // `_atheneaExtraerSolicitudes` ni `_getAtheneaLabsAutoNucleo` ordenan: el orden es el
+      // del HTML del portal, y estas 7 casillas NO llevan fecha acompañante, así que un
+      // componente viejo colado ahí es indetectable para el médico.
+      //
+      // Con el orden explícito, «el primero» y «el más reciente» pasan a ser lo mismo por
+      // construcción en vez de por suerte. Los que no traen fecha van AL FINAL: sin fecha no
+      // se puede afirmar que sean recientes, y la dirección segura es que no le ganen a uno
+      // fechado. `slice()` porque el array es del llamador y ordenarlo en el sitio le
+      // cambiaría el orden a todo lo demás que lo lea después.
+      const _ordenadoPorFecha = labsArray.slice().sort((x, y) => {
+          const fx = (_extractAtheneaFecha(x) || {}).iso || "";
+          const fy = (_extractAtheneaFecha(y) || {}).iso || "";
+          if (fx === fy) return 0;
+          if (!fx) return 1;
+          if (!fy) return -1;
+          return fx > fy ? -1 : 1;
+      });
+      _ordenadoPorFecha.forEach((lab) => {
           if (_esAnalitoDeOrina(lab) && !_diagUroNombresVistos.has(_canonTexto(lab.NombreParametro || lab.nombre || lab.examen))) {
               try {
                   const deOrinaTodos = labsArray.filter(_esAnalitoDeOrina);
@@ -3582,6 +3728,10 @@
       UROANALISIS: "Uroanálisis",
       CREATININA: "Creatinina en Suero",
       RAC: "RAC (Relación Albúmina/Creatinina)",
+      // v17.6.96 — HbA1c NO esta en RCV_VIGENCIA_KEYS (ver el comentario de arriba), pero el
+      // antiduplicado del paquete RCV si la pide como clave extra en pacientes diabeticos, y
+      // sin nombre saldria como «HBA1C» en mayuscula pelada si algun dia se pinta.
+      HBA1C: "Hemoglobina glicosilada (HbA1c)",
   };
   // v12.6.0 — RAC (relación albúmina/creatinina) con albuminuria franca (≥30 mg/g) pide
   // control más frecuente que los demás analitos del grupo: su vigencia se reduce a la
@@ -3858,17 +4008,64 @@
       // resumen en caché), esta función retornaba aquí mismo y el bloque de aplicar50
       // quedaba inalcanzable: un LDL fuera de meta con contexto clínico completo se
       // reportaba "vigente" por los 180 días enteros de la tabla, sin acortar a la mitad.
+      // v17.6.95 — HUECO 8: UNA SOLA TABLA DE VIGENCIAS. Aqui vivia una consulta a
+      // `vigenciaPorEstadio` (la tabla legacy, transcripcion de la Tabla 50 oficial),
+      // mientras TODO el resto del producto —el motor, el Panel, Agendar, Ordenar— ya
+      // usaba `mtrVigenciaDiasNorma`. Las dos no coinciden, y donde no coinciden la legacy
+      // siempre es MAS LARGA: declara vigente un examen que la norma da por vencido.
+      //
+      // Medido con el harness sobre las 8 claves RCV, todos los estadios, ambos programas
+      // y esDM2 en los dos valores (barrido exhaustivo, cero celdas al reves):
+      //   · ERC G5 -> la legacy no tiene columna G5, devuelve null, y el respaldo plano de
+      //     180 dias entra para los OCHO analitos. La norma colapsa G5 en G4 (que es lo
+      //     conservador) y da 120/60/93. Efecto real, reproducido de punta a punta sobre el
+      //     aviso rojo de entrada: un paciente ERC G5 con TODOS sus examenes de hace 170
+      //     dias recibe "todo al dia", mientras el mismo paciente en G4 recibe seis
+      //     examenes marcados. Mover al paciente un estadio HACIA PEOR apagaba el aviso.
+      //   · ERC G4 + RAC -> la Tabla 50 no tiene fila `rac` (pide "micro albuminuria", que
+      //     es otro analito), asi que tambien caia al respaldo de 180. La norma da 120.
+      // DM2 y HTA no cambian en ninguna celda: la divergencia entera vivia en ERC.
+      //
+      // Esto NO es una decision clinica nueva. `MTR_CORRECCIONES_NORMA` ya declaraba
+      // "ERC/rac/G4: copiloto 180 -> norma 120", y `MTR_MAPA_ESTADIO_ERC` ya mapeaba
+      // G5 -> G4. Lo unico que pasaba es que el aviso de entrada y el antiduplicado de PyM
+      // eran los dos ultimos sitios que no se habian enterado.
+      //
+      // `mtrColapsarVigencia(v, false)` convierte el rango [min,max] de la creatinina en su
+      // valor SUPERIOR, que es exactamente lo que hacia la linea vieja (`v.max`): aqui no
+      // hay forma de saber si la funcion renal se esta moviendo, y suponerlo seria inferir.
+      // `vigenciaPorEstadio` NO se borra: es la transcripcion de la Tabla 50, con filas que
+      // la norma no tiene (hematocrito, depuracion en orina 24h, microalbuminuria), y sigue
+      // sirviendo de documento de referencia con sus propias pruebas.
       let base = null;
       if (opts && (opts.estadio || opts.programa)) {
           const analito = analitoTablaDesdeClaveRcv(key);
-          if (analito) {
+          if (analito && typeof mtrVigenciaDiasNorma === "function") {
               const programa = opts.programa || (opts.estadio ? "ERC" : null);
-              const v = vigenciaPorEstadio(programa, opts.estadio, analito, opts);
-              if (typeof v === "number") base = v;
-              else if (v && typeof v === "object") {
-                  if (Number.isFinite(v.max)) base = v.max;
-                  else if (Number.isFinite(v.min)) base = v.min;
-              }
+              const esDm2 = (opts.esDM2 === true || opts.esDm2 === true);
+              // El override de RAC>=30 se aplica mas abajo, con `resultValCrudo`, que es el
+              // valor que este camino SI tiene; por eso aqui va `null` y no se pide dos veces.
+              const v = mtrVigenciaDiasNorma(programa, analito, opts.estadio, esDm2, opts.edad, null);
+              // `funcionRenalInestable` se LEE aunque hoy nadie lo mande: los dos llamadores
+              // no lo pasan, asi que vale false y el rango se colapsa a su extremo SUPERIOR,
+              // que es exactamente lo que hacia la linea vieja (`v.max`). Se deja leido, y no
+              // cableado a `false` a pelo, para que quede claro que es una DECISION y no un
+              // descuido: encenderlo baja la creatinina de 121 a 90 en G3a/G3b y de 93 a 60 en
+              // G4/G5 (medido), y eso es un cambio clinico que el medico no ha pedido aqui.
+              const colapsada = (typeof mtrColapsarVigencia === "function")
+                ? mtrColapsarVigencia(v, !!opts.funcionRenalInestable) : v;
+              if (typeof colapsada === "number" && Number.isFinite(colapsada)) base = colapsada;
+              // v17.6.96 — BLOQ deja de disfrazarse de 180. Hasta v17.6.95 esto era
+              // inalcanzable (ninguna de las 8 claves podia producirlo) y se anoto asi en el
+              // informe de mutaciones; con HbA1c en el MAPA ya SI es alcanzable —un ERC sin
+              // diabetes documentada— y devolver 180 seria afirmar una vigencia sobre un
+              // examen que la norma niega. Se devuelve el propio BLOQ y el consumidor lo salta.
+              else if (colapsada === MTR_BLOQ) return MTR_BLOQ;
+              // "BLOQ" o null dejan `base` en null y se cae al respaldo plano, igual que hoy.
+              // Verificado por barrido: ninguna de las 8 claves RCV puede producir "BLOQ"
+              // (los analitos bloqueables —PTH, fosforo, albumina, HbA1c— no estan en el mapa
+              // de `analitoTablaDesdeClaveRcv`). La suite lo fija con una prueba, para que si
+              // alguien anade uno bloqueable al mapa tenga que decidir que hacer aqui.
           }
       }
       // v16.4.0 — LA MISMA VARA EN TODOS LOS CAMINOS (decisión del médico, 20-ago: "una
@@ -4144,24 +4341,49 @@
           COLESTEROL_HDL: "hdl",
           COLESTEROL_LDL: "ldl",
           RAC: "rac",
+          // v17.6.96 — HbA1c entra al MAPA, pero NO a `RCV_VIGENCIA_KEYS`. Son dos cosas
+          // distintas y conviene no confundirlas nunca mas:
+          //   · `RCV_VIGENCIA_KEYS` = "de que le aviso en ROJO a TODO paciente al abrir su
+          //     historia". Ahi HbA1c sigue FUERA, por pedido explicito del medico del
+          //     11-08-2026: no todo paciente es diabetico.
+          //   · este MAPA = "si alguien me pregunta por esta clave, ¿que vigencia tiene?".
+          //     Devolver null aqui obligaba al consumidor a caer en los 180 dias planos, que
+          //     para la HbA1c de un ERC G4/G5 son 120 segun la norma — y para un NO diabetico
+          //     no son 180, es que NO SE PIDE (la norma devuelve BLOQ).
+          HBA1C: "hba1c",
       };
       return Object.prototype.hasOwnProperty.call(MAPA, clave) ? MAPA[clave] : null;
   }
   // `hoyIso` se recibe como parámetro (nunca Date.now()/new Date() implícito aquí) para
   // que la prueba pueda fijar "hoy" y el resultado sea siempre reproducible.
   // `opts` opcional: { estadio, programa, esDM2, edad } para vigencia por estadio (T3).
+  // v17.6.96 — `opts.clavesExtra`: analitos que este llamador concreto quiere vigilar ADEMAS
+  // de los 8 de siempre. Existe por el punto ciego de HbA1c del antiduplicado del paquete RCV
+  // (ver `pymRcvCubiertoPorAthenea`), y esta hecho asi —una lista que aporta el llamador, no
+  // una clave mas en `RCV_VIGENCIA_KEYS`— precisamente para NO tocar el aviso rojo de entrada:
+  // esa lista la fijo el medico el 11-08-2026 y dice, textualmente, que la HbA1c no entra
+  // porque no todo paciente es diabetico. Quien pide la clave extra es quien SABE que este
+  // paciente si lo es.
   function _analitosRcvVencidos(labsArray, hoyIso, opts) {
       const hoy = _parseFechaHoraLike(hoyIso);
       if (!hoy) return [];
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
       const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labsArray) ? labsArray : [], { uroanalisisPorComponentes: true });
+      const extra = (opts && Array.isArray(opts.clavesExtra)) ? opts.clavesExtra : [];
+      const claves = RCV_VIGENCIA_KEYS.concat(extra.filter((k) => RCV_VIGENCIA_KEYS.indexOf(k) < 0));
       const faltantes = [];
-      for (const key of RCV_VIGENCIA_KEYS) {
+      for (const key of claves) {
+          const vigenciaDias = _vigenciaDiasParaAnalito(key, (candidatos.get(key) || {}).resultVal, opts);
+          // v17.6.96 — BLOQ: la norma PROHIBE pedir este analito a este paciente (bloqueo
+          // KDIGO, o HbA1c en quien no consta diabetes). No es "vencido": es que no se pide.
+          // Reportarlo como faltante seria pedir un examen que la norma niega, y tratarlo
+          // como 180 dias planos —lo que pasaba antes— es peor todavia: se afirma una
+          // vigencia sobre algo que no deberia estar en la lista.
+          if (vigenciaDias === MTR_BLOQ) continue;
           const c = candidatos.get(key);
           if (!c || !c.resultDate) { faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key] }); continue; }
           const fechaMs = new Date(c.resultDate + "T00:00:00").getTime();
           const dias = Math.round((hoyMs - fechaMs) / 86400000);
-          const vigenciaDias = _vigenciaDiasParaAnalito(key, c.resultVal, opts);
           if (dias > vigenciaDias) faltantes.push({ key, nombre: RCV_VIGENCIA_NOMBRES[key], resultDate: c.resultDate, dias });
       }
       return faltantes;
@@ -4222,7 +4444,10 @@
   }
   function _preconDe(doc) {
     try {
-      const e = _preconLeerTodo().porDoc[String(doc)];
+      // v17.53.0 — misma tolerancia que el resto de almacenes por cédula (v17.48.0). Aquí
+      // el daño es menor (es una caché de 6 h que se rehace sola), pero un fallo de caché
+      // significa una espera que el médico sí nota, y la corrección cuesta lo mismo.
+      const e = _vglBuscarPorDoc(_preconLeerTodo().porDoc, doc);
       if (!e || !Array.isArray(e.labs)) return null;
       if (Date.now() - (e.ts || 0) > VGL_PRECON_TTL_MS) return null;
       return e;
@@ -4423,13 +4648,90 @@
   function _vglCosechaTodo() {
     try { return JSON.parse(localStorage.getItem(VGL_COSECHA_KEY) || "{}"); } catch (e) { return {}; }
   }
+  // v17.48.0 — LECTURA TOLERANTE A LOS CEROS A LA IZQUIERDA.
+  // Desde esta versión toda cédula se canonicaliza en la fuente (_vglDocCanon), así que
+  // lo que se archive de aquí en adelante queda bajo UNA sola clave. Pero lo ya guardado
+  // bajo la forma rellenada ("0005150076") se volvería INVISIBLE si solo probáramos la
+  // clave canónica — sería introducir el mismo síntoma que venimos a evitar. Por eso los
+  // lectores comparan por forma canónica en vez de por igualdad de cadena: encuentran el
+  // registro esté guardado como esté. Es el mismo patrón de "migración suave" que
+  // _vglCosechaLeer ya usaba para caer a sessionStorage; se extiende, no se inventa.
+  // No fusiona nada: solo lee. La fusión, si el detector encuentra duplicados reales,
+  // exige antes el respaldo exportable (decisión D3), todavía sin implementar.
+  function _vglMismaCedula(a, b) {
+    const ca = normalizeKey(String(a == null ? "" : a));
+    if (!ca) return false;
+    return ca === normalizeKey(String(b == null ? "" : b));
+  }
+  // Devuelve el valor guardado bajo CUALQUIER escritura de esa cédula (primero la exacta,
+  // que es el caso normal y no cuesta recorrer nada).
+  function _vglBuscarPorDoc(mapa, docId) {
+    if (!mapa || typeof mapa !== "object") return null;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return null;
+    if (Object.prototype.hasOwnProperty.call(mapa, s) && mapa[s]) return mapa[s];
+    for (const k of Object.keys(mapa)) { if (k !== s && _vglMismaCedula(k, s) && mapa[k]) return mapa[k]; }
+    return null;
+  }
+  // v17.53.0 — Devuelve la CLAVE bajo la que está archivado ese documento, sea la canónica
+  // o una escritura antigua con ceros de relleno; null si no hay ninguna. Hace falta cuando
+  // el llamador no solo lee sino que va a ESCRIBIR encima: escribir bajo la clave canónica
+  // sin mirar dejaría huérfano lo archivado antes y el contador arrancaría de cero otra vez.
+  function _vglClaveDeDoc(mapa, docId) {
+    if (!mapa || typeof mapa !== "object") return null;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return null;
+    if (Object.prototype.hasOwnProperty.call(mapa, s)) return s;
+    for (const k of Object.keys(mapa)) { if (_vglMismaCedula(k, s)) return k; }
+    return null;
+  }
+  function _vglListaTieneDoc(lista, docId) {
+    if (!Array.isArray(lista)) return false;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return false;
+    if (lista.includes(s)) return true;
+    return lista.some((k) => _vglMismaCedula(k, s));
+  }
+  // v17.48.0 — DETECTOR DE CLAVES DUPLICADAS (decisión D2: "que detecte y le informe
+  // primero"). Función PURA: dado el objeto de un almacén indexado por cédula, devuelve
+  // los grupos de claves DISTINTAS que colapsan a la misma cédula canónica — es decir, el
+  // mismo paciente archivado dos veces. NO fusiona nada: fusionar exige antes el respaldo
+  // exportable (D3), porque _vglCosechaGuardar fusiona PLANO y `programas`/`pestanasVistas`
+  // /`hcEverest` no tienen marca de tiempo por campo, así que una fusión mal hecha borraría
+  // antecedentes ya documentados.
+  function _vglDetectarClavesDuplicadas(almacen) {
+    const grupos = [];
+    if (!almacen || typeof almacen !== "object") return grupos;
+    const porCanon = Object.create(null);
+    for (const k of Object.keys(almacen)) {
+      const canon = normalizeKey(String(k));
+      if (!canon) continue;
+      (porCanon[canon] || (porCanon[canon] = [])).push(k);
+    }
+    for (const canon of Object.keys(porCanon)) {
+      if (porCanon[canon].length > 1) grupos.push(porCanon[canon]);
+    }
+    return grupos;
+  }
+  // Deja UNA línea en la bitácora local con el CONTEO. Cero PHI por construcción: nunca
+  // sale una cédula, solo cuántos grupos y cuántas claves suman entre todos.
+  function _vglRevisarClavesDuplicadas() {
+    try {
+      const grupos = _vglDetectarClavesDuplicadas(_vglCosechaTodo());
+      if (!grupos.length) return 0;
+      let claves = 0;
+      for (const g of grupos) claves += g.length;
+      vglLog("DATOS", "cedulas_duplicadas", { grupos: grupos.length, claves });
+      return grupos.length;
+    } catch (e) { return 0; }
+  }
   function _vglCosechaLeer(docId) {
     try {
-      const deAhora = _vglCosechaTodo()[String(docId || "")];
+      const deAhora = _vglBuscarPorDoc(_vglCosechaTodo(), docId);
       if (deAhora) return deAhora;
       // Migración suave: lo cosechado HOY bajo el esquema viejo (sessionStorage) no se
       // pierde en el cambio de versión — se lee como respaldo hasta que la pestaña muera.
-      try { return JSON.parse(sessionStorage.getItem(VGL_COSECHA_KEY) || "{}")[String(docId || "")] || null; } catch (e2) { return null; }
+      try { return _vglBuscarPorDoc(JSON.parse(sessionStorage.getItem(VGL_COSECHA_KEY) || "{}"), docId); } catch (e2) { return null; }
     } catch (e) { return null; }
   }
 
@@ -4453,7 +4755,27 @@
           for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) delete todo[k];
         }
       } catch (e2) {}
-      localStorage.setItem(VGL_COSECHA_KEY, JSON.stringify(todo));
+      // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
+      // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
+      // null, así que un QuotaExceededError se tragaba ENTERO y en silencio. Con el
+      // almacén del navegador lleno, todo lo aprendido del paciente en esa consulta —
+      // factores de riesgo, pestañas vistas, la historia cosechada— no existía al día
+      // siguiente. El médico no vería ningún error: solo notaría, días después, que la
+      // compuerta de contexto "se quedó atascada", que es exactamente el síntoma que ya
+      // reportó en campo por otra causa en la v16.4.0.
+      // La defensa ya existía en el script (`safeWriteJSON` purga por cuota y reintenta);
+      // esta ruta —la que guarda la memoria clínica— simplemente no la usaba. El espejo
+      // que safeWriteJSON invoca es un no-op aquí: `vgl_cosecha` no está en
+      // VGL_ESPEJO_CLAVES, así que sale por su propia guarda sin hacer nada.
+      // Si aun tras purgar no cabe, se DICE: perder la memoria del paciente sin avisar es
+      // peor que interrumpir un momento al médico.
+      if (!safeWriteJSON(VGL_COSECHA_KEY, todo)) {
+        try {
+          showToast("AMBAR", "No se pudo guardar la memoria del paciente",
+            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Avísele al programador.", true);
+        } catch (e3) {}
+        return null;
+      }
       return fusion;
     } catch (e) { return null; }
   }
@@ -4534,6 +4856,13 @@
       if (docId && String(docId) !== String(id)) return null;   // cambió de paciente a mitad: no se adivina
 
       let guardado = null;
+      // v17.10.0 — LO PRIMERO: la cosecha COMPLETA de la pantalla, casilla por casilla.
+      // Va aquí y no en un reloj aparte a propósito — este es el punto que ya se dispara en
+      // cada cambio de ruta de Everest y que ya resolvió, con cicatrices, el problema difícil
+      // de «¿de qué paciente es lo que estoy viendo?» (ver el comentario de arriba: cosechar
+      // bajo el documento equivocado le inventa comorbilidades a otro). Colgar de aquí
+      // hereda esa guarda entera en vez de reescribirla peor.
+      try { mtrHcAcumularDelDom(id, document); } catch (eHc) {}
       // 1) Los cuatro programas de «Ingreso a programa» (solo viven en Ruta Crónicos).
       if (_vglEnPestana("cronicos") !== false) {
         const progs = mtrLeerProgramasRutaCronicos(document);
@@ -4628,7 +4957,7 @@
   // se queda sin el dato — nunca con uno inventado.
   function _vglLeerCabeceraHistoria(doc) {
     const d = doc || (typeof document !== "undefined" ? document : null);
-    const salida = { marcaciones: null, cockcroftGault: null, estadio: null, clasificacionEstadio: null };
+    const salida = { marcaciones: null, cockcroftGault: null, estadio: null, clasificacionEstadio: null, sexo: null };
     if (!d || typeof d.querySelectorAll !== "function") return salida;
     try {
       // Se recorre un número acotado de nodos con texto corto: la cabecera es breve y
@@ -4658,6 +4987,19 @@
       // "Clasificación Estadio: Ligera a moderadamente...".
       salida.estadio = buscar(/(?:^|[^n])\bEstadio\s*:\s*(G?\d\s*[ab]?)\b/i);
       salida.clasificacionEstadio = buscar(/Clasificaci[oó]n\s+Estadio\s*:\s*(.+)$/i);
+      // v17.6.85 — la cabecera imprime "Sexo: MASCULINO" (confirmado por el médico con una
+      // captura, 26-ago). Es la MEJOR fuente del dato: vive en la cabecera que Everest pinta
+      // en TODAS las pestañas, no cuesta una petición de red, y no depende de que haya una
+      // pestaña concreta montada — al contrario que cualquier lector del formulario, que en
+      // esta SPA solo ve la pestaña activa.
+      // Se captura SOLO LA PALABRA, no `(.+)$` como los campos de arriba: en la cabecera real
+      // este campo COMPARTE LÍNEA con el siguiente ("Sexo: MASCULINO, Eps: NUEVA EPS"), así
+      // que un comodín hasta fin de línea se llevaría también el nombre de la EPS.
+      // Comprobado: ese valor sucio SÍ lo reconocería `mtrEsSexoMasculino` (le basta con que
+      // empiece por "MAS"), así que el riesgo no es fallar el reconocimiento — es que el
+      // nombre de la aseguradora acabe viajando dentro del campo `sexo` hasta
+      // `erc.entradas.sexo`, que se muestra y se persiste. Se guarda el dato limpio.
+      salida.sexo = buscar(/\bSexo\s*:\s*([A-Za-zÁÉÍÓÚÑáéíóúñ]+)/i);
       return salida;
     } catch (e) { return salida; }
   }
@@ -4744,10 +5086,35 @@
     } catch (e) { return null; }
   }
 
+  // v17.31.0 — LA TFG (COCKCROFT-GAULT) YA CONFIRMA ERC: NO HAY NADA QUE PREGUNTAR
+  // ---------------------------------------------------------------------------
+  // Encargo del médico (28-ago), textual: "cuando entro al Panel del paciente a veces me
+  // pregunta que si el paciente tiene enfermedad renal crónica y el script no consulta la
+  // TFG porque muchas veces la TFG es menor a 60 y aun así me pregunta, el script debe ser
+  // inteligente en estos casos" — y, al recordárselo, "RECUERDA COCKCROFT GAULT": la TFG
+  // que decide aquí es la administrativa (Cockcroft-Gault, `resumen.erc.crcl`), la misma
+  // que ya rige vigencias y estadio en todo el resto del script (R1a, línea ~4215) —
+  // NUNCA la CKD-EPI.
+  // Causa: `mtrDiscrepanciasDeFuentes` nunca recibía la TFG — el único llamador en vivo
+  // (`mtrReconciliarAhora`) pasaba `labsPorClave: null` a propósito, y de todos modos
+  // `enfermedadRenal` en `MTR_HECHOS_SENSIBLES` declara `labs: []` porque la TFG no es un
+  // resultado de laboratorio con clave propia, es un CÁLCULO. Con TFG<60 sin marcar en la
+  // historia y algo más (texto, medicamento, cabecera) afirmándolo, el reconciliador
+  // preguntaba por un dato que el propio script ya tenía calculado y confirmado.
+  // Con TFG por Cockcroft-Gault <60 ml/min, ERC queda establecida por evidencia objetiva
+  // — un cálculo, no una inferencia de prosa — así que esa pregunta puntual se salta por
+  // completo (ni afirma ni niega: se resuelve sola). El resto de hechos sensibles
+  // (diabetes, HTA, tabaquismo, ECV) no se toca.
+  function mtrTfgConfirmaErc(tfgCockcroftGault) {
+    const v = mtrFloat(tfgCockcroftGault);
+    return v !== null && v > 0 && v < 60;
+  }
+
   function mtrDiscrepanciasDeFuentes(ctx) {
     const c = ctx || {};
     const leidos = c.leidos || {};
     const cabecera = c.cabecera || {};
+    const tfgConfirmaErc = mtrTfgConfirmaErc(c.tfgCockcroftGault);
     // v16.3.1 — "No pude leerlo" NO es "no lo tiene". Un medicamento o un laboratorio
     // solo pueden NEGAR algo si esa fuente de verdad se cargó: si los laboratorios no han
     // llegado, la ausencia de HbA1c no dice nada del paciente. Es la misma regla que se
@@ -4762,6 +5129,9 @@
     const salida = [];
 
     for (const h of MTR_HECHOS_SENSIBLES) {
+      // La TFG ya la establece objetivamente: no hay contradicción que resolver.
+      if (h.clave === "enfermedadRenal" && tfgConfirmaErc) continue;
+
       const afirman = [], niegan = [];
 
       const enHistoria = Object.prototype.hasOwnProperty.call(leidos, h.clave) ? leidos[h.clave] : null;
@@ -4854,7 +5224,36 @@
     if (d.yaConfirmado) return false;                      // respondido y todavía vigente
     if (!mtrEsSexoFemenino(d.sexo)) return false;          // la pregunta no aplica
     if (!mtrEmbarazoEdadFertil(d.edad)) return false;
-    return d.uroSugestivo === true;                        // solo cuando cambia la conducta
+    // v17.6.91 — antes exigía `uroSugestivo === true` a secas. Pero la conducta también
+    // cambia con BACTERIURIA FRANCA aunque no haya piuria (o sea, aunque el parcial NO sea
+    // sugestivo de ITU): en embarazo la bacteriuria se trata SIEMPRE — es la única excepción
+    // que la norma marca en mayúsculas, porque la bacteriuria asintomática no tratada es
+    // factor de pielonefritis y de parto pretérmino. `mtrEvaluarUroanalisis` ya lo tenía
+    // resuelto (`embarazo && (sugestivo || bacteriuria)`), pero esa rama era INALCANZABLE:
+    // sin la pregunta nunca se sabía que la paciente estaba embarazada. Se usa aquí la MISMA
+    // condición que allí, para que no puedan volver a separarse.
+    return d.uroSugestivo === true || d.uroBacteriuria === true;
+  }
+
+  // v17.6.91 — De un resumen del paciente a los insumos que la compuerta necesita. Existe
+  // por una razón concreta: al mutar el cableado del Panel (borrar el insumo que se le pasa a
+  // mtrDebePreguntarEmbarazo) el banco seguía TODO en verde, porque ese armado vivía suelto
+  // dentro de `openPanelPacienteModal` —una función de interfaz que el banco no puede
+  // ejercitar— y nada comprobaba que la compuerta recibiera lo que necesita. Sacarlo aquí lo
+  // vuelve probable: si alguien deja de leer `bacteriuria` del resumen, una prueba lo caza.
+  // (La llamada final desde el Panel sigue sin cubrir; es una sola línea y está anotada en
+  // INFORME_MUTACIONES.md como límite conocido de esta arquitectura.)
+  function mtrInsumosEmbarazo(res, yaConfirmado) {
+    const r = res || {};
+    const f = r.factores || {};
+    const uro = r.uroanalisis || {};
+    return {
+      sexo: f.sexo,
+      edad: f.edad,
+      uroSugestivo: !!uro.sugestivo,
+      uroBacteriuria: !!uro.bacteriuria,
+      yaConfirmado: !!yaConfirmado,
+    };
   }
 
   // La pregunta, con la forma que ya entiende el modal del reconciliador.
@@ -4884,6 +5283,67 @@
   // flujo; las medias se muestran pero no bloquean.
   function mtrDiscrepanciasQueFrenan(discrepancias) {
     return (Array.isArray(discrepancias) ? discrepancias : []).filter((d) => d && d.severidad === "alta");
+  }
+
+  // =====================================================================
+  //  v17.7.0 — EL RECONCILIADOR, MIRANDO LA PANTALLA DE AHORA
+  //  ------------------------------------------------------------------
+  //  REPORTE EN CONSULTA (27-ago): el cuadro «Las fuentes no coinciden» decía que la
+  //  hipertensión estaba marcada como «No» cuando el médico ya la había marcado, y «no
+  //  recibió el cambio en tiempo real». El cuadro tenía razón sobre lo que leyó y se
+  //  equivocaba sobre CUÁNDO lo leyó: todo este armado vivía dentro de
+  //  openPanelPacienteModal y se ejecutaba UNA sola vez, al abrir el Panel. La vigilancia
+  //  de 20 s recalculaba el resumen pero nunca volvía a pasar por aquí, y el HTML del
+  //  cuadro es estático.
+  //
+  //  Sacarlo a una función propia hace dos cosas a la vez: la vigilancia puede volver a
+  //  llamarlo, y el banco puede probarlo. Mientras vivió dentro de una función de interfaz
+  //  fue intocable —el mismo motivo por el que en v17.6.91 se sacó mtrInsumosEmbarazo—, y
+  //  una mutación que borrara una fuente entera no rompía ninguna prueba.
+  // =====================================================================
+  function mtrReconciliarAhora(docId, doc) {
+    const vacio = { frenan: [], desfasadas: [], leidos: null };
+    try {
+      const d = doc || (typeof document !== "undefined" ? document : null);
+      if (!d) return vacio;
+      const f = (typeof mtrLeerFactoresRcvDelDom === "function")
+        ? mtrLeerFactoresRcvDelDom(docId, d) : null;
+      if (!f || !f._leidos) return vacio;
+
+      const cab = (typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(d) : null;
+      const res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(docId) : null;
+      const meds = (res && Array.isArray(res.medicamentos)) ? mtrMedicamentosRcv(res.medicamentos) : null;
+      const discrepancias = mtrDiscrepanciasDeFuentes({
+        leidos: f._leidos,
+        cabecera: cab ? { hta: cab.hta, diabetes: cab.diabetes, enfermedadRenal: cab.enfermedadRenalDocumentada } : {},
+        medicamentosRcv: meds,
+        labsPorClave: null,
+        textoLibre: (typeof _vglTextoLibreCombinado === "function") ? _vglTextoLibreCombinado(d) : "",
+        // v17.31.0 — mismo campo que ya usa el resto del script para el estadio
+        // administrativo (resumen.erc.crcl, Cockcroft-Gault): con TFG<60, ERC ya está
+        // establecida y la pregunta de "¿tiene ERC?" no debe salir.
+        tfgCockcroftGault: (res && res.erc && res.erc.crcl != null) ? res.erc.crcl : null,
+      });
+
+      const confirmadas = (typeof _vglConfirmacionesLeer === "function") ? _vglConfirmacionesLeer(docId) : {};
+      const desfasadas = Array.isArray(f._confirmacionesDesfasadas) ? f._confirmacionesDesfasadas : [];
+      // Una clave ya confirmada se calla... salvo que la historia de hoy contradiga esa
+      // confirmación. Ahí se vuelve a preguntar UNA vez, porque manda la pantalla.
+      const frenan = mtrDiscrepanciasQueFrenan(discrepancias).filter((x) =>
+        !Object.prototype.hasOwnProperty.call(confirmadas, x.clave) || desfasadas.indexOf(x.clave) >= 0);
+      frenan.forEach((x) => { if (desfasadas.indexOf(x.clave) >= 0) x.desfasada = true; });
+
+      // La pregunta de embarazo entra por aquí, y SOLO cuando cambia la conducta: mujer en
+      // edad fértil con parcial de orina sugestivo. Su respuesta caduca a los 30 días
+      // (decisión del médico), a diferencia de las demás.
+      try {
+        if (mtrDebePreguntarEmbarazo(mtrInsumosEmbarazo(
+          res, _vglConfirmacionVigente(docId, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS)
+        ))) frenan.push(mtrPreguntaEmbarazo());
+      } catch (e) {}
+
+      return { frenan: frenan, desfasadas: desfasadas, leidos: f._leidos };
+    } catch (e) { return vacio; }
   }
 
   // =====================================================================
@@ -5023,6 +5483,10 @@
     // "anamesis" va con la errata de Everest a propósito: es el id REAL de su DOM,
     // confirmado en las capturas del consultorio, y corregirlo aquí sería no encontrarlo.
     anamnesis: { textos: ["anamnesis"], ids: ["anamesis"] },
+    // v17.18.0 — captura real (captura_ordenamiento_paquete_HTA_20260812.json):
+    // {"tag":"a#conducta","text":"Conducta"}. Único ancla de esta lista con id Y texto
+    // verificados contra el DOM real de Everest, no supuestos.
+    conducta: { textos: ["conducta"], ids: ["conducta"] },
     impresion: { textos: ["impresion diagnostica", "impresión diagnóstica"], ids: ["impDiagnostica"] },
   };
 
@@ -5104,6 +5568,564 @@
       return true;
     } catch (e) { return true; }   // duda razonable: no esconder un botón por un fallo de lectura
   }
+
+  // =====================================================================
+  //  v17.18.0 — WIDGET DE CONDUCTA: "qué ordenar en el próximo control"
+  //  ---------------------------------------------------------------------
+  //  Pedido del médico (28-ago): que la lista de exámenes a ordenar salga en un widget
+  //  propio, junto al botón de ordenar de Everest dentro de Conducta — no metido en el
+  //  Panel del paciente, que hay que abrir aparte.
+  //
+  //  POR QUÉ NO HACE FALTA LEER NADA DEL DOM DE CONDUCTA PARA EL CONTENIDO: la lista
+  //  "qué ordenar" ya la calcula el motor entero (mtrTableroClinico, el mismo que pinta
+  //  la Sección 3 del Panel del paciente) a partir del resumen clínico que el auto-fetch
+  //  de laboratorios ya deja caliente en cuanto se abre la historia. Este widget solo
+  //  LEE esa caché (mtrCacheResumenLeer) — cero peticiones nuevas, cero escritura en
+  //  Conducta. Lo único que SÍ se lee del DOM es la posición del botón ancla, para saber
+  //  dónde flotar — nunca su contenido, y nunca se le escribe ni se le simula un clic
+  //  (la razón exacta por la que v15.3.0 retiró la automatización anterior en esta misma
+  //  pestaña: simular gestos ahí causó un bucle real en consultorio).
+  //
+  //  ANCLA SIN CAPTURA CON SELECTOR PROPIO: la única evidencia real de esta zona
+  //  (captura_ordenamiento_paquete_HTA_20260812.json) solo registra tag+texto de los
+  //  clics, no ids ni clases: {"tag":"button","text":"Paquetes"}. Se busca por texto,
+  //  igual que ya hace mtrCasillaAnalisis con el placeholder de Impresión Diagnóstica —
+  //  no es una excepción a "casilla vacía antes que dato inventado": es el mismo patrón
+  //  defensivo ya establecido para cuando no hay un id estable, aplicado con la única
+  //  evidencia real que existe. Si Everest cambia el texto del botón, o si el médico no
+  //  ha entrado a Conducta, el widget simplemente no aparece — nunca flota a ciegas.
+  // =====================================================================
+  function mtrBotonOrdenarConducta(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll("button"));
+      for (const b of botones) {
+        if (!_vglVisibleDeVerdad(b)) continue;
+        const t = stripAccents(String(b.textContent || "").trim().toLowerCase());
+        if (t === "paquetes") return b;
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
+  // v17.34.0 — encargo del médico: el botón "Ordenar pendientes" debe quedar EXACTAMENTE
+  // centrado entre "Historial" y "Paquetes", justo debajo de los dos, sin tapar nada.
+  // OJO: la pantalla de Conducta tiene DOS botones de texto "Historial" (el de Ordenamientos
+  // y el de Medicamentos, más abajo) — se descarta cualquiera que no esté en el MISMO
+  // renglón que "Paquetes" (mismo `top`, con 12px de tolerancia por redondeo de layout), en
+  // vez de tomar el primero que aparezca en el DOM. Si no se encuentran los dos, el botón se
+  // oculta — mismo principio que mtrBotonOrdenarConducta: nunca se adivina un ancla.
+  function mtrAnclaOrdenarPendientes(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll("button"));
+      const paquetes = botones.find((b) => _vglVisibleDeVerdad(b)
+        && stripAccents(String(b.textContent || "").trim().toLowerCase()) === "paquetes");
+      if (!paquetes) return null;
+      const rPaquetes = paquetes.getBoundingClientRect();
+      let historial = null, mejorDist = Infinity;
+      for (const b of botones) {
+        if (b === paquetes || !_vglVisibleDeVerdad(b)) continue;
+        if (stripAccents(String(b.textContent || "").trim().toLowerCase()) !== "historial") continue;
+        const rb = b.getBoundingClientRect();
+        if (Math.abs(rb.top - rPaquetes.top) > 12) continue;   // descarta el de Medicamentos
+        const dist = Math.abs(rb.left - rPaquetes.left);
+        if (dist < mejorDist) { mejorDist = dist; historial = b; }
+      }
+      if (!historial) return null;
+      return { historial: historial, paquetes: paquetes };
+    } catch (e) { return null; }
+  }
+
+  // =====================================================================
+  //  v17.34.0 — REPORTE EN VIVO: el panel de #vgl-cw-examenes se abrió pegado al borde
+  //  derecho de la pantalla y el texto quedó partido letra por letra, ilegible.
+  //  ------------------------------------------------------------------
+  //  Causa: `left: r.right + 10` sin límite. Un `<div>` con `position:fixed` y solo
+  //  `left` fijado (sin `right`, sin `width` propio, solo `max-width`) se dimensiona por
+  //  "shrink-to-fit" contra el CSS 2.1 §10.3.7 — si el espacio libre entre ese `left` y el
+  //  borde derecho de la ventana es menor que el `max-width`, el navegador ENCOGE el panel
+  //  a ese espacio en vez de dejarlo salirse de pantalla. Con el botón "Paquetes" cerca del
+  //  borde derecho (layout real de Everest, nunca visto así en el arnés), el panel se
+  //  reducía a esa franja angosta.
+  //  Arreglo: decidir el lado en JS, no dejarlo al navegador. Si no cabe a la derecha del
+  //  ancla, se abre a la IZQUIERDA; si tampoco cabe ahí (ventana angosta), se recorta contra
+  //  los dos bordes — nunca más ancho de lo que hay, nunca negativo. `anchoPanel` es el
+  //  mismo valor que la hoja de estilos ya usa como `width` fijo (ver la regla de
+  //  #vgl-cw-examenes/#vgl-cw-farmaco): con un `width` real (no solo `max-width`) y un
+  //  `left` ya garantizado seguro, el shrink-to-fit deja de tener margen para actuar.
+  // =====================================================================
+  function mtrPosicionPanelJuntoA(rect, anchoPanel, margenBorde) {
+    const m = (typeof margenBorde === "number") ? margenBorde : 8;
+    const anchoVentana = (typeof window !== "undefined" && window.innerWidth) ? window.innerWidth : 1024;
+    const cabeADerecha = (rect.right + 10 + anchoPanel) <= (anchoVentana - m);
+    let left = cabeADerecha ? (rect.right + 10) : (rect.left - anchoPanel - 10);
+    if (left < m) left = m;
+    if (left + anchoPanel > anchoVentana - m) left = Math.max(m, anchoVentana - m - anchoPanel);
+    return Math.round(left);
+  }
+
+  // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
+  // mostrar. Nunca decide nada nuevo — reusa mtrTableroClinico, el mismo motor que ya
+  // pinta la Sección 3 del Panel del paciente, para que las dos vistas nunca diverjan.
+  function mtrWidgetExamenesDatos(resumen) {
+    let d = null;
+    try { d = mtrTableroClinico(resumen); } catch (e) { d = null; }
+    if (!d) return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo evaluar todavía.</div>' };
+    const ordenar = Array.isArray(d.ordenar) ? d.ordenar : [];
+    if (!ordenar.length) {
+      const sinPrograma = !(d.programa && d.programa.rector);
+      return {
+        n: 0, sinJuicio: sinPrograma,
+        html: sinPrograma
+          ? '<div class="vgl-cw-err-msg">No se identificó el programa del paciente: no se evaluó qué ordenar.</div>'
+          : '<div class="vgl-cw-ok-msg">Al día con el programa de ' + escapeHtml(String(d.programa.rotulo || d.programa.rector)) + '.</div>',
+      };
+    }
+    // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido se veía en ámbar ("por
+    // pedir"), no en rojo ("vencido"), mientras la LDL vencida del mismo paciente sí
+    // salía roja — pese a que la RAC estaba igual de vencida (o más: albuminuria es
+    // "vigilancia estrecha", nunca menos urgente). Causa: un RAC≥30 vencido se
+    // reclasifica a estado "R"/subestado "albuminuria" (mtrEstadoAnalito, ver
+    // vencidoBase) para darle su propia señal — pero `subestado === "vencido"` nunca
+    // contempló ese caso, así que caía en el color por defecto. `vencidoBase` es la
+    // verdad de terreno de que YA venció (se usa así en todo el resto del motor); se
+    // usa aquí también, sin inventar un color nuevo para "vigilancia estrecha".
+    const html = ordenar.map((x) => '<div class="vgl-cw-fila ' + ((x.subestado === "vencido" || x.vencidoBase) ? "vgl-cw-venc" : "vgl-cw-pedir") + '">'
+      + '<span class="vgl-cw-nom">' + escapeHtml(x.nombre) + '</span>'
+      + '<span class="vgl-cw-que">' + escapeHtml(x.quePasa) + '</span>'
+      + '</div>').join("");
+    return { n: ordenar.length, sinJuicio: false, html: html };
+  }
+
+  // v17.41.0 — alto real del botón "Ordenar pendientes" (36px, copiado del botón nativo
+  // "Paquetes") + el hueco de siempre entre filas: la segunda fila de widgets de Conducta
+  // (#vgl-cw-examenes) se apila justo debajo de la primera (#vgl-cw-ordenar-btn) sin
+  // solaparse, midan lo que midan las dos en cada paciente.
+  const MTR_ALTO_FILA_CONDUCTA = 36, MTR_HUECO_FILA_CONDUCTA = 8;
+  let _cwDocPrevio = null, _cwFirmaPrevia = "", _cwNPrevio = 0, _cwAbierto = false;
+  // Solo para el banco: sin esto, una mutación que rompiera el reinicio entre pacientes
+  // (la de más consecuencia posible aquí: pintar el juicio del paciente ANTERIOR sobre
+  // la pantalla del actual) no tendría cómo caer en rojo desde fuera del cierre.
+  function _cwEstadoParaTest() { return { docPrevio: _cwDocPrevio, firma: _cwFirmaPrevia, nPrevio: _cwNPrevio }; }
+  function _cwResetParaTest() { _cwDocPrevio = null; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false; }
+
+  function mtrWidgetConductaTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-examenes");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) {
+        if (el) el.style.display = "none";
+        _cwDocPrevio = null; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false;   // nunca arrastrar el juicio de un paciente a otro
+        return;
+      }
+      if (docId !== _cwDocPrevio) { _cwDocPrevio = docId; _cwFirmaPrevia = ""; _cwNPrevio = 0; _cwAbierto = false; }
+      // v17.41.0 — encargo del médico: "quiero que este [widget] se vea igual [al CSS real
+      // de Everest] y esté justamente debajo de estos [Historial y Paquetes]" — mismo
+      // ancla de los dos botones nativos que ya usa el botón "Ordenar pendientes"
+      // (mtrAnclaOrdenarPendientes), no solo "Paquetes" como hacía esta versión hasta hoy.
+      const ancla = mtrAnclaOrdenarPendientes(d);
+      if (!ancla) {
+        if (el) el.style.display = "none";
+        return;
+      }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+
+      let widget = el;
+      if (!widget) {
+        widget = document.createElement("div");
+        widget.id = "vgl-cw-examenes";
+        widget.addEventListener("click", (e) => {
+          e.stopPropagation();
+          _cwAbierto = !_cwAbierto;
+          widget.classList.toggle("vgl-cw-abierto", _cwAbierto);
+          widget.classList.remove("vgl-cw-atencion");   // el clic reconoce el aviso
+        });
+        document.body.appendChild(widget);
+      }
+      // v17.41.0 — centrado EXACTO entre "Historial" y "Paquetes", en una SEGUNDA fila,
+      // justo debajo de "Ordenar pendientes" (mismo punto medio, un alto de botón + el
+      // hueco de siempre más abajo) — nunca se solapan, aunque "Ordenar pendientes" esté
+      // oculto ese día (sin pendientes que ordenar): esta fila no depende de esa otra.
+      const rH = ancla.historial.getBoundingClientRect();
+      const rP = ancla.paquetes.getBoundingClientRect();
+      const centroX = (rH.left + rP.right) / 2;
+      const debajoDeAmbos = Math.max(rH.bottom, rP.bottom) + 8;
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed` (coordenadas de
+      // VENTANA): así el navegador lo desplaza solo con el scroll normal, sin JS.
+      widget.style.position = "absolute";
+      widget.style.left = Math.round(centroX + _cwCoordX()) + "px";
+      widget.style.top = Math.round(debajoDeAmbos + MTR_ALTO_FILA_CONDUCTA + MTR_HUECO_FILA_CONDUCTA + _cwCoordY()) + "px";
+      widget.style.display = "";
+
+      const datos = mtrWidgetExamenesDatos(resumen);
+      // Firma barata: si nada de esto cambió desde el último tick, no se toca el
+      // contenido — es lo que evita el parpadeo de un repintado sin diferencia real.
+      const firma = docId + "|" + datos.n + "|" + datos.sinJuicio + "|" + datos.html.length;
+      if (firma === _cwFirmaPrevia) return;
+      // "Llama la atención" solo al SUBIR de severidad (0 pendientes -> 1+) — nunca al
+      // bajar, y nunca en el primer pintado del paciente (evita animar solo por abrir
+      // la historia). Comparar el CONTEO, no la firma completa: la firma cambia con
+      // cualquier detalle (p.ej. el texto de "quePasa"), y no toda diferencia es un
+      // ascenso real de severidad.
+      const subeDeSeveridad = _cwFirmaPrevia !== "" && _cwNPrevio === 0 && datos.n > 0;
+      _cwFirmaPrevia = firma; _cwNPrevio = datos.n;
+      const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
+      widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
+      widget.innerHTML = '<div class="vgl-cw-badge">🧪' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+    } catch (e) {}
+  }
+
+  // =====================================================================
+  //  v17.32.0/v17.35.0 — BOTÓN "ORDENAR LO PENDIENTE", ENTRE "HISTORIAL" Y "PAQUETES"
+  //  ---------------------------------------------------------------------
+  //  Ancla propia (mtrAnclaOrdenarPendientes) — los dos botones nativos, no solo
+  //  "Paquetes" como la pastilla de qué-ordenar. El gesto real (clics/DOM) vive en
+  //  mtrConductaAgregarPendientes y sus ayudantes, arriba, junto al resto del módulo de
+  //  Ordenamientos — aquí solo hay DOM y estado de la UI del botón mismo.
+  //
+  //  `_cwoEnCurso` es AHORA la ÚNICA línea de defensa contra un doble disparo — a
+  //  diferencia de la primera entrega (v17.32.0, por red), aquí NO hay ninguna capa de
+  //  deduplicación de otro módulo por debajo: dos clics casi simultáneos ejecutarían dos
+  //  secuencias de clics reales, independientes, sobre el mismo <li>/botón. Sin esta
+  //  guarda, un doble clic agregaría el mismo examen dos veces.
+  // =====================================================================
+  let _cwoDocPrevio = null, _cwoEnCurso = false;
+  function _cwoEstadoParaTest() { return { docPrevio: _cwoDocPrevio, enCurso: _cwoEnCurso }; }
+  function _cwoResetParaTest() { _cwoDocPrevio = null; _cwoEnCurso = false; }
+
+  async function _cwoClic(btn, docId) {
+    if (_cwoEnCurso || !docId) return;
+    _cwoEnCurso = true;
+    btn.disabled = true;
+    const textoPrevio = btn.textContent;
+    btn.textContent = "⏳ Agregando...";
+    try {
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      let plan = null;
+      try { plan = resumen ? mtrTableroClinico(resumen) : null; } catch (e) { plan = null; }
+      const items = mtrItemsOrdenarConducta(plan ? plan.ordenar : []);
+      const total = items.paquete.length + items.individuales.length;
+      if (!total) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
+
+      uxTrack("widget.ordenarConducta.clic");
+      // v17.42.0 — el `docId` que ya tenía este clic se PROPAGA por fin hasta el gesto
+      // real. Sin él, la cadena de clics escribía en la historia que estuviera en pantalla
+      // en ese instante, que puede no ser la que pidió la orden.
+      const r = await mtrConductaAgregarPendientes(items, undefined, docId);
+      const todos = items.paquete.concat(items.individuales);
+      if (r.agregados.length) {
+        markOrdenLabsConductaHoy(docId, r.agregados);
+        const nombresOk = r.agregados.map((c) => (todos.find((x) => x.clave === c) || {}).nombre || c).join(", ");
+        if (r.fallidos.length) {
+          const nombresMal = r.fallidos.map((f) => f.nombre || f.clave).join(", ");
+          showToast("AMBAR", "Se agregó parte de lo pendiente", "Se agregó: " + nombresOk + ". No se pudo con: " + nombresMal + " — revíselo en la tabla.", true);
+        } else {
+          showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
+        }
+      } else if (!_pacienteSigueAbierto(docId)) {
+        // v17.42.0 — REGLA D del proyecto: no presentar un fallo del sistema como un hecho
+        // de la pantalla. Si no se agregó nada porque la historia cambió a mitad del
+        // gesto, decir ESO — el mensaje genérico ("no se encontraron los botones") sería
+        // falso, y mandaría al médico a buscar un problema que no existe.
+        showToast("AMBAR", "Se canceló para no equivocar la historia", "Se cambió de paciente mientras se agregaban los exámenes, así que se detuvo: nada se escribió en la historia de otra persona. Vuelva a abrir al paciente y púlselo de nuevo.", true);
+      } else {
+        showToast("ROJO", "No se pudo agregar", "No se encontraron los botones o la lista de exámenes en la pantalla. Inténtelo de nuevo, o agréguelo a mano.", true);
+      }
+    } catch (e) {
+      showToast("ROJO", "No se pudo agregar", "Error inesperado al agregar. Inténtelo de nuevo.", true);
+    } finally {
+      _cwoEnCurso = false;
+      btn.disabled = false;
+      btn.textContent = textoPrevio;
+      try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
+    }
+  }
+
+  function mtrWidgetOrdenarConductaTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-ordenar-btn");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) { if (el) el.style.display = "none"; _cwoDocPrevio = null; return; }
+      if (docId !== _cwoDocPrevio) { _cwoDocPrevio = docId; }
+
+      const ancla = mtrAnclaOrdenarPendientes(d);
+      if (!ancla) { if (el) el.style.display = "none"; return; }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+      let plan = null;
+      try { plan = mtrTableroClinico(resumen); } catch (e) { plan = null; }
+      const items = mtrItemsOrdenarConducta(plan ? plan.ordenar : []);
+
+      let btn = el;
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.id = "vgl-cw-ordenar-btn";
+        btn.type = "button";
+        document.body.appendChild(btn);
+      }
+      // v17.34.0 — centrado EXACTO entre "Historial" y "Paquetes", justo debajo de los
+      // dos (encargo del médico): el punto medio va del borde izquierdo de Historial al
+      // borde derecho de Paquetes, y el botón se centra sobre ese punto con `transform`
+      // (ver CSS) — así no hace falta medir el ancho propio del botón, que cambia según
+      // el texto ("Ordenar pendientes (3)" vs "✓ Ordenado hoy").
+      const rH = ancla.historial.getBoundingClientRect();
+      const rP = ancla.paquetes.getBoundingClientRect();
+      const centroX = (rH.left + rP.right) / 2;
+      const debajoDeAmbos = Math.max(rH.bottom, rP.bottom) + 8;
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed`: el navegador lo
+      // desplaza solo con el scroll normal, igual que "Historial"/"Paquetes" — sin JS.
+      btn.style.position = "absolute";
+      btn.style.left = Math.round(centroX + _cwCoordX()) + "px";
+      btn.style.top = Math.round(debajoDeAmbos + _cwCoordY()) + "px";
+
+      if (_cwoEnCurso) { btn.style.display = ""; return; }   // no se repinta a mitad de un clic en curso
+
+      const todos = items.paquete.concat(items.individuales);
+      const yaOrdenado = isOrdenLabsConductaHoy(docId);
+      if (!todos.length && !yaOrdenado) { btn.style.display = "none"; return; }
+
+      // v17.39.0 — sin `isLight()`: este botón siempre se ve como Everest (fondo blanco,
+      // texto casi negro, literal), nunca según el tema del propio Vigilante — la clase
+      // "light" tampoco la usaba ninguna regla de CSS (quedó viva sin dueño desde v17.32.0).
+      btn.className = "vgl-cw-ord-btn" + (yaOrdenado ? " vgl-cw-ord-hecho" : "");
+      btn.style.display = "";
+      if (yaOrdenado) {
+        btn.disabled = true;
+        btn.textContent = "✓ Agregado hoy";
+        btn.title = "Ya se agregaron a Conducta los laboratorios pendientes hoy para este paciente. Recuerde guardar la consulta.";
+        btn.onclick = null;
+      } else {
+        btn.disabled = false;
+        btn.textContent = "📋 Ordenar pendientes (" + todos.length + ")";
+        btn.title = "Agrega de una vez, en la tabla de Ordenamientos, todo lo que toca en la próxima consulta: " + todos.map((x) => x.nombre).join(", ") + ".";
+        btn.onclick = (e) => { e.stopPropagation(); return _cwoClic(btn, docId); };
+      }
+    } catch (e) {}
+  }
+
+  // =====================================================================
+  //  v17.24.0 — WIDGET DE CONDUCTA: análisis farmacológico (Fase 2)
+  //  ---------------------------------------------------------------------
+  //  Pedido del médico (28-ago): avisos de seguridad farmacológica junto a donde
+  //  receta en Conducta, en vez de escondidos en la pestaña Medicamentos del Panel
+  //  (retirada en la Fase 1, v17.24.0). Mismo patrón que #vgl-cw-examenes: badge +
+  //  panel, 3 estados honestos, ancla real vía getBoundingClientRect, firma barata
+  //  anti-parpadeo, reset duro entre pacientes.
+  //
+  //  ANCLA CONFIRMADA POR GRABACIÓN REAL (28-ago, DIAGNOSTICO_CONDUCTA_DOM.js, sin
+  //  datos de paciente — solo estructura): el botón "+" de cada tarjeta de
+  //  medicamento (`.btn-reformular`, dentro de `.med-card` en un modal Angular
+  //  propio, `app-modal-reformular`) es la única evidencia real que existe. Si el
+  //  paciente no tiene medicamentos activos ese botón puede no existir todavía y el
+  //  widget simplemente no aparece — nunca flota a ciegas, mismo principio que la
+  //  Fase 1 del widget de exámenes.
+  //
+  //  LO QUE ESTA VERSIÓN NO LOGRA, Y POR QUÉ: el pedido original era "en tiempo
+  //  real mientras receta". La grabación real confirmó el gesto de REFORMULAR
+  //  (renovar/ajustar dosis de un medicamento ya activo) con total detalle, pero
+  //  nunca capturó el de AGREGAR uno nuevo, ni la estructura interna de una
+  //  `.med-card` (nombre/dosis/vía) — el propio script de captura redacta todo
+  //  texto por diseño (cero PHI), así que esa estructura sigue siendo desconocida.
+  //  Escribir un lector de esa estructura sería adivinar la forma del dato, justo
+  //  lo que "casilla vacía antes que dato inventado" prohíbe. En su lugar, el
+  //  widget se repinta tras una acción REAL y confirmada — un clic en "+" o en el
+  //  botón de confirmar del modal de reformular — releyendo los medicamentos por
+  //  la misma vía que ya usa el resto del script (mtrRefrescarMedicamentos, la API
+  //  de Everest). No es por tecla; es lo más cerca de "en vivo" que se puede
+  //  construir hoy sin inventar una estructura de DOM que nadie verificó.
+  // =====================================================================
+  function mtrBotonFarmacoConducta(doc) {
+    try {
+      const d = doc || document;
+      if (_vglEnPestana("conducta", d) !== true) return null;
+      const botones = Array.from(d.querySelectorAll(".btn-reformular"));
+      const visibles = botones.filter(_vglVisibleDeVerdad);
+      return visibles.length ? visibles[0] : null;
+    } catch (e) { return null; }
+  }
+
+  // Pura: de un `resumen` clínico ya calculado, arma lo que este widget necesita
+  // mostrar. Reusa mtrAvisosFarmacologicos/mtrDuplicidadesTerapeuticas, el mismo
+  // motor que ya pinta la sección de Medicamentos del Redactor y (hasta la Fase 1)
+  // pintaba la extinta pestaña del Panel — nunca un cálculo propio que diverja.
+  function mtrWidgetFarmacoDatos(resumen) {
+    if (!resumen) return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo evaluar todavía.</div>' };
+    const crudos = Array.isArray(resumen.medicamentos) ? resumen.medicamentos : null;
+    const meds = crudos ? mtrMedicamentosUnicos(crudos) : null;
+    if (meds === null) {
+      return { n: 0, sinJuicio: true, html: '<div class="vgl-cw-err-msg">No se pudo leer la lista de medicamentos todavía.</div>' };
+    }
+    const dups = mtrDuplicidadesTerapeuticas(meds);
+    const dupsHtml = mtrRenderDuplicidadesHtml(meds) || "";
+
+    // Decisión del médico (28-ago): con el motor de avisos apagado (su estado de
+    // fábrica), el widget aparece con un aviso NEUTRO — nunca oculto, nunca como si
+    // no hubiera nada que evaluar. La duplicidad terapéutica no depende del motor
+    // (mtrPanelMedicamentosHtml ya la trataba así) y sigue viéndose igual.
+    if (!mtrMotorEncendido()) {
+      return {
+        n: dups.length, sinJuicio: !dups.length,
+        html: '<div class="vgl-cw-err-msg">Motor de avisos apagado — actívelo en Ajustes para evaluar interacciones y dosis renal aquí.</div>' + dupsHtml,
+      };
+    }
+
+    let avisosHtml = "", nAvisos = 0, sinJuicioAvisos = false;
+    try {
+      const ctx = {
+        medicamentos: meds,
+        tfgCkdEpi: (resumen.erc && resumen.erc.egfr != null) ? resumen.erc.egfr : null,
+        tfgCockcroftGault: (resumen.erc && resumen.erc.crcl != null) ? resumen.erc.crcl : null,
+        potasio: (resumen._ultimos && resumen._ultimos.POTASIO && resumen._ultimos.POTASIO.valor) || null,
+        medicamentosFrecuencia: resumen.medicamentosFrecuencia || undefined,
+      };
+      const r = mtrAvisosFarmacologicos(ctx);
+      const todo = Array.isArray(r.todo) ? r.todo : [];
+      nAvisos = todo.length;
+      sinJuicioAvisos = !todo.length && (r.motivo === "SIN_LISTA_DE_MEDICAMENTOS" || r.motivo === "SIN_FUNCION_RENAL");
+      avisosHtml = mtrRenderAvisosHtml(ctx) || "";
+    } catch (e) { avisosHtml = ""; }
+
+    return { n: nAvisos + dups.length, sinJuicio: sinJuicioAvisos && !dups.length, html: avisosHtml + dupsHtml };
+  }
+
+  let _cwfDocPrevio = null, _cwfFirmaPrevia = "", _cwfNPrevio = 0, _cwfAbierto = false;
+  function _cwfEstadoParaTest() { return { docPrevio: _cwfDocPrevio, firma: _cwfFirmaPrevia, nPrevio: _cwfNPrevio }; }
+  function _cwfResetParaTest() { _cwfDocPrevio = null; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false; }
+
+  function mtrWidgetFarmacoTick(doc) {
+    try {
+      const d = doc || document;
+      const el = document.getElementById("vgl-cw-farmaco");
+      if (!S.conductaWidgets) { if (el) el.style.display = "none"; return; }
+      const docId = extractPacienteAbierto();
+      if (!docId) {
+        if (el) el.style.display = "none";
+        _cwfDocPrevio = null; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false;
+        return;
+      }
+      if (docId !== _cwfDocPrevio) { _cwfDocPrevio = docId; _cwfFirmaPrevia = ""; _cwfNPrevio = 0; _cwfAbierto = false; }
+      const boton = mtrBotonFarmacoConducta(d);
+      if (!boton) { if (el) el.style.display = "none"; return; }
+      let resumen = null;
+      try { resumen = mtrCacheResumenLeer(docId); } catch (e) { resumen = null; }
+      if (!resumen) { if (el) el.style.display = "none"; return; }
+
+      let widget = el;
+      if (!widget) {
+        widget = document.createElement("div");
+        widget.id = "vgl-cw-farmaco";
+        widget.addEventListener("click", (e) => {
+          e.stopPropagation();
+          _cwfAbierto = !_cwfAbierto;
+          widget.classList.toggle("vgl-cw-abierto", _cwfAbierto);
+          widget.classList.remove("vgl-cw-atencion");
+        });
+        document.body.appendChild(widget);
+      }
+      const r = boton.getBoundingClientRect();
+      // v17.38.0 — `absolute` (coordenadas de PÁGINA), no `fixed`: el navegador lo
+      // desplaza solo con el scroll normal, sin JS.
+      widget.style.position = "absolute";
+      widget.style.left = (mtrPosicionPanelJuntoA(r, 280) + _cwCoordX()) + "px";
+      widget.style.top = (Math.round(r.top) + _cwCoordY()) + "px";
+      widget.style.display = "";
+
+      const datos = mtrWidgetFarmacoDatos(resumen);
+      const firma = docId + "|" + datos.n + "|" + datos.sinJuicio + "|" + datos.html.length;
+      if (firma === _cwfFirmaPrevia) return;
+      const subeDeSeveridad = _cwfFirmaPrevia !== "" && _cwfNPrevio === 0 && datos.n > 0;
+      _cwfFirmaPrevia = firma; _cwfNPrevio = datos.n;
+      const clase = datos.sinJuicio ? "vgl-cw-nd" : (datos.n > 0 ? "vgl-cw-pend" : "vgl-cw-ok");
+      widget.className = "vgl-cw " + clase + (isLight() ? " light" : "") + (_cwfAbierto ? " vgl-cw-abierto" : "") + (subeDeSeveridad ? " vgl-cw-atencion" : "");
+      widget.innerHTML = '<div class="vgl-cw-badge">💊' + (datos.n ? " " + datos.n : "") + '</div><div class="vgl-cw-panel">' + datos.html + '</div>';
+    } catch (e) {}
+  }
+
+  // Repinta tras una acción REAL de prescribir — ver el comentario grande de arriba
+  // sobre por qué no es por tecla. Los dos selectores (.btn-reformular, el botón de
+  // confirmar de app-modal-reformular) son los únicos confirmados por la grabación
+  // real; si Everest los cambia, este disparador simplemente deja de dispararse —
+  // nunca bloquea ni rompe el flujo del médico.
+  let _cwfRefrescoPendiente = null;
+  function _cwfProgramarRefresco() {
+    try {
+      if (!S.conductaWidgets) return;
+      const docId = extractPacienteAbierto();
+      if (!docId) return;
+      if (_cwfRefrescoPendiente) clearTimeout(_cwfRefrescoPendiente);
+      _cwfRefrescoPendiente = setTimeout(function () {
+        _cwfRefrescoPendiente = null;
+        Promise.resolve()
+          .then(function () {
+            mtrMedsInvalidar();
+            return mtrRefrescarMedicamentos(docId);
+          })
+          .then(function (lista) {
+            if (lista === null) return;
+            try {
+              const resumen = mtrCacheResumenLeer(docId);
+              if (resumen) {
+                resumen.medicamentos = lista;
+                try { resumen.medicamentosFrecuencia = mtrLeerFrecuenciasMedicamento(docId); } catch (e) {}
+                mtrCacheResumenGuardar(docId, resumen);
+              }
+            } catch (e) {}
+          })
+          .catch(function () {})
+          .then(function () { mtrWidgetFarmacoTick(); });
+      }, 1200);
+    } catch (e) {}
+  }
+  function _cwfInstalarEscucha() {
+    if (_cwfInstalarEscucha._listo || typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+    _cwfInstalarEscucha._listo = true;
+    document.addEventListener("click", function (e) {
+      try {
+        const t = e && e.target;
+        if (!t || !t.closest) return;
+        if (t.closest(".btn-reformular") || t.closest("app-modal-reformular .footer-actions button")) {
+          _cwfProgramarRefresco();
+        }
+      } catch (err) {}
+    }, true);
+  }
+
+  // =====================================================================
+  //  v17.38.0 — CORRECCIÓN DEL MÉDICO sobre v17.37.0: "yo no te pedí que siguiera el
+  //  scroll, te pedí que sea un botón estático debajo del botón de historial y
+  //  paquetes de Everest". El arreglo de v17.37.0 (reposicionar por JS en cada evento
+  //  de scroll) resolvía el síntoma reportado (el widget "viajaba", desanclado del
+  //  botón real) pero no era lo que él pidió: un botón que reacciona a cada scroll
+  //  con JavaScript se siente distinto de un botón que de verdad está "ahí", como
+  //  cualquier otro elemento de la página. Se retira ese mecanismo por completo
+  //  (_cwReposicionarEnScroll/_cwInstalarEscuchaScroll).
+  //
+  //  RAÍZ DE FONDO: los tres widgets usaban `position:fixed`, que se mide en
+  //  coordenadas de VENTANA — un elemento fijo NUNCA se mueve con el scroll de la
+  //  página por diseño del navegador, así que la única forma de que "siguiera" al
+  //  botón real era recalcular su posición con JS todo el tiempo (justo lo que se
+  //  acaba de rechazar). `position:absolute` es la pieza que faltaba: se mide en
+  //  coordenadas de PÁGINA (documento completo, no solo lo visible), así que el
+  //  navegador lo desplaza solo con el scroll normal — CERO JavaScript de por medio,
+  //  literalmente estático respecto al resto del contenido, que es lo que se pidió.
+  //  `_cwCoordX`/`_cwCoordY` solo suman el desplazamiento de scroll actual
+  //  (`window.pageXOffset`/`pageYOffset`) al rectángulo de pantalla que ya devuelve
+  //  `getBoundingClientRect()` — la misma cuenta que hace cualquier tooltip anclado a
+  //  un elemento que necesita sobrevivir al scroll de la página.
+  // =====================================================================
+  function _cwCoordX() { try { return window.pageXOffset || document.documentElement.scrollLeft || 0; } catch (e) { return 0; } }
+  function _cwCoordY() { try { return window.pageYOffset || document.documentElement.scrollTop || 0; } catch (e) { return 0; } }
 
   // v17.1.0 (#136) — último paciente y momento en que el clic de Auto-Labs emitió su
   // aviso flotante, para no repetirlo si el médico pulsa dos veces seguidas. Gemelo de
@@ -5192,7 +6214,15 @@
                   _vglFeedbackBoton(btn,
                       _huboEscritura
                           ? "✓ " + r.count + " casillas escritas" + (r.respetadas ? " · " + r.respetadas + " respetadas" : "")
-                          : "✋ Todo ya estaba escrito: no toqué nada" + (r.respetadas ? " (" + r.respetadas + " respetadas)" : ""),
+                          // v17.8.1 — hallazgo #34. Esta frase salía siempre que `count`
+                          // fuera 0, sin mirar por qué. Si además `respetadas` es 0, no es
+                          // que «todo ya estuviera escrito»: es que NINGÚN resultado casó
+                          // con una casilla de esta vista, que es un problema distinto y
+                          // que el médico necesita saber —puede estar en la pestaña
+                          // equivocada, o los nombres del laboratorio no coinciden.
+                          : (r.respetadas
+                              ? "✋ Todo ya estaba escrito: no toqué nada (" + r.respetadas + " respetadas)"
+                              : "✋ Ningún resultado casó con una casilla de esta pantalla: no toqué nada"),
                       _huboEscritura ? "verde" : "ambar", "🧬 Auto-Labs (Athenea)");
                   _vglGuardarDeshacer(docId, _fotoRC.filter((x) => String(x.el.value == null ? "" : x.el.value) !== x.prev), "Auto-Labs");
 _vglOfrecerDeshacer(btn);
@@ -6301,7 +7331,6 @@ _vglOfrecerDeshacer(btn);
   // =====================================================================
   const SETTINGS_KEY = "vgl_cfg";
   const DEFAULTS = {
-    tolerancia: 6.0,          // minutos de gracia antes de marcar inasistencia
     refresco: 5,              // segundos entre lecturas
     tema: "oscuro",           // oscuro | claro | auto (sigue a Windows)
     sonido: true,             // tonos por color
@@ -6318,22 +7347,7 @@ _vglOfrecerDeshacer(btn);
     equipo: "",               // etiqueta del PUESTO (ej. "Consultorio 3"), NO un dato personal
     reporteUrl: "",           // opcional: otra Web App de Google (vacío = la de fábrica)
     modoRendimiento: false,   // apaga el blur/vidrio por completo (equipos muy viejos)
-    avisoPymModal: false,     // v15.0.0 — el aviso MODAL de PyM (el que bloquea hasta
-                              // reconocerlo). Apagado: su trabajo lo hace ahora el recuadro
-                              // dentro del modal de laboratorios más el chip del dock.
-    bannerPym: false,         // v15.0.0 — APAGADO POR DEFECTO. Encargo del médico del
-                              // 16-08-2026: "el script debe ser amigable y no molesto".
-                              // El banner era una franja fija arriba de la Historia Clínica
-                              // que empujaba el contenido de Everest durante TODA la consulta
-                              // y no se podía cerrar mientras algo siguiera pendiente.
-                              // LO REEMPLAZA: el recuadro clínico completo dentro del modal
-                              // (clasificación, qué falta, fecha de toma y de control), que
-                              // aparece en el momento en que sirve; y el chip discreto del
-                              // dock, que mantiene el recuento visible para que la alerta no
-                              // pueda desaparecer en silencio (D4).
-                              // En true vuelve el banner de v14 tal cual, sin tocar nada más.
     abandonoPES: true,        // alarma de abandono en riesgo cardiovascular (Abandonados_PES="Si")
-    labsVencidos: true,       // aviso ROJO de laboratorios RCV sin resultado en los últimos 180 días (v12.5.7)
     agendamientoRapido: true, // agendamiento de citas de control/PyM en 1-clic desde el panel (v7.9)
     smsRecordatorio: true,    // enviar al paciente el SMS de recordatorio al crear la cita (v11.0.1)
     tamanoLetra: "normal",    // v15.8.0 — tamaño de letra del asistente: normal | grande | muygrande (N5)
@@ -6348,9 +7362,31 @@ _vglOfrecerDeshacer(btn);
     sedeLabNombre: "",        // v15.9.0 — nombre de la sede que se imprime en el recordatorio de la toma.
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
     uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
+    // v17.43.0 — DIARIO DE LENTITUD, y NO es lo mismo que `uxTelemetria`.
+    // El médico reportó lentitud real en consulta pero "no sé cuándo" se dispara. El
+    // observador LoAF que ya existía (_iniciarRumObserver) sabe atribuir si una tarea
+    // larga fue NUESTRA o de Everest, pero solo contaba baldes agregados: perdía el
+    // contexto, así que jamás podía responder "¿cuándo?". Esto añade la otra mitad: una
+    // línea en la bitácora local por cada tarea larga NUESTRA.
+    // Nace ENCENDIDO, y eso exige justificarse frente a la regla Default-off R1.8:
+    //   · `uxTelemetria` gobierna los CONTADORES que pueden SALIR del equipo (uxTrack →
+    //     vgl_ux → repPost). Sigue apagado de fábrica y NO se toca aquí.
+    //   · `perfLog` gobierna solo la bitácora LOCAL (vglLog → localStorage), que nunca
+    //     se envía a ninguna parte y ya pasa por sanitizePII en cada campo.
+    // Lo que se guarda es el nombre de una fase nuestra y unos milisegundos. Cero PHI:
+    // ni cédula, ni nombre, ni texto del DOM. Sin esto, el defecto que el médico reporta
+    // seguiría siendo invisible, que es justo lo que la v17.15.0 dejó escrito como
+    // lección: medir antes de arreglar.
+    perfLog: true,
     motorPortado: false,      // v14.2.0 — avisos de seguridad farmacologica. NACE APAGADO:
                               // el calculo esta verificado contra el Copiloto, pero nadie lo
                               // ha visto en consulta real. Lo enciende el medico, uno a uno.
+    conductaWidgets: false,   // v17.18.0 — widgets flotantes anclados a un boton real de
+                              // Everest en la pestana Conducta (hoy: examenes a ordenar).
+                              // NACE APAGADO, mismo criterio que motorPortado: es la primera
+                              // vez que este script pinta algo propio DENTRO del espacio
+                              // visual de Conducta, con un ancla ubicada por texto (sin
+                              // captura con selector real de esa zona todavia).
     iaRedaccion: false,       // v14.2.0 — redacción asistida por IA (Gemini). NACE APAGADO:
                               // manda datos clínicos DESIDENTIFICADOS a un tercero; lo activa
                               // el médico y configura su clave. El motor está probado; la UI
@@ -6512,16 +7548,12 @@ _vglOfrecerDeshacer(btn);
       delete S.popup;
       writeJSON(SETTINGS_KEY, S);
     }
-    // Migración v15.0 RETIRO DEL BANNER (una sola vez). Sin esto el cambio no llega
-    // a ningún equipo: `writeJSON(SETTINGS_KEY, S)` guarda el objeto ENTERO, así que
-    // los veinte consultorios ya tienen `bannerPym: true` en disco y ese valor
-    // guardado le gana al nuevo valor de fábrica. Es el mismo patrón que la
-    // migración de v7.3, y por la misma razón.
-    if (localStorage.getItem("vgl_v15_banner") !== "1") {
-      localStorage.setItem("vgl_v15_banner", "1");
-      S.bannerPym = false; S.avisoPymModal = false;
-      writeJSON(SETTINGS_KEY, S);
-    }
+    // v17.19.0 — RETIRADA la migración "v15.0 RETIRO DEL BANNER": bannerPym/avisoPymModal
+    // se confirmaron 100% muertas (ningún código activo las lee, ver auditoría del
+    // 28-ago) y se retiraron de DEFAULTS. Esta migración ya corrió hace docenas de
+    // versiones en toda instalación real (su propia marca vgl_v15_banner lo impedía
+    // repetirse) — quitarla no cambia nada para nadie; solo deja de escribir a dos
+    // claves que ya no existen como default.
     // Migración v14.2.0 ESTRENO (decisión del médico para el arranque con 3 consultorios).
     // Enciende, UNA sola vez, las funciones nuevas y la telemetría de mejora del servicio.
     // Los valores de FÁBRICA siguen en false (arranque conservador para instalaciones
@@ -6572,12 +7604,12 @@ _vglOfrecerDeshacer(btn);
   function isCitaAgendadaHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return p.citas && p.citas.includes(String(docId));
+    return _vglListaTieneDoc(p.citas, docId);
   }
   function isOrdenesCreadasHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return p.ordenes && p.ordenes.includes(String(docId));
+    return _vglListaTieneDoc(p.ordenes, docId);
   }
   // v12.3.28 — "ID y bloqueo de seguridad" independiente para cita de control y toma de
   // muestras. Pedido explícito en consultorio: si la cita de control se creó pero la
@@ -6590,14 +7622,15 @@ _vglOfrecerDeshacer(btn);
   function isLabAgendadaHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return !!(p.labs && p.labs.includes(String(docId)));
+    return _vglListaTieneDoc(p.labs, docId);
   }
   // Fecha (ISO) de la cita de control agendada hoy para este paciente — null si no hay
   // ninguna, o si se agendó antes de esta versión y no quedó guardada.
   function citaAgendadaFechaHoy(docId) {
     if (!docId) return null;
     const p = getProcessedToday();
-    return (p.citasDetalle && p.citasDetalle[String(docId)] && p.citasDetalle[String(docId)].fechaIso) || null;
+    const det = _vglBuscarPorDoc(p.citasDetalle, docId);
+    return (det && det.fechaIso) || null;
   }
   function markCitaAgendadaHoy(docId, fechaIso, extra) {
     if (!docId) return;
@@ -6686,7 +7719,7 @@ _vglOfrecerDeshacer(btn);
     if (!docId) return false;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    return !!(p.agendPend && p.agendPend[sDoc]) && !isCitaAgendadaHoy(sDoc);
+    return !!_vglBuscarPorDoc(p.agendPend, sDoc) && !isCitaAgendadaHoy(sDoc);
   }
 
   // v14.2.4 — COLA DE CONDUCTA PENDIENTE (a pedido explícito del médico: Conducta pasa a
@@ -6735,7 +7768,7 @@ _vglOfrecerDeshacer(btn);
   function ordenesDetalleHoy(docId) {
     if (!docId) return null;
     const p = getProcessedToday();
-    return (p.ordenesDetalle && p.ordenesDetalle[String(docId)]) || null;
+    return _vglBuscarPorDoc(p.ordenesDetalle, docId);
   }
   function applySettings() {
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
@@ -6780,7 +7813,7 @@ _vglOfrecerDeshacer(btn);
     "#vgl-ia-inj-ea", "#vgl-ia-inj-an",     // v17.1.0 (#73) — también escalan con el tamaño de letra
     "#vgl-pym-banner", "#vgl-toasts", "#vgl-sp", "#vgl-visib-pill",
     "#vgl-acomp-burbuja", "#vgl-tip-pop", "#vgl-postcita-panel",
-    "#vgl-instancia-duplicada", "#vgl-pausa-clinica",
+    "#vgl-instancia-duplicada", "#vgl-pausa-clinica", "#vgl-cw-examenes", "#vgl-cw-farmaco", "#vgl-cw-ordenar-btn",
     ".vgl-agm-card", ".vgl-pym-card", ".vgl-modal-card", ".vgl-pes-card", ".vgl-labsv-card",
   ].join(",");
 
@@ -7142,8 +8175,46 @@ _vglOfrecerDeshacer(btn);
   function _pestanaOculta() {
     try { return document.visibilityState === "hidden"; } catch (e) { return false; }
   }
+  // =====================================================================
+  //  v17.40.0 — REPORTE EN VIVO: "cuando estoy en otra ventana o en otro programa, no me
+  //  avisa de llegadas, cambios de leyenda, inasistencias". Causa confirmada: la decisión
+  //  de canal (toast dentro de la página vs. notificación real de Windows, ver notify()
+  //  más abajo) miraba solo `_pestanaOculta()` — que la API del navegador NO marca "hidden"
+  //  mientras la pestaña siga abierta en pantalla, aunque esté DETRÁS de otra ventana o el
+  //  médico esté usando otro programa. Solo pasa a "hidden" al minimizar o cambiar de
+  //  pestaña. Con Everest de fondo pero no minimizado, el script creía que el médico seguía
+  //  mirando, pintaba el toast DENTRO de la página — tapado por la otra ventana — y nunca
+  //  llegaba a la notificación real del sistema operativo.
+  //
+  //  `_pestanaSinAtencion()` es la pregunta correcta para decidir el CANAL de aviso: además
+  //  de oculta, "ventana visible pero sin el foco" (`!document.hasFocus()`) cuenta igual —
+  //  las dos son "el médico no está mirando esta pantalla ahora mismo". A propósito NO se
+  //  usa para el relevo de liderazgo entre pestañas (`heartbeat()`, más abajo): ese sigue
+  //  usando `_pestanaOculta()` a secas — perder el foco (sin estar oculta) no debe disparar
+  //  un relevo de mando, solo cambiar cómo se avisa.
+  // =====================================================================
+  function _pestanaSinAtencion() {
+    try { return _pestanaOculta() || !document.hasFocus(); } catch (e) { return _pestanaOculta(); }
+  }
   const RELEVO_VISIBILIDAD_MIN_MS = 10000;
   let _ultimoRelevoVisibilidad = 0;
+  // v17.17.0 — REPORTE EN VIVO (27-ago): "avisa erróneamente que activaron un paciente
+  // tarde y no fue así" — un FALSO POSITIVO de contenido, no una demora. Causa real
+  // (reproducida con el arnés, dos pestañas del MISMO médico compartiendo storage):
+  // cuando esta pestaña toma el mando por `relevoPorVisibilidad` (una pestaña ajena
+  // quedó oculta y estrangulada), su PRIMERA lectura — venga del DOM propio (que Everest
+  // pudo no haber refrescado mientras estuvo oculta) o de `state.apiCitas` (que puede
+  // traer hasta 180 s de antigüedad, ver tick()) — no tiene ninguna garantía de reflejar
+  // el estado ACTUAL. Si esa lectura estancada dice "Sin presentarse" y el reloj real ya
+  // superó la gracia, la v17.6.74 la deja originar fraudWatch igual (`state.leader` era
+  // la única condición) — acusando de tardanza a un paciente que otra pestaña ya había
+  // confirmado A TIEMPO minutos antes. La ventana de gracia de abajo NO toca `esNueva`
+  // (que sigue sin demorarse nunca — lo exige el propio comentario de colorAndAlert y dos
+  // pruebas ya existentes) ni el camino API por separado: se aplica UNA vez, por pestaña,
+  // solo en los milisegundos que siguen a un relevo por visibilidad genuino — un arranque
+  // de sesión normal (sin relevo ajeno de por medio) nunca la toca, porque
+  // `_ultimoRelevoVisibilidad` empieza en 0 y jamás se actualiza sin un latido ajeno real.
+  const RELEVO_GRACIA_FRAUDE_MS = 8000;
   // vN — write-condicional del latido: último instante/visibilidad con que se escribió
   // LEADER_KEY. Ver heartbeat() para el porqué del umbral de 10 s.
   const BEAT_WRITE_MIN_MS = 10000;
@@ -7215,6 +8286,15 @@ _vglOfrecerDeshacer(btn);
     // ("0005150076") y la agenda la trae limpia ("5150076"), deben ser la misma clave.
     return s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
   }
+  // v17.48.0 — La cédula que sale de la pantalla o del API indexa TODA la memoria local
+  // (vgl_cosecha, vgl_proc_today, cachés). `extractDoc` la EXTRAE de texto crudo pero no
+  // la canonicaliza: si Everest la entrega rellenada ("0005150076") por una vía y limpia
+  // ("5150076") por otra, el mismo paciente quedaba con dos claves distintas y el script
+  // parecía "olvidar" lo aprendido. Se COMPONEN — extraer y luego canonicalizar — en vez
+  // de sustituir una por otra: `extractDoc` tolera "CC 8396613, 66 años" y exige 5-15
+  // dígitos (cosas que `normalizeKey` no hace), y `normalizeKey` resuelve la notación
+  // científica y los ceros a la izquierda (cosas que `extractDoc` no hace).
+  function _vglDocCanon(t) { return normalizeKey(extractDoc(t)); }
   function extractDoc(t) { if (!t) return ""; const first = t.split(",")[0].replace(/[.\s]/g, ""); let m = /^(\d{5,15})$/.exec(first); if (m) return m[1]; m = /(\d{5,15})/.exec(t.replace(/[.\s]/g, "")); return m ? m[1] : ""; }
   // Se ejecuta más de un millón de veces con las bases grandes: primero los descartes
   // baratos (vacío o texto largo) y solo después se normaliza la cadena.
@@ -7262,10 +8342,14 @@ _vglOfrecerDeshacer(btn);
     return CONFIG.EXCLUDE_PYM.some((k) => hay.includes(k));
   }
   function getActivities(docId) { return state.pym.get(normalizeKey(docId)) || []; }
-  // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS del panel, por pedido
-  // del consultorio: saturaban la fila y no son órdenes que se generen desde ahí. El
-  // filtro se aplica EN LÍNEA dentro de pymPendientesRestantes (v17.6.10: las funciones
-  // aparte isPanelHiddenActivity/panelActivities no tenían llamador en producción).
+  // v12.4.0 — Optometría (AV) y Odontología (OD) salen de los CHIPS de la tarjeta, por
+  // pedido del consultorio: saturaban la fila y no son órdenes que se generen desde ahí.
+  // SIGUEN en el índice PyM: el aviso al abrir la historia (pymAlert) las muestra igual.
+  // v17.6.10 retiró estas dos funciones por falta de llamador (T4 había amputado los
+  // chips); v17.22.0 las restaura, textualmente iguales a su última versión viva (commit
+  // 46e2076^), porque el médico pidió reintroducir los chips en la tarjeta.
+  function isPanelHiddenActivity(label) { return /optometr|odontolog/i.test(stripAccents(String(label || ""))); }
+  function panelActivities(list) { return (list || []).filter((l) => !isPanelHiddenActivity(l)); }
   // v12.4.0 — Pendientes que QUEDAN para el aviso de la historia: todo lo del índice PyM
   // menos las actividades cuyas órdenes ya se generaron HOY desde el panel (el detalle
   // por actividad lo guarda markOrdenesCreadasHoy). Si el médico no ha ordenado nada,
@@ -7824,6 +8908,48 @@ _vglOfrecerDeshacer(btn);
   function debeBuscarPymDiario() {
     return !state.pymFile || state.pymFallback === true || state.pymDia !== todayStamp();
   }
+  // v17.16.0 — TANDA 4, REGLA D («un mensaje tranquilizador exige evidencia de que se
+  // evaluó algo»). El modal de Órdenes decía, sin coincidencias:
+  //
+  //   «No se detectaron actividades de prevención pendientes en la base de PyM PARA ESTE
+  //    PACIENTE.»
+  //
+  // Eso es una afirmación sobre el PACIENTE, y se emitía igual en tres situaciones que no
+  // se parecen en nada:
+  //   1. la lista de hoy está cargada y él no tiene nada pendiente  -> la frase es cierta;
+  //   2. la lista está cargada y él NO APARECE en ella (cédula que no cruza, paciente
+  //      nuevo) -> no se sabe nada de él, y el propio índice ya guarda pymTodos justo
+  //      para poder distinguirlo (ver el comentario de indexRows);
+  //   3. la lista NO está cargada (SharePoint caído, aún no la suben, o es la de ayer)
+  //      -> no se miró ninguna lista, y la frase es sencillamente falsa.
+  //
+  // Es el patrón G del informe del enjambre —«el fallo del sistema se presenta como un
+  // hecho del paciente»— idéntico a los nueve que corrigió la v17.8.1. Los datos para
+  // distinguir los tres casos YA existían (state.pymFile, pymDia, pymFallback, pymTodos):
+  // lo único que faltaba era no tirarlos.
+  //
+  // Función PURA para poder probarla: recibe el estado, devuelve el motivo y el texto.
+  const PYM_SIN_ACT_MOTIVOS = ["sin_lista", "no_esta_en_lista", "sin_pendientes"];
+  function pymMotivoSinActividades(est) {
+    const e = est || {};
+    if (!e.listaCargada || e.esBasePiloto || e.diaDistinto) {
+      return {
+        motivo: "sin_lista",
+        texto: "No tengo cargada la lista de prevención de hoy" + (e.esBasePiloto ? " (estoy con la base de respaldo, no con la de la sede)" : e.diaDistinto ? " (la que tengo es de otro día)" : "") + ", así que NO he podido mirar qué le corresponde a este paciente. Esto no dice que no tenga nada pendiente: dice que no lo sé. Cargue la lista con «Abrir PyM», o revise el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    if (e.pacienteEnLista === false) {
+      return {
+        motivo: "no_esta_en_lista",
+        texto: "Este paciente NO aparece en la lista de prevención de hoy (puede ser nuevo, o su identificación no cruza con la del archivo). Por eso no puedo decir qué le corresponde. Si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+      };
+    }
+    return {
+      motivo: "sin_pendientes",
+      texto: "Este paciente está en la lista de prevención de hoy y no tiene actividades pendientes. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.",
+    };
+  }
+
   // Huella de un archivo PyM: identifica "el mismo archivo" sin depender solo de la fecha.
   function pymFP(name, mtime) { return String(name || "") + "|" + String(mtime || ""); }
 
@@ -8076,6 +9202,18 @@ _vglOfrecerDeshacer(btn);
       try { err0 = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); } catch (e) {}
       paso("Último envío confirmado", !!ok0, ok0 ? "hace " + Math.max(0, Math.round((Date.now() - new Date(ok0).getTime()) / 60000)) + " min" : "nunca visto en este equipo");
       paso("Último intento fallido", !err0, err0 ? (err0.detalle || "?") + " (" + String(err0.ts || "").slice(0, 16) + ")" : "ninguno registrado");
+      // v17.51.0 — lo que contesta el panel, tal cual. Sirve para dos cosas: ver de un
+      // vistazo si quien responde es el panel o algo que se metio por medio (un proxy, una
+      // pagina de sesion), y decidir con un dato real si la prueba de acuse puede pasar a
+      // ser una lista blanca estricta. Un cuerpo que no sea "ok"/"dup"/"no"/"err" no se
+      // declara malo aqui —hoy cuenta como entrega— pero SÍ se enseña.
+      let cuerpo0 = "";
+      try { cuerpo0 = localStorage.getItem("vgl_rep_last_body") || ""; } catch (e) {}
+      const cuerpoConocido = ["ok", "dup", "no", "err"].indexOf(String(cuerpo0).trim().toLowerCase()) >= 0;
+      paso("Lo que contesta el panel", !cuerpo0 || cuerpoConocido,
+        !cuerpo0 ? "todavía no ha contestado nada en este equipo — pulse «Probar conexión»"
+                 : (cuerpoConocido ? "«" + cuerpo0 + "» (respuesta esperada del panel)"
+                                   : "«" + cuerpo0 + "» — esto NO lo dice el panel: quien contesta puede no ser él"));
       let sum = "";
       try { sum = localStorage.getItem("vgl_rep_sum") || ""; } catch (e) {}
       const ayer = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
@@ -8100,8 +9238,29 @@ _vglOfrecerDeshacer(btn);
             // el sello en verde — indistinguible del éxito. "dup" sí es éxito: la fila ya
             // había llegado y el servidor la descartó por duplicada.
             const rechazoToken = String(r.responseText || "").trim().toLowerCase() === "no";
-            const ok = r.status >= 200 && r.status < 400 && !rechazoLogin && !respuestaHtml && !rechazoToken;
-            _repSello(ok, ok ? "" : (rechazoLogin ? "la hoja pidió inicio de sesión (revisar despliegue del panel)" : respuestaHtml ? "el panel respondió una página, no un acuse (URL o despliegue)" : rechazoToken ? "el panel rechazó el token (¿se rotó en Codigo.gs sin actualizar el script?)" : "respuesta " + r.status));
+            // v17.49.0 (D4) — El receptor envuelve TODO su trabajo en un try/catch que
+            // devuelve el cuerpo "err" con estado HTTP 200 (TABLERO/Codigo.gs). Ese cuerpo
+            // significa "no pude escribir la fila": cuota de Apps Script, contención de la
+            // Hoja, tiempo agotado. Hasta hoy no era ni "no", ni HTML, ni login, ni un
+            // estado feo — así que pasaba por ENTREGA BUENA: la fila se retiraba de la cola
+            // y, peor, el sello «último envío confirmado» se ponía verde y autorizaba
+            // treinta minutos de beacon contra un panel que estaba fallando. Un fallo del
+            // sistema presentado como un hecho: exactamente lo que este proyecto no acepta.
+            const falloServidor = String(r.responseText || "").trim().toLowerCase() === "err";
+            const ok = r.status >= 200 && r.status < 400 && !rechazoLogin && !respuestaHtml && !rechazoToken && !falloServidor;
+            // v17.51.0 — QUE CONTESTA EL PANEL, LITERALMENTE. La prueba de acuse de arriba
+            // es una LISTA NEGRA: da por buena toda respuesta que no reconozca como mala,
+            // asi que un cuerpo vacio (respuesta truncada) o el texto de un proxy que no sea
+            // HTML seguirian contando como entrega. Lo correcto seria una lista BLANCA —solo
+            // "ok" y "dup"—, y el receptor que vive en este repositorio nunca ha respondido
+            // otra cosa... pero su propia cabecera dice que el DESPLEGADO es una version
+            // anterior a todo el historial, y desde aqui no hay forma de saber que contesta.
+            // Equivocarse en esa direccion apaga la telemetria entera en silencio, que es
+            // peor que el agujero que cerraria. Asi que en vez de adivinar se guarda la
+            // respuesta REAL, recortada y saneada, y se le enseña al medico en «Probar y
+            // diagnosticar»: con una sola pulsacion suya la pregunta queda contestada.
+            try { localStorage.setItem("vgl_rep_last_body", sanitizePII(String(r.responseText || "").trim().slice(0, 80))); } catch (e3) {}
+            _repSello(ok, ok ? "" : (rechazoLogin ? "la hoja pidió inicio de sesión (revisar despliegue del panel)" : respuestaHtml ? "el panel respondió una página, no un acuse (URL o despliegue)" : rechazoToken ? "el panel rechazó el token (¿se rotó en Codigo.gs sin actualizar el script?)" : falloServidor ? "el panel recibió la fila pero no pudo guardarla (¿cuota de Google agotada?)" : "respuesta " + r.status));
             res(ok);
           },
           onerror: () => { _repSello(false, "sin red hacia el panel (¿proxy de la IPS?)"); res(false); },
@@ -8182,6 +9341,11 @@ _vglOfrecerDeshacer(btn);
     try { let g = 0; while (repQ.length && g++ < 10) { if (await repPost(repQ[0])) { repQ.shift(); repQSave(); } else break; } }
     finally { repFlushing = false; }
   }
+  // v17.49.0 (D4) — Vive como funcion CON NOMBRE, no como un closure dentro de boot(),
+  // por la misma razon que _vaciarTelemetriaAlSalir: para que el banco pueda ejercerla.
+  // Un timer cuyo cuerpo nadie puede llamar es un timer que nadie puede probar.
+  function _repVaciadoDeArranque() { try { repFlush(); } catch (e) {} }
+
   // v12.6.9 — IDENTIFICADOR DE EQUIPO AUTOMÁTICO. Hasta v12.6.8 la columna `equipo` del
   // tablero salía VACÍA en todas las filas: dependía de que alguien escribiera a mano el
   // ajuste S.equipo, y nadie lo hace. Sin ese dato el tablero es un montón de filas
@@ -8455,6 +9619,73 @@ _vglOfrecerDeshacer(btn);
   // balde perdía su etiqueta en silencio. La «a» del medio corta la corrida y el saneador
   // sigue igual de estricto.
   const RUM_UMBRALES = [[300, "gt300ms"], [100, "de100a300ms"], [50, "50_100ms"]];
+
+  // =====================================================================
+  //  v17.43.0 — DIARIO DE LENTITUD: de "cuánto" a "cuándo y qué"
+  //
+  //  El médico reportó lentitud en consulta real y, al preguntarle cuándo, respondió
+  //  "sí, pero no sé cuándo". Con lo que había no se podía saber: el observador LoAF
+  //  contaba baldes (`rum.self.task.gt300ms`) y ahí se acababa la información — un
+  //  contador dice cuántas veces pasó, nunca qué estaba corriendo.
+  //
+  //  El puente es este anillo. `_rumTramo` (que existía desde la v17.1.0 y NUNCA se
+  //  adoptó en ningún llamador real, ver su comentario) deja aquí las fases nuestras que
+  //  costaron >= 50 ms. Cuando el LoAF avisa de un cuadro largo que fue NUESTRO, se
+  //  vuelca ese anillo a la bitácora: entonces la línea dice qué fase se estaba
+  //  ejecutando, no solo que algo tardó.
+  //
+  //  CERO PHI, por construcción: aquí solo entra un nombre de fase de un catálogo fijo
+  //  que escribimos nosotros (`tick.cosecha`, `tick.widgets`...) y un número de
+  //  milisegundos. Nunca una cédula, un nombre, ni texto del DOM. Y `vglLog` pasa cada
+  //  campo por `sanitizePII` de todos modos.
+  //
+  //  Tope 12: suficiente para reconstruir un tick completo y sus vecinos, y lo bastante
+  //  pequeño para que el volcado no cueste nada frente a la tarea de 300 ms que lo dispara.
+  // =====================================================================
+  const RUM_TRAMOS_MAX = 12;
+  let _rumTramosRecientes = [];
+  function _rumTramoAnotar(nombre, ms) {
+    try {
+      _rumTramosRecientes.push({ f: String(nombre), ms: Math.round(ms) });
+      if (_rumTramosRecientes.length > RUM_TRAMOS_MAX) {
+        _rumTramosRecientes = _rumTramosRecientes.slice(-RUM_TRAMOS_MAX);
+      }
+    } catch (e) {}
+  }
+  // Costura para el banco: leer y vaciar el anillo sin tocar el estado por dentro.
+  function _rumTramosParaTest() { return _rumTramosRecientes.slice(); }
+  function _rumTramosResetParaTest() { _rumTramosRecientes = []; }
+
+  // Escribe UNA línea de bitácora por tarea larga nuestra. Se llama solo cuando el LoAF
+  // ya decidió que el tiempo fue mayoritariamente nuestro y pasó del umbral: es un
+  // suceso raro por definición, así que el coste de `vglLog` (~0,20 ms medidos, ver el
+  // comentario de `_frLogs`) es despreciable frente a los >=300 ms que lo provocaron.
+  function _perfRegistrarTareaLarga(msCuadro, msNuestros) {
+    try {
+      if (S.perfLog === false) return;
+      const tramos = _rumTramosRecientes.slice(-6);
+      // Se vacía tras volcar: si no, la siguiente tarea larga arrastraría las fases de
+      // esta y la bitácora acusaría a la fase equivocada.
+      _rumTramosRecientes = [];
+      vglLog("PERF", "tarea_larga", {
+        ms: Math.round(msCuadro),
+        ms_nuestros: Math.round(msNuestros),
+        // Dónde estaba el médico. `_seccionActiva` devuelve un nombre de nuestro propio
+        // catálogo ("historia", "agenda", "otra"), nunca una URL ni un id de Everest.
+        seccion: (function () { try { return String(seccionActiva() || "?"); } catch (e) { return "?"; } })(),
+        // Si había una historia abierta — un booleano, NO la cédula.
+        con_historia: (function () {
+          try {
+            const dockEl = document.getElementById("vgl-acciones-dock");
+            return !!(dockEl && dockEl.dataset && dockEl.dataset.vglDoc);
+          } catch (e) { return false; }
+        })(),
+        oculta: (function () { try { return !!_pestanaSinAtencion(); } catch (e) { return false; } })(),
+        fases: tramos.map(function (t) { return t.f + ":" + t.ms; }).join(" "),
+      });
+    } catch (e) {}
+  }
+
   function _rumCubeta(dur) {
     for (let i = 0; i < RUM_UMBRALES.length; i++) if (dur >= RUM_UMBRALES[i][0]) return RUM_UMBRALES[i][1];
     return null;
@@ -8485,7 +9716,16 @@ _vglOfrecerDeshacer(btn);
   function _iniciarRumObserver() {
     try {
       if (typeof PerformanceObserver === "undefined") return;
-      if (S.uxTelemetria === false) return;
+      // v17.43.0 — la compuerta se abre con CUALQUIERA de los dos interruptores, no solo
+      // con `uxTelemetria`. Son dos cosas distintas: `uxTelemetria` gobierna los
+      // contadores que pueden SALIR del equipo (y sigue apagada de fábrica), `perfLog`
+      // gobierna la bitácora LOCAL de lentitud. Si el observador siguiera atado solo al
+      // primero, `perfLog` sería letra muerta: el médico lo tiene apagado y nunca se
+      // habría registrado la lentitud que él mismo reportó.
+      // Los `uxTrack` de aquí dentro NO cambian: se autocensuran solos (ver su guarda
+      // `if (S.uxTelemetria === false) return;`), así que encender `perfLog` no filtra
+      // ni un contador de más hacia el tablero.
+      if (S.uxTelemetria === false && S.perfLog === false) return;
       const tipos = (PerformanceObserver.supportedEntryTypes || []);
       const hayLoaf = tipos.indexOf && tipos.indexOf("long-animation-frame") >= 0;
 
@@ -8511,6 +9751,16 @@ _vglOfrecerDeshacer(btn);
                 // Y el tiempo NUESTRO se cuenta aparte, aunque el cuadro sea de Everest:
                 // es el número que de verdad responde «¿cuánto le cuesto al médico?».
                 if (msNuestros >= 50) uxTrack("rum.self.ms." + _rumCubeta(msNuestros));
+                // v17.43.0 — y AQUÍ es donde el contador se vuelve un diagnóstico. Si el
+                // cuadro largo fue mayoritariamente nuestro y pasó de 300 ms, se deja una
+                // línea en la bitácora con las fases que acababan de correr. Ese es el
+                // dato que convierte «no sé cuándo» en «fue la cosecha, a las 10:42, con
+                // la historia abierta».
+                // Umbral 300 ms y no 50: por debajo de eso el médico no percibe un tirón,
+                // y llenar la bitácora de ruido la haría inservible como evidencia.
+                if (msNuestros > msAjenos && (e.duration || 0) >= 300) {
+                  _perfRegistrarTareaLarga(e.duration || 0, msNuestros);
+                }
               }
             } catch (e2) {}
           });
@@ -8572,6 +9822,11 @@ _vglOfrecerDeshacer(btn);
           const ms = (performance.now() - t0);
           const cubeta = _rumCubeta(ms);
           if (cubeta) uxTrack("rum.self." + nombre + "." + cubeta);
+          // v17.43.0 — el tramo se anota además en el anillo de fases recientes. Es lo
+          // que permite que, cuando el LoAF avise de un cuadro largo NUESTRO, la línea de
+          // bitácora pueda decir QUÉ fase lo causó. Mismo umbral que la cubeta más baja
+          // (50 ms): por debajo no explica un tirón y solo gastaría sitio en el anillo.
+          if (cubeta) _rumTramoAnotar(nombre, ms);
         }
       } catch (e) {}
     }
@@ -8650,22 +9905,43 @@ _vglOfrecerDeshacer(btn);
       // se perdía en silencio — los tres rechazos que repPost SÍ detecta y reencola. Beacon
       // solo cuando el último envío CONFIRMADO está fresco (< 30 min): si el panel está
       // sano, es un refuerzo al cerrar; si no hay sello fresco, las filas quedan en la cola
-      // y el próximo arranque las reintenta por repFlush (que sí lee el acuse). El servidor
-      // ya descarta duplicados por `lote`, así que reintentar nunca duplica.
+      // y el próximo arranque las reintenta por repFlush (que sí lee el acuse).
+      // v17.49.0: esta guarda ya solo gobierna las filas reconstruibles — ver abajo.
       let ultimoOk = 0;
       try { const iso = localStorage.getItem("vgl_rep_last_ok"); if (iso) ultimoOk = new Date(iso).getTime(); } catch (e) {}
       const selloFresco = ultimoOk > 0 && (Date.now() - ultimoOk) < 30 * 60 * 1000;
       if (!selloFresco) return 0;
-      // TODAS las filas pendientes, no solo la primera: la cola admite hasta 30 y las que
-      // mas importan (fraude, resumen diario) pueden estar en cualquier posicion. Cada
-      // fila que SI sale se retira y se persiste — igual que hace repFlush con
-      // repQ.shift()+repQSave() tras un repPost exitoso — para que no se reenvie y salga
-      // duplicada en el tablero. Las que sendBeacon rechace (cuota o tamaño) se quedan
-      // en la cola para el proximo intento, que es justo lo que se quiere.
+      // v17.49.0 (decision D4) — LA EVIDENCIA NO VIAJA POR ESTE CAMINO.
+      // El beacon despacha lo RECONSTRUIBLE y nada mas. "ux" son metricas de uso agregadas
+      // y "entorno" sale otra vez mañana: si se pierden, no se pierde nada que no vuelva.
+      // "error", "fraude" y "resumen" son EVIDENCIA — el propio recorte de la cola
+      // (repQSave) las protege con un orden de sacrificio explicito — y por este camino
+      // no se puede saber si llegaron: sendBeacon y fetch(no-cors) devuelven true sin
+      // haber leido nada. Se quedan en la cola y salen por repFlush/repPost, que si lee
+      // el acuse del panel.
+      //
+      // POR QUE NO SE MANDAN POR BEACON *ADEMAS* DE DEJARLAS EN LA COLA (que era la idea
+      // inicial): el receptor descarta el reenvio con CacheService y un TTL de 6 h
+      // (TABLERO/Codigo.gs, LOTE_TTL_SEG = 21600), y su propio comentario justifica ese
+      // numero diciendo "la cola del userscript no reintenta mas alla de eso". Con la
+      // evidencia retenida eso deja de ser cierto: el medico cierra a las 18:00 y abre al
+      // dia siguiente a las 07:00 — trece horas — asi que el reintento caeria FUERA de la
+      // ventana de descarte y la fila se escribiria DOS VECES, inflando los acumulados del
+      // tablero. Que es exactamente el defecto que el campo `lote` nacio para cerrar.
+      // Mandarla una sola vez, por el camino que confirma, no depende de esa ventana ni
+      // de que version del receptor este desplegada.
+      //
+      // Y evita una segunda trampa: este manejador cuelga de `visibilitychange`, no solo
+      // de `pagehide`. Se dispara cada vez que el medico pasa a otra ventana — decenas de
+      // veces en una jornada. Con la evidencia retenida Y beaconeada, la misma fila de
+      // fraude saldria en cada uno de esos cambios.
+      const RECONSTRUIBLE = { ux: 1, entorno: 1 };
       const pendientes = [];
       let despachadas = 0;
       for (let i = 0; i < repQ.length; i++) {
-        if (repBeacon(repQ[i])) despachadas++; else pendientes.push(repQ[i]);
+        const fila = repQ[i];
+        if (!RECONSTRUIBLE[fila && fila.evento]) { pendientes.push(fila); continue; }
+        if (repBeacon(fila)) despachadas++; else pendientes.push(fila);
       }
       repQ = pendientes;
       repQSave();
@@ -8848,17 +10124,42 @@ _vglOfrecerDeshacer(btn);
         total: filas.reduce((s, f) => s + f.n, 0),
         filas: filas.slice(0, 12),
         embudo: { abiertos: abiertos, creadas: creadas, rechazadas: rechazadas, cupoPerdido: cupoPerdido, iaGen: iaGen, abandono: abandono },
+        // v17.8.1 — el estado REAL del envío remoto, para que el texto no tenga que
+        // suponerlo. `repOn()` ya sabe si hay interruptor, URL y transporte.
+        envioActivo: (function () { try { return !!(S.uxTelemetria !== false && repOn()); } catch (e) { return false; } })(),
       };
     } catch (e) { return { total: 0, filas: [], embudo: { abiertos: 0, creadas: 0, rechazadas: 0, cupoPerdido: 0, iaGen: 0, abandono: null } }; }
   }
 
+  // =====================================================================
+  //  v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #156: DOS PANTALLAS DEL MISMO PROGRAMA
+  //  AFIRMABAN LO CONTRARIO SOBRE EL MISMO DATO
+  //  ------------------------------------------------------------------
+  //  «Resumen del turno» aseguraba, sin condiciones, que «la telemetría no sale de este
+  //  equipo» — mientras Ajustes ofrece un interruptor («reporte») que la envía a una hoja
+  //  remota. Y la migración de estreno de v14.2.0 dejó ese interruptor ENCENDIDO, así que
+  //  la frase no era una imprecisión: en la instalación real del médico era falsa.
+  //
+  //  Una promesa sobre a dónde van sus datos no puede depender de que alguien se acuerde de
+  //  actualizar dos textos. Se calcula del estado real, en un solo sitio, y se prueba.
+  //  Nota: se describe el estado, NO se cambia. Encender o apagar el envío es decisión del
+  //  médico y se hace en Ajustes.
+  // =====================================================================
+  function mtrTextoDestinoTelemetria(envioActivo) {
+    return envioActivo === true
+      ? "Los conteos se envían al tablero remoto configurado en Ajustes. Puede apagarlo ahí."
+      : "Conteos locales: no salen de este computador.";
+  }
+
   // Pinta el bloque del tablero para la hoja «Resumen del turno». Puro: recibe los datos.
+  // `t.envioActivo` dice si el reporte remoto está encendido (ver mtrTextoDestinoTelemetria).
   function mtrTableroTelemetriaHtml(t) {
     try {
       if (t === null || t === undefined) return "";
       if (!t.filas.length) {
         return '<div class="vgl-grp"><div class="vgl-chart-cap"><span>TELEMETRÍA LOCAL</span></div>'
-          + '<div class="vgl-prod-nota">Sin eventos en la ventana actual. Los conteos se acumulan por ventana de 30 minutos y no salen del computador.</div></div>';
+          + '<div class="vgl-prod-nota">Sin eventos en la ventana actual. Los conteos se acumulan por ventana de 30 minutos. '
+          + escapeHtml(mtrTextoDestinoTelemetria(t && t.envioActivo)) + '</div></div>';
       }
       const e = t.embudo;
       const pct = (x) => (x === null || x === undefined) ? "—" : x + " %";
@@ -8870,7 +10171,8 @@ _vglOfrecerDeshacer(btn);
         + '<span class="vgl-prod-num">' + e.abiertos + ' abiertos · ' + e.creadas + ' creadas</span>'
         + '<span class="vgl-prod-pct">abandono ' + pct(e.abandono) + '</span></div>'
         + filas
-        + '<div class="vgl-prod-nota">Abandono = agendamientos abiertos que no terminaron en cita creada. Conteos locales: la telemetría no sale de este equipo.</div>'
+        + '<div class="vgl-prod-nota">Abandono = agendamientos abiertos que no terminaron en cita creada. '
+        + escapeHtml(mtrTextoDestinoTelemetria(t && t.envioActivo)) + '</div>'
         + '</div>';
     } catch (e) { return ""; }
   }
@@ -9503,7 +10805,7 @@ _vglOfrecerDeshacer(btn);
         nombre = limpio((firstMatch(cont, CONFIG.SEL.nombre) || {}).textContent);
         modalidad = limpio((cont.querySelector(CONFIG.SEL.modalidad) || {}).textContent);
       }
-      return { hora_texto: limpio(h.textContent), doc_id: extractDoc(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
+      return { hora_texto: limpio(h.textContent), doc_id: _vglDocCanon(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
     });
     return { visible: true, citas };
   }
@@ -9599,7 +10901,7 @@ _vglOfrecerDeshacer(btn);
       const contenedor = document.querySelector("app-index") || document;
       for (const el of contenedor.querySelectorAll(".text-muted")) {
         if (el.closest("#vgl-root")) continue;                 // nunca leer el propio panel
-        const doc = extractDoc(limpio(el.textContent));
+        const doc = _vglDocCanon(limpio(el.textContent));
         if (doc) return doc;
       }
       return "";
@@ -9656,10 +10958,68 @@ _vglOfrecerDeshacer(btn);
   // sonaba dos veces y el contador sumaba dos veces por el mismo paciente.
   // Si la hora no se puede leer se cae al texto crudo: perder la cita del mapa sería peor
   // que una clave imperfecta.
+  // v17.56.0 — REPORTE EN VIVO DE UNA COLEGA (29-ago): «cuando lo confirman tarde sale rojo
+  // y después me salía verde». La marca de llegada extemporánea aparecía y se perdía sola.
+  //
+  // Causa, reproducida con el arnés: esta clave puede CAMBIAR para la MISMA cita, y la marca
+  // de fraude (`state.fraudWatch`) queda huérfana bajo la clave vieja, así que la tarjeta
+  // vuelve a pintarse VERDE. Dos vías, las dos reales:
+  //   1. `a.index` es la POSICIÓN en la lista. Cuando entra un cupo adicional o la agenda se
+  //      reordena, la posición cambia — y con ella la clave de todo paciente cuya tarjeta no
+  //      muestre un documento legible.
+  //   2. El documento aparece o desaparece entre lecturas (la API lo trae, el respaldo por
+  //      DOM a veces no), así que la misma cita salta de `123@m680` a `NOMBRE|3@m680`.
+  //
+  // Es EXACTAMENTE el defecto que `mtrProdClaveCita` ya corrigió en la v17.6.2, por el
+  // reporte del médico «atendí a 10 y el Resumen dice 20»: allí se retiró el `idx` con esta
+  // razón, que vale igual aquí — «el orden de la lista no identifica nada: dos citas del
+  // mismo nombre a la misma hora son, en la práctica, la misma cita». Esta función nunca
+  // recibió aquella corrección.
+  //
+  // Y el documento se canonicaliza (v17.48.0): «0005150076» y «5150076» son el mismo
+  // paciente y no pueden dar dos claves.
   function apptKey(a) {
     const min = parseHoraMin(a && a.hora_texto);
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
-    return (a.doc_id ? a.doc_id : a.nombre + "|" + a.index) + "@" + hora;
+    const doc = normalizeKey((a && a.doc_id) || "");
+    return (doc ? doc : ((a && a.nombre) || "")) + "@" + hora;
+  }
+  // Las formas ANTERIORES de la clave, solo para LEER. Una marca de fraude puesta esta misma
+  // mañana con la versión anterior vive bajo la clave vieja: si el arreglo la ignorara,
+  // borraría hoy la evidencia que viene a proteger. Se normaliza hacia adelante y se lee
+  // tolerante — el mismo patrón de la v17.48.0. Solo se ESCRIBE con la clave canónica.
+  function _apptKeysLegado(a) {
+    const min = parseHoraMin(a && a.hora_texto);
+    const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
+    const out = [];
+    const crudo = (a && a.doc_id) || "";
+    if (crudo) out.push(crudo + "@" + hora);                                   // doc sin canonicalizar
+    // La MISMA cita pudo quedar marcada por NOMBRE si en aquella lectura el documento no se
+    // leía, y ahora traerlo. Es justo el salto que perdía la marca: la identidad de una cita
+    // se puede establecer por documento O por nombre, y las dos tienen que cruzarse o el
+    // arreglo solo cubre la mitad de las veces.
+    if (a && a.nombre) out.push(a.nombre + "@" + hora);                        // nombre solo (clave nueva sin doc)
+    if (a && a.nombre !== undefined && a.index !== undefined) out.push(a.nombre + "|" + a.index + "@" + hora);   // nombre+posición (clave vieja)
+    return out;
+  }
+  // ¿Está esta cita marcada en `conjunto`, con la clave de hoy o con cualquiera de las viejas?
+  function _apptMarcada(conjunto, a, key) {
+    if (!conjunto) return false;
+    if (conjunto.has(key)) return true;
+    for (const k of _apptKeysLegado(a)) { if (conjunto.has(k)) return true; }
+    return false;
+  }
+  // Marca la cita bajo SUS DOS identidades: la canónica (documento) y la del nombre. El
+  // documento aparece y desaparece entre lecturas —la API lo trae, el respaldo por DOM a
+  // veces no—, así que una marca anotada solo bajo una de las dos se pierde en cuanto la
+  // siguiente lectura llega por la otra vía. Anotar las dos cuesta una entrada en un
+  // conjunto que se vacía cada día, y es lo que impide que la evidencia se evapore.
+  function _apptMarcar(conjunto, a, key) {
+    if (!conjunto) return;
+    conjunto.add(key);
+    const min = parseHoraMin(a && a.hora_texto);
+    const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
+    if (a && a.nombre) conjunto.add(a.nombre + "@" + hora);
   }
   // Reinicio al cambiar de día: sin esto, una pestaña dejada abierta toda la noche seguía
   // con la lista de "sospechosos" de ayer y marcaba fraude a quien volviera hoy.
@@ -9724,7 +11084,7 @@ _vglOfrecerDeshacer(btn);
     } else state.estadoPendiente.delete(key);
     const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false;
     if (st.includes("en sala")) {
-      if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); } }
+      if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
     }
     else if (st.includes("atendido")) {
@@ -9737,8 +11097,8 @@ _vglOfrecerDeshacer(btn);
       // interrumpe. El color ROJO se CONSERVA (el panel lo sigue pintando y la auditoría lo
       // sigue registrando: es la evidencia para las reclamaciones), pero `sound` se queda
       // en false, que es lo único que dispara tono, notificación del sistema y cartel.
-      if (state.alertedFraud.has(key)) color = "ROJO";
-      else if (state.fraudWatch.has(key)) { color = "ROJO"; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); }
+      if (_apptMarcada(state.alertedFraud, a, key)) color = "ROJO";
+      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
       else color = "VERDE";
     }
     else if (st.includes("sin presentarse")) {
@@ -9759,7 +11119,19 @@ _vglOfrecerDeshacer(btn);
         // sin estrangulamiento, la fuente de verdad del resto del archivo) puede
         // ORIGINAR la marca; las demás pestañas la siguen pintando si ya existe (leída
         // vía state.fraudWatch más abajo/arriba), pero nunca la crean por su cuenta.
-        if (state.leader && !state.fraudWatch.has(key)) { state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id); }
+        // v17.17.0 — ver el comentario junto a RELEVO_GRACIA_FRAUDE_MS: una pestaña recién
+        // ascendida por relevo de visibilidad no origina fraude con su primer vistazo,
+        // sea cual sea la fuente del dato. La evidencia no se pierde: queda igual en la
+        // bitácora, marcada como no confirmada, para que una lectura futura (ya sin la
+        // sospecha de estar estancada) sea la que de verdad origine la marca.
+        const _relevoReciente = (Date.now() - _ultimoRelevoVisibilidad) < RELEVO_GRACIA_FRAUDE_MS;
+        if (state.leader && !_apptMarcada(state.fraudWatch, a, key)) {
+          if (_relevoReciente) {
+            logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
+          } else {
+            _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
+          }
+        }
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
     }
     else { if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else if (pym.length >= 3) { color = "MORADO"; reason = "pym"; } else color = "AZUL"; }
@@ -10553,6 +11925,31 @@ _vglOfrecerDeshacer(btn);
   //      idénticas y las dos llegaban a la pila.
   //   2. Avisos DISTINTOS del mismo paciente (p. ej. "Cierre de consulta" + "Espera
   //      prolongada" del mismo tick) se combinan en UNA sola tarjeta en vez de apilarse.
+  // =====================================================================
+  //  v17.11.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #63 (gravedad alta): AGRUPAR NO PUEDE
+  //  REBAJAR LA ALARMA
+  //  ------------------------------------------------------------------
+  //  El grupo salía SIEMPRE en ÁMBAR cuando alguno de los avisos era crítico. Reproducido:
+  //  un aviso ROJO —la confirmación extemporánea, que este proyecto trata como evidencia
+  //  para una reclamación— agrupado con un AZUL rutinario del mismo paciente salía en
+  //  ÁMBAR. El rojo desaparecía por el solo hecho de que hubiera otro aviso al lado.
+  //
+  //  Regla: el color de un grupo es el del aviso MÁS GRAVE que contiene. Nunca uno fijo.
+  //  Es el orden que el resto del archivo ya usa para ordenar y para no autodescartar
+  //  (ver el comentario de _renderToast: «ROJO/MORADO/ÁMBAR van al FRENTE»).
+  // =====================================================================
+  const MTR_ORDEN_GRAVEDAD_COLOR = ["ROJO", "MORADO", "AMBAR", "VERDE", "AZUL"];
+  function mtrColorMasGrave(colores) {
+    const lista = (Array.isArray(colores) ? colores : []).filter(Boolean);
+    for (const c of MTR_ORDEN_GRAVEDAD_COLOR) {
+      if (lista.indexOf(c) >= 0) return c;
+    }
+    // Un color que nadie declaró no puede rebajar nada: si hay algo y no se reconoce, se
+    // trata como lo más grave. Callar una alarma por no saber clasificarla es el peor
+    // error posible aquí.
+    return lista.length ? "ROJO" : "AZUL";
+  }
+
   // Función pura para que el banco la pueda probar: agrupa por apptKey.
   function _agruparToasts(lista) {
     const out = [];
@@ -10564,9 +11961,9 @@ _vglOfrecerDeshacer(btn);
     }
     for (const [, listaP] of porPaciente) {
       if (listaP.length === 1) { out.push(listaP[0]); continue; }
-      const critico = listaP.some((t) => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR");
       out.push({
-        color: critico ? "AMBAR" : "AZUL",
+        // v17.11.0 — el más grave, nunca un valor fijo (ver mtrColorMasGrave arriba).
+        color: mtrColorMasGrave(listaP.map((t) => t && t.color)),
         title: listaP.length + " avisos de este paciente",
         body: listaP.map((t) => "• " + t.title + ": " + t.body).join("  |  "),
         persist: true, apptKey: listaP[0].apptKey,
@@ -10586,7 +11983,11 @@ _vglOfrecerDeshacer(btn);
         const agrupados = _agruparToasts(toastQueue);
         if (agrupados.length > 3) {
           const criticos = agrupados.filter(t => t.color === "ROJO" || t.color === "MORADO" || t.color === "AMBAR").length;
-          _renderToast("AMBAR", `Alerta Múltiple (${agrupados.length})`, `${criticos} alertas críticas y ${agrupados.length - criticos} rutinarias recibidas.`, true);
+          // v17.11.0 — mismo defecto que en _agruparToasts, y aquí afecta a MÁS avisos a la
+          // vez: «Alerta Múltiple» salía en ÁMBAR fijo aunque dentro hubiera un ROJO.
+          _renderToast(mtrColorMasGrave(agrupados.map((t) => t && t.color)),
+            `Alerta Múltiple (${agrupados.length})`,
+            `${criticos} alertas críticas y ${agrupados.length - criticos} rutinarias recibidas.`, true);
         } else {
           agrupados.forEach(t => _renderToast(t.color, t.title, t.body, t.persist, t.apptKey));
         }
@@ -10605,7 +12006,7 @@ _vglOfrecerDeshacer(btn);
     // GM_notification es la única vía) y el toast SOLO queda como respaldo si ninguna de
     // las dos pudo. Antes la rama sin permiso disparaba GM_notification Y el toast a la
     // vez: dos canales para el mismo aviso.
-    if (!_pestanaOculta()) { showToast(color, title, body, persist); return; }
+    if (!_pestanaSinAtencion()) { showToast(color, title, body, persist); return; }
     if (!_notificarSistema(color, title, body, persist, uid)) showToast(color, title, body, persist);
   }
   function _gmNotify(color, title, body, persist, uid) {
@@ -10692,7 +12093,7 @@ _vglOfrecerDeshacer(btn);
     cola.forEach((p) => {
       if (!p) return;
       if (p.ts && (ahora - p.ts) > AVISO_CARTEL_CADUCA_MS) { caducados++; return; }
-      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaOculta();
+      const puedePintar = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
       if (puedePintar) { _dispararAvisoCartel(p); return; }
       if (p.color === "ROJO" && S.cartel) { seQuedan.push(p); return; }   // pestaña oculta: esperará
       // No-ROJO o cartel apagado: jamás se pintará como cartel — su canal ya sonó. Se suelta.
@@ -10747,7 +12148,15 @@ _vglOfrecerDeshacer(btn);
     if (crossTabDup("full|" + p.uid)) return false;   // varias pestañas a la vez: solo la primera
     if (p.color === "ROJO") startNag("ROJO");
     else if (p.color === "MORADO") playTone("MORADO");
-    if (_pestanaOculta()) {
+    // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): "Silenciar 15 min" callaba solo el tono
+    // (beep() ya mira muted()); toast y notificación de Windows seguían saliendo igual,
+    // justo el ruido que pidió apagar ("mejor dejarlo lo más minimalista posible"). El
+    // hecho se sigue contando y registrando igual — eso ya pasó en colorAndAlert/
+    // maybeNotify, antes de llegar aquí — y devolver `true` (no `false`) deja intacto
+    // que el cartel pendiente se siga encolando para cuando el médico entre a la
+    // historia, aunque el silencio ya haya vencido para entonces.
+    if (muted()) return true;
+    if (_pestanaSinAtencion()) {
       if (!_notificarSistema(p.color, p.title, p.body, p.persist, p.uid)) {
         showToast(p.color, p.title, p.body, p.persist, p.apptKey);   // quedará a la vista al volver
         if (p.color === "ROJO" || p.color === "MORADO" || p.color === "AMBAR") startFlash(p.flashText, p.color);
@@ -10764,13 +12173,17 @@ _vglOfrecerDeshacer(btn);
   // El cartel dentro de la página: solo ROJO, solo si el médico lo activó, y solo con la
   // pestaña visible (oculta, el canal ya fue la notificación del sistema).
   function _dispararAvisoCartel(p) {
-    if (S.cartel && p.color === "ROJO" && !_pestanaOculta()) bigAlert("ROJO", p.title, p.body);
+    // v17.19.0 — el comentario original de "Silencio temporal" (línea ~10364) ya prometía
+    // "calla sonido/ventana/cartel", pero el cartel nunca miró muted(): la promesa era
+    // falsa. Se cierra la brecha aquí, único punto del que cuelgan los tres llamadores
+    // reales de este disparador (inmediato, cola diferida y el de _dispararAvisoReal).
+    if (S.cartel && p.color === "ROJO" && !_pestanaSinAtencion() && !muted()) bigAlert("ROJO", p.title, p.body);
   }
   function _dispararAvisoReal(p) {
     // Si el cartel va a salir (ROJO + S.cartel + pestaña visible, y aquí solo se llega
     // estando en la historia), el cartel ES el canal visible: se le indica al disparador
     // para que no pinte también el toast.
-    const conCartel = S.cartel && p.color === "ROJO" && !_pestanaOculta();
+    const conCartel = S.cartel && p.color === "ROJO" && !_pestanaSinAtencion();
     if (!_dispararAvisoAudible(conCartel ? Object.assign({}, p, { sinToastPorCartel: true }) : p)) return;   // otra pestaña se adelantó: tampoco el cartel
     _dispararAvisoCartel(p);
   }
@@ -10897,13 +12310,27 @@ _vglOfrecerDeshacer(btn);
       // resumen, tabla por estadio + 50%; si no, tamizaje plano. Así "ya cubierto" y
       // "vencido" no pueden volver a contradecirse en la misma sesión.
       const _resPym = (typeof mtrCacheResumenLeer === "function" && ctxDocId) ? mtrCacheResumenLeer(ctxDocId) : null;
+      // v17.6.96 — PUNTO CIEGO DE LA HbA1c, cerrado. El paquete I10X («RCV EXPRES») ordena el
+      // CUPS 903426, Hemoglobina Glicosilada, desde v14.0.0 — pero esta funcion respondia «ya
+      // esta todo cubierto» mirando solo las 8 claves de `RCV_VIGENCIA_KEYS`, que no la
+      // incluyen. Reproducido: diabetico con TODO fresco de 30 dias y la HbA1c en 11,2 % de
+      // hace 219, `pymRcvCubiertoPorAthenea` devolvia true y la pantalla afirmaba «Athenea ya
+      // tiene todos estos resultados vigentes — el paciente ya se los hizo». Falso: el examen
+      // que el paquete iba a pedir llevaba 39 dias vencido, y con un valor catastrofico.
+      //
+      // La clave extra va SOLO cuando consta la diabetes. Si no consta —o si no hay resumen en
+      // cache— no se pide: la decision del medico del 11-08-2026 sigue intacta, y «no se sabe»
+      // nunca se lee como «si». Esa es tambien la razon de que esto NO sea una clave nueva en
+      // `RCV_VIGENCIA_KEYS`: ahi la pediria a todo el mundo, incluido el no diabetico.
+      const _esDm2Pym = !!(_resPym && _resPym.factores && _resPym.factores.diabetes);
       const _optsPym = _resPym ? {
         programa: _resPym.programa || null,
         estadio: _resPym.erc && _resPym.erc.estadioAdministrativo || null,
-        esDM2: !!(_resPym.factores && _resPym.factores.diabetes),
-        esDm2: !!(_resPym.factores && _resPym.factores.diabetes),
+        esDM2: _esDm2Pym,
+        esDm2: _esDm2Pym,
         categoriaRiesgo: _resPym.riesgo && _resPym.riesgo.categoria || null,
         aplicar50: true,
+        clavesExtra: _esDm2Pym ? ["HBA1C"] : [],
       } : undefined;
       return _analitosRcvVencidos(labs, hoyIso, _optsPym).length === 0;
     } catch (e) { return false; }
@@ -10922,11 +12349,55 @@ _vglOfrecerDeshacer(btn);
   // caída, sesión vencida, sin resultado del examen, fecha ilegible) devuelve false — el
   // paquete se ofrece como siempre. Un falso "ya está hecho" le quitaría al paciente un
   // examen que necesita; un falso "hágalo" solo cuesta un clic.
-  function pymPaqueteCubiertoPorAthenea(pkg, labs, hoyIso) {
+  // v17.6.99 — ¿ESTE EXAMEN APARECE HECHO EN ATHENEA, Y DESDE CUÁNDO?
+  //
+  // Se extrae de `pymPaqueteCubiertoPorAthenea`, que hacía las dos cosas en una: buscar el
+  // resultado y juzgar si sigue vigente. Separarlas hace falta porque son dos preguntas
+  // distintas y solo la SEGUNDA necesita una vigencia declarada:
+  //
+  //   · «¿sigue vigente?»  -> exige saber cuánto vale ese examen según la norma.
+  //   · «¿está hecho?»     -> no exige nada: o el resultado está en Athenea, o no está.
+  //
+  // Reportado en consulta (27-ago-2026): el script seguía ofreciendo un PSA que el paciente
+  // se había hecho seis días antes. La causa no era que no lo reconociera —lo reconoce
+  // perfectamente— sino que el paquete Z125 no tenía `vigenciaDias`, y sin ese campo el
+  // cruce se rendía en su primera línea. Cinco de los ocho paquetes estaban así.
+  //
+  // Devuelve `{ iso, dias }` del resultado MÁS RECIENTE que case, o null si no aparece
+  // ninguno. Nunca inventa una vigencia: eso lo decide quien llama.
+  // v17.6.99 — TOPE PARA DESMARCAR SIN VIGENCIA CONFIRMADA. El médico decidió (27-ago)
+  // que un examen que ya aparece hecho se avise y se desmarque, aunque no se sepa cada
+  // cuánto se repite. Estaba respondiendo sobre un PSA de SEIS DÍAS.
+  //
+  // El caso que no tenía delante es el contrario: una mamografía de hace 955 días también
+  // «aparece hecha», y desmarcarla en silencio ya no evita un duplicado — provoca una
+  // OMISIÓN, que es peor. Así que el aviso se da siempre (con su fecha, para que él juzgue),
+  // pero la casilla solo se desmarca si el resultado es más reciente que el intervalo MÁS
+  // LARGO que el propio médico ha confirmado para cualquier examen: los 730 días del SOMF
+  // (22-ago) y del PSA (27-ago). No es una vigencia inventada para la mamografía; es negarse
+  // a suponer que algo sigue bueno más allá de lo que él mismo ha dado por bueno alguna vez.
+  //
+  // Se cambia con una línea si él prefiere lo otro.
+  const PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS = 730;
+
+  // v17.14.0 — DECISIÓN DEL MÉDICO (27-ago, entrevista): «mamografía guiarse netamente de
+  // los SharePoints». Para la tamización de mama, la lista de PyM de la sede (el Excel de
+  // SharePoint) es la ÚNICA autoridad sobre si toca o no: si ahí figura pendiente, se
+  // premarca, aunque Athenea traiga un resultado previo. El tope de 730 días de arriba no
+  // aplica a estos paquetes — ni para desmarcar ni para dejar de hacerlo.
+  //
+  // Por qué solo estos: en la mamografía la periodicidad depende de la edad y del riesgo
+  // (Resolución 3280/2018), no de una vigencia fija que el script pueda calcular, y el
+  // programa de la IPS ya la resuelve al armar la lista. El resultado de Athenea NO se
+  // esconde: se sigue mostrando con su fecha, para que el médico lo tenga presente — lo
+  // único que cambia es que no toca la casilla.
+  const PYM_MANDA_SHAREPOINT = ["Z123"];
+
+  function pymPaqueteHechoEnAthenea(pkg, labs, hoyIso) {
     try {
-      if (!pkg || !pkg.vigenciaDias || !Array.isArray(labs) || !labs.length) return false;
+      if (!pkg || !Array.isArray(labs) || !labs.length) return null;
       const hoy = _parseFechaHoraLike(hoyIso);
-      if (!hoy) return false;                                  // misma trampa que en RCV: fecha de hoy ilegible NO se lee como "todo hecho"
+      if (!hoy) return null;                                   // fecha de hoy ilegible: no se afirma nada
       const hoyMs = new Date(hoy.iso + "T00:00:00").getTime();
       const codigos = new Set((pkg.cups || []).map((c) => String(c.codigo || "").trim()).filter(Boolean));
       const palabras = (pkg.keywords || []).map((k) => stripAccents(String(k)).toLowerCase());
@@ -10948,11 +12419,19 @@ _vglOfrecerDeshacer(btn);
         const fi = _extractAtheneaFecha(lab);
         if (fi && fi.iso && (!mejorIso || fi.iso > mejorIso)) mejorIso = fi.iso;
       }
-      if (!mejorIso) return false;                             // el examen no aparece: no se puede afirmar que esté hecho
+      if (!mejorIso) return null;                              // el examen no aparece: no se puede afirmar que esté hecho
       const fechaMs = new Date(mejorIso + "T00:00:00").getTime();
-      const dias = Math.round((hoyMs - fechaMs) / 86400000);
-      return dias <= pkg.vigenciaDias;
-    } catch (e) { return false; }
+      return { iso: mejorIso, dias: Math.round((hoyMs - fechaMs) / 86400000) };
+    } catch (e) { return null; }
+  }
+
+  // ¿Está hecho Y sigue vigente? Ahora es una sola línea sobre la función de arriba: una
+  // sola forma de reconocer el examen, y la vigencia aplicada aparte. Antes las dos cosas
+  // vivían juntas y un paquete sin `vigenciaDias` ni siquiera llegaba a buscarse.
+  function pymPaqueteCubiertoPorAthenea(pkg, labs, hoyIso) {
+    if (!pkg || !pkg.vigenciaDias) return false;
+    const hecho = pymPaqueteHechoEnAthenea(pkg, labs, hoyIso);
+    return !!hecho && hecho.dias <= pkg.vigenciaDias;
   }
 
   function maybeNotify(a) {
@@ -11239,7 +12718,7 @@ _vglOfrecerDeshacer(btn);
       if (min != null) buenas++;
       citas.push({
         hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] ?? "")),
-        doc_id: extractDoc(String(c.doc ? (r[c.doc] ?? "") : "")),
+        doc_id: _vglDocCanon(String(c.doc ? (r[c.doc] ?? "") : "")),
         nombre: limpio(c.nombres.map((k) => r[k]).filter(Boolean).join(" ")) || "Paciente Everest",
         modalidad: "", estado: limpio(String(r[c.estado] ?? "")) || "Pendiente", index: i,
         // v13.0.0 — Solo se rellena si /ObtenerConsultas trajo el campo real `citaId`
@@ -11535,17 +13014,32 @@ _vglOfrecerDeshacer(btn);
         #vgl-ordenar-modal .vgl-rcv-falta,#vgl-labs-modal .vgl-rcv-falta{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.45}
         #vgl-ordenar-modal .vgl-rcv-renal,#vgl-labs-modal .vgl-rcv-renal{display:flex;flex-direction:column;gap:5px}
         #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:var(--t-micro);color:var(--fg2) !important}
-        #vgl-ordenar-modal .vgl-rcv-tfg,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-tfg b,#vgl-labs-modal .vgl-rcv-tfg b{color:var(--fg) !important}
         #vgl-ordenar-modal .vgl-rcv-aviso,#vgl-labs-modal .vgl-rcv-aviso{font-size:var(--t-micro);color:var(--c-azul) !important;line-height:1.45}
-        #vgl-ordenar-modal .vgl-rcv-aviso-alto,#vgl-labs-modal .vgl-rcv-aviso-alto{color:var(--c-ambar) !important;font-weight:700}
+        /* v17.24.0 — dos bugs reales, hallados al resolver el punto ciego de suite_25 sobre
+           el CSS que buildOverlay() splicea (${_cssSeguro(() => MTR_RCV_CSS)}, invisible
+           para esa suite hasta esta versión):
+           (1) las 6 reglas de aquí abajo (tfg b, lista li, lista li b, vencido-item b,
+           lista-orden li, det summary) solo llevaban el descendiente real del lado de
+           #vgl-labs-modal — el lado de #vgl-ordenar-modal apuntaba a la clase sola, así que
+           ese texto (TFG en negrita, cada ítem de la lista, el analito vencido en ámbar, el
+           resumen plegable) nunca recibía su color dentro del modal de Ordenar. Simetría
+           restaurada en los dos lados.
+           (2) .vgl-rcv-aviso-alto y .vgl-rcv-lista-orden son MODIFICADORES que siempre
+           conviven con su clase base en el mismo elemento (class="vgl-rcv-aviso
+           vgl-rcv-aviso-alto", class="vgl-rcv-lista vgl-rcv-lista-orden") — con la misma
+           especificidad que la base, cuál gana dependía del orden de la hoja (Regla A). Se
+           combinan en un solo selector compuesto (.base.modificador) para que la
+           especificidad decida siempre, no el orden. */
+        #vgl-ordenar-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto,#vgl-labs-modal .vgl-rcv-aviso.vgl-rcv-aviso-alto{color:var(--c-ambar) !important;font-weight:700}
         #vgl-ordenar-modal .vgl-rcv-subtit,#vgl-labs-modal .vgl-rcv-subtit{font-size:var(--t-micro);color:var(--fg) !important;font-weight:700}
         #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista{margin:4px 0 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px}
-        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.4}
-        #vgl-ordenar-modal .vgl-rcv-lista,#vgl-labs-modal .vgl-rcv-lista li b{color:var(--fg) !important}
-        #vgl-ordenar-modal .vgl-rcv-vencido-item,#vgl-labs-modal .vgl-rcv-vencido-item b{color:var(--c-ambar) !important}
+        #vgl-ordenar-modal .vgl-rcv-lista li,#vgl-labs-modal .vgl-rcv-lista li{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.4}
+        #vgl-ordenar-modal .vgl-rcv-lista li b,#vgl-labs-modal .vgl-rcv-lista li b{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-vencido-item b,#vgl-labs-modal .vgl-rcv-vencido-item b{color:var(--c-ambar) !important}
         #vgl-ordenar-modal .vgl-rcv-bloq-item,#vgl-labs-modal .vgl-rcv-bloq-item{opacity:.75}
-        #vgl-ordenar-modal .vgl-rcv-lista-orden,#vgl-labs-modal .vgl-rcv-lista-orden li{color:var(--fg) !important}
-        #vgl-ordenar-modal .vgl-rcv-det,#vgl-labs-modal .vgl-rcv-det summary{font-size:var(--t-micro);color:var(--fg3) !important;cursor:pointer}
+        #vgl-ordenar-modal .vgl-rcv-lista.vgl-rcv-lista-orden li,#vgl-labs-modal .vgl-rcv-lista.vgl-rcv-lista-orden li{color:var(--fg) !important}
+        #vgl-ordenar-modal .vgl-rcv-det summary,#vgl-labs-modal .vgl-rcv-det summary{font-size:var(--t-micro);color:var(--fg3) !important;cursor:pointer}
         #vgl-ordenar-modal .vgl-rcv-fechas,#vgl-labs-modal .vgl-rcv-fechas{display:flex;gap:10px;flex-wrap:wrap}
         #vgl-ordenar-modal .vgl-rcv-fecha,#vgl-labs-modal .vgl-rcv-fecha{
           flex:1 1 140px;background:var(--bg3);border-radius:var(--r-chip);padding:7px 9px;
@@ -11558,7 +13052,17 @@ _vglOfrecerDeshacer(btn);
         #vgl-ordenar-modal .vgl-rcv-pie,#vgl-labs-modal .vgl-rcv-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
   `;
 
-  const MTR_RCV_CSS_TODOS_LOS_MODALES = MTR_RCV_CSS.replace(/#vgl-labs-modal (\.vgl-rcv-[\w-]+(?: [\w-]+)*)\{/g, (m, sel) => "#vgl-labs-modal " + sel + ",#vgl-riesgo-modal " + sel + "{") + `
+  // v17.25.0 — AUDITORÍA DE LABORATORIOS: este regex se saltaba 2 de sus reglas.
+  // `(?: [\w-]+)*` capturaba un descendiente separado por espacio (" b", " li"), pero
+  // no un SEGUNDO SELECTOR DE CLASE pegado sin espacio (".vgl-rcv-aviso.vgl-rcv-aviso-alto")
+  // — el patrón de "modificador que siempre convive con su base" que esta misma versión
+  // introdujo en MTR_RCV_CSS (Regla A, ver el comentario junto a esas dos reglas). Con el
+  // regex viejo, esas dos reglas nunca llegaban a #vgl-riesgo-modal: la más grave, el
+  // aviso ámbar "Criterio de remisión a nefrología", habría salido sin color si ese modal
+  // (retirado, ver mtrRenderResumenClinicoHtml) alguna vez se reconecta. `(?:\.[\w-]+)*`
+  // agrega esa segunda forma sin quitarle nada a la primera — verificado en Node que las
+  // 37 reglas de #vgl-labs-modal terminan siendo 37 en #vgl-riesgo-modal, ni una de más ni de menos.
+  const MTR_RCV_CSS_TODOS_LOS_MODALES = MTR_RCV_CSS.replace(/#vgl-labs-modal (\.vgl-rcv-[\w-]+(?:\.[\w-]+)*(?: [\w-]+)*)\{/g, (m, sel) => "#vgl-labs-modal " + sel + ",#vgl-riesgo-modal " + sel + "{") + `
         #vgl-riesgo-modal .vgl-agm-kicker{color:var(--c-rojo) !important}
         #vgl-riesgo-modal .vgl-agm-lbl{color:var(--c-rojo) !important}
         #vgl-riesgo-modal .vgl-agm-patient{color:var(--fg) !important}
@@ -11646,9 +13150,9 @@ _vglOfrecerDeshacer(btn);
         .vgl-prod-fila.casi{border-color:rgba(var(--rgb-ambar),.42);background:rgba(var(--rgb-ambar),.07)}
         .vgl-prod-fila.bajo{border-color:rgba(var(--rgb-rojo),.38);background:rgba(var(--rgb-rojo),.06)}
         .vgl-prod-rot{font-size:11.5px;font-weight:800;min-width:62px;color:var(--fg) !important}
-        .vgl-prod-num{font-size:15px;font-weight:800;color:var(--fg) !important}
+        .vgl-prod-num{font-size:var(--t-strong);font-weight:800;color:var(--fg) !important}
         .vgl-prod-num i{font-size:11px;font-weight:600;opacity:.65;font-style:normal}
-        .vgl-prod-pct{font-size:12px;font-weight:800;margin-left:auto;color:var(--fg2) !important}
+        .vgl-prod-pct{font-size:var(--t-micro);font-weight:800;margin-left:auto;color:var(--fg2) !important}
         .vgl-prod-fila.ok .vgl-prod-pct{color:var(--c-verde) !important}
         .vgl-prod-fila.casi .vgl-prod-pct{color:var(--c-ambar) !important}
         .vgl-prod-fila.bajo .vgl-prod-pct{color:var(--c-rojo) !important}
@@ -11668,13 +13172,29 @@ _vglOfrecerDeshacer(btn);
         .vgl-summary-grid b{color:var(--fg) !important}
 
         /* ==== [v15.1.0] Bento Grid y Aislamiento CSS Total ==== */
+        /* v17.24.0 — este bloque se escribió en 15.1.0 y quedó SIN CONSUMIDOR (ningún HTML
+           usaba class="vgl-bento-*" hasta hoy: el Panel del paciente es el primer uso real).
+           Nunca se verificó contra un CSS de Everest agresivo porque nunca hizo falta — y
+           en efecto le faltaba !important en cada declaración de color, el defecto #2 que
+           documenta CLAUDE.md. Se corrige aquí, antes de que este bloque pinte algo de
+           verdad, en vez de después de que el médico lo reporte en consulta. */
         .vgl-bento-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:10px 0 16px}
-        .vgl-bento-card{background:var(--bg2,#121826);border:1px solid var(--edge,rgba(255,255,255,.14));border-radius:var(--r-card,12px);padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--glow-edge)}
+        .vgl-bento-card{background:var(--bg2,#121826);border:1px solid var(--edge,rgba(255,255,255,.14));border-radius:var(--r-card,12px);padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--glow-edge);cursor:pointer;transition:transform .15s var(--ease-out,ease-out),border-color .15s}
+        .vgl-bento-card:hover,.vgl-bento-card:focus-visible{transform:translateY(-2px);border-color:var(--edge)}
+        .vgl-bento-card:focus-visible{outline:2px solid var(--c-azul);outline-offset:2px}
         .vgl-bento-card.full{grid-column:1 / -1}
-        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:var(--c-azul,#38bdf8);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
-        .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--fg2,#94a3b8);line-height:1.4}
-        .vgl-bento-row b{color:var(--fg,#f8fafc);font-weight:700}
-        .vgl-bento-badge{background:rgba(var(--rgb-azul),.15);color:var(--c-azul);padding:2px 8px;border-radius:var(--r-chip,6px);font-weight:800;font-size:11px}
+        .vgl-bento-head{display:flex;align-items:center;gap:6px;font-size:var(--t-micro);font-weight:800;color:var(--c-azul,#38bdf8) !important;text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;border-bottom:1px solid var(--line,rgba(255,255,255,.08));margin-bottom:4px}
+        .vgl-bento-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--t-micro);color:var(--fg2,#94a3b8) !important;line-height:1.4}
+        .vgl-bento-row b{color:var(--fg,#f8fafc) !important;font-weight:700}
+        .vgl-bento-pie{font-size:11px;opacity:.75;color:var(--fg3) !important}
+        .vgl-bento-badge{background:rgba(var(--rgb-azul),.15);color:var(--c-azul) !important;padding:2px 8px;border-radius:var(--r-chip,6px);font-weight:800;font-size:11px}
+        /* v17.24.0 — estados del dashboard "de un vistazo" del Panel del paciente: 3
+           estados honestos, mismo idioma que #vgl-cw-examenes (nunca colapsar "no sé"
+           con "está bien"). */
+        .vgl-bento-badge.ok{background:rgba(var(--rgb-verde),.15);color:var(--c-verde) !important}
+        .vgl-bento-badge.pend{background:rgba(var(--rgb-ambar),.15);color:var(--c-ambar) !important}
+        .vgl-bento-badge.nd{background:rgba(255,255,255,.08);color:var(--fg3) !important}
+        .vgl-bento-sub{font-size:11px;color:var(--fg3) !important}
 
         /* Aislamiento CSS estricto para Uroanálisis y Tablas de Laboratorios */
         #vgl-labs-modal .vgl-labs-uro-panel{background:var(--bg2,#121826) !important;border:1px solid var(--edge,rgba(255,255,255,.16)) !important;border-radius:var(--r-card,12px) !important;padding:12px 14px !important;color:var(--fg,#f8fafc) !important}
@@ -11720,7 +13240,7 @@ _vglOfrecerDeshacer(btn);
          navegador descartaba esa declaración. El aviso salía como texto suelto sobre la
          pantalla de Everest —sin tarjeta, sin fondo y con el azul heredado del host—, que es
          justo lo que reportó el médico. El diseño ya existía; no llegaba. */
-      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado{
+      #vgl-root,#vgl-lab-injector,#vgl-examen-normalidad,#vgl-examen-guardar,#vgl-examen-aplicar,#vgl-visib-pill,#vgl-sp,#vgl-dock,#vgl-acciones-dock,#vgl-pym-banner,#vgl-toasts,#vgl-modal,#vgl-pym-modal,#vgl-pes-modal,#vgl-agendar-modal,#vgl-ordenar-modal,#vgl-labs-modal,#vgl-labsv-modal,#vgl-postcita-panel,#vgl-ia-modal,#vgl-riesgo-modal,#vgl-ficha-modal,#vgl-tablero-modal,#vgl-acomp-burbuja,#vgl-instancia-duplicada,#vgl-tip-pop,#vgl-pausa-clinica,#vgl-confirma-modal,#vgl-min-bar,#vgl-panel-modal,#vgl-llenar-modal,#vgl-deshacer-llenado,#vgl-cw-examenes,#vgl-cw-farmaco{
         /* Vidrio frost sobre negro OLED */
         --bg:rgba(9,11,17,.84);
         --bg-sidebar:rgba(5,7,12,.66);
@@ -11807,7 +13327,7 @@ _vglOfrecerDeshacer(btn);
 
       /* ---- Modo Claro — cerámica ---- */
       #vgl-root.light,#vgl-lab-injector.light,#vgl-examen-normalidad.light,#vgl-visib-pill.light,#vgl-examen-guardar.light,#vgl-examen-aplicar.light,#vgl-sp.light,#vgl-dock.light,#vgl-acciones-dock.light,#vgl-pym-banner.light,#vgl-toasts.light,
-      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light{
+      #vgl-modal.light,#vgl-pym-modal.light,#vgl-pes-modal.light,#vgl-agendar-modal.light,#vgl-ordenar-modal.light,#vgl-labs-modal.light,#vgl-labsv-modal.light,#vgl-postcita-panel.light,#vgl-ia-modal.light,#vgl-riesgo-modal.light,#vgl-ficha-modal.light,#vgl-tablero-modal.light,#vgl-acomp-burbuja.light,#vgl-instancia-duplicada.light,#vgl-tip-pop.light,#vgl-pausa-clinica.light,#vgl-confirma-modal.light,#vgl-min-bar.light,#vgl-panel-modal.light,#vgl-llenar-modal.light,#vgl-deshacer-llenado.light,#vgl-cw-examenes.light,#vgl-cw-farmaco.light{
         --bg:rgba(250,250,253,.86);
         --bg-sidebar:rgba(243,245,250,.80);
         --bg2:rgba(15,23,42,.045);--bg3:rgba(15,23,42,.075);--bg4:rgba(15,23,42,.13);
@@ -11932,7 +13452,8 @@ _vglOfrecerDeshacer(btn);
         #vgl-modal,#vgl-modal *,#vgl-pym-modal,#vgl-pym-modal *,
         #vgl-pes-modal,#vgl-pes-modal *,#vgl-agendar-modal,#vgl-agendar-modal *,
         #vgl-ordenar-modal,#vgl-ordenar-modal *,#vgl-labs-modal,#vgl-labs-modal *,
-        #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *{
+        #vgl-labsv-modal,#vgl-labsv-modal *,#vgl-postcita-panel,#vgl-postcita-panel *,
+        #vgl-cw-examenes,#vgl-cw-examenes *,#vgl-cw-farmaco,#vgl-cw-farmaco *,#vgl-cw-ordenar-btn{
           animation:none !important;transition:none !important;
         }
       }
@@ -12017,7 +13538,8 @@ _vglOfrecerDeshacer(btn);
       body.vgl-modo-oculto #vgl-pym-modal,body.vgl-modo-oculto #vgl-pausa-clinica,
       body.vgl-modo-oculto #vgl-confirma-modal,body.vgl-modo-oculto #vgl-llenar-modal,body.vgl-modo-oculto #vgl-min-bar,
       body.vgl-modo-oculto #vgl-deshacer-llenado,body.vgl-modo-oculto #vgl-deshacer-lote,
-      body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an{display:none !important}
+      body.vgl-modo-oculto #vgl-ia-inj-ea,body.vgl-modo-oculto #vgl-ia-inj-an,
+      body.vgl-modo-oculto #vgl-cw-examenes,body.vgl-modo-oculto #vgl-cw-farmaco,body.vgl-modo-oculto #vgl-cw-ordenar-btn{display:none !important}
       #vgl-visib-pill{
         position:fixed;bottom:10px;right:10px;z-index:2147483646;
         width:26px;height:26px;border-radius:50%;border:1px solid var(--edge,rgba(255,255,255,.25));
@@ -12254,6 +13776,93 @@ _vglOfrecerDeshacer(btn);
       .vgl-salud-fila b{display:inline-block;width:14px}
       .vgl-salud-alerta{color:var(--c-ambar)}
       .vgl-salud-nd{opacity:.75}
+      /* =====================================================================
+         v17.18.0 — WIDGETS DE CONDUCTA. Cuelgan de document.body, junto a un botón real
+         de Everest (nunca dentro de su árbol — Regla dura, ver mtrWidgetConductaTick):
+         fuera de #vgl-root no hay NINGÚN blindaje heredado, así que todo color con clase
+         propia lleva !important sin excepción (CLAUDE.md), y el texto suelto usa el
+         patrón :where(...:not([class])), nunca "selector b,span,div" a pelo (bug #1 del
+         proyecto: una regla de tipo le gana en especificidad a una clase de acento).
+         ===================================================================== */
+      #vgl-cw-examenes{position:absolute;z-index:var(--z-widget,2147480000);font-family:"adineue PRO",var(--font-stack, sans-serif);max-width:280px;transform:translateX(-50%)}
+      #vgl-cw-examenes.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      #vgl-cw-examenes .vgl-cw-panel{
+        display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
+        border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
+        max-height:260px;overflow-y:auto;
+      }
+      #vgl-cw-examenes.vgl-cw-abierto .vgl-cw-panel{display:block}
+      #vgl-cw-examenes .vgl-cw-fila{margin:5px 0;line-height:1.4}
+      #vgl-cw-examenes .vgl-cw-fila:not(:last-child){border-bottom:1px solid var(--line);padding-bottom:5px}
+      #vgl-cw-examenes .vgl-cw-nom{display:block;font-size:var(--t-micro);font-weight:700;color:var(--fg) !important}
+      #vgl-cw-examenes .vgl-cw-que{display:block;font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-cw-examenes .vgl-cw-venc .vgl-cw-nom{color:var(--c-rojo) !important}
+      #vgl-cw-examenes .vgl-cw-pedir .vgl-cw-nom{color:var(--c-ambar) !important}
+      #vgl-cw-examenes .vgl-cw-ok-msg,#vgl-cw-examenes .vgl-cw-err-msg{font-size:var(--t-micro);color:var(--fg2) !important}
+      :where(#vgl-cw-examenes :not([class])){color:inherit}
+      /* v17.32.0/v17.41.0 — botón "Ordenar pendientes" y la pastilla de "Exámenes a
+         ordenar" (#vgl-cw-examenes .vgl-cw-badge), los dos justo debajo del ancla de
+         Historial+Paquetes. Viven en document.body, fuera de #vgl-root: cada regla de
+         color con clase propia lleva !important sin excepción (CLAUDE.md).
+         v17.39.0/v17.41.0 — a pedido del médico ("hazlo igual al CSS de Everest para que
+         se vea natural" / "quiero que este botón se vea igual [a Historial y Paquetes]"),
+         el estilo copia EXACTAMENTE las reglas reales del botón nativo "Paquetes" — no
+         solo el computed style final, sino la hoja de estilos real de Everest, pegada por
+         el médico desde su propia consola (getComputedStyle primero, las reglas
+         declaradas después): mismo display:inline-block, line-height en vez de flexbox
+         para centrar el texto, el mismo letter-spacing:1pt, el mismo margen mínimo. Se
+         comparte UNA sola regla entre los dos elementos para que nunca puedan divergir
+         por accidente — si Everest cambia su botón, se actualiza una vez.
+         A diferencia del widget de farmacia (que sí sigue el tema claro/oscuro del propio
+         Vigilante, porque vive en un panel flotante propio), estos dos se sientan
+         directamente en la barra de Everest — SIEMPRE deben verse como un botón más de
+         Everest, nunca como el nuestro, así que sus colores son literales, no las
+         variables de tema del script. */
+      button#vgl-cw-ordenar-btn, #vgl-cw-examenes .vgl-cw-badge{
+        display:inline-block !important;
+        font-family:"adineue PRO",var(--font-stack, sans-serif) !important;
+        color:rgba(0,0,0,.87) !important;
+        background-color:#fff !important;
+        border:none; outline:0 !important;
+        border-radius:13px !important;
+        font-size:var(--t-micro); font-weight:500; letter-spacing:1.33333px !important; text-transform:none;
+        box-sizing:border-box; position:relative; user-select:none;
+        -webkit-tap-highlight-color:transparent;
+        white-space:nowrap; text-decoration:none; vertical-align:baseline; text-align:center;
+        margin:.1% .1% .1% 0; min-width:64px; line-height:36px; padding:0 16px;
+        overflow:visible; cursor:pointer; box-shadow:none;
+      }
+      button#vgl-cw-ordenar-btn{
+        position:absolute;z-index:var(--z-widget,2147480000);
+        transform:translateX(-50%);   /* v17.34.0 — centrado exacto sobre el punto medio que ya calcula JS */
+      }
+      button#vgl-cw-ordenar-btn:disabled{cursor:default;opacity:.6}
+      button#vgl-cw-ordenar-btn.vgl-cw-ord-hecho{color:rgba(0,0,0,.5) !important}
+      :where(#vgl-cw-ordenar-btn :not([class])){color:inherit}
+      /* v17.24.0 — widget de Conducta: análisis farmacológico (Fase 2). Mismo idioma que
+         #vgl-cw-examenes (badge/panel/estados/pulso); el contenido del panel lo pintan
+         mtrRenderAvisosHtml/mtrRenderDuplicidadesHtml (.vgl-mtr-*/.vgl-dup-*), cuyo CSS se
+         extiende más abajo para cubrir también este widget — Regla E, cuelga de
+         document.body. */
+      #vgl-cw-farmaco{position:fixed;z-index:var(--z-widget,2147480000);font-family:var(--font-stack, sans-serif);max-width:320px}
+      #vgl-cw-farmaco .vgl-cw-badge{
+        display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;
+        background:var(--bg-solid);border:1px solid var(--edge);border-radius:999px;
+        padding:6px 12px;font-size:var(--t-micro);font-weight:700;
+        color:var(--fg) !important;box-shadow:0 4px 12px rgba(0,0,0,.35);
+      }
+      #vgl-cw-farmaco.vgl-cw-pend .vgl-cw-badge{color:var(--c-ambar) !important;border-color:var(--c-ambar)}
+      #vgl-cw-farmaco.vgl-cw-nd .vgl-cw-badge{color:var(--fg3) !important;opacity:.85}
+      #vgl-cw-farmaco.vgl-cw-ok .vgl-cw-badge{color:var(--c-verde) !important}
+      #vgl-cw-farmaco .vgl-cw-panel{
+        display:none;margin-top:6px;background:var(--bg-solid);border:1px solid var(--edge);
+        border-radius:var(--r-card,10px);padding:10px 12px;box-shadow:0 12px 30px rgba(0,0,0,.45);
+        max-height:320px;overflow-y:auto;
+      }
+      #vgl-cw-farmaco.vgl-cw-abierto .vgl-cw-panel{display:block}
+      #vgl-cw-farmaco .vgl-cw-err-msg,#vgl-cw-farmaco .vgl-cw-ok-msg{font-size:var(--t-micro);color:var(--fg2) !important}
+      #vgl-cw-farmaco.vgl-cw-atencion .vgl-cw-badge{animation:vglPulse 2.4s ease-out infinite}
+      :where(#vgl-cw-farmaco :not([class])){color:inherit}
       /* =====================================================================
          v16.1.0 — REGLA E APLICADA A LA FICHA Y AL MÓDULO DE RIESGO
          ---------------------------------------------------------------------
@@ -12572,6 +14181,16 @@ _vglOfrecerDeshacer(btn);
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         line-height:1.4;
       }
+      /* v17.14.0 — enjambre UX #2: #vgl-sum es una línea única con text-overflow:ellipsis,
+         y por ahí salen advertencias con la instrucción DENTRO del texto («Notificaciones
+         BLOQUEADAS: clic en el candado → Notificaciones → Permitir, y recargue»). La parte
+         que dice qué hacer es justo la que la elipsis se comía. En estado normal sigue
+         siendo una línea (la barra no puede crecer con cada resumen); solo cuando lleva
+         una advertencia o un error se le permite envolver hasta 3 renglones. */
+      #vgl-sum.warn,#vgl-sum.error{
+        white-space:normal;overflow:hidden;text-overflow:clip;
+        display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;
+      }
       #vgl-sum.warn{color:var(--c-ambar)}
       #vgl-sum.error{color:var(--c-rojo)}
       #vgl-root:not(.light) #vgl-sum.warn{color:var(--c-ambar)}
@@ -12705,6 +14324,18 @@ _vglOfrecerDeshacer(btn);
         box-shadow:0 0 12px rgba(var(--rgb-rojo),.35);
       }
       .vgl-flag.pes{background:var(--c-pes);box-shadow:0 0 12px rgba(var(--rgb-pes),.35)}
+      /* v17.8.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #1 (gravedad alta). Estas dos reglas
+         NO EXISTÍAN. Sin ellas, la bandera «agpend» (🗓️ SIN TERMINAR) y la bandera «adic»
+         («➕ CANDIDATO ADICIONAL») heredaban el fondo ROJO de la regla base — y ninguna de
+         las dos es una alarma: una es deuda de agendamiento y la otra una sugerencia de
+         cupo. El comentario del código que las emite ya decía «ámbar, no rojo»; la regla
+         nunca se escribió, así que durante meses dos avisos informativos se pintaron con
+         el color reservado para el paciente que no confirmó y para el que abandonó el
+         programa. Gastar el rojo donde no hay alarma no confunde solo ese aviso: devalúa
+         todos los demás. La suite_70 (REGLA A) impide que vuelva a pasar con cualquier
+         bandera nueva. */
+      .vgl-flag.agpend{background:var(--c-ambar);box-shadow:0 0 12px rgba(var(--rgb-ambar),.30)}
+      .vgl-flag.adic{background:var(--c-azul);box-shadow:0 0 12px rgba(var(--rgb-azul),.28)}
 
       .vgl-cd{
         font-size:var(--t-micro);font-weight:700;font-variant-numeric:tabular-nums; /* Mínimo 12px */
@@ -12724,6 +14355,11 @@ _vglOfrecerDeshacer(btn);
       /* Clases migradas de render() T1 */
       .vgl-empty-msg { opacity:.7; }
       .vgl-chip-ocultas { opacity:.75; }
+      /* v17.22.0 — chip de sobrante ("+N más") del tope de 3 chips visibles por tarjeta.
+         Mismo estilo base de .vgl-chip (dentro de #vgl-root, hereda su blindaje), solo
+         más apagado para no competir visualmente con los 3 chips reales — el detalle
+         completo de lo que resume vive en su atributo title, nunca se pierde. */
+      .vgl-chip-mas { opacity:.75; cursor:help; }
       .vgl-btn-action:disabled { opacity:.4; cursor:not-allowed; }
       .vgl-card-top.vgl-card-top-t1 { gap:10px; }
       .vgl-card-time-wrap.vgl-card-time-wrap-t1 { gap:10px; }
@@ -12953,16 +14589,26 @@ _vglOfrecerDeshacer(btn);
       #vgl-pym-banner .vgl-pymb-lista,
       #vgl-pym-banner .vgl-pymb-item,
       #vgl-pym-banner .vgl-pymb-titulo,
-      #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg)}
+      #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg) !important}
       /* Los dos que SÍ traían color propio también suben a 1,1,0: con una clase pelada
          (0,1,0) perdían contra un ".contenedor span{color:...}" de Everest (0,1,1) —
          verificado, el contador caía a contraste 1.54 en tema claro. Su color va sobre
-         fondo de acento, así que perderlo no los deja grises: los deja ilegibles. */
-      #vgl-pym-banner .vgl-pymb-contador{color:var(--bg-solid)}
-      #vgl-pym-banner .vgl-pymb-item-btn{color:var(--bg-solid)}
-      #vgl-pym-banner .vgl-pymb-aviso{color:var(--c-ambar)}
-      #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3)}
-      #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg)}
+         fondo de acento, así que perderlo no los deja grises: los deja ilegibles.
+         v17.44.0 — LA DEFENSA POR ESPECIFICIDAD ESTABA A MEDIAS, y una auditoría de CSS
+         lo destapó. Subir a 1,1,0 gana contra reglas de Everest MÁS ESPECÍFICAS, pero
+         pierde contra CUALQUIERA que lleve la marca de importante, tenga la especificidad
+         que tenga. Y #vgl-pym-banner cuelga de document.body, fuera de #vgl-root: es
+         exactamente el caso que CLAUDE.md marca como crítico (toda regla de color que
+         viva fuera de #vgl-root la lleva, sin excepción). El CSS real de Everest es una
+         caja negra de Angular que puede cambiar sin avisar, así que la especificidad
+         sola es una apuesta sobre algo que no controlamos.
+         .vgl-pymb-aviso es un AVISO CLÍNICO: que se vuelva ilegible no es un problema
+         estético, es un aviso que el médico no lee. */
+      #vgl-pym-banner .vgl-pymb-contador{color:var(--bg-solid) !important}
+      #vgl-pym-banner .vgl-pymb-item-btn{color:var(--bg-solid) !important}
+      #vgl-pym-banner .vgl-pymb-aviso{color:var(--c-ambar) !important}
+      #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3) !important}
+      #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg) !important}
       .vgl-pymb-contador{
         background:var(--c-ambar);color:var(--bg-solid);font-weight:800;
         border-radius:var(--r-pill);padding:1px 8px;font-size:var(--t-micro);
@@ -13367,15 +15013,18 @@ _vglOfrecerDeshacer(btn);
       #vgl-panel-modal .vgl-meta-act{font-size:var(--t-body);font-weight:800;color:var(--fg) !important}
       #vgl-panel-modal .vgl-meta-fila.ok .vgl-meta-act{color:var(--c-verde) !important}
       #vgl-panel-modal .vgl-meta-fila.falla .vgl-meta-act{color:var(--c-ambar) !important}
-      /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color. */
-      #vgl-panel-modal .vgl-dup-bloque{
+      /* v17.0.0 — Duplicidad terapéutica en el Panel. Regla E: !important en color.
+         v17.24.0 — se suma #vgl-cw-farmaco (widget de Conducta, Fase 2): mismo contenido
+         (mtrRenderDuplicidadesHtml), misma disciplina de !important por colgar de
+         document.body. */
+      #vgl-panel-modal .vgl-dup-bloque,#vgl-cw-farmaco .vgl-dup-bloque{
         margin-top:10px;padding:10px 12px;
         border:1px solid rgba(var(--rgb-ambar),.45);border-radius:var(--r-field);
         background:rgba(var(--rgb-ambar),.09)
       }
-      #vgl-panel-modal .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
-      #vgl-panel-modal .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
-      #vgl-panel-modal .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
+      #vgl-panel-modal .vgl-dup-tope,#vgl-cw-farmaco .vgl-dup-tope{font-size:var(--t-body);color:var(--c-ambar) !important;margin-bottom:6px}
+      #vgl-panel-modal .vgl-dup-cuenta,#vgl-cw-farmaco .vgl-dup-cuenta{font-size:var(--t-micro);font-weight:700;color:var(--fg2) !important}
+      #vgl-panel-modal .vgl-dup-fila,#vgl-cw-farmaco .vgl-dup-fila{font-size:var(--t-micro);color:var(--fg) !important;margin-bottom:6px;line-height:1.45}
       /* v17.0.0 — Emergente «faltan antecedentes». Cuelga de document.body como todos
          los módulos: Regla E, y además entra en la lista de paneles que heredan los
          tokens (ver el selector raíz) y la posición fija de los modales. */
@@ -13424,7 +15073,7 @@ _vglOfrecerDeshacer(btn);
       .vgl-agm-card::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:var(--r-pill)}
       #vgl-agendar-modal.light .vgl-agm-card,#vgl-ordenar-modal.light .vgl-agm-card,#vgl-labs-modal.light .vgl-agm-card{
         background:linear-gradient(160deg,rgba(var(--rgb-azul),.05),rgba(0,0,0,0) 60%),var(--bg-solid);
-        color:var(--fg);
+        color:var(--fg) !important;
         border-color:var(--edge);
         box-shadow:var(--shadow-float),inset 0 1px 0 rgba(255,255,255,.85)
       }
@@ -13439,27 +15088,27 @@ _vglOfrecerDeshacer(btn);
         font-size:var(--t-title);font-weight:800;color:var(--fg);
         display:flex;align-items:center;gap:8px;letter-spacing:.2px
       }
-      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-title,#vgl-ordenar-modal.light .vgl-agm-title,#vgl-labs-modal.light .vgl-agm-title{color:var(--fg) !important}
       .vgl-agm-sub{font-size:var(--t-body);margin-top:3px;color:var(--fg2)}
-      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2)}
+      #vgl-agendar-modal.light .vgl-agm-sub,#vgl-ordenar-modal.light .vgl-agm-sub,#vgl-labs-modal.light .vgl-agm-sub{color:var(--fg2) !important}
       .vgl-agm-sub b{color:var(--fg);font-weight:800}
-      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-sub b,#vgl-ordenar-modal.light .vgl-agm-sub b,#vgl-labs-modal.light .vgl-agm-sub b{color:var(--fg) !important}
       .vgl-agm-sub.med b{color:var(--c-azul)}
-      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul)}
+      #vgl-agendar-modal.light .vgl-agm-sub.med b{color:var(--c-azul) !important}
       .vgl-agm-close{
         background:transparent;border:0;color:var(--fg);
         font-size:var(--t-hero);font-weight:700;cursor:pointer;
         opacity:.7;padding:0 6px;border-radius:var(--r-chip);
         transition:opacity .15s var(--ease-out),color .15s var(--ease-out),transform .2s var(--spring)
       }
-      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg)}
+      #vgl-agendar-modal.light .vgl-agm-close,#vgl-ordenar-modal.light .vgl-agm-close,#vgl-labs-modal.light .vgl-agm-close{color:var(--fg) !important}
       .vgl-agm-close:hover{opacity:1;color:var(--c-rojo);transform:scale(1.1)}
       .vgl-agm-sec{margin-bottom:18px}
       .vgl-agm-lbl{
         font-size:var(--t-micro);font-weight:800;letter-spacing:.7px;text-transform:uppercase;
         display:block;margin-bottom:9px;color:var(--c-azul)
       }
-      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul)}
+      #vgl-agendar-modal.light .vgl-agm-lbl,#vgl-ordenar-modal.light .vgl-agm-lbl,#vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-azul) !important}
       .vgl-agm-presets{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
       .vgl-agm-pbtn{
         background:var(--bg2);color:var(--fg);
@@ -13470,7 +15119,7 @@ _vglOfrecerDeshacer(btn);
         box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-pbtn,#vgl-ordenar-modal.light .vgl-agm-pbtn,#vgl-labs-modal.light .vgl-agm-pbtn{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-pbtn:hover{background:var(--bg3);color:var(--fg);border-color:var(--bg4);transform:translateY(-1px)}
       #vgl-agendar-modal.light .vgl-agm-pbtn:hover,#vgl-ordenar-modal.light .vgl-agm-pbtn:hover{background:var(--bg3);border-color:var(--bg4)}
@@ -13574,7 +15223,7 @@ _vglOfrecerDeshacer(btn);
         box-shadow:var(--glow-edge)
       }
       #vgl-agendar-modal.light .vgl-agm-sbtn,#vgl-ordenar-modal.light .vgl-agm-sbtn,#vgl-labs-modal.light .vgl-agm-sbtn{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-sbtn:hover{background:var(--bg3);border-color:var(--bg4);color:var(--fg)}
       .vgl-agm-sbtn.active{
@@ -13608,7 +15257,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
       #vgl-ordenar-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido,
       #vgl-labs-modal.light .vgl-agm-sbtn.vgl-agm-sbtn-sugerido{
-        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar);border-color:rgba(var(--rgb-ambar),.55)
+        background:rgba(var(--rgb-ambar),.14);color:var(--c-ambar) !important;border-color:rgba(var(--rgb-ambar),.55)
       }
       /* v14.0.0 — La FRANJA recomendada completa, no solo la hora elegida como sugerida.
          El encargo del médico pedía las dos cosas ("se deben repintar de otro color Y
@@ -13708,7 +15357,7 @@ _vglOfrecerDeshacer(btn);
         outline:none
       }
       #vgl-agendar-modal.light .vgl-agm-input{
-        background:var(--bg2);color:var(--fg);border-color:var(--edge)
+        background:var(--bg2);color:var(--fg) !important;border-color:var(--edge)
       }
       .vgl-agm-foot{
         display:flex;justify-content:flex-end;gap:12px;
@@ -13716,9 +15365,9 @@ _vglOfrecerDeshacer(btn);
         border-top:1px solid var(--line);padding-top:16px
       }
       #vgl-agendar-modal.light .vgl-agm-foot{border-top-color:var(--line)}
-      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:var(--fg)}
-      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:var(--fg2)}
-      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde)}
+      #vgl-agendar-modal.light .vgl-agm-title, #vgl-ordenar-modal.light .vgl-agm-title{color:var(--fg) !important}
+      #vgl-agendar-modal.light .vgl-agm-sub, #vgl-ordenar-modal.light .vgl-agm-sub{color:var(--fg2) !important}
+      #vgl-agendar-modal.light .vgl-agm-dinfo b, #vgl-ordenar-modal.light .vgl-agm-dinfo b{color:var(--c-verde) !important}
       .vgl-agm-btn{
         border:0;border-radius:var(--r-chip);padding:11px 22px;
         font-size:var(--t-body);font-weight:800;cursor:pointer;
@@ -13810,6 +15459,14 @@ _vglOfrecerDeshacer(btn);
       .vgl-conf-tit{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;margin-bottom:4px}
       .vgl-conf-fuentes{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
       .vgl-conf-porque{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.45;margin-top:4px}
+      /* v17.14.0 — #vgl-confirma-modal se pega a document.body: NO hereda ninguna
+         protección de #vgl-root, así que este color lleva !important o el CSS de Everest
+         (SPA ajena, especificidad desconocida) puede ganarle. Regla de CLAUDE.md. */
+      .vgl-conf-desfase{
+        font-size:var(--t-micro);font-weight:700;color:var(--c-ambar) !important;line-height:1.45;
+        margin:2px 0 6px;padding:5px 8px;border-radius:var(--r-chip);
+        background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.35);
+      }
       .vgl-conf-btns{display:flex;gap:8px;align-items:center;margin-top:8px}
       .vgl-conf-hecho{font-size:var(--t-micro);font-weight:700;color:var(--c-verde) !important}
       .vgl-postcita-sep{height:1px;background:var(--edge);margin:12px 0 10px}
@@ -13881,7 +15538,7 @@ _vglOfrecerDeshacer(btn);
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-title {
-        color: var(--fg);
+        color: var(--fg) !important;
       }
       .vgl-ord-cie {
         color: var(--c-azul); /* [UI-CSS] */
@@ -13889,7 +15546,7 @@ _vglOfrecerDeshacer(btn);
         white-space: nowrap;
       }
       #vgl-agendar-modal.light .vgl-ord-cie {
-        color: var(--c-azul);
+        color: var(--c-azul) !important;
       }
       .vgl-ord-cups {
         font-size: var(--t-micro); /* [UI-CSS] */
@@ -13900,7 +15557,7 @@ _vglOfrecerDeshacer(btn);
         word-break: break-word;
       }
       #vgl-agendar-modal.light .vgl-ord-cups {
-        color: var(--fg2);
+        color: var(--fg2) !important;
       }
 
       /* ==== [v12.3.13] CSS del modal de laboratorios — antes inline en openLaboratoriosModal(); se movió aquí para inyectarse UNA vez y no re-parsearse en cada apertura ==== */
@@ -13909,19 +15566,19 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-verde);background:rgba(var(--rgb-verde),.12);
+        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.12);
         border:1px solid rgba(var(--rgb-verde),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-verde),.10)
       }
       #vgl-labs-modal .vgl-labs-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-verde),.22)
       }
       #vgl-labs-modal.light .vgl-labs-patient{text-shadow:none}
       #vgl-labs-modal .vgl-agm-sub{margin-top:5px}
-      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde)}
-      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde)}
+      #vgl-labs-modal .vgl-agm-lbl{color:var(--c-verde) !important}
+      #vgl-labs-modal.light .vgl-agm-lbl{color:var(--c-verde) !important}
 
       /* ---- Celda bento de fuente + botón portal ---- */
       #vgl-labs-modal .vgl-labs-srcbar{
@@ -13931,12 +15588,12 @@ _vglOfrecerDeshacer(btn);
         padding:12px 16px;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal.light .vgl-labs-srcbar{background:rgba(var(--rgb-azul),.06)}
-      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2);line-height:1.5;min-width:0}
-      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg);font-weight:800}
+      #vgl-labs-modal .vgl-labs-srclbl{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5;min-width:0}
+      #vgl-labs-modal .vgl-labs-srclbl b{color:var(--fg) !important;font-weight:800}
       #vgl-labs-modal .vgl-labs-portal{
         text-decoration:none;display:inline-flex;align-items:center;gap:7px;
         background:linear-gradient(135deg,rgba(var(--rgb-azul),.30),rgba(var(--rgb-azul),.15));
-        color:var(--c-azul);font-size:var(--t-micro);font-weight:800;
+        color:var(--c-azul) !important;font-size:var(--t-micro);font-weight:800;
         padding:9px 16px;border-radius:var(--r-pill);
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.40),0 6px 18px rgba(var(--rgb-azul),.14);
         transition:transform .2s var(--spring),filter .15s var(--ease-out)
@@ -13949,11 +15606,11 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-agm-loading{display:flex;align-items:center;gap:10px;padding:18px 8px;font-size:var(--t-body);animation:vglLabsPulse 1.6s ease-in-out infinite}
       @keyframes vglLabsPulse{0%,100%{opacity:.55}50%{opacity:1}}
       #vgl-labs-modal .vgl-labs-empty{
-        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2);
+        margin:10px 0 2px;background:var(--bg2);border:1px dashed var(--edge);color:var(--fg2) !important;
         border-radius:var(--r-card);padding:22px 20px;text-align:center;
         font-size:var(--t-body);font-weight:600;line-height:1.6;box-shadow:var(--glow-edge)
       }
-      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg)}
+      #vgl-labs-modal .vgl-labs-empty b{color:var(--fg) !important}
 
       /* ---- Tabla clínica: filas respiradas, el RESULTADO manda ---- */
       /* v12.8.1 — La tabla salía ilegible en consultorio (capturas del médico): una
@@ -13978,7 +15635,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-table thead th{
         position:sticky;top:0;z-index:2;background:var(--bg-solid);
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.1px;text-transform:uppercase;
-        color:var(--fg3);text-align:left;padding:12px 12px 9px;
+        color:var(--fg3) !important;text-align:left;padding:12px 12px 9px;
         border-bottom:1px solid var(--edge)
       }
       #vgl-labs-modal .vgl-labs-tr td{
@@ -13988,13 +15645,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr td:first-child{border-radius:var(--r-field) 0 0 var(--r-field)}
       #vgl-labs-modal .vgl-labs-tr td:last-child{border-radius:0 var(--r-field) var(--r-field) 0}
       #vgl-labs-modal .vgl-labs-tr:hover td{background:var(--bg3)}
-      #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3);font-variant-numeric:tabular-nums;white-space:nowrap}
-      #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg);overflow-wrap:break-word}
+      #vgl-labs-modal .vgl-labs-date{font-size:var(--t-micro);color:var(--fg3) !important;font-variant-numeric:tabular-nums;white-space:nowrap}
+      #vgl-labs-modal .vgl-labs-exam{font-size:var(--t-body);font-weight:700;color:var(--fg) !important;overflow-wrap:break-word}
       #vgl-labs-modal .vgl-labs-val{
-        font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg);
+        font-size:var(--t-strong);font-weight:900;letter-spacing:-.2px;color:var(--fg) !important;
         font-variant-numeric:tabular-nums;overflow-wrap:break-word
       }
-      #vgl-labs-modal .vgl-labs-ref{font-size:var(--t-micro);color:var(--fg3);overflow-wrap:break-word}
+      #vgl-labs-modal .vgl-labs-ref{font-size:var(--t-micro);color:var(--fg3) !important;overflow-wrap:break-word}
       /* v12.8.1 — Panel multiparamétrico (uroanálisis): un uroanálisis son ~30 parámetros,
          no un valor único. En rejilla auto-ajustable ocupan 2–4 columnas según el ancho
          disponible y la fila deja de medir varias pantallas. Tipografía de DATO, no de
@@ -14045,7 +15702,7 @@ _vglOfrecerDeshacer(btn);
         padding:3px 0;border-bottom:1px solid var(--line);
         display:flex;justify-content:space-between;gap:8px;font-size:11px;
       }
-      #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3);font-weight:800;font-size:var(--t-micro)}
+      #vgl-labs-modal .vgl-labs-uro-i b{color:var(--fg3) !important;font-weight:800;font-size:var(--t-micro)}
       /* v14.1.1 (R1b) — recuadro de función renal. Superficie propia para que se lea como
          un resumen y no como una fila más de la tabla de resultados. */
       #vgl-labs-modal .vgl-labs-renal{
@@ -14085,10 +15742,10 @@ _vglOfrecerDeshacer(btn);
         display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
         font-size:var(--t-micro);font-weight:800;letter-spacing:.4px;
         padding:4px 10px;border-radius:var(--r-pill);
-        background:var(--bg3);color:var(--fg2);box-shadow:var(--glow-edge)
+        background:var(--bg3);color:var(--fg2) !important;box-shadow:var(--glow-edge)
       }
       #vgl-labs-modal .vgl-labs-src.athenea{
-        background:rgba(var(--rgb-azul),.16);color:var(--c-azul);
+        background:rgba(var(--rgb-azul),.16);color:var(--c-azul) !important;
         box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.38),0 0 14px rgba(var(--rgb-azul),.10)
       }
       /* v12.5.4 — Botón "Ver informe" (PDF real de Athenea) */
@@ -14104,7 +15761,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td{background:rgba(var(--rgb-rojo),.10)}
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert:hover td{background:rgba(var(--rgb-rojo),.15)}
       #vgl-labs-modal .vgl-labs-tr.vgl-labs-alert td:first-child{box-shadow:inset 3px 0 0 var(--c-rojo)}
-      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo);text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
+      #vgl-labs-modal .vgl-labs-alert .vgl-labs-val{color:var(--c-rojo) !important;text-shadow:0 0 16px rgba(var(--rgb-rojo),.50)}
       #vgl-labs-modal.light .vgl-labs-alert .vgl-labs-val{text-shadow:none}
       #vgl-labs-modal .vgl-labs-alert .vgl-labs-val::before{content:"▲ ";font-size:var(--t-micro);vertical-align:2px}
 
@@ -14156,13 +15813,13 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-azul);background:rgba(var(--rgb-azul),.12);
+        color:var(--c-azul) !important;background:rgba(var(--rgb-azul),.12);
         border:1px solid rgba(var(--rgb-azul),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-azul),.10)
       }
       #vgl-agendar-modal .vgl-agm-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-azul),.25)
       }
       #vgl-agendar-modal.light .vgl-agm-patient{text-shadow:none}
@@ -14173,7 +15830,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-agendar-modal .vgl-agm-step{
         flex:none;display:inline-flex;align-items:center;justify-content:center;
         width:21px;height:21px;border-radius:var(--r-pill);
-        font-size:var(--t-micro);font-weight:900;color:var(--c-azul);
+        font-size:var(--t-micro);font-weight:900;color:var(--c-azul) !important;
         background:rgba(var(--rgb-azul),.15);border:1px solid rgba(var(--rgb-azul),.42);
         box-shadow:0 0 12px rgba(var(--rgb-azul),.14)
       }
@@ -14210,16 +15867,16 @@ _vglOfrecerDeshacer(btn);
          envío de la orden por correo: mismo layout de fila, sin duplicar la regla. */
       #vgl-agendar-modal .vgl-agm-fieldrow, #vgl-ordenar-modal .vgl-agm-fieldrow{
         display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-        margin-top:8px;font-size:var(--t-micro);color:var(--fg2)
+        margin-top:8px;font-size:var(--t-micro);color:var(--fg2) !important
       }
       #vgl-agendar-modal .vgl-agm-fieldrow>label, #vgl-ordenar-modal .vgl-agm-fieldrow>label{
         flex:none;font-weight:800;font-size:var(--t-micro);letter-spacing:.6px;
-        text-transform:uppercase;color:var(--c-azul)
+        text-transform:uppercase;color:var(--c-azul) !important
       }
-      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde)}
-      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3)}
-      #vgl-agendar-modal .vgl-agm-lab-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3);margin:2px 0 6px}
-      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde)}
+      #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-fieldrow>label{color:var(--c-verde) !important}
+      #vgl-agendar-modal #vgl-agm-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3) !important}
+      #vgl-agendar-modal .vgl-agm-lab-sms-nota{font-size:var(--t-micro);font-style:italic;color:var(--fg3) !important;margin:2px 0 6px}
+      #vgl-agendar-modal #vgl-lab-date-lbl{color:var(--c-verde) !important}
       #vgl-agendar-modal .vgl-agm-check-lbl{margin-bottom:0}
       #vgl-agendar-modal .vgl-agm-check-lbl input[type=checkbox]{width:17px;height:17px;flex:none;accent-color:var(--c-azul)}
       #vgl-agendar-modal .vgl-agm-cell-lab .vgl-agm-check-lbl input[type=checkbox]{accent-color:var(--c-verde)}
@@ -14259,24 +15916,24 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-agm-kicker{
         display:inline-flex;align-items:center;gap:7px;
         font-size:var(--t-micro);font-weight:800;letter-spacing:1.5px;text-transform:uppercase;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.12);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.12);
         border:1px solid rgba(var(--rgb-morado),.32);border-radius:var(--r-pill);
         padding:4px 12px;margin-bottom:9px;box-shadow:0 0 18px rgba(var(--rgb-morado),.10)
       }
       #vgl-ordenar-modal .vgl-agm-patient{
         font-size:var(--t-hero);font-weight:900;letter-spacing:-.4px;line-height:1.12;
-        color:var(--fg);overflow-wrap:anywhere;
+        color:var(--fg) !important;overflow-wrap:anywhere;
         text-shadow:0 0 30px rgba(var(--rgb-morado),.25)
       }
       #vgl-ordenar-modal.light .vgl-agm-patient{text-shadow:none}
       #vgl-ordenar-modal .vgl-agm-sub{margin-top:5px}
 
       /* ---- Rótulo de sección con ficha de conteo ---- */
-      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado)}
+      #vgl-ordenar-modal .vgl-agm-lbl{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--c-morado) !important}
       #vgl-ordenar-modal .vgl-agm-step{
         flex:none;display:inline-flex;align-items:center;justify-content:center;
         min-width:21px;height:21px;padding:0 6px;border-radius:var(--r-pill);
-        font-size:var(--t-micro);font-weight:900;color:var(--c-morado);
+        font-size:var(--t-micro);font-weight:900;color:var(--c-morado) !important;
         background:rgba(var(--rgb-morado),.15);border:1px solid rgba(var(--rgb-morado),.42);
         box-shadow:0 0 12px rgba(var(--rgb-morado),.14)
       }
@@ -14310,7 +15967,7 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-ord-title{font-size:var(--t-body);line-height:1.4}
       #vgl-ordenar-modal .vgl-ord-cie{
         display:inline-block;font-size:var(--t-micro);font-weight:800;letter-spacing:.5px;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.13);
         border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-pill);
         padding:1px 8px;margin-left:2px;white-space:nowrap;vertical-align:1px
       }
@@ -14318,28 +15975,28 @@ _vglOfrecerDeshacer(btn);
       #vgl-ordenar-modal .vgl-ord-cups{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:8px}
       #vgl-ordenar-modal .vgl-ord-cupk{
         flex:none;font-size:var(--t-micro);font-weight:800;letter-spacing:1.2px;
-        text-transform:uppercase;color:var(--fg3)
+        text-transform:uppercase;color:var(--fg3) !important
       }
       #vgl-ordenar-modal .vgl-ord-cup{
         display:inline-flex;align-items:baseline;gap:5px;min-width:0;
-        font-size:var(--t-micro);font-weight:600;line-height:1.35;color:var(--fg2);
+        font-size:var(--t-micro);font-weight:600;line-height:1.35;color:var(--fg2) !important;
         background:var(--bg2);border:1px solid var(--line);
         border-radius:var(--r-field);padding:2px 9px;box-shadow:var(--glow-edge)
       }
-      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul);font-weight:800;letter-spacing:.3px}
+      #vgl-ordenar-modal .vgl-ord-cup b{flex:none;color:var(--c-azul) !important;font-weight:800;letter-spacing:.3px}
       /* Aviso de actividad propia del otro sexo — chip ROJO neón-pastel */
       /* v12.3.x — Caption de trazabilidad: qué actividad REAL del Excel de PyM disparó
          cada paquete sugerido. Mismo tratamiento visual que .vgl-ord-sexwarn, en acento
          morado informativo (no es una advertencia, es la fuente del dato). */
       #vgl-ordenar-modal .vgl-ord-pymsrc{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-morado);background:rgba(var(--rgb-morado),.13);
+        color:var(--c-morado) !important;background:rgba(var(--rgb-morado),.13);
         border:1px solid rgba(var(--rgb-morado),.35);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
       }
       #vgl-ordenar-modal .vgl-ord-sexwarn{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-rojo);background:rgba(var(--rgb-rojo),.13);
+        color:var(--c-rojo) !important;background:rgba(var(--rgb-rojo),.13);
         border:1px solid rgba(var(--rgb-rojo),.40);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
         box-shadow:0 0 16px rgba(var(--rgb-rojo),.10)
@@ -14350,8 +16007,31 @@ _vglOfrecerDeshacer(btn);
          .vgl-ord-sexwarn/.vgl-ord-pymsrc, solo cambia el acento de color. */
       #vgl-ordenar-modal .vgl-ord-vigwarn{
         font-size:var(--t-micro);font-weight:700;line-height:1.45;
-        color:var(--c-verde);background:rgba(var(--rgb-verde),.13);
+        color:var(--c-verde) !important;background:rgba(var(--rgb-verde),.13);
         border:1px solid rgba(var(--rgb-verde),.35);border-radius:var(--r-field);
+        padding:7px 10px;margin-top:8px;
+      }
+      /* v17.11.0 — AUDITORÍA DE EXPERIENCIA, hallazgo #44 (gravedad alta). El aviso de que
+         la corrida salió A MEDIAS reutilizaba .vgl-ord-vigwarn, que en ESTE modal es VERDE
+         y significa «esto ya está cubierto». O sea: de un vistazo, una corrida en la que
+         parte de las órdenes NO se crearon decía «todo bien». El médico se va creyendo que
+         quedaron pedidas.
+         Clase propia, en ámbar, con !important porque este modal cuelga de document.body
+         (regla de la casa) y verificada en Chromium contra un CSS de Everest agresivo. */
+      /* v17.16.0 — el aviso de que el cruce contra Athenea no se pudo hacer. Ámbar, que es
+         el color de «ojo con esto»: no es un error del paciente ni una alarma clínica, es
+         una comprobación que falta. Con !important porque #vgl-ordenar-modal cuelga de
+         document.body, fuera de #vgl-root (Regla E de CLAUDE.md). */
+      #vgl-ordenar-modal .vgl-ord-nocruce{
+        margin:0 0 10px;padding:8px 10px;border-radius:var(--r-chip);
+        font-size:var(--t-micro);line-height:1.45;font-weight:600;
+        color:var(--c-ambar) !important;
+        background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.35);
+      }
+      #vgl-ordenar-modal .vgl-ord-parcial{
+        font-size:var(--t-micro);font-weight:700;line-height:1.45;
+        color:var(--c-ambar) !important;background:rgba(var(--rgb-ambar),.13);
+        border:1px solid rgba(var(--rgb-ambar),.45);border-radius:var(--r-field);
         padding:7px 10px;margin-top:8px;
       }
 
@@ -15030,16 +16710,68 @@ _vglOfrecerDeshacer(btn);
     };
   }
 
+  // v17.15.0 — CORTACIRCUITOS PARA LAS LLAMADAS ESPECULATIVAS.
+  //
+  // REPORTE EN CONSULTA (27-ago): el médico pegó su consola y era una pared de
+  // «[Vigilante SYNAPSE] GM fallback también falló en intento N», cada una con su traza de
+  // pila, sobre BuscarPaciente y GetUsuarioPerfil. Los servicios de Everest devolvían 500 y
+  // agotaban el tiempo. Medido con el arnés ANTES de tocar nada: UN solo hover sobre una
+  // tarjeta de paciente dispara **16 peticiones al servidor y 8 líneas de consola**.
+  //
+  // El detonante no es una acción del médico: es el preparador por hover, una optimización
+  // ESPECULATIVA cuyo fallo no tiene ninguna consecuencia (su llamador lo descarta con un
+  // catch vacío). Pasar el cursor por la lista del día con el servidor caído son cientos de
+  // peticiones a un servidor que ya está mal, y una consola inservible — justo la consola
+  // donde este proyecto le pide al médico que lea los diagnósticos.
+  //
+  // Dos frenos, y ninguno toca lo que el médico pidió con un clic:
+  //   · `options.especulativo`: un intento, sin reintentos y sin narrar el fallo.
+  //   · el cortacircuitos de aquí abajo: tras 3 fallos seguidos, lo especulativo se
+  //     suspende 5 minutos y se dice UNA vez, no una por intento.
+  // Una acción PEDIDA por el médico se intenta siempre, cortacircuitos o no: el asistente
+  // no puede negarse a hacer lo que le mandaron.
+  const API_CORTE_FALLOS = 3;
+  const API_CORTE_MS = 5 * 60 * 1000;
+  let _apiFallosSeguidos = 0;
+  let _apiCorteHasta = 0;
+  let _apiCorteAvisado = false;
+  function _apiCorteAbierto(ahora) {
+    return _apiCorteHasta > 0 && (ahora || Date.now()) < _apiCorteHasta;
+  }
+  function _apiMarcarResultado(ok) {
+    if (ok) {
+      _apiFallosSeguidos = 0; _apiCorteHasta = 0; _apiCorteAvisado = false;
+      try { _saludMarca("everest", true); } catch (e) {}
+      return;
+    }
+    _apiFallosSeguidos++;
+    try { _saludMarca("everest", false); } catch (e) {}
+    if (_apiFallosSeguidos >= API_CORTE_FALLOS && !_apiCorteAbierto()) {
+      _apiCorteHasta = Date.now() + API_CORTE_MS;
+      if (!_apiCorteAvisado) {
+        _apiCorteAvisado = true;
+        try { console.warn("[Vigilante] los servicios de Everest no responden: se suspenden " + Math.round(API_CORTE_MS / 60000) + " min las consultas que el asistente hace por adelantado. Lo que usted pida con un clic se sigue intentando."); } catch (e) {}
+      }
+    }
+  }
+  function _apiCorteEstadoParaTest() { return { fallos: _apiFallosSeguidos, hasta: _apiCorteHasta }; }
+  function _apiCorteResetParaTest() { _apiFallosSeguidos = 0; _apiCorteHasta = 0; _apiCorteAvisado = false; }
+
   // Petición universal en el contexto de la página (núcleo) con SYNAPSE (Exponential Backoff + Jitter)
   async function _pageFetchJsonCore(url, options) {
     let delay = 300;
+    // v17.15.0 — una llamada especulativa no insiste ni narra, y no sale siquiera si el
+    // cortacircuitos está abierto. Devolver null es su modo normal de fallar: el llamador
+    // real volverá a pedirlo cuando de verdad haga falta.
+    const especulativo = !!(options && options.especulativo === true);
+    if (especulativo && _apiCorteAbierto()) return null;
     // v11.0.1 — NO se reintenta una ESCRITURA. Este núcleo reintentaba hasta 4 veces y,
     // en cada vuelta, repetía la petición por una segunda vía (GM_xmlhttpRequest): hasta
     // OCHO envíos del mismo POST. En AsignarTurno son ocho citas para el mismo paciente;
     // en GuardarOrdenamiento, ocho órdenes clínicas repetidas.
     const metodo = String((options && options.method) || "GET").toUpperCase();
     const esEscritura = metodo !== "GET" && metodo !== "HEAD" && !(options && options.__idempotent === true);
-    const maxRetries = esEscritura ? 0 : 3;
+    const maxRetries = (esEscritura || especulativo) ? 0 : 3;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       let isError = false;
@@ -15052,7 +16784,7 @@ _vglOfrecerDeshacer(btn);
           }, options || {}));
           if (resp && resp.ok) {
             const data = await resp.json();
-            if (data) return data;
+            if (data) { _apiMarcarResultado(true); return data; }
           } else if (resp && resp.status >= 500) {
             isError = true;
           } else {
@@ -15086,10 +16818,14 @@ _vglOfrecerDeshacer(btn);
                 ontimeout: () => reject(new Error("Timeout")),
               }, options || {}));
             });
-            if (result) return result;
+            if (result) { _apiMarcarResultado(true); return result; }
           } catch (e) {
             // [BLINDADO v8.2.0 NET-01] Silent Failure eliminado: registrar para diagnóstico técnico (sin datos de pacientes)
-            if (console && console.warn) console.warn('[Vigilante SYNAPSE] GM fallback también falló en intento ' + attempt + ':', (e && e.message) || String(e));
+            // v17.15.0 — salvo en la vía especulativa: su fallo no tiene consecuencia y
+            // narrarlo con traza, cuatro veces por ruta y por cada tarjeta que roza el
+            // cursor, sepulta la consola que el médico necesita para diagnosticar. El
+            // fallo SÍ se cuenta (más abajo, en _apiMarcarResultado) — solo no se narra.
+            if (!especulativo && console && console.warn) console.warn('[Vigilante SYNAPSE] GM fallback también falló en intento ' + attempt + ':', (e && e.message) || String(e));
           }
         }
 
@@ -15101,6 +16837,14 @@ _vglOfrecerDeshacer(btn);
         }
       }
     }
+    // v17.15.0 — se agotaron los intentos. Es lo que alimenta el módulo «Servicios de
+    // Everest» del panel de salud: hasta ahora ese panel podía decir «✓ leyendo bien» en
+    // sus cuatro módulos con toda la API de Everest devolviendo 500, porque los cuatro se
+    // marcan desde la lectura de la PANTALLA, que sigue funcionando. El médico no tenía
+    // forma de saber que agendar o buscar un paciente iban a fallar hasta intentarlo.
+    // Un 4xx NO llega aquí (se devuelve arriba sin reintentar): eso es una respuesta del
+    // servidor, no una caída, y contarlo como fallo abriría el cortacircuitos sin motivo.
+    _apiMarcarResultado(false);
     return null;
   }
 
@@ -15225,7 +16969,9 @@ _vglOfrecerDeshacer(btn);
   // no cambia, la clave ya separa por médico y por cédula, y el TTL cubre el resto. Es la
   // cuarta vez que este proyecto casi mete un invalidador sin llamador.)
   const _pacienteIdCache = new Map();
-  async function apiAccesoBuscarPaciente(docId) {
+  // v17.15.0 — `opts.especulativo` viaja hasta pageFetchJson: el preparador por hover lo
+  // pasa, el modal que el médico abrió NO. Es la única diferencia entre las dos vías.
+  async function apiAccesoBuscarPaciente(docId, opts) {
     const uId = state.activeDoctor.id || S.medicoId || 0;
     const cleanDoc = String(docId || "").replace(/\D/g, "");
     if (!cleanDoc) return null;
@@ -15251,7 +16997,7 @@ _vglOfrecerDeshacer(btn);
 
     for (const path of paths) {
       try {
-        const res = await pageFetchJson(path);
+        const res = await pageFetchJson(path, (opts && opts.especulativo) ? { especulativo: true } : undefined);
         const pid = extractPatientId(res);
         if (pid) { _pacienteIdCache.set(clave, { pid, ts: Date.now() }); return pid; }
       } catch (e) {}
@@ -15781,7 +17527,11 @@ _vglOfrecerDeshacer(btn);
       let smsEnviado = false;
       if (celular && radicado) {
         try {
-          const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${encodeURIComponent(telParam)}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${encodeURIComponent(radicado)}&codigoSede=378`;
+          const urlSms = `https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio?Celular=${encodeURIComponent(telParam)}&Fecha=${fechaIso}&Hora=${encodeURIComponent(horaFinal)}&codigoCita=${encodeURIComponent(radicado)}&codigoSede=${mtrSedeIdLab()}`;
+          // v17.15.0 — la v17.6.3 sacó el 378 cableado de CINCO URLs a mtrSedeIdLab() y dejó
+          // esta, que es la peor de las seis: es el mensaje que le llega al CELULAR DEL
+          // PACIENTE diciéndole a qué laboratorio ir. Un colega de otra sede que instalara
+          // el script mandaba a sus pacientes a la sede equivocada, por escrito.
           // v12.3.33 — hallado en revisión adversarial: _gmReq resuelve con CUALQUIER
           // estado HTTP (incluidos 4xx/5xx), así que un rechazo del servicio de SMS se
           // anunciaba igual como "Se envió SMS" y el médico se saltaba el recordatorio
@@ -15792,7 +17542,12 @@ _vglOfrecerDeshacer(btn);
         } catch (e) { console.warn("[Vigilante Lab] error enviando SMS de laboratorio:", e); }
       }
 
-      spToast(`🧪 Cita de Laboratorio agendada en AppCita para el ${fechaIso} a las ${format12hTime(horaFinal)}.` + (smsEnviado ? " Se envió SMS de recordatorio." : " El paciente NO recibe SMS del laboratorio: recuérdeselo."));
+      // v17.28.0 — RETIRADO el toast de confirmación (encargo del médico, 28-ago: "elimina
+      // esa notificación... es cuando se asignan citas de laboratorio"). El agendamiento y
+      // el envío real del SMS al paciente NO se tocan — solo se calla el aviso EN PANTALLA
+      // para el médico. `smsEnviado` se conserva en el valor de retorno (informativo, sin
+      // llamador hoy) por si algún consumidor futuro lo necesita sin tener que reabrir esta
+      // función.
       // v15.9.0 — se devuelve el radicado (objeto TRUTHY: quien solo preguntaba "¿quedó?"
       // sigue funcionando igual) para poder imprimir el recordatorio de la toma.
       return { ok: true, radicado: radicado, fechaIso: fechaIso, hora: horaFinal, smsEnviado: smsEnviado };
@@ -17374,6 +19129,20 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-sec">
           <label class="vgl-agm-lbl">⚡ Historial de Paraclínicos (Últimos 365 días):${vglTip("Las filas resaltadas en color son valores fuera del rango normal — igual que en Everest, no es un error del Vigilante. La etiqueta junto a cada resultado dice si vino directo del laboratorio (Athenea) o quedó registrado a mano.")}</label>
+          <!-- v17.25.0 — AUDITORÍA DE LABORATORIOS: _renderEstadioRenalHtml (R1b, v14.1.1)
+               calculaba el recuadro de función renal — TFG, estadio, discordancia entre
+               fórmulas, paciente pediátrico, creatinina fuera de rango — con su propio CSS
+               ya escrito (.vgl-labs-renal-*), probado de punta a punta (suite_29/suite_32),
+               y JAMÁS insertado en ningún sitio: no había ni un contenedor para él en esta
+               plantilla. El catch de más abajo ("recuadro renal no disponible") ya hablaba
+               de un recuadro que nunca llegó a pintarse. -->
+          <!-- v17.26.0 — el bloque de seguridad farmacológica (#vgl-labs-farmaco,
+               extraFarmaco, v17.12.0) SE FUE de aquí: el médico lo probó en vivo el 28-ago
+               contra un paciente real y reportó que su lugar es erróneo — el juicio
+               farmacológico vive en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de
+               resultados de laboratorio. La función renal de arriba se queda: la queja fue
+               puntualmente sobre seguridad farmacológica, no sobre este recuadro. -->
+          <div id="vgl-labs-renal" aria-live="polite"></div>
           <div id="vgl-labs-content" class="vgl-agm-slots" aria-live="polite" style="max-height:460px;overflow-y:auto;display:block">
             <div class="vgl-agm-loading">⏳ Consultando automáticamente exámenes de laboratorio en Portal Athenea Soluciones...</div>
           </div>
@@ -17411,11 +19180,21 @@ _vglOfrecerDeshacer(btn);
     const contentEl = modal.querySelector("#vgl-labs-content");
 
     const todosLabs = [];
+    let _labsSolicitudesNoLeidas = 0;
+    let _labsAtheneaCrudos = null;
 
     // 1. BÚSQUEDA PRIORITARIA Y DE ENTRADA EN ATHENEA SOLUCIONES (v12.3.3: puente real
     // por navegador — búsqueda por cédula, sin depender de ningún servidor externo).
     try {
       const labsArr = await getAtheneaLabsAuto(apt.doc_id);
+      // v17.7.1 — el contador de solicitudes no leídas viaja como propiedad NO enumerable
+      // del array que devuelve Athenea, así que la línea de abajo (que copia analito a
+      // analito a OTRO array) lo perdía irremediablemente. Se lee ANTES.
+      try { _labsSolicitudesNoLeidas = (labsArr && labsArr.__vglIncompleto) || 0; } catch (e) {}
+      // v17.8.1 — `null` («no pude leer el portal») y `[]` («leí y no hay nada») son cosas
+      // distintas y la pantalla las presentaba igual. Se conserva el crudo para poder
+      // decirlo, porque `todosLabs` ya no lo distingue: los dos casos dejan el array vacío.
+      _labsAtheneaCrudos = (labsArr === undefined) ? null : labsArr;
       if (labsArr && labsArr.length) {
         labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)", ...l }));
       }
@@ -17450,21 +19229,23 @@ _vglOfrecerDeshacer(btn);
       try {
         const r = await calcularEstadioRenal(pacienteIdLabs, todosLabs);
         if (!vivo()) return;
+        // v17.25.0 — y AQUÍ SE INSERTA el recuadro renal: calcular y no pintar es trabajo
+        // perdido (ver el comentario de la plantilla más arriba).
         try {
+          const cajaR = modal.querySelector("#vgl-labs-renal");
+          if (cajaR && vivo()) cajaR.innerHTML = _renderEstadioRenalHtml(r) || "";
+        } catch (eR) {}
+        try {
+          // v17.26.0 — se sigue refrescando en segundo plano (el widget de Conducta,
+          // #vgl-cw-farmaco, y el modal de Ordenar dependen de este dato ya cargado),
+          // pero ya no se pinta nada de seguridad farmacológica en Laboratorios: ver el
+          // comentario de la plantilla más arriba.
           if (S.motorPortado && typeof mtrRefrescarMedicamentos === "function") {
             await mtrRefrescarMedicamentos(pacienteIdLabs);
           }
         } catch (eMeds) { console.warn("[Vigilante] no se pudo refrescar medicamentos:", eMeds); }
         if (!vivo()) return;
         try {
-          let extraFarmaco = "";
-          try {
-            extraFarmaco = mtrRenderAvisosHtml({
-              citaId: pacienteIdLabs,
-              tfgCkdEpi: (r && (r.tfgCkdEpi || r.tfg)) || null,
-              tfgCockcroftGault: (r && r.tfg) || null,
-            });
-          } catch (eF) {}
           const resumenClinico = mtrResumenDesdeModalLabs(r, todosLabs, apt, pacienteIdLabs);
           try { mtrCacheResumenGuardar(apt && apt.doc_id, resumenClinico); } catch (eCache) {}
           try { mtrTelemetriaResumen(resumenClinico).forEach((ev) => uxTrack(ev.accion, ev.extra)); }
@@ -17478,7 +19259,17 @@ _vglOfrecerDeshacer(btn);
       // Se marca completado y ademas se anota el desenlace, que es lo interesante.
       _fnCompletado = true;
       try { uxTrack("fn.labs.vacio"); uxTrack("fn.labs.complete"); } catch (e) {}
-      if (contentEl) contentEl.innerHTML = `<div class="vgl-agm-err vgl-labs-empty">ℹ No se encontraron paraclínicos recientes para este paciente en Athenea, Annar ni Citi.<br><br>Verifique directamente en el portal de Athenea con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #26 (gravedad alta, riesgo clínico).
+      // Este mensaje es una afirmación sobre el PACIENTE y salía también cuando el fallo era
+      // del SISTEMA. `getAtheneaLabsAuto` está escrita a propósito para distinguir los dos
+      // casos —devuelve `null` cuando no pudo leer el portal y `[]` cuando leyó y no hay
+      // nada— y esa distinción se tiraba aquí. En consulta las dos frases llevan a conductas
+      // opuestas: «no tiene exámenes» hace que se los ordene otra vez; «no pude leer el
+      // portal» hace que se vuelva a intentar o se mire a mano.
+      const _noSePudoLeer = (_labsAtheneaCrudos === null) || _labsSolicitudesNoLeidas > 0;
+      if (contentEl) contentEl.innerHTML = _noSePudoLeer
+        ? `<div class="vgl-agm-err vgl-labs-empty">⚠ <b>No pude leer el portal de Athenea</b>, así que no sé qué exámenes tiene este paciente. Esto NO quiere decir que no tenga ninguno.<br><br>Vuelva a abrir el módulo para reintentar, o ábralo directamente con el botón azul de arriba.</div>`
+        : `<div class="vgl-agm-err vgl-labs-empty">ℹ Athenea respondió y <b>no tiene ningún paraclínico registrado</b> de los últimos 365 días para este paciente. Tampoco Annar ni Citi.<br><br>Verifique directamente en el portal con el botón azul de arriba. <b>No se muestra ningún resultado de ejemplo.</b></div>`;
       return;
     }
 
@@ -17615,6 +19406,7 @@ _vglOfrecerDeshacer(btn);
 
     if (contentEl) {
       contentEl.innerHTML = `
+        ${mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: _labsSolicitudesNoLeidas, viejasOcultas: _labViejasOcultas })}
         <table class="vgl-labs-table">
           <thead>
             <tr>
@@ -17795,7 +19587,17 @@ _vglOfrecerDeshacer(btn);
       // distinta disfrazada de la otra — justo lo que la regla "sin dato = sin
       // suposición" prohíbe. Ahora la etiqueta dice la verdad: si no hay Cockcroft-Gault
       // real, se avisa que el número es CKD-EPI y por qué (falta el peso).
-      fila(erc.crcl != null ? "Filtrado (Cockcroft-Gault)" : "Filtrado (CKD-EPI — falta peso para Cockcroft-Gault)",
+      // v17.8.1 — hallazgo #13. La etiqueta acusaba al PESO cada vez que faltaba el
+      // Cockcroft-Gault, fuera cual fuera la causa. Reproducido: paciente con «Peso: 78 kg»
+      // impreso dos filas más arriba y sin creatinina; la fila seguía diciendo «falta peso».
+      // El motor ya publica `erc.faltan` con el insumo real; basta con leerlo en vez de
+      // suponerlo. Acusar al dato equivocado hace perder tiempo de consulta buscando algo
+      // que ya está.
+      fila(erc.crcl != null
+        ? "Filtrado (Cockcroft-Gault)"
+        : "Filtrado (CKD-EPI — para Cockcroft-Gault falta " + escapeHtml(
+            (Array.isArray(erc.faltan) && erc.faltan.length) ? erc.faltan.join(" y ") : "algún dato"
+          ) + ")",
         num(erc.crcl != null ? erc.crcl : erc.egfr, "mL/min"), F_CAL),
       fila("Estadio", erc.estadioAdministrativo || null, F_CAL),
     ]});
@@ -17920,12 +19722,19 @@ _vglOfrecerDeshacer(btn);
   //  HTML) para poder fijarla en el banco sin montar un navegador.
   // =====================================================================
 
+  // v17.24.0 — «medicamentos» sale de aquí (decisión del médico, entrevista S+ del
+  // 28-ago): el juicio clínico farmacológico (avisos + duplicidades) se muda por
+  // completo al widget de Conducta (#vgl-cw-farmaco, bloqueado hasta capturar el DOM
+  // real del formulario de prescripción). El Panel se queda como archivo pasivo — una
+  // sola fuente de verdad para lo accionable, nunca dos que puedan divergir (el mismo
+  // defecto de v17.1.0 con el conteo de medicamentos, ahora evitado por diseño).
+  // mtrPanelSeccionValida sigue cayendo a "resumen" ante cualquier id desconocido, así
+  // que un llamador viejo con seccion:"medicamentos" no se rompe.
   const MTR_PANEL_SECCIONES = [
     { id: "resumen",      icono: "🧾", rotulo: "Resumen" },
     { id: "renal",        icono: "❤️", rotulo: "Riesgo y función renal" },
     { id: "examenes",     icono: "🧪", rotulo: "Exámenes y vigencias" },
     { id: "tendencias",   icono: "📈", rotulo: "Tendencias" },
-    { id: "medicamentos", icono: "💊", rotulo: "Medicamentos" },
   ];
   // Los puntos de entrada viejos siguen existiendo (el agendamiento abre el
   // tablero, el dock abría la ficha): cada uno aterriza en SU sección.
@@ -17946,9 +19755,98 @@ _vglOfrecerDeshacer(btn);
       + '</div>';
   }
 
+  // ---------- v17.24.0 — ESTADO DE UN VISTAZO (dashboard de 3 tarjetas) ----------
+  // Pura, y a propósito NO recalcula ningún criterio propio: lee los MISMOS campos que
+  // ya consumen mtrPanelRiesgoRenalHtml/mtrPanelExamenesHtml/mtrPanelTendenciasHtml (el
+  // mismo `d = mtrTableroClinico(resumen)`, la misma `resumen._series`). Si algún día
+  // diverge de su pestaña detallada es porque alguien cambió una de las dos sin la otra
+  // — exactamente el defecto que v17.1.0 tuvo que corregir para el conteo de
+  // medicamentos, aquí evitado por construcción en vez de por disciplina.
+  function mtrPanelResumenBentoDatos(resumen, d) {
+    const cards = [];
+
+    // -- Riesgo cardiovascular / función renal --
+    {
+      const cat = d && d.riesgo && d.riesgo.categoria;
+      let estado = "nd", dato = "Sin clasificar", sub = "";
+      if (cat) {
+        const discordanciaSeria = !!(d.renal && d.renal.discordancia && d.renal.discordancia.hayDiscrepancia && d.renal.discordancia.diferenciaEstadios >= 2);
+        const alerta = discordanciaSeria || (d.renal && (d.renal.sospechaIra || d.renal.remitirNefrologia)) || cat === "alto" || cat === "muy alto";
+        estado = alerta ? "pend" : "ok";
+        dato = cat.charAt(0).toUpperCase() + cat.slice(1);
+        sub = (d.renal && d.renal.sospechaIra) ? "sospecha de injuria renal"
+          : (d.renal && d.renal.remitirNefrologia) ? "cumple criterio de remisión"
+          : discordanciaSeria ? "discordancia entre fórmulas"
+          : "";
+      }
+      cards.push({ id: "renal", icono: "❤️", rotulo: "Riesgo cardiovascular", estado: estado, dato: dato, sub: sub,
+        pie: estado === "nd" ? "Toque para ver por qué falta →" : "Toque para ver los criterios completos →" });
+    }
+
+    // -- Exámenes y vigencias --
+    {
+      const tieneProg = !!(d && d.programa && d.programa.rector);
+      const nOrdenar = (d && Array.isArray(d.ordenar)) ? d.ordenar.length : 0;
+      const estado = !tieneProg ? "nd" : (nOrdenar > 0 ? "pend" : "ok");
+      cards.push({ id: "examenes", icono: "🧪", rotulo: "Exámenes y vigencias", estado: estado,
+        dato: !tieneProg ? "Sin programa" : (nOrdenar + (nOrdenar === 1 ? " examen" : " exámenes")),
+        sub: !tieneProg ? "" : (nOrdenar > 0 ? "por ordenar hoy" : "al día"),
+        pie: !tieneProg ? "Ningún programa identificado →" : "Toque para ver el detalle →" });
+    }
+
+    // -- Tendencias --
+    {
+      const series = (resumen && resumen._series) || {};
+      const claves = Object.keys(series).filter((k) => (series[k] || []).length >= 1);
+      const conSerie = claves.filter((k) => series[k].length >= 2);
+      let estado = "nd", dato = "—", sub = claves.length ? (claves.length + (claves.length === 1 ? " analito con un solo control" : " analitos con un solo control")) : "";
+      if (conSerie.length) {
+        const ctxTend = {
+          categoriaRiesgo: (resumen && resumen.riesgo && resumen.riesgo.categoria) || null,
+          metaHba1c: (resumen && resumen.hba1c && typeof resumen.hba1c.meta === "number") ? resumen.hba1c.meta : null,
+        };
+        let peor = false;
+        conSerie.forEach((k) => {
+          try {
+            const t = mtrTendenciaDe(series[k], k, ctxTend);
+            if (t.gravedad === "grave" || t.sentido === "empeora") peor = true;
+          } catch (e) {}
+        });
+        estado = peor ? "pend" : "ok";
+        dato = conSerie.length + (conSerie.length === 1 ? " analito" : " analitos");
+        sub = peor ? "con cambio a vigilar" : "estable o mejorando";
+      }
+      cards.push({ id: "tendencias", icono: "📈", rotulo: "Tendencias", estado: estado, dato: dato, sub: sub,
+        pie: estado === "nd" ? "Hace falta un segundo control para trazar dirección →" : "Toque para ver la serie completa →" });
+    }
+
+    return cards;
+  }
+
+  function mtrPanelResumenBentoHtml(cards) {
+    if (!cards || !cards.length) return "";
+    const rotuloEstado = { ok: "Al día", pend: "Revisar", nd: "Sin dato" };
+    return '<div class="vgl-bento-grid">' + cards.map((c) =>
+      '<div class="vgl-bento-card" data-panel-sec="' + escapeHtml(c.id) + '" role="button" tabindex="0" aria-label="Ir a ' + escapeHtml(c.rotulo) + '">'
+        + '<div class="vgl-bento-head">' + c.icono + ' ' + escapeHtml(c.rotulo) + '</div>'
+        + '<div class="vgl-bento-row"><span class="vgl-bento-badge ' + c.estado + '">' + rotuloEstado[c.estado] + '</span></div>'
+        + '<div class="vgl-bento-row"><b>' + escapeHtml(c.dato) + '</b>' + (c.sub ? '<span class="vgl-bento-sub">' + escapeHtml(c.sub) + '</span>' : "") + '</div>'
+        + '<div class="vgl-bento-pie">' + escapeHtml(c.pie) + '</div>'
+      + '</div>'
+    ).join("") + '</div>';
+  }
+
   // ---------- SECCIÓN 1: RESUMEN (lo leído y de dónde) ----------
+  // v17.28.0 — "Medicamentos actuales" (archivo pasivo, v17.24.0) SE RETIRA de aquí, por
+  // encargo del médico (28-ago): el Panel solo debe mostrar medicamentos con foco de
+  // riesgo cardiovascular, y esa lista completa duplicaba, sin aportar nada nuevo, la fila
+  // "Medicamentos del programa cardiovascular" ya existente en la Ficha (más abajo,
+  // mtrFichaVivaFilas) — que SÍ está filtrada a RCV. mtrPanelResumenMedsHtml se retira
+  // por completo (nunca queda un llamador huérfano en el proyecto).
   function mtrPanelResumenHtml(resumen) {
     if (!resumen) return '<div class="vgl-agm-sec"><div class="vgl-agm-err">No se pudo leer al paciente ahora (los laboratorios no respondieron). Inténtelo de nuevo en un momento.</div></div>';
+    const d = mtrTableroClinico(resumen);
+    const bento = mtrPanelResumenBentoHtml(mtrPanelResumenBentoDatos(resumen, d));
     const datos = mtrFichaVivaFilas(resumen);
     const filas = datos.secciones.map((sec) => '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">' + escapeHtml(sec.titulo) + '</span>'
@@ -17961,7 +19859,7 @@ _vglOfrecerDeshacer(btn);
     const aviso = datos.faltantes
       ? '<div class="vgl-ord-vigwarn" style="margin:8px 0">Faltan ' + datos.faltantes + ' dato(s). El asistente NO los inventa: donde diga «sin dato», sus conclusiones van sin ese insumo.</div>'
       : "";
-    return aviso + filas
+    return bento + aviso + filas
       + '<div class="vgl-rcv-pie" style="margin-top:6px">El resumen muestra lo LEÍDO, nunca lo supuesto. Sus fuentes: los laboratorios, los datos y órdenes de Everest, y lo escrito hoy en la historia.</div>';
   }
 
@@ -18009,6 +19907,11 @@ _vglOfrecerDeshacer(btn);
     // salía en la cabecera del recuadro clínico. Aquí van las dos, con el valor actual al
     // lado, porque «¿está en meta?» es la pregunta que se hace en la consulta.
     const metasHtml = mtrPanelMetasHtml(d);
+    // v17.6.94 — TIEMPO DE EVOLUCIÓN DE LA DIABETES. Everest no tiene dónde guardarlo y el
+    // consenso lo usa en dos de sus cuatro pasos, así que sin esta fila el motor clasifica
+    // a ciegas y lo tapa con un piso. Solo aparece en el diabético: preguntárselo a quien
+    // no tiene diabetes es ruido.
+    const dmHtml = mtrPanelDmAniosHtml(d);
     // v17.0.0 — Sospecha de injuria renal: la caída de la TFG contra el control ANTERIOR.
     // Hasta v16.9 el dato previo no llegaba nunca y esta alerta no podía dispararse.
     const ira = (d.renal && d.renal.sospechaIra)
@@ -18018,11 +19921,59 @@ _vglOfrecerDeshacer(btn);
       : "";
 
     return '<div class="vgl-agm-sec">' + riesgoHtml + '</div>'
+      + dmHtml
       + metasHtml
       + '<div class="vgl-agm-sec">'
       + '<span class="vgl-agm-lbl">Función renal</span>'
       + '<div class="vgl-tab-tfgs">' + cel(d.renal.cg) + cel(d.renal.ckd) + '</div>'
       + ira + disc + faltanRenal + remitir
+      + '</div>';
+  }
+
+  // v17.6.94 — La fila de «desde cuándo es diabético». Pura: recibe lo ya calculado.
+  // Dos formas, y la diferencia importa: cuando el dato ESTÁ, es una línea tranquila que
+  // se puede corregir; cuando FALTA, dice qué está pasando con la clasificación mientras
+  // tanto, en vez de dejar al médico creyendo que el ALTO que ve es el definitivo.
+  // No se usa ninguna clase de color nueva: todo lo que pinta aquí ya existe en la hoja
+  // (regla de CLAUDE.md para lo que vive fuera de #vgl-root).
+  function mtrPanelDmAniosHtml(d) {
+    if (!d || !d.esDm2) return "";
+    const anios = (typeof d.dmAnios === "number" && isFinite(d.dmAnios)) ? d.dmAnios : null;
+    const boton = '<button type="button" class="vgl-agm-btn sec" data-accion="editar-dm-anios">'
+      + (anios === null ? "Registrar" : "Cambiar") + '</button>';
+    if (anios === null) {
+      // Dos textos distintos a propósito. `dmAniosRequerido` es true SOLO cuando la falta de
+      // este dato está cambiando la clasificación ahora mismo (el piso provisional entró en
+      // juego). Si el paciente ya quedó clasificado por otra vía —daño de órgano blanco, ECV
+      // establecida, tres factores mayores—, el dato no cambia nada y decirle «dejo el riesgo
+      // en ALTO como mínimo» sería FALSO: está en MUY ALTO por el paso 1. Es exactamente la
+      // clase de frase que este proyecto no puede permitirse.
+      const urge = d.dmAniosRequerido === true;
+      return '<div class="vgl-agm-sec" id="vgl-dm-anios-fila">'
+        + '<span class="vgl-agm-lbl">Diabetes</span>'
+        + (urge
+            ? '<div class="vgl-tab-nota vgl-tab-falta">Falta un dato: <b>¿hace cuántos años tiene diabetes?</b> '
+              + 'Mientras no conste, dejo el riesgo en ALTO como mínimo, que es lo prudente — pero puede no ser '
+              + 'la categoría que le corresponde. Everest no tiene casilla para esto; se guarda aquí, para este paciente.</div>'
+            : '<div class="vgl-tab-nota">No consta <b>hace cuántos años tiene diabetes</b>. En este paciente no cambia '
+              + 'la clasificación —ya quedó fijada por otro criterio—, pero conviene registrarlo: en el próximo control '
+              + 'puede ser lo que decida la categoría. Everest no tiene casilla para esto; se guarda aquí, para este paciente.</div>')
+        + '<div class="vgl-meta-fila">' + boton + '</div>'
+        + '</div>';
+    }
+    const larga = anios >= MTR_DM_LARGA_DURACION_ANIOS;
+    return '<div class="vgl-agm-sec" id="vgl-dm-anios-fila">'
+      + '<span class="vgl-agm-lbl">Diabetes</span>'
+      + '<div class="vgl-meta-fila">'
+      + '<span class="vgl-meta-rot">Desde hace</span>'
+      + '<span class="vgl-meta-act">' + escapeHtml(String(anios)) + (anios === 1 ? " año" : " años") + '</span>'
+      + boton
+      + '</div>'
+      + '<div class="vgl-tab-mini">'
+      + (larga
+          ? "De " + MTR_DM_LARGA_DURACION_ANIOS + " años en adelante cuenta como diabetes de larga evolución, y eso sube el riesgo por sí solo."
+          : "Se usa para clasificar el riesgo. De " + MTR_DM_LARGA_DURACION_ANIOS + " años en adelante contaría como diabetes de larga evolución.")
+      + '</div>'
       + '</div>';
   }
 
@@ -18097,9 +20048,28 @@ _vglOfrecerDeshacer(btn);
       + '<span class="vgl-tab-que">' + escapeHtml(x.quePasa) + '</span>'
       + '<span class="vgl-tab-fecha">' + (x.vence ? escapeHtml(mtrFechaLegible(x.vence)) : "—") + ((typeof x.dias === "number" && x.dias >= 0) ? ' <i>(' + x.dias + ' d)</i>' : "") + '</span>'
       + '</div>';
+    // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido (estado "R"/subestado
+    // "albuminuria") se veía en ámbar, no en rojo, mientras la LDL vencida del mismo
+    // paciente sí salía roja — pese a estar igual de vencida (o más urgente: la
+    // albuminuria es "vigilancia estrecha"). `vencidoBase` es la verdad de terreno de
+    // que YA venció; ver mtrTableroClinico.
     const listaOrdenar = d.ordenar.length
-      ? d.ordenar.map((x) => filaHtml(x, x.subestado === "vencido" ? "vgl-tab-venc" : "vgl-tab-pedir")).join("")
-      : '<div class="vgl-agm-dinfo">Nada por ordenar: el paciente está al día con su programa.</div>';
+      ? d.ordenar.map((x) => filaHtml(x, (x.subestado === "vencido" || x.vencidoBase) ? "vgl-tab-venc" : "vgl-tab-pedir")).join("")
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #12 (gravedad alta, riesgo clínico).
+      // Aquí se afirmaba «el paciente está al día con su programa» CADA VEZ que la lista de
+      // ordenar quedaba vacía — incluido el caso en que no hay ningún programa identificado
+      // y por tanto NO SE EVALUÓ NADA. Reproducido con el arnés: paciente sin programa,
+      // `ordenar: 0`, y la pantalla lo declaraba al día. Es la regla fundacional de la casa
+      // al revés: un hueco rellenado con una frase tranquilizadora.
+      //   «no hay nada que pedir» y «no pude mirar» se ven igual en pantalla y son cosas
+      //   opuestas en consulta.
+      // OJO: `d.programa` es un OBJETO ({rector, rotulo, inscritos, porQue}) y por tanto
+      // SIEMPRE es truthy. Un primer intento de este arreglo comprobaba `d.programa` a
+      // secas y no cambiaba nada — lo cazó la prueba de la REGLA D. Lo que dice si hubo
+      // programa es `rector`.
+      : ((d.programa && d.programa.rector)
+        ? '<div class="vgl-agm-dinfo">Nada por ordenar: al día con el programa de ' + escapeHtml(String(d.programa.rotulo || d.programa.rector)) + '.</div>'
+        : '<div class="vgl-agm-err">No hay ningún programa identificado para este paciente, así que <b>no evalué qué exámenes le tocan</b>. Esto no quiere decir que esté al día. Marque el programa en la historia (hipertensión, diabetes o enfermedad renal) y vuelva a abrir el módulo.</div>');
     // v17.0.3 — Reporte real (2 veces): "Sin exámenes vigentes registrados" sonaba a "no
     // encontramos resultados válidos", y confundía/alarmaba porque el médico ACABABA de
     // pegar resultados en Everest. Causa real (revisada en mtrTableroClinico): "vigentes"
@@ -18603,44 +20573,18 @@ _vglOfrecerDeshacer(btn);
 
     // Reconciliador de fuentes: si algo de severidad alta se contradice y el
     // médico no lo ha confirmado nunca, el panel se detiene y pregunta UNA vez.
+    // v17.7.0 — el armado vive ahora en mtrReconciliarAhora, para que el banco pueda
+    // probarlo y para que la vigilancia de 20 s del propio cuadro pueda repetirlo.
     try {
-      const _leidosAhora = (typeof mtrLeerFactoresRcvDelDom === "function")
-        ? mtrLeerFactoresRcvDelDom(apt.doc_id, document) : null;
-      if (_leidosAhora && _leidosAhora._leidos) {
-        const _cab = (typeof _vglProgramasDesdeCabecera === "function") ? _vglProgramasDesdeCabecera(document) : null;
-        const _resCache = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
-        const _medsRcv = (_resCache && Array.isArray(_resCache.medicamentos)) ? mtrMedicamentosRcv(_resCache.medicamentos) : null;
-        const discrepancias = mtrDiscrepanciasDeFuentes({
-          leidos: _leidosAhora._leidos,
-          cabecera: _cab ? { hta: _cab.hta, diabetes: _cab.diabetes, enfermedadRenal: _cab.enfermedadRenalDocumentada } : {},
-          medicamentosRcv: _medsRcv,
-          labsPorClave: null,
-          textoLibre: _vglTextoLibreCombinado(document),
-        });
-        const confirmadas = _vglConfirmacionesLeer(apt.doc_id);
-        const frenan = mtrDiscrepanciasQueFrenan(discrepancias)
-          .filter((d) => !Object.prototype.hasOwnProperty.call(confirmadas, d.clave));
-        // v16.9.0 — La pregunta de embarazo entra por aquí, y SOLO cuando cambia la
-        // conducta: mujer en edad fértil con parcial de orina sugestivo. Su respuesta
-        // caduca a los 30 días (decisión del médico), a diferencia de las demás.
-        try {
-          const _res = (typeof mtrCacheResumenLeer === "function") ? mtrCacheResumenLeer(apt.doc_id) : null;
-          const _f = (_res && _res.factores) || {};
-          if (mtrDebePreguntarEmbarazo({
-            sexo: _f.sexo, edad: _f.edad,
-            uroSugestivo: !!(_res && _res.uroanalisis && _res.uroanalisis.sugestivo),
-            yaConfirmado: _vglConfirmacionVigente(apt.doc_id, "embarazo", MTR_EMBARAZO_VIGENCIA_DIAS),
-          })) frenan.push(mtrPreguntaEmbarazo());
-        } catch (e) {}
-        if (frenan.length) {
-          // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
-          // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
-          // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
-          // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
-          const mostrado = _vglModalConfirmarDatos(apt, frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
-          if (mostrado) return;
-          try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
-        }
+      const _rec = mtrReconciliarAhora(apt.doc_id, document);
+      if (_rec.frenan.length) {
+        // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
+        // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
+        // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
+        // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
+        const mostrado = _vglModalConfirmarDatos(apt, _rec.frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
+        if (mostrado) return;
+        try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
       }
     } catch (e) {}
 
@@ -18717,8 +20661,6 @@ _vglOfrecerDeshacer(btn);
         dentro = mtrPanelResumenHtml(_resumen);
       } else if (seccion === "tendencias") {
         dentro = mtrPanelTendenciasHtml(_resumen);
-      } else if (seccion === "medicamentos") {
-        dentro = mtrPanelMedicamentosHtml(_resumen);
       } else {
         const d = mtrTableroClinico(_resumen);
         dentro = (seccion === "examenes")
@@ -18754,6 +20696,21 @@ _vglOfrecerDeshacer(btn);
           pintar("");                                  // sin una sola petición nueva
         }));
       }
+      // v17.24.0 — las tarjetas de "Estado de un vistazo" (Resumen) son un atajo visual
+      // al MISMO swap de siempre, no una navegación nueva: mismo mtrPanelSeccionValida,
+      // mismo pintar(""). Solo viven en `cuerpo` (nunca en `nav`), así que este selector
+      // no puede pisar el wiring de las pestañas de arriba.
+      cuerpo.querySelectorAll("[data-panel-sec]").forEach((b) => {
+        const ir = () => {
+          const id = mtrPanelSeccionValida(b.getAttribute("data-panel-sec"));
+          if (id === seccion) return;
+          seccion = id;
+          try { uxTrack("fn.panel.seccion", { s: id, origen: "bento" }); } catch (e) {}
+          pintar("");
+        };
+        b.addEventListener("click", ir);
+        b.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ir(); } });
+      });
       const bl = cuerpo.querySelector("#vgl-panel-labs");
       if (bl) bl.addEventListener("click", async () => {
         bl.disabled = true;
@@ -18822,6 +20779,51 @@ _vglOfrecerDeshacer(btn);
           pintar("Meta de HbA1c actualizada.");
         });
       });
+
+      // v17.6.94 — AÑOS DE EVOLUCIÓN DE LA DIABETES. Mismo patrón exacto que el botón de
+      // arriba: el control solo existe si mtrPanelDmAniosHtml pintó la fila (paciente
+      // diabético); en cualquier otra sección el selector no encuentra nada y no hace nada.
+      const bEditarDmAnios = cuerpo.querySelector('[data-accion="editar-dm-anios"]');
+      if (bEditarDmAnios) bEditarDmAnios.addEventListener("click", () => {
+        const fila = cuerpo.querySelector("#vgl-dm-anios-fila");
+        if (!fila) return;
+        const actual = (_resumen && _resumen.factores && mtrFloat(_resumen.factores.dmAnios) !== null)
+          ? mtrFloat(_resumen.factores.dmAnios) : "";
+        fila.innerHTML = '<span class="vgl-agm-lbl">Diabetes</span>'
+          + '<div class="vgl-meta-fila">'
+          + '<span class="vgl-meta-rot">Desde hace</span>'
+          + '<input type="number" step="1" min="0" max="80" class="vgl-meta-input" id="vgl-dm-anios-input" value="'
+          + escapeHtml(String(actual)) + '" style="width:64px">'
+          + '<span class="vgl-meta-rot">años</span>'
+          + '<button type="button" class="vgl-agm-btn sec" id="vgl-dm-anios-guardar">Guardar</button>'
+          + '<button type="button" class="vgl-agm-btn sec" id="vgl-dm-anios-cancelar">Cancelar</button>'
+          + '</div>'
+          + '<div class="vgl-tab-mini">Un número aproximado sirve: lo que se usa son los tramos (menos de 10 años, más de 10, '
+          + MTR_DM_LARGA_DURACION_ANIOS + ' o más). Si no lo sabe, deje el campo como está y cancele — prefiero no tener el dato '
+          + 'a tener uno inventado.</div>'
+          + '<div class="vgl-tab-mini" id="vgl-dm-anios-error"></div>';
+        const inp = fila.querySelector("#vgl-dm-anios-input");
+        if (inp && inp.focus) inp.focus();
+        const errEl = fila.querySelector("#vgl-dm-anios-error");
+        const cancelar = fila.querySelector("#vgl-dm-anios-cancelar");
+        if (cancelar) cancelar.addEventListener("click", () => pintar(""));
+        const guardar = fila.querySelector("#vgl-dm-anios-guardar");
+        if (guardar) guardar.addEventListener("click", async () => {
+          const v = mtrFloat(inp && inp.value);
+          if (v === null || !(v >= 0 && v <= 80)) {
+            if (errEl) errEl.textContent = "⚠ Escriba los años como un número entre 0 y 80.";
+            return;
+          }
+          guardar.disabled = true; guardar.textContent = "Guardando…";
+          try { _vglCosechaGuardar(apt.doc_id, { dmAniosManual: { v: Math.round(v), ts: Date.now() } }); } catch (e) {}
+          try { uxTrack("fn.panel.dmAniosManual"); } catch (e) {}
+          try { mtrCacheResumenBorrar(); } catch (e) {}
+          try { _resumen = await mtrCalcularResumenClinico(apt, vivo, { fresco: true }); } catch (e) {}
+          if (!vivo()) return;
+          _firma = _tableroFirmaDom(apt.doc_id);
+          pintar("Tiempo de evolución de la diabetes registrado; el riesgo se volvió a clasificar con él.");
+        });
+      });
     };
 
     try { _resumen = mtrCacheResumenLeer(apt.doc_id); } catch (e) { _resumen = null; }
@@ -18837,6 +20839,11 @@ _vglOfrecerDeshacer(btn);
         // escrito llegue a Cockcroft-Gault sin tener que cerrar y reabrir el Panel.
         const _pAlAbrir = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
         if (_pAlAbrir != null) _factoresAlAbrir.pesoKg = _pAlAbrir;
+        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
+        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
+        // sin poder contarse nunca.
+        const _cAlAbrir = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
+        if (_cAlAbrir != null) _factoresAlAbrir.cinturaCm = _cAlAbrir;
         const _reconciliado = mtrPanelResumenAlAbrir(_resumen, _factoresAlAbrir, todayStamp());
         if (_reconciliado) {
           _resumen = _reconciliado;
@@ -18867,6 +20874,11 @@ _vglOfrecerDeshacer(btn);
         if (t) { factores.paSistolica = t.pas; factores.paDiastolica = t.pad; }
         const pTick = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
         if (pTick != null) factores.pesoKg = pTick;
+        // v17.6.97 — la cintura, por rótulo (ver mtrLeerCinturaDelDom). Sin este cable el
+        // 5º criterio del síndrome metabólico y la obesidad central por perímetro siguen
+        // sin poder contarse nunca.
+        const cTick = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
+        if (cTick != null) factores.cinturaCm = cTick;
         const nuevo = mtrRecalcularConFactores(_resumen, factores, todayStamp());
         if (!nuevo) return;
         // Lo que el médico acaba de escribir puede abrir la compuerta: se
@@ -18903,12 +20915,30 @@ _vglOfrecerDeshacer(btn);
       // contaba como "algo cambió", así que la vigilancia de 20 s nunca reclasificaba
       // por eso solo — se quedaba esperando que cambiara alguna otra casilla.
       const pDom = (typeof mtrLeerPesoDelDom === "function") ? mtrLeerPesoDelDom(document) : null;
+      // v17.6.97 — misma lección que el peso en v17.6.75: si la cintura no entra en la
+      // firma, escribirla en Examen físico NO cuenta como «algo cambió» y la vigilancia
+      // de 20 s no reclasifica por ella sola.
+      const cDom = (typeof mtrLeerCinturaDelDom === "function") ? mtrLeerCinturaDelDom(document) : null;
       const partes = Object.keys(f).sort().map((k) => {
         const v = f[k];
         return (v === null || v === undefined || typeof v === "object") ? "" : k + "=" + String(v);
       }).filter(Boolean);
+      // v17.7.0 — misma lección que el peso (v17.6.75) y la cintura (v17.6.97): lo que no
+      // entra en la firma no existe para la vigilancia. Aquí el agujero era otro: `_leidos`
+      // es un objeto, así que la línea de arriba lo descarta a propósito, y de los 25 campos
+      // que el médico marca en Everest solo llegan a la firma los que la salida derivada
+      // publica como booleano suelto. Medido con el arnés: 18 de 150 transiciones no movían
+      // la firma — entre ellas cambiar EPOC, alcohol o autoinmunes de «No» a «Sí», y
+      // cualquiera de las tres casillas de ECV cuando otra ya estaba en «Sí». Esos campos no
+      // cambian la categoría, pero sí alimentan el reconciliador de fuentes y la hoja de
+      // hechos de la IA, así que la pantalla se quedaba atrás sin decirlo.
+      const L = f._leidos;
+      if (L && typeof L === "object") {
+        Object.keys(L).sort().forEach((k) => { partes.push("L." + k + "=" + String(L[k])); });
+      }
       if (t) partes.push("pas=" + (t.pas == null ? "" : t.pas), "pad=" + (t.pad == null ? "" : t.pad));
       partes.push("peso=" + (pDom == null ? "" : pDom));
+      partes.push("cintura=" + (cDom == null ? "" : cDom));
       return partes.join("|");
     } catch (e) { return ""; }
   }
@@ -18932,7 +20962,19 @@ _vglOfrecerDeshacer(btn);
       return m;
     };
     const a = aMapa(firmaVieja), b = aMapa(firmaNueva), cambios = [];
-    Object.keys(b).forEach((k) => { if (a[k] !== b[k]) cambios.push(TABLERO_ROTULO_FACTOR[k] || k); });
+    // v17.8.1 — hallazgo #14. El aviso «🔄 Se actualizó con lo que acaba de escribir en la
+    // historia» terminaba diciendo «(_documentados, dislipidemiaDocumentada, ...)»: la firma
+    // de pantalla lleva contadores internos (`_documentados`, `_total`, `_fuente`) y, desde
+    // v17.7.0, el tri-estado completo con prefijo `L.`. Nada de eso es un nombre que el
+    // médico reconozca. Lo que no tenga rótulo de consultorio NO se imprime: es preferible
+    // un aviso que diga «se actualizó» a secas que uno que le enseñe el interior del motor.
+    Object.keys(b).forEach((k) => {
+      if (a[k] === b[k]) return;
+      const rotulo = TABLERO_ROTULO_FACTOR[k];
+      if (rotulo) { cambios.push(rotulo); return; }
+      if (k.charAt(0) === "_" || k.indexOf("L.") === 0) return;   // interno: no se enseña
+      cambios.push(k);
+    });
     return cambios;
   }
 
@@ -18958,14 +21000,34 @@ _vglOfrecerDeshacer(btn);
       modal.setAttribute("role", "dialog");
       modal.setAttribute("aria-modal", "true");
 
+      // v17.7.0 — cada texto lleva su propio id para poder reescribirlo en el repaso de
+      // 20 s sin volver a montar la fila: repintar el HTML entero borraría los botones que
+      // el médico ya pulsó. Es el mismo patrón que ya usaba #vgl-conf-ok-<clave>.
+      const _dicen = (lst) => (Array.isArray(lst) ? lst : []).map((x) => x.fuente + " (" + x.detalle + ")").join(" · ");
+      const _textoAfavor = (d) => "A favor: " + _dicen(d.afirman);
+      const _textoEnContra = (d) => "En contra: " + _dicen(d.niegan);
+      // Si la respuesta que él dio antes ya no coincide con lo que hay escrito en la
+      // historia de hoy, el cuadro lo dice en lugar de callárselo: manda la historia.
+      const _textoPorque = (d) => "Importa porque " + d.porQue + ".";
+      // v17.14.0 — enjambre UX #69: el aviso de que su respuesta anterior ya no coincide
+      // con la historia de hoy viajaba PEGADO al «Importa porque…», en la última línea del
+      // ítem, con la misma letra pequeña y el mismo gris de la nota rutinaria. El caso
+      // excepcional se veía idéntico al caso normal, y era justo el que el médico tiene
+      // que leer: le está diciendo que lo que confirmó antes quedó desactualizado.
+      // Ahora sale ARRIBA del ítem, con acento ámbar y su propia línea; cuando no aplica,
+      // el elemento queda vacío y no ocupa nada.
+      const _textoDesfase = (d) => (d.desfasada
+        ? "⚠ Usted ya respondió esto antes, y la historia de hoy dice lo contrario — mandan las casillas de la historia."
+        : "");
+
       const filas = discrepancias.map((d) => {
-        const dicen = (lst) => lst.map((x) => x.fuente + " (" + x.detalle + ")").join(" · ");
         return `
           <div class="vgl-conf-item" data-clave="${escapeHtml(d.clave)}">
             <div class="vgl-conf-tit">${escapeHtml(d.etiqueta)}</div>
-            <div class="vgl-conf-fuentes">A favor: ${escapeHtml(dicen(d.afirman))}</div>
-            <div class="vgl-conf-fuentes">En contra: ${escapeHtml(dicen(d.niegan))}</div>
-            <div class="vgl-conf-porque">Importa porque ${escapeHtml(d.porQue)}.</div>
+            <div class="vgl-conf-desfase${d.desfasada ? "" : " vgl-d-none"}" id="vgl-conf-df-${escapeHtml(d.clave)}" role="alert">${escapeHtml(_textoDesfase(d))}</div>
+            <div class="vgl-conf-fuentes" id="vgl-conf-af-${escapeHtml(d.clave)}">${escapeHtml(_textoAfavor(d))}</div>
+            <div class="vgl-conf-fuentes" id="vgl-conf-ne-${escapeHtml(d.clave)}">${escapeHtml(_textoEnContra(d))}</div>
+            <div class="vgl-conf-porque" id="vgl-conf-pq-${escapeHtml(d.clave)}">${escapeHtml(_textoPorque(d))}</div>
             <div class="vgl-conf-btns">
               <button class="vgl-agm-btn pri" id="vgl-conf-si-${escapeHtml(d.clave)}">Sí tiene</button>
               <button class="vgl-agm-btn sec" id="vgl-conf-no-${escapeHtml(d.clave)}">No tiene</button>
@@ -18989,7 +21051,7 @@ _vglOfrecerDeshacer(btn);
       document.body.appendChild(modal);
 
       const pendientes = new Set(discrepancias.map((d) => d.clave));
-      const cerrar = () => { try { modal.remove(); } catch (e) {} };
+      let cerrar = () => { try { modal.remove(); } catch (e) {} };
       const responder = (clave, valor) => {
         _vglConfirmacionGuardar(apt.doc_id, clave, valor);
         pendientes.delete(clave);
@@ -19027,6 +21089,57 @@ _vglOfrecerDeshacer(btn);
       const x = modal.querySelector("#vgl-conf-x");
       if (x && x.addEventListener) x.addEventListener("click", _luego);
       modal.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); _luego(); } });
+
+      // =================================================================
+      //  v17.7.0 — EL REPASO: el cuadro mira la pantalla de AHORA, no la de hace un rato
+      //  REPORTE EN CONSULTA (27-ago): «me está mostrando que yo no marqué la hipertensión
+      //  pero sí la marqué, y no recibió el cambio en tiempo real». Este cuadro era una
+      //  foto: se calculaba una sola vez al abrir el Panel y su HTML no volvía a mirarse.
+      //  Si el médico iba a la historia y corregía la casilla, el cuadro seguía
+      //  acusándole de no haberla marcado.
+      //  Decisión suya: que se refresque solo. Misma cadencia que la vigilancia del
+      //  tablero (20 s) — es el ritmo que él ya conoce y no hay motivo para tener dos.
+      // =================================================================
+      let _repaso = null;
+      const _pararRepaso = () => { try { if (_repaso) clearInterval(_repaso); } catch (e) {} _repaso = null; };
+      const _cerrarConRepaso = cerrar;
+      cerrar = () => { _pararRepaso(); _cerrarConRepaso(); };
+      try {
+        _repaso = setInterval(() => {
+          try {
+            // ¿Sigue en pantalla? Si el médico ya lo cerró, no hay nada que repasar.
+            if (document.getElementById("vgl-confirma-modal") !== modal) { _pararRepaso(); return; }
+            if (!pendientes.size) { _pararRepaso(); return; }
+            const rec = mtrReconciliarAhora(apt.doc_id, document);
+            const vivas = rec.frenan.filter((d) => pendientes.has(d.clave));
+            if (!vivas.length) {
+              // La historia ya lo aclara sola: no se le pregunta lo que él acaba de
+              // escribir. Se sigue por la misma puerta que si hubiera respondido.
+              try { mtrCacheResumenBorrar(); } catch (e) {}
+              try { uxTrack("fn.confirmar.resuelto_en_pantalla"); } catch (e) {}
+              cerrar();
+              try { showToast("VERDE", "Fuentes", "La historia ya lo aclara: sigo sin preguntarle.", false); } catch (e) {}
+              try { if (typeof alContinuar === "function") alContinuar(); } catch (e) {}
+              return;
+            }
+            // Sigue habiendo contradicción, pero puede haber cambiado lo que dice cada
+            // fuente. Se reescribe SOLO el texto: los botones ya pulsados se quedan.
+            for (const d of vivas) {
+              const af = modal.querySelector("#vgl-conf-af-" + d.clave);
+              const ne = modal.querySelector("#vgl-conf-ne-" + d.clave);
+              const pq = modal.querySelector("#vgl-conf-pq-" + d.clave);
+              const df = modal.querySelector("#vgl-conf-df-" + d.clave);
+              if (af) af.textContent = _textoAfavor(d);
+              if (ne) ne.textContent = _textoEnContra(d);
+              if (pq) pq.textContent = _textoPorque(d);
+              // El desfase puede APARECER o DESAPARECER en el repaso de 20 s: si solo se
+              // escribiera el texto, un aviso que dejó de aplicar se quedaría en pantalla.
+              if (df) { df.textContent = _textoDesfase(d); df.classList.toggle("vgl-d-none", !d.desfasada); }
+            }
+          } catch (e) {}
+        }, TABLERO_VIGILANCIA_MS);
+      } catch (e) {}
+
       try { uxTrack("fn.confirmar.mostrado", { n: discrepancias.length }); } catch (e) {}
       return true;
     } catch (e) { return false; }
@@ -21496,7 +23609,11 @@ _vglOfrecerDeshacer(btn);
       cie10: "Z125",
       titulo: "PSA (antígeno de próstata)",
       keywords: ["psa", "prostata"],
-      // vigenciaDias: sin confirmar (Resolución 3280/2018) — pregunta abierta para el médico.
+      // v17.6.99 — VIGENCIA CONFIRMADA por el médico (27-ago-2026): 2 años. La pidió al
+      // reportar en consulta que el script le seguía ofreciendo un PSA que el paciente ya
+      // se había hecho seis días antes. Sin este campo, `pymPaqueteCubiertoPorAthenea` se
+      // rinde en su primera línea y el paquete NUNCA se cruza contra Athenea.
+      vigenciaDias: 730,
       cups: [
         { codigo: "906610", desc: "Antigeno Especifico De Prostata Semiautomatizado O Automatizado" }
       ]
@@ -21924,6 +24041,19 @@ _vglOfrecerDeshacer(btn);
     // catálogo institucional real (Ordenamientos de Everest) si de verdad corresponde algo.
     const hayCoincidencia = matchedPackages && matchedPackages.length > 0;
     const pkgsToRender = hayCoincidencia ? matchedPackages : [];
+    // v17.16.0 — REGLA D: por qué NO hay nada que ofrecer. Los tres motivos ya se podían
+    // distinguir con lo que el estado guarda; hasta hoy los tres salían con la misma frase,
+    // que además afirmaba algo sobre el paciente en los dos casos en que no se sabe nada
+    // de él. `pymTodos` es null mientras no se haya indexado ninguna base: entonces no se
+    // puede afirmar que el paciente no esté en la lista, y el primer motivo ya manda.
+    const _pymSinAct = hayCoincidencia ? null : pymMotivoSinActividades({
+      listaCargada: !!state.pymFile,
+      esBasePiloto: state.pymFallback === true,
+      diaDistinto: !!state.pymFile && state.pymDia !== todayStamp(),
+      pacienteEnLista: (state.pymTodos && apt && apt.doc_id)
+        ? state.pymTodos.has(normalizeKey(apt.doc_id))
+        : null,
+    });
     // Sexo esperado por actividad (solo para DESMARCAR y advertir, nunca para ocultar:
     // el médico manda). Z123 mama y Z124 cérvix -> F; Z125 próstata -> M.
     const SEXO_PKG = { Z123: "F", Z124: "F", Z125: "M" };
@@ -21955,8 +24085,25 @@ _vglOfrecerDeshacer(btn);
     // bloquea nada: se cae en silencio al comportamiento de siempre (mismo principio que el
     // cruce de Everest, un poco más abajo).
     const atheneaVigentePorCie10 = {};
-    const paquetesConVigencia = pkgsToRender.filter((p) => p && p.vigenciaDias);
-    if (paquetesConVigencia.length) {
+    // v17.6.99 — y, para los paquetes cuya vigencia el médico todavía no ha confirmado,
+    // DESDE CUÁNDO aparece hecho. No se da por cubierto —no se inventa una vigencia— pero
+    // tampoco se le vuelve a ofrecer en silencio un examen que ya está en Athenea.
+    const atheneaHechoPorCie10 = {};
+    // v17.16.0 — TANDA 4, REGLA D. El comentario de abajo decía, con estas palabras, que un
+    // fallo de red «se cae EN SILENCIO al comportamiento de siempre». La conducta es la
+    // correcta (ante la duda se ofrece el examen, nunca se oculta); el silencio no lo es:
+    // el médico ve la lista premarcada igual que siempre y no tiene forma de saber que el
+    // cruce contra Athenea NO se pudo hacer. El síntoma que le queda es exactamente el que
+    // reportó en la v17.6.99 —«me sale que hay que enviarle el antígeno de próstata pero ya
+    // se lo realizó»— sin ninguna explicación a la vista.
+    // `null` = no se pudo preguntar. `[]` = se preguntó y Athenea no trajo nada. Son cosas
+    // distintas y getAtheneaLabsAuto ya las distingue a propósito.
+    let atheneaNoRespondio = false;
+    // v17.6.99 — el cruce se hace ahora para TODOS los paquetes candidatos, no solo para
+    // los que tienen vigencia. Antes se filtraba aquí, y ese filtro era justo el que dejaba
+    // a cinco de los ocho paquetes sin cruzarse nunca contra Athenea. El coste de red no
+    // cambia: sigue siendo UNA consulta por paciente, cacheada en `_labsPrefetch`.
+    if (pkgsToRender.length) {
       let labsPacienteAthenea = null;
       try {
         // "una consulta por paciente": si la historia de este paciente ya está abierta (o se
@@ -21971,11 +24118,19 @@ _vglOfrecerDeshacer(btn);
         }
       } catch (e) { console.warn("[Vigilante PyM] no se pudo sincronizar con Athenea para el cruce antiduplicado:", e); labsPacienteAthenea = null; }
       if (!vivo()) return;
+      atheneaNoRespondio = (labsPacienteAthenea === null);
       const _hoyPyM = todayStamp();
-      for (const _p of paquetesConVigencia) {
-        atheneaVigentePorCie10[_p.cie10] = (_p.cie10 === "I10X")
-          ? pymRcvCubiertoPorAthenea(labsPacienteAthenea, _hoyPyM, apt && apt.doc_id)
-          : pymPaqueteCubiertoPorAthenea(_p, labsPacienteAthenea, _hoyPyM);
+      for (const _p of pkgsToRender) {
+        if (!_p) continue;
+        if (_p.vigenciaDias) {
+          atheneaVigentePorCie10[_p.cie10] = (_p.cie10 === "I10X")
+            ? pymRcvCubiertoPorAthenea(labsPacienteAthenea, _hoyPyM, apt && apt.doc_id)
+            : pymPaqueteCubiertoPorAthenea(_p, labsPacienteAthenea, _hoyPyM);
+        } else {
+          // Sin vigencia confirmada no se puede decir «vigente», pero sí «ya está hecho,
+          // y desde cuándo». El I10X nunca cae aquí: siempre tiene vigencia.
+          atheneaHechoPorCie10[_p.cie10] = pymPaqueteHechoEnAthenea(_p, labsPacienteAthenea, _hoyPyM);
+        }
       }
     }
 
@@ -22001,10 +24156,17 @@ _vglOfrecerDeshacer(btn);
           <button class="vgl-agm-close" id="vgl-ord-x" aria-label="Cerrar">✕</button>
         </div>
 
-        <div class="vgl-ux-caption" style="font-size:12px;color:#a0aec0;margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
+        <!-- v17.24.0 — el inline font-size/color de aquí abajo NUNCA tuvo efecto: la clase
+             .vgl-ux-caption ya declara ambos con !important (Regla E), así que el inline
+             quedaba muerto desde que se escribió — hallado al resolver el punto ciego de
+             suite_25 sobre VGL_UX_CSS (Regla B lo señaló). Se retira lo muerto; el
+             margin-bottom SÍ tenía efecto (la clase no lo lleva con !important) y se
+             conserva para no mover ni un píxel lo que sí se veía. -->
+        <div class="vgl-ux-caption" style="margin-bottom:8px">Al confirmar, la orden queda creada en el módulo oficial de Ordenamientos de Everest y se abre en otra pestaña lista para imprimir. Los códigos en la historia clínica los escribe usted, como siempre.</div>
 
         <div class="vgl-agm-sec">
-          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">No se detectaron actividades de prevención pendientes en la base de PyM para este paciente. Para evitar ordenar algo que no le corresponde, este módulo no ofrece nada para marcar aquí — si de verdad aplica algo, ordénelo desde el catálogo institucional de Ordenamientos en Everest.</div>`}
+          ${hayCoincidencia ? `<label class="vgl-agm-lbl"><span class="vgl-agm-step">${pkgsToRender.length}</span>Actividades de prevención para este paciente:${vglTip("Cada actividad incluye su diagnóstico CIE-10 y códigos CUPS oficiales. Al ordenar, se inyectan directamente en Everest.")}</label>` : `<div class="vgl-agm-err" style="margin-bottom:10px">${escapeHtml(_pymSinAct.texto)}</div>`}
+          ${atheneaNoRespondio ? `<div class="vgl-ord-nocruce">⚠ No pude consultar Athenea para este paciente, así que <b>no comprobé si alguno de estos exámenes ya se lo hicieron</b>. La lista sale completa a propósito (ante la duda se ofrece, nunca se esconde): revísela antes de ordenar.</div>` : ""}
           <div id="vgl-ord-list">
             ${pkgsToRender.map((pkg, idx) => {
               const sexoReq = SEXO_PKG[pkg.cie10] || "";
@@ -22014,7 +24176,15 @@ _vglOfrecerDeshacer(btn);
               // v17.6.2 — ahora el cruce por paquete: VIH (Z113, 1 año) y SOMF (Z121, 2 años)
               // también se desmarcan cuando Athenea ya trae el resultado dentro de su vigencia.
               const yaHechoAthenea = atheneaVigentePorCie10[pkg.cie10] === true;
-              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && !yaHechoAthenea;
+              // v17.6.99 — hecho, pero sin vigencia confirmada con la que juzgarlo.
+              const hechoSinVigencia = atheneaHechoPorCie10[pkg.cie10] || null;
+              // Solo desmarca si es RECIENTE (ver PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS). Un
+              // resultado más viejo que eso se avisa igual, pero se sigue premarcando: ahí
+              // el riesgo ya no es repetir un examen, es no pedirlo.
+              // v17.14.0 — la lista de PyM manda sobre Athenea para estos paquetes.
+              const mandaPym = PYM_MANDA_SHAREPOINT.indexOf(pkg.cie10) >= 0;
+              const hechoYReciente = !mandaPym && !!hechoSinVigencia && hechoSinVigencia.dias <= PYM_TOPE_DESMARCAR_SIN_VIGENCIA_DIAS;
+              const marcar = hayCoincidencia && !chocaSexo && !yaVigente && (mandaPym || (!yaHechoAthenea && !hechoYReciente));
               const pymEtiquetas = pymPorPaquete.get(pkg) || [];
               const prio = mtrPrioridadPaquetePym(pkg.cie10, _resumenOrd);
               return `
@@ -22027,6 +24197,7 @@ _vglOfrecerDeshacer(btn);
                     ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
+                    ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). ${mandaPym ? "Aquí manda la lista de PyM de la sede, no este resultado: si ahí figura pendiente, se premarca. Descárquelo usted si no corresponde." : "No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto" + (hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde.")}</div>` : ""}
                     ${chocaSexo ? `<div class="vgl-ord-sexwarn">⚠ Actividad propia del sexo ${escapeHtml(sexoReq)}; el paciente registra sexo ${escapeHtml(sexoPaciente)}. Verifique antes de ordenar.</div>` : ""}
                     <div class="vgl-ord-cups">
                       <span class="vgl-ord-cupk">CUPS</span>${pkg.cups.map((c) => `<span class="vgl-ord-cup"><b>${escapeHtml(c.codigo)}</b> ${escapeHtml(c.desc)}</span>`).join("")}${idx === 0 ? vglTip("Códigos oficiales de procedimiento asignados automáticamente.") : ""}
@@ -22040,7 +24211,7 @@ _vglOfrecerDeshacer(btn);
 
         <div class="vgl-agm-foot">
           <button id="vgl-ord-cancel" class="vgl-agm-btn sec">Cancelar</button>
-          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : "Sin actividades para ordenar"}</button>
+          <button id="vgl-ord-confirm" class="vgl-agm-btn pri"${hayCoincidencia ? "" : " disabled"}>${hayCoincidencia ? `✓ Generar Órdenes en Conducta (${pkgsToRender.length})` : (_pymSinAct.motivo === "sin_pendientes" ? "Sin actividades para ordenar" : "No hay lista que consultar")}</button>
         </div>
       </div>
     `;
@@ -22190,7 +24361,10 @@ _vglOfrecerDeshacer(btn);
           confirmBtn.disabled = !parcial;   // en el parcial el médico tiene que poder reintentar
 
           const successMsg = document.createElement("div");
-          successMsg.className = parcial ? "vgl-ord-vigwarn" : "vgl-msg-success";
+          // v17.11.0 — hallazgo #44: el parcial usaba .vgl-ord-vigwarn, que en este modal es
+          // VERDE («ya está cubierto»). Una corrida a medias no puede parecerse a una que
+          // salió bien: clase propia en ámbar.
+          successMsg.className = parcial ? "vgl-ord-parcial" : "vgl-msg-success";
           successMsg.innerHTML = parcial
             ? `
             <div style="font-size:14px;font-weight:600;margin-bottom:4px">⚠️ Se generaron ${creadasCount} de ${creadasCount + fallidasCount} órdenes</div>
@@ -22335,6 +24509,362 @@ _vglOfrecerDeshacer(btn);
   }
 
   // =====================================================================
+  //  v17.32.0/v17.35.0 — BOTÓN "ORDENAR LO PENDIENTE" DE CONDUCTA (encargo del médico)
+  //  ------------------------------------------------------------------
+  //  Textual (28-ago): "necesito además el botón debajo del botón de Paquetes en la
+  //  sección de Conducta para agregar en un solo clic los laboratorios que se debe
+  //  ordenar cada paciente en la próxima consulta". La primera entrega (v17.32.0) creaba
+  //  una orden real por el módulo de Ordenamientos de Everest (GuardarOrdenamiento) — el
+  //  mismo camino que las órdenes de PyM. Reporte en vivo: esa orden no aparecía en la
+  //  tabla de Conducta > Ordenamientos, porque es un mecanismo DISTINTO al que usa el
+  //  botón nativo "Paquetes".
+  //
+  //  DIAGNÓSTICO EN VIVO (el médico corrió DIAGNOSTICO_PAQUETES_CONDUCTA.js en consulta
+  //  real, 28-ago): "Paquetes" + "Agregar" hacen UNA sola petición de red (un GET que
+  //  trae el catálogo del paquete) — el resto, las diez filas que aparecen en la tabla,
+  //  lo arma Everest ENTERAMENTE en el navegador. No hay ningún POST que "guarde" esa
+  //  fila: queda pendiente hasta que el médico usa el "Guardar" de toda la consulta.
+  //
+  //  Encargo explícito, tras ver las dos alternativas (simular u orden por Ordenamientos)
+  //  y rechazar las dos que se le propusieron sin simular: "quiero que simules
+  //  exactamente lo que hace ese botón de paquetes, tal cual. ni más ni menos... debes
+  //  simular exactamente lo que hace Everest y así no tendrás problemas". Es la excepción
+  //  puntual que CLAUDE.md documenta (v12.10.4): un botón que actúa sin cuadro de
+  //  confirmación, y ahora también simulando un gesto real, porque el propio médico lo
+  //  pidió así con las dos alternativas ya vistas — no una decisión unilateral del script.
+  //
+  //  POR QUÉ ESTO ES DISTINTO DE LO QUE v15.3.0/v15.7.0 RETIRARON: aquello se retiró por
+  //  un bug real — una cola que reintentaba en CADA vuelta del reloj de sondeo (5-30 s) un
+  //  clic que nunca calzaba, reteclando sin parar. Esta vez: (1) el gesto corre UNA sola
+  //  vez, disparado por el clic explícito del médico — nunca desde el reloj de sondeo ni
+  //  con reintento automático; (2) cada texto de <li>/botón es LITERAL, capturado por el
+  //  propio médico en consultorio real, dos veces, 16 días aparte, con el mismo resultado
+  //  (`captura_ordenamiento_paquete_HTA_20260812.json`, `EVIDENCIA_ORDENAMIENTO_CURADO.md`,
+  //  y el diagnóstico de hoy) — nunca se adivina un texto; (3) coincidencia EXACTA, nunca
+  //  por substring, mismo principio que ya tenía _conductaBuscarYAgregarExamen (v14.0.3,
+  //  retirado junto con todo lo demás y restaurado aquí); (4) cada fila que se cuenta como
+  //  "agregada" se VERIFICA leyendo la propia tabla después del clic — nunca se asume que
+  //  un clic disparado hizo lo que se esperaba.
+  //
+  //  QUÉ SE AGREGA: exactamente lo que `mtrPlanParaclinicos` ya calculó que toca en la
+  //  próxima consulta (`resumen.plan.ordenar`) — nunca el paquete completo por costumbre. A
+  //  partir de v17.37.0 el botón SOLO agrega analitos que se buscan y agregan uno por uno
+  //  (los 4 pasajeros, HbA1c y los DOS componentes de la RAC): el disparo de "Paquetes →
+  //  HTA" quedó RETIRADO por completo (ver el comentario junto a
+  //  MTR_ANALITOS_PAQUETE_CONDUCTA, ahora vacía) porque agrega SIEMPRE un examen no
+  //  permitido (hemograma) de arrastre. Los analitos que solo existen agrupados en ese
+  //  paquete (perfil lipídico, glicemia, uroanálisis, creatinina sérica) siguen apareciendo
+  //  en la pastilla de solo-lectura "qué ordenar", pero este botón ya no los toca: el
+  //  médico los agrega él mismo con su propio "Paquetes" cuando quiera.
+  //
+  //  v17.36.0 — CORRECCIÓN DEL MÉDICO: la primera entrega de esta versión disparaba el
+  //  paquete completo (8-10 analitos ajenos) solo para conseguir la mitad de la RAC que
+  //  el catálogo del paquete también trae (creatinina en orina, 903876) — "documentado
+  //  como hueco conocido" en vez de evitado. El médico lo rechazó de plano: "jamás debes
+  //  hacer eso, solamente ordenar lo que se debe" — y aportó la corrección de fondo: la
+  //  creatinina en orina parcial SÍ se busca y agrega individual, igual que los demás
+  //  analitos sueltos, con el mismo texto exacto que el paquete confirma que existe en el
+  //  catálogo de Everest (`captura_ordenamiento_paquete_HTA_20260812.json`, línea del GET
+  //  `ObtenerPaqueteProgramasCupsByCitaId`: `"CREATININA EN ORINA PARCIAL"`, código 903876).
+  //
+  //  v17.37.0 — SEGUNDA CORRECCIÓN DEL MÉDICO, misma tarde: reporte en vivo con captura real
+  //  confirmó que "Paquetes → HTA" agrega SIEMPRE "HEMOGRAMA IV ... AUTOMATIZADO" (902210,
+  //  visible en el catálogo de `captura_ordenamiento_paquete_HTA_20260812.json`) — un
+  //  examen que NO está entre los 13 analitos permitidos/monitoreados de este proyecto. El
+  //  botón lo estaba agregando cada vez que disparaba el paquete, sin que el médico lo
+  //  pidiera. Con la RAC ya fuera del paquete (v17.36.0), la única razón que quedaba para
+  //  disparar "Paquetes → HTA" era el perfil lipídico/glicemia/uroanálisis/creatinina — y
+  //  ninguna de esas siete razones justifica agregar un hemograma no pedido. Se retira el
+  //  disparo del paquete por completo: la RAC (sus dos búsquedas individuales, desde
+  //  v17.36.0) nunca arrastra el resto de la HTA, y ahora ningún otro analito lo hace.
+  // =====================================================================
+
+  // v17.35.0/v17.36.0 — Nombre EXACTO con el que cada analito aparece como <li> en el
+  // buscador nativo de Conducta de Everest (Paquetes → HTA → agregar examen individual).
+  // Cada valor es una LISTA de textos (casi siempre de un solo elemento) porque la RAC
+  // necesita DOS búsquedas independientes, ninguna sustituye a la otra. Texto LITERAL
+  // capturado por el grabador de clics del proyecto en consultorio el 12-08-2026
+  // (`captura_ordenamiento_paquete_HTA_20260812.json`, ver también
+  // `EVIDENCIA_ORDENAMIENTO_CURADO.md` §2 y §4) — HBA1C y la microalbuminuria automatizada
+  // de la RAC se re-confirmaron el 28-08-2026 con un diagnóstico nuevo en consulta real,
+  // mismo texto, 16 días después; la creatinina en orina parcial de la RAC viene del
+  // catálogo del paquete de esa misma captura (nunca de un botón "Agregar" propio — no
+  // hay evidencia de ese clic exacto, pero el nombre de examen SÍ es real y textual, no
+  // adivinado). NO son inventados ni tomados del catálogo del Copiloto (esas son
+  // descripciones cortas, p. ej. "HEMOGLOBINA GLICOSILADA" sin "AUTOMATIZADA"). Usados por
+  // _conductaBuscarYAgregarExamen (más abajo), coincidencia EXACTA de texto, nunca por
+  // substring — un match parcial en un catálogo clínico real podría clickear el examen
+  // equivocado.
+  const CONDUCTA_LI_TEXTO_POR_ANALITO = {
+    PTH: ["HORMONA PARATIROIDEA MOLECULA INTACTA"],
+    ALBUMINA: ["ALBUMINA EN SUERO U OTROS FLUIDOS"],
+    FOSFORO: ["FOSFORO EN SUERO U OTROS FLUIDOS"],
+    HEMOGLOBINA: ["HEMOGLOBINA"],
+    HBA1C: ["HEMOGLOBINA GLICOSILADA AUTOMATIZADA"],
+    // v17.36.0 — los DOS componentes de la RAC, cada uno buscado y agregado por su cuenta.
+    // La microalbuminuria pide la variante AUTOMATIZADA (903026), no la SEMIAUTOMATIZADA
+    // (903028) que trae el catálogo del paquete — EVIDENCIA_ORDENAMIENTO_CURADO.md §3. Las
+    // dos búsquedas deben tener éxito para dar la RAC por agregada — "no se pide media RAC"
+    // (regla ya fijada desde v17.32.0, ver tests/INFORME_MUTACIONES.md).
+    RAC: ["MICROALBUMINURIA AUTOMATIZADA EN ORINA PARCIAL", "CREATININA EN ORINA PARCIAL"],
+  };
+
+  // v17.37.0 — REPORTE EN VIVO DEL MÉDICO, con captura real: el paquete "HTA" que dispara
+  // "Paquetes → HTA" (`ObtenerPaqueteProgramasCupsByCitaId`) trae SIEMPRE sus 10 códigos de
+  // catálogo, y uno de ellos es "HEMOGRAMA IV ... AUTOMATIZADO" (902210) — un examen que NO
+  // está entre los analitos permitidos/monitoreados de este proyecto (los 13 de
+  // MTR_DRIVERS/MTR_PASAJEROS). El botón lo estaba agregando SIEMPRE que disparaba el
+  // paquete por cualquiera de los otros siete, sin que el médico lo pidiera ni lo esperara
+  // — "ese laboratorio no hace parte de los analitos permitidos". Everest no ofrece (hasta
+  // donde hay evidencia) una forma de disparar el paquete SIN el hemograma, ni de
+  // deseleccionar un ítem antes de confirmar.
+  //
+  // Por eso esta lista queda VACÍA: el botón deja de disparar "Paquetes → HTA" por
+  // completo, para NUNCA volver a agregar un examen no permitido sin que el médico lo pida.
+  // Los siete analitos que antes vivían aquí (COLESTEROL_TOTAL, COLESTEROL_HDL,
+  // COLESTEROL_LDL, TRIGLICERIDOS, GLUCOSA, UROANALISIS, CREATININA) siguen apareciendo en
+  // la pastilla de solo-lectura "qué ordenar" (mtrWidgetExamenesDatos, que nunca clickea
+  // nada) — el médico los ve igual, y los agrega él mismo con su propio "Paquetes" cuando
+  // decida qué hacer con el hemograma que viene de arrastre. Si en el futuro se confirma
+  // (con evidencia real, nunca adivinada) que alguno de estos siete se puede buscar y
+  // agregar SUELTO —igual que ya se hizo con la RAC en v17.36.0—, vuelve aquí con su propio
+  // texto de `<li>` y sale de esta lista, uno por uno.
+  const MTR_ANALITOS_PAQUETE_CONDUCTA = [];
+
+  // Pura: separa el `ordenar` crudo de mtrPlanParaclinicos en {paquete, individuales} —
+  // paquete: claves que necesitan el disparo de "Paquetes → HTA"; individuales: claves
+  // con su(s) texto(s) de <li> propio(s) (`liTextos`, un arreglo — casi siempre de un solo
+  // elemento, dos para la RAC). Una clave sin ninguna de las dos formas conocidas (nunca
+  // debería pasar con los 13 analitos de hoy) se ignora, no truena.
+  function mtrItemsOrdenarConducta(ordenar) {
+    const lista = Array.isArray(ordenar) ? ordenar : [];
+    const vistos = new Set();
+    const paquete = [], individuales = [];
+    for (const a of lista) {
+      const clave = a && a.clave;
+      if (!clave || vistos.has(clave)) continue;
+      const enPaquete = MTR_ANALITOS_PAQUETE_CONDUCTA.indexOf(clave) >= 0;
+      const liTextos = CONDUCTA_LI_TEXTO_POR_ANALITO[clave];
+      if (!enPaquete && !liTextos) continue;
+      vistos.add(clave);
+      const nombre = a.nombre || mtrNombreLegibleAnalito(a) || clave;
+      if (enPaquete) paquete.push({ clave: clave, nombre: nombre });
+      if (liTextos) individuales.push({ clave: clave, nombre: nombre, liTextos: liTextos });
+    }
+    return { paquete: paquete, individuales: individuales };
+  }
+
+  // v17.35.0 — mismo patrón day-scoped que isLabAgendadaHoy/markLabAgendadaHoy, en su
+  // PROPIO namespace (`p.labsConducta`): a propósito NO comparte almacén con
+  // isOrdenesCreadasHoy/markOrdenesCreadasHoy (ese es el de las órdenes PyM del botón
+  // "Ordenar" del dock — un paciente puede necesitar las dos cosas el mismo día, y
+  // marcar una no puede apagar el botón de la otra con un mensaje que ya no sería cierto).
+  function isOrdenLabsConductaHoy(docId) {
+    if (!docId) return false;
+    const p = getProcessedToday();
+    return !!(p.labsConducta && p.labsConducta.includes(String(docId)));
+  }
+  function markOrdenLabsConductaHoy(docId, claves) {
+    if (!docId) return;
+    const p = getProcessedToday();
+    const sDoc = String(docId);
+    if (!p.labsConducta) p.labsConducta = [];
+    if (!p.labsConducta.includes(sDoc)) p.labsConducta.push(sDoc);
+    if (Array.isArray(claves) && claves.length) {
+      if (!p.labsConductaDetalle) p.labsConductaDetalle = {};
+      p.labsConductaDetalle[sDoc] = { claves: claves, ts: Date.now() };
+    }
+    writeJSON(PROC_KEY, p); state.lastSignature = ""; repaint();
+  }
+
+  // =====================================================================
+  //  v17.35.0 — EL GESTO REAL: encontrar la tabla, encontrar y clickear los botones/<li>,
+  //  y VERIFICAR después leyendo la propia tabla — nunca asumir que un clic hizo lo que
+  //  se esperaba.
+  // =====================================================================
+
+  // Encuentra la tabla de Ordenamientos por su encabezado ("Código"+"Cantidad"), no por
+  // id/clase — no hay evidencia de que sean estables (mismo criterio que
+  // mtrBotonOrdenarConducta con el botón "Paquetes"). Devuelve null si no está a la vista.
+  function _conductaTablaOrdenamientos(doc) {
+    try {
+      const d = doc || document;
+      const tablas = Array.from(d.querySelectorAll("table"));
+      for (const t of tablas) {
+        const enc = _canonTexto(t.textContent).slice(0, 400);
+        if (enc.indexOf("CODIGO") >= 0 && enc.indexOf("CANTIDAD") >= 0) return t;
+      }
+      return null;
+    } catch (e) { return null; }
+  }
+
+  // Códigos CUPS que YA están en la tabla ahora mismo (primera columna de cada fila) —
+  // se usa ANTES y DESPUÉS de cada clic para saber si de verdad apareció algo nuevo.
+  function _conductaCodigosEnTabla(doc) {
+    try {
+      const t = _conductaTablaOrdenamientos(doc);
+      if (!t) return new Set();
+      const filas = Array.from(t.querySelectorAll("tr"));
+      const set = new Set();
+      for (const f of filas) {
+        const celda = f.querySelector("td");
+        if (celda) { const c = celda.textContent.trim(); if (/^\d{5,6}$/.test(c)) set.add(c); }
+      }
+      return set;
+    } catch (e) { return new Set(); }
+  }
+
+  function _conductaEsperar(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // Espera hasta `maxMs` a que la tabla tenga AL MENOS un código nuevo respecto a
+  // `codigosPrevios` — sondeando cada 150ms en vez de un solo `sleep` ciego, para no
+  // sobre-esperar cuando Angular ya terminó, y para no quedarse corto cuando tarda más de
+  // lo normal. Nunca reintenta el CLIC — solo espera a que el que ya se dio surta efecto.
+  async function _conductaEsperarFilasNuevas(doc, codigosPrevios, maxMs) {
+    const limite = Date.now() + maxMs;
+    while (Date.now() < limite) {
+      const ahora = _conductaCodigosEnTabla(doc);
+      for (const c of ahora) if (!codigosPrevios.has(c)) return ahora;
+      await _conductaEsperar(150);
+    }
+    return _conductaCodigosEnTabla(doc);
+  }
+
+  // v17.35.0 — dispara el paquete "HTA" (Paquetes → HTA), confirmado real dos veces
+  // (12-ago y 28-ago) como el gesto que agrega los 8-10 analitos que no se buscan sueltos.
+  // UN SOLO intento — si "Paquetes" o "HTA" no aparecen, devuelve false sin insistir; la
+  // guarda de reentrada (_cwoEnCurso) y el hecho de que esto solo corre por un clic
+  // explícito del médico son las mismas dos barreras que ya evitan el bucle de antes.
+  async function _conductaClicPaqueteHTA(doc) {
+    try {
+      const d = doc || document;
+      const botones = Array.from(d.querySelectorAll("button"));
+      const bPaquetes = botones.find((b) => _vglVisibleDeVerdad(b) && _canonTexto(b.textContent) === "PAQUETES");
+      if (!bPaquetes) return false;
+      bPaquetes.click();
+      await _conductaEsperar(400);   // Angular monta los botones de programa (HTA/DM/…)
+      const botones2 = Array.from(d.querySelectorAll("button"));
+      const bHta = botones2.find((b) => _vglVisibleDeVerdad(b) && _canonTexto(b.textContent) === "HTA");
+      if (!bHta) return false;
+      bHta.click();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // v17.35.0/v14.0.3 — restaurada: reproduce en el DOM real de Everest el mismo gesto que
+  // el médico ya hace a mano en Conducta — clic en el <li> del examen (coincidencia EXACTA
+  // de texto, nunca parcial) y, tras darle a Angular un instante, clic en "Agregar". Si
+  // aparece un cuadro de confirmación opcional ("Repetirlo"/"Confirmar" o "Entendido" —
+  // vistos en la captura real, no siempre los dos mismos) se reconoce y se cierra; si no
+  // aparece ninguno, sigue de largo sin esperarlo. Fallo seguro: si el <li> no está en la
+  // pantalla actual, o el texto no casó exacto, no se clickea nada por aproximación —
+  // "casilla vacía antes que clic inventado".
+  // v17.42.0 — `docIdEsperado` (3.er parámetro, OPCIONAL para no romper a nadie): la
+  // cédula que estaba en pantalla cuando el médico pulsó el botón. Entre el clic en el
+  // <li> y el clic en "Agregar" hay 700 ms de espera fija, y otros 400+300 ms hasta el
+  // cuadro de confirmación. En ese hueco el médico puede cerrar la historia y abrir otra:
+  // Angular remonta la pantalla y CADA `d.querySelectorAll("button")` de aquí abajo es de
+  // DOCUMENTO COMPLETO, así que encontraría el "Agregar" del paciente NUEVO.
+  // Esta era la única cadena de escritura clínica del script sin esta guarda, pese a que
+  // el comentario de `_pacienteSigueAbierto` ya llamaba al cruce de pacientes "el riesgo
+  // clínico más alto que ha tenido este script" — la guarda existía desde la v14.1.5 y
+  // esta ruta, que nació en la v17.35.0, nunca se cableó a ella.
+  // Se comprueba ANTES de cada clic, no solo al entrar: lo que importa no es quién estaba
+  // al empezar, sino quién está en el instante exacto en que se va a escribir.
+  async function _conductaBuscarYAgregarExamen(nombreLiExacto, doc, docIdEsperado) {
+    try {
+      const d = doc || document;
+      const sigueElMismo = () => !docIdEsperado || _pacienteSigueAbierto(docIdEsperado);
+      const claveObjetivo = _canonTexto(nombreLiExacto);
+      if (!sigueElMismo()) return false;
+      const items = Array.from(d.querySelectorAll("li"));
+      let li = null;
+      for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; } }
+      if (!li) return false;
+      li.click();
+      await _conductaEsperar(700);   // cadencia real observada: ~700-1500ms entre <li> y "Agregar"
+      if (!sigueElMismo()) return false;               // ← el hueco grande: 700 ms
+      const botones = Array.from(d.querySelectorAll("button"));
+      const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled);
+      if (!btnAgregar) return false;
+      btnAgregar.click();
+      // Cuadro opcional (visto en la captura real para algunos analitos, no todos): se
+      // reconoce si aparece, nunca se espera a la fuerza si no aparece.
+      await _conductaEsperar(400);
+      if (!sigueElMismo()) return false;
+      const botones2 = Array.from(d.querySelectorAll("button"));
+      const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO");
+      if (btnRepetir) {
+        btnRepetir.click();
+        await _conductaEsperar(300);
+        if (!sigueElMismo()) return false;
+        const botones3 = Array.from(d.querySelectorAll("button"));
+        const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR");
+        if (btnConfirmar) btnConfirmar.click();
+      } else {
+        const btnEntendido = botones2.find((b) => _canonTexto(b.textContent) === "ENTENDIDO");
+        if (btnEntendido) btnEntendido.click();
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // v17.35.0 — el orquestador: dado {paquete, individuales} de mtrItemsOrdenarConducta,
+  // dispara el paquete UNA vez si hace falta, agrega cada individual por su cuenta, y
+  // VERIFICA leyendo la tabla al final — nunca cuenta como "agregado" algo que no se ve en
+  // pantalla. Devuelve {agregados:[claves], fallidos:[{clave,nombre}]}. Nunca lanza.
+  // v17.42.0 — `docIdEsperado` opcional, se propaga a cada búsqueda. La guarda se
+  // reevalúa además al empezar cada analito: un lote de 4 individuales son >12 s de clics
+  // automáticos, así que el paciente puede cambiar entre uno y el siguiente, no solo
+  // dentro de uno. Lo que ya se agregó antes del cambio se devuelve como agregado (es
+  // verdad, se agregó al paciente correcto); lo que no se intentó, no se inventa.
+  async function mtrConductaAgregarPendientes(items, doc, docIdEsperado) {
+    const d = doc || document;
+    const sigueElMismo = () => !docIdEsperado || _pacienteSigueAbierto(docIdEsperado);
+    const paquete = (items && items.paquete) || [];
+    const individuales = (items && items.individuales) || [];
+    const agregados = [], fallidos = [];
+    if (!paquete.length && !individuales.length) return { agregados, fallidos };
+
+    const antes = _conductaCodigosEnTabla(d);
+    if (paquete.length) {
+      const disparado = await _conductaClicPaqueteHTA(d);
+      if (disparado) await _conductaEsperarFilasNuevas(d, antes, 4000);
+    }
+    // Las filas que YA aparecieron (por el paquete, o porque ya estaban) cuentan para
+    // TODOS los analitos del paquete a la vez — no hay una clave por fila que verificar
+    // uno por uno, así que se da por agregado el grupo completo si algo nuevo apareció.
+    const trasPaquete = _conductaCodigosEnTabla(d);
+    const huboFilasNuevas = trasPaquete.size > antes.size;
+    for (const it of paquete) {
+      if (huboFilasNuevas || antes.size !== trasPaquete.size) agregados.push(it.clave);
+      else fallidos.push({ clave: it.clave, nombre: it.nombre });
+    }
+
+    // v17.36.0 — `liTextos` es un arreglo (dos elementos para la RAC, uno para el resto):
+    // TODAS sus búsquedas deben tener éxito para dar la clave por agregada — "no se pide
+    // media RAC" (regla fijada desde v17.32.0). Cada búsqueda se verifica por su cuenta
+    // leyendo la tabla, igual que el resto de este orquestador.
+    for (const it of individuales) {
+      let todasOk = true;
+      // v17.42.0 — se comprueba ANTES de empezar cada analito: entre uno y otro también
+      // hay segundos de por medio, y ahí también puede haber cambiado el paciente.
+      if (!sigueElMismo()) { fallidos.push({ clave: it.clave, nombre: it.nombre }); continue; }
+      for (const texto of it.liTextos) {
+        const previos = _conductaCodigosEnTabla(d);
+        const disparado = await _conductaBuscarYAgregarExamen(texto, d, docIdEsperado);
+        if (!disparado) { todasOk = false; break; }
+        const despues = await _conductaEsperarFilasNuevas(d, previos, 2500);
+        if (despues.size <= previos.size) { todasOk = false; break; }
+      }
+      if (todasOk) agregados.push(it.clave);
+      else fallidos.push({ clave: it.clave, nombre: it.nombre });
+    }
+
+    return { agregados, fallidos };
+  }
+
+  // =====================================================================
   //  [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró por completo el
   //  bloque "T7 — BANNER PyM SUPERIOR" (`_bannerPymCache`, `_bannerPymEnVuelo`,
   //  `BANNER_PYM_TTL_MS`, `_bannerPymInvalidar`, `_pymYaOrdenadoHoyDesdeElScript`,
@@ -22371,7 +24901,12 @@ _vglOfrecerDeshacer(btn);
       if (GHOST.promises.has(promKey)) return; // Re-verificar en el momento de lanzar
       const p = (async () => {
         try {
-          const pacienteId = await apiAccesoBuscarPaciente(docId);
+          // v17.15.0 — ESPECULATIVO. Esto no lo pidió nadie: el cursor pasó por encima de
+          // una tarjeta. Con el servidor caído, tratarlo como una petición que alguien
+          // espera costaba 16 peticiones y 8 líneas de consola POR TARJETA (medido con el
+          // arnés). Su fallo ya se descartaba con el catch vacío de abajo — ahora también
+          // deja de insistir y de gritar.
+          const pacienteId = await apiAccesoBuscarPaciente(docId, { especulativo: true });
           if (pacienteId) {
             const dt = new Date();
             dt.setDate(dt.getDate() + 1);
@@ -22509,7 +25044,11 @@ _vglOfrecerDeshacer(btn);
     // normalizeHora (que ya iguala «6:40:00», «06:40:00» y «06:40») antes de formar la
     // clave, y el documento manda sobre la hora: la misma atención da la misma clave
     // venga de donde venga.
-    const doc = String(cita.doc_id || cita.documento || "").replace(/\D/g, "");
+    // v17.53.0 — normalizeKey en vez de un replace a pelo: quitaba lo no-dígito pero
+    // CONSERVABA los ceros de relleno, asi que «0099900042|08:00» y «99900042|08:00» eran
+    // dos claves para la misma atencion — justo lo que el parrafo de arriba promete que no
+    // pasa («la misma atencion da la misma clave venga de donde venga»).
+    const doc = normalizeKey(String(cita.doc_id || cita.documento || ""));
     let hora = String(cita.hora_texto || cita.hora || cita.horaTexto || "").trim();
     try { if (typeof normalizeHora === "function" && hora) hora = normalizeHora(hora) || hora; } catch (e) {}
     if (doc) return doc + "|" + hora;
@@ -23317,7 +25856,8 @@ _vglOfrecerDeshacer(btn);
         <!-- v15.5.0 — Barrido de Ajustes (decidido en entrevista): controles técnicos y de identidad manual retirados; los valores quedan en fábrica y la identidad se detecta sola. -->
         <div class="vgl-fld"><label>Acerca del asistente<span class="vgl-hint">Versión instalada en este computador — solo se necesita si reporta algo al administrador.</span></label><b style="font-size:var(--t-micro)">v${VERSION}</b></div>
         <div class="vgl-fld"><label>Médico en sesión<span class="vgl-hint">El asistente lo reconoce solo al abrir la agenda del día.</span></label><b id="c-medses" style="font-size:var(--t-micro)">${escapeHtml((state.activeDoctor && state.activeDoctor.name) ? state.activeDoctor.name + " · id " + state.activeDoctor.id : "aún sin detectar — abra la agenda del día")}</b></div>
-        <div class="vgl-fld"><label>Avisos de seguridad farmacológica <b>(en pruebas)</b><span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Avisos de seguridad farmacológica<span class="vgl-hint">Revisa los medicamentos formulados del paciente contra su función renal y avisa de dosis peligrosas e interacciones. <b>No ordena ni cambia nada: solo avisa.</b> Viene apagado; enciéndalo solo si va a revisar lo que muestra.</span></label>${sw("c-motor", S.motorPortado)}</div>
+        <div class="vgl-fld"><label>Exámenes y órdenes en Conducta <b>(en pruebas)</b><span class="vgl-hint">Muestra, junto al botón "Paquetes" de Everest, qué exámenes hacen falta para el próximo control — eso solo avisa, no toca la pantalla de Conducta. <b>Además agrega, debajo de ese mismo botón, uno propio que SÍ actúa: "Ordenar pendientes" genera de un clic la orden de todo lo pendiente, sin pantalla de confirmación, igual que "Paquetes" de Everest.</b> Viene apagado; enciéndalo solo si ya conoce las dos partes.</span></label>${sw("c-cw-examenes", S.conductaWidgets)}</div>
         <!-- v15.5.0 — RCV+IA pasó a BETA CERRADA: sus controles vuelven cuando se reabra el módulo. -->
       </div>
       <!-- SECCIÓN TÉCNICA (oculta salvo que se active arriba) -->
@@ -23461,6 +26001,8 @@ _vglOfrecerDeshacer(btn);
     if (volSlider) volSlider.addEventListener("change", () => { const v = clampNum(volSlider.value, 2, 60, 15) / 100; _ajustesPonBorrador("volumen", v); const prev = S.volumen; try { S.volumen = v; playTone("AZUL"); } catch (e) {} S.volumen = prev; });
     const motorBtn = q("#c-motor");
     if (motorBtn) motorBtn.addEventListener("change", () => _ajustesPonBorrador("motorPortado", motorBtn.checked));
+    const cwBtn = q("#c-cw-examenes");
+    if (cwBtn) cwBtn.addEventListener("change", () => _ajustesPonBorrador("conductaWidgets", cwBtn.checked));
     // v17.6.3 — Meta general de HbA1c (Ajustes). Fuera de rango o vacío → 7,0: el mismo
     // contrato de mtrMetaHba1cGeneral; la meta individual del paciente gana siempre.
     const hba1cMetaEl = q("#c-hba1c-meta");
@@ -23768,11 +26310,11 @@ _vglOfrecerDeshacer(btn);
   //  ------------------------------------------------------------------
   //  El contrato del DOM documenta 95 puntos de apoyo con su «si falla»: en
   //  varios, el efecto real era que un módulo callaba SIN avisar y el médico
-  //  solo percibía «se dañó». Este registro anota, en cuatro frentes (agenda,
-  //  historia, laboratorios y lista de prevención), la última lectura buena y
+  //  solo percibía «se dañó». Este registro anota, en cinco frentes (los servicios
+  //  de Everest, agenda, historia, laboratorios y lista de prevención), la última buena y
   //  el último fallo. El punto de estado del panel se pone ÁMBAR solo tras
   //  3 minutos de fallo sostenido (los parpadeos de Everest no alarman), y al
-  //  tocarlo se abre un globito con los cuatro renglones en lenguaje llano.
+  //  tocarlo se abre un globito con los cinco renglones en lenguaje llano.
   //  NADA clínico depende de esto: es un termómetro, no una compuerta.
   // =====================================================================
   const _saludReg = {
@@ -23780,14 +26322,26 @@ _vglOfrecerDeshacer(btn);
     historia: { ok: 0, fallo: 0, falloDesde: 0 },
     labs:     { ok: 0, fallo: 0, falloDesde: 0 },
     pym:      { ok: 0, fallo: 0, falloDesde: 0 },
+    // v17.15.0 — QUINTO FRENTE. Los cuatro de arriba se marcan desde la lectura de la
+    // PANTALLA, que sigue funcionando aunque los servicios de Everest estén caídos: en la
+    // consola real del 27-ago toda la API devolvía 500 y este panel podía seguir diciendo
+    // «✓ leyendo bien» en los cuatro. Este lo marca _pageFetchJsonCore, así que refleja lo
+    // que de verdad decide si agendar o buscar un paciente van a funcionar.
+    everest:  { ok: 0, fallo: 0, falloDesde: 0 },
   };
   const SALUD_MIN_FALLO_MS = 3 * 60 * 1000;
   const SALUD_ROTULOS = {
+    everest: "Servicios de Everest (buscar paciente, agendar)",
     agenda: "Agenda del día",
     historia: "Historia clínica",
     labs: "Laboratorios (Athenea)",
     pym: "Lista de prevención (PyM)",
   };
+
+  // Accesor de solo lectura para el banco (mismo patrón que _getRacGuardiaParaTest):
+  // el registro es privado y sin esto una prueba tendría que adivinar su estado por la
+  // interfaz pintada, que es justo lo que no se puede montar en el arnés.
+  function _saludRegParaTest() { return _saludReg; }
 
   function _saludMarca(mod, ok) {
     const m = _saludReg[mod];
@@ -23851,10 +26405,23 @@ _vglOfrecerDeshacer(btn);
       const mm = String(ahora.getMinutes()).padStart(2, "0");
       const turnoMin = Math.max(0, Math.floor((Date.now() - (state.turnoInicio || Date.now())) / 60000));
       const h = Math.floor(turnoMin / 60), m = turnoMin % 60;
-      const fresco = !state.ultimaLectura || (Date.now() - state.ultimaLectura) <= 30000;
-      c.classList.toggle("vgl-stale", !fresco);
+      // v17.16.0 — TANDA 4, REGLA D. Eran DOS estados para TRES situaciones: con
+      // `ultimaLectura` en 0 (arranque, o una sesión en la que nunca se pudo leer la
+      // agenda) `fresco` salía true y el reloj afirmaba «Datos al día» — sobre datos que
+      // no existen. No alarmar al arrancar está bien y se conserva (no se pinta en
+      // `vgl-stale`); afirmar que están al día es otra cosa: es rellenar un hueco con una
+      // frase tranquilizadora, que es justo lo que la regla de la casa prohíbe.
+      const _hubo = !!state.ultimaLectura;
+      const fresco = _hubo && (Date.now() - state.ultimaLectura) <= 30000;
+      c.classList.toggle("vgl-stale", _hubo && !fresco);
       c.textContent = hh + ":" + mm + " · " + h + "h" + (m < 10 ? "0" : "") + m + "m";
-      c.title = fresco ? "Hora actual y tiempo de turno. Datos al día." : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".";
+      // v17.21.0 — cadencia visible en el tooltip (automática, sin control manual).
+      let _cadTxt = "";
+      try { _cadTxt = " Sondeando la agenda cada " + Math.round(apiCadencia() / 1000) + " s."; } catch (e2) {}
+      c.title = (!_hubo
+        ? "Hora actual y tiempo de turno. Todavía no he leído la agenda en esta sesión: no sé si los datos están al día."
+        : fresco ? "Hora actual y tiempo de turno. Datos al día."
+        : "Datos viejos — última lectura " + new Date(state.ultimaLectura).toLocaleTimeString() + ".") + _cadTxt;
     } catch (e) {}
   }
   // ===== [v17.6.7] Cierre de turno: checklist y adherencia.
@@ -23875,20 +26442,31 @@ _vglOfrecerDeshacer(btn);
   const NO_SHOW_KEY = "vgl_nosh_hist";
   function _noShowLeer() { try { return JSON.parse(localStorage.getItem(NO_SHOW_KEY) || "{}"); } catch (e) { return {}; } }
   function _noShowGuardar(h) { try { localStorage.setItem(NO_SHOW_KEY, JSON.stringify(h)); } catch (e) {} }
+  // v17.53.0 — TOLERANTE A LOS CEROS DE RELLENO, igual que vgl_cosecha y vgl_proc_today
+  // desde la v17.48.0. Este almacén se quedó fuera de aquella entrega y es el que peor lo
+  // llevaba: NO caduca por día. Guarda el historial de inasistencias del paciente, y ese
+  // contador es lo que le avisa al médico. Un paciente archivado bajo "0099900042" y
+  // consultado como "99900042" aparecía con CERO inasistencias — su historial entero,
+  // invisible, sin que nada lo dijera.
+  //
+  // Se escribe sobre la clave que YA existe (no sobre la canónica) para no dejar huérfano
+  // lo archivado antes: eso reiniciaría el contador a cero, que es justo el daño a evitar.
+  // No se fusiona nada ni se mueve nada de sitio.
   function _noShowRegistrar(docId) {
     if (!docId) return 0;
     const h = _noShowLeer();
-    const e = h[docId] || { total: 0, ultima: "" };
+    const k = _vglClaveDeDoc(h, docId) || String(docId);
+    const e = h[k] || { total: 0, ultima: "" };
     if (e.ultima === todayStamp()) return e.total || 0;
     e.total = (e.total || 0) + 1;
     e.ultima = todayStamp();
-    h[docId] = e;
+    h[k] = e;
     _noShowGuardar(h);
     return e.total;
   }
   function _noShowPrevia(docId) {
     if (!docId) return 0;
-    const e = _noShowLeer()[docId];
+    const e = _vglBuscarPorDoc(_noShowLeer(), docId);
     if (!e || !e.total) return 0;
     // No cuenta el no-show de HOY: la tarjeta ya lo pinta con su color ámbar.
     return (e.ultima === todayStamp()) ? Math.max(0, e.total - 1) : (e.total || 0);
@@ -23976,20 +26554,47 @@ _vglOfrecerDeshacer(btn);
       const candAdic = a.doc_id ? candidatoAdicional(a.doc_id) : null;
       const adicFlag = candAdic
         ? `<span class="vgl-flag adic" title="Perfil sencillo confirmado hoy (hipertensión pura, sin diabetes/renal/falla/riesgo muy alto/PA no controlada): buen candidato para cupos Adicional o sábados con espacio libre.">➕ CANDIDATO ADICIONAL</span>` : ""; // [COPY-UX]
-      // v14.0.0 (T4) — AMPUTACIÓN DEL PANEL: agendar/ordenar/labs (🗓️/📋/🧪) y los chips de
-      // PyM salen de la tarjeta — el panel queda solo como vigía de agenda. Los tres flujos
-      // renacen como widgets sobre la Historia Clínica en T5, reutilizando exactamente las
-      // mismas funciones (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/
-      // openLabSoloModal) y los mismos bloqueos antiduplicado (isCitaAgendadaHoy/
-      // isLabAgendadaHoy/isOrdenesCreadasHoy) — por eso esas funciones NO se tocan aquí, solo
-      // dejan de tener llamador DENTRO de render(). panelActivities/isPanelHiddenActivity se
-      // retiraron en v17.6.10: el filtro AV/OD quedó en línea en pymPendientesRestantes.
-      // v14.0.2 — El botón "Atender" (registrar en Everest la hora de apertura sin navegar
-      // a la historia) se retiró a pedido explícito del médico: usa directamente el botón
-      // nativo "Historias Clínicas" de Everest para entrar a la historia, sin intermediarios.
-      // La fila inferior de la tarjeta (vgl-card-btm) ya no tiene contenido que mostrar —
-      // T4 ya se había llevado los botones de agendar/ordenar/labs y los chips de PyM a los
-      // widgets del dock (T5); este era el último ocupante.
+      // v14.0.0 (T4) — agendar/ordenar/labs (🗓️/📋/🧪) siguen fuera de la tarjeta: viven
+      // como widgets sobre la Historia Clínica (T5), reutilizando las mismas funciones
+      // (openAgendamientoModal/openOrdenamientoModal/openLaboratoriosModal/openLabSoloModal)
+      // y los mismos bloqueos antiduplicado — eso NO cambia aquí.
+      // v14.0.2 — El botón "Atender" tampoco vuelve: usa el nativo "Historias Clínicas".
+      //
+      // v17.22.0 — REVERSIÓN CONSCIENTE de la otra mitad de T4 (decisión del médico,
+      // entrevista del 28-ago): los chips de PyM SÍ vuelven a la tarjeta. Iguales en
+      // esencia a la versión de v12.4.0 (recuperada de 40798bc^), con dos diferencias
+      // pedidas explícitamente esta noche:
+      //  1) Tope de 3 chips visibles (antes no había tope: se envolvía todo). Lo que
+      //     sobra se resume en un chip "+N más" con el detalle completo en el `title`
+      //     — nunca se pierde el dato, solo se compacta la vista.
+      //  2) NO se implementó una abreviación de TEXTO (el médico pidió "etiquetas
+      //     abreviadas"): el propio historial de este archivo (comentario de
+      //     `.vgl-pyms`, v12.4.0) documenta un reporte real de consultorio donde los
+      //     chips truncados/cortados por CSS se veían mal y se corrigió a propósito
+      //     para que el texto SIEMPRE se viera completo. Inventar una tabla de siglas
+      //     clínicas sin una fuente real sería exactamente lo que "casilla vacía antes
+      //     que dato inventado" prohíbe. El tope de 3 (punto 1) ya cumple el objetivo
+      //     real detrás del pedido — "no ensanchar la tarjeta" — sin ese riesgo. Queda
+      //     anotado en docs/DECISIONES_ENTREVISTA_SPLUS_20260828.md para que el médico
+      //     lo confirme o lo corrija.
+      const pymsPanel = panelActivities(a.pym);
+      const pymsVisibles = pymsPanel.slice(0, 3);
+      const pymsDeMas = pymsPanel.length - pymsVisibles.length;
+      const chipDeMas = pymsDeMas > 0
+        ? `<span class="vgl-chip vgl-chip-mas" title="${escapeHtml(pymsPanel.slice(3).join(", "))}">+${pymsDeMas} más</span>` : "";
+      const ocultasAvOd = (a.pym || []).length - pymsPanel.length;
+      const chipOcultas = ocultasAvOd > 0 ? `<span class="vgl-chip vgl-chip-ocultas">+ remisión AV/OD</span>` : "";
+      // Tres lecturas distintas y honestas cuando no hay chips que mostrar: tiene
+      // pendientes sin registrar / está al día / no cruza con la base (paciente nuevo o
+      // cédula que no coincide, hay que revisarlo). Nunca se dice "al día" sin haber
+      // podido comprobarlo (Regla D).
+      const enBase = !state.pymTodos || !state.pymTodos.size || state.pymTodos.has(normalizeKey(a.doc_id));
+      const pyms = pymsVisibles.length
+        ? `<div class="vgl-pyms">${pymsVisibles.map((p) => `<span class="vgl-chip">${escapeHtml(p)}</span>`).join("")}${chipDeMas}${chipOcultas}</div>`
+        : ((a.pym || []).length ? `<div class="vgl-none">Pendiente: remisión AV/OD — ver aviso al abrir la historia</div>`
+          : !state.pymFile ? `<div class="vgl-none falta">PyM sin cargar</div>`
+          : enBase ? `<div class="vgl-none">Al día · sin PyM pendiente</div>`
+                   : `<div class="vgl-none falta">Dato faltante: sin registro en PyM</div>`);
       card.innerHTML = `
         <div class="vgl-card-top vgl-card-top-t1" style="--tc:var(--c-${COLORS[a.color] ? a.color.toLowerCase() : "azul"},${col});--trgb:var(--rgb-${COLORS[a.color] ? a.color.toLowerCase() : "azul"})">
           <div class="vgl-card-time-wrap vgl-card-time-wrap-t1">
@@ -24009,6 +26614,9 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-card-mid vgl-card-mid-t1">
           <div class="vgl-name vgl-name-t1" title="${escapeHtml(a.nombre)}">${highlight(a.nombre)}</div>
           ${a.doc_id ? `<span class="vgl-doc vgl-doc-t1">CC ${highlight(String(a.doc_id))}</span>` : ""}
+        </div>
+        <div class="vgl-card-btm vgl-card-btm-t1">
+          ${pyms}
         </div>`;
       card.__vglKey = a.key;
       fragment.appendChild(card);
@@ -24186,12 +26794,30 @@ _vglOfrecerDeshacer(btn);
       // su guarda de una-vez-por-paciente (lastAutoFetchedAt).
       if (secc === "historia") {
         createLabInjectorUI(); createExamenFisicoInjectorUI(); createIaInjectorUI(); checkRacGuardia(); /* v15.3.0 — el drenado automático hacia la historia se retiró con el paso que lo alimentaba */
+        // v17.24.0 — HALLAZGO REAL: mtrWidgetConductaTick (v17.18.0, "qué ordenar en el
+        // próximo control") se escribió y se probó de frente (suite_71), pero JAMÁS se
+        // enganchó aquí — el widget nunca se pintó en ninguna consulta real desde que se
+        // "entregó". Se descubrió al enganchar el widget hermano de esta misma versión
+        // (mtrWidgetFarmacoTick, análisis farmacológico). Los dos cuelgan del mismo tick
+        // de "historia", igual que el resto de los inyectores de esta línea.
+        // v17.43.0 — envueltos en _rumTramo. Esa infraestructura existía desde la v17.1.0
+        // y su propio comentario dejaba escrito que NUNCA se había adoptado en ningún
+        // llamador real ("se construyó y se probó como infraestructura lista para
+        // instrumentar"). Estos tres son justamente los sospechosos del tirón de 5 s que
+        // el médico reporta, así que son los primeros en instrumentarse: si el tiempo se
+        // va aquí, la bitácora lo dirá con nombre propio en vez de dejarlo en «algo tardó».
+        try { _rumTramo("tick.widget.conducta", mtrWidgetConductaTick); } catch (e) {}
+        try { _rumTramo("tick.widget.ordenar", mtrWidgetOrdenarConductaTick); } catch (e) {}
+        try { _rumTramo("tick.widget.farmaco", mtrWidgetFarmacoTick); } catch (e) {}
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {
           const dockEl = document.getElementById("vgl-acciones-dock");
           const docId = dockEl && dockEl.dataset ? dockEl.dataset.vglDoc : "";
           try { _saludMarca("historia", !!docId); } catch (e2) {}   // v15.8.0 (N2) — ¿se está leyendo quién está en pantalla?
-          try { _vglCosecharDePantalla(docId); } catch (e2) {}      // v16.1.0 — se guarda lo que esta pestaña revela
+          // v16.1.0 — se guarda lo que esta pestaña revela. v17.43.0 — instrumentada:
+          // es el primer sospechoso del tirón periódico (barre el DOM entero y reserializa
+          // el almacén de hasta 80 pacientes, cada vuelta).
+          try { _rumTramo("tick.cosecha", function () { return _vglCosecharDePantalla(docId); }); } catch (e2) {}
           try { _vglVigilarTextoLibre(docId); } catch (e2) {}       // v16.3.2 — y se vigila lo que el médico escribe
           _acompTick(docId ? { doc_id: docId } : null);
         } catch (e) {}
@@ -24597,7 +27223,7 @@ _vglOfrecerDeshacer(btn);
   // este (acaba de salir). Coste de red: UN GET pequeño al día, y solo lee los primeros
   // bytes del encabezado para el @version — dentro del presupuesto (PRESUPUESTO_RED.md).
   // Requiere el @connect gist.githubusercontent.com añadido en esta misma versión.
-  const VGL_UPDATE_GIST_URL = "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile1.txt"; // = @updateURL del encabezado
+  const VGL_UPDATE_GIST_URL = "https://gist.githubusercontent.com/bpalencia27/d231aab6f54de51a5c472b392aac1b91/raw/gistfile2.txt"; // = @updateURL del encabezado
   function mtrCheckActualizacionGist() {
     try {
       if (state.killed) return;
@@ -25270,9 +27896,24 @@ _vglOfrecerDeshacer(btn);
   }
   function boot() {
     try { _vglRestaurarDeEspejo(); } catch (e) {}   // v16.5.1 — antes de leer nada: si el navegador perdió el resumen, vuelve del espejo
+    // v17.9.0 — la escucha de la historia clínica, lo antes posible: si el médico guarda
+    // antes de que el widget termine de montarse, ese guardado no se pierde. Va en su
+    // try/catch porque NADA de esto puede impedir el arranque, y la propia función no
+    // modifica ninguna petición: lee el cuerpo y devuelve el control intacto.
+    try { mtrHcEnganchar(); } catch (e) {}
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
     try { _festivosAvisarSiVencida(); } catch (e) {}
+    // v17.48.0 — una sola pasada, con la misma bandera de una-sola-vez que usan las
+    // migraciones de arriba: cuenta si algún paciente quedó archivado bajo dos claves
+    // (por ceros a la izquierda) antes de que la normalización en la fuente lo impidiera.
+    // Solo cuenta y anota; no toca un solo dato del médico.
+    try {
+      if (localStorage.getItem("vgl_v1748_dupdoc") !== "1") {
+        localStorage.setItem("vgl_v1748_dupdoc", "1");
+        _vglRevisarClavesDuplicadas();
+      }
+    } catch (e) {}
     try {
       const killActivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_active", false)) === true;
       const bypass = (typeof localStorage !== "undefined" && localStorage.getItem("vgl_override_kill") === "1") ||
@@ -25303,6 +27944,7 @@ _vglOfrecerDeshacer(btn);
     // sugiere al médico, una vez al día, la excepción "mantener siempre activo este sitio".
     try { _avisarPestanaDescartada(); } catch (e) {}
     try { _vglTipInstalar(); } catch (e) {}   // v14.3.0 — burbujas de información de los modales
+    try { _cwfInstalarEscucha(); } catch (e) {}  // v17.24.0 — repinta el widget de farmacia de Conducta tras reformular
     try { vglMinInstalar(); } catch (e) {}    // v16.7.0 — botón «—» en todos los módulos: minimizar sin perder lo llenado
     try { _vglDeadmanRevisar(); } catch (e) {}   // v17.0.0 — ¿cuánto llevamos sin servidor de control?
     try { vglCarpetaRestaurar(); } catch (e) {}  // v17.0.1 — la carpeta del médico sobrevive a la recarga
@@ -25341,6 +27983,15 @@ _vglOfrecerDeshacer(btn);
         }
       } catch (e) {}
     }, 12000);
+    // v17.49.0 (D4) — VACIADO AL ARRANCAR. Hasta hoy solo habia dos disparadores de
+    // repFlush: este intervalo, que dispara por PRIMERA vez en el minuto 10, y la llamada
+    // de dentro de reportar() al encolar algo nuevo (que ademas se salta si hubo un fallo
+    // hace menos de 3 min). Asi que la evidencia que quedo de ayer esperaba hasta diez
+    // minutos de pestaña abierta, o hasta que ocurriera un evento nuevo. Ahora que la
+    // evidencia SOLO sale por este camino (ya no se beaconea al cerrar), "se reintenta al
+    // arrancar" tiene que ser literal. A los 8 s, no en el instante 0: es el mismo respeto
+    // por el arranque que ya tienen la fila de entorno (12 s) y el autochequeo del embudo.
+    const tRepBoot = setTimeout(_repVaciadoDeArranque, 8000);
     const tRepFlush = setInterval(repFlush, 600000);
     // v12.5.0 — telemetría de uso del panel: la ventana pendiente de otro día sale al
     // arrancar (45 s, tras estabilizarse el liderazgo) y luego una fila agregada cada
@@ -25357,7 +28008,7 @@ _vglOfrecerDeshacer(btn);
     try { _instalarOyenteTablaOficial(); } catch (e) {}
     const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
     if (Array.isArray(state.timers)) {
-      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
       // v15.x — Sin esto, emergencyTeardown() NO podia cancelarlos: el kill-switch retiraba
       // la interfaz y anunciaba "Pausa de seguridad remota activa" mientras la pestaña seguia
       // consultando SharePoint y desempacando el libro de PyM cada 10 min, indefinidamente.
@@ -25906,9 +28557,24 @@ _vglOfrecerDeshacer(btn);
       dias: (typeof a.diasParaVencer === "number") ? a.diasParaVencer : null,
       vigenciaDias: a.vigenciaDias == null ? null : a.vigenciaDias,
       estado: a.estado, subestado: a.subestado || "", quePasa: quePasa,
+      // v17.29.0 — REPORTE EN VIVO (28-ago): un RAC≥30 vencido se veía en ámbar, no en
+      // rojo, porque se reclasifica a estado "R"/subestado "albuminuria" y ningún
+      // consumidor de esta fila podía distinguirlo de un examen que de verdad todavía
+      // no vence — `vencidoBase` (la verdad de terreno) no viajaba en el objeto. Se
+      // agrega para que cualquier pantalla que pinte "vencido = rojo" pueda hacerlo
+      // también para la RAC relabeleada, sin inventar un color nuevo para ella.
+      vencidoBase: !!a.vencidoBase,
     });
     const ordenar = (plan.ordenar || []).map((a) => {
       if (a.subestado === "sin_historial") return fila(a, "Nunca se le ha tomado");
+      // v17.6.87 — hay resultado pero sin fecha. Antes caía en la rama de arriba y se le
+      // decía al médico "Nunca se le ha tomado" de un examen que SÍ está hecho y cuyo
+      // resultado puede ser crítico. Se muestra el valor para que lo vea, y se dice por qué
+      // se vuelve a pedir: sin fecha no hay forma de saber si sigue vigente.
+      if (a.subestado === "sin_fecha") {
+        return fila(a, "Hay un resultado (" + (a.valor != null ? a.valor : "sin valor legible")
+          + ") pero sin fecha: no se puede saber si sigue vigente");
+      }
       if (a.subestado === "vencido") return fila(a, "Venció el " + mtrFechaLegible(a.vence));
       // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora llega aquí con
       // estado "R"/subestado "albuminuria" (ya no "vencido") — sin este caso, el texto
@@ -25940,6 +28606,11 @@ _vglOfrecerDeshacer(btn);
       // `f.diabetes` vivía en esta función, sin salir de aquí. Mismo campo y misma
       // fórmula que ya usan esDm2 en mtrResumenClinico/mtrFueraDeMeta.
       esDm2: !!f.diabetes,
+      // v17.6.94 — el tiempo de evolución de la diabetes, y si la clasificación lo está
+      // esperando. Mismo motivo que `esDm2`: el Panel no puede pintar la fila —ni saber
+      // que debe pedirla— si el dato no sale de aquí.
+      dmAnios: (mtrFloat(f.dmAnios) !== null ? mtrFloat(f.dmAnios) : null),
+      dmAniosRequerido: riesgo.dmAniosRequerido === true,
     };
   }
 
@@ -26023,6 +28694,20 @@ _vglOfrecerDeshacer(btn);
       nuevo._embarazo = (r._embarazo !== undefined ? r._embarazo : null);
       if (Array.isArray(r.medicamentos)) nuevo.medicamentos = r.medicamentos.slice();
       else if (r.medicamentos === null) nuevo.medicamentos = null;   // «no se pudo leer» se conserva
+      // v17.6.86 — auditoría v68 (S4, "MEDS: genérico+dosis+frecuencia; falta -> [DOSIS NO
+      // ESPECIFICADA]"). El mapa de frecuencias NO se copiaba, aunque `medicamentos` sí. El
+      // marcador que v17.6.66 construyó para impedir que la IA invente una posología duraba
+      // lo que tardara el médico en escribir el peso o la tensión en el Panel: al
+      // reclasificar, `mtrJsonV68DesdeResumen` dejaba de recibir el mapa y emitía los
+      // medicamentos SIN el marcador. Verificado con el harness, misma hoja en las dos
+      // llamadas: antes ["ATORVASTATINA 80 MG [DOSIS NO ESPECIFICADA]", …], después
+      // ["ATORVASTATINA 80 MG", …]. La nota que el médico copia a la historia quedaba sin
+      // las frecuencias Y sin la advertencia de que faltaban — el peor de los dos mundos,
+      // porque nadie ve que se perdió. Mismo trato que `medicamentos`: un Map vacío es un
+      // dato ("se preguntó y no hay frecuencias"), distinto de `undefined` ("no se preguntó").
+      if (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function") {
+        nuevo.medicamentosFrecuencia = r.medicamentosFrecuencia;
+      }
     } catch (e) {}
     return nuevo;
   }
@@ -28962,6 +31647,7 @@ _vglOfrecerDeshacer(btn);
       const a = mtrAlertaInteraccion(mtrUnirFarmacos.apply(null, pares),
         r.codigo, r.conducta, r.mensaje, r.severidad, r.mecanismo);
       a.fuente = r.fuente;
+      a.titulo = r.titulo;
       alertas.push(a);
     }
 
@@ -29103,12 +31789,24 @@ _vglOfrecerDeshacer(btn);
     FUERA_DE_GRUPO: "Fuera de grupo reconocido",
   };
 
+  // v17.26.0 — bug reportado en vivo (28-ago): los 17 códigos del catálogo RCV
+  // (mtrEvaluarConCatalogoRcv) no estaban en el mapa de arriba y se veía el código
+  // crudo (p. ej. "AINE_RAAS") en la UI. El catálogo YA trae un `titulo` legible y
+  // con fuente (BNF) por cada interacción — mtrEvaluarConCatalogoRcv lo copia al
+  // aviso (`a.titulo = r.titulo`) y aquí se prefiere sobre el mapa de códigos, que
+  // queda como respaldo para los avisos del Copiloto original (sin `titulo` propio).
   function mtrEtiquetaAviso(a) {
+    if (a.titulo) return String(a.titulo);
     if (a.tipo_interaccion) {
       return MTR_ETIQUETA_INTERACCION[a.tipo_interaccion] || String(a.tipo_interaccion);
     }
     return String(a.medicamento_detectado || a.principio_activo || "");
   }
+
+  // v17.26.0 — mismo bug: "CAP_DOSIS" (conducta interna de mtrAlerta, 18 sitios en
+  // el Copiloto de dosis renal) se veía crudo en la UI. Traducción solo para
+  // mostrar — ninguno de los 18 sitios que pasan "CAP_DOSIS" como lógica se toca.
+  const MTR_CONDUCTA_ETIQUETA = { CAP_DOSIS: "TOPE DE DOSIS" };
 
   // Pinta un aviso. `escapeHtml` en TODO lo que venga de fuera.
   function mtrPintarAviso(a) {
@@ -29124,7 +31822,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-mtr-cab">
           <span class="vgl-mtr-ico">${icono}</span>
           <span class="vgl-mtr-tit">${escapeHtml(mtrEtiquetaAviso(a))}</span>
-          <span class="vgl-mtr-conducta">${escapeHtml(String(a.conducta || ""))}</span>
+          <span class="vgl-mtr-conducta">${escapeHtml(MTR_CONDUCTA_ETIQUETA[String(a.conducta || "")] || String(a.conducta || ""))}</span>
         </div>
         <div class="vgl-mtr-msg">${escapeHtml(String(a.mensaje || ""))}</div>
         ${pares}${mecanismo}
@@ -29197,7 +31895,15 @@ _vglOfrecerDeshacer(btn);
     "moderado": { ldl: 100, cnoHdl: 130, reduccion: null },
     "bajo": { ldl: 116, cnoHdl: 150, reduccion: null },
   };
-  const MTR_META_TRIGLICERIDOS = 150;
+  // v17.29.0 — ENCARGO DEL MÉDICO (28-ago): "vamos a repetir los triglicéridos mayor a
+  // 400, ya no en 200" — la meta base de 150 (con el margen del 15-30% que ya usa el
+  // resto del motor) hacía que "grave" cayera cerca de 195-200. Sube a 400: con el
+  // mismo +30% de siempre, el rojo de tendencias (_mtrTendUmbralGrave) queda cerca de
+  // 520, alineado con el umbral clínico de riesgo de pancreatitis (TG≥500) que ya
+  // menciona el prompt de la IA. Ya NO dispara por sí solo la regla del 50% de
+  // vigencia (v17.28.0, mismo día) — esto solo afecta dónde se pinta "fuera de meta"/
+  // "grave" en la tendencia y en mtrFueraDeMeta si algún día vuelve a usarse.
+  const MTR_META_TRIGLICERIDOS = 400;
 
   function mtrEsSexoFemenino(sexo) {
     const s = String(sexo == null ? "" : sexo).trim().toUpperCase();
@@ -29269,7 +31975,15 @@ _vglOfrecerDeshacer(btn);
     if (x.prediabetesSdMetabolico) fr.push("prediabetes/Sd. metabólico");
     if (x.sedentarismo) fr.push("sedentarismo");
     const imc = mtrFloat(x.imc);
-    if (x.obesidad || (imc !== null && imc >= 30) || x.circunferenciaAbdElevada) fr.push("obesidad");
+    // v17.6.97 — `circunferenciaAbdElevada` era un booleano que NO ALIMENTABA NADIE, así
+    // que la obesidad solo podía contarse por IMC. Ahora se deriva de la cintura leída
+    // del DOM con el umbral del consenso, que NO es el mismo del síndrome metabólico:
+    // v68 dice «obesidad(IMC>=30 o CA>94H/>90M)» aquí, y «CA>=90H/>=80M» allá. Son dos
+    // reglas distintas de la misma medida y se respetan las dos tal como están escritas.
+    const _caFr = mtrFloat(x.cinturaCm);
+    const _caElevadaFr = x.circunferenciaAbdElevada === true
+      || (_caFr !== null && ((mtrEsSexoMasculino(x.sexo) && _caFr > 94) || (mtrEsSexoFemenino(x.sexo) && _caFr > 90)));
+    if (x.obesidad || (imc !== null && imc >= 30) || _caElevadaFr) fr.push("obesidad");
     if (x.masld) fr.push("MASLD (hígado graso)");
     if (x.apneaSueno) fr.push("apnea del sueño");
     if (x.hiperuricemia) fr.push("hiperuricemia");
@@ -29306,7 +32020,11 @@ _vglOfrecerDeshacer(btn);
     const cintura = mtrFloat(x.cinturaCm);
     if (cintura !== null && (esF || esM)) {
       evaluables++;
-      if ((esM && cintura > 90) || (esF && cintura > 80)) criterios.push("cintura elevada (" + cintura + " cm)");
+      // v17.6.97 — el consenso dice «CA>=90H/>=80M», con MAYOR O IGUAL (S2, FR MAYORES
+      // del spec). Aquí estaba con mayor estricto, así que un hombre de exactamente
+      // 90 cm no sumaba el criterio que la norma sí le cuenta. Afecta solo al valor
+      // justo en el borde, pero el borde es donde se decide.
+      if ((esM && cintura >= 90) || (esF && cintura >= 80)) criterios.push("cintura elevada (" + cintura + " cm)");
     }
     const tg = mtrFloat(x.trigliceridos);
     if (tg !== null) {
@@ -29343,6 +32061,52 @@ _vglOfrecerDeshacer(btn);
   }
 
   // ---------- POTENCIADORES (PASO 3) ----------
+  // =====================================================================
+  //  v17.6.94 — TIEMPO DE EVOLUCIÓN DE LA DIABETES
+  //  ------------------------------------------------------------------
+  //  El consenso usa el tiempo de evolución en DOS sitios y con DOS umbrales
+  //  distintos, y hasta esta versión ninguno de los dos podía dispararse porque
+  //  `dmAnios`/`dmLargaDuracion` no los alimentaba NADIE (Everest no tiene campo
+  //  para «desde cuándo es diabético»):
+  //
+  //    · Paso 1 (MUY ALTO): «DM con daño de órgano blanco o CONTEO>=3 o LARGA DURACIÓN»
+  //    · Paso 2 (ALTO):     «DM + CONTEO>=1 y >10 AÑOS»
+  //
+  //  Si «larga duración» significara lo mismo que «>10 años», la cláusula del paso 2
+  //  sería inalcanzable: el paso 1 se lleva a todos antes. Para que las dos vivan,
+  //  «larga duración» tiene que ser un umbral MÁS ALTO. Se fija en 20 años, que es
+  //  el corte que usan el consenso colombiano y la guía europea para «diabetes de
+  //  larga evolución».
+  //
+  //  ESTO ES UNA LECTURA, NO UNA CITA: el prompt v68 no pone número a «larga
+  //  duración». Se deja en una constante con nombre, a la vista, para que cambiarla
+  //  sea una línea y para que quede claro que es interpretable. Cambia la meta de LDL
+  //  de <70 a <55 en el diabético de muchos años: no es un detalle.
+  const MTR_DM_LARGA_DURACION_ANIOS = 20;
+
+  // ¿Sabemos hace cuánto es diabético? Tri-estado por diseño: para el NO diabético la
+  // pregunta no aplica y se responde `true` (no falta nada). Para el diabético, solo
+  // cuenta un dato REAL — un número de años, o el médico marcando explícitamente que sí
+  // o que no es de larga evolución. Sin eso, «no se sabe», que no es «no la tiene».
+  function mtrDmEvolucionConocida(f) {
+    const x = f || {};
+    if (!x.diabetes) return true;
+    if (mtrFloat(x.dmAnios) !== null) return true;
+    if (x.dmLargaDuracion === true || x.dmLargaDuracion === false) return true;
+    return false;
+  }
+
+  // ¿Es una diabetes de larga evolución? Lo que el médico marca a mano gana sobre el
+  // cálculo; si solo hay años, se compara con la constante de arriba.
+  function mtrDmLargaDuracion(f) {
+    const x = f || {};
+    if (!x.diabetes) return false;
+    if (x.dmLargaDuracion === true) return true;
+    if (x.dmLargaDuracion === false) return false;
+    const a = mtrFloat(x.dmAnios);
+    return a !== null && a >= MTR_DM_LARGA_DURACION_ANIOS;
+  }
+
   function mtrContarPotenciadores(f, conteoFr) {
     const x = f || {};
     const pot = [];
@@ -29357,8 +32121,17 @@ _vglOfrecerDeshacer(btn);
     const rac = mtrFloat(x.rac);
     if (rac !== null && rac > 30) pot.push("RAC>30");
     if (x.condicionesEspecificasMujer) pot.push("condiciones específicas de la mujer");
-    const dmAnios = mtrFloat(x.dmAnios);
-    if (x.diabetes && dmAnios !== null && dmAnios < 10 && conteoFr === 0) pot.push("diabetes <10 años sin FR");
+    // v17.6.94 — DIVERGENCIA DECLARADA con v68, y es una corrección de un hueco suyo.
+    // El paso 3 del consenso dice «DM<10a sin FR». Medido con el harness: un diabético de
+    // 12 años SIN ningún factor de riesgo mayor no lo recoge el paso 1 (no hay daño de
+    // órgano, CONTEO=0, no llega a larga duración), no lo recoge el paso 2 (exige
+    // CONTEO>=1) y el paso 3 lo deja fuera por pasar de 10 — así que cae al paso 4 y sale
+    // **BAJO**, mientras que el MISMO paciente con 5 años de diabetes sale MODERADO.
+    // Tener la enfermedad hace más tiempo lo bajaba de categoría: eso no es una regla,
+    // es un hueco de redacción. Aquí el potenciador es «diabetes sin FR mayores», sin
+    // techo de años. No baja a nadie: los de <10 años puntúan igual que antes, y los que
+    // ya subían por los pasos 1 o 2 ni siquiera llegan hasta aquí.
+    if (x.diabetes && conteoFr === 0) pot.push("diabetes sin otros factores de riesgo mayores");
     if (x.pobrezaMultidimensional) pot.push("pobreza multidimensional");
     return { conteo: pot.length, lista: pot };
   }
@@ -29379,7 +32152,7 @@ _vglOfrecerDeshacer(btn);
     if (rac !== null && rac >= 300) c.push("Macroalbuminuria severa (RAC>=300 mg/g)");
     if (x.diabetes) {
       const danoOrgano = (rac !== null && rac >= 30) || !!x.retinopatia || !!x.neuropatia;
-      if (danoOrgano || conteoFr >= 3 || x.dmLargaDuracion) {
+      if (danoOrgano || conteoFr >= 3 || mtrDmLargaDuracion(x)) {
         c.push("Diabetes con daño de órgano blanco / FR>=3 / larga duración");
       }
     }
@@ -29404,6 +32177,20 @@ _vglOfrecerDeshacer(btn);
     if (x.hfHeterocigota && conteoFr === 0) c.push("HF heterocigota sin otros FR");
     const egfr = mtrFloat(x.egfrCkdepi);
     if (egfr !== null && egfr > 30 && egfr < 60) c.push("ERC eGFR 30-60 (G3a-G3b)");
+    // v17.52.0 (decision D7, 29-ago) — LA ALBUMINURIA ENTRA COMO EJE PROPIO.
+    // Hasta hoy la albuminuria solo pesaba de dos formas: la severa (RAC>=300) subia sola a
+    // MUY ALTO en el paso 1, y la moderada (RAC>=30) contaba SOLO como dano de organo blanco
+    // DENTRO de la rama de diabetes. Es decir: un hipertenso no diabetico con RAC 45 no subia
+    // de categoria por su albuminuria. El eje CGA de KDIGO la trata como eje independiente
+    // del filtrado y del diagnostico de base, y el medico eligio la opcion estricta:
+    // "A2 (30-300) sube a ALTO por si sola".
+    // Va DESPUES del filtrado a proposito: si el paciente ya cumple un criterio del paso 1
+    // (RAC>=300 incluido), este ni se consulta — el clasificador para en el primer paso que
+    // se cumple.
+    // Y exige rac !== null: un RAC que nadie midio NO es un RAC normal. Casilla vacia antes
+    // que dato inventado, aplicado a la clasificacion.
+    const racA2 = mtrFloat(x.rac);
+    if (racA2 !== null && racA2 >= 30 && racA2 < 300) c.push("Albuminuria moderada (RAC 30-299 mg/g, A2)");
     return c;
   }
 
@@ -29448,15 +32235,25 @@ _vglOfrecerDeshacer(btn);
     //
     // Es un PISO, no un valor fijo (confirmado con él): el paso 1 sigue mandando, así que
     // un diabético con daño de órgano blanco, ECV establecida o TFG<=30 sigue subiendo a
-    // MUY ALTO con meta <55. Lo que se elimina es la posibilidad de que un diabético caiga
-    // a "moderado" o "bajo" por el paso 4 — que es lo que ocurría siempre, porque las dos
-    // reglas de diabetes de los pasos 1 y 2 dependen de `dmAnios`/`dmLargaDuracion`, dos
-    // campos que en producción NO LOS ALIMENTA NADIE (auditoría del 20-ago): estaban
-    // muertos, y con ellos la única vía por la que un diabético subía de categoría.
-    if (x.diabetes) {
+    // MUY ALTO con meta <55.
+    //
+    // v17.6.94 — EL PISO DEJA DE SER INCONDICIONAL. Decisión del médico (27-ago): quitarlo
+    // Y añadir la casilla del tiempo de evolución, las dos mitades juntas. La razón por la
+    // que existía está escrita en su propio comentario original: las dos reglas de diabetes
+    // de los pasos 1 y 2 dependen de `dmAnios`/`dmLargaDuracion`, y en producción NO LOS
+    // ALIMENTABA NADIE. El piso no corregía una regla del consenso: tapaba una ceguera de
+    // datos. Con el dato ya no hay nada que tapar y el consenso clasifica de verdad.
+    //
+    // Sin el dato el piso sigue entero — y ESO ES LO QUE LO HACE SEGURO. Medido con el
+    // harness antes de tocar nada, quitándolo a secas: un hombre de 60 años con DM2 + HTA
+    // pasa de ALTO (<70) a MODERADO (<100), y uno de 52 con DM2 sola pasa de ALTO a
+    // **BAJO** (<116). Eso no es fidelidad al consenso, es perder al paciente por un campo
+    // vacío. Así que el piso se aplica solo cuando NO SE SABE, se marca como lo que es
+    // —provisional— y PIDE el dato en vez de callarse (ver `mtrSolicitudV68`).
+    if (x.diabetes && !mtrDmEvolucionConocida(x)) {
       return Object.assign({}, base, {
-        categoria: "alto", paso: 2, pisoPorDiabetes: true,
-        criterios: c2.concat(["Diabetes mellitus (piso institucional: riesgo ALTO como mínimo, independiente de otros factores)"]),
+        categoria: "alto", paso: 2, pisoPorDiabetes: true, dmAniosRequerido: true,
+        criterios: c2.concat(["Diabetes mellitus sin tiempo de evolución registrado (piso provisional: riesgo ALTO como mínimo mientras falte ese dato)"]),
       });
     }
 
@@ -29558,12 +32355,24 @@ _vglOfrecerDeshacer(btn);
     else if (bajoMeta && cumpleReduccion) estado = "en_meta";
     else if (bajoMeta || cumpleReduccion) estado = "meta_parcial";
     else estado = "fuera_de_meta";
-    // FALLA terapéutica según la norma: actual > meta + 15%.
-    const falla = actual > metas.ldl * 1.15;
-    const fallaGrave = actual > metas.ldl * 1.30;
+    // v17.54.0 — ESTOS DOS LITERALES ERAN UNA CUARTA PUERTA, y no pasaba por la constante.
+    // Hasta hoy `1.15` y `1.30` estaban escritos a mano aqui, duplicando MTR_FALLA_UMBRAL y
+    // MTR_FALLA_GRAVE_UMBRAL. Cambiar la constante sin cambiar esto habria hecho que el plan
+    // de examenes y la HOJA EDUCATIVA QUE EL PACIENTE SE LLEVA IMPRESA (que se alimenta de
+    // `meta.falla` via mtrEducationFlags) dijeran cosas distintas del mismo paciente. Ahora
+    // los cuatro caminos leen el mismo numero.
+    const falla = actual > metas.ldl * (1 + _mtrMargenMeta());
+    // v17.55.0 — SE RETIRA `fallaGrave` DE AQUÍ. Con la D10, «grave» deja de ser un
+    // porcentaje y pasa a ser la regla renal (riesgo alto + TFG<45 + edad<75), que esta
+    // función NO puede evaluar: no recibe ni el filtrado ni la edad. Seguir emitiendo un
+    // campo llamado `fallaGrave` que significa otra cosa que el «grave» del resto del motor
+    // sería crear DOS VERDADES sobre el mismo paciente — el mismo defecto que la v17.6.83
+    // documentó y corrigió con las banderas educativas. Sus dos únicos consumidores lo leían
+    // en un OR con `falla`, y `fallaGrave` siempre implicaba `falla`, así que quitarlo no
+    // cambia el resultado de ninguno.
     return {
       metas: metas, estado: estado, enMeta: estado === "en_meta",
-      reduccionPct: reduccion, falla: falla, fallaGrave: fallaGrave,
+      reduccionPct: reduccion, falla: falla,
       ldlActual: actual,
     };
   }
@@ -29701,22 +32510,38 @@ _vglOfrecerDeshacer(btn);
     // fuente del clasificador (advertencia del médico: "no siempre son verídicas").
     // La lee aparte, por su cuenta, mtrDiscrepanciasDeFuentes vía su llamador — aquí
     // ya no se consulta (v17.6.10: solo alimentaba un contador muerto).
-    // v16.3.2 — Lo que el médico CONFIRMÓ con un clic en el reconciliador manda sobre
-    // todo lo demás: es la única fuente donde él respondió la pregunta directamente.
-    // Decisión suya: la confirmación vale la jornada Y las siguientes citas. Si la
-    // pantalla contradice una confirmación, gana la confirmación para los cálculos;
-    // la historia es el documento legal y quien debe corregirla es él, no este script
-    // (v17.6.10: el anotador _confirmadoContraHistoria de ese choque se retiró, no lo
-    // leía nada en producción — la reconciliación en sí sigue intacta).
+    // v16.3.2 — Lo que el médico CONFIRMÓ con un clic en el reconciliador rellena lo que
+    // la historia no dice: es la única fuente donde él respondió la pregunta directamente.
+    // Decisión suya: la confirmación vale la jornada Y las siguientes citas.
+    //
+    // v17.7.0 — REPORTE EN CONSULTA (27-ago): «me está mostrando que yo no marqué la
+    // hipertensión pero sí la marqué». Hasta aquí la confirmación pisaba la pantalla SIEMPRE,
+    // en silencio y sin caducidad: el médico corregía la casilla en Everest y el script
+    // seguía usando la respuesta vieja, sin enterarse siquiera de que la pantalla lo
+    // contradecía. Peor: `leidos` salía ya contaminado y era justo lo que recibía
+    // mtrDiscrepanciasDeFuentes, así que el reconciliador terminaba comparando la respuesta
+    // del médico contra la cabecera, no contra la historia real.
+    //
+    // Decisión del médico (27-ago): MANDA LA PANTALLA Y SE AVISA. Es la regla de la casa
+    // —lo que él escribió a mano no se pisa en silencio— aplicada en la dirección que
+    // faltaba. La confirmación solo rellena casilla vacía; si la historia dice otra cosa,
+    // gana la historia y el choque se reporta en `_confirmacionesDesfasadas` para que el
+    // reconciliador vuelva a preguntar UNA vez en lugar de callarse.
     const confirmados = (typeof _vglConfirmacionesLeer === "function")
       ? _vglConfirmacionesLeer(docIdEsperado) : {};
     const leidos = {};
+    const desfasadas = [];
     // v17.6.10 — los contadores de fuente y el mapa `origen` se retiraron con los
     // campos de trazabilidad muertos (_origen/_dePantalla/_deArchivo/_deCabecera/
     // _confirmadoContraHistoria/_sinDocumentar): nada en producción los leía.
     let documentados = 0, total = 0;
     for (const clave of Object.keys(C)) {
       let v = r(clave);
+      // v17.7.0 — lo que está EN PANTALLA ahora mismo, antes de cualquier respaldo. Es lo
+      // único que puede contradecir una confirmación del médico: un valor archivado de una
+      // pestaña que él visitó hace rato no es «la historia que tiene delante», y tratarlo
+      // como tal deja el cuadro preguntando lo mismo para siempre (lo cazó suite_63).
+      const vPantalla = v;
       if (v === null || v === undefined) {
         const a = archivados[clave];
         if (a === true || a === false) { v = a; }
@@ -29729,7 +32554,12 @@ _vglOfrecerDeshacer(btn);
       }
       const conf = confirmados[clave];
       if (conf && (conf.v === true || conf.v === false)) {
-        v = conf.v;
+        if (vPantalla === true || vPantalla === false) {
+          if (vPantalla !== conf.v) desfasadas.push(clave);   // la pantalla manda, y se avisa
+          v = vPantalla;
+        } else {
+          v = conf.v;                 // la historia no dice nada: su respuesta rellena el hueco
+        }
       }
       leidos[clave] = v;
       total++;
@@ -29777,6 +32607,10 @@ _vglOfrecerDeshacer(btn);
       apneaSueno: false,      // nunca se da por diagnosticada desde síntomas
       // --- trazabilidad: qué se pudo leer y qué no ---
       _leidos: leidos,
+      // v17.7.0 — las claves donde una confirmación vieja del médico ya NO coincide con lo
+      // que hay escrito en la historia de hoy. Manda la historia; esta lista existe para que
+      // el reconciliador pueda volver a preguntar por ellas en vez de darlas por zanjadas.
+      _confirmacionesDesfasadas: desfasadas,
       _documentados: documentados,
       _total: total,
       _fuente: "DOM Everest (mapa del 2026-08-14) + contexto archivado de las pestañas ya visitadas",
@@ -30068,7 +32902,17 @@ _vglOfrecerDeshacer(btn);
       // usa la vía legacy (estadioRenalDelPaciente:sexoAusente, línea ~15930): quien
       // consuma este resultado puede avisar "esto sobreestima la TFG" en vez de mostrar el
       // número crudo como si el dato fuera real.
-      sexoAusente: (d.sexo === null || d.sexo === undefined || d.sexo === ""),
+      // v17.6.85 — la guarda solo cazaba la cadena VACÍA, y eso dejaba una mina: un valor
+      // presente pero no reconocible ("0", "1", "2", "Indeterminado", "N/A"…) hacía que
+      // `mtrEsSexoFemenino` diera false, la TFG se calculara COMO HOMBRE, y encima
+      // `sexoAusente` saliera FALSE — el script afirmaba tener el dato. Verificado con el
+      // harness sobre {edad:70, peso:70, creat:1.0}: "0" -> CrCl 68.1 (G2) con
+      // sexoAusente:false, frente a "F" -> 57.8 (G3a). Es PEOR que el caso vacío, porque el
+      // vacío al menos levantaba la bandera. Y es exactamente donde caería una fuente nueva
+      // leída de un <select> de Angular, cuyo `.value` suele ser "0"/"1" — se cambiaría un
+      // fallo silencioso por otro peor. La guarda correcta no es "¿está vacío?" sino
+      // "¿lo reconozco?": si no es ni femenino ni masculino, el sexo NO se tiene.
+      sexoAusente: (!mtrEsSexoFemenino(d.sexo) && !mtrEsSexoMasculino(d.sexo)),
       // v16.0.0 — las entradas viajan con el resultado: el módulo de riesgo reclasifica
       // en vivo con los datos nuevos de pantalla SIN volver a consultar laboratorios.
       entradas: { edad: edad, peso: peso, creatinina: creat, sexo: d.sexo == null ? "" : String(d.sexo) },
@@ -30161,7 +33005,17 @@ _vglOfrecerDeshacer(btn);
 
   // ¿Consta que este médico trabaja sábados? Se responde con lo OBSERVADO (agendas
   // propias vistas en sábado), nunca con una tabla de IDs que envejece.
+  //
+  // v17.6.93 — este objeto es EL QUE VIAJA al motor (ver `grupoSabado:` en el contexto
+  // de mtrResumenClinico) y hasta ahora se dejaba por el camino tres datos que sí tiene
+  // `mtrSabadoGrupoDeMedico`: el grupo con su nombre propio, la CONFIANZA de la deducción
+  // y si salió en CONFLICTO. Sin esos tres, `mtrGrupoSabadoFiable` no puede distinguir
+  // «grupo deducido con datos coherentes» de «grupo adivinado con una sola observación»,
+  // y se quedaría siempre en null: la regla de grupo quedaría escrita y sin cablear —
+  // exactamente el fallo que la propia auditoría de v17.0.1 encontró aquí mismo.
   function mtrSabadoTrabajaEsteMedico(medicoId) {
+    const vacio = { habilitado: false, observados: [], origen: null, grupoDeducido: null,
+                    grupo: null, confianza: "sin_datos", conflicto: false };
     try {
       const info = mtrSabadoGrupoDeMedico(medicoId) || {};
       const obs = Array.isArray(info.observados) ? info.observados : [];
@@ -30169,9 +33023,12 @@ _vglOfrecerDeshacer(btn);
         habilitado: obs.length > 0 || info.origen === "manual",
         observados: obs,
         origen: info.origen || null,
-        grupoDeducido: info.grupo || null,        // informativo: ya no decide nada
+        grupoDeducido: info.grupo || null,        // nombre histórico, se conserva por compatibilidad
+        grupo: info.grupo || null,
+        confianza: info.confianza || "sin_datos",
+        conflicto: info.conflicto === true,
       };
-    } catch (e) { return { habilitado: false, observados: [], origen: null, grupoDeducido: null }; }
+    } catch (e) { return vacio; }
   }
 
   function mtrMedicoTrabajaSabado(iso, grupo) {
@@ -30299,6 +33156,35 @@ _vglOfrecerDeshacer(btn);
 
   // ¿Puede caer una CITA DE CONTROL este día?
   // L-V sí (salvo festivo). Domingo nunca. Sábado solo si le toca a este médico.
+  // v17.6.93 — ¿Se puede confiar en el grupo de sábados de este médico? Devuelve "1-3"/"2-4"
+  // SOLO cuando la deducción es concluyente, y null en todo lo demás (conflicto, conjetura
+  // con pocas observaciones, sin datos, o un booleano suelto del modelo viejo).
+  //
+  // Existe por la historia de esta regla, que conviene no repetir: la de grupos se cableó,
+  // se probó contra la agenda real del médico el 20-ago y se RETIRÓ porque le tachaba
+  // sábados en los que sí tenía agenda — su deducción salió en CONFLICTO (agendas suyas en
+  // sábados de los dos grupos) y con la regla activa eso deja CERO sábados ofrecidos.
+  // Medido con el harness sobre septiembre de 2026: con grupo 1-3 se ofrecen 2 de 4 sábados;
+  // con la deducción en conflicto, ninguno.
+  //
+  // Decisión del médico (27-ago), tras ver esa medición: el grupo manda cuando la deducción
+  // es fiable, y cuando no lo es se cae a la regla de hoy en vez de castigarlo por un dato
+  // ambiguo. Una "conjetura" (menos observaciones de las que el propio motor exige para
+  // deducir) NO se considera fiable: quitarle un sábado a alguien por una corazonada es
+  // exactamente lo que ya falló una vez.
+  // Se exige constancia POSITIVA de fiabilidad («deducido» o «manual»): un objeto que
+  // nombra un grupo pero no dice de dónde salió no basta. La duda se resuelve siempre
+  // hacia ofrecer el sábado, nunca hacia esconderlo.
+  const MTR_SAB_CONFIANZAS_FIABLES = ["deducido", "manual"];
+  function mtrGrupoSabadoFiable(grupoSabado) {
+    const x = grupoSabado;
+    if (!x || typeof x !== "object") return null;      // string/booleano: modelo viejo, sin grupo fiable
+    if (x.conflicto === true) return null;
+    if (MTR_SAB_CONFIANZAS_FIABLES.indexOf(x.confianza) < 0) return null;
+    const g = String(x.grupo == null ? "" : x.grupo).trim();
+    return (g === MTR_SAB_GRUPO_13 || g === MTR_SAB_GRUPO_24) ? g : null;
+  }
+
   // `grupoSabado` en null => los sábados quedan fuera (no se propone lo que no
   // se sabe; la interfaz los ofrece aparte como "por confirmar").
   function mtrDiaValidoParaControlConSabado(iso, grupoSabado) {
@@ -30310,7 +33196,22 @@ _vglOfrecerDeshacer(btn);
     // v16.9.0 — regla única: basta con que conste que el médico trabaja sábados. Antes
     // se exigía además que ESE sábado cayera en "su" grupo, y eso tachaba sábados en los
     // que sí tiene agenda (deducción en conflicto con datos reales del 20-ago).
-    if (d === 6) return mtrSabadosHabilitados(grupoSabado);
+    //
+    // v17.6.93 — decisión del médico del 27-ago: el grupo vuelve, pero SOLO cuando la
+    // deducción es fiable. Sigue mandando primero lo de v16.9.0 (si no consta que trabaja
+    // sábados, no se propone ninguno); y si consta, se afina con el grupo cuando se puede
+    // confiar en él. Con la deducción en conflicto o en conjetura se ofrecen todos, que es
+    // el comportamiento de v16.9.0 — se prefiere ofrecer un sábado de más, que el médico
+    // descarta de un vistazo, a esconderle uno en el que sí trabaja.
+    if (d === 6) {
+      if (!mtrSabadosHabilitados(grupoSabado)) return false;
+      const g = mtrGrupoSabadoFiable(grupoSabado);
+      if (g === null) return true;                     // trabaja sábados, pero el grupo no es fiable
+      const suyo = mtrMedicoTrabajaSabado(iso, g);
+      // `null` = 5º sábado del mes, que no pertenece a ningún grupo: no se descarta, por la
+      // misma razón de arriba (no esconder un día en el que puede tener agenda).
+      return suyo === null ? true : suyo;
+    }
     return true;
   }
 
@@ -30475,14 +33376,36 @@ _vglOfrecerDeshacer(btn);
   // real para quien lo lee después. Hoy tienen meta:
   //   · LDL         -> MTR_METAS_LIPIDICAS[categoría de riesgo]
   //   · No-HDL      -> idem (no se evalúa aquí: no es un analito propio)
-  //   · Triglicéridos -> MTR_META_TRIGLICERIDOS (150)
   //   · HbA1c       -> MTR_HBA1C_META_DM2 (7,0) o la meta individual del paciente
-  // NO tienen meta definida y por tanto NO se acortan: glicemia, colesterol
-  // total, HDL, creatinina, hemoglobina, PTH, fósforo, albúmina, uroanálisis.
-  // El RAC queda FUERA a propósito: ya tiene su propio acortamiento por
-  // albuminuria (mtrAcortarRacSiAlbuminuria + MTR_RAC_OVERRIDE_DIAS), y aplicarle
-  // las dos reglas lo partiría dos veces.
-  const MTR_CLAVES_CON_META = ["COLESTEROL_LDL", "TRIGLICERIDOS", "HBA1C"];
+  //   · Glicemia    -> MTR_GLICEMIA_META_DM2 (130), solo en diabéticos (v17.28.0)
+  // NO tienen meta definida y por tanto NO se acortan: colesterol total, HDL,
+  // creatinina, hemoglobina, PTH, fósforo, albúmina, uroanálisis.
+  //
+  // v17.28.0 — ENCARGO DEL MÉDICO (28-ago): «los únicos exámenes que se repiten al 50% de
+  // su vigencia por estar fuera de metas son LDL (arrastra el perfil lipídico completo),
+  // glicemia >130, HbA1c según el grupo etario, RAC >30 y TFG <60 por Cockcroft-Gault; de
+  // resto, ningún otro laboratorio se repite antes de su vigencia natural». Tres cambios
+  // de los cinco:
+  //   1. TRIGLICÉRIDOS SALE de esta lista — el médico fue explícito: no debe disparar por
+  //      sí solo, solo arrastrarse con el grupo lipídico. El arrastre de grupo
+  //      (MTR_GRUPO_LIPIDOS, más abajo en mtrPlanParaclinicos) es un mecanismo
+  //      INDEPENDIENTE de esta lista — quitar TRIGLICERIDOS de aquí no le quita nada al
+  //      arrastre, solo le quita el disparo POR SU CUENTA.
+  //   2. GLICEMIA ENTRA — antes deliberadamente excluida ("no tiene meta definida"); ahora
+  //      sí la tiene (MTR_GLICEMIA_META_DM2, la misma que ya usa el eje de falla
+  //      terapéutica desde v17.6.84), así que entra con el mismo margen del 15% que ya
+  //      usan LDL/HbA1c ("una sola vara", decisión del médico del 20-ago) — dispara sobre
+  //      130*1,15 ≈ 149,5, no sobre 130 exactos. Solo en diabéticos, igual que HbA1c.
+  //   3. RAC y TFG/CREATININA NO ENTRAN todavía — ambos YA tienen su propio mecanismo de
+  //      acortamiento (RAC: override plano a 90 días vía MTR_RAC_OVERRIDE_DIAS, más abajo;
+  //      TFG: la tabla MTR_ERC ya reduce la vigencia de creatinina por estadio G3a-G5). El
+  //      `if` de _vigenciaDiasParaAnalito que consulta esta lista hace un `return`
+  //      temprano (línea ~4076): si RAC/CREATININA entraran aquí, ese `return` se
+  //      adelantaría al de sus mecanismos actuales y los REEMPLAZARÍA por completo, no los
+  //      sumaría — cambiando fechas de cita ya medidas y aprobadas sin que nadie lo pidiera
+  //      así. Pendiente de que el médico confirme si esos mecanismos YA cumplen su regla
+  //      (parece que sí, con otra forma) o si de verdad quiere una capa nueva encima.
+  const MTR_CLAVES_CON_META = ["COLESTEROL_LDL", "HBA1C", "GLUCOSA"];
 
   // Devuelve true (fuera de meta), false (en meta) o null (no hay meta que aplicar).
   // v16.4.0 — UN SOLO UMBRAL con la falla terapéutica (decisión del médico, 20-ago):
@@ -30494,8 +33417,8 @@ _vglOfrecerDeshacer(btn);
   function _mtrMargenMeta() {
     // La constante vive más abajo en el archivo; en tiempo de ejecución ya existe, pero
     // esta lectura defensiva evita repetir la zona muerta temporal de la v16.2.6.
-    try { return (typeof MTR_FALLA_UMBRAL === "number") ? MTR_FALLA_UMBRAL : 0.15; }
-    catch (e) { return 0.15; }
+    try { return (typeof MTR_FALLA_UMBRAL === "number") ? MTR_FALLA_UMBRAL : 0; }
+    catch (e) { return 0; }
   }
   function mtrFueraDeMeta(clave, valor, ctx) {
     const c = ctx || {};
@@ -30503,8 +33426,6 @@ _vglOfrecerDeshacer(btn);
     if (v === null) return null;                       // sin resultado no se juzga
     if (MTR_CLAVES_CON_META.indexOf(clave) < 0) return null;
     const margen = 1 + _mtrMargenMeta();
-
-    if (clave === "TRIGLICERIDOS") return v > MTR_META_TRIGLICERIDOS * margen;
 
     if (clave === "COLESTEROL_LDL") {
       const cat = c.categoriaRiesgo || null;
@@ -30521,15 +33442,51 @@ _vglOfrecerDeshacer(btn);
       if (meta === null) return null;
       return v > meta * margen;
     }
+
+    // v17.28.0 — encargo del médico (28-ago): "glicemia >130" entra a la regla del 50%.
+    // Mismo criterio que HbA1c: solo tiene sentido contra una meta glicémica en un
+    // diabético — un hipertenso sin diabetes no tiene "glicemia fuera de meta". Reusa
+    // mtrMetaGlicemiaGeneral() (130 mg/dL), la misma meta que ya usa el eje de falla
+    // terapéutica desde v17.6.84 — un solo número, no dos que puedan divergir.
+    if (clave === "GLUCOSA") {
+      if (!c.esDm2) return null;
+      const meta = (typeof mtrMetaGlicemiaGeneral === "function") ? mtrMetaGlicemiaGeneral() : null;
+      if (meta === null) return null;
+      return v > meta * margen;
+    }
     return null;
   }
 
   // La mitad, nunca menos de 1 día. Se aplica DESPUÉS de colapsar el rango y
   // DESPUÉS del ajuste renal, sobre el número que de verdad se iba a usar.
-  function mtrAcortarPorFueraDeMeta(vigencia, fuera) {
+  //
+  // v17.6.84 — auditoría v68 (S2 "Recontrol: HbA1c mín 90d"), decisión del médico 26-ago
+  // ("Sí, piso de 90 días"): la regla del 50% partía la vigencia de CUALQUIER analito sin
+  // mirar si el resultado seguía siendo interpretable. En ERC G4 la HbA1c vale 120 días, así
+  // que una HbA1c fuera de meta se volvía a pedir a los 60 — por debajo del piso de 90 que el
+  // propio motor ya declara en MTR_RECONTROL.hba1c.pisoDias. En G4 la vida del eritrocito ya
+  // está acortada y la HbA1c es menos fiable: repetirla a los 60 días no es interpretable
+  // como respuesta al tratamiento, gasta un cupo de alto costo y le suma un viaje al
+  // paciente. El piso se lee de MTR_RECONTROL para que viva en UN solo sitio (el mismo del
+  // que sale la fecha de recontrol de la falla terapéutica) y las dos no puedan divergir.
+  // Para el LDL el piso equivalente (28 d) nunca se alcanza con estas vigencias, así que
+  // esta guarda no le cambia nada.
+  // Solo las claves que de verdad pueden acortarse: son las de MTR_CLAVES_CON_META. La
+  // glicemia NO está ahí (mtrFueraDeMeta devuelve null para GLUCOSA), así que no se lista
+  // aquí un piso que nunca se aplicaría — sería código que insinúa un comportamiento que no
+  // existe. Si algún día la glicemia entra en MTR_CLAVES_CON_META, su piso se añade aquí.
+  const MTR_PISO_ACORTAMIENTO = { HBA1C: "hba1c", COLESTEROL_LDL: "ldl" };
+  function mtrAcortarPorFueraDeMeta(vigencia, fuera, clave) {
     if (fuera !== true) return vigencia;
     if (typeof vigencia !== "number" || !isFinite(vigencia)) return vigencia;
-    return Math.max(1, Math.floor(vigencia / 2));
+    const acortada = Math.max(1, Math.floor(vigencia / 2));
+    const k = MTR_PISO_ACORTAMIENTO[String(clave == null ? "" : clave).trim().toUpperCase()];
+    const ventana = k ? mtrVentanaRecontrol(k) : null;
+    const piso = ventana && typeof ventana.pisoDias === "number" ? ventana.pisoDias : null;
+    // El piso nunca ALARGA por encima de la vigencia normativa: si la norma ya da menos que
+    // el piso, manda la norma (acortar es seguro, estirar una vigencia no lo es).
+    if (piso === null) return acortada;
+    return Math.min(vigencia, Math.max(acortada, piso));
   }
 
   // =====================================================================
@@ -30567,6 +33524,49 @@ _vglOfrecerDeshacer(btn);
     HBA1C: "Hemoglobina glicosilada", HEMOGLOBINA: "Hemoglobina",
     PTH: "PTH intacta", FOSFORO: "Fósforo sérico", ALBUMINA: "Albúmina sérica",
   };
+
+  // =====================================================================
+  //  v17.8.0 — UN SOLO TRADUCTOR DE NOMBRE DE ANALITO
+  //  ------------------------------------------------------------------
+  //  AUDITORÍA DE EXPERIENCIA (27-ago-2026), patrón C: «cuatro traductores de nombre de
+  //  analito distintos conviviendo con precedencias distintas». El resultado se veía en
+  //  el peor sitio posible — hallazgo #61, gravedad alta: la hoja educativa que el médico
+  //  IMPRIME Y ENTREGA EN LA MANO al paciente listaba «COLESTEROL_LDL», «UROANALISIS»,
+  //  «HBA1C». Verificado ejecutando la función, no leyendo el código.
+  //
+  //  Precedencia FIJA, y este es el orden y el porqué:
+  //    1. MTR_NOMBRE_ANALITO — 13 claves, redacción clínica («Creatinina sérica»,
+  //       «Relación albúmina/creatinina»). Es el más completo y el mejor escrito.
+  //    2. RCV_VIGENCIA_NOMBRES — 9 claves, redacción de catálogo con mayúsculas de
+  //       título («Creatinina en Suero», «RAC (Relación Albúmina/Creatinina)»). Solo
+  //       cubre huecos del primero.
+  //    3. Último recurso: quitar los guiones bajos y dejar la primera en mayúscula, para
+  //       que una clave nueva que nadie tradujo salga como «Ferritina» y no «FERRITINA».
+  //
+  //  Nunca devuelve vacío y nunca inventa: si no reconoce la clave, la deja legible.
+  //  La suite_70 (REGLA C) impide que una clave cruda vuelva a llegar al papel.
+  // =====================================================================
+  function mtrNombreLegibleAnalito(x) {
+    if (x == null) return "";
+    if (typeof x === "object") {
+      // Un item de plan: {clave, nombre}. El nombre bonito manda sobre la clave.
+      const n = String(x.nombre == null ? "" : x.nombre).trim();
+      if (n && !/^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(n)) return n;
+      return mtrNombreLegibleAnalito(x.clave || x.key || n);
+    }
+    const clave = String(x).trim();
+    if (!clave) return "";
+    if (typeof MTR_NOMBRE_ANALITO !== "undefined" && MTR_NOMBRE_ANALITO[clave]) return MTR_NOMBRE_ANALITO[clave];
+    if (typeof RCV_VIGENCIA_NOMBRES !== "undefined" && RCV_VIGENCIA_NOMBRES[clave]) return RCV_VIGENCIA_NOMBRES[clave];
+    // Sin guion bajo no se toca NADA. Aquí caben dos cosas y las dos hay que respetarlas:
+    // un nombre ya legible («Colesterol total») y una sigla clínica que el médico usa a
+    // diario («LDL», «RAC», «PTH»). Un primer intento de esta función las pasaba a
+    // minúsculas y convertía «LDL» en «Ldl» — lo cazó suite_67. Destrozar una sigla para
+    // que parezca prosa es peor que dejarla como está.
+    if (!/_/.test(clave)) return clave;
+    const suelto = clave.replace(/_/g, " ").toLowerCase();
+    return suelto.charAt(0).toUpperCase() + suelto.slice(1);
+  }
 
   // Piso de la norma para un examen que hay que pedir de cero: no se cita al
   // paciente antes de HOY+14 días (le tiene que dar tiempo a ir).
@@ -30606,7 +33606,7 @@ _vglOfrecerDeshacer(btn);
     // el siguiente control no puede esperar la vigencia completa, que está pensada para
     // un paciente controlado.
     const fueraMeta = mtrFueraDeMeta(clave, valor, c);
-    const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta);
+    const vigencia = mtrAcortarPorFueraDeMeta(vigenciaNorma, fueraMeta, clave);
     if (!fecha) {
       // v17.6.57 — auditoría 25-ago (1.16): esto devolvía valor:null SIEMPRE que faltaba
       // la fecha, aunque `ultimo.valor` sí trajera un resultado real (alcanzable:
@@ -30615,7 +33615,18 @@ _vglOfrecerDeshacer(btn);
       // afirmar "vigente" — pero descartar un valor real que SÍ llegó hace que quien
       // consuma este resultado (p.ej. para decidir si reordenar) no tenga forma de saber
       // que el examen ya se hizo, solo que le falta la fecha.
-      return { clave: clave, nombre: nombre, estado: "A", subestado: "sin_historial",
+      // v17.6.87 — el valor se conservaba (arriba) y el `motivo` distinguía el caso, pero el
+      // SUBESTADO seguía siendo "sin_historial" para los dos — y quien pinta la pantalla
+      // decide por el subestado, no por el motivo (mtrTableroClinico, ~:25924). Resultado
+      // verificado con el harness: una glicemia de 260 que SÍ existe pero llegó sin fecha se
+      // le mostraba al médico como "Nunca se le ha tomado". Además de perderse un resultado
+      // alarmante, se reordena un examen ya hecho: viaje y gasto que la misión del motor
+      // ("minimizar desplazamientos sin dejar vencer exámenes") busca evitar precisamente.
+      // Se separan los dos casos en el subestado. Sigue sin poder afirmarse "vigente" —sin
+      // fecha no hay vigencia que calcular—, así que el estado sigue siendo "A" y el examen
+      // se sigue ordenando; lo que cambia es que ya no se afirma una falsedad.
+      return { clave: clave, nombre: nombre, estado: "A",
+        subestado: (valor !== null ? "sin_fecha" : "sin_historial"),
         vigenciaDias: vigencia, fecha: null, valor: valor, vence: null,
         motivo: valor !== null
           ? "hay un resultado (" + valor + ") pero sin fecha registrada: no se puede calcular vigencia"
@@ -30695,7 +33706,12 @@ _vglOfrecerDeshacer(btn);
     const pasajeros = evaluar(MTR_PASAJEROS);
     const todos = drivers.concat(pasajeros);
 
-    const faltantes = todos.filter((a) => a.estado === "A" && a.subestado === "sin_historial");
+    // v17.6.87 — "sin_fecha" (hay resultado pero sin fecha) se suma aquí: es un subestado
+    // NUEVO que antes venía dentro de "sin_historial", así que sin esta línea el examen
+    // dejaría de ordenarse — y sin fecha sigue sin poderse afirmar que esté vigente, que es
+    // justo el motivo por el que hay que volver a pedirlo. Lo que cambia es el texto que lee
+    // el médico (ya no "nunca se le ha tomado"), no la conducta.
+    const faltantes = todos.filter((a) => a.estado === "A" && (a.subestado === "sin_historial" || a.subestado === "sin_fecha"));
     // v17.6.75 — auditoría 25-ago (1.17): un RAC≥30 vencido ahora sale como estado "R"
     // (ver mtrEstadoAnalito), no "A" — pero `vencidoBase` sigue siendo la verdad de
     // terreno de que YA venció, y esta lista ("Ya vencidos") es justo donde el médico
@@ -30722,8 +33738,11 @@ _vglOfrecerDeshacer(btn);
       .sort((x, y) => (x.vence < y.vence ? -1 : x.vence > y.vence ? 1 : 0))[0];
 
     if (hayEstadoA) {
-      // Hay que pedir algo YA. Piso de 14 días para que al paciente le dé
-      // tiempo, techo de 22. Pero si un examen vigente vence ANTES del piso,
+      // Hay que pedir algo YA. Piso de MTR_PISO_ESTADO_A días para que al paciente le dé
+      // tiempo, techo de MTR_TECHO_ESTADO_A. (v17.7.2 — este comentario decía «techo de
+      // 22» y la constante vale 21 desde v16.9.0, cuando se igualó al techo que ya usaba
+      // mtrPlanLabsPrimero. Un comentario que contradice a su propia línea de código es una
+      // trampa para quien lo lea después.) Pero si un examen vigente vence ANTES del piso,
       // manda él: el piso NUNCA puede retrasar una toma por encima de un
       // vencimiento (eso rompería CERO VENCIDOS).
       const piso = mtrSumarDias(hoy, MTR_PISO_ESTADO_A);
@@ -30759,7 +33778,12 @@ _vglOfrecerDeshacer(btn);
       };
     }
 
-    // ---- Agujero Negro Renal: en G3a-G4 la creatinina puede mandar ----
+    // ---- Agujero Negro Renal: en G3a-G5 la creatinina puede mandar ----
+    // v17.7.2 — este rótulo decía «G3a-G4», igual que el spec, pero MTR_ESTADIOS_ANR
+    // incluye G5 desde siempre. Manda el código y se corrige el rótulo, por decisión
+    // explícita del médico (27-ago): G5 es el paciente MÁS enfermo, sacarlo del ANR sería
+    // dejar sin agrupar justo al que menos puede permitirse un segundo viaje. Anotado como
+    // divergencia deliberada en MOTOR_RCV_V68_SPEC.md.
     // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada):
     // VENTANAS ANR ANCLADAS EN "HOY", no en la fecha de la propia creatinina. La ventana
     // (30/45/60/90 días, según mtrVentanaAnrDias) se mide desde `hoy` — el día en que
@@ -30773,6 +33797,16 @@ _vglOfrecerDeshacer(btn);
     // ANR" no es una fecha fija en el calendario, cambia según cuándo se mire.
     let anr = null;
     const creat = drivers.find((a) => a.clave === "CREATININA");
+    // v17.7.2 — el tercer parámetro (vigilanciaEstrecha) va en `false` A PROPÓSITO, y esto
+    // NO es un cabo suelto: es una decisión del médico (27-ago) tomada con la medición
+    // delante. La rama de 30 días existe porque es port fiel del Copiloto Python —44 de los
+    // 242 vectores dorados de tests/golden/ventana_anr_dias.json la fijan, así que borrarla
+    // rompería la conformidad—, pero cablearla aquí haría daño: en el motor Python el ANR
+    // RETRASA la toma y estrechar la ventana protege; en el nuestro la ADELANTA, así que
+    // estrecharla activa el ANR MENOS. Medido con el arnés: 51 planes perderían la
+    // agrupación, y precisamente en pacientes con sospecha de daño renal agudo — los que
+    // más necesitan que la creatinina entre en esta toma. El mecanismo está invertido, y
+    // copiar la regla al pie de la letra desprotegería. Divergencia declarada en el spec.
     const ventanaAnr = mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false);
     if (ventanaAnr && creat && creat.vence) {
       const limite = mtrSumarDias(hoy, ventanaAnr);
@@ -30805,9 +33839,69 @@ _vglOfrecerDeshacer(btn);
       // pasada, no un candidato real de "cosecha por margen futuro").
       if (a.vencidoBase) continue;
       if (!a.vence || !a.vigenciaDias) continue;
+      // v17.6.98 — EL ANR AGRUPA DE VERDAD. Con el agujero negro renal activo, la
+      // creatinina NO se difiere nunca: entra en esta toma pase lo que pase.
+      //
+      // Hasta aquí el ANR solo hacía un `Math.min` contra la fecha ya calculada (más
+      // arriba, `if (creat.vence < ftlCruda)`). Si otro examen vencía antes, el ANR se
+      // marcaba igual y la creatinina caía en la regla genérica del 33 % de abajo, que la
+      // mandaba a `diferidos`: el paciente volvía una segunda vez justo por ella, que es
+      // EXACTAMENTE el viaje que el ANR existe para evitar. v17.6.90 corrigió el texto
+      // para que dejara de afirmar una agrupación que no ocurría; esto la hace ocurrir.
+      //
+      // Medido con el harness sobre 240 planes con el ANR activo: 88 en los que la
+      // creatinina ya mandaba la fecha, y 26 de dos viajes — los que esta línea cierra.
+      //
+      // POR QUÉ NO SE APLICA LA REGLA LITERAL DE v68. El spec dice «Vc=FTL Maestra; todos
+      // drivers A/D se agrupan en Vc», es decir MOVER la toma al vencimiento de la
+      // creatinina. Medido: en 0 de esos 240 casos sería seguro. Por construcción, si la
+      // creatinina no es ya la primera en vencer es porque algo la adelanta, y retrasar la
+      // toma hasta Vc o deja vencer otro examen (reproducido: la glicemia se pasaría 27
+      // días) o hace esperar más a uno ya vencido. v68 pone CERO VENCIDOS en S0, por
+      // encima de la logística de S3, así que su propia jerarquía lo prohíbe. La única vía
+      // es la contraria: traer la creatinina a la toma que ya hay.
+      //
+      // DIVERGENCIA DECLARADA frente al spec, que dice «Creatinina-ancla no se fuerza».
+      // Decisión del médico (27-ago) tras ver las cifras de arriba: forzarla siempre.
+      // El coste es vigencia: se toma hasta ~46 días antes de vencer, de 121 de vigencia.
+      if (anr && a.clave === "CREATININA") { cosechados.push(a); continue; }
+      // v17.7.5 — LA CLÁUSULA DEL RAC DEL SPEC, QUE NUNCA SE CONSTRUYÓ. v68 dice, dentro
+      // del mismo bloque del ANR: «RAC sincroniza si venc<=Vc+60d y reinicia». Era la
+      // última rama del spec sin implementar, y no era teórica.
+      //
+      // Medido con el arnés ANTES de escribir esta línea, sobre 2.016 planes: 672 con el
+      // ANR activo, 480 en los que el RAC entra en la ventana Vc+60d — y de esos, **72
+      // salían DIFERIDOS**, o sea el paciente volvía una segunda vez solo por el RAC.
+      // Vector representativo: RAC de hace 10 días con vigencia de 90 (override por
+      // RAC>=30), vence a 49 días de la toma; el margen del 33 % (29,7 d) lo difiere.
+      //
+      // Es la misma forma que la creatinina de v17.6.98 y tiene la misma contención: solo
+      // AÑADE el RAC a la toma que ya existe, nunca mueve `ftl` ni la fecha de control. El
+      // «reinicia» del spec ocurre solo: al tomarse la muestra ese día, los 90 días
+      // vuelven a contar desde ahí.
+      //
+      // El coste es vigencia (se adelanta hasta 60 días), y es justo el canje que el médico
+      // ya decidió para la Cosecha: «en su población el viaje pesa más que la vigencia».
+      if (anr && a.clave === "RAC" && anr.vence && a.vence
+          && Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(anr.vence).getTime()) / 86400000) <= MTR_RAC_SINCRONIA_ANR_DIAS) {
+        cosechados.push(a); continue;
+      }
       if (a.vence === ftl) { cosechados.push(a); continue; }
       const margen = Math.round((mtrFechaDesdeIso(a.vence).getTime() - mtrFechaDesdeIso(ftl).getTime()) / 86400000);
       if (margen <= 0) { cosechados.push(a); continue; }
+      // v17.30.0 — ENCARGO DEL MÉDICO (28-ago), reporte en vivo: un paciente con la
+      // creatinina forzando la toma a 6 días (ANR activo) traía además glicemia,
+      // uroanálisis y HbA1c —cada una a ~65 días de SU PROPIO vencimiento, sin relación
+      // con lo renal— porque el margen del 33% (59,4 d de 180 de vigencia) seguía
+      // siendo generoso incluso con la toma tan adelantada. El médico: "no puedes
+      // activar ANR y a su vez los vencidos [la cosecha genérica], trata de
+      // equilibrar" — con el ANR activo, solo la creatinina y el RAC que sincroniza
+      // con ella (las dos ramas de arriba) se agrupan de forma automática; el resto de
+      // los drivers SOLO entran si ya están vencidos/faltantes por su cuenta (evaluado
+      // aparte, antes de este bucle) — la cosecha genérica del 33% se apaga mientras el
+      // ANR gobierna la fecha, para no combinar dos motivos de adelanto distintos sobre
+      // el mismo examen. Sin ANR activo (el caso de casi todos los planes), nada cambia.
+      if (anr) { diferidos.push(Object.assign({}, a, { margenDias: margen })); continue; }
       if (margen <= a.vigenciaDias * MTR_COSECHA_MARGEN_PROP) cosechados.push(a);
       else diferidos.push(Object.assign({}, a, { margenDias: margen }));
     }
@@ -30830,6 +33924,45 @@ _vglOfrecerDeshacer(btn);
       for (let i = diferidos.length - 1; i >= 0; i--) {
         if (MTR_GRUPO_LIPIDOS.indexOf(diferidos[i].clave) < 0) continue;
         cosechados.push(diferidos[i]);
+        diferidos.splice(i, 1);
+      }
+    }
+
+    // ---- 1.16 — ARRASTRE POR GRACIA: un diferido que casi entró, entra ----
+    // ENCARGO DEL MÉDICO (28-ago): reporte en vivo con creatinina (vence a 83 días,
+    // margen 69) y glicemia (vence a 68 días, margen 54, sí cosechada) de la MISMA
+    // visita — la creatinina se pasó de su propio corte del 33% (59,4 d de una
+    // vigencia de 180) por apenas 9,6 días, y aun así el paciente habría tenido que
+    // volver por ella sola. Medido con `tools/medir_cercania.js` sobre 10.000
+    // pacientes sintéticos ANTES de fijar el número: a 14 días de gracia, 18,6% de
+    // los pacientes con algún diferido se ahorran un viaje completo, con un costo
+    // promedio de ~62,5 días de vigencia gastados antes de tiempo en lo arrastrado —
+    // el médico vio la tabla completa (7/14/21/30 días) y eligió 14, el mismo piso
+    // que ya usa el motor para Estado A (MTR_PISO_ESTADO_A), no un número nuevo.
+    //
+    // MTR_GRACIA_COSECHA_DIAS es DÍAS DE GRACIA SOBRE EL CORTE, no sobre la vigencia
+    // completa: un diferido entra si (margenDias − 33% de su vigencia) <= 14, así que
+    // un examen de vigencia larga y un examen de vigencia corta reciben el mismo trato
+    // relativo — nunca compara la fecha de un examen contra la de otro directamente
+    // (eso sería una "ventana de agrupación" que este proyecto no tiene y que ya se le
+    // explicó al médico que no existe). Nunca mueve `ftl` ni retrasa nada: solo
+    // adelanta la toma de lo que ya estaba a punto de entrar por su cuenta.
+    // v17.30.0 — CON EL ANR ACTIVO, LA GRACIA TAMBIÉN SE APAGA. Sin este guardarraíl, la
+    // gracia (que solo mira margenDias/vigenciaDias, sin saber nada del ANR) volvía a
+    // arrastrar exactamente lo que el bucle de arriba acababa de excluir a propósito —
+    // el mismo defecto que el médico reportó, colándose por la puerta de al lado. Mismo
+    // principio: con el ANR gobernando la fecha, solo creatinina y el RAC sincronizado
+    // se agrupan de forma automática.
+    const MTR_GRACIA_COSECHA_DIAS = 14;
+    if (!anr) {
+      for (let i = diferidos.length - 1; i >= 0; i--) {
+        const d = diferidos[i];
+        if (typeof d.margenDias !== "number" || typeof d.vigenciaDias !== "number") continue;
+        const exceso = d.margenDias - d.vigenciaDias * MTR_COSECHA_MARGEN_PROP;
+        if (exceso > MTR_GRACIA_COSECHA_DIAS) continue;
+        // Se conserva margenDias en el objeto (ya lo trae, de la cosecha normal) para que
+        // quien lea `cosechados` pueda seguir distinguiendo esto de un faltante/vencido.
+        cosechados.push(d);
         diferidos.splice(i, 1);
       }
     }
@@ -31086,11 +34219,23 @@ _vglOfrecerDeshacer(btn);
     for (const k of MTR_HECHOS_FACTORES) if (f[k] === true) factores[k] = true;
 
     const labs = [];
+    // v17.7.3 — los laboratorios con resultado de TEXTO (el uroanálisis cualitativo:
+    // nitritos, esterasa, proteinuria, cilindros…) se descartaban aquí por el filtro
+    // `typeof c.valor !== "number"`, así que la IA no los veía NUNCA. Van en un array
+    // aparte, no mezclados con los numéricos: quien espera números sigue recibiendo solo
+    // números, y quien redacta la nota recibe además lo cualitativo.
+    const labsTexto = [];
     const ult = o.ultimos || {};
     for (const clave of Object.keys(ult)) {
       const c = ult[clave];
-      if (!c || c.valor == null || typeof c.valor !== "number") continue;
-      labs.push({ analito: clave, valor: c.valor, hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
+      if (!c || c.valor == null) continue;
+      if (typeof c.valor === "number") {
+        labs.push({ analito: clave, valor: c.valor, hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
+        continue;
+      }
+      const txt = limpiar(String(c.valor).trim());
+      if (!txt) continue;
+      labsTexto.push({ analito: clave, valor: txt.slice(0, 60), hace: mtrRelativizarFecha(c.fecha, o.hoyIso) });
     }
 
     // Medicamentos: nombres de moléculas (no son PHI). Aun así se limpian y se acotan.
@@ -31124,8 +34269,20 @@ _vglOfrecerDeshacer(btn);
         imc: (typeof f.imc === "number") ? f.imc : null,
         paSistolica: (typeof f.paSistolica === "number") ? f.paSistolica : null,
         paDiastolica: (typeof f.paDiastolica === "number") ? f.paDiastolica : null,
+        // v17.7.3 — peso y CINTURA, que el examen físico sí tiene y la IA no recibía. La
+        // cintura se lee por rótulo desde v17.6.97 y es el 5º criterio del síndrome
+        // metabólico; que no llegara aquí obligaba al modelo a redactar el examen físico
+        // sin uno de sus datos.
+        pesoKg: (typeof f.pesoKg === "number") ? f.pesoKg : null,
+        cinturaCm: (typeof f.cinturaCm === "number") ? f.cinturaCm : null,
       },
       metaLdl: (r.meta && r.meta.metas) ? r.meta.metas.ldl : null,
+      // v17.26.0 — mismo criterio que metaLdl (el número real viaja calculado, para que la
+      // IA solo lo cite): faltaba el porcentaje de reducción de LDL exigido desde el basal
+      // (riesgo alto/muy alto), y el prompt de Análisis y plan lo tenía cableado como "50%"
+      // fijo en la instrucción en vez de leerlo de aquí. Ver mtrJsonV68DesdeResumen
+      // (ldl_reduction_target) para el mismo dato en el canal JSON.
+      metaReduccionLdl: (r.meta && r.meta.metas) ? r.meta.metas.reduccion : null,
       // v17.6.64 — auditoría 25-ago (sección 4): cNoHDL (colesterol no-HDL = CT − HDL) NO
       // se calculaba en ningún lado, pese a que el prompt de Análisis y Plan (línea ~30783)
       // le pide a la IA "menciona cNoHDL junto al LDL" — el modelo tenía que INVENTARLO o
@@ -31149,11 +34306,63 @@ _vglOfrecerDeshacer(btn);
       // hoja de hechos que lee la IA, ni al recuadro que el médico copia a mano si la IA
       // falla. Ver mtrEducacionFlagsTexto() y el mismo defecto en mtrJsonV68DesdeResumen.
       educacion: mtrEducacionFlagsTexto(r.educationFlags),
+      labsTexto: labsTexto,
+      // v17.9.0 — la historia clínica tal como Everest la guarda, por secciones. Es lo que
+      // el médico escribió de verdad, no la lectura parcial de la pestaña que estuviera
+      // abierta. Ver mtrHechosDesdeHcEverest: llega ya desidentificado.
+      hcEverest: (o.hcEverest && (o.hcEverest.secciones || o.hcEverest.dom)) ? o.hcEverest : null,
+      // v17.7.3 — ENCARGO DEL MÉDICO (27-ago): «la IA debe recibir todo el JSON de Everest,
+      // toda esa información sirve de grounding para redactar una excelente nota clínica».
+      // Todo lo que sigue YA estaba calculado en el script y nadie lo copiaba a la hoja: el
+      // modelo opinaba con menos datos de los que el propio asistente tenía en la mano.
+      // Regla de la casa intacta: lo que no conste se OMITE (null / lista vacía), nunca se
+      // rellena con un valor plausible.
+      uroanalisis: (r.uroanalisis && r.uroanalisis.estado) ? {
+        estado: r.uroanalisis.estado,
+        criterios: Array.isArray(r.uroanalisis.criterios) ? r.uroanalisis.criterios.slice(0, 10) : [],
+        conducta: r.uroanalisis.conducta ? limpiar(String(r.uroanalisis.conducta)) : null,
+      } : null,
+      sindromeMetabolico: (r.sindromeMetabolico && r.sindromeMetabolico.cumple === true) ? {
+        criterios: Array.isArray(r.sindromeMetabolico.criterios) ? r.sindromeMetabolico.criterios.slice(0, 6) : [],
+        count: r.sindromeMetabolico.count != null ? r.sindromeMetabolico.count : null,
+        evaluables: r.sindromeMetabolico.evaluables != null ? r.sindromeMetabolico.evaluables : null,
+      } : null,
+      plan: (r.plan) ? {
+        ftl: r.plan.ftl || null,
+        control: (r.plan.control && r.plan.control.fecha) || null,
+        motivoFtl: r.plan.motivoFtl ? limpiar(String(r.plan.motivoFtl)) : null,
+        ordenar: (r.plan.ordenar || []).map((x) => x && x.clave).filter(Boolean),
+        // v17.13.0 — cuál de los exámenes ordenados FIJA la fecha de la toma. Es derivación
+        // pura de lo que el motor ya calculó (no recalcula nada, no mueve ninguna fecha):
+        // la ventana renal manda cuando está activa; si no, el driver cuyo vencimiento se
+        // convirtió en la fecha de toma sin ajustar (ftlSinAjustar). Si ningún vencimiento
+        // la fijó —p. ej. la fecha salió del piso de 14 días porque falta pedir algo— queda
+        // en null y la hoja simplemente no afirma que haya uno: casilla vacía antes que
+        // dato inventado.
+        dicta: mtrAnalitoQueFijaLaToma(r.plan),
+        anr: r.plan.anr ? { ventanaDias: r.plan.anr.ventanaDias, vence: r.plan.anr.vence } : null,
+      } : null,
       pendientes: {
         faltantes: (r.plan && r.plan.faltantes || []).map((x) => x && x.clave).filter(Boolean),
         vencidos: (r.plan && r.plan.vencidos || []).map((x) => x && x.clave).filter(Boolean),
+        // v17.7.3 — los DIFERIDOS: exámenes vigentes que NO entran en esta toma porque el
+        // margen de la cosecha no da. Se ven en pantalla desde hace versiones y la IA no
+        // los recibía, así que podía recomendar pedir algo que el plan decidió aplazar.
+        diferidos: (r.plan && r.plan.diferidos || []).map((x) => x && x.clave).filter(Boolean),
       },
     };
+  }
+
+  // v17.13.0 — Derivación pura: de los exámenes que se ordenan hoy, ¿cuál fija la fecha de
+  // la toma? Lee SOLO campos que el motor ya dejó escritos en el plan; no evalúa vigencias,
+  // no compara contra hoy y no toca ninguna fecha. Devuelve la clave del analito o null.
+  function mtrAnalitoQueFijaLaToma(plan) {
+    const p = plan || {};
+    if (p.anr && p.anr.vence) return "CREATININA";
+    if (!p.ftlSinAjustar) return null;
+    const cand = (p.drivers || []).filter((a) => a && (a.estado === "D" || a.estado === "R")
+      && a.vence && !a.vencidoBase && a.vence === p.ftlSinAjustar);
+    return cand.length ? cand[0].clave : null;
   }
 
   // Aplana la hoja a texto etiquetado, compacto y legible. Es lo que ve Gemini y, si
@@ -31172,11 +34381,35 @@ _vglOfrecerDeshacer(btn);
     if (rn.tfgCkdepi != null) L.push("Función renal: TFG (CKD-EPI 2021) " + rn.tfgCkdepi + " mL/min/1.73m2" + (rn.estadioClinico ? " (estadio " + rn.estadioClinico + ")" : "") + (rn.crcl != null ? "; depuración Cockcroft-Gault " + rn.crcl + " mL/min" : "") + (rn.remitirNefrologia ? "; criterio de remisión a nefrología" : "") + (rn.sospechaIra ? "; sospecha de deterioro agudo" : ""));
     const rg = h.riesgo || {};
     if (rg.categoria) L.push("Riesgo cardiovascular: " + rg.categoria + (rg.framinghamPuntos != null ? " (Framingham oficial " + rg.framinghamPuntos + " puntos)" : ""));
-    if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL");
+    if (h.metaLdl != null) L.push("Meta LDL: <" + h.metaLdl + " mg/dL" + (h.metaReduccionLdl != null ? " y reducción ≥" + h.metaReduccionLdl + " % desde el basal" : ""));
     if (h.cNoHDL != null) L.push("Colesterol no-HDL: " + h.cNoHDL + " mg/dL" + (h.metaCnoHdl != null ? " (meta: <" + h.metaCnoHdl + " mg/dL)" : ""));
     const an = h.antropometria || {};
-    if (an.paSistolica != null) L.push("Signos vitales: PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg" + (an.imc != null ? " · IMC: " + an.imc : ""));
+    // v17.7.3 — el examen físico completo: peso y cintura además de PA e IMC. Cada dato
+    // solo aparece si consta; un hueco se calla, nunca se rellena.
+    // La etiqueta sigue siendo «Signos vitales:» A PROPÓSITO, aunque ahora lleve más cosas:
+    // es uno de los 5 prefijos de MTR_EA_PREFIJOS_PROHIBIDOS, la segunda capa que borra del
+    // borrador de Enfermedad Actual las líneas que el modelo copie tal cual de la hoja.
+    // Renombrarla dejaría ese filtro sin reconocer su propia línea — y el filtro compara
+    // por texto exacto, así que fallaría en silencio.
+    if (an.paSistolica != null || an.pesoKg != null || an.cinturaCm != null) {
+      const ex = [];
+      if (an.paSistolica != null) ex.push("PA " + an.paSistolica + (an.paDiastolica != null ? "/" + an.paDiastolica : "") + " mmHg");
+      if (an.pesoKg != null) ex.push("peso " + an.pesoKg + " kg");
+      if (an.imc != null) ex.push("IMC " + an.imc);
+      if (an.cinturaCm != null) ex.push("circunferencia abdominal " + an.cinturaCm + " cm");
+      L.push("Signos vitales: " + ex.join(" · "));
+    }
+    if (h.sindromeMetabolico) {
+      L.push("Síndrome metabólico: SÍ cumple criterios (" + h.sindromeMetabolico.count + " de "
+        + h.sindromeMetabolico.evaluables + " evaluables): " + (h.sindromeMetabolico.criterios || []).join(", "));
+    }
     if (h.labs && h.labs.length) L.push("Laboratorios y paraclínicos: " + h.labs.map((x) => x.analito + " " + x.valor + (x.hace ? " (" + x.hace + ")" : "")).join("; "));
+    if (h.labsTexto && h.labsTexto.length) L.push("Paraclínicos con resultado descriptivo: " + h.labsTexto.map((x) => x.analito + " " + x.valor + (x.hace ? " (" + x.hace + ")" : "")).join("; "));
+    if (h.uroanalisis) {
+      L.push("Uroanálisis: " + h.uroanalisis.estado
+        + ((h.uroanalisis.criterios && h.uroanalisis.criterios.length) ? " — " + h.uroanalisis.criterios.join(", ") : "")
+        + (h.uroanalisis.conducta ? ". Conducta que ya definió el motor: " + h.uroanalisis.conducta : ""));
+    }
     // v16.1.0 — a la IA y a los textos solo viajan los medicamentos del programa
     // cardiovascular: el resto no es asunto de este asistente.
     if (h.medicamentos && h.medicamentos.length) {
@@ -31184,7 +34417,51 @@ _vglOfrecerDeshacer(btn);
       if (soloRcv.length) L.push("Medicamentos del programa cardiovascular: " + soloRcv.join("; "));
     }
     const pd = h.pendientes || {};
-    if ((pd.faltantes && pd.faltantes.length) || (pd.vencidos && pd.vencidos.length)) L.push("Paraclínicos pendientes/vencidos: " + [].concat(pd.faltantes || [], pd.vencidos || []).join(", "));
+    // v17.13.0 — iban en clave interna (COLESTEROL_LDL) mientras la línea de órdenes ya
+    // salía en nombre legible: el MISMO examen le llegaba al modelo con dos nombres
+    // distintos en el mismo mensaje, y uno de ellos no es español.
+    if ((pd.faltantes && pd.faltantes.length) || (pd.vencidos && pd.vencidos.length)) L.push("Paraclínicos pendientes/vencidos: " + [].concat(pd.faltantes || [], pd.vencidos || []).map(mtrNombreLegibleAnalito).join(", "));
+    // v17.7.3 — el plan que el motor YA decidió. Va explícito para que el modelo lo CITE en
+    // vez de proponer uno suyo: las fechas y la lista de órdenes son deterministas y no se
+    // le delegan a un LLM (lo dice la cabecera del propio promptware).
+    const pl = h.plan || {};
+    // v17.13.0 — ENCARGO DEL MÉDICO (27-ago): «usa el contexto de drivers y pasajeros que
+    // tiene el promptware, acá también es válido». El motor ya distingue el examen que DICTA
+    // la fecha de la toma (el driver cuyo vencimiento fijó la FTL, o la creatinina cuando
+    // manda la ventana renal) de los que solo se enganchan a esa misma muestra — y la hoja
+    // lo aplanaba en una lista donde todos pesaban igual, así que el modelo justificaba la
+    // toma sobre cualquiera, a veces sobre un pasajero.
+    // Los términos internos (DRIVER, PASAJERO, COSECHA, FTL, ANR) NO salen de aquí: el
+    // médico fue explícito en que esa jerga es del programador, no del usuario final. La
+    // hoja los traduce a español clínico llano ANTES de que el modelo los vea, que es la
+    // única defensa real — un prompt que prohíbe una palabra que igual le llega es más
+    // frágil que no mandarle nunca la palabra.
+    if (pl.ordenar && pl.ordenar.length) {
+      const _nom = (k) => mtrNombreLegibleAnalito(k);
+      L.push("Exámenes que YA se van a ordenar en esta toma: " + pl.ordenar.map(_nom).join(", "));
+      const dicta = (pl.dicta && pl.ordenar.indexOf(pl.dicta) >= 0) ? pl.dicta : null;
+      if (dicta) {
+        const resto = pl.ordenar.filter((k) => k !== dicta);
+        L.push("El examen que fija la fecha de la toma es " + _nom(dicta)
+          + (resto.length ? "; los demás (" + resto.map(_nom).join(", ") + ") se piden para aprovechar la misma muestra y no fijan la fecha." : "; es el único de esta toma."));
+      }
+    }
+    if (pd.diferidos && pd.diferidos.length) L.push("Exámenes vigentes que NO entran en esta toma (diferidos, quedan para la siguiente): " + pd.diferidos.map(mtrNombreLegibleAnalito).join(", "));
+    if (pl.ftl || pl.control) {
+      L.push("Fechas ya calculadas: toma de laboratorios " + (pl.ftl || "sin definir")
+        + " · control " + (pl.control || "sin definir")
+        + (pl.motivoFtl ? " (" + pl.motivoFtl + ")" : ""));
+    }
+    // v17.13.0 — el rótulo decía «Agujero negro renal ACTIVO», que es el apodo interno del
+    // motor. El médico pidió que esa jerga no salga del código: se enuncia el hecho clínico.
+    if (pl.anr) L.push("Vigilancia de la función renal: la creatinina vence el " + pl.anr.vence + ", dentro de la ventana de " + pl.anr.ventanaDias + " días de vigilancia renal, y por eso se adelanta a esta misma toma.");
+    // v17.9.0 — al final a propósito: es el bloque más largo y el que menos se resume. Va
+    // después de lo calculado por el motor para que, si algo hay que recortar por longitud,
+    // se recorte esto y no las cifras que el modelo tiene prohibido inventar.
+    if (h.hcEverest) {
+      const bloque = mtrHcTextoParaHoja(h.hcEverest);
+      if (bloque) L.push("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---\n" + bloque);
+    }
     if (h.foco) L.push("Foco de la consulta: " + h.foco);
     if (h.educacion && h.educacion.length) L.push("Educación indicada: " + h.educacion.join("; "));
     return L.join("\n");
@@ -31321,12 +34598,70 @@ _vglOfrecerDeshacer(btn);
   // Ambos datos SIGUEN disponibles para el médico — Análisis y Plan si recibe HECHOS DEL
   // PACIENTE, que es donde ya se interpretan labs y riesgo — esto solo saca lo que sobra de
   // Enfermedad Actual, no borra información en ningún otro lado.
+  // v17.13.0 — BLOQUE DE PRECEDENCIA, compartido por los tres prompts largos.
+  // Motivo: entre la v17.7.3 y la v17.12.0 la hoja de hechos creció con el examen físico
+  // completo, el uroanálisis, el síndrome metabólico, el plan con sus fechas y —desde la
+  // v17.10.0— la historia clínica entera tal como Everest la guarda («--- LO REGISTRADO EN
+  // LA HISTORIA CLÍNICA DE EVEREST ---», dentro de HECHOS DEL PACIENTE). NINGÚN prompt
+  // nombraba ese bloque nuevo. Es la regla que este mismo archivo escribió en la v17.7.3:
+  // un dato que llega al JSON y que el prompt no nombra es un dato que no llegó.
+  // Los rótulos de aquí abajo son EXACTAMENTE los que emite mtrRedaccionPrompt al armar
+  // `bloques` (más el de la hoja). Si alguno se renombra allá y no aquí, el modelo vuelve a
+  // buscar un bloque que no existe — por eso una prueba de suite_57 compara ambas listas.
+  // Va AL PRINCIPIO de cada prompt a propósito: el modelo por defecto es un flash-lite, y
+  // al final este bloque competiría con las reglas de formato de salida.
+  const MTR_PRECEDENCIA_SYS = [
+    "# FUENTES Y SU ORDEN DE MANDO",
+    "Solo existen los bloques que recibes abajo. Si dos se contradicen, manda el de arriba:",
+    "1. INSTRUCCIONES DEL MÉDICO PARA ESTA REDACCIÓN — lo que él te pide expresamente para este borrador.",
+    "2. DATOS APORTADOS POR EL MÉDICO PARA ESTA NOTA — lo que anotó en la consulta de HOY.",
+    "3. TEXTO YA REGISTRADO EN LA HISTORIA HOY — lo que él lleva escrito en la casilla en este momento.",
+    "4. LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST (viene dentro de HECHOS DEL PACIENTE) — antecedentes patológicos y familiares, hábitos, revisión por sistemas, examen físico y el texto ya guardado de esta historia.",
+    "5. HECHOS DEL PACIENTE (y, en la nota, el JSON DEL MOTOR) — lo que el asistente ya calculó: función renal, riesgo cardiovascular, metas, laboratorios, plan de exámenes y fechas. NO recalcules ninguno: cítalos como vienen.",
+    "Lo que no esté en esos bloques NO EXISTE: no lo inventes, no lo supongas, no lo deduzcas de lo típico en un paciente parecido.",
+    // v17.50.0 (decision D5) — LA MITAD QUE FALTABA. Hasta aqui el contrato solo PROHIBIA
+    // (no inventes). La regla simetrica —no te dejes nada— vivia en MTR_REDACCION_SYS, un
+    // prompt que dejo de usarse y que nadie retiro, asi que se perdio sin que se notara: un
+    // borrador incompleto no dispara ninguna alarma, a diferencia de uno con una cifra
+    // inventada. Un hallazgo relevante que estaba en los datos y no llego a la nota es una
+    // omision en una historia clinica que el medico firma.
+    "Y a la inversa: NO OMITAS ningún hallazgo clínicamente relevante que SÍ esté en los bloques. Inventar y dejarse algo son la misma falta con distinto signo: la nota tiene que contener TODO lo pertinente que recibiste, ni una cosa más ni una menos.",
+    // v17.50.0 (decision D6) — Estaba solo en el prompt de Enfermedad Actual; los otros
+    // cuatro modos (motivo, recomendaciones, analisis y plan, y el respaldo de un modo
+    // desconocido) no la llevaban. Verificado construyendo los cinco prompts reales.
+    "Ni juicios de valor ni inferencias sin respaldo: no califiques al paciente (‘incumplidor’, ‘poco colaborador’, ‘descuidado’) ni conjetures causas, pronósticos o intenciones que los bloques no afirmen.",
+    "",
+    "# CÓMO SE LEE LA HISTORIA DE EVEREST",
+    "- Un campo en 'no' o 'false' ES UN HECHO: significa que el médico lo evaluó y lo descartó expresamente (p. ej. 'infarto de miocardio: no' = descartado). Un campo AUSENTE significa que no se preguntó. Son cosas distintas y jamás se tratan igual: de un campo ausente no se afirma ni que está ni que no está.",
+    "- De los antecedentes negativos escribe SOLO los pertinentes al motivo de consulta y al cuadro de hoy. El resto se calla: esto es semiología, no un inventario de la base de datos.",
+    "- Los identificadores de campo del sistema (sedentarismo, antecedentePatologicos, revisionSistema y similares) NUNCA se escriben: se traducen a lenguaje clínico.",
+    "",
+    "# EL TEXTO QUE EL MÉDICO YA ESCRIBIÓ",
+    "El texto ya redactado por el médico —el de la casilla de hoy y el guardado en la historia de Everest— es MATERIA PRIMA CLÍNICA: reescríbelo mejorado, con la semiología completa y la estructura y el lenguaje que exige la Resolución 1995 de 1999, en vez de repetirlo tal cual o de ignorarlo.",
+    "- CONSERVA todos y cada uno de los hechos que él consignó. Suprimir un dato suyo está PROHIBIDO.",
+    "- NO alteres ninguna cifra, fecha, dosis ni unidad que él haya escrito: se transcriben exactas.",
+    "- NO agregues ningún hecho que no esté en los bloques de arriba.",
+    "Lo que produces es un BORRADOR que el médico lee, edita y aprueba: nunca reemplaza su texto por su cuenta.",
+    "SI NO HAY TEXTO PREVIO, la sección se redacta COMPLETA desde cero con todo lo que traen los bloques: no la dejes corta por falta de un borrador de partida — el material está en la historia de Everest y en los hechos calculados.",
+    "",
+    "# JERGA INTERNA — PROHIBIDA EN LA SALIDA",
+    "Nunca escribas términos de logística interna del asistente ni sus siglas: AGUJERO NEGRO RENAL, ANR, FTL, COSECHA, DRIVER, DRIVER DICTADOR, PASAJERO, MODO ESTABLE, ESTADO A/D/R, BLOQ. Si algo así apareciera en los datos, tradúcelo a una frase clínica humana (por ejemplo: 'se adelanta el control de función renal para no dejarla vencer').",
+  ].join("\n");
+
   const MTR_EA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "# ROL",
     "Actúa como un médico general colombiano experto en semiología clínica y auditoría de historias clínicas bajo la Resolución 1995 de 1999. Redactas la sección ENFERMEDAD ACTUAL de la consulta de HOY, en primera persona del médico que documenta (refiere, niega, se evidencia). No preguntas ni pides datos: usas exclusivamente lo entregado.",
     "",
     "# FUENTE DE VERDAD",
-    "Solo los HECHOS DEL PACIENTE, el TEXTO YA REGISTRADO y los DATOS APORTADOS POR EL MÉDICO que recibas. CERO INFERENCIA: si un dato no está, para ti no existe — no lo inventes, no lo supongas, y no escribas 'no se registró' salvo necesidad clínica.",
+    "Las del bloque de arriba, en ese orden de mando. CERO INFERENCIA: si un dato no está, para ti no existe — no lo inventes, no lo supongas, y no escribas 'no se registró' salvo necesidad clínica.",
+    "",
+    "# LO QUE SIEMPRE VA (si consta en los bloques)",
+    "Sexo y edad · antecedentes pertinentes en extenso con su tiempo de evolución y su manejo actual · la cronología desde el último control · la semiotecnia de cada síntoma relevante, con sus positivos Y sus negativos pertinentes · la adherencia farmacológica · los estilos de vida cuantificados.",
+    "",
+    "# LO QUE NUNCA VA, AUNQUE TE LLEGUE EN LOS DATOS",
+    "Resultados de laboratorio y paraclínicos · clasificación de riesgo cardiovascular · metas terapéuticas · el plan de exámenes y sus fechas · quejas administrativas · siglas de diagnósticos · frases de relleno · signos vitales o cualquier hallazgo de examen físico de HOY (presión arterial, peso, frecuencia cardíaca, glucometría capilar, IMC y similares) — pertenecen al Examen Físico, nunca a Enfermedad Actual, aunque consten en los bloques entregados. (Cada punto está detallado abajo en PROHIBIDO.)",
     "",
     "# CONTENIDO OBLIGATORIO (en este orden narrativo)",
     "1. Apertura: sexo, edad, antecedentes pertinentes EN EXTENSO con su tiempo de evolución y el manejo actual (medicamentos con dosis y frecuencia), integrados en la narración, no como lista.",
@@ -31335,17 +34670,28 @@ _vglOfrecerDeshacer(btn);
     "4. Adherencia farmacológica objetiva. La compra de medicamentos por cuenta propia se registra como 'adquisición particular', SIN mencionar causas administrativas.",
     // v17.6.3 — IA ALUCINA (reporte del médico): la Enfermedad Actual inventaba la presión
     // arterial (p. ej. «PA 110/70») cuando la TA no estaba documentada ni en los hechos.
-    // Raíz: esta regla y la 6 pedían la PA como contenido OBLIGATORIO incondicional y el
-    // modelo «rellenaba» el vacío con una cifra típica. Regla del proyecto: casilla vacía
-    // antes que dato inventado. El automonitoreo de PA ahora se condiciona a que conste en
-    // los bloques entregados; la regla 6 y PROHIBIDO refuerzan lo mismo en positivo y
-    // negativo (mismo patrón que la corrección de labs/riesgo de v17.3.0).
+    // Raíz: la regla 6 (retirada en v17.28.0, ver más abajo) y esta pedían la PA como
+    // contenido obligatorio y el modelo «rellenaba» el vacío con una cifra típica.
+    // v17.28.0 — CORRECCIÓN DE FONDO, no solo de alucinación (encargo del médico, 28-ago,
+    // tras un reporte en vivo: "por ejemplo se sigue colando examen físico en la enfermedad
+    // actual, eso no es permitido"). Investigado contra semiología clínica estándar: la
+    // anamnesis (donde vive Enfermedad Actual — lo que el paciente RELATA) y el examen
+    // físico (lo que el médico MIDE) son fases distintas y consecutivas del acto médico; la
+    // Resolución 1995/1999 no fija esto campo por campo, pero delega en la "racionalidad
+    // científica" que sí lo exige. La regla 6 de abajo ("Cifras objetivas DE HOY: presión
+    // arterial, glucometría, peso, frecuencia cardíaca") pedía exactamente lo que la
+    // semiología prohíbe: un hallazgo de examen físico narrado como si fuera anamnesis. No
+    // bastaba con condicionarlo a "si consta" (v17.6.3) — el defecto no era que la IA
+    // inventara la cifra, era que la pedía en el lugar equivocado incluso cuando la cifra
+    // era real. Retirada por completo (regla 6 eliminada, PROHIBIDO reforzado sin
+    // condición, ejemplo recortado). El automonitoreo DOMICILIARIO de PA de la regla 5 NO
+    // se toca: es lo que el paciente refiere de su casa, anamnesis legítima — la medición de
+    // HOY en el consultorio es la que se va, no el relato del paciente sobre la suya.
     "5. Estilos de vida CUANTIFICADOS: actividad física (modalidad, días/semana, min/sesión); dieta y restricciones (sodio/azúcares si aplica); tabaquismo (paquetes/año, o nunca fumador, o exfumador desde cuándo); alcohol (unidades/semana o abstinencia); automonitoreo de presión arterial (frecuencia y cifras) SOLO si el paciente lo reporta en los bloques entregados — si no consta, no se menciona.",
-    "6. Cifras objetivas con unidades DE HOY: SOLO las que aparecen en los bloques entregados (HECHOS DEL PACIENTE, TEXTO YA REGISTRADO o DATOS APORTADOS): presión arterial, glucometría capilar, peso, frecuencia cardíaca… Si una cifra no está en NINGÚN bloque (p. ej. la presión arterial), NO la escribas — el texto queda sin esa cifra. Nunca resultados de laboratorio ni paraclínicos de controles anteriores — esos van en Análisis y Plan, no en Enfermedad Actual.",
     "",
     "# PROHIBIDO",
     "- Problemas administrativos: quejas de EPS, dispensación, autorizaciones, demoras.",
-    "- Inventar cifras de signos vitales: si la presión arterial u otra medida no aparece en los bloques entregados, jamás escribas un valor (ni 'se evidencia PA …', ni cifras de automonitoreo) — el texto simplemente no la menciona.",
+    "- Signos vitales o hallazgos de examen físico de HOY (presión arterial, peso, frecuencia cardíaca, glucometría capilar, IMC y similares): pertenecen al Examen Físico, NUNCA a Enfermedad Actual — ni siquiera si constan en los bloques entregados. (El automonitoreo domiciliario que el paciente REFIERE sí es anamnesis: ver regla 5.)",
     "- Siglas de diagnósticos o términos clínicos: escribe SIEMPRE en extenso (Hipertensión Arterial, Diabetes Mellitus Tipo 2, Enfermedad Renal Crónica, Infarto Agudo de Miocardio, Presión Arterial, Riesgo Cardiovascular, Frecuencia Cardíaca) — nunca HTA, DM2, ERC, IAM, TA, RCV, FC, FR.",
     "- Frases de relleno: 'paciente estable', 'asiste a control rutinario', 'sin cambios', 'evolución satisfactoria', 'en buen estado general'.",
     "- Viñetas, subtítulos, markdown, saludos, preámbulos, explicaciones o notas al pie.",
@@ -31360,7 +34706,7 @@ _vglOfrecerDeshacer(btn);
     "Prosa continua, TODO EN MAYÚSCULAS SOSTENIDAS, terminología médica formal. EXTENSIÓN: cubre TODOS los hechos entregados en narrativa completa — NO comprimas en un resumen; con datos suficientes el texto suele tomar entre 120 y 260 palabras. Responde ÚNICAMENTE con el texto final.",
     "",
     "# EJEMPLO (imita la FORMA y el TONO; el contenido real sale SOLO de los hechos entregados)",
-    "PACIENTE FEMENINA DE 62 AÑOS, CON ANTECEDENTE DE HIPERTENSIÓN ARTERIAL DE 8 AÑOS DE EVOLUCIÓN EN MANEJO CON LOSARTÁN 50 mg CADA 12 HORAS, QUIEN REFIERE QUE DESDE EL ÚLTIMO CONTROL HACE 3 MESES SE HA ENCONTRADO ASINTOMÁTICA DESDE EL PUNTO DE VISTA CARDIOVASCULAR; NIEGA DOLOR TORÁCICO, DISNEA, PALPITACIONES, EDEMA DE MIEMBROS INFERIORES Y CEFALEA. EN CUANTO A LA ADHERENCIA FARMACOLÓGICA REFIERE TOMA REGULAR DE SU ESQUEMA SIN OMISIÓN DE DOSIS. RESPECTO A LOS ESTILOS DE VIDA REALIZA CAMINATA 3 DÍAS POR SEMANA DURANTE 40 MINUTOS POR SESIÓN, REFIERE DIETA CON RESTRICCIÓN DE SODIO, NIEGA TABAQUISMO Y REFIERE ABSTINENCIA ALCOHÓLICA. EL AUTOMONITOREO DOMICILIARIO DE PRESIÓN ARTERIAL REPORTA CIFRAS PROMEDIO DE 125/78 mmHg. EN LA CONSULTA ACTUAL SE EVIDENCIA PRESIÓN ARTERIAL DE 128/80 mmHg Y PESO DE 70 kg.",
+    "PACIENTE FEMENINA DE 62 AÑOS, CON ANTECEDENTE DE HIPERTENSIÓN ARTERIAL DE 8 AÑOS DE EVOLUCIÓN EN MANEJO CON LOSARTÁN 50 mg CADA 12 HORAS, QUIEN REFIERE QUE DESDE EL ÚLTIMO CONTROL HACE 3 MESES SE HA ENCONTRADO ASINTOMÁTICA DESDE EL PUNTO DE VISTA CARDIOVASCULAR; NIEGA DOLOR TORÁCICO, DISNEA, PALPITACIONES, EDEMA DE MIEMBROS INFERIORES Y CEFALEA. EN CUANTO A LA ADHERENCIA FARMACOLÓGICA REFIERE TOMA REGULAR DE SU ESQUEMA SIN OMISIÓN DE DOSIS. RESPECTO A LOS ESTILOS DE VIDA REALIZA CAMINATA 3 DÍAS POR SEMANA DURANTE 40 MINUTOS POR SESIÓN, REFIERE DIETA CON RESTRICCIÓN DE SODIO, NIEGA TABAQUISMO Y REFIERE ABSTINENCIA ALCOHÓLICA. EL AUTOMONITOREO DOMICILIARIO DE PRESIÓN ARTERIAL REPORTA CIFRAS PROMEDIO DE 125/78 mmHg.",
     "",
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas nombres ni identificadores (no los tienes).",
   ].join("\n");
@@ -31372,14 +34718,28 @@ _vglOfrecerDeshacer(btn);
   // (su fuerte es extraer y plantillar, no razonar largo), y cada casilla es una llamada
   // pequeña e independiente.
   const MTR_BASE_CASILLA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "Actúa como un médico general colombiano que documenta la consulta de HOY en la historia clínica (Resolución 1995 de 1999).",
-    "FUENTE DE VERDAD: únicamente los HECHOS DEL PACIENTE, el TEXTO YA REGISTRADO, los DATOS APORTADOS y las INSTRUCCIONES DEL MÉDICO que recibas. CERO INFERENCIA: si un dato no está, no existe — no lo inventes ni lo supongas.",
+    // v17.13.0 — enumeraba tres fuentes y se le habían quedado afuera la historia de Everest
+    // (que llega desde la v17.10.0) y el orden entre ellas. Ambas cosas las enuncia ahora,
+    // una sola vez, el bloque de precedencia de arriba.
+    "FUENTE DE VERDAD: únicamente los bloques enumerados arriba. CERO INFERENCIA: si un dato no está, no existe — no lo inventes ni lo supongas.",
     "PROHIBIDO: siglas de diagnósticos (escribe Hipertensión Arterial, Diabetes Mellitus Tipo 2, Enfermedad Renal Crónica…), quejas administrativas, frases de relleno ('paciente estable', 'sin cambios'), viñetas, markdown, saludos, preámbulos y notas al pie.",
     "PERMITIDO abreviar solo unidades y posología: mg, kg, mmHg, lpm, dL, c/8h, v.o.",
     "SALIDA: prosa continua EN MAYÚSCULAS SOSTENIDAS, terminología médica formal. Responde ÚNICAMENTE con el texto final, sin explicar nada.",
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas nombres ni identificadores (no los tienes).",
   ].join("\n");
-  const MTR_MOTIVO_SYS = MTR_BASE_CASILLA_SYS + "\nREDACTAS el MOTIVO DE CONSULTA: UNA sola frase corta (máximo ~15 palabras) que diga a qué viene el paciente HOY (control de sus programas, síntoma nuevo, resultado de exámenes). Sin cronología ni semiotecnia: eso va en Enfermedad Actual.";
+  // v17.50.0 (decision D6) — MINI-EJEMPLO. La rotacion de modelos incluye variantes
+  // flash-lite desde el PRIMER intento, y esos modelos copian un patron mucho mejor de lo
+  // que siguen una instruccion abstracta. Los ejemplos van SIN UNA SOLA CIFRA a proposito:
+  // mtrVerificarCifrasIA marca como inventado todo numero con unidad que no este en la hoja
+  // de hechos, asi que un ejemplo con cifras se le colaria al modelo y le saldria al medico
+  // el aviso de «cifras sin respaldo» sobre un dato que copio del propio prompt.
+  const MTR_MOTIVO_SYS = MTR_BASE_CASILLA_SYS + "\nREDACTAS el MOTIVO DE CONSULTA: UNA sola frase corta (máximo ~15 palabras) que diga a qué viene el paciente HOY (control de sus programas, síntoma nuevo, resultado de exámenes). Sin cronología ni semiotecnia: eso va en Enfermedad Actual."
+    + "\n\n# EJEMPLO (imita la FORMA; el contenido real sale SOLO de los datos entregados)"
+    + "\nDATOS: paciente del programa de riesgo cardiovascular, viene por control periódico y a que le lean los laboratorios que se tomó."
+    + "\nSALIDA: CONTROL DEL PROGRAMA DE RIESGO CARDIOVASCULAR Y LECTURA DE LABORATORIOS.";
   // v16.5.0 — DECISIÓN DEL MÉDICO (entrevista del modal, 20-ago): "nota clínica y análisis
   // y plan es lo mismo — dejar análisis y plan, que es el que usa Everest". La casilla de
   // Análisis y plan pasa a generar la NOTA COMPLETA del Copiloto (MTR_NOTA_SYS: blindaje
@@ -31398,7 +34758,20 @@ _vglOfrecerDeshacer(btn);
     "3. SU ESTILO DE VIDA: dieta ajustada a SUS patologías (sal si hipertensión, azúcares si diabetes, proteínas según su función renal), actividad física adaptada a su edad y condición (frecuencia y minutos), y lo que aplique de tabaco/alcohol SOLO si consta en sus datos.",
     "4. SUS EXÁMENES Y CITA: qué exámenes le ordenaron hoy, cuándo tomárselos, si requieren ayuno cuando conste, y la fecha de su próximo control.",
     "5. SIGNOS DE ALARMA PERSONALIZADOS: por cuáles síntomas debe consultar a urgencias SIN ESPERAR CITA, elegidos según SUS patologías (p. ej. en diabetes: sudoración fría con temblor o confusión; en enfermedad renal: disminución marcada de la orina o hinchazón progresiva; en riesgo cardiovascular: dolor opresivo en el pecho, dificultad para respirar, pérdida súbita de fuerza o del habla, desviación de la cara, dolor de cabeza intenso e inusual).",
+    "SIEMPRE van los cinco puntos de arriba que tengan datos: sus medicamentos, sus metas, su estilo de vida, sus exámenes con fecha y sus signos de alarma.",
+    // v17.13.0 — el paciente y su familia LEEN esta casilla. Con la historia de Everest
+    // ahora en el contexto (109 marcaciones con nombres de campo del sistema), el riesgo de
+    // que un identificador crudo termine impreso en la hoja del paciente es real.
+    "NUNCA escribas identificadores de campo del sistema ni pares clave-valor ('sedentarismo: sí', 'antecedentePatologicos', 'revisionSistema', 'RAC', 'FTL'): esto lo lee el paciente. Todo se dice en palabras que él entienda.",
+    "NUNCA lo que no conste en sus datos: si no sabes su dosis, su cifra o su fecha, no la escribas — mejor una recomendación menos que una inventada.",
     "Frases cortas separadas por punto. Sin numerar, sin viñetas. Entre 80 y 160 palabras según los datos disponibles.",
+    // v17.50.0 (decision D6) — mismo motivo que en el motivo de consulta, y con la misma
+    // condicion tecnica: NI UNA CIFRA en el ejemplo. Aqui importa el doble, porque esta es
+    // la casilla que el paciente se lleva impresa.
+    "",
+    "# EJEMPLO (imita la FORMA y el TRATO; el contenido real sale SOLO de los datos de ESTE paciente)",
+    "DATOS: hipertenso en manejo con un antihipertensivo, le ordenaron exámenes para su próximo control.",
+    "SALIDA: CONTINÚE TOMANDO SU MEDICAMENTO PARA LA PRESIÓN TODOS LOS DÍAS A LA MISMA HORA Y NO LO SUSPENDA POR SU CUENTA AUNQUE SE SIENTA BIEN. REDUZCA LA SAL EN LAS COMIDAS Y EVITE LOS ALIMENTOS EMPACADOS. HÁGASE LOS EXÁMENES QUE LE ORDENAMOS ANTES DE SU PRÓXIMA CITA Y TRAIGA LOS RESULTADOS. SI PRESENTA DOLOR OPRESIVO EN EL PECHO, DIFICULTAD PARA RESPIRAR, PÉRDIDA SÚBITA DE LA FUERZA O DEL HABLA, O DOLOR DE CABEZA INTENSO E INUSUAL, ACUDA A URGENCIAS SIN ESPERAR SU CITA.",
   ].join("\n");
   // v17.1.0 (#110) — RETIRADO `MTR_CRONICOS_SYS`. Era el prompt de la casilla de Ruta
   // Crónicos, que el médico mandó eliminar; sin su rama en mtrRedaccionPrompt quedaba
@@ -31407,6 +34780,8 @@ _vglOfrecerDeshacer(btn);
   // v14.2.0 — NOTA CLÍNICA (copiloto del médico, SIN la consola interactiva /meds//labs//ok:
   // el médico edita el resultado antes de copiarlo). Se basa en el JSON v68 del motor.
   const MTR_NOTA_SYS = [
+    MTR_PRECEDENCIA_SYS,
+    "",
     "# ROL",
     "Eres un médico internista senior y auditor médico-legal experto en el sistema de salud colombiano y en riesgo cardiovascular. Generas de una sola vez la NOTA CLÍNICA FINAL para la historia clínica electrónica de ESTE paciente.",
     "",
@@ -31415,6 +34790,17 @@ _vglOfrecerDeshacer(btn);
     "- Un campo en null, vacío o ausente significa DATO NO DISPONIBLE (no se midió o no se pudo calcular): NO lo menciones ni lo interpretes como valor real. NUNCA escribas 'TFG 0', 'estadio terminal' ni 'meta LDL menor a 0' a partir de un campo vacío; si falta la función renal o la meta, simplemente no las afirmes.",
     "- DOBLE TFG: el ESTADIO CLÍNICO (CKD-EPI: estadio_clinico/tfg_ckdepi) gobierna decisiones clínicas, ajuste de dosis y remisión; el ADMINISTRATIVO (Cockcroft-Gault: estadio_administrativo/tfg_cg) es solo referencia logística de agenda.",
     "- USA los campos nota_clinica y alertas_dosis (escritos para la historia), puliendo la redacción. JAMÁS copies ni parafrasees technical_justification ni su jerga logística (AGUJERO NEGRO RENAL/ANR, MODO ESTABLE, COSECHA, ESTADO A/D/R, FTL, DRIVER DICTADOR): si aparece, tradúcela a frase clínica humana.",
+    "",
+    "",
+    "# LO QUE SIEMPRE VA (si el dato consta)",
+    "El blindaje médico-legal que corresponda · las dos tasas de filtración con su papel (la clínica gobierna, la administrativa es referencia) · cada ajuste de dosis renal con su motivo y la tasa usada · la meta de LDL y el colesterol no-HDL con su lectura de meta · las fechas y los exámenes YA decididos, CITADOS tal como vienen.",
+    "",
+    "# LO QUE NUNCA VA",
+    "Recalcular filtrado, riesgo o metas · proponer fechas u órdenes propias, moverlas o agregarles exámenes · jerga logística interna sin traducir · afirmar sobre un campo vacío · datos de otro paciente.",
+    // v17.13.0 — la hoja ya dice cuál examen FIJA la fecha de la toma y cuáles se piden para
+    // aprovechar la misma muestra. Sin esta línea el modelo justificaba la toma sobre
+    // cualquiera de la lista, a veces sobre uno que solo iba de acompañante.
+    "- LA TOMA SE JUSTIFICA SOBRE EL EXAMEN QUE FIJA SU FECHA (la hoja lo nombra explícitamente). Los demás se mencionan como aprovechamiento de la misma muestra, nunca como el motivo de la toma. Si la hoja no nombra ninguno, no afirmes cuál manda.",
     "",
     "# BLINDAJE MÉDICO-LEGAL (aplícalo siempre que corresponda)",
     "1. Con ajustes de metas o medicamentos: 'SE REALIZAN AJUSTES TERAPÉUTICOS Y/O DE METAS CON BASE EN EL PROTOCOLO INSTITUCIONAL DE RIESGO CARDIOVASCULAR (CONSENSO COLOMBIANO DE DISLIPIDEMIA 2024) Y EN LA FUNCIÓN RENAL ACTUAL (CKD-EPI 2021), EN EL MARCO DE LA RUTA INTEGRAL DE ATENCIÓN EN SALUD (RESOLUCIÓN 3280/2018).'",
@@ -31440,11 +34826,32 @@ _vglOfrecerDeshacer(btn);
     "# ESTRUCTURA DE SALIDA (genera la nota completa de una vez, exactamente en este orden, en texto plano y mayúsculas)",
     "#PACIENTE_[ID]_#RCV_CONTROL_[AÑO_MES]",
     "===== SECCIÓN: IDENTIFICACIÓN Y EVOLUCIÓN CLÍNICA ===== párrafo con edad, sexo, programa de riesgo cardiovascular, motivo de consulta y anamnesis según lo anotado; integra la evolución vs el control previo NOMBRANDO el cambio concreto en los campos que sí traiga el JSON o lo anotado (función renal, RAC, perfil lipídico, glicemia/HbA1c si hay diabetes, ajustes farmacológicos) — nunca 'evolución favorable' o 'sin cambios significativos' sin decir en qué; menciona si niega síntomas de alarma, adherencia aparente y estilo de vida si se dispone.",
-    "===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS; :: CLASIFICACIÓN DE RIESGO CARDIOVASCULAR (cv_risk); :: JUSTIFICACIÓN CLÍNICA (criterio del paso, edad, estadio clínico, RAC alterado, eventos previos); :: META TERAPÉUTICA DE LDL (menor a ldl_target, y reducción ≥50% del basal si riesgo alto/muy alto); :: FOCO CLÍNICO PRIORITARIO (según priority_focus).",
+    // v17.26.0 — "reducción ≥50% del basal si riesgo alto/muy alto" era un número FIJO
+    // escrito en la instrucción, no derivado de ldl_reduction_target — el mismo tipo de
+    // defecto que ldl_target/cno_hdl_target ya evitan (el JSON es la única fuente numérica,
+    // el prompt nunca declara un número que el modelo deba recordar de memoria). Ahora cita
+    // el campo, y calla la mitad de la reducción cuando ldl_reduction_target es null (riesgo
+    // moderado/bajo, donde la norma no exige un porcentaje de reducción).
+    "===== SECCIÓN: DIAGNÓSTICOS Y PERFIL DE RIESGO ===== :: PATOLOGÍAS ACTIVAS; :: CLASIFICACIÓN DE RIESGO CARDIOVASCULAR (cv_risk); :: JUSTIFICACIÓN CLÍNICA (criterio del paso, edad, estadio clínico, RAC alterado, eventos previos); :: META TERAPÉUTICA DE LDL (menor a ldl_target, y si ldl_reduction_target no es null, reducción igual o mayor a ese porcentaje desde el basal — si es null, no menciones ningún porcentaje de reducción); :: FOCO CLÍNICO PRIORITARIO (según priority_focus).",
+    // v17.6.89 — sin esta regla el campo `status` nace muerto: podría emitirse PENDIENTE y el
+    // modelo redactaría igual, como si el paciente estuviera estratificado. Es el mismo
+    // patrón de "la función existe, nadie la cablea" que ya dejó inertes a otros campos.
+    "- Si `status` es 'PENDIENTE', la estratificación de riesgo NO SE PUDO HACER: NO escribas ninguna categoría de riesgo ni meta de LDL (irán en null), di en una frase que la clasificación queda pendiente, y copia LITERALMENTE el texto del campo `solicitud` como última línea de esta sección. Si `status` trae otro valor, no menciones `solicitud` ni escribas nada sobre estratificación pendiente.",
     "===== SECCIÓN: REVISIÓN PARACLÍNICA ===== :: FUNCIÓN RENAL (eGFR CKD-EPI y estadio clínico; CrCl como referencia; evolución; RAC como daño de órgano blanco; injuria/progresión como prioritario; remisión si aplica); :: PERFIL LIPÍDICO (CT, HDL, LDL, TG y cNoHDL, en meta o falla, con tendencia; TG≥500 riesgo de pancreatitis); :: METABOLISMO GLUCÍDICO (glicemia y HbA1c si diabetes; si no: 'HEMOGLOBINA GLICOSILADA NO SOLICITADA POR AUSENCIA DE DIAGNÓSTICO DE DIABETES MELLITUS'); :: ANÁLISIS DE METAS.",
     "===== SECCIÓN: PLAN FARMACOLÓGICO Y JUSTIFICACIÓN ===== Si alertas_dosis NO está vacío, ÁBRELA con 'AJUSTE DE DOSIS POR FUNCIÓN RENAL:' y un renglón propio por cada ajuste (medicamento, dosis actual, dosis sugerida, motivo, TFG usada) antes de cualquier otro contenido de la sección — es intencional que tenga sus propios saltos de línea, para que un ajuste de seguridad no se diluya en la prosa. Luego :: ESQUEMA FARMACOLÓGICO (medicamentos con dosis y frecuencia; si un registro es incompleto, anotar que se completará en próximo control); :: JUSTIFICACIÓN DE AJUSTES (el motivo y la TFG de cada ajuste ya listado arriba, sin repetir las cifras; suspensión de metformina por TFG<30; intensidad de estatina si falla; antihipertensivos para metas y protección renal).",
     "===== SECCIÓN: PLAN NO FARMACOLÓGICO ===== :: DIETA (adaptada a las patologías); :: ACTIVIDAD FÍSICA (150 a 300 minutos semanales de intensidad moderada, adaptada); :: EDUCACIÓN (si education_flags true, reflejar que se explicó adherencia, control, riesgo, signos de alarma y autocuidado).",
-    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list uno por línea (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR EL [control_date].', remisión si aplica, constancia si hubo toma previa incumplida por barrera de acceso no imputable al profesional).",
+    // v17.6.84 — auditoría v68 (S3 "LLEGA TARDE SIN LABS"), decisión del médico 26-ago:
+    // aquí se le PEDÍA al modelo la constancia médico-legal "si hubo toma previa incumplida
+    // por barrera de acceso no imputable al profesional" — pero NINGÚN campo del JSON le dice
+    // si eso ocurrió: el script no persiste todavía si la FTL anterior se cumplió. El modelo
+    // solo podía omitirla siempre o inventársela, y una constancia inventada tiene
+    // consecuencia médico-legal sobre un paciente que quizá sí fue a tomarse los exámenes.
+    // Es el mismo criterio con el que `falla_dispensacion` se dejó fija en "NO" (v17.6.78):
+    // casilla vacía antes que dato inventado, y con más razón cuando el dato es una
+    // afirmación jurídica. Se retira la mención; el médico la escribe a mano cuando aplique.
+    // Cuando exista el campo real (`toma_previa_incumplida`), esta cláusula vuelve — atada a
+    // él, nunca al criterio del modelo.
+    "===== SECCIÓN: LOGÍSTICA Y SOLICITUDES ===== :: CONDUCTA (plan integral en párrafo); :: PRÓXIMOS LABORATORIOS ([ftl_date]) listando order_list uno por línea (añade UROCULTIVO si uroanálisis alterado); :: TRÁMITES ('CITA CONTROL DE RIESGO CARDIOVASCULAR EL [control_date].', remisión si aplica).",
     "===== SECCIÓN: SEGURIDAD DEL PACIENTE ===== :: URGENCIAS (pautas de alarma cardio y cerebrovascular en tono humano: dolor opresivo en pecho, dificultad para respirar, pérdida repentina de fuerza o del habla, alteración de la cara, dolor de cabeza intenso inusual). Añade la alerta médico-legal si falla_dispensacion aplica.",
     "",
     "# EJEMPLO DE FORMA (solo el patrón '::' de UNA sección; el contenido real sale del JSON)",
@@ -31461,19 +34868,14 @@ _vglOfrecerDeshacer(btn);
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas identificadores del paciente (no los tienes): escribe los marcadores [ID] y [AÑO_MES] LITERALES — el equipo del médico los reemplaza en su computador, nunca viajan a la IA. Responde ÚNICAMENTE con la nota final.",
   ].join("\n");
 
-  // La instrucción del sistema es la barrera anti-invención. Es deliberadamente dura y
-  // se repite en positivo y en negativo: el modelo redacta los hechos, no razona clínica
-  // nueva ni añade cifras que no le dieron.
-  const MTR_REDACCION_SYS = [
-    "Eres un asistente de redacción para un médico en Colombia. Recibes HECHOS CLÍNICOS ya verificados de un paciente y tu única tarea es redactarlos en prosa clínica profesional en español.",
-    "REGLAS ABSOLUTAS:",
-    "1. No agregues ningún hecho, dato, diagnóstico, valor, cifra, fecha o medicamento que no esté explícitamente en los HECHOS.",
-    "2. No omitas hallazgos clínicamente relevantes que sí estén en los HECHOS.",
-    "3. Si un dato no aparece, NO lo menciones ni lo supongas; no escribas 'no se registró' salvo que sea clínicamente necesario.",
-    "4. No des recomendaciones, dosis ni conductas nuevas: solo las que estén en los HECHOS.",
-    "5. Escribe en tercera persona, tono clínico neutro, sin viñetas, sin markdown, sin encabezados salvo los que se te pidan explícitamente.",
-    "6. El texto es un BORRADOR que el médico revisará, editará y firmará. No incluyas nombres propios ni datos de identificación (no los tienes).",
-  ].join("\n");
+  // v17.50.0 (decision D5) — RETIRADO `MTR_REDACCION_SYS`. Era el prompt de sistema del
+  // redactor antiguo; desde que cada casilla tiene el suyo (MTR_EA_SYS, MTR_BASE_CASILLA_SYS
+  // y sus derivados) no lo referenciaba NADIE — quince lineas que solo servian para que
+  // alguien las leyera creyendo que estaban en uso. Antes de borrarlo se rescato lo unico
+  // que tenia y los prompts vivos habian perdido: su regla 2, la de exhaustividad ("no
+  // omitas hallazgos clinicamente relevantes que si esten en los HECHOS"), que ahora vive
+  // en MTR_PRECEDENCIA_SYS y por tanto alcanza a los cinco modos. Sus otras cinco reglas ya
+  // estaban cubiertas, y mejor, por el bloque de precedencia y por cada prompt de casilla.
 
   // Saneamiento de texto libre para prompts de IA: desidentificación de PHI y honoríficos/nombres.
   //
@@ -31560,9 +34962,23 @@ _vglOfrecerDeshacer(btn);
     tfgAportada: "TFG APORTADA POR EL MÉDICO (ml/min)",
     medicamentosAportados: "MEDICAMENTOS APORTADOS POR EL MÉDICO",
   };
-  function mtrDatosExtraTexto(datos) {
+  // v17.45.0 — `nombrePaciente` (2.º parámetro, OPCIONAL para no romper llamadores).
+  // FUGA DE PHI cerrada, hallazgo de auditoría adversarial: esta función llamaba al
+  // saneador SIN el nombre, y `mtrSanearTextoLibreAI` tiene dos defensas — una por FORMA
+  // (correo, teléfono, cédula) y otra por TOKENS, dentro de `if (nombrePaciente)`, que es
+  // la ÚNICA capaz de tachar un apellido en MAYÚSCULAS SOSTENIDAS (el estilo real de
+  // Everest) y la única que puede reconocer un nombre propio, porque un nombre no tiene
+  // forma reconocible. Esa rama quedaba inerte aquí.
+  // De los cinco canales que llegan al prompt de Gemini —contextoLibre, pregunta, ancla,
+  // indicaciones y este— los otros cuatro sí pasaban el nombre. Este era el único hueco,
+  // y uno de sus tres campos ("medicamentos aportados") es texto libre que el médico
+  // teclea a mano, donde es natural escribir "según la esposa de FULANO".
+  // El proyecto ya lo tenía escrito: "scrubPII reconoce correos y cédulas porque tienen
+  // forma, pero NO puede reconocer un nombre propio. Tachar un nombre con garantía exige
+  // conocerlo."
+  function mtrDatosExtraTexto(datos, nombrePaciente) {
     if (!datos || typeof datos !== "object") return "";
-    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(s) : ((typeof scrubPII === "function") ? String(scrubPII(String(s))) : String(s));
+    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(s, nombrePaciente) : ((typeof scrubPII === "function") ? String(scrubPII(String(s))) : String(s));
     const L = [];
     for (const k of Object.keys(MTR_DATOS_EXTRA_ETIQUETAS)) {
       const v = datos[k];
@@ -31651,7 +35067,9 @@ _vglOfrecerDeshacer(btn);
     const o = opts || {};
     const hechos = mtrHojaDeHechosTexto(hoja);
     const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim(), o.nombrePaciente) : "";
-    const datosExtra = mtrDatosExtraTexto(o.datosExtra);
+    // v17.45.0 — el nombre viaja también aquí. Era el único de los cinco canales del
+    // prompt que no lo pasaba (contextoLibre, pregunta, ancla e indicaciones sí).
+    const datosExtra = mtrDatosExtraTexto(o.datosExtra, o.nombrePaciente);
     // v17.6.26 — sin checkbox que marcar: el estilo se usa SIEMPRE que haya al menos un
     // ejemplo aprendido (mtrEstiloGuardar sigue siendo automático, ver más abajo).
     const ejemplos = (Array.isArray(o.estiloEjemplos) && o.estiloEjemplos.length)
@@ -31829,9 +35247,24 @@ _vglOfrecerDeshacer(btn);
   // prefijos que mtrHojaDeHechosTexto usa para esos datos (los mismos 5 bloques que
   // MTR_EA_SYS prohíbe por su nombre) — no toca ninguna otra línea, y solo aplica al modo
   // "enfermedad_actual" (en "analisis_plan" esas mismas líneas son contenido correcto).
+  // v17.7.3 — la hoja de hechos creció (uroanálisis, síndrome metabólico, plan y fechas,
+  // paraclínicos descriptivos). Cada bloque nuevo que sea un DATO —y no semiotecnia— tiene
+  // que entrar también en esta lista: si no, el modelo puede copiarlo tal cual dentro de la
+  // Enfermedad Actual y el filtro no lo reconocería. Las fechas y el plan pertenecen a
+  // Análisis y Plan, nunca a la Enfermedad Actual.
   const MTR_EA_PREFIJOS_PROHIBIDOS = [
     "Signos vitales:", "Laboratorios y paraclínicos:", "Función renal:",
     "Riesgo cardiovascular:", "Meta LDL:",
+    "Paraclínicos con resultado descriptivo:", "Síndrome metabólico:",
+    "Exámenes que YA se van a ordenar en esta toma:",
+    "Exámenes vigentes que NO entran en esta toma",
+    "Fechas ya calculadas:",
+    // v17.13.0 — los dos rótulos siguientes cambiaron/nacieron con la traducción de la jerga
+    // interna a español clínico. Este filtro compara por TEXTO EXACTO: si el rótulo de la
+    // hoja y el de esta lista se separan, el filtro deja de reconocer su propia línea y
+    // falla en silencio (ver el comentario de «Signos vitales:» en mtrHojaDeHechosTexto).
+    "Vigilancia de la función renal:",
+    "El examen que fija la fecha de la toma es",
   ];
   function mtrQuitarDatosProhibidosEA(texto) {
     if (!texto) return "";
@@ -31882,7 +35315,7 @@ _vglOfrecerDeshacer(btn);
       const an = h.antropometria || {};
       sumar([an.imc, an.paSistolica, an.paDiastolica]);
       const rn = h.renal || {};
-      sumar([rn.tfgCkdepi, rn.crcl, rn.framinghamPuntos, h.metaLdl]);
+      sumar([rn.tfgCkdepi, rn.crcl, rn.framinghamPuntos, h.metaLdl, h.metaReduccionLdl]);
       if (Array.isArray(h.labs)) for (const x of h.labs) sumar(x && x.valor);
       if (Array.isArray(h.medicamentos)) for (const m of h.medicamentos) sumar(m);
       // 2. Cifras de MEDIDA en el borrador: unidad de medida pegada al número, fracción
@@ -32378,7 +35811,16 @@ _vglOfrecerDeshacer(btn);
     return { ok: false, motivo: "casilla_no_aparecio", pestania: info.pestania };
   }
 
-  function mtrInsertarEnCasillaModo(modo, texto, docId, doc) {
+  // v17.13.0 — `opciones.reemplazar`. El médico pidió (27-ago) que la IA no solo lea su
+  // texto sino que lo devuelva reescrito y mejorado según la norma y la semiología. Eso
+  // choca de frente con la regla de la casa —«la casilla del médico es sagrada: ningún
+  // botón sobrescribe EN SILENCIO algo que él escribió a mano»— y la única resolución que
+  // respeta las dos es esta: la reescritura se le entrega como BORRADOR en el modal, y
+  // pisar la casilla exige que él lo confirme una vez visto.
+  // El valor por defecto NO cambia: sin `reemplazar` la función rechaza igual que siempre
+  // (`motivo:"ocupada"`) y devuelve el `previo` intacto. Solo el flujo de confirmación
+  // explícita pasa `reemplazar:true`, y aun entonces se devuelve `previo` para deshacer.
+  function mtrInsertarEnCasillaModo(modo, texto, docId, doc, opciones) {
     const info = MTR_CASILLAS_REDACTOR[modo];
     if (!info || !texto || !String(texto).trim()) return { ok: false, motivo: "sin_texto" };
     // v17.6.59 — auditoría 25-ago (1.21): vglEscrituraPermitida (el dead-man switch) tenía
@@ -32395,9 +35837,15 @@ _vglOfrecerDeshacer(btn);
     const el = mtrCasillaDeModo(modo, doc);
     if (!el) return { ok: false, motivo: "sin_casilla", pestania: info.pestania };
     const actual = String(el.value == null ? "" : el.value).trim();
-    if (actual !== "") return { ok: false, motivo: "ocupada", el: el, previo: el.value };
-    try { setNgValue(el, String(texto).trim()); return { ok: true, motivo: "insertado", el: el }; }
-    catch (e) { return { ok: false, motivo: "error" }; }
+    const reemplazar = !!(opciones && opciones.reemplazar === true);
+    if (actual !== "" && !reemplazar) return { ok: false, motivo: "ocupada", el: el, previo: el.value };
+    const previo = el.value;
+    try {
+      setNgValue(el, String(texto).trim());
+      return (actual !== "")
+        ? { ok: true, motivo: "reemplazado", el: el, previo: previo }
+        : { ok: true, motivo: "insertado", el: el };
+    } catch (e) { return { ok: false, motivo: "error" }; }
   }
 
   // v17.6.10 — mtrInsertarNota (inserción de nota partida) se retiró: sin llamador
@@ -32490,6 +35938,53 @@ _vglOfrecerDeshacer(btn);
     } catch (e) { return iso || ""; }
   }
 
+  // v17.6.89 — auditoría v68 (S2/S5): el campo `status` del JSON leía `r.meta.status`, que NO
+  // EXISTE — `mtrEvaluarMetaLdl` expone `estado`, no `status`. Resultado verificado con el
+  // harness: `status` salía SIEMPRE `""`, incluso en un paciente perfectamente clasificado y
+  // en meta. Era un campo muerto del contrato.
+  //
+  // v68 lo usa para dos cosas distintas y esta función las separa:
+  //  - PENDIENTE cuando la estratificación NO SE PUDO HACER (falta el ASCVD, o falta la TFG).
+  //    Es el caso que el spec nombra explícitamente: "status PENDIENTE" + la SOLICITUD.
+  //  - El estado de la meta de LDL cuando sí se clasificó. El vocabulario sale del propio v68
+  //    ("completa si LDL<meta Y red>=50; si solo una -> FALLA parcial").
+  // Sin LDL con qué juzgar se devuelve "" en vez de inventar un estado: casilla vacía antes
+  // que dato inventado.
+  const MTR_STATUS_V68 = {
+    en_meta: "EN META",
+    meta_parcial: "FALLA PARCIAL",
+    fuera_de_meta: "FUERA DE META",
+  };
+  function mtrStatusV68(resumen) {
+    const r = resumen || {};
+    const riesgo = r.riesgo || {}, meta = r.meta || {};
+    // La clasificación manda: si no hay categoría, nada de lo demás es interpretable.
+    if (riesgo.categoria === null || riesgo.categoria === undefined || riesgo.categoria === "") return "PENDIENTE";
+    if (riesgo.datosCompletos === false) return "PENDIENTE";
+    return MTR_STATUS_V68[meta.estado] || "";
+  }
+
+  // v17.6.89 — el texto literal que v68 exige cuando los pasos 1-3 no clasificaron y hace
+  // falta el ASCVD. Va en el JSON para que la IA lo CITE, nunca para que lo redacte por su
+  // cuenta: antes no existía ningún campo y el modelo no tenía cómo saber que la
+  // estratificación había quedado pendiente.
+  function mtrSolicitudV68(resumen) {
+    const riesgo = (resumen && resumen.riesgo) || {};
+    if (riesgo.requiereAscvd === true) {
+      return "SOLICITUD: pasos 1-3 no clasificaron; ingrese ASCVD 10a crudo AHA/ACC";
+    }
+    if (riesgo.motivo === "tfg_requerida") {
+      return "SOLICITUD: falta la TFG (CKD-EPI) para clasificar el riesgo cardiovascular";
+    }
+    // v17.6.94 — el piso provisional por diabetes NO deja la categoría en blanco (sería
+    // peor: sin categoría no hay meta de LDL, y sin meta no hay falla terapéutica ni
+    // órdenes), pero tampoco se calla: dice qué falta para que deje de ser provisional.
+    if (riesgo.dmAniosRequerido === true) {
+      return "SOLICITUD: registre hace cuántos años el paciente tiene diabetes; sin ese dato el riesgo queda en ALTO provisional";
+    }
+    return "";
+  }
+
   function mtrJsonV68DesdeResumen(resumen, hoja) {
     const r = resumen || {}, h = hoja || {}, erc = r.erc || {}, riesgo = r.riesgo || {}, plan = r.plan || {};
     const meta = (r.meta && r.meta.metas) || {};
@@ -32533,13 +36028,30 @@ _vglOfrecerDeshacer(btn);
       tfg_ckdepi: erc.egfr != null ? erc.egfr : null,
       estadio_clinico: erc.estadioClinico || "",
       remitir_nefrologia: !!erc.remitirNefrologia,
-      cv_risk: riesgo.categoria || "",
+      // v17.6.89 — v68 dice "N/A=null" y este campo emitía "" cuando no había categoría. Una
+      // cadena vacía es un valor; null dice "no hay dato". La diferencia importa porque el
+      // JSON es lo que la IA trata como fuente de verdad.
+      cv_risk: riesgo.categoria || null,
       ldl_target: meta.ldl != null ? meta.ldl : null,
+      // v17.26.0 — REPORTE EN VIVO (28-ago, paciente real): el prompt le ORDENABA al modelo
+      // escribir "reducción ≥50% del basal si riesgo alto/muy alto" como regla fija de
+      // redacción (ver la instrucción de la sección DIAGNÓSTICOS Y PERFIL DE RIESGO, más
+      // abajo) — un número que el motor SÍ calcula (mtrMetasLipidicas.reduccion, la misma
+      // tabla que da ldl_target) pero que nunca viajaba como dato: el modelo lo citaba de
+      // memoria del prompt, no del JSON. Mismo principio que ldl_target/cno_hdl_target: el
+      // número real viaja calculado para que la IA solo lo cite, nunca lo recuerde de la
+      // instrucción. Consecuencia práctica del defecto viejo: mtrVerificarCifrasIA no
+      // conocía ese "50" por ningún canal, así que lo marcaba en rojo como cifra sin
+      // respaldo aunque el modelo lo hubiera escrito bien.
+      ldl_reduction_target: meta.reduccion != null ? meta.reduccion : null,
       // v17.6.64 (sección 4) — mismo criterio que ldl_target: el número real y su meta
       // viajan calculados, para que la IA solo los cite (nunca los calcule/invente).
       cno_hdl: h.cNoHDL != null ? h.cNoHDL : null,
       cno_hdl_target: meta.cnoHdl != null ? meta.cnoHdl : null,
-      status: (r.meta && r.meta.status) || "",
+      status: mtrStatusV68(r),
+      // v17.6.89 — el texto que v68 exige cuando la estratificación quedó pendiente. Vacío
+      // cuando sí se pudo clasificar; nunca se inventa una solicitud que no corresponde.
+      solicitud: mtrSolicitudV68(r),
       // v17.6.78 — auditoría 25-ago (sección 5, divergencia ya vigente, documentada): el
       // Vigilante NO TIENE forma de saber si la EPS/aseguradora falló en dispensar un
       // medicamento — esa información no vive en Everest ni en Athenea, solo en lo que
@@ -32554,8 +36066,27 @@ _vglOfrecerDeshacer(btn);
       // sigue pudiendo escribirlo a mano en la historia — el motor no lo bloquea, solo
       // no lo inventa por su cuenta.
       falla_dispensacion: "NO",
-      datos_completos: erc.datosCompletos !== false,
+      // v17.6.89 — esto solo miraba la función renal, así que un paciente cuya
+      // ESTRATIFICACIÓN DE RIESGO no se pudo hacer (faltaba el ASCVD) salía con
+      // `datos_completos: true` y `cv_risk` vacío: la IA redactaba como si estuviera
+      // evaluado. Verificado con el harness. Ahora basta con que falte cualquiera de las dos
+      // para que el campo diga la verdad.
+      datos_completos: (erc.datosCompletos !== false) && (riesgo.datosCompletos !== false),
       itu_estado: (r.uroanalisis && r.uroanalisis.estado) || "",
+      // v17.6.88 — auditoría v68 (S4 UROANÁLISIS: "pedir UROCULTIVO+antibiograma", "sin
+      // antibiótico a ciegas", "la orden nunca queda vacía"). `mtrEvaluarUroanalisis` calcula
+      // la orden concreta que corresponde a cada estado —["Urocultivo","Antibiograma"] en
+      // ITU probable y en bacteriuria del embarazo— y ese array NO viajaba al JSON: la IA
+      // recibía solo `itu_estado` y tenía que DEDUCIR el urocultivo a partir de él. Deducir
+      // es exactamente lo que el resto del prompt le prohíbe, así que o lo omitía o se lo
+      // inventaba. Verificado con el harness (nitritos + síntomas): `orden` traía
+      // ["Urocultivo","Antibiograma"] y la cadena "urocultivo" no aparecía por ninguna parte
+      // del JSON emitido.
+      // Va en campo PROPIO y no dentro de `order_list`: esa lista lleva CLAVES de analito
+      // (COLESTEROL_LDL, RAC…) que sus lectores usan para cruzar con el catálogo de CUPS;
+      // meterle nombres libres la rompería. Vacío si no hay uroanálisis evaluado — nunca se
+      // inventa una orden que el motor no calculó.
+      orden_uroanalisis: (r.uroanalisis && Array.isArray(r.uroanalisis.orden)) ? r.uroanalisis.orden.slice() : [],
       alerta_metformina: alertaMetformina,
       alertas_dosis: alertasDosis,
       // v16.1.0 — solo los del programa cardiovascular (orden del médico).
@@ -32569,7 +36100,13 @@ _vglOfrecerDeshacer(btn);
       // divergencia vigente, se documenta el cierre en vez de la divergencia.
       medicamentos_actuales: mtrMedicamentosRcv(Array.isArray(h.medicamentos) ? h.medicamentos : [], r.medicamentosFrecuencia || undefined)
         .map((m) => m.nombre + (m.sinFrecuenciaEspecificada ? " [DOSIS NO ESPECIFICADA]" : "")),
-      education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!(r.fallas && r.fallas.hayGrave) || riesgo.categoria === "muy alto" },
+      // v17.6.83 — auditoría v68 (S5): `alarmas` se recalculaba aquí con una fórmula PROPIA
+      // (`fallas.hayGrave || muy alto`) distinta de la de mtrEducationFlags (`meta.falla`,
+      // solo lípidos) que alimenta la hoja educativa impresa. Las dos se contradecían sobre
+      // el mismo paciente en la misma consulta (verificado: DM2 con HbA1c 11% y LDL en meta
+      // -> hoja `false`, JSON `true`). Ahora se consume la bandera ya calculada: una sola
+      // fuente, imposible que vuelvan a divergir.
+      education_flags: { dieta: !!ef.dieta, actividad: !!ef.actividad, alarmas: !!ef.alarmas },
       priority_focus: r.foco || "",
       // v17.6.8 — relativizadas (nunca crudas): cuasi-identificadores fuera del prompt.
       ftl_date: mtrRelativizarFechaIso(plan.ftl, (r && r._hoyIso) || todayStamp()) || "",
@@ -32642,7 +36179,45 @@ _vglOfrecerDeshacer(btn);
       pesoKg: c.pesoKg,
       ct: c.ct, hdl: c.hdl, ldl: c.ldl,
       paSistolica: c.paSistolica, paDiastolica: c.paDiastolica,
+      // v17.6.92 — TRIGLICÉRIDOS y GLICEMIA nunca llegaban al clasificador, aunque el motor
+      // ya los tenía en `c.ultimos`. Son dos de los cinco criterios del síndrome metabólico,
+      // así que sin ellos ese cálculo no podía ni intentarse. Se toman del ctx si el llamador
+      // los trae y, si no, del último resultado —el mismo sitio del que sale el resto.
+      trigliceridos: (function () {
+        const directo = mtrFloat(c.tg);
+        if (directo !== null) return directo;
+        const u = (c.ultimos && c.ultimos.TRIGLICERIDOS) ? mtrFloat(c.ultimos.TRIGLICERIDOS.valor) : null;
+        return u;
+      })(),
+      glicemia: (function () {
+        const directo = mtrFloat(c.glicemia);
+        if (directo !== null) return directo;
+        const u = (c.ultimos && c.ultimos.GLUCOSA) ? mtrFloat(c.ultimos.GLUCOSA.valor) : null;
+        return u;
+      })(),
     });
+
+    // v17.6.92 — auditoría v68 (S2, FR MAYORES). `mtrSindromeMetabolico` existía desde hacía
+    // versiones y estaba MUERTA: cero llamadores en producción. El síndrome metabólico es uno
+    // de los diez factores de riesgo mayores del consenso, y hoy sumaba CERO siempre.
+    //
+    // Verificado con el harness sobre el paciente clásico del programa (hipertenso tratado,
+    // sedentario, TG 200, HDL 35, glicemia 105, NO diabético): el cálculo dice `cumple: true`
+    // con cuatro de cinco criterios, pero el conteo de factores mayores salía en 2 y el
+    // paciente se clasificaba **BAJO con meta de LDL 116**. Con el punto que le corresponde
+    // cruza el CONTEO>=3 del Paso 2 y es ALTO con meta <70 — y de la meta salen la falla
+    // terapéutica, las vigencias y las fechas de toma.
+    //
+    // REGLA INNEGOCIABLE: `cumple` es TRI-ESTADO y solo se cuenta cuando es `true`. Un `null`
+    // significa "con lo que hay no se puede decidir" (faltan criterios que aún podrían
+    // empujarlo a 3) y NO se cuenta ni a favor ni en contra: contarlo sería inferir, que es
+    // justo lo que la regla de la casa prohíbe. Y si el médico ya documentó el factor a mano,
+    // eso manda: no se le pisa con el cálculo.
+    const _sdMet = mtrSindromeMetabolico(factores);
+    if (factores.prediabetesSdMetabolico !== true && _sdMet && _sdMet.cumple === true) {
+      factores.prediabetesSdMetabolico = true;
+    }
+
     const riesgo = mtrClasificarRiesgoCv(factores);
     // v16.9.0 — El basal se deduce de la serie de LDL que ya vino de Athenea (ver
     // mtrLdlBasalDeSerie) salvo que el llamador entregue uno explícito. Sin serie, sigue
@@ -32683,6 +36258,11 @@ _vglOfrecerDeshacer(btn);
     });
 
     const resumen = { erc: erc, riesgo: riesgo, meta: meta, programa: programa, plan: plan, factores: factores };
+    // v17.6.92 — el cálculo del síndrome metabólico viaja con el resumen, no solo su
+    // conclusión: el médico tiene que poder ver POR QUÉ cuenta (qué criterios se cumplieron y
+    // cuántos se pudieron evaluar) y no solo que su paciente subió de categoría. Un factor de
+    // riesgo que aparece sin explicación es indistinguible de uno inventado.
+    resumen.sindromeMetabolico = _sdMet || null;
     // v17.6.0 — SEGUNDO ESLABÓN QUE FALTABA (el primero: mtrResumenDesdeModalLabs no
     // mandaba el valor crudo — ver el comentario allá). Aunque ctx.hba1c ya llegara con
     // el valor de laboratorio, este resumen NUNCA lo copiaba a un campo propio: viajaba
@@ -32694,6 +36274,85 @@ _vglOfrecerDeshacer(btn);
     // las dos lean exactamente la misma meta (individual si el médico la fijó, general
     // si no).
     resumen.hba1c = (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null;
+    // Falla terapéutica y recontrol (S2). La meta de LDL sale de la
+    // clasificación; la de HbA1c es la estándar de DM2 salvo que el médico la
+    // pase por c.hba1cMeta. Si no hay LDL ni HbA1c, mtrPlanFallas no encuentra
+    // nada y devuelve listas vacías — no inventa fallas.
+    //
+    // v17.6.83 — auditoría v68 (S5, `education_flags`): este bloque se calculaba DESPUÉS de
+    // `resumen.foco`/`resumen.educationFlags`, así que las banderas no podían verlo y tenían
+    // que apañarse con `meta.falla`, que solo conoce el eje LIPÍDICO. El JSON que lee la IA,
+    // en cambio, sí miraba `r.fallas.hayGrave`. Dos fórmulas distintas para la misma bandera
+    // = dos verdades sobre el mismo paciente. Verificado con el harness (DM2, HbA1c 11% en
+    // falla GRAVE, LDL 60 en meta): la HOJA EDUCATIVA IMPRESA salía con `alarmas:false` (sin
+    // la sección de signos de alarma) mientras el JSON de la IA decía `alarmas:true`. Se
+    // sube el cálculo aquí para que haya UNA sola fuente; el orden es seguro porque
+    // mtrPlanFallas solo necesita `riesgo`, `erc`, `plan.ftl`, `meta.metas` y `factores`,
+    // todos ya construidos por encima de esta línea.
+    resumen.fallas = mtrPlanFallas({
+      hoyIso: c.hoyIso,
+      categoriaRiesgo: riesgo.categoria, egfr: erc.egfr, edad: c.edad,
+      ftlMaestra: plan.ftl, meds: c.meds, esDm2: !!factores.diabetes,
+      // v16.4.0 — una sola clave para la meta de HbA1c: `metaHba1c`. Antes convivían
+      // `hba1cMeta` (aquí) y `metaHba1c` (la regla del 50%), y aunque alguien cableara
+      // una, la otra seguía en 7,0. El campo editable por paciente llega en la próxima
+      // versión; esta unificación es su cimiento.
+      grupoSabado: c.grupoSabado || null, hba1cMeta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta), metaHba1c: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta),
+      ldl: (meta && meta.metas && c.ldl != null) ? { actual: c.ldl, meta: meta.metas.ldl } : null,
+      hba1c: (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null,
+      // v17.6.84 — el tercer eje. La glicemia se toma del ctx si el llamador la trae, y si
+      // no, del último resultado que ya viajaba en `c.ultimos.GLUCOSA` — el mismo sitio del
+      // que sale para el resto del motor. Ese respaldo es lo que evita que este eje nazca
+      // muerto: el patrón de "la función existe pero ningún llamador la alimenta" ya dejó
+      // inertes a `ldlBasal` (v16.9.0), `hba1c` (v17.6.0) y `ldlMetaPrevia` en este archivo.
+      glicemia: (function () {
+        const directa = mtrFloat(c.glicemia);
+        const deUltimos = (c.ultimos && c.ultimos.GLUCOSA) ? mtrFloat(c.ultimos.GLUCOSA.valor) : null;
+        const val = directa !== null ? directa : deUltimos;
+        return val !== null ? { actual: val, meta: (c.metaGlicemia != null ? mtrFloat(c.metaGlicemia) : null) } : null;
+      })(),
+    });
+    // v17.54.0 — UNIÓN EXPLÍCITA DE LAS FUSIONES MTT A LA LISTA DE ÓRDENES.
+    // El spec v68 pide «order_list = incluidos + drivers debidos + pasajeros no bloqueados +
+    // MTT fusionados», y hasta hoy esa última suma NO estaba escrita: la v17.7.5 midió 1.440
+    // planes, encontró CERO fusiones fuera de la lista, y decidió a conciencia no añadir una
+    // línea que ninguna mutación podría matar. Era la decisión correcta con la regla de
+    // entonces: una fusión exigía que la toma cayera en o después del recontrol, y un analito
+    // cuyo recontrol ya venció entraba al plan por su propio pie.
+    //
+    // La D9 rompe esa coincidencia. Al retirar el margen, un analito puede entrar en falla
+    // SIN estar cerca de vencer: medido, un diabético con glicemia de 140 (meta 130) TOMADA
+    // AYER queda en falla, se le fusiona el recontrol al 31-ago... y su glicemia no entra en
+    // la orden, porque su vigencia no ha vencido. El médico agenda la toma y nadie pide el
+    // examen. La rama dejó de ser inerte, así que ahora se escribe.
+    try {
+      // v17.55.0 — la unión cubre los TRES destinos, no solo las fusiones. Al repartir los
+      // recontroles entre fusionados, con cita dedicada y sin viaje, un analito que acabara
+      // en cita dedicada se quedaba fuera de la orden: se le agendaba al paciente un viaje
+      // aparte y nadie pedía el examen. Lo cazó la prueba de la glicemia de la v17.54.0, que
+      // es exactamente el invariante que esta unión existe para proteger. Da igual por dónde
+      // salga el recontrol: si hay recontrol, el examen se pide.
+      const _ALIAS_MTT = { ldl: "COLESTEROL_LDL", hba1c: "HBA1C", glicemia: "GLUCOSA" };
+      const _fa = resumen.fallas || {};
+      const _conRecontrol = []
+        .concat(Array.isArray(_fa.fusiones) ? _fa.fusiones : [])
+        .concat(Array.isArray(_fa.fechasDedicadas) ? _fa.fechasDedicadas : [])
+        .concat(Array.isArray(_fa.sinViaje) ? _fa.sinViaje : []);
+      if (_conRecontrol.length && plan && Array.isArray(plan.ordenar)) {
+        const _ya = new Set(plan.ordenar.map((x) => x && x.clave));
+        for (const _f of _conRecontrol) {
+          // una cita colapsada lleva varios analitos en `analitos`; el resto, uno en `analito`
+          const _nombres = (Array.isArray(_f && _f.analitos) && _f.analitos.length) ? _f.analitos : [_f && _f.analito];
+          for (const _n of _nombres) {
+            const _k = _ALIAS_MTT[String(_n).toLowerCase()] || String(_n == null ? "" : _n).toUpperCase();
+            if (!_k || _ya.has(_k)) continue;
+            _ya.add(_k);
+            plan.ordenar.push({ clave: _k, nombre: mtrNombreLegibleAnalito(_k), motivo: "recontrol por falla terapéutica" });
+          }
+        }
+      }
+    } catch (e) {}
+
     // Bloques de S5 que dependen del resumen ya armado (foco, banderas, TG y
     // uroanálisis). Se calculan aquí para que el recuadro no tenga que pedirlos
     // aparte y para que las pruebas los vean por la misma puerta.
@@ -32721,22 +36380,6 @@ _vglOfrecerDeshacer(btn);
     // El uroanálisis solo se evalúa si llegaron sus componentes (nitritos,
     // esterasa, etc.); si no, no se inventa nada.
     resumen.uroanalisis = c.uroHallazgos ? mtrEvaluarUroanalisis(c.uroHallazgos, c.uroSintomas, c.embarazo) : null;
-    // Falla terapéutica y recontrol (S2). La meta de LDL sale de la
-    // clasificación; la de HbA1c es la estándar de DM2 salvo que el médico la
-    // pase por c.hba1cMeta. Si no hay LDL ni HbA1c, mtrPlanFallas no encuentra
-    // nada y devuelve listas vacías — no inventa fallas.
-    resumen.fallas = mtrPlanFallas({
-      hoyIso: c.hoyIso,
-      categoriaRiesgo: riesgo.categoria, egfr: erc.egfr, edad: c.edad,
-      ftlMaestra: plan.ftl, meds: c.meds, esDm2: !!factores.diabetes,
-      // v16.4.0 — una sola clave para la meta de HbA1c: `metaHba1c`. Antes convivían
-      // `hba1cMeta` (aquí) y `metaHba1c` (la regla del 50%), y aunque alguien cableara
-      // una, la otra seguía en 7,0. El campo editable por paciente llega en la próxima
-      // versión; esta unificación es su cimiento.
-      grupoSabado: c.grupoSabado || null, hba1cMeta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta), metaHba1c: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta),
-      ldl: (meta && meta.metas && c.ldl != null) ? { actual: c.ldl, meta: meta.metas.ldl } : null,
-      hba1c: (c.hba1c != null) ? { actual: c.hba1c, meta: (c.metaHba1c != null ? c.metaHba1c : c.hba1cMeta) } : null,
-    });
     return resumen;
   }
 
@@ -32815,6 +36458,36 @@ _vglOfrecerDeshacer(btn);
   // que arma el bloque de riesgo/función renal/exámenes/uroanálisis/falla/fechas a partir
   // de un resumen ya calculado. `opts.ocultarCabeceraRiesgoEIA` deja fuera la cabecera de
   // riesgo y la entrada a la IA (usado por modales que no deben mostrar esas dos piezas).
+  // v17.6.90 — auditoría v68 (S3, ANR). La línea del "agujero negro renal" se pintaba SIEMPRE
+  // que existiera `plan.anr`, diciendo "todo se agrupa en la fecha de la creatinina". Pero el
+  // ANR solo mueve la fecha de toma si la creatinina es la que vence PRIMERO; si otro examen
+  // vence antes, el ANR se marca igual y no agrupa nada.
+  //
+  // Verificado con el harness (ERC G3b, creatinina que vence el 19-oct dentro de la ventana,
+  // lípidos que vencen el 28-sep): la toma queda el 9-sep y la creatinina sale **DIFERIDA** —
+  // no entra en esa orden. La pantalla afirmaba que todo se agrupaba mientras el paciente, tal
+  // como estaba el plan, habría tenido que volver una segunda vez justo por la creatinina.
+  //
+  // Es el peor tipo de error de este proyecto: no una casilla vacía, sino un dato que
+  // CONTRADICE el plan que el médico va a firmar, y sobre el que puede apoyarse para no
+  // revisar la lista. Este helper describe lo que de verdad pasó. (La agrupación real —que el
+  // ANR agrupe de hecho— es un cambio de fechas y va aparte, con su propia entrega.)
+  function mtrTextoAnr(plan) {
+    const p = plan || {};
+    if (!p.anr) return "";
+    const vence = p.anr.vence;
+    const enLaToma = (p.ordenar || []).some((a) => a && a.clave === "CREATININA");
+    const fecha = (typeof mtrFechaLegible === "function" && vence) ? mtrFechaLegible(vence) : vence;
+    if (vence && p.ftl === vence) {
+      return "La creatinina vence el " + fecha + " y es la que manda: los exámenes se agrupan ese día.";
+    }
+    if (enLaToma) {
+      return "La creatinina vence el " + fecha + " y se adelanta a esta misma toma: un solo viaje.";
+    }
+    return "Ojo: la creatinina vence el " + fecha + " y NO entra en esta toma. Tal como está el plan, "
+      + "el paciente tendría que volver una segunda vez solo por ella.";
+  }
+
   function mtrRenderResumenClinicoHtml(r, opts) {
     if (!r) return "";
     const ocultarCabeceraRiesgoEIA = !!(opts && opts.ocultarCabeceraRiesgoEIA);
@@ -32865,7 +36538,7 @@ _vglOfrecerDeshacer(btn);
         </div>
       </div>
       <div class="vgl-rcv-porque">${esc(plan.motivoFtl)}${plan.seAdelantoPorDiaNoHabil ? " · adelantada al día hábil anterior para no pasarse del vencimiento" : ""}${control && control.fueraDeVentana ? " · " + esc(control.motivo) : ""}</div>
-      ${plan.anr ? `<div class="vgl-rcv-porque">Ventana renal de ${esc(plan.anr.ventanaDias)} días activa: todo se agrupa en la fecha de la creatinina.</div>` : ""}
+      ${plan.anr ? `<div class="vgl-rcv-porque">${esc(mtrTextoAnr(plan))}</div>` : ""}
       ${(plan.diferidos || []).length ? `<div class="vgl-rcv-porque">Se dejan para después (todavía tienen vigencia de sobra): ${esc(plan.diferidos.map((a) => a.nombre).join(", "))}.</div>` : ""}
     ` : `<div class="vgl-rcv-porque">No hay ningún examen que vigilar con el programa y el estadio actuales.</div>`;
 
@@ -32882,6 +36555,7 @@ _vglOfrecerDeshacer(btn);
         <div class="vgl-rcv-subtit">🔬 Uroanálisis: <b>${esc(uro.estado)}</b></div>
         <div class="vgl-rcv-uro-conducta">${esc(uro.conducta)}</div>
         ${(uro.criterios || []).length ? `<div class="vgl-rcv-meta">Por: ${esc(uro.criterios.join(", "))}.</div>` : ""}
+        ${(uro.orden || []).length ? `<div class="vgl-rcv-meta">Qué ordenar por este hallazgo: ${esc(uro.orden.join(" + "))}.</div>` : ""}
       </div>` : "";
 
     const fallaHtml = mtrRenderFallaHtml(r);
@@ -32930,7 +36604,16 @@ _vglOfrecerDeshacer(btn);
     // hoja para que la redacción con IA (Conducta/Análisis y plan) la vea también.
     let medsFrecuencia = new Map();
     try { medsFrecuencia = mtrLeerFrecuenciasMedicamento(resumen && resumen._pacienteIdLabs) || new Map(); } catch (e) { medsFrecuencia = new Map(); }
-    return mtrHojaDeHechos(resumen, { ultimos: (resumen && resumen._ultimos) || {}, hoyIso: (resumen && resumen._hoyIso) || todayStamp(), medicamentos: meds, medicamentosFrecuencia: medsFrecuencia });
+    // v17.9.0 — ENCARGO DEL MÉDICO: «que nuestro JSON también guarde todo lo mismo que
+    // guarda Everest». Lo capturado al guardar la historia (secciones completas: 109
+    // antecedentes patológicos, 39 de examen físico, hábitos, familiares, revisión por
+    // sistemas) viaja con la hoja, ya desidentificado desde el momento de capturarlo.
+    let hcEverest = null;
+    try { hcEverest = mtrHcLeer(resumen && resumen._docId); } catch (e) { hcEverest = null; }
+    return mtrHojaDeHechos(resumen, {
+      ultimos: (resumen && resumen._ultimos) || {}, hoyIso: (resumen && resumen._hoyIso) || todayStamp(),
+      medicamentos: meds, medicamentosFrecuencia: medsFrecuencia, hcEverest: hcEverest,
+    });
   }
 
   // v17.6.26 — REPORTE DE CAMPO (24-ago-2026): "¿ya auditaste si el cuadro de texto libre
@@ -33035,7 +36718,6 @@ _vglOfrecerDeshacer(btn);
         + '<div id="vgl-ia-ancla" class="vgl-agm-dinfo vgl-d-none" style="margin:0 0 6px"></div>'
         + '<textarea id="vgl-ia-indicaciones" class="vgl-agm-input" rows="2" style="width:100%;margin-bottom:8px;resize:vertical" placeholder="Datos e indicaciones para este borrador (opcional): síntomas de hoy, adherencia, hábitos, énfasis, tono — todo lo que quiera que la IA tenga en cuenta…"></textarea>'
         + '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap"><button id="vgl-ia-generar" class="vgl-agm-btn pri" title="Generar el borrador de la casilla activa (atajo: Ctrl+Enter)">✨ Generar</button>'
-        + '<button id="vgl-ia-generar-todo" class="vgl-agm-btn sec" title="Genera los borradores de las TRES casillas en cadena (las notas largas con el modelo potente, las cortas con la rotación). Después usted las revisa e inserta una por una.">✨ Generar todo (3)</button>'
         + '<button id="vgl-ia-copiar" class="vgl-agm-btn sec" disabled>📋 Copiar</button>'
         + '<button id="vgl-ia-insertar" class="vgl-agm-btn sec" disabled>⬇ Insertar en la historia</button></div>'
         + '<div id="vgl-ia-estado" class="vgl-agm-dinfo" role="status" aria-live="polite"></div>'
@@ -33239,8 +36921,14 @@ _vglOfrecerDeshacer(btn);
           if (!caja) {
             caja = document.createElement("div");
             caja.id = "vgl-ia-cifras";
-            caja.style.cssText = "margin:0 0 8px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
-            salida.parentNode.insertBefore(caja, salida.nextSibling);
+            caja.style.cssText = "margin:0 0 8px;scroll-margin-top:12px;border:1px solid #d33;border-radius:8px;padding:8px 10px;color:#8b1a1a;font-size:12.5px;line-height:1.5;background:rgba(255,80,80,.07)";
+            // v17.14.0 — enjambre UX #53: la caja iba DESPUÉS del área de texto
+            // (salida.nextSibling). Una nota de Análisis y Plan ocupa varias pantallas, así
+            // que el aviso de que la IA pudo INVENTAR una cifra quedaba por debajo del
+            // pliegue — el médico podía leer el borrador entero y firmarlo sin verlo nunca.
+            // Es el aviso más grave del módulo: va antes del texto, pegado al encabezado,
+            // donde no hay forma de no verlo.
+            salida.parentNode.insertBefore(caja, salida);
           }
           caja.innerHTML = '<div style="font-weight:700">⚠ Cifras sin respaldo en los hechos entregados a la IA — revíselas antes de firmar (el modelo pudo inventarlas o calcularlas):</div>'
             + hallazgos.map((x) => '<div style="margin:4px 0"><b style="color:#c00">' + escapeHtml(x.numero) + '</b> · “' + escapeHtml(x.contexto) + '”</div>').join("");
@@ -33280,78 +36968,6 @@ _vglOfrecerDeshacer(btn);
         }
       })();
 
-      const _generarPara = async (modoX) => {
-        const optsX = {
-          estiloEjemplos: mtrEstiloLeer(),
-          nombrePaciente: resumen._nombrePaciente,
-          pregunta: scrubPII($("#vgl-ia-pregunta").value),
-          indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
-          datosExtra: mtrDatosExtraLeer(resumen._docId),
-          contextoLibre: libreAhora().combinado,
-          jsonV68: (modoX === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
-          // v17.0.0 — ancla del control anterior (solo Enfermedad Actual, y solo si el
-          // médico tiene carpeta local con historial de este paciente).
-          anclaControlAnterior: (modoX === "enfermedad_actual") ? _anclaPrevia : null,
-        };
-        const r = await mtrGeminiRedactar(hoja, modoX, optsX);
-        if (r.ok && modoX === "analisis_plan") {
-          try {
-            const d = new Date();
-            const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
-            r.texto = r.texto.replace(/\[ID\]/g, String(resumen._docId || "SIN_ID")).replace(/\[A[NÑ]O_MES\]/g, anioMes);
-          } catch (e) {}
-        }
-        return r;
-      };
-
-      // v16.6.1 — «Generar todo»: las tres casillas EN CADENA (secuencial a propósito:
-      // la cuota gratuita castiga las ráfagas y la cadena de modelos ya rota sola en cada
-      // llamada). Si faltan los datos críticos del Análisis y plan, esa casilla se SALTA
-      // con nota y las otras tres salen igual — el cuadro de críticos aparece al final.
-      const btnTodo = $("#vgl-ia-generar-todo");
-      if (btnTodo) btnTodo.addEventListener("click", async () => {
-        if (!mtrLeerClaveGemini()) { estado.textContent = "Falta la clave de Gemini (Ajustes → Redacción IA)."; return; }
-        _congelarChips(true);   // v17.6.11 — la cadena entera corre sin cambiar de casilla
-        const ordenTodo = ["enfermedad_actual", "analisis_plan", "recomendaciones"];
-        // El único crítico BLOQUEANTE del lote es la categoría de riesgo (TFG y
-        // medicamentos son blandos: la nota los declara). Se evalúa directo — no vía
-        // _criticosFaltantes(), que responde por el MODO ACTIVO y aquí el activo puede
-        // ser otra casilla.
-        let faltanCrit = [];
-        try {
-          const extra = mtrDatosExtraLeer(resumen._docId) || {};
-          if (!(resumen.riesgo && resumen.riesgo.categoria) && !extra.categoriaRiesgoConfirmada) faltanCrit.push("riesgo");
-        } catch (e) {}
-        btnTodo.disabled = true; btnGen.disabled = true;
-        let hechas = 0, saltadas = 0;
-        try { uxTrack("fn.ia.gen.todo"); } catch (e) {}
-        for (let i = 0; i < ordenTodo.length; i++) {
-          const m = ordenTodo[i];
-          const etiq = (MTR_CASILLAS_REDACTOR[m] || {}).etiqueta || m;
-          if (m === "analisis_plan" && faltanCrit.length) {
-            _borradores[m] = { texto: "", original: "", estado: "Saltado: falta la categoría de riesgo (genérelo individual y complete el cuadro)." };
-            saltadas++;
-            continue;
-          }
-          estado.textContent = "Generando " + (i + 1) + "/3: " + etiq + " (" + mtrModeloGemini(m) + ")…";
-          _ultimoModelo = mtrModeloGemini(m);
-          const r = await _generarPara(m);
-          if (r.ok) {
-            _borradores[m] = { texto: r.texto, original: r.texto, estado: mtrEstadoBorrador(r) };
-            hechas++;
-          } else {
-            _borradores[m] = { texto: "", original: "", estado: "No se generó (" + (r.motivo || "desconocido") + ")." };
-          }
-          if (m === modo) { salida.value = _borradores[m].texto; textoGeneradoOriginal = _borradores[m].original; habilitarPost(salida.value); _pintarCifras(); }
-        }
-        _congelarChips(false);
-        btnTodo.disabled = false; btnGen.disabled = false;
-        estado.textContent = "✓ " + hechas + " borrador(es) listos" + (saltadas ? " · 1 saltado (Análisis y plan: complete los datos críticos)" : "") + ". Revise casilla por casilla e inserte — cada chip guarda el suyo.";
-        const b = _borradores[modo];
-        if (b) { salida.value = b.texto; textoGeneradoOriginal = b.original; habilitarPost(salida.value); _pintarCifras(); if (b.estado) estado.textContent = b.estado + " · " + hechas + "/3 listas."; }
-        _pintarMeta();
-      });
-
       btnGen.addEventListener("click", async () => {
         const modoGen = modo;   // v17.6.11 — el borrador va a SU casilla aunque el chip cambie a mitad de llamada
         _congelarChips(true);
@@ -33359,9 +36975,13 @@ _vglOfrecerDeshacer(btn);
           const faltan = _criticosFaltantes();
           if (faltan.length) { _congelarChips(false); _pintarCriticos(faltan); estado.textContent = "Complete lo marcado para una nota válida."; return; }
         }
+        // v17.47.0 — se resuelve el resumen VIGENTE en el instante del clic, no la foto
+        // que se tomó al abrir el panel. Ver mtrIaResumenVigente.
+        const _vig = mtrIaResumenVigente(resumen, hoja);
+        const _res = _vig.resumen, _hoja = _vig.hoja;
         const opts = {
           estiloEjemplos: mtrEstiloLeer(),
-          nombrePaciente: resumen._nombrePaciente,
+          nombrePaciente: _res._nombrePaciente,
           // v14.2.0 (auditoría pre-producción) — esta era la ÚNICA de las cuatro entradas de
           // texto libre del panel de IA que llegaba a Gemini SIN pasar por scrubPII (las
           // otras tres se limpian dentro de sus propias funciones lectoras). El pie del modal
@@ -33371,28 +36991,22 @@ _vglOfrecerDeshacer(btn);
           indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
           // v17.0.0 — ancla del control anterior, solo para la Enfermedad Actual.
           anclaControlAnterior: (modo === "enfermedad_actual") ? _anclaPrevia : null,
-          datosExtra: mtrDatosExtraLeer(resumen._docId),
+          datosExtra: mtrDatosExtraLeer(_res._docId),
           contextoLibre: libreAhora().combinado,
-          jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
+          jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(_res, _hoja) : null,
         };
         if (!mtrLeerClaveGemini()) {
           _congelarChips(false);
-          salida.value = mtrHojaDeHechosTexto(hoja);
+          salida.value = mtrHojaDeHechosTexto(_hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
         }
-        // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
-        // deshabilita "Generar" al arrancar (línea de arriba), pero "Generar" no hacía
-        // lo mismo con "Generar todo" — el médico podía disparar las dos cadenas a la
-        // vez, y la que terminara primero llamaba _congelarChips(false) y rehabilitaba
-        // ambos botones A MITAD de la cadena del lote, rompiendo el candado que
-        // v17.6.11 puso a propósito.
-        btnGen.disabled = true; if (btnTodo) btnTodo.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
+        btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
-        const r = await mtrGeminiRedactar(hoja, modoGen, opts);
-        btnGen.disabled = false; if (btnTodo) btnTodo.disabled = false;
+        const r = await mtrGeminiRedactar(_hoja, modoGen, opts);
+        btnGen.disabled = false;
         _congelarChips(false);
         if (r.ok) {
           let textoFinal = r.texto;
@@ -33403,7 +37017,8 @@ _vglOfrecerDeshacer(btn);
               const d = new Date();
               const anioMes = d.getFullYear() + "_" + String(d.getMonth() + 1).padStart(2, "0");
               textoFinal = textoFinal
-                .replace(/\[ID\]/g, String(resumen._docId || "SIN_ID"))
+                // v17.8.1 — ver hallazgo #59 arriba: nunca «SIN_ID» en la historia.
+                .replace(/\[ID\]/g, String(resumen._docId || ""))
                 .replace(/\[A[NÑ]O_MES\]/g, anioMes);
             } catch (e) {}
           }
@@ -33589,12 +37204,24 @@ _vglOfrecerDeshacer(btn);
           const bCan = document.createElement("button");
           bCan.className = "vgl-agm-btn sec"; bCan.textContent = "Dejarla como está"; bCan.style.marginLeft = "6px";
           bRee.addEventListener("click", () => {
-            if (typeof _pacienteSigueAbierto === "function" && resumen._docId && !_pacienteSigueAbierto(resumen._docId)) {
-              estado.textContent = "⚠ La historia abierta ya no es la de este paciente. No se reemplazó nada."; return;
+            // v17.13.0 — este botón escribía con setNgValue a pelo, saltándose el dead-man
+            // switch (vglEscrituraPermitida) que la inserción normal SÍ consulta: con la
+            // escritura suspendida, «Insertar» se negaba y «Reemplazar» pisaba igual — y
+            // pisando texto del médico, que es el caso más grave de los dos. Ahora pasa por
+            // mtrInsertarEnCasillaModo con {reemplazar:true}: mismas guardas que la
+            // inserción normal (dead-man, paciente abierto, casilla viva) y el reemplazo
+            // solo ocurre tras este clic explícito suyo.
+            const rr = mtrInsertarEnCasillaModo(modo, salida.value, resumen._docId, undefined, { reemplazar: true });
+            if (!rr.ok) {
+              estado.textContent = (rr.motivo === "otro_paciente")
+                ? "⚠ La historia abierta ya no es la de este paciente. No se reemplazó nada."
+                : (rr.motivo === "deadman")
+                  ? "⚠ La escritura en la historia está suspendida. No se reemplazó nada."
+                  : "No se pudo reemplazar.";
+              return;
             }
             try {
-              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: res.el, prev: res.previo }], "Redactor IA");
-              setNgValue(res.el, String(salida.value).trim());
+              if (typeof _vglGuardarDeshacer === "function") _vglGuardarDeshacer(resumen._docId, [{ el: rr.el, prev: rr.previo }], "Redactor IA");
               _registrarInsercion();
               estado.innerHTML = "";
               const okTxt = document.createElement("span");
@@ -33642,13 +37269,98 @@ _vglOfrecerDeshacer(btn);
     return { pas: mtrLeerCampoNumerico("sistolica", doc), pad: null };
   }
 
-  // v17.6.65 — auditoría 25-ago (sección 4): circunferencia de cintura, para
-  // mtrSindromeMetabolico. Ancla real: id="cinturaPelvica" (tipo number, pestaña
-  // "Examen físico"), confirmada en las capturas del DOM (grounding/mapas/). Mismo
-  // criterio que mtrLeerTensionDelDom: sin la casilla o sin valor, null — nunca se
-  // inventa la cintura.
+  // =====================================================================
+  //  v17.6.97 — LECTURA POR RÓTULO (y la corrección de la cintura)
+  //  ------------------------------------------------------------------
+  //  La fila antropométrica de Everest NO SE PUEDE LEER POR ID. Verificado con el
+  //  diagnóstico que corrió el médico en su propia pantalla (26-ago):
+  //
+  //      Peso (Kg)                     -> id="peso"
+  //      Talla (cm)                    -> id="Talla"
+  //      IMC                           -> id="IMC"
+  //      Circunferencia abdominal (cm) -> id="alert_message"   <-- la cintura
+  //      Perímetro Cefálico (cm)       -> id="IMC"             <-- REPETIDO
+  //      Perímetro Braquial (cm)       -> id="alert_message"   <-- REPETIDO
+  //      Pliegue Cutáneo Subescapular  -> id="IMC"             <-- REPETIDO
+  //      Pliegue Cutáneo del Tríceps   -> id="alert_message"   <-- REPETIDO
+  //      Perímetro de pantorrilla (cm) -> id="perimetroPantorrilla"
+  //      Cintura pélvica (cm)          -> id="cinturaPelvica"
+  //
+  //  Ninguno tiene atributo `name`, y cuatro comparten dos ids entre sí. La
+  //  circunferencia abdominal solo es alcanzable por su RÓTULO.
+  //
+  //  La estrategia de abajo no es una conjetura: es la misma de DIAGNOSTICO_CINTURA.js,
+  //  que se ejecutó contra el Everest real y devolvió el rótulo correcto para los diez
+  //  campos de la fila.
+  //
+  //  REGLA DURA: si el rótulo casa con MÁS DE UNA casilla, se devuelve null. Un id
+  //  repetido ya nos costó una lectura equivocada; una coincidencia ambigua no se
+  //  resuelve eligiendo la primera.
+  function _mtrRotuloDeCampo(el, doc) {
+    try {
+      const d = doc || (typeof document !== "undefined" ? document : null);
+      const limpia = (t) => String(t == null ? "" : t).replace(/\s+/g, " ").trim();
+      if (el.id && d && typeof d.querySelector === "function") {
+        // Ojo: con ids repetidos, `label[for=...]` puede apuntar a OTRA casilla. Sirve
+        // igual para descartar, porque lo que se compara después es el conjunto entero.
+        try {
+          const l = d.querySelector('label[for="' + String(el.id).replace(/"/g, '\\"') + '"]');
+          if (l && limpia(l.textContent)) return limpia(l.textContent);
+        } catch (e) {}
+      }
+      if (typeof el.closest === "function") {
+        const envuelve = el.closest("label");
+        if (envuelve && limpia(envuelve.textContent)) return limpia(envuelve.textContent);
+      }
+      if (typeof el.getAttribute === "function") {
+        const aria = el.getAttribute("aria-label");
+        if (limpia(aria)) return limpia(aria);
+      }
+      // La maqueta de dos columnas de Everest: el rótulo vive en la celda anterior.
+      let n = el.parentElement;
+      for (let salto = 0; n && salto < 4; salto++, n = n.parentElement) {
+        let prev = n.previousElementSibling;
+        while (prev) {
+          const t = limpia(prev.innerText || prev.textContent || "");
+          if (t && t.length < 80) return t;
+          prev = prev.previousElementSibling;
+        }
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  // Devuelve el valor numérico de la ÚNICA casilla cuyo rótulo casa. 0 o 2+ -> null.
+  function mtrLeerCampoPorRotulo(rotuloRe, doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function" || !rotuloRe) return null;
+    let nodos = [];
+    try { nodos = Array.prototype.slice.call(d.querySelectorAll("input, select, textarea")); } catch (e) { return null; }
+    const casan = nodos.filter((el) => {
+      try { return rotuloRe.test(_mtrRotuloDeCampo(el, d)); } catch (e) { return false; }
+    });
+    if (casan.length !== 1) return null;      // ambiguo o ausente: no se adivina
+    return _labNumerico(casan[0].value);
+  }
+
+  // v17.6.97 — LA CINTURA, CORREGIDA. Hasta aquí esta función leía `cinturaPelvica`,
+  // que NO es la cintura: es la CADERA. Lo confirmó el médico al ver la pantalla
+  // ("Circunferencia abdominal es lo que es cintura en Everest, y cintura pélvica es
+  // caderas"). Como la cadera siempre mide más que la cintura, cablear esto habría
+  // marcado obesidad central en casi todo paciente -> un factor de riesgo mayor falso
+  // -> meta de LDL más estricta -> más exámenes. No llegó a hacer daño porque la
+  // función estaba MUERTA (cero llamadores) desde que se escribió en v17.6.65; se
+  // corrige ANTES de darle ningún uso.
+  const MTR_ROTULO_CINTURA = /circunferencia\s+abdominal/i;
+  const MTR_CINTURA_MIN_CM = 30;
+  const MTR_CINTURA_MAX_CM = 250;
   function mtrLeerCinturaDelDom(doc) {
-    return mtrLeerCampoNumerico("cinturaPelvica", doc);
+    const v = mtrLeerCampoPorRotulo(MTR_ROTULO_CINTURA, doc);
+    if (v === null) return null;
+    // Una circunferencia abdominal fuera de este rango no es un paciente: es un dedazo
+    // o una casilla que no era. Mismo criterio que ya usa mtrLeerCampoNumerico con el IMC.
+    if (v < MTR_CINTURA_MIN_CM || v > MTR_CINTURA_MAX_CM) return null;
+    return v;
   }
 
   // v17.6.75 — REPORTE EN VIVO (26-ago, captura): "no aparece la TFG y me dice que
@@ -33802,7 +37514,13 @@ _vglOfrecerDeshacer(btn);
   // ctx: { categoriaRiesgo, metaHba1c }. Sin contexto no hay meta y no hay rojo por valor.
   function _mtrTendUmbralGrave(clave, ctx) {
     const c = ctx || {};
-    const factor = 1 + MTR_FALLA_GRAVE_UMBRAL;
+    // v17.55.0 — EL ROJO EMPIEZA EN LA META. Decisión del médico del 29-ago, tomada con la
+    // medición delante (130 de los 137 vectores con LDL quedan en rojo). Antes el factor era
+    // `1 + MTR_FALLA_GRAVE_UMBRAL` (meta+30 %), y ese mismo número decidía además qué era una
+    // «falla grave» — dos preguntas clínicas distintas atadas a una sola constante. Se separan:
+    // la gravedad la decide ahora solo la regla renal (ver mtrGravedadFalla) y el color lo
+    // decide esta línea, que es lo único que queda del 30 % y ya no lo usa.
+    const factor = 1;
     if (clave === "COLESTEROL_LDL") {
       const cat = String(c.categoriaRiesgo || "").toLowerCase();
       const m = MTR_METAS_LIPIDICAS[cat];
@@ -33900,6 +37618,28 @@ _vglOfrecerDeshacer(btn);
     // un paciente sin peso guardado en Athenea se queda "sin dato" para Cockcroft-Gault
     // aunque el médico lo acabe de escribir en Examen físico.
     const pesoDom = _mismoPac ? mtrLeerPesoDelDom() : null;
+    // v17.6.97 — la cintura entra al motor por primera vez. Va dentro del mismo guard
+    // `_mismoPac`: leer el DOM de OTRO paciente y metérselo a este es exactamente el
+    // cruce que ese guard existe para impedir.
+    const cinturaDom = _mismoPac ? mtrLeerCinturaDelDom() : null;
+    // v17.6.85 — el sexo era el ÚNICO insumo de Cockcroft-Gault/CKD-EPI SIN red de
+    // seguridad: peso y tensión ya tienen respaldo de DOM (arriba), el sexo tenía una sola
+    // fuente (la demografía de la API) y un solo intento. Si esa ficha llegaba con el campo
+    // vacío, AMBAS fórmulas se calculaban como hombre y una mujer subía un estadio
+    // administrativo entero — que es el que rige vigencias, ventana ANR y bloqueos KDIGO.
+    // La cabecera de la historia lo imprime ("Sexo: MASCULINO") y ya la leíamos para otras
+    // cosas: es el respaldo más barato y el más disponible (vive en todas las pestañas).
+    // Solo se usa si el paciente abierto es el mismo, igual que peso y tensión, y solo si el
+    // valor es RECONOCIBLE — un texto que no sea ni femenino ni masculino se descarta en vez
+    // de entrar y hacerse pasar por dato bueno (ver la guarda de mtrEvaluarErc, v17.6.85).
+    const sexoCabecera = (function () {
+      try {
+        if (!_mismoPac || typeof _vglLeerCabeceraHistoria !== "function") return null;
+        const s = (_vglLeerCabeceraHistoria() || {}).sexo;
+        if (!s) return null;
+        return (mtrEsSexoFemenino(s) || mtrEsSexoMasculino(s)) ? s : null;
+      } catch (e) { return null; }
+    })();
     const { candidatos } = _ultimaFechaPorAnalito(Array.isArray(labs) ? labs : [], { uroanalisisPorComponentes: true });
     const ultimos = {};
     candidatos.forEach((c, clave) => {
@@ -33932,6 +37672,37 @@ _vglOfrecerDeshacer(btn);
       }
     } catch (e) {}
 
+    // v17.6.94 — AÑOS DE EVOLUCIÓN DE LA DIABETES. Everest no tiene campo para «desde
+    // cuándo es diabético» (verificado contra MTR_CAMPOS_FACTORES y contra el mapa de
+    // campos del repo), así que el dato solo puede venir del médico. Se guarda por paciente
+    // en el mismo almacén que la meta individual de HbA1c (`_vglCosecha`, por cédula) y con
+    // el mismo criterio: NO caduca solo — los años de evolución de una enfermedad crónica
+    // no dejan de aplicar por sí solos, y volver a preguntarlo cada jornada sería pedirle
+    // al médico que reescriba lo que ya escribió.
+    //
+    // Sin este cable, `dmAnios` no lo alimenta nadie y las dos reglas de diabetes de los
+    // pasos 1 y 2 del consenso siguen sin poder dispararse — que es exactamente el estado
+    // que el piso incondicional venía tapando desde v16.2.9.
+    // v17.6.97 — la cintura leída del DOM entra en los factores. Es el 5º criterio del
+    // síndrome metabólico y, con otro umbral, la obesidad central de los FR mayores.
+    // Nunca pisa un dato que el médico ya hubiera documentado a mano.
+    try {
+      if (cinturaDom != null) {
+        factores = factores || {};
+        if (mtrFloat(factores.cinturaCm) === null) factores.cinturaCm = cinturaDom;
+      }
+    } catch (e) {}
+
+    try {
+      const _cosDm = _vglCosechaLeer(apt && apt.doc_id);
+      const _dm = _cosDm && _cosDm.dmAniosManual;
+      const _v = _dm && _dm.v;
+      if (typeof _v === "number" && isFinite(_v) && _v >= 0) {
+        factores = factores || {};
+        factores.dmAnios = _v;
+      }
+    } catch (e) {}
+
     // v15.4 — Uroanálisis: se leen los componentes reales del parcial de orina
     // que Athenea ya trajo a este modal. Si no hay ninguno, queda null y el
     // recuadro simplemente no muestra el bloque (no se inventa nada).
@@ -33953,7 +37724,11 @@ _vglOfrecerDeshacer(btn);
     const resumen = mtrResumenClinico({
       hoyIso: hoyIso,
       meds: _medsParaMotor,
-      edad: ent.edad, sexo: ent.sexo, pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
+      // v17.6.85 — el sexo de la API manda; la cabecera es el respaldo cuando no llega o
+      // llega en un formato que no reconocemos. Mismo patrón que `pesoDom` de al lado.
+      edad: ent.edad,
+      sexo: ((mtrEsSexoFemenino(ent.sexo) || mtrEsSexoMasculino(ent.sexo)) ? ent.sexo : (sexoCabecera || ent.sexo)),
+      pesoKg: (ent.peso != null ? ent.peso : pesoDom), creatinina: ent.creatinina,
       rac: val("RAC"), ct: val("COLESTEROL_TOTAL"), hdl: val("COLESTEROL_HDL"),
       ldl: val("COLESTEROL_LDL"),
       // v17.6.0 — HALLADO AL CABLEAR EL ÍTEM 3 (meta de HbA1c individual): esta llamada
@@ -34296,6 +38071,14 @@ _vglOfrecerDeshacer(btn);
       // v16.7.0 — Hallazgos por debajo del umbral franco (trazas, escasas). No deciden
       // nada, pero el médico tiene que verlos: son justo los que se prestan a discusión.
       leves: leves,
+      // v17.6.91 — la bacteriuria se calculaba aquí dentro y NO SALÍA. Sin ella, quien
+      // decide si preguntar por embarazo (mtrDebePreguntarEmbarazo) solo podía mirar
+      // `sugestivo` — y una bacteriuria franca SIN piuria no es sugestiva. Resultado
+      // verificado: a esa paciente nunca se le preguntaba si estaba embarazada, así que la
+      // rama BACTERIURIA EN EMBARAZO de más abajo —que el propio motor ya tiene bien
+      // resuelta— era INALCANZABLE en el camino real. Se expone el dato para que la
+      // pregunta pueda dispararse con la MISMA condición que usa esa rama.
+      bacteriuria: !!bacteriuria,
       embarazo: !!embarazo,
     };
 
@@ -34358,16 +38141,34 @@ _vglOfrecerDeshacer(btn);
   function mtrEjesEnFalla(resumen) {
     const r = resumen || {};
     const erc = r.erc || {}, plan = r.plan || {}, meta = r.meta || {};
+    // v17.6.83 — auditoría v68 (S5, `priority_focus`): esto era `a.estado === "A"` a secas,
+    // y desde v17.6.75 un RAC≥30 VENCIDO ya no sale como "A": sale como "R" (vigilancia
+    // estrecha) con `vencidoBase` a true. Resultado verificado con el harness: paciente HTA,
+    // RAC 45 tomado hace 138 días, resto de laboratorios frescos y LDL en meta -> el eje
+    // renal quedaba en `false` y el foco de la consulta salía "lipídico". Ese foco viaja al
+    // JSON (`priority_focus`) que lee la IA, así que la nota clínica que el médico copia a la
+    // historia declaraba el foco equivocado y el daño renal quedaba relegado en el texto —
+    // justo en el paciente que v17.6.75 acababa de promover a recontrol prioritario.
+    // Se usa LA MISMA condición que la lista "Ya vencidos" de mtrPlanParaclinicos (:30704),
+    // para que las dos lecturas de "está vencido" no puedan volver a contradecirse.
     const enFalla = (clave) => {
       const drivers = (plan.drivers || []);
       const a = drivers.find((x) => x.clave === clave);
-      return !!a && a.estado === "A";   // ausente o vencido
+      return !!a && (a.estado === "A" || (a.estado === "R" && !!a.vencidoBase));   // ausente o vencido
     };
     const renal = !!plan.anr || !!erc.sospechaIra || !!erc.remitirNefrologia
       || enFalla("CREATININA") || enFalla("RAC") || enFalla("UROANALISIS");
-    const metabolico = enFalla("HBA1C") || enFalla("GLUCOSA");
+    // v17.6.84 — el eje metabólico solo miraba el ESTADO del driver (ausente/vencido), nunca
+    // la FALLA TERAPÉUTICA — al contrario que el lipídico, que sí cuenta `meta.falla`. Con la
+    // glicemia recién incorporada como tercer eje de falla (decisión del médico, 26-ago), un
+    // diabético con la glicemia en 260 y todos sus laboratorios frescos disparaba la falla
+    // pero NO el foco metabólico: el eje habría nacido medio cableado. `r.fallas` está
+    // disponible aquí desde v17.6.83, que subió su cálculo por encima del foco.
+    const fallasS2 = (r.fallas && Array.isArray(r.fallas.fallas)) ? r.fallas.fallas : [];
+    const fallaDe = (nombre) => fallasS2.some((f) => f && f.analito === nombre);
+    const metabolico = enFalla("HBA1C") || enFalla("GLUCOSA") || fallaDe("HbA1c") || fallaDe("Glicemia");
     const lipidico = enFalla("COLESTEROL_LDL") || enFalla("TRIGLICERIDOS")
-      || !!(meta && (meta.falla || meta.fallaGrave));
+      || !!(meta && meta.falla);
     return { renal: renal, metabolico: metabolico, lipidico: lipidico };
   }
 
@@ -34387,7 +38188,462 @@ _vglOfrecerDeshacer(btn);
     // Nada en falla: el foco lo marca el programa rector (ERC > DM2 > HTA).
     if (r.programa === "ERC") return "renal";
     if (r.programa === "DM2") return "metabólico";
-    return "lipídico";
+    if (r.programa) return "lipídico";
+    // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #96. Aquí había un `return "lipídico"`
+    // a secas: un paciente SIN programa y SIN nada en falla —o sea, del que no se sabe casi
+    // nada— salía con foco «lipídico», y ese foco viaja al JSON que lee la IA y al chip del
+    // Panel. Un foco inventado es peor que ninguno: le dice al médico y al modelo que la
+    // consulta va de lípidos cuando lo que pasa es que no hay datos. Sin programa y sin
+    // ejes, no hay con qué decidir: null. Quien lo pinte tiene que saber callarse.
+    return null;
+  }
+
+  // =====================================================================
+  //  v17.9.0 — LO QUE EVEREST GUARDA, PARA QUE LA IA LO VEA
+  //  ------------------------------------------------------------------
+  //  ENCARGO DEL MÉDICO (27-ago-2026): «necesito que nuestro JSON también guarde todo lo
+  //  mismo que guarda Everest, nos servirá para que la IA tenga todo el contexto
+  //  (grounding) necesario para buenas redacciones».
+  //
+  //  Hasta aquí el asistente leía 25 casillas del DOM (MTR_CAMPOS_FACTORES) — las de la
+  //  pestaña que el médico tuviera abierta. Everest, al guardar, manda 111 campos, y solo
+  //  en antecedentes patológicos hay 109 marcaciones. La distancia entre lo que el
+  //  asistente ve y lo que el médico escribió era desconocida hasta que él corrió
+  //  DIAGNOSTICO_GUARDADO_HC.js. El mapa completo está en MAPA_GUARDADO_HC.md.
+  //
+  //  POR QUÉ SE DETECTA POR FORMA Y NO POR URL. La ruta capturada es
+  //  `/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad`, pero atarse a ella sería
+  //  atarse a una cadena que Everest puede cambiar sin avisar — y este proyecto ya se llevó
+  //  ese susto en v12.3.30 (cuatro nombres supuestos, ninguno existía). Se reconoce el
+  //  paquete por sus SECCIONES, que son el contrato clínico y no cambian con una
+  //  reestructuración de rutas.
+  //
+  //  LO QUE NO SE TOCA, NUNCA. `datosUsuario` (91 campos: nombre, apellidos, cédula,
+  //  celular, correo, dirección) y `acompanante` no entran aquí ni desidentificados. No es
+  //  que se limpien: es que no se leen. Una lista blanca de secciones es la única barrera
+  //  que no se degrada cuando alguien añade un campo nuevo al otro lado.
+  // =====================================================================
+
+  // Las secciones clínicas que SÍ se leen. Todo lo demás del paquete se ignora.
+  const MTR_HC_SECCIONES = [
+    "antecedentePatologicos", "antecedenteFamiliar", "habitosGestionRiesgo",
+    "examenFisico", "revisionSistema", "antecedenteGinecoObstetrico",
+  ];
+  // Texto libre de la consulta. Va aparte porque necesita saneo distinto (scrubPII) y
+  // porque son, literalmente, las casillas que el redactor con IA escribe.
+  const MTR_HC_TEXTOS = {
+    motivo: "Motivo de consulta",
+    ultimaEnfermedad: "Enfermedad actual",
+    analisisYplan: "Análisis y plan",
+    recomendacionesMedicas: "Recomendaciones",
+  };
+
+  // ¿Este objeto es el paquete de historia clínica de Everest? Se exige más de una sección
+  // conocida: con una sola, cualquier respuesta suelta del portal podría colarse.
+  function mtrEsPayloadHcEverest(obj) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return false;
+    let n = 0;
+    for (const s of MTR_HC_SECCIONES) {
+      if (obj[s] && typeof obj[s] === "object" && !Array.isArray(obj[s])) n++;
+    }
+    return n >= 2;
+  }
+
+  // Un valor de sección tal como lo manda Everest. No se sabe QUÉ valores admite cada campo
+  // (el diagnóstico capturó la forma, no el significado), así que no se interpreta ninguno:
+  // los booleanos y números pasan tal cual y el texto se sanea. Interpretar sin saber sería
+  // exactamente el error que MAPA_GUARDADO_HC.md advierte que no hay que repetir.
+  function mtrHcValorLimpio(v) {
+    if (v === null || v === undefined) return null;
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t) return null;                       // vacío es vacío: no viaja
+      const limpio = (typeof scrubPII === "function") ? scrubPII(t, { conFechas: true }) : t;
+      return String(limpio).slice(0, 300);
+    }
+    return null;                                  // objetos y listas anidadas: fuera
+  }
+
+  // =====================================================================
+  //  v17.9.0 — TACHAR EL NOMBRE CON EL NOMBRE, Y LUEGO TIRARLO
+  //  ------------------------------------------------------------------
+  //  La prueba de barrera (suite_31) cazó una fuga REAL en el primer intento: `scrubPII`
+  //  sabe reconocer correos, teléfonos, direcciones, fechas y cédulas —todos tienen forma—
+  //  pero NO puede reconocer un nombre propio: «MARTHA» es una palabra como cualquier otra.
+  //  Y el médico escribe el nombre del paciente a mano en la enfermedad actual.
+  //
+  //  La salida está en el propio paquete: Everest manda `datosUsuario` con el nombre, los
+  //  apellidos, la cédula y el celular. Se leen SOLO para construir la lista de tachaduras,
+  //  se aplican al texto libre, y se descartan sin guardarse en ninguna parte. Es la única
+  //  forma de tachar un nombre con garantía: conociéndolo.
+  //
+  //  Se exigen 3 caracteres para evitar tachar partículas («DE», «LA») que aparecerían por
+  //  todo el texto clínico.
+  // =====================================================================
+  function mtrHcTachaduras(payload) {
+    const fuera = [];
+    try {
+      const d = (payload && payload.datosUsuario) || {};
+      const campos = ["nombre", "primer_Apellido", "segundo_Apellido", "primerApellido",
+                      "segundoApellido", "nombreCompleto", "identificacion", "celular", "telefono", "correo"];
+      for (const c of campos) {
+        const v = d[c];
+        if (typeof v !== "string") continue;
+        for (const parte of v.split(/\s+/)) {
+          const t = parte.trim();
+          if (t.length >= 3) fuera.push(t);
+        }
+      }
+    } catch (e) {}
+    // Las más largas primero: si no, tachar «MARTHA» dejaría a medias «MARTHA LUCIA».
+    return [...new Set(fuera)].sort((a, b) => b.length - a.length);
+  }
+
+  function mtrHcTachar(texto, tachaduras) {
+    let t = String(texto == null ? "" : texto);
+    for (const x of (tachaduras || [])) {
+      if (!x) continue;
+      const esc = String(x).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      t = t.replace(new RegExp(esc, "gi"), "[CENSURADO]");
+    }
+    return t;
+  }
+
+  // Extrae las secciones clínicas del paquete de Everest, desidentificadas y sin huecos.
+  // Un campo sin valor NO viaja: la regla de la casa, aplicada al grounding — un `false`
+  // explícito es información, un vacío no lo es y no se convierte en «no tiene».
+  function mtrHechosDesdeHcEverest(payload) {
+    if (!mtrEsPayloadHcEverest(payload)) return null;
+    const salida = { secciones: {}, textos: {}, medicamentos: [], diagnosticos: [] };
+    let totalCampos = 0;
+
+    for (const sec of MTR_HC_SECCIONES) {
+      const bloque = payload[sec];
+      if (!bloque || typeof bloque !== "object" || Array.isArray(bloque)) continue;
+      const limpio = {};
+      for (const k of Object.keys(bloque)) {
+        const v = mtrHcValorLimpio(bloque[k]);
+        if (v === null) continue;
+        limpio[k] = v;
+        totalCampos++;
+      }
+      if (Object.keys(limpio).length) salida.secciones[sec] = limpio;
+    }
+
+    // Medicamentos: solo la descripción (nombre y dosis). El resto del objeto es plomería.
+    if (Array.isArray(payload.farmacologicos)) {
+      salida.medicamentos = payload.farmacologicos
+        .map((m) => mtrHcValorLimpio(m && m.descripcion))
+        .filter(Boolean).slice(0, 40);
+    }
+    // Diagnósticos: código CIE-10 y descripción. Nunca `nombreBusqueda` ni ids internos.
+    if (Array.isArray(payload.diagnosticos)) {
+      salida.diagnosticos = payload.diagnosticos.map((x) => {
+        const cod = mtrHcValorLimpio(x && x.codigo);
+        const des = mtrHcValorLimpio(x && x.descripcion);
+        return (cod || des) ? { codigo: cod, descripcion: des } : null;
+      }).filter(Boolean).slice(0, 20);
+    }
+
+    // El texto libre es donde el médico escribe el nombre a mano. Se tacha con la identidad
+    // que trae el propio paquete (ver mtrHcTachaduras) ANTES de pasar por scrubPII, y esa
+    // identidad no se guarda en ningún sitio.
+    const tachaduras = mtrHcTachaduras(payload);
+    for (const k of Object.keys(MTR_HC_TEXTOS)) {
+      const crudo = payload[k];
+      const v = mtrHcValorLimpio(typeof crudo === "string" ? mtrHcTachar(crudo, tachaduras) : crudo);
+      if (v) { salida.textos[k] = v; totalCampos++; }
+    }
+    // Y las observaciones dentro de las secciones, por el mismo motivo.
+    for (const sec of Object.keys(salida.secciones)) {
+      const b = salida.secciones[sec];
+      for (const k of Object.keys(b)) {
+        if (typeof b[k] === "string") b[k] = mtrHcTachar(b[k], tachaduras);
+      }
+    }
+    salida.medicamentos = salida.medicamentos.map((m) => mtrHcTachar(m, tachaduras));
+    salida.diagnosticos = salida.diagnosticos.map((d) => ({
+      codigo: d.codigo, descripcion: d.descripcion ? mtrHcTachar(d.descripcion, tachaduras) : d.descripcion,
+    }));
+
+    salida._campos = totalCampos;
+    return totalCampos ? salida : null;
+  }
+
+  // Aplana lo anterior a texto etiquetado para la hoja de hechos. Solo lo que consta.
+  function mtrHcTextoParaHoja(hechos) {
+    if (!hechos) return "";
+    const L = [];
+    // v17.10.0 — lo cosechado EN VIVO de la pantalla, que es lo que el médico está
+    // escribiendo ahora mismo. Va PRIMERO: es más fresco que lo capturado en el último
+    // guardado, y cuando los dos hablan del mismo campo manda esto.
+    if (hechos.dom && Object.keys(hechos.dom).length) {
+      const porSeccion = {};
+      for (const ruta of Object.keys(hechos.dom)) {
+        const i = ruta.lastIndexOf(".");
+        const sec = i > 0 ? ruta.slice(0, i) : "(sin sección)";
+        const campo = i > 0 ? ruta.slice(i + 1) : ruta;
+        const v = hechos.dom[ruta];
+        (porSeccion[sec] = porSeccion[sec] || []).push(campo + ": " + (v === true ? "sí" : v === false ? "no" : v));
+      }
+      for (const sec of Object.keys(porSeccion).sort()) {
+        L.push(sec + " (escrito en la historia de HOY): " + porSeccion[sec].join(" · "));
+      }
+    }
+    if (!hechos.secciones) return L.join("\n");
+    const rotulo = {
+      antecedentePatologicos: "Antecedentes patológicos marcados en la historia",
+      antecedenteFamiliar: "Antecedentes familiares",
+      habitosGestionRiesgo: "Hábitos y gestión de riesgo",
+      examenFisico: "Examen físico (lo registrado en Everest)",
+      revisionSistema: "Revisión por sistemas",
+      antecedenteGinecoObstetrico: "Antecedentes ginecoobstétricos",
+    };
+    for (const sec of MTR_HC_SECCIONES) {
+      const b = hechos.secciones[sec];
+      if (!b) continue;
+      // Los `false` explícitos importan tanto como los `true`: «marcado que NO» es un
+      // hecho documentado, y esconderlo dejaría a la IA sin saber si se preguntó.
+      const partes = Object.keys(b).map((k) => k + ": " + (b[k] === true ? "sí" : b[k] === false ? "no" : b[k]));
+      if (partes.length) L.push(rotulo[sec] + ": " + partes.join(" · "));
+    }
+    if (hechos.diagnosticos && hechos.diagnosticos.length) {
+      L.push("Diagnósticos de esta consulta: " + hechos.diagnosticos
+        .map((d) => [d.codigo, d.descripcion].filter(Boolean).join(" ")).join("; "));
+    }
+    if (hechos.medicamentos && hechos.medicamentos.length) {
+      L.push("Medicamentos registrados en la historia: " + hechos.medicamentos.join("; "));
+    }
+    for (const k of Object.keys(MTR_HC_TEXTOS)) {
+      if (hechos.textos && hechos.textos[k]) L.push(MTR_HC_TEXTOS[k] + " (lo que ya está escrito): " + hechos.textos[k]);
+    }
+    return L.join("\n");
+  }
+
+  // =====================================================================
+  //  v17.9.0 — LA ESCUCHA. Se engancha una sola vez y solo mira.
+  //  ------------------------------------------------------------------
+  //  Reglas que se cumplen aquí, y por qué cada una:
+  //
+  //  · NO MODIFICA NADA. Se lee el cuerpo del envío y se devuelve el control intacto. Si
+  //    cualquier cosa falla dentro, Everest ni se entera: todo va en try/catch y la llamada
+  //    original se hace igual. El médico está guardando una historia clínica; este código
+  //    no puede ser el motivo de que no se guarde.
+  //  · SE DESIDENTIFICA ANTES DE ALMACENAR, no antes de enviar. La barrera va lo más cerca
+  //    posible de la fuente: lo que nunca se guardó no se puede filtrar después por
+  //    descuido de otro. `datosUsuario` y `acompanante` no se leen siquiera.
+  //  · SE GUARDA POR PACIENTE, con la misma poda por edad y cantidad que el resto de la
+  //    cosecha (_vglCosechaGuardar).
+  //
+  //  LO QUE ESTO NO RESUELVE, y hay que decirlo: Everest manda este paquete cuando el médico
+  //  pulsa GUARDAR, que normalmente es al FINAL de la consulta — después de redactar. Así
+  //  que lo capturado sirve de grounding para la consulta SIGUIENTE, y para la actual solo
+  //  si él guarda a mitad. Que sirva también para la actual exige leer lo que Everest CARGA
+  //  al abrir el paciente, y ese endpoint todavía no está capturado. Por eso la detección
+  //  es por forma: el día que se capture una carga, este mismo código la reconocerá sin
+  //  tocar una línea.
+  // =====================================================================
+  const VGL_HC_CLAVE = "hcEverest";
+  let _vglHcEnganchado = false;
+
+  // Guarda los hechos de la historia para un paciente. Puro salvo por el almacén.
+  function mtrHcGuardar(docId, payload) {
+    try {
+      const hechos = mtrHechosDesdeHcEverest(payload);
+      if (!hechos) return null;
+      const id = String(docId || "");
+      if (!id) return null;
+      _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: Object.assign({}, hechos, { ts: Date.now() }) });
+      try { uxTrack("hc.capturado", { campos: hechos._campos }); } catch (e) {}
+      return hechos;
+    } catch (e) { return null; }
+  }
+
+  function mtrHcLeer(docId) {
+    try {
+      const c = _vglCosechaLeer(docId);
+      return (c && c[VGL_HC_CLAVE]) || null;
+    } catch (e) { return null; }
+  }
+
+  function mtrHcEnganchar() {
+    if (_vglHcEnganchado) return false;
+    _vglHcEnganchado = true;
+    // =====================================================================
+    //  v17.12.0 — TAMBIÉN SE ESCUCHA LO QUE EVEREST *CARGA*, no solo lo que envía
+    //  ------------------------------------------------------------------
+    //  Faltaba el único hueco del grounding: lo que Everest tiene guardado en pestañas que
+    //  el médico no ha abierto hoy. El servidor SÍ lo manda —por eso las casillas aparecen
+    //  prellenadas al abrir la historia—, así que basta con escuchar la respuesta.
+    //
+    //  POR QUÉ NO SIRVIÓ UN DIAGNÓSTICO DE CONSOLA. Se le entregó uno y capturó CERO. La
+    //  causa la dio su propia bitácora: de 36 cambios de URL, 24 arrancan con `from` vacío,
+    //  o sea que el script empezó de cero. **Everest recarga la página de verdad al abrir un
+    //  paciente**, y eso borra cualquier cosa pegada en la consola antes de que la respuesta
+    //  llegue. Dentro del userscript no pasa: Tampermonkey lo reinyecta en cada carga.
+    //
+    //  Y NO HAY QUE ADIVINAR NADA. La respuesta se reconoce con el MISMO detector por forma
+    //  que ya usa el envío (mtrEsPayloadHcEverest, que exige ≥2 secciones conocidas). Si
+    //  Everest la manda, se captura; si no, no pasa nada y no se ha supuesto ni un campo.
+    //  Pasa por la misma barrera: `datosUsuario` no se lee, y el nombre se tacha con la
+    //  identidad del propio paquete, que se descarta sin guardarse.
+    // =====================================================================
+    const mirar = (cuerpo, origen) => {
+      try {
+        if (!cuerpo || typeof cuerpo !== "string" || cuerpo.length < 200) return;
+        if (cuerpo.indexOf("antecedentePatologicos") < 0) return;   // criba barata primero
+        let datos = null;
+        try { datos = JSON.parse(cuerpo); } catch (e) { return; }
+        if (!mtrEsPayloadHcEverest(datos)) return;
+        // La cédula del paciente ABIERTO ahora mismo, con el mismo lector que usa el resto del
+        // script (extractPacienteAbierto). Si el DOM no la deja leer no se guarda nada: atribuir
+        // una historia al paciente equivocado es el riesgo más alto que ha tenido este proyecto
+        // (v14.1.5), y aquí se aplica la misma regla — sin cédula legible, no se escribe.
+        const id = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : null;
+        if (!id) return;
+        const hechos = mtrHcGuardar(id, datos);
+        if (hechos) {
+          try { uxTrack("hc.capturado." + (origen || "envio"), { campos: hechos._campos }); } catch (e) {}
+          try {
+            console.log("%c[Vigilante] historia clínica leída de Everest (" + (origen === "carga" ? "al abrir el paciente" : "al guardar") +
+              "): " + hechos._campos + " campos de contexto para la redacción.", "color:#16a34a;font-weight:bold");
+          } catch (e) {}
+        }
+      } catch (e) {}
+    };
+    try {
+      const XHRsend = XMLHttpRequest.prototype.send;
+      XMLHttpRequest.prototype.send = function (cuerpo) {
+        try { mirar(cuerpo, "envio"); } catch (e) {}
+        // v17.12.0 — Y TAMBIÉN LA RESPUESTA. Ver el bloque grande de abajo.
+        try {
+          const xhr = this;
+          xhr.addEventListener("load", function () {
+            try {
+              if (xhr.responseType && xhr.responseType !== "text") return;
+              mirar(xhr.responseText, "carga");
+            } catch (e) {}
+          });
+        } catch (e) {}
+        return XHRsend.apply(this, arguments);
+      };
+      const fetchOriginal = window.fetch;
+      window.fetch = function (entrada, opciones) {
+        try { mirar(opciones && opciones.body, "envio"); } catch (e) {}
+        const p = fetchOriginal.apply(this, arguments);
+        try {
+          return p.then(function (resp) {
+            try {
+              // SE CLONA: leer el cuerpo original dejaría a Everest sin poder leerlo.
+              resp.clone().text().then(function (t) { mirar(t, "carga"); }).catch(function () {});
+            } catch (e) {}
+            return resp;
+          });
+        } catch (e) { return p; }
+      };
+    } catch (e) { return false; }
+    return true;
+  }
+
+  // =====================================================================
+  //  v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE, NO AL GUARDARLA
+  //  ------------------------------------------------------------------
+  //  RECHAZO EXPLÍCITO DEL MÉDICO a la v17.9.0: «no me sirve para la siguiente cita. La IA y
+  //  el script completo, todos sus módulos, deben estar alimentados por ese json INCLUSO
+  //  ANTES DE GUARDAR, porque la idea es poder redactar en tiempo real. Debe ser algo mucho
+  //  mejor que se actualice a medida que se vaya llenando la historia».
+  //
+  //  Tenía razón. La v17.9.0 se enganchaba al Guardar, que ocurre AL FINAL — después de
+  //  redactar. Servía para la cita siguiente, que es justo lo que él no necesita.
+  //
+  //  LA PISTA QUE LO HACE POSIBLE: los nombres de las casillas del DOM de Everest son las
+  //  MISMAS RUTAS del paquete que se guarda. `name="AntecedentePatologicos.Hipertension"` en
+  //  pantalla es `antecedentePatologicos.hipertension` en el envío;
+  //  `name="signosVitales.peso"` es `examenFisico.peso`. No hay que esperar al guardado para
+  //  conocer la estructura: la estructura está escrita en la pantalla, casilla por casilla.
+  //
+  //  Así que se cosecha TODO lo que tenga `name`, con su ruta, en cada repaso — y se acumula
+  //  por paciente. Lo que el médico llenó en Antecedentes sigue ahí cuando pasa a Hábitos
+  //  (Angular destruye la pestaña anterior con *ngIf, por eso hay que acumular y no releer).
+  //  Cada vez que escribe algo, el contexto crece. Eso es «en tiempo real».
+  //
+  //  LÍMITE HONESTO, y no se disimula: esto ve las pestañas que el médico YA ABRIÓ en esta
+  //  consulta, más lo que quedó archivado de antes. Lo que Everest tiene guardado en
+  //  pestañas que él no ha tocado hoy no está en el DOM y no se puede leer de aquí. Cerrar
+  //  ese hueco exige leer lo que Everest CARGA al abrir el paciente, y ese endpoint aún no
+  //  está capturado — no se supone nada.
+  // =====================================================================
+
+  // Prefijos de ruta que SÍ son clínicos. Todo lo demás se descarta sin mirarlo: es la misma
+  // barrera de lista blanca de v17.9.0, aplicada ahora a la pantalla. Un `name` nuevo que no
+  // esté aquí no entra — se prefiere perder un dato a colar uno identificable.
+  const MTR_HC_PREFIJOS_DOM = [
+    "antecedentepatologicos.", "antecedentefamiliar.", "antecedentesrelacionados.",
+    "hs.habitosgestionriesgo.", "habitosgestionriesgo.", "clinicapaciente.",
+    "examenfisico.", "signosvitales.", "revisionsistema.", "gineco.",
+    "antecedenteginecoobstetrico.", "resultadoprograma.", "monitoreoprogramaprenatalmadre.",
+  ];
+
+  function mtrRutaHcAceptada(nombre) {
+    const n = String(nombre || "").trim().toLowerCase();
+    if (!n) return false;
+    return MTR_HC_PREFIJOS_DOM.some((p) => n.indexOf(p) === 0);
+  }
+
+  // Cosecha de la pantalla ACTUAL: toda casilla con `name` cuya ruta sea clínica.
+  // Devuelve { ruta: valor } con los radios ya resueltos a sí/no.
+  function mtrCosecharHcDelDom(doc) {
+    const d = doc || (typeof document !== "undefined" ? document : null);
+    if (!d || typeof d.querySelectorAll !== "function") return {};
+    const salida = {};
+    let nodos = [];
+    try { nodos = Array.prototype.slice.call(d.querySelectorAll("input[name],select[name],textarea[name]")); } catch (e) { return {}; }
+    // Los radios se resuelven por grupo: hace falta ver TODOS los del mismo `name` para
+    // saber cuál está marcado. Un grupo sin ninguno marcado NO produce entrada: en blanco
+    // es en blanco, y convertirlo en «no» sería inventar una respuesta que nadie dio.
+    const radios = {};
+    for (const el of nodos) {
+      const nombre = String(el.name || "").trim();
+      if (!mtrRutaHcAceptada(nombre)) continue;
+      const tipo = String(el.type || "").toLowerCase();
+      if (tipo === "radio") {
+        (radios[nombre] = radios[nombre] || []).push(el);
+        continue;
+      }
+      if (tipo === "checkbox") { salida[nombre] = !!el.checked; continue; }
+      if (tipo === "password" || tipo === "file" || tipo === "hidden") continue;
+      const v = String(el.value == null ? "" : el.value).trim();
+      if (!v) continue;
+      const num = Number(v.replace(",", "."));
+      salida[nombre] = (v !== "" && Number.isFinite(num) && /^-?[\d.,]+$/.test(v)) ? num : v.slice(0, 300);
+    }
+    for (const nombre of Object.keys(radios)) {
+      let v = null;
+      try { v = mtrLeerRadioSiNo(nombre, d); } catch (e) { v = null; }
+      if (v === true || v === false) salida[nombre] = v;
+    }
+    return salida;
+  }
+
+  // Acumula lo cosechado sobre lo ya conocido de ESTE paciente. La pantalla manda sobre lo
+  // archivado —es lo que el médico tiene delante— pero lo archivado NO se borra: Angular
+  // destruye la pestaña anterior y releerla daría vacío, que no es lo mismo que «lo borró».
+  function mtrHcAcumularDelDom(docId, doc) {
+    try {
+      const id = String(docId || "");
+      if (!id) return null;
+      const ahora = mtrCosecharHcDelDom(doc);
+      const nuevas = Object.keys(ahora).length;
+      const previo = (mtrHcLeer(id) || {}).dom || {};
+      if (!nuevas && !Object.keys(previo).length) return null;
+      const fusion = Object.assign({}, previo, ahora);
+      const c = _vglCosechaLeer(id) || {};
+      const bloque = Object.assign({}, c[VGL_HC_CLAVE] || {}, { dom: fusion, ts: Date.now() });
+      _vglCosechaGuardar(id, { [VGL_HC_CLAVE]: bloque });
+      return { campos: Object.keys(fusion).length, nuevos: nuevas };
+    } catch (e) { return null; }
   }
 
   // ---------- BANDERAS DE EDUCACIÓN (education_flags de S5) ----------
@@ -34396,7 +38652,17 @@ _vglOfrecerDeshacer(btn);
   function mtrEducationFlags(resumen) {
     const r = resumen || {};
     const riesgo = r.riesgo || {}, meta = r.meta || {};
-    const hayFalla = !!(meta && (meta.falla || meta.fallaGrave));
+    // v17.6.83 — auditoría v68 (S5): `hayFalla` solo miraba `meta.falla`/`meta.fallaGrave`,
+    // que son del eje LIPÍDICO exclusivamente. Un diabético con HbA1c en 11% (falla GRAVE
+    // del eje metabólico) y el LDL en meta salía con `alarmas:false` y se iba de la consulta
+    // con la hoja educativa impresa SIN la sección de signos de alarma cardiovasculares —
+    // mientras el JSON que lee la IA, con su propia fórmula, decía lo contrario. Ahora esta
+    // función es la ÚNICA fuente (el JSON la consume, ya no recalcula) y mira los TRES ejes
+    // vía `r.fallas`, que v68 define como "FALLA" sin distinguir de qué analito viene.
+    // Se cuentan tanto graves como leves: v68 dice "alarmas=true si MUY ALTO o FALLA", y
+    // ante la duda educar de más es inocuo — omitir los signos de alarma no lo es.
+    const fallas = r.fallas || {};
+    const hayFalla = !!(meta && meta.falla) || !!fallas.hayGrave || !!fallas.hayLeve;
     const programaRcv = ["ERC", "DM2", "HTA"].indexOf(r.programa) >= 0;
     return {
       alarmas: riesgo.categoria === "muy alto" || hayFalla,
@@ -34431,7 +38697,11 @@ _vglOfrecerDeshacer(btn);
       const nombre = o.nombre || "";
       const fecha = (typeof mtrFechaLegible === "function") ? mtrFechaLegible(o.hoyIso || todayStamp()) : (o.hoyIso || "");
       const pendientes = [].concat(plan.vencidos || [], plan.faltantes || [])
-        .map((x) => (x && (x.clave || x.nombre)) ? (x.clave || x.nombre) : (typeof x === "string" ? x : "")).filter(Boolean);
+        // v17.8.0 — aquí la preferencia estaba INVERTIDA (`x.clave || x.nombre`), así que
+        // cuando el item traía las dos cosas ganaba la clave interna y el paciente se
+        // llevaba a casa un papel que decía «COLESTEROL_LDL». Un solo traductor, con
+        // precedencia fija, y el nombre legible siempre por delante.
+        .map((x) => mtrNombreLegibleAnalito(x)).filter(Boolean);
       const secciones = [];
       if (flags.alarmas) {
         secciones.push('<div class="sec"><h2>🚨 Signos de alarma — vaya de inmediato a urgencias o llame al 123 si presenta:</h2>'
@@ -34557,6 +38827,16 @@ _vglOfrecerDeshacer(btn);
   // ata el recontrol de glicemia a la HbA1c, no a un número de corte propio.
   const MTR_HBA1C_META_DM2 = 7.0;
 
+  // v17.6.84 — auditoría v68 (S2: "FALLA (LDL/glicemia/HbA1c DM2)"), decisión del médico
+  // del 26-ago. v68 manda vigilar la falla terapéutica en TRES ejes, pero el tercero
+  // —glicemia en ayunas— nunca se cableó, y lo que lo bloqueaba era que NO EXISTÍA una meta
+  // de glicemia en ninguna parte del archivo: v68 tampoco la da. El médico la fija en
+  // 130 mg/dL (meta prepandial habitual en DM2), así que con el umbral único del proyecto
+  // (meta+15%) la falla arranca en 149,5 mg/dL. Solo aplica a diabéticos, igual que la
+  // HbA1c: en un hipertenso sin diabetes una glicemia de 135 no es "falla terapéutica".
+  const MTR_GLICEMIA_META_DM2 = 130;
+  function mtrMetaGlicemiaGeneral() { return MTR_GLICEMIA_META_DM2; }
+
   // v17.6.3 — FLUJO COMPLETO DE LA META DE HbA1c (decisión del médico, 22-ago):
   // la meta GENERAL ahora se configura en Ajustes (S.metaHba1cGeneral, 5–12 %);
   // la meta INDIVIDUAL del paciente (botón ✏️ del Panel, `metaHba1cManual`) gana
@@ -34569,8 +38849,22 @@ _vglOfrecerDeshacer(btn);
     return MTR_HBA1C_META_DM2;
   }
 
-  const MTR_FALLA_UMBRAL = 0.15;   // meta+15% -> falla
-  const MTR_FALLA_GRAVE_UMBRAL = 0.30;   // meta+30% -> grave
+  // v17.54.0 (decision D9, 29-ago) — SE RETIRA EL MARGEN. Textual del medico: "ya no quiero
+  // usar el +15% ahora quiero ser estricto como lo dicen las guias". Un solo numero para
+  // los tres ejes (LDL, HbA1c y glicemia): por encima de la meta es falla, sin franja de
+  // cortesia. Las franjas que hasta hoy se callaban, medidas antes de tocar nada:
+  //   LDL 55,1-63,25 / 70,1-80,50 / 100,1-115,00 / 116,1-133,40 segun categoria
+  //   HbA1c 7,1-8,05 %   ·   glicemia 131-149,5 mg/dL
+  // Un paciente con LDL 80 y meta 70 figuraba "en meta", conservaba los 180 dias de
+  // vigencia y no se le declaraba falla. Ahora: fuera de meta, examen a los 90 dias y falla.
+  // La constante se queda (en vez de borrarse) porque es el UNICO sitio del que salen las
+  // cuatro puertas de abajo; ponerla a cero las mueve todas a la vez y deja el numero a la
+  // vista si algun dia hay que volver a discutirlo.
+  const MTR_FALLA_UMBRAL = 0;   // estricto: por encima de la meta ya es falla
+  // v17.55.0 — RETIRADA `MTR_FALLA_GRAVE_UMBRAL` (meta+30 %). Con la D10 dejó de decidir la
+  // gravedad, y con la decisión del médico sobre el color dejó de decidir el rojo de la tabla
+  // de tendencias. Sin un solo consumidor, una constante clínica que sigue ahí es una
+  // invitación a que alguien la vuelva a cablear pensando que significa algo.
 
   // Gravedad de una falla, o null si no hay falla.
   // ctx: { categoriaRiesgo, egfr, edad }
@@ -34579,7 +38873,12 @@ _vglOfrecerDeshacer(btn);
     if (a === null || m === null || m <= 0) return null;
     if (a <= m * (1 + MTR_FALLA_UMBRAL)) return null;   // no llega a falla
     const c = ctx || {};
-    if (a > m * (1 + MTR_FALLA_GRAVE_UMBRAL)) return "grave";   // >30% es grave a cualquier edad
+    // v17.55.0 (decisión D10, 29-ago) — SE RETIRA EL ESCALÓN POR PORCENTAJE. Textual del
+    // médico: "Sin +30%, pero la regla renal se queda". Aquí vivía
+    // `if (a > m * (1 + MTR_FALLA_GRAVE_UMBRAL)) return "grave"`.
+    // «Grave» pasa a significar UNA sola cosa: la regla clínica de abajo. Y su privilegio ya
+    // no es tener fecha de recontrol —desde esta versión la tiene toda falla— sino ser lo
+    // único que puede justificar que el paciente haga un VIAJE APARTE al laboratorio.
     const cat = mtrNormalizarRiesgoCv(c.categoriaRiesgo);
     const riesgoAlto = cat === "alto" || cat === "muy alto";
     const egfr = mtrFloat(c.egfr), edad = mtrFloat(c.edad);
@@ -34595,10 +38894,12 @@ _vglOfrecerDeshacer(btn);
       analito: analito, actual: a, meta: m, excesoPct: excesoPct,
       falla: gravedad !== null, gravedad: gravedad,
       motivo: gravedad === null
-        ? "en meta o dentro del margen (meta+15%)"
+        ? "en meta"
+        // v17.55.0 — el único camino a «grave» es la regla renal, así que el motivo ya no
+        // tiene que elegir entre dos: se dice el que hay.
         : (gravedad === "grave"
-          ? "falla grave: " + (a > m * 1.30 ? "supera la meta en más del 30%" : "riesgo alto con eGFR<45 en menor de 75")
-          : "falla leve: supera la meta en más del 15%"),
+          ? "falla grave: riesgo alto con eGFR<45 en menor de 75"
+          : "falla leve: por encima de la meta"),
     };
   }
 
@@ -34620,12 +38921,26 @@ _vglOfrecerDeshacer(btn);
     const o = opts || {};
     const v = mtrVentanaRecontrol(analito);
     if (!v || !mtrFechaDesdeIso(hoyIso)) return null;
-    const min = Math.max(v.minDias, v.pisoDias);
-    const base = mtrSumarDias(hoyIso, min);
+    const corto = Math.max(v.minDias, v.pisoDias);
+    // v17.55.0 — LA VENTANA SE USA ENTERA, Y POR DEFECTO HACIA EL LADO LARGO.
+    // Hasta hoy esta función colocaba la fecha SIEMPRE en el extremo corto, y `maxDias` se
+    // declaraba, viajaba en el objeto devuelto y no colocaba ninguna fecha jamás: el «6-8
+    // semanas» del comentario del LDL era en realidad «42 días, siempre».
+    //
+    // El encargo del médico es explícito: "la idea es que el paciente tenga la menos cantidad
+    // de veces que ir a sangrarse e ir a la IPS". Y una fecha más tardía CABE MUCHO MEJOR en
+    // la toma maestra que ya está programada. Adelantar dos semanas no compra un control
+    // mejor: compra un viaje más. Así que el extremo largo es el defecto, y el corto queda
+    // para lo que de verdad no puede esperar — la regla renal (`o.urgente`).
+    //
+    // El piso clínico manda sobre las dos: nunca por debajo de `pisoDias`.
+    const dias = o.urgente ? corto : Math.max(v.maxDias, v.pisoDias);
+    const base = mtrSumarDias(hoyIso, dias);
     const fecha = mtrAjustarFechaHabil(base);   // avanza a hábil (sábado sí, domingo/festivo no)
     return {
       analito: analito, fecha: fecha,
-      minDias: min, maxDias: v.maxDias,
+      minDias: corto, maxDias: v.maxDias, pisoDias: v.pisoDias,
+      urgente: !!o.urgente,
       diasReales: Math.round((mtrFechaDesdeIso(fecha).getTime() - mtrFechaDesdeIso(hoyIso).getTime()) / 86400000),
     };
   }
@@ -34671,15 +38986,42 @@ _vglOfrecerDeshacer(btn);
   // maestra, se FUSIONA (se retoma en la misma toma). Si está más lejos, es una
   // 2ª fecha dedicada y prioritaria. Las fechas dedicadas que caigan a <=7 d
   // entre sí se colapsan a la más temprana (un solo viaje).
+  // v17.7.5 — ventana de sincronía del RAC con el ANR, del spec: «RAC sincroniza si
+  // venc<=Vc+60d y reinicia» (Vc = vencimiento de la creatinina). Se nombra en vez de
+  // dejar un 60 suelto: es un número clínico del promptware, no una constante de conveniencia.
+  const MTR_RAC_SINCRONIA_ANR_DIAS = 60;
+
   const MTR_MTT_FUSION_DIAS = 60;
   const MTR_MTT_COLAPSO_DIAS = 7;
 
   function mtrConsolidarMtt(gravesConRecontrol, ftlMaestra) {
     const graves = (Array.isArray(gravesConRecontrol) ? gravesConRecontrol : []).filter((g) => g && g.fecha);
     const ftl = mtrFechaDesdeIso(ftlMaestra);
-    const fusiones = [], dedicadas = [];
+    const fusiones = [], dedicadas = [], sinViaje = [];
     for (const g of graves) {
       const f = mtrFechaDesdeIso(g.fecha);
+      // v17.55.0 — FUSIÓN HACIA ATRÁS, HASTA EL PISO CLÍNICO.
+      // La regla de abajo solo fusiona cuando la toma maestra cae EN O DESPUÉS del recontrol.
+      // Consecuencia medida: si la toma maestra cae CINCO DÍAS ANTES, no fusiona y se le
+      // manda al paciente una segunda cita por cinco días de diferencia. Con el encargo de
+      // "la menos cantidad de veces que ir a sangrarse", eso no se sostiene.
+      //
+      // Se adelanta el recontrol a la toma maestra siempre que la fecha resultante siga
+      // siendo >= pisoDias desde hoy. El piso NO es un número de conveniencia: para el LDL
+      // son 28 días, el mismo "nunca antes de 4 semanas" que el propio fichero justifica
+      // (un LDL a las dos semanas de cambiar la estatina no es interpretable). Por debajo
+      // del piso no se adelanta NUNCA: ahí el examen no mediría nada y el viaje sobraría
+      // igual, solo que además con un resultado que engaña.
+      if (ftl && f && g.hoyIso && typeof g.pisoDias === "number") {
+        const difAtras = Math.round((f.getTime() - ftl.getTime()) / 86400000);   // >0: la toma va ANTES
+        if (difAtras > 0) {
+          const diasDesdeHoy = Math.round((ftl.getTime() - mtrFechaDesdeIso(g.hoyIso).getTime()) / 86400000);
+          if (diasDesdeHoy >= g.pisoDias) {
+            fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: -difAtras, adelantado: difAtras }));
+            continue;
+          }
+        }
+      }
       if (ftl && f) {
         // v17.6.57 — auditoría 25-ago (1.19): esto comparaba con Math.abs (bidireccional):
         // un recontrol que cae DESPUÉS de la FTL se fusionaba igual que uno que cae ANTES.
@@ -34693,6 +39035,12 @@ _vglOfrecerDeshacer(btn);
         const dif = Math.round((ftl.getTime() - f.getTime()) / 86400000);
         if (dif >= 0 && dif <= MTR_MTT_FUSION_DIAS) { fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: dif })); continue; }
       }
+      // v17.55.0 — SOLO LO GRAVE JUSTIFICA UN VIAJE APARTE. Una falla leve que no cupo en la
+      // toma maestra NO manda al paciente a sangrarse otra vez: su analito ya entra en la
+      // orden (unión MTT de la v17.54.0) y su vigencia ya viene partida a la mitad por la
+      // D9, que es lo que adelanta la toma maestra. Se anota en `sinViaje` para que quien
+      // pinte pueda decirlo, en vez de que desaparezca en silencio.
+      if (g.gravedad !== "grave") { sinViaje.push(Object.assign({}, g)); continue; }
       dedicadas.push(Object.assign({}, g));
     }
     // Colapsar dedicadas a <=7 d entre sí, a la más temprana.
@@ -34706,7 +39054,7 @@ _vglOfrecerDeshacer(btn);
       if (ancla) { ancla.analitos = (ancla.analitos || [ancla.analito]).concat(d.analito); }
       else { colapsadas.push(Object.assign({}, d, { analitos: [d.analito] })); }
     }
-    return { fusiones: fusiones, dedicadas: colapsadas };
+    return { fusiones: fusiones, dedicadas: colapsadas, sinViaje: sinViaje };
   }
 
   // ---------- ORQUESTADOR ----------
@@ -34717,12 +39065,23 @@ _vglOfrecerDeshacer(btn);
     const fallas = [];
     const recontroles = [];
 
+    // v17.55.0 — TODA falla lleva su fecha de recontrol, no solo las graves. Hasta hoy solo
+    // las graves la tenían, así que al retirar el escalón del 30 % (D10) un LDL de 260 con
+    // meta 70 se habría quedado SIN ninguna fecha. Lo que distingue a una grave ya no es
+    // tener fecha: es poder justificar un VIAJE APARTE (ver mtrConsolidarMtt).
+    // `urgente` decide en qué extremo de su ventana cae la fecha: corto para lo que no puede
+    // esperar (la regla renal), largo para lo demás — porque el largo cabe mejor en la toma
+    // maestra y eso es un viaje menos.
+    const _recon = (analito, f) => Object.assign(
+      { gravedad: f.gravedad, hoyIso: c.hoyIso },
+      mtrFechaRecontrol(analito, c.hoyIso, Object.assign({}, c, { urgente: f.gravedad === "grave" })) || {}
+    );
     // LDL
     if (c.ldl && c.ldl.actual != null && c.ldl.meta != null) {
       const f = mtrEvaluarFalla("LDL", c.ldl.actual, c.ldl.meta, c);
       if (f.falla) {
         fallas.push(f);
-        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("ldl", c.hoyIso, c) || {}));
+        recontroles.push(_recon("ldl", f));
       }
     }
     // HbA1c (solo DM2)
@@ -34731,12 +39090,42 @@ _vglOfrecerDeshacer(btn);
       const f = mtrEvaluarFalla("HbA1c", c.hba1c.actual, meta, c);
       if (f.falla) {
         fallas.push(f);
-        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("hba1c", c.hoyIso, c) || {}));
+        recontroles.push(_recon("hba1c", f));
       }
     }
 
-    const graves = recontroles.filter((r) => r && r.gravedad === "grave" && r.fecha);
-    const mtt = mtrConsolidarMtt(graves, c.ftlMaestra);
+    // Glicemia en ayunas (solo DM2) — v17.6.84, el TERCER eje que v68 exige y que faltaba.
+    // Sin este eje, un diabético con la glicemia disparada y la HbA1c todavía vigente (o
+    // ausente) no disparaba falla, ni recontrol de 2-4 semanas, ni entraba en el foco
+    // metabólico: el descontrol glucémico agudo pasaba entero por debajo del radar de S2,
+    // porque la HbA1c —lo único que se vigilaba— se mueve en 90-120 días.
+    if (c.esDm2 && c.glicemia && c.glicemia.actual != null) {
+      const metaGlic = c.glicemia.meta != null ? c.glicemia.meta : mtrMetaGlicemiaGeneral();
+      const f = mtrEvaluarFalla("Glicemia", c.glicemia.actual, metaGlic, c);
+      if (f.falla) {
+        fallas.push(f);
+        // v17.55.0 — LA GLICEMIA NUNCA GENERA VIAJE PROPIO. El propio v68 lo autoriza y el
+        // comentario de MTR_RECONTROL lo dice literal: «glicemia 2-4 sem O ALINEADA CON LA
+        // HbA1c». Medido sobre 3.072 planes, la glicemia provocaba 884 segundas citas — y
+        // mandar a un paciente a sangrarse otra vez a los 14 días es justo lo que el médico
+        // señaló como absurdo. La falla se sigue declarando (él la ve, la IA la redacta, el
+        // analito entra en la orden): se alinea con el recontrol de la HbA1c si lo hay, y si
+        // no, la cubre la toma maestra. Lo que desaparece es el viaje, no la vigilancia.
+        const _reconHba1c = recontroles.find((r) => r && r.analito === "hba1c" && r.fecha);
+        if (_reconHba1c) {
+          recontroles.push(Object.assign({}, _reconHba1c, {
+            analito: "glicemia", gravedad: f.gravedad, alineadoA: "hba1c",
+          }));
+        }
+      }
+    }
+
+    // v17.55.0 — a consolidar van TODOS los recontroles, no solo los graves: la fusión a la
+    // toma maestra es justo lo que evita el viaje, y negársela a las leves las mandaba a
+    // ninguna parte. Quién puede acabar en una cita dedicada lo decide mtrConsolidarMtt por
+    // la gravedad de cada uno.
+    const conFecha = recontroles.filter((r) => r && r.fecha);
+    const mtt = mtrConsolidarMtt(conFecha, c.ftlMaestra);
     const hayFallaLdl = fallas.some((f) => f.analito === "LDL");
     const inercia = mtrInerciaEstatina(hayFallaLdl, c.meds);
 
@@ -34747,6 +39136,7 @@ _vglOfrecerDeshacer(btn);
       recontroles: recontroles,
       fusiones: mtt.fusiones,       // se retoman en la FTL maestra (order_list)
       fechasDedicadas: mtt.dedicadas,  // 2ª fecha prioritaria, ya colapsadas
+      sinViaje: mtt.sinViaje || [],    // v17.55.0 — leves que no cupieron: sin cita aparte
       inercia: inercia,
     };
   }
@@ -34823,7 +39213,12 @@ _vglOfrecerDeshacer(btn);
   // resuelven un problema distinto: VGL_PRECON_TTL_MS (6 h, prefetch de TODA la
   // agenda del día, no de un paciente que se está mirando ahora) y
   // LABS_PREFETCH_TTL_MS (ya estaba en 10 min).
-  const MTR_CACHE_TTL_MS = 10 * 60000;
+  // v17.29.0 — ENCARGO DEL MÉDICO (28-ago, decisión #23 de la entrevista S+):
+  // «pasa a un reloj más corto» — 10 min podía dejar que Agendamiento/Ordenamiento
+  // mostraran una fecha de control calculada con datos que ya cambiaron durante una
+  // consulta activa. Se le explicó el mecanismo y eligió 3 minutos: se recalcula
+  // bastante más seguido sin disparar una llamada de red en cada clic.
+  const MTR_CACHE_TTL_MS = 3 * 60000;
 
   function mtrCacheResumenGuardar(docId, resumen) {
     if (!docId || !resumen) return false;
@@ -34839,6 +39234,50 @@ _vglOfrecerDeshacer(btn);
   // v15.6.0 — minutos desde que se calculó el resumen en caché (null si no hay caché
   // vigente). La Ficha del paciente lo muestra para que el médico sepa qué tan fresca
   // es la lectura antes de confiar en ella.
+  // =====================================================================
+  //  v17.47.0 — EL JSON QUE VA A LA IA NO PUEDE IR CADUCADO
+  //
+  //  Defecto encontrado por auditoría del flujo de datos: el panel de redacción calcula
+  //  la hoja de hechos UNA SOLA VEZ, al abrirse, y el botón "Generar" reutiliza esa foto.
+  //  El médico deja el panel abierto mientras completa la historia —uso normal, y el
+  //  propio código lo documenta— así que la nota se podía redactar con TFG, LDL,
+  //  categoría de riesgo y metas de hasta 13 minutos antes (3 min de TTL más el rato que
+  //  el panel llevara abierto). El texto libre SÍ se relee en cada clic desde la
+  //  v17.6.22; los números no. Y la nota la firma el médico.
+  //
+  //  Esta función resuelve, en el instante del clic, cuál es el resumen vigente:
+  //   · Si la caché tiene uno (el Panel la refresca cada 20 s con los factores del DOM),
+  //     ese manda, y la hoja se recalcula sobre él.
+  //   · Si la caché está vacía —invalidada porque el médico acaba de escribir, o
+  //     caducada— NO se puede recomponer el resumen aquí: haría falta volver a leer los
+  //     laboratorios. Entonces se conserva la foto, pero se DICE que es una foto y de
+  //     cuándo. Callarlo sería presentar como fresco algo que no lo es, que es justo lo
+  //     que este proyecto prohíbe.
+  //
+  //  Devuelve `{resumen, hoja, refrescado, edadMin}`. Nunca lanza: ante cualquier duda
+  //  devuelve la foto original, que es el comportamiento de antes.
+  // =====================================================================
+  function mtrIaResumenVigente(resumenFoto, hojaFoto) {
+    const salida = { resumen: resumenFoto, hoja: hojaFoto, refrescado: false, edadMin: null };
+    try {
+      const docId = resumenFoto && resumenFoto._docId;
+      if (!docId) return salida;
+      const vigente = mtrCacheResumenLeer(docId);
+      if (!vigente) {
+        // Sin caché vigente: la foto es lo único que hay. Se informa su antigüedad si se
+        // puede saber; `mtrCacheResumenEdadMin` devuelve null cuando ya caducó.
+        salida.edadMin = mtrCacheResumenEdadMin(docId);
+        return salida;
+      }
+      if (vigente === resumenFoto) { salida.edadMin = mtrCacheResumenEdadMin(docId); return salida; }
+      salida.resumen = vigente;
+      salida.hoja = mtrHojaDesdeResumen(vigente);
+      salida.refrescado = true;
+      salida.edadMin = mtrCacheResumenEdadMin(docId);
+      return salida;
+    } catch (e) { return salida; }
+  }
+
   function mtrCacheResumenEdadMin(docId) {
     if (!docId || _mtrCacheResumen.docId !== String(docId) || !_mtrCacheResumen.resumen) return null;
     const ahora = (typeof Date !== "undefined" ? Date.now() : 0);
@@ -34875,32 +39314,40 @@ _vglOfrecerDeshacer(btn);
   // CSS del bloque. Mismas convenciones que el recuadro renal: todo cuelga de
   // #vgl-labs-modal y toda declaración de color lleva !important, porque el CSS de
   // Everest pisa lo que no lo lleve (Regla E de la suite 25).
+  // v17.23.0 — HALLAZGO REAL (investigación S+ del Panel del paciente, 28-ago): este
+  // bloque solo se sembró para #vgl-labs-modal, nunca para #vgl-panel-modal — aunque
+  // mtrRenderAvisosHtml/mtrPintarAviso pintan los MISMOS avisos (.vgl-mtr-*) también
+  // dentro de la pestaña Medicamentos del Panel (mtrPanelMedicamentosHtml). Con
+  // S.motorPortado encendido, esos avisos CRITICAL/HIGH/INFO se veían sin fondo, sin
+  // borde y sin color de severidad ahí — no por perder una batalla de especificidad
+  // contra Everest, sino porque ninguna regla nuestra aplicaba en ese modal. Cada
+  // selector gana un segundo destino, #vgl-panel-modal, con el mismo !important.
   const MTR_CSS = `
-        #vgl-labs-modal .vgl-mtr-bloque{
+        #vgl-labs-modal .vgl-mtr-bloque,#vgl-panel-modal .vgl-mtr-bloque,#vgl-cw-farmaco .vgl-mtr-bloque{
           background:var(--surface-1);border:1px solid var(--edge);border-radius:var(--r-card);
           padding:10px 12px;display:flex;flex-direction:column;gap:7px;margin-top:8px
         }
-        #vgl-labs-modal .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-        #vgl-labs-modal .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
-        #vgl-labs-modal .vgl-mtr-aviso{
+        #vgl-labs-modal .vgl-mtr-tope,#vgl-panel-modal .vgl-mtr-tope,#vgl-cw-farmaco .vgl-mtr-tope{font-size:var(--t-body);color:var(--fg) !important;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        #vgl-labs-modal .vgl-mtr-cuenta,#vgl-panel-modal .vgl-mtr-cuenta,#vgl-cw-farmaco .vgl-mtr-cuenta{font-size:var(--t-micro);color:var(--fg2) !important}
+        #vgl-labs-modal .vgl-mtr-aviso,#vgl-panel-modal .vgl-mtr-aviso,#vgl-cw-farmaco .vgl-mtr-aviso{
           border-radius:var(--r-chip);padding:7px 9px;display:flex;flex-direction:column;gap:3px;
           box-shadow:inset 0 0 0 1px var(--edge)
         }
-        #vgl-labs-modal .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
-        #vgl-labs-modal .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
-        #vgl-labs-modal .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
-        #vgl-labs-modal .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
-        #vgl-labs-modal .vgl-mtr-ico{font-size:var(--t-body)}
-        #vgl-labs-modal .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
-        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
-        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
-        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
-        #vgl-labs-modal .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
-        #vgl-labs-modal .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
-        #vgl-labs-modal .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
-        #vgl-labs-modal .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
-        #vgl-labs-modal .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-crit,#vgl-panel-modal .vgl-mtr-crit,#vgl-cw-farmaco .vgl-mtr-crit{background:rgba(var(--rgb-rojo),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-rojo),.34)}
+        #vgl-labs-modal .vgl-mtr-alto,#vgl-panel-modal .vgl-mtr-alto,#vgl-cw-farmaco .vgl-mtr-alto{background:rgba(var(--rgb-ambar),.12);box-shadow:inset 0 0 0 1px rgba(var(--rgb-ambar),.30)}
+        #vgl-labs-modal .vgl-mtr-info,#vgl-panel-modal .vgl-mtr-info,#vgl-cw-farmaco .vgl-mtr-info{background:rgba(var(--rgb-azul),.10);box-shadow:inset 0 0 0 1px rgba(var(--rgb-azul),.26)}
+        #vgl-labs-modal .vgl-mtr-cab,#vgl-panel-modal .vgl-mtr-cab,#vgl-cw-farmaco .vgl-mtr-cab{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--t-micro)}
+        #vgl-labs-modal .vgl-mtr-ico,#vgl-panel-modal .vgl-mtr-ico,#vgl-cw-farmaco .vgl-mtr-ico{font-size:var(--t-body)}
+        #vgl-labs-modal .vgl-mtr-tit,#vgl-panel-modal .vgl-mtr-tit,#vgl-cw-farmaco .vgl-mtr-tit{font-weight:800;color:var(--fg) !important}
+        #vgl-labs-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-crit .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-crit .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-rojo) !important}
+        #vgl-labs-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-alto .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-alto .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-ambar) !important}
+        #vgl-labs-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-panel-modal .vgl-mtr-info .vgl-mtr-conducta,#vgl-cw-farmaco .vgl-mtr-info .vgl-mtr-conducta{font-weight:800;letter-spacing:.3px;color:var(--c-azul) !important}
+        #vgl-labs-modal .vgl-mtr-msg,#vgl-panel-modal .vgl-mtr-msg,#vgl-cw-farmaco .vgl-mtr-msg{font-size:var(--t-micro);color:var(--fg) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-meds,#vgl-panel-modal .vgl-mtr-meds,#vgl-cw-farmaco .vgl-mtr-meds{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.45}
+        #vgl-labs-modal .vgl-mtr-mec,#vgl-panel-modal .vgl-mtr-mec,#vgl-cw-farmaco .vgl-mtr-mec{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4;font-style:italic}
+        #vgl-labs-modal .vgl-mtr-pie,#vgl-panel-modal .vgl-mtr-pie,#vgl-cw-farmaco .vgl-mtr-pie{font-size:var(--t-micro);color:var(--fg3) !important;line-height:1.4}
+        #vgl-labs-modal .vgl-mtr-sinjuicio,#vgl-panel-modal .vgl-mtr-sinjuicio,#vgl-cw-farmaco .vgl-mtr-sinjuicio{font-size:var(--t-micro);color:var(--c-ambar) !important;line-height:1.5}
+        #vgl-labs-modal .vgl-mtr-limpio,#vgl-panel-modal .vgl-mtr-limpio,#vgl-cw-farmaco .vgl-mtr-limpio{font-size:var(--t-micro);color:var(--fg2) !important;line-height:1.5}
   `;
 
   // ---- v14.3.0 — CSS de las burbujas de información y del rediseño UX --------
