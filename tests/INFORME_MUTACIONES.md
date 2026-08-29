@@ -2703,3 +2703,24 @@ rojo con el mensaje exacto esperado, y se restauró. El banco completo volvió a
 la misma clase de cambio (texto sin lógica) verificado por la misma prueba en bucle sobre
 las 12 formas; cualquier regresión futura en cualquiera de los 10 sitios hace caer esta
 misma prueba.
+
+## v17.56.0 — 29-ago-2026 (reconciliación del banco con la producción REAL del gist)
+
+El workspace se sincronizó con la v17.56.0 del gist público (fuente de verdad, traída
+íntegra) y el banco se reconcilió contra el código REAL: 13 pruebas documentaban contratos
+intermedios que producción ya había cambiado (PR #101 y las decisiones del 28/29-ago). Cada
+contrato nuevo que se portó a las pruebas se mutó para confirmar que la prueba mide algo
+real y no es un no-op.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **rojo de tendencias (v17.55.0)** | `_mtrTendUmbralGrave` vuelto a `const factor = 1.3` (revive el +30 %) | `suite_67` | *#123 rojo por VALOR* → *131 con meta 116 ya está sobre la meta: rojo en riesgo bajo también* (esperaba "grave", obtuvo null) y *#123: HbA1c usa la meta del paciente...* → *9,2 con meta individual de 8,0 está sobre ella* (esperaba "grave", obtuvo null) |
+| **chips PyM en la tarjeta (v17.22.0)** | `pymsVisibles = pymsPanel.slice(0, 0)` (amputa los chips otra vez) | `suite_15` | *render: ... los chips PyM volvieron en v17.22.0* → *el chip de PyM pendiente vuelve a la tarjeta*; *T4/v14.0.2 + v17.22.0...* → *la fila de chips PyM volvió*; *v14.0.2 + v17.22.0...* → *y muestra el chip PyM del paciente* (las tres obtuvieron false) |
+| **mensaje de labs sin lectura (v17.8.1)** | la rama `_noSePudoLeer` vuelta al texto viejo «No se encontraron paraclínicos recientes» | `suite_15` | *openLaboratoriosModal (v17.8.1): sin poder leer el portal...* → *el fallo fue del sistema: se dice como tal (obtuvo false)* |
+| **botón del modal de órdenes sin lista (v17.16.0)** | el confirm vuelto a «Sin actividades para ordenar» siempre (sin distinguir «No hay lista que consultar») | `suite_15` | *openOrdenamientoModal: sin coincidencia PyM...* → *y el botón no invita a ordenar nada (antes decía 'Sin actividades'...) (obtuvo false)* |
+| **claves muertas del banner (v17.19.0)** | `bannerPym: false` revivido en DEFAULTS | `suite_15` | *v15 (v17.19.0): el bloque T7 se retiró entero...* → *la clave del banner ya no existe en los ajustes (esperaba undefined y obtuvo false)* |
+
+Cada mutación se aplicó sobre el archivo de producción UNA A LA VEZ (restaurando antes de
+pasar a la siguiente), se corrió la suite afectada con el filtro del runner, se confirmó el
+rojo con la aserción esperada, y se restauró. El banco completo quedó en **2.295/2.295**
+tras la restauración final.
