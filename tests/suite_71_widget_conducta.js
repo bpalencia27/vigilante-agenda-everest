@@ -1103,15 +1103,25 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       const iHistoria = src.indexOf('if (secc === "historia")');
       t.cierto(iHistoria >= 0, "debe existir la rama de la sección historia en tick()");
-      const bloque = src.slice(iHistoria, iHistoria + 1200);
-      t.cierto(bloque.indexOf("mtrWidgetConductaTick()") >= 0,
-        "mtrWidgetConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el widget de exámenes volvió a quedar sin pintar en consulta real");
-      t.cierto(bloque.indexOf("mtrWidgetFarmacoTick()") >= 0,
-        "mtrWidgetFarmacoTick() debe llamarse dentro de la rama de historia — el widget de farmacia, igual que su hermano, no sirve de nada si solo vive en el banco de pruebas");
+      const bloque = src.slice(iHistoria, iHistoria + 1800);
+      // v17.43.0 — los tres pasaron de `mtrWidgetXTick()` a
+      // `_rumTramo("tick.widget.x", mtrWidgetXTick)` para poder cronometrarlos. La
+      // INTENCIÓN de esta prueba no cambia ni un ápice —el defecto que existe para evitar
+      // es que un widget se escriba, se pruebe y NUNCA se enganche al tick, que ya pasó
+      // tres veces— así que se comprueba que el nombre aparezca en la rama, envuelto o no.
+      // Se busca el nombre SIN paréntesis a propósito: pasarlo como referencia a _rumTramo
+      // es una forma tan válida de engancharlo como llamarlo directamente, y atarse a la
+      // sintaxis exacta haría que esta prueba se rompiera en cada refactor inocente.
+      const enganchado = (nombre) =>
+        bloque.indexOf(nombre + "()") >= 0 || bloque.indexOf(", " + nombre + ")") >= 0;
+      t.cierto(enganchado("mtrWidgetConductaTick"),
+        "mtrWidgetConductaTick debe engancharse dentro de la rama de historia — si esto falla, el widget de exámenes volvió a quedar sin pintar en consulta real");
+      t.cierto(enganchado("mtrWidgetFarmacoTick"),
+        "mtrWidgetFarmacoTick debe engancharse dentro de la rama de historia — el widget de farmacia, igual que su hermano, no sirve de nada si solo vive en el banco de pruebas");
       // v17.32.0 — el mismo defecto, una tercera vez, es el que esta prueba existe para
       // evitar: el botón "Ordenar pendientes" no sirve de nada si solo vive en el banco.
-      t.cierto(bloque.indexOf("mtrWidgetOrdenarConductaTick()") >= 0,
-        "mtrWidgetOrdenarConductaTick() debe llamarse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
+      t.cierto(enganchado("mtrWidgetOrdenarConductaTick"),
+        "mtrWidgetOrdenarConductaTick debe engancharse dentro de la rama de historia — si esto falla, el botón de ordenar nunca se pinta en consulta real");
     });
   },
 };

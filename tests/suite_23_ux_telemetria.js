@@ -27,6 +27,8 @@ module.exports = {
     "_equipoId", "_sanearMensajeError", "reportarError",
     "_rumEndpointLabel", "_sanearDondeError", "_errRepeticion",
     "_rumCubeta", "_rumEsNuestro", "_rumNodoEsNuestro", "_rumTramo",
+    // v17.43.0 — diario de lentitud: el anillo de fases y el volcado a la bitácora
+    "_rumTramoAnotar", "_rumTramosParaTest", "_rumTramosResetParaTest", "_perfRegistrarTareaLarga",
     // v15.x — vaciado de telemetria al cerrarse la pestaña (antes era un closure sin pruebas)
     "_vaciarTelemetriaAlSalir", "repBeacon",
     // v15.2.0 — lista blanca de etiquetas de friccion
@@ -564,14 +566,131 @@ module.exports = {
       t.noLanza(() => c.api._iniciarRumObserver());
     });
 
-    t.caso("_iniciarRumObserver: con uxTelemetria apagada de entrada, NO llega a crear ningún observador", () => {
+    // v17.43.0 — esta prueba fijaba "uxTelemetria apagada ⇒ ningún observador". Ese
+    // contrato cambió a propósito, y su INTENCIÓN (que el interruptor de privacidad se
+    // respete) se conserva entera abajo: con los DOS apagados sigue sin instalarse nada.
+    // El motivo del cambio: el médico reportó lentitud real pero "no sé cuándo". El
+    // observador es lo único que puede cazarla, y estaba atado al interruptor de la
+    // telemetría que PUEDE SALIR del equipo — que él tiene apagado. Se separaron: `perfLog`
+    // gobierna la bitácora LOCAL de lentitud; `uxTelemetria` sigue gobernando, sola, los
+    // contadores que viajan.
+    t.caso("_iniciarRumObserver: con uxTelemetria Y perfLog apagados, NO crea ningún observador", () => {
       const c = cargar({ silencioso: true });
       c.api.__S.uxTelemetria = false;
+      c.api.__S.perfLog = false;
       const creados = [];
       class FakePO { constructor(cb) { creados.push(cb); } observe() {} }
       c.env.win.PerformanceObserver = FakePO;
       c.api._iniciarRumObserver();
-      t.igual(creados.length, 0, "corta en el guard de S.uxTelemetria antes de tocar PerformanceObserver");
+      t.igual(creados.length, 0, "con los dos interruptores en 'no', el médico no es observado de ninguna forma");
+    });
+
+    t.caso("_iniciarRumObserver: con uxTelemetria apagada pero perfLog encendido, SÍ observa — y no filtra ni un contador", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.uxTelemetria = false;   // el interruptor de lo que SALE del equipo: apagado
+      c.api.__S.perfLog = true;         // el de la bitácora local: encendido
+      const creados = [];
+      class FakePO { constructor(cb) { creados.push(cb); } observe() {} }
+      c.env.win.PerformanceObserver = FakePO;
+      c.api._iniciarRumObserver();
+      t.cierto(creados.length > 0, "el medidor arranca: es la única forma de cazar la lentitud que el médico reporta");
+      // Y la garantía que sostiene la separación: uxTrack se autocensura con su propia
+      // guarda, así que encender perfLog NO mete ni un contador en el almacén que viaja.
+      const antes = JSON.stringify(c.env.almacen[c.api.UX_KEY] || null);
+      c.api.uxTrack("rum.self.task.gt300ms");
+      const despues = JSON.stringify(c.env.almacen[c.api.UX_KEY] || null);
+      t.igual(despues, antes, "con uxTelemetria en 'no', ningún contador se guarda aunque el observador esté vivo");
+    });
+
+    // =====================================================================
+    //  v17.43.0 — DIARIO DE LENTITUD
+    //  El médico: "sí siento lentitud, pero no sé cuándo". Un contador por baldes
+    //  (`rum.self.task.gt300ms`) dice cuántas veces pasó y nunca qué estaba corriendo.
+    //  Estas pruebas fijan el puente: `_rumTramo` deja las fases caras en un anillo, y
+    //  cuando el LoAF avisa de un cuadro largo NUESTRO se vuelca a la bitácora.
+    // =====================================================================
+    const FLIGHT_KEY_PERF = "vgl_flight_recorder_logs";
+    const leerPerf = (c) => {
+      try { return JSON.parse(c.env.almacen[FLIGHT_KEY_PERF] || "[]").filter((e) => e.cat === "PERF"); }
+      catch (e) { return []; }
+    };
+
+    t.caso("_rumTramo: una fase cara queda anotada en el anillo con su nombre y sus ms", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      let t0 = 1000;
+      c.env.win.performance = { now: () => t0 };
+      c.api._rumTramo("tick.cosecha", () => { t0 = 1240; });   // 240 ms
+      const anillo = c.api._rumTramosParaTest();
+      t.igual(anillo.length, 1, "la fase se anotó");
+      t.igual(anillo[0].f, "tick.cosecha", "con su nombre, que es lo que responde '¿qué fue?'");
+      t.cierto(anillo[0].ms >= 200, "y con su costo real, no un balde");
+    });
+
+    t.caso("_rumTramo: una fase barata NO ensucia el anillo — si todo entrara, no explicaría nada", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      let t0 = 1000;
+      c.env.win.performance = { now: () => t0 };
+      c.api._rumTramo("tick.widget.ordenar", () => { t0 = 1005; });   // 5 ms
+      t.igual(c.api._rumTramosParaTest().length, 0, "por debajo de 50 ms no explica ningún tirón");
+    });
+
+    t.caso("_rumTramo: el anillo tiene tope — nunca crece sin límite en una jornada entera", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      for (let i = 0; i < 40; i++) c.api._rumTramoAnotar("fase" + i, 100);
+      t.cierto(c.api._rumTramosParaTest().length <= 12, "acotado al tope, no se acumula");
+      const ultimos = c.api._rumTramosParaTest();
+      t.igual(ultimos[ultimos.length - 1].f, "fase39", "y conserva las MÁS RECIENTES, que son las que explican el tirón de ahora");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: escribe UNA línea en la bitácora, con las fases culpables", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      const perf = leerPerf(c);
+      t.igual(perf.length, 1, "una línea, no una por fase");
+      t.igual(perf[0].act, "tarea_larga");
+      t.cierto(String(perf[0].det.fases).indexOf("tick.cosecha") >= 0, "dice QUÉ fase estaba corriendo — eso es lo que faltaba");
+      t.igual(perf[0].det.ms, 410, "y cuánto costó el cuadro");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: vacía el anillo tras volcarlo — no acusa a la fase equivocada dos veces", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      c.api._perfRegistrarTareaLarga(500, 400);            // segundo tirón, sin fases nuevas
+      const perf = leerPerf(c);
+      t.igual(perf.length, 2, "las dos quedaron registradas");
+      t.igual(String(perf[1].det.fases), "", "la segunda NO hereda la fase de la primera: sería acusar en falso");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: con perfLog apagado no escribe nada", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = false;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      t.igual(leerPerf(c).length, 0, "el interruptor manda");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: CERO PHI — nunca guarda la cédula, solo si había historia abierta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.env.doc.getElementById = ((real) => (id) => (
+        id === "vgl-acciones-dock" ? { dataset: { vglDoc: "1098765432" } } : real(id)
+      ))(c.env.doc.getElementById.bind(c.env.doc));
+      c.api._perfRegistrarTareaLarga(400, 350);
+      const perf = leerPerf(c);
+      t.igual(perf[0].det.con_historia, true, "sabe que había un paciente abierto…");
+      const crudo = JSON.stringify(perf[0]);
+      t.cierto(crudo.indexOf("1098765432") < 0, "…pero la cédula NO aparece por ningún lado en la línea guardada");
     });
 
     t.caso("_iniciarRumObserver: con PerformanceObserver disponible, instala EXACTAMENTE 2 observadores con las opciones correctas", () => {

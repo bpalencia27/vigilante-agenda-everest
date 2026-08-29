@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.42.0
+// @version     17.43.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.42.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.43.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -7262,6 +7262,22 @@ _vglOfrecerDeshacer(btn);
     sedeLabNombre: "",        // v15.9.0 — nombre de la sede que se imprime en el recordatorio de la toma.
     atheneaAutoLogin: true,   // v12.5.2 — ENCENDIDO de fábrica: cuenta única compartida por la sede (ver aviso de seguridad junto a atheneaCredsGet). Sin credenciales guardadas, simplemente no hace nada.
     uxTelemetria: false,      // v12.5.0 — telemetría desactivada de fábrica (Default-off R1.8)
+    // v17.43.0 — DIARIO DE LENTITUD, y NO es lo mismo que `uxTelemetria`.
+    // El médico reportó lentitud real en consulta pero "no sé cuándo" se dispara. El
+    // observador LoAF que ya existía (_iniciarRumObserver) sabe atribuir si una tarea
+    // larga fue NUESTRA o de Everest, pero solo contaba baldes agregados: perdía el
+    // contexto, así que jamás podía responder "¿cuándo?". Esto añade la otra mitad: una
+    // línea en la bitácora local por cada tarea larga NUESTRA.
+    // Nace ENCENDIDO, y eso exige justificarse frente a la regla Default-off R1.8:
+    //   · `uxTelemetria` gobierna los CONTADORES que pueden SALIR del equipo (uxTrack →
+    //     vgl_ux → repPost). Sigue apagado de fábrica y NO se toca aquí.
+    //   · `perfLog` gobierna solo la bitácora LOCAL (vglLog → localStorage), que nunca
+    //     se envía a ninguna parte y ya pasa por sanitizePII en cada campo.
+    // Lo que se guarda es el nombre de una fase nuestra y unos milisegundos. Cero PHI:
+    // ni cédula, ni nombre, ni texto del DOM. Sin esto, el defecto que el médico reporta
+    // seguiría siendo invisible, que es justo lo que la v17.15.0 dejó escrito como
+    // lección: medir antes de arreglar.
+    perfLog: true,
     motorPortado: false,      // v14.2.0 — avisos de seguridad farmacologica. NACE APAGADO:
                               // el calculo esta verificado contra el Copiloto, pero nadie lo
                               // ha visto en consulta real. Lo enciende el medico, uno a uno.
@@ -9455,6 +9471,73 @@ _vglOfrecerDeshacer(btn);
   // balde perdía su etiqueta en silencio. La «a» del medio corta la corrida y el saneador
   // sigue igual de estricto.
   const RUM_UMBRALES = [[300, "gt300ms"], [100, "de100a300ms"], [50, "50_100ms"]];
+
+  // =====================================================================
+  //  v17.43.0 — DIARIO DE LENTITUD: de "cuánto" a "cuándo y qué"
+  //
+  //  El médico reportó lentitud en consulta real y, al preguntarle cuándo, respondió
+  //  "sí, pero no sé cuándo". Con lo que había no se podía saber: el observador LoAF
+  //  contaba baldes (`rum.self.task.gt300ms`) y ahí se acababa la información — un
+  //  contador dice cuántas veces pasó, nunca qué estaba corriendo.
+  //
+  //  El puente es este anillo. `_rumTramo` (que existía desde la v17.1.0 y NUNCA se
+  //  adoptó en ningún llamador real, ver su comentario) deja aquí las fases nuestras que
+  //  costaron >= 50 ms. Cuando el LoAF avisa de un cuadro largo que fue NUESTRO, se
+  //  vuelca ese anillo a la bitácora: entonces la línea dice qué fase se estaba
+  //  ejecutando, no solo que algo tardó.
+  //
+  //  CERO PHI, por construcción: aquí solo entra un nombre de fase de un catálogo fijo
+  //  que escribimos nosotros (`tick.cosecha`, `tick.widgets`...) y un número de
+  //  milisegundos. Nunca una cédula, un nombre, ni texto del DOM. Y `vglLog` pasa cada
+  //  campo por `sanitizePII` de todos modos.
+  //
+  //  Tope 12: suficiente para reconstruir un tick completo y sus vecinos, y lo bastante
+  //  pequeño para que el volcado no cueste nada frente a la tarea de 300 ms que lo dispara.
+  // =====================================================================
+  const RUM_TRAMOS_MAX = 12;
+  let _rumTramosRecientes = [];
+  function _rumTramoAnotar(nombre, ms) {
+    try {
+      _rumTramosRecientes.push({ f: String(nombre), ms: Math.round(ms) });
+      if (_rumTramosRecientes.length > RUM_TRAMOS_MAX) {
+        _rumTramosRecientes = _rumTramosRecientes.slice(-RUM_TRAMOS_MAX);
+      }
+    } catch (e) {}
+  }
+  // Costura para el banco: leer y vaciar el anillo sin tocar el estado por dentro.
+  function _rumTramosParaTest() { return _rumTramosRecientes.slice(); }
+  function _rumTramosResetParaTest() { _rumTramosRecientes = []; }
+
+  // Escribe UNA línea de bitácora por tarea larga nuestra. Se llama solo cuando el LoAF
+  // ya decidió que el tiempo fue mayoritariamente nuestro y pasó del umbral: es un
+  // suceso raro por definición, así que el coste de `vglLog` (~0,20 ms medidos, ver el
+  // comentario de `_frLogs`) es despreciable frente a los >=300 ms que lo provocaron.
+  function _perfRegistrarTareaLarga(msCuadro, msNuestros) {
+    try {
+      if (S.perfLog === false) return;
+      const tramos = _rumTramosRecientes.slice(-6);
+      // Se vacía tras volcar: si no, la siguiente tarea larga arrastraría las fases de
+      // esta y la bitácora acusaría a la fase equivocada.
+      _rumTramosRecientes = [];
+      vglLog("PERF", "tarea_larga", {
+        ms: Math.round(msCuadro),
+        ms_nuestros: Math.round(msNuestros),
+        // Dónde estaba el médico. `_seccionActiva` devuelve un nombre de nuestro propio
+        // catálogo ("historia", "agenda", "otra"), nunca una URL ni un id de Everest.
+        seccion: (function () { try { return String(seccionActiva() || "?"); } catch (e) { return "?"; } })(),
+        // Si había una historia abierta — un booleano, NO la cédula.
+        con_historia: (function () {
+          try {
+            const dockEl = document.getElementById("vgl-acciones-dock");
+            return !!(dockEl && dockEl.dataset && dockEl.dataset.vglDoc);
+          } catch (e) { return false; }
+        })(),
+        oculta: (function () { try { return !!_pestanaSinAtencion(); } catch (e) { return false; } })(),
+        fases: tramos.map(function (t) { return t.f + ":" + t.ms; }).join(" "),
+      });
+    } catch (e) {}
+  }
+
   function _rumCubeta(dur) {
     for (let i = 0; i < RUM_UMBRALES.length; i++) if (dur >= RUM_UMBRALES[i][0]) return RUM_UMBRALES[i][1];
     return null;
@@ -9485,7 +9568,16 @@ _vglOfrecerDeshacer(btn);
   function _iniciarRumObserver() {
     try {
       if (typeof PerformanceObserver === "undefined") return;
-      if (S.uxTelemetria === false) return;
+      // v17.43.0 — la compuerta se abre con CUALQUIERA de los dos interruptores, no solo
+      // con `uxTelemetria`. Son dos cosas distintas: `uxTelemetria` gobierna los
+      // contadores que pueden SALIR del equipo (y sigue apagada de fábrica), `perfLog`
+      // gobierna la bitácora LOCAL de lentitud. Si el observador siguiera atado solo al
+      // primero, `perfLog` sería letra muerta: el médico lo tiene apagado y nunca se
+      // habría registrado la lentitud que él mismo reportó.
+      // Los `uxTrack` de aquí dentro NO cambian: se autocensuran solos (ver su guarda
+      // `if (S.uxTelemetria === false) return;`), así que encender `perfLog` no filtra
+      // ni un contador de más hacia el tablero.
+      if (S.uxTelemetria === false && S.perfLog === false) return;
       const tipos = (PerformanceObserver.supportedEntryTypes || []);
       const hayLoaf = tipos.indexOf && tipos.indexOf("long-animation-frame") >= 0;
 
@@ -9511,6 +9603,16 @@ _vglOfrecerDeshacer(btn);
                 // Y el tiempo NUESTRO se cuenta aparte, aunque el cuadro sea de Everest:
                 // es el número que de verdad responde «¿cuánto le cuesto al médico?».
                 if (msNuestros >= 50) uxTrack("rum.self.ms." + _rumCubeta(msNuestros));
+                // v17.43.0 — y AQUÍ es donde el contador se vuelve un diagnóstico. Si el
+                // cuadro largo fue mayoritariamente nuestro y pasó de 300 ms, se deja una
+                // línea en la bitácora con las fases que acababan de correr. Ese es el
+                // dato que convierte «no sé cuándo» en «fue la cosecha, a las 10:42, con
+                // la historia abierta».
+                // Umbral 300 ms y no 50: por debajo de eso el médico no percibe un tirón,
+                // y llenar la bitácora de ruido la haría inservible como evidencia.
+                if (msNuestros > msAjenos && (e.duration || 0) >= 300) {
+                  _perfRegistrarTareaLarga(e.duration || 0, msNuestros);
+                }
               }
             } catch (e2) {}
           });
@@ -9572,6 +9674,11 @@ _vglOfrecerDeshacer(btn);
           const ms = (performance.now() - t0);
           const cubeta = _rumCubeta(ms);
           if (cubeta) uxTrack("rum.self." + nombre + "." + cubeta);
+          // v17.43.0 — el tramo se anota además en el anillo de fases recientes. Es lo
+          // que permite que, cuando el LoAF avise de un cuadro largo NUESTRO, la línea de
+          // bitácora pueda decir QUÉ fase lo causó. Mismo umbral que la cubeta más baja
+          // (50 ms): por debajo no explica un tirón y solo gastaría sitio en el anillo.
+          if (cubeta) _rumTramoAnotar(nombre, ms);
         }
       } catch (e) {}
     }
@@ -26441,15 +26548,24 @@ _vglOfrecerDeshacer(btn);
         // "entregó". Se descubrió al enganchar el widget hermano de esta misma versión
         // (mtrWidgetFarmacoTick, análisis farmacológico). Los dos cuelgan del mismo tick
         // de "historia", igual que el resto de los inyectores de esta línea.
-        try { mtrWidgetConductaTick(); } catch (e) {}
-        try { mtrWidgetOrdenarConductaTick(); } catch (e) {}
-        try { mtrWidgetFarmacoTick(); } catch (e) {}
+        // v17.43.0 — envueltos en _rumTramo. Esa infraestructura existía desde la v17.1.0
+        // y su propio comentario dejaba escrito que NUNCA se había adoptado en ningún
+        // llamador real ("se construyó y se probó como infraestructura lista para
+        // instrumentar"). Estos tres son justamente los sospechosos del tirón de 5 s que
+        // el médico reporta, así que son los primeros en instrumentarse: si el tiempo se
+        // va aquí, la bitácora lo dirá con nombre propio en vez de dejarlo en «algo tardó».
+        try { _rumTramo("tick.widget.conducta", mtrWidgetConductaTick); } catch (e) {}
+        try { _rumTramo("tick.widget.ordenar", mtrWidgetOrdenarConductaTick); } catch (e) {}
+        try { _rumTramo("tick.widget.farmaco", mtrWidgetFarmacoTick); } catch (e) {}
         // v15.6.0 — guía paso a paso: el dock ya resolvió QUIÉN está en pantalla.
         try {
           const dockEl = document.getElementById("vgl-acciones-dock");
           const docId = dockEl && dockEl.dataset ? dockEl.dataset.vglDoc : "";
           try { _saludMarca("historia", !!docId); } catch (e2) {}   // v15.8.0 (N2) — ¿se está leyendo quién está en pantalla?
-          try { _vglCosecharDePantalla(docId); } catch (e2) {}      // v16.1.0 — se guarda lo que esta pestaña revela
+          // v16.1.0 — se guarda lo que esta pestaña revela. v17.43.0 — instrumentada:
+          // es el primer sospechoso del tirón periódico (barre el DOM entero y reserializa
+          // el almacén de hasta 80 pacientes, cada vuelta).
+          try { _rumTramo("tick.cosecha", function () { return _vglCosecharDePantalla(docId); }); } catch (e2) {}
           try { _vglVigilarTextoLibre(docId); } catch (e2) {}       // v16.3.2 — y se vigila lo que el médico escribe
           _acompTick(docId ? { doc_id: docId } : null);
         } catch (e) {}

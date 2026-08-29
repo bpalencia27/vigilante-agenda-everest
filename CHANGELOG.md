@@ -4,6 +4,42 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.43.0] — 2026-08-29 (El asistente empieza a anotar cuándo se pone lento)
+
+### 🐢 Usted dijo "sí siento lentitud, pero no sé cuándo". Ahora el script lo apunta solo
+No se optimizó nada todavía **a propósito**: primero hay que saber qué es. Es la misma
+disciplina que en la v17.15.0 convirtió "la consola está llena de errores" en un número
+concreto ("un hover costaba 16 peticiones; después, 4").
+
+**Lo que ya había, y por qué no servía.** El script lleva desde la v17.1.0 un medidor de
+verdad: usa una función del navegador (LoAF) que sabe distinguir si un tirón lo causó
+**nuestro** código o el de Everest. Pero solo llevaba una cuenta: "hubo 7 tirones de más de
+300 ms". Un número así dice *cuántas veces*, nunca *qué estaba haciendo* — así que jamás
+habría podido responder su pregunta. Y estaba apagado.
+
+**Lo que se hizo.**
+- Las fases caras del ciclo de 5 segundos (la cosecha de datos de la pantalla y los tres
+  widgets de Conducta) ahora se cronometran una por una. Curiosamente, la herramienta para
+  hacerlo ya existía desde la v17.1.0 y su propio comentario decía que **nunca se había
+  usado en ningún sitio**; ahora sí.
+- Cuando ocurre un tirón de más de 300 ms y es **nuestro**, se anota **una línea** en la
+  bitácora local con la hora, en qué pantalla estaba usted, si había una historia abierta,
+  y **qué fases acababan de correr y cuánto costó cada una**.
+- Nace encendido, pero conviene decir exactamente qué significa eso: es un interruptor
+  **distinto** al de las métricas de uso. Ése (el que puede enviar datos fuera del equipo)
+  **sigue apagado de fábrica y no se tocó**. El nuevo solo escribe en la bitácora de su
+  propio computador, que no se envía a ninguna parte.
+- **Cero PHI, y hay una prueba que lo fija:** la línea guarda si había un paciente abierto
+  (sí/no), nunca la cédula. Se comprueba buscando la cédula dentro de la línea guardada y
+  exigiendo que no aparezca.
+
+**Qué sigue.** Trabaje una jornada normal. Después leemos la bitácora y sabremos si el
+tirón es lo que sospechamos (la cosecha, que barre la pantalla entera cada 5 s y reescribe
+un almacén de hasta 80 pacientes) o algo distinto. Si es algo distinto, **manda la medición
+y se reordena el plan** — que para eso se mide antes de tocar.
+
+---
+
 ## [Versión 17.42.0] — 2026-08-29 (⚠️ SEGURIDAD: "Ordenar pendientes" ya no puede escribir en la historia equivocada)
 
 ### 🛡️ Se cerró un cruce de pacientes en el botón "Ordenar pendientes"

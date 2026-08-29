@@ -6,6 +6,28 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.43.0 — 29-ago-2026 (diario de lentitud: del "cuántas veces" al "cuándo y qué")
+
+Entrega de INSTRUMENTACIÓN, no de optimización: no se tocó ni una ruta caliente. El medidor
+LoAF ya existía y sabía atribuir culpa (nuestra vs. Everest), pero solo agregaba baldes y
+estaba atado al interruptor de la telemetría que puede salir del equipo — que el médico
+tiene apagado. Se separó en dos interruptores y se le añadió memoria de contexto.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | El anillo de fases deja de vaciarse tras volcarse a la bitácora | "vacía el anillo tras volcarlo — no acusa a la fase equivocada dos veces" | Sí — 100/100 |
+| 2 | Se retira el tope del anillo (`RUM_TRAMOS_MAX`) | "el anillo tiene tope — nunca crece sin límite en una jornada entera" | Sí — 100/100 |
+
+Nota de método: la mutación 1 es la que de verdad importa. Sin vaciar el anillo, la
+**segunda** tarea larga heredaría las fases de la primera y la bitácora acusaría a una fase
+que ya había terminado — un diagnóstico que miente es peor que no tener diagnóstico.
+
+Una prueba existente (`_iniciarRumObserver: con uxTelemetria apagada … NO crea ningún
+observador`) fijaba el contrato viejo y se reescribió, conservando su intención: con los
+DOS interruptores apagados sigue sin instalarse nada. Y se añadió la garantía que sostiene
+la separación — con `perfLog` encendido y `uxTelemetria` apagado, **ningún contador entra al
+almacén que viaja**.
+
 ## v17.42.0 — 29-ago-2026 (cruce de pacientes en "Ordenar pendientes")
 
 Hallazgo de auditoría adversarial, no de consulta. `_conductaBuscarYAgregarExamen` era la
