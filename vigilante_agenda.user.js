@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.43.0
+// @version     17.44.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.43.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.44.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -14362,16 +14362,26 @@ _vglOfrecerDeshacer(btn);
       #vgl-pym-banner .vgl-pymb-lista,
       #vgl-pym-banner .vgl-pymb-item,
       #vgl-pym-banner .vgl-pymb-titulo,
-      #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg)}
+      #vgl-pym-banner .vgl-pymb-item-nombre{color:var(--fg) !important}
       /* Los dos que SÍ traían color propio también suben a 1,1,0: con una clase pelada
          (0,1,0) perdían contra un ".contenedor span{color:...}" de Everest (0,1,1) —
          verificado, el contador caía a contraste 1.54 en tema claro. Su color va sobre
-         fondo de acento, así que perderlo no los deja grises: los deja ilegibles. */
-      #vgl-pym-banner .vgl-pymb-contador{color:var(--bg-solid)}
-      #vgl-pym-banner .vgl-pymb-item-btn{color:var(--bg-solid)}
-      #vgl-pym-banner .vgl-pymb-aviso{color:var(--c-ambar)}
-      #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3)}
-      #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg)}
+         fondo de acento, así que perderlo no los deja grises: los deja ilegibles.
+         v17.44.0 — LA DEFENSA POR ESPECIFICIDAD ESTABA A MEDIAS, y una auditoría de CSS
+         lo destapó. Subir a 1,1,0 gana contra reglas de Everest MÁS ESPECÍFICAS, pero
+         pierde contra CUALQUIERA que lleve la marca de importante, tenga la especificidad
+         que tenga. Y #vgl-pym-banner cuelga de document.body, fuera de #vgl-root: es
+         exactamente el caso que CLAUDE.md marca como crítico (toda regla de color que
+         viva fuera de #vgl-root la lleva, sin excepción). El CSS real de Everest es una
+         caja negra de Angular que puede cambiar sin avisar, así que la especificidad
+         sola es una apuesta sobre algo que no controlamos.
+         .vgl-pymb-aviso es un AVISO CLÍNICO: que se vuelva ilegible no es un problema
+         estético, es un aviso que el médico no lee. */
+      #vgl-pym-banner .vgl-pymb-contador{color:var(--bg-solid) !important}
+      #vgl-pym-banner .vgl-pymb-item-btn{color:var(--bg-solid) !important}
+      #vgl-pym-banner .vgl-pymb-aviso{color:var(--c-ambar) !important}
+      #vgl-pym-banner .vgl-pymb-toggle{color:var(--fg3) !important}
+      #vgl-pym-banner .vgl-pymb-toggle:hover{color:var(--fg) !important}
       .vgl-pymb-contador{
         background:var(--c-ambar);color:var(--bg-solid);font-weight:800;
         border-radius:var(--r-pill);padding:1px 8px;font-size:var(--t-micro);

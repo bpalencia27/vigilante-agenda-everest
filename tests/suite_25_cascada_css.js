@@ -649,8 +649,16 @@ module.exports = {
       // !important propios (display, font-family, color, background-color) más los que ya
       // tenía el selector del botón solo (border-radius, letter-spacing) — 2 de más frente
       // a la regla vieja de solo-badge, que no llevaba ninguno.
+      // v17.44.0 — 527 -> 533: las seis reglas de color de #vgl-pym-banner (el recordatorio
+      // de PyM, que cuelga de document.body y por tanto vive FUERA de #vgl-root). Se
+      // defendían solo por especificidad (1,1,0, ver el comentario justo encima de ellas en
+      // el script): eso gana contra reglas de Everest más específicas, pero pierde contra
+      // cualquiera que lleve !important, sea cual sea su especificidad. El propio comentario
+      // documenta que el contador YA cayó una vez a contraste 1,54 en tema claro por este
+      // mecanismo. Una de las seis, .vgl-pymb-aviso, es un AVISO CLÍNICO: perder su color
+      // no lo deja gris, lo deja ilegible. Hallazgo de la auditoría de CSS del 29-ago.
       const importantTotal = (cssClean.match(/!important/g) || []).length;
-      t.cierto(importantTotal === 527, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.41.0 sobre #vgl-cw-examenes, 525 -> 527). Esperado 527, salió ${importantTotal}.`);
+      t.cierto(importantTotal === 533, `El total de !important en la hoja no debe cambiar salvo por una entrega documentada (ver el historial de saltos arriba, y la nota de v17.44.0 sobre #vgl-pym-banner, 527 -> 533). Esperado 533, salió ${importantTotal}.`);
 
       // v17.25.0 — AUDITORÍA DE LABORATORIOS: MTR_RCV_CSS_TODOS_LOS_MODALES generaba
       // #vgl-riesgo-modal a partir de MTR_RCV_CSS con un regex que se saltaba cualquier

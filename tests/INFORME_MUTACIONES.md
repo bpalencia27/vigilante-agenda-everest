@@ -6,6 +6,26 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.44.0 — 29-ago-2026 (el recordatorio de PyM sobrevive al CSS de Everest)
+
+No hay mutación de código que verificar: el cambio es puramente declarativo (seis
+`!important` en reglas de color). La verificación equivalente, y más fuerte, es empírica en
+Chromium real — y se hizo en las dos direcciones, que es lo que la convierte en prueba:
+
+| Estado del código | Aviso clínico | Contador | Nombre | Título |
+|---|---|---|---|---|
+| **Sin** el arreglo (revertido a propósito) | ❌ pisado | ❌ pisado | ❌ pisado | ❌ pisado |
+| **Con** el arreglo | ✅ ámbar | ✅ | ✅ | ✅ |
+
+El CSS de "Everest" simulado es deliberadamente más agresivo que el real: lleva
+`!important` **y** más especificidad que nuestras reglas. Si el color sobrevive a eso,
+sobrevive a cualquier cosa. El CSS se extrajo del script con las hojas interpoladas
+resueltas (mismo método que `suite_25`), nunca de una copia recortada a mano.
+
+Revertir el arreglo y ver los cuatro caer es la contraprueba: demuestra que el arreglo era
+necesario, no decorativo. El contador de `!important` de `suite_25` se actualizó a mano de
+527 a 533 con su justificación, que es exactamente para lo que ese contador existe.
+
 ## v17.43.0 — 29-ago-2026 (diario de lentitud: del "cuántas veces" al "cuándo y qué")
 
 Entrega de INSTRUMENTACIÓN, no de optimización: no se tocó ni una ruta caliente. El medidor

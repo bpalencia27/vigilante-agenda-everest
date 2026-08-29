@@ -4,6 +4,45 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.44.0] — 2026-08-29 (El recordatorio de PyM ya no puede volverse ilegible)
+
+### 👁️ Seis avisos que Everest podía borrar de su pantalla, uno de ellos clínico
+Hallazgo de una auditoría de CSS. El recordatorio de PyM (`#vgl-pym-banner`) se pega
+directamente sobre la página de Everest, fuera de nuestro contenedor protegido. Sus colores
+se defendían **por especificidad**: una técnica que gana contra las reglas normales de
+Everest… pero pierde contra cualquier regla que Everest marque como "importante", sin
+importar nada más.
+
+Y no es hipotético: el propio comentario del código documenta que **el contador ya cayó una
+vez a contraste 1,54 en tema claro** — prácticamente invisible — por este mismo mecanismo.
+Se arregló a medias entonces.
+
+Uno de los seis es `.vgl-pymb-aviso`, que es un **aviso clínico**. Que pierda su color no lo
+deja gris: lo deja ilegible sobre su propio fondo. Un aviso que usted no puede leer es lo
+mismo que un aviso que no existe.
+
+**Verificado en Chromium real**, no en teoría, contra un CSS de Everest simulado más
+agresivo que la vida real (reglas con la marca de importante Y más específicas que las
+nuestras):
+
+| | Antes | Ahora |
+|---|---|---|
+| Aviso clínico de PyM | ❌ pisado (rojo de Everest) | ✅ ámbar correcto |
+| Contador | ❌ pisado | ✅ sobrevive |
+| Nombre de la actividad | ❌ pisado | ✅ sobrevive |
+| Título | ❌ pisado | ✅ sobrevive |
+
+Los cuatro se perdían antes; los cuatro sobreviven ahora. Nada cambia de aspecto cuando
+Everest se comporta bien — esto solo importa cuando intenta pisarnos.
+
+### 📋 Sobre el resto de la paleta: está bien
+La misma auditoría calculó el contraste real de todos los pares de color que conviven en
+la interfaz, en **los dos temas**. Ninguno incumple la norma de accesibilidad (AA): el peor
+caso medido es 5,01 y el mínimo exigido es 4,5. **El problema nunca fue su paleta**, sino
+que el CSS ajeno pudiera pisarla.
+
+---
+
 ## [Versión 17.43.0] — 2026-08-29 (El asistente empieza a anotar cuándo se pone lento)
 
 ### 🐢 Usted dijo "sí siento lentitud, pero no sé cuándo". Ahora el script lo apunta solo
