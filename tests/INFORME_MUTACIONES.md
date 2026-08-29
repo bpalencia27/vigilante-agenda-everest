@@ -5811,3 +5811,66 @@ tocarla: lo que cambia es que su HbA1c queda vencida y **la fecha de toma se ade
 —que es justo lo que debe pasar—, y el examen sale en la orden. Se afinó el predicado para que
 diga lo que el comentario ya decía, y se le añadió la comprobación que faltaba: que todo lo
 vencido vaya en la orden.
+
+---
+
+## v17.55.0 — menos viajes al laboratorio (D10, replanteada dos veces por el médico)
+
+**El plan se rechazó dos veces, y las dos correcciones cambiaron la entrega entera.** La
+primera versión graduaba el recontrol como *cuanto más descontrolado, más pronto vuelve*.
+Respuesta del médico: *«la idea es que el paciente tenga la menos cantidad de veces que ir a
+sangrarse e ir a la IPS. ¿Repetir la glucosa en menos de 1 mes? ¿LDL en máximo 8 semanas?»*
+
+**El error no fue el diseño: fue la métrica.** Se estaba midiendo «cuántos casos pasan de grave
+a leve» en vez de lo único que le pasa al paciente: cuántas veces va a sangrarse.
+
+**Medición previa (3.072 planes con el motor real) y resultado:**
+
+| | antes | después |
+|---|---|---|
+| Viajes por paciente | 2,329 | **1,613** (−31 %) |
+| Con segunda cita dedicada | 78,1 % | **42,6 %** |
+| Citas dedicadas totales | 4.082 | 1.884 (−54 %) |
+| Con falla y sin ninguna fecha | 0 | **0** |
+
+Y quedó fijada en el banco: el caso *«el barrido completo hace menos viajes que antes, y nadie
+se queda sin fecha»* corre su propio barrido y exige las dos cosas a la vez — menos viajes **y**
+cero pacientes sin vigilancia. Una sin la otra no vale.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | La fecha de recontrol vuelve al extremo corto siempre | *v17.55.0: la ventana de recontrol se usa ENTERA* + el barrido |
+| 2 | La fusión hacia atrás cruza el piso clínico | *…FUSIÓN HACIA ATRÁS, HASTA EL PISO* (suite_46) |
+| 3 | Se quita la fusión hacia atrás | la misma |
+| 4 | Una leve vuelve a poder crear cita dedicada | *…una falla leve no manda al paciente a sangrarse aparte* + suite_46 |
+| 5 | Solo las graves vuelven a tener fecha | *v17.55.0: TODA falla lleva fecha, no solo las graves* |
+| 6 | Se retira también la regla renal de `mtrGravedadFalla` | 6 casos de suite_49 |
+| 7 | El rojo de tendencias vuelve a meta+30 % | 3 casos de suite_67 |
+| 8 | Lo que tiene cita dedicada deja de entrar en la orden | *v17.54.0: una glicemia en falla TOMADA AYER entra en la orden* |
+
+**La mutación 8 documenta un defecto que introduje yo en esta misma entrega**, y lo cazó una
+prueba de la versión anterior. Al repartir los recontroles entre tres destinos (fusionados, con
+cita dedicada, sin viaje), la unión a la lista de órdenes de la v17.54.0 seguía mirando **solo
+las fusiones** — así que un analito con cita propia se agendaba y nadie lo pedía. Es exactamente
+el invariante que esa unión existe para proteger, y por eso la prueba lo vio.
+
+**Trece pruebas reescritas, en tres categorías distintas, y la distinción importa:**
+
+- **Seis fijaban el escalón del +30 %** (gravedad y rojo de tendencias). No eran pruebas
+  equivocadas: eran las pruebas correctas de la regla anterior, que el médico revocó. Se
+  reescriben fijando el contrato nuevo, con la sucesión escrita en el sitio.
+- **Cuatro se apoyaban en `meta.fallaGrave`**, un campo que esta versión **retira**: con la D10
+  «grave» deja de ser un porcentaje y pasa a ser la regla renal, que `mtrEvaluarMetaLdl` no
+  puede evaluar (no recibe filtrado ni edad). Seguir emitiéndolo habría dejado **dos
+  definiciones de «grave» conviviendo sobre el mismo paciente** — el mismo defecto que la
+  v17.6.83 ya documentó y corrigió con las banderas educativas. Sus dos consumidores lo leían
+  en un `OR` con `falla`, y `fallaGrave` siempre implicaba `falla`: quitarlo no cambia ningún
+  resultado.
+- **Tres necesitaban cifras nuevas** para seguir demostrando lo mismo. La más ilustrativa: *«la
+  misma cifra no es grave en un paciente de riesgo bajo: la meta es del paciente, no del
+  analito»*. Con el corte en meta+30 % lo demostraba un LDL de 131; con el corte en la meta hay
+  que usar 100. **Lo que la prueba defiende no cambió; cambió el número que lo hace visible.**
+
+**Retiradas por quedarse sin un solo consumidor**: `MTR_FALLA_GRAVE_UMBRAL` y `_mtrMargenGrave`.
+Una constante clínica sin usuarios es una invitación a que alguien la vuelva a cablear pensando
+que significa algo.

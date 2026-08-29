@@ -226,7 +226,11 @@ module.exports = {
       t.igual(r.riesgo.categoria, "muy alto", "diabetes con daño de órgano blanco");
       t.igual(r.meta.metas.ldl, 55, "meta de LDL de muy alto riesgo");
       t.cierto(r.meta.falla, "un LDL de 148 contra meta 55 es falla terapéutica");
-      t.cierto(r.meta.fallaGrave, "y grave: supera meta+30%");
+      // v17.55.0 — `meta.fallaGrave` se retiró: la gravedad ya no la decide un porcentaje
+      // sobre la meta lipídica sino la regla renal, y `mtrEvaluarMetaLdl` no tiene con qué
+      // evaluarla. La gravedad de esta paciente se pregunta donde ahora vive.
+      t.igual(r.meta.fallaGrave, undefined, "la meta lipídica ya no opina sobre la gravedad");
+      t.cierto((r.fallas.fallas || []).some((f) => f.analito === "LDL"), "el LDL sí figura en falla");
     });
 
     t.caso("el programa rector lo decide la norma: ERC por encima de DM2 y HTA", () => {

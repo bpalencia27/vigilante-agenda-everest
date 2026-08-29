@@ -807,14 +807,17 @@ module.exports = {
     // alimenta (vía mtrEducationFlags) la hoja educativa que el paciente se lleva impresa.
     // Ahora lee el mismo número que las otras tres. El escalón del 30 % NO se toca aquí:
     // esa es la decisión D10, pendiente.
-    t.caso("v17.54.0 (D9): la meta de LDL declara falla por encima de la meta, y grave sigue a meta+30%", () => {
+    // v17.55.0 — se retiran las aserciones sobre `fallaGrave`: ese campo YA NO EXISTE. Con la
+    // D10, «grave» deja de ser un porcentaje y pasa a ser la regla renal, que esta función no
+    // puede evaluar (no recibe filtrado ni edad). Mantenerlo habría dejado dos definiciones
+    // distintas de «grave» conviviendo sobre el mismo paciente.
+    t.caso("v17.55.0 (D9+D10): la meta de LDL declara falla por encima de la meta, y ya no opina sobre la gravedad", () => {
       t.falso(api.mtrEvaluarMetaLdl("alto", 70, null).falla, "justo en la meta de «alto» (70) no hay falla");
-      const leve = api.mtrEvaluarMetaLdl("alto", 71, null);
-      t.cierto(leve.falla, "71 ya es falla — antes hacía falta pasar de 80,5");
-      t.falso(leve.fallaGrave, "pero no grave");
+      t.cierto(api.mtrEvaluarMetaLdl("alto", 71, null).falla, "71 ya es falla — antes hacía falta pasar de 80,5");
       t.cierto(api.mtrEvaluarMetaLdl("alto", 80, null).falla, "y 80, el caso de la franja callada, también");
-      t.falso(api.mtrEvaluarMetaLdl("alto", 91, null).fallaGrave, "el escalón grave sigue en meta+30% = 91");
-      t.cierto(api.mtrEvaluarMetaLdl("alto", 92, null).fallaGrave, "92 lo supera");
+      t.igual(api.mtrEvaluarMetaLdl("alto", 260, null).fallaGrave, undefined,
+        "la gravedad ya no se decide aquí: la decide mtrGravedadFalla con la regla renal");
+      t.igual(api.mtrEvaluarMetaLdl("alto", 92, null).fallaGrave, undefined, "ni siquiera muy por encima");
     });
 
     // ================= FUNCIÓN RENAL =================

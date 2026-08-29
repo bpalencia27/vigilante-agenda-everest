@@ -42,9 +42,18 @@ module.exports = {
       t.igual(api.mtrGravedadFalla(85, 70, {}), "leve", "85 vs 70 = +21%");
     });
 
-    t.caso("un sobrepaso >30% es GRAVE a cualquier edad, incluso >=75", () => {
-      t.igual(api.mtrGravedadFalla(95, 70, { edad: 82 }), "grave", "95 vs 70 = +35%, 82 años: grave igual");
-      t.igual(api.mtrGravedadFalla(95, 70, { edad: 50 }), "grave", "y a los 50 también");
+    // v17.55.0 (D10) — REESCRITA. Fijaba el escalón del +30 %, que el médico retiró: "Sin
+    // +30%, pero la regla renal se queda". No era una prueba equivocada: era la prueba
+    // correcta de la regla anterior. Lo que fija ahora es que ese escalón YA NO EXISTE —
+    // por muy lejos que esté el paciente de su meta, la gravedad la decide la función renal.
+    // Que un descontrolado severo no se quede sin vigilancia lo garantiza otra cosa: desde
+    // esta versión TODA falla lleva fecha de recontrol (ver mtrPlanFallas).
+    t.caso("v17.55.0 (D10): por muy alto que esté, el porcentaje ya no hace grave a nadie", () => {
+      t.igual(api.mtrGravedadFalla(95, 70, { edad: 82 }), "leve", "+35% a los 82 sin criterio renal: leve");
+      t.igual(api.mtrGravedadFalla(95, 70, { edad: 50 }), "leve", "y a los 50 también");
+      t.igual(api.mtrGravedadFalla(260, 70, { edad: 50 }), "leve", "ni un LDL al cuádruple de su meta");
+      t.igual(api.mtrGravedadFalla(260, 70, { categoriaRiesgo: "alto", egfr: 40, edad: 50 }), "grave",
+        "el ÚNICO camino a grave: riesgo alto + eGFR<45 + menor de 75");
     });
 
     t.caso("la vía de riesgo hace grave a <75 con eGFR<45 y riesgo alto, y NO a los >=75", () => {
@@ -61,9 +70,99 @@ module.exports = {
     t.caso("mtrEvaluarFalla devuelve el exceso en % y un motivo legible", () => {
       const f = api.mtrEvaluarFalla("LDL", 95, 70, { edad: 50 });
       t.cierto(f.falla, "es falla");
-      t.igual(f.gravedad, "grave", "grave por >30%");
-      t.cierto(Math.abs(f.excesoPct - 35.7) < 0.2, "exceso ~35.7%");
-      t.cierto(/30%/.test(f.motivo), "el motivo nombra el 30%");
+      t.igual(f.gravedad, "leve", "v17.55.0: sin criterio renal, el porcentaje ya no la hace grave");
+      t.cierto(Math.abs(f.excesoPct - 35.7) < 0.2, "exceso ~35.7% — el dato SIGUE viajando, aunque ya no decida la gravedad");
+      t.falso(/30%/.test(f.motivo), "y el motivo ya no puede nombrar un escalón que no existe");
+      const g = api.mtrEvaluarFalla("LDL", 95, 70, { categoriaRiesgo: "alto", egfr: 40, edad: 50 });
+      t.igual(g.gravedad, "grave");
+      t.cierto(/eGFR<45/.test(g.motivo), "y el motivo dice el único porqué que queda: " + g.motivo);
+    });
+
+    // ================= v17.55.0 — MENOS VIAJES AL LABORATORIO =================
+    // Encargo del médico, textual: "la idea es que el paciente tenga la menos cantidad de
+    // veces que ir a sangrarse e ir a la IPS". Medido sobre 3.072 planes ANTES de tocar nada:
+    // 2,33 viajes por paciente y el 78,1 % con una segunda cita dedicada.
+    // =========================================================================
+
+    t.caso("v17.55.0: la ventana de recontrol se usa ENTERA — el extremo largo por defecto", () => {
+      // Hasta hoy `maxDias` se declaraba, viajaba en el objeto devuelto y no colocaba
+      // ninguna fecha jamás: el "6-8 semanas" del LDL era en realidad "42 días, siempre".
+      // `diasReales` puede pasarse unos días del objetivo porque la fecha se ajusta a día
+      // hábil (sábado sí, domingo y festivo no) — por eso se comprueba el tramo, no el punto.
+      const largo = api.mtrFechaRecontrol("ldl", "2026-08-16", {});
+      t.cierto(largo.diasReales >= 56 && largo.diasReales <= 59,
+        "LDL sin urgencia: 8 semanas, que caben mejor en la toma maestra (dio " + largo.diasReales + ")");
+      const corto = api.mtrFechaRecontrol("ldl", "2026-08-16", { urgente: true });
+      t.cierto(corto.diasReales >= 42 && corto.diasReales <= 45,
+        "con criterio renal sí se aprieta a 6 semanas (dio " + corto.diasReales + ")");
+      t.cierto(corto.diasReales < largo.diasReales, "y el urgente siempre cae antes que el normal");
+      t.cierto(corto.diasReales >= largo.pisoDias, "nunca por debajo del piso de 4 semanas");
+    });
+
+    t.caso("v17.55.0: donde la biología no deja graduar, no se gradúa", () => {
+      // En HbA1c el piso ES el extremo corto (90 d): antes no es interpretable, así que
+      // urgente y no urgente coinciden. El diseño se autolimita en vez de fingir precisión.
+      t.igual(api.mtrFechaRecontrol("hba1c", "2026-08-16", {}).diasReales, 120);
+      t.igual(api.mtrFechaRecontrol("hba1c", "2026-08-16", { urgente: true }).diasReales, 90);
+      t.igual(api.mtrVentanaRecontrol("hba1c").pisoDias, 90, "el piso y el extremo corto son el mismo número");
+    });
+
+    t.caso("v17.55.0: TODA falla lleva fecha, no solo las graves", () => {
+      const base = { hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55 };
+      const leve = api.mtrPlanFallas(Object.assign({}, base, { ldl: { actual: 260, meta: 70 } }));
+      t.igual(leve.fallas[0].gravedad, "leve", "sin criterio renal, un LDL al cuádruple es leve");
+      t.igual(leve.recontroles.length, 1, "pero NO se queda sin fecha: eso era lo que D10 iba a romper");
+    });
+
+    t.caso("v17.55.0: una falla leve no manda al paciente a sangrarse aparte", () => {
+      const base = { hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55, ftlMaestra: "2027-01-01" };
+      const leve = api.mtrPlanFallas(Object.assign({}, base, { ldl: { actual: 260, meta: 70 } }));
+      t.igual(leve.fechasDedicadas.length, 0, "la toma maestra queda lejísimos y aun así no hay segunda cita");
+      t.igual(leve.sinViaje.length, 1, "queda anotada, no desaparece");
+      const grave = api.mtrPlanFallas(Object.assign({}, base, { egfr: 40, ldl: { actual: 260, meta: 70 } }));
+      t.igual(grave.fechasDedicadas.length, 1, "la misma cifra con criterio renal SÍ justifica el viaje aparte");
+    });
+
+    t.caso("v17.55.0: el barrido completo hace menos viajes que antes, y nadie se queda sin fecha", () => {
+      // La métrica de esta entrega. Base medida con el código de la v17.54.0: 2,329 viajes
+      // por paciente y 78,1 % con segunda cita.
+      let n = 0, viajes = 0, conDed = 0, sinFecha = 0;
+      for (const creat of [0.9, 1.4, 2.0, 2.6]) {
+        for (const ldl of [60, 90, 140, 260]) {
+          for (const hba1c of [null, 6.8, 7.6, 11.5]) {
+            for (const glu of [95, 140, 220]) {
+              const r = api.mtrPlanFallas({
+                hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: (creat > 2 ? 30 : 70), edad: 66,
+                esDm2: hba1c != null, ftlMaestra: "2026-10-01",
+                ldl: { actual: ldl, meta: 70 },
+                hba1c: hba1c != null ? { actual: hba1c } : null,
+                glicemia: { actual: glu },
+              });
+              n++;
+              const ded = (r.fechasDedicadas || []).length;
+              viajes += 1 + ded;
+              if (ded) conDed++;
+              // La contracara: nadie con falla puede quedarse sin nada. La glicemia es la
+              // excepción DECIDIDA —no tiene fecha propia a propósito, la cubre la toma
+              // maestra— así que se comprueba sobre las fallas que sí deben tenerla.
+              const noGlicemia = (r.fallas || []).filter((x) => x.analito !== "Glicemia");
+              if (noGlicemia.length && !(r.recontroles || []).length && !ded) sinFecha++;
+            }
+          }
+        }
+      }
+      const media = viajes / n;
+      t.cierto(media < 2.0, "viajes por paciente = " + media.toFixed(3) + " — la base de la v17.54.0 era 2,329");
+      t.cierto(conDed / n < 0.6, "con segunda cita = " + (100 * conDed / n).toFixed(1) + " % — la base era 78,1 %");
+      t.igual(sinFecha, 0, "y NADIE con falla se queda sin ninguna fecha: menos viajes no puede ser menos vigilancia");
+    });
+
+    t.caso("v17.55.0: una glicemia sola en falla no tiene fecha propia — y eso es lo que ahorra el viaje", () => {
+      const base = { hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55, esDm2: true, ftlMaestra: "2026-10-01" };
+      const sola = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 220 } }));
+      t.igual(sola.fallas.length, 1, "la falla SÍ se declara: el médico la ve y la IA la redacta");
+      t.igual(sola.recontroles.length, 0, "pero no genera fecha propia");
+      t.igual(sola.fechasDedicadas.length, 0, "ni cita aparte: la cubre la toma maestra y su vigencia ya partida por la D9");
     });
 
     // ================= VENTANAS Y FECHAS DE RECONTROL =================
@@ -214,9 +313,16 @@ module.exports = {
           HEMOGLOBINA: { fecha: ayer, valor: 14 }, HBA1C: { fecha: "2026-06-17", valor: 11.5 },
         },
       });
-      const fus = (r.fallas && r.fallas.fusiones) || [];
-      t.cierto(fus.some((x) => /glicemia/i.test(String(x.analito))),
-        "precondición: la glicemia de 140 con meta 130 se fusiona a la toma maestra");
+      // v17.55.0 — la precondición ya no puede exigir «fusiones»: desde que los recontroles se
+      // reparten entre fusionados, con cita dedicada y sin viaje, este caso acaba en cita
+      // dedicada. Lo que esta prueba defiende NO es por dónde salga, sino que el examen se
+      // pida. Ese fue justamente el defecto que cazó: la unión a la orden solo miraba las
+      // fusiones, así que se agendaba la cita y nadie pedía la glicemia.
+      const fa = r.fallas || {};
+      const todos = [].concat(fa.fusiones || [], fa.fechasDedicadas || [], fa.sinViaje || []);
+      const nombra = (x) => [].concat(x.analitos || [x.analito]).join(",");
+      t.cierto(todos.some((x) => /glicemia/i.test(nombra(x))),
+        "precondición: la glicemia de 140 con meta 130 tiene recontrol — " + JSON.stringify(todos.map(nombra)));
       const claves = (r.plan.ordenar || []).map((x) => x.clave);
       t.cierto(claves.indexOf("GLUCOSA") >= 0,
         "y tiene que ir en la orden: si no, el médico agenda la toma y nadie pide el examen — " + JSON.stringify(claves));
@@ -241,9 +347,26 @@ module.exports = {
       t.igual(leve.fallas.length, 1, "160 sí es falla");
       t.igual(leve.fallas[0].analito, "Glicemia", "y es del eje de la glicemia");
       t.igual(leve.fallas[0].gravedad, "leve", "por debajo de meta+30% es leve");
+      // v17.55.0 (D10) — el escalón del 30 % se retiró: con la función renal sana (egfr 80),
+      // ni una glicemia de 260 es «grave». Lo es con criterio renal, y solo entonces.
       const grave = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 260 } }));
-      t.igual(grave.fallas[0].gravedad, "grave", "260 supera la meta en más del 30%");
-      t.cierto(grave.recontroles.length > 0, "y una falla grave programa recontrol");
+      t.igual(grave.fallas[0].gravedad, "leve", "260 con función renal sana: falla, pero no grave");
+      const renal = api.mtrPlanFallas(Object.assign({}, base, { egfr: 40, glicemia: { actual: 260 } }));
+      t.igual(renal.fallas[0].gravedad, "grave", "la misma cifra con eGFR 40 sí: es la única vía que queda");
+      // v17.55.0 — Y AQUÍ ESTÁ EL CAMBIO QUE MÁS VIAJES AHORRA: la glicemia NO programa una
+      // fecha propia. Medido sobre 3.072 planes, provocaba 884 segundas citas — mandar a
+      // sangrarse otra vez a los 14 días a quien viene de lejos. El propio v68 lo autoriza
+      // («2-4 sem O ALINEADA CON LA HbA1c»). La falla se declara igual; lo que desaparece es
+      // el viaje.
+      t.igual(grave.recontroles.length, 0, "una falla de glicemia sola no manda al paciente a sangrarse aparte");
+      const conHba1c = api.mtrPlanFallas(Object.assign({}, base, {
+        glicemia: { actual: 260 }, hba1c: { actual: 11 },
+      }));
+      const rGlu = conHba1c.recontroles.filter((r) => r.analito === "glicemia")[0];
+      const rHba = conHba1c.recontroles.filter((r) => r.analito === "hba1c")[0];
+      t.cierto(!!rGlu && !!rHba, "con la HbA1c también en falla, la glicemia sí tiene fecha");
+      t.igual(rGlu.fecha, rHba.fecha, "y es EXACTAMENTE la misma: se alinea, no se suma");
+      t.igual(rGlu.alineadoA, "hba1c", "dicho explícitamente, para que se pueda leer por qué");
     });
 
     t.caso("v17.6.84: en un no diabético la glicemia NO es falla terapéutica", () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.54.0
+// @version     17.55.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.54.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.55.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32304,10 +32304,17 @@ _vglOfrecerDeshacer(btn);
     // `meta.falla` via mtrEducationFlags) dijeran cosas distintas del mismo paciente. Ahora
     // los cuatro caminos leen el mismo numero.
     const falla = actual > metas.ldl * (1 + _mtrMargenMeta());
-    const fallaGrave = actual > metas.ldl * (1 + _mtrMargenGrave());
+    // v17.55.0 — SE RETIRA `fallaGrave` DE AQUÍ. Con la D10, «grave» deja de ser un
+    // porcentaje y pasa a ser la regla renal (riesgo alto + TFG<45 + edad<75), que esta
+    // función NO puede evaluar: no recibe ni el filtrado ni la edad. Seguir emitiendo un
+    // campo llamado `fallaGrave` que significa otra cosa que el «grave» del resto del motor
+    // sería crear DOS VERDADES sobre el mismo paciente — el mismo defecto que la v17.6.83
+    // documentó y corrigió con las banderas educativas. Sus dos únicos consumidores lo leían
+    // en un OR con `falla`, y `fallaGrave` siempre implicaba `falla`, así que quitarlo no
+    // cambia el resultado de ninguno.
     return {
       metas: metas, estado: estado, enMeta: estado === "en_meta",
-      reduccionPct: reduccion, falla: falla, fallaGrave: fallaGrave,
+      reduccionPct: reduccion, falla: falla,
       ldlActual: actual,
     };
   }
@@ -33349,15 +33356,6 @@ _vglOfrecerDeshacer(btn);
   // viajes al laboratorio sin que ninguna pantalla le declarara falla. Ahora "acortar"
   // y "falla" usan el MISMO margen (MTR_FALLA_UMBRAL): si se le adelanta el examen, es
   // porque está en falla declarada.
-  // Lectura defensiva del umbral GRAVE, por el mismo motivo que _mtrMargenMeta: la constante
-  // vive mas abajo en el fichero. v17.54.0: NO se toca su valor — el escalon del 30 % es la
-  // decision D10, que sigue pendiente de que el medico confirme que no quiere arrastrar con
-  // ella el rojo de la tabla de tendencias (que sale del mismo numero, decision suya del
-  // 21-ago).
-  function _mtrMargenGrave() {
-    try { return (typeof MTR_FALLA_GRAVE_UMBRAL === "number") ? MTR_FALLA_GRAVE_UMBRAL : 0.30; }
-    catch (e) { return 0.30; }
-  }
   function _mtrMargenMeta() {
     // La constante vive más abajo en el archivo; en tiempo de ejecución ya existe, pero
     // esta lectura defensiva evita repetir la zona muerta temporal de la v16.2.6.
@@ -36270,15 +36268,29 @@ _vglOfrecerDeshacer(btn);
     // la orden, porque su vigencia no ha vencido. El médico agenda la toma y nadie pide el
     // examen. La rama dejó de ser inerte, así que ahora se escribe.
     try {
+      // v17.55.0 — la unión cubre los TRES destinos, no solo las fusiones. Al repartir los
+      // recontroles entre fusionados, con cita dedicada y sin viaje, un analito que acabara
+      // en cita dedicada se quedaba fuera de la orden: se le agendaba al paciente un viaje
+      // aparte y nadie pedía el examen. Lo cazó la prueba de la glicemia de la v17.54.0, que
+      // es exactamente el invariante que esta unión existe para proteger. Da igual por dónde
+      // salga el recontrol: si hay recontrol, el examen se pide.
       const _ALIAS_MTT = { ldl: "COLESTEROL_LDL", hba1c: "HBA1C", glicemia: "GLUCOSA" };
-      const _fus = (resumen.fallas && Array.isArray(resumen.fallas.fusiones)) ? resumen.fallas.fusiones : [];
-      if (_fus.length && plan && Array.isArray(plan.ordenar)) {
+      const _fa = resumen.fallas || {};
+      const _conRecontrol = []
+        .concat(Array.isArray(_fa.fusiones) ? _fa.fusiones : [])
+        .concat(Array.isArray(_fa.fechasDedicadas) ? _fa.fechasDedicadas : [])
+        .concat(Array.isArray(_fa.sinViaje) ? _fa.sinViaje : []);
+      if (_conRecontrol.length && plan && Array.isArray(plan.ordenar)) {
         const _ya = new Set(plan.ordenar.map((x) => x && x.clave));
-        for (const _f of _fus) {
-          const _k = _ALIAS_MTT[String(_f && _f.analito).toLowerCase()] || String(_f && _f.analito).toUpperCase();
-          if (!_k || _ya.has(_k)) continue;
-          _ya.add(_k);
-          plan.ordenar.push({ clave: _k, nombre: mtrNombreLegibleAnalito(_k), motivo: "recontrol por falla terapéutica" });
+        for (const _f of _conRecontrol) {
+          // una cita colapsada lleva varios analitos en `analitos`; el resto, uno en `analito`
+          const _nombres = (Array.isArray(_f && _f.analitos) && _f.analitos.length) ? _f.analitos : [_f && _f.analito];
+          for (const _n of _nombres) {
+            const _k = _ALIAS_MTT[String(_n).toLowerCase()] || String(_n == null ? "" : _n).toUpperCase();
+            if (!_k || _ya.has(_k)) continue;
+            _ya.add(_k);
+            plan.ordenar.push({ clave: _k, nombre: mtrNombreLegibleAnalito(_k), motivo: "recontrol por falla terapéutica" });
+          }
         }
       }
     } catch (e) {}
@@ -37444,7 +37456,13 @@ _vglOfrecerDeshacer(btn);
   // ctx: { categoriaRiesgo, metaHba1c }. Sin contexto no hay meta y no hay rojo por valor.
   function _mtrTendUmbralGrave(clave, ctx) {
     const c = ctx || {};
-    const factor = 1 + MTR_FALLA_GRAVE_UMBRAL;
+    // v17.55.0 — EL ROJO EMPIEZA EN LA META. Decisión del médico del 29-ago, tomada con la
+    // medición delante (130 de los 137 vectores con LDL quedan en rojo). Antes el factor era
+    // `1 + MTR_FALLA_GRAVE_UMBRAL` (meta+30 %), y ese mismo número decidía además qué era una
+    // «falla grave» — dos preguntas clínicas distintas atadas a una sola constante. Se separan:
+    // la gravedad la decide ahora solo la regla renal (ver mtrGravedadFalla) y el color lo
+    // decide esta línea, que es lo único que queda del 30 % y ya no lo usa.
+    const factor = 1;
     if (clave === "COLESTEROL_LDL") {
       const cat = String(c.categoriaRiesgo || "").toLowerCase();
       const m = MTR_METAS_LIPIDICAS[cat];
@@ -38092,7 +38110,7 @@ _vglOfrecerDeshacer(btn);
     const fallaDe = (nombre) => fallasS2.some((f) => f && f.analito === nombre);
     const metabolico = enFalla("HBA1C") || enFalla("GLUCOSA") || fallaDe("HbA1c") || fallaDe("Glicemia");
     const lipidico = enFalla("COLESTEROL_LDL") || enFalla("TRIGLICERIDOS")
-      || !!(meta && (meta.falla || meta.fallaGrave));
+      || !!(meta && meta.falla);
     return { renal: renal, metabolico: metabolico, lipidico: lipidico };
   }
 
@@ -38586,7 +38604,7 @@ _vglOfrecerDeshacer(btn);
     // Se cuentan tanto graves como leves: v68 dice "alarmas=true si MUY ALTO o FALLA", y
     // ante la duda educar de más es inocuo — omitir los signos de alarma no lo es.
     const fallas = r.fallas || {};
-    const hayFalla = !!(meta && (meta.falla || meta.fallaGrave)) || !!fallas.hayGrave || !!fallas.hayLeve;
+    const hayFalla = !!(meta && meta.falla) || !!fallas.hayGrave || !!fallas.hayLeve;
     const programaRcv = ["ERC", "DM2", "HTA"].indexOf(r.programa) >= 0;
     return {
       alarmas: riesgo.categoria === "muy alto" || hayFalla,
@@ -38785,7 +38803,10 @@ _vglOfrecerDeshacer(btn);
   // cuatro puertas de abajo; ponerla a cero las mueve todas a la vez y deja el numero a la
   // vista si algun dia hay que volver a discutirlo.
   const MTR_FALLA_UMBRAL = 0;   // estricto: por encima de la meta ya es falla
-  const MTR_FALLA_GRAVE_UMBRAL = 0.30;   // meta+30% -> grave
+  // v17.55.0 — RETIRADA `MTR_FALLA_GRAVE_UMBRAL` (meta+30 %). Con la D10 dejó de decidir la
+  // gravedad, y con la decisión del médico sobre el color dejó de decidir el rojo de la tabla
+  // de tendencias. Sin un solo consumidor, una constante clínica que sigue ahí es una
+  // invitación a que alguien la vuelva a cablear pensando que significa algo.
 
   // Gravedad de una falla, o null si no hay falla.
   // ctx: { categoriaRiesgo, egfr, edad }
@@ -38794,7 +38815,12 @@ _vglOfrecerDeshacer(btn);
     if (a === null || m === null || m <= 0) return null;
     if (a <= m * (1 + MTR_FALLA_UMBRAL)) return null;   // no llega a falla
     const c = ctx || {};
-    if (a > m * (1 + MTR_FALLA_GRAVE_UMBRAL)) return "grave";   // >30% es grave a cualquier edad
+    // v17.55.0 (decisión D10, 29-ago) — SE RETIRA EL ESCALÓN POR PORCENTAJE. Textual del
+    // médico: "Sin +30%, pero la regla renal se queda". Aquí vivía
+    // `if (a > m * (1 + MTR_FALLA_GRAVE_UMBRAL)) return "grave"`.
+    // «Grave» pasa a significar UNA sola cosa: la regla clínica de abajo. Y su privilegio ya
+    // no es tener fecha de recontrol —desde esta versión la tiene toda falla— sino ser lo
+    // único que puede justificar que el paciente haga un VIAJE APARTE al laboratorio.
     const cat = mtrNormalizarRiesgoCv(c.categoriaRiesgo);
     const riesgoAlto = cat === "alto" || cat === "muy alto";
     const egfr = mtrFloat(c.egfr), edad = mtrFloat(c.edad);
@@ -38811,8 +38837,10 @@ _vglOfrecerDeshacer(btn);
       falla: gravedad !== null, gravedad: gravedad,
       motivo: gravedad === null
         ? "en meta"
+        // v17.55.0 — el único camino a «grave» es la regla renal, así que el motivo ya no
+        // tiene que elegir entre dos: se dice el que hay.
         : (gravedad === "grave"
-          ? "falla grave: " + (a > m * 1.30 ? "supera la meta en más del 30%" : "riesgo alto con eGFR<45 en menor de 75")
+          ? "falla grave: riesgo alto con eGFR<45 en menor de 75"
           : "falla leve: por encima de la meta"),
     };
   }
@@ -38835,12 +38863,26 @@ _vglOfrecerDeshacer(btn);
     const o = opts || {};
     const v = mtrVentanaRecontrol(analito);
     if (!v || !mtrFechaDesdeIso(hoyIso)) return null;
-    const min = Math.max(v.minDias, v.pisoDias);
-    const base = mtrSumarDias(hoyIso, min);
+    const corto = Math.max(v.minDias, v.pisoDias);
+    // v17.55.0 — LA VENTANA SE USA ENTERA, Y POR DEFECTO HACIA EL LADO LARGO.
+    // Hasta hoy esta función colocaba la fecha SIEMPRE en el extremo corto, y `maxDias` se
+    // declaraba, viajaba en el objeto devuelto y no colocaba ninguna fecha jamás: el «6-8
+    // semanas» del comentario del LDL era en realidad «42 días, siempre».
+    //
+    // El encargo del médico es explícito: "la idea es que el paciente tenga la menos cantidad
+    // de veces que ir a sangrarse e ir a la IPS". Y una fecha más tardía CABE MUCHO MEJOR en
+    // la toma maestra que ya está programada. Adelantar dos semanas no compra un control
+    // mejor: compra un viaje más. Así que el extremo largo es el defecto, y el corto queda
+    // para lo que de verdad no puede esperar — la regla renal (`o.urgente`).
+    //
+    // El piso clínico manda sobre las dos: nunca por debajo de `pisoDias`.
+    const dias = o.urgente ? corto : Math.max(v.maxDias, v.pisoDias);
+    const base = mtrSumarDias(hoyIso, dias);
     const fecha = mtrAjustarFechaHabil(base);   // avanza a hábil (sábado sí, domingo/festivo no)
     return {
       analito: analito, fecha: fecha,
-      minDias: min, maxDias: v.maxDias,
+      minDias: corto, maxDias: v.maxDias, pisoDias: v.pisoDias,
+      urgente: !!o.urgente,
       diasReales: Math.round((mtrFechaDesdeIso(fecha).getTime() - mtrFechaDesdeIso(hoyIso).getTime()) / 86400000),
     };
   }
@@ -38897,9 +38939,31 @@ _vglOfrecerDeshacer(btn);
   function mtrConsolidarMtt(gravesConRecontrol, ftlMaestra) {
     const graves = (Array.isArray(gravesConRecontrol) ? gravesConRecontrol : []).filter((g) => g && g.fecha);
     const ftl = mtrFechaDesdeIso(ftlMaestra);
-    const fusiones = [], dedicadas = [];
+    const fusiones = [], dedicadas = [], sinViaje = [];
     for (const g of graves) {
       const f = mtrFechaDesdeIso(g.fecha);
+      // v17.55.0 — FUSIÓN HACIA ATRÁS, HASTA EL PISO CLÍNICO.
+      // La regla de abajo solo fusiona cuando la toma maestra cae EN O DESPUÉS del recontrol.
+      // Consecuencia medida: si la toma maestra cae CINCO DÍAS ANTES, no fusiona y se le
+      // manda al paciente una segunda cita por cinco días de diferencia. Con el encargo de
+      // "la menos cantidad de veces que ir a sangrarse", eso no se sostiene.
+      //
+      // Se adelanta el recontrol a la toma maestra siempre que la fecha resultante siga
+      // siendo >= pisoDias desde hoy. El piso NO es un número de conveniencia: para el LDL
+      // son 28 días, el mismo "nunca antes de 4 semanas" que el propio fichero justifica
+      // (un LDL a las dos semanas de cambiar la estatina no es interpretable). Por debajo
+      // del piso no se adelanta NUNCA: ahí el examen no mediría nada y el viaje sobraría
+      // igual, solo que además con un resultado que engaña.
+      if (ftl && f && g.hoyIso && typeof g.pisoDias === "number") {
+        const difAtras = Math.round((f.getTime() - ftl.getTime()) / 86400000);   // >0: la toma va ANTES
+        if (difAtras > 0) {
+          const diasDesdeHoy = Math.round((ftl.getTime() - mtrFechaDesdeIso(g.hoyIso).getTime()) / 86400000);
+          if (diasDesdeHoy >= g.pisoDias) {
+            fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: -difAtras, adelantado: difAtras }));
+            continue;
+          }
+        }
+      }
       if (ftl && f) {
         // v17.6.57 — auditoría 25-ago (1.19): esto comparaba con Math.abs (bidireccional):
         // un recontrol que cae DESPUÉS de la FTL se fusionaba igual que uno que cae ANTES.
@@ -38913,6 +38977,12 @@ _vglOfrecerDeshacer(btn);
         const dif = Math.round((ftl.getTime() - f.getTime()) / 86400000);
         if (dif >= 0 && dif <= MTR_MTT_FUSION_DIAS) { fusiones.push(Object.assign({}, g, { fusionadoAFtl: ftlMaestra, difDias: dif })); continue; }
       }
+      // v17.55.0 — SOLO LO GRAVE JUSTIFICA UN VIAJE APARTE. Una falla leve que no cupo en la
+      // toma maestra NO manda al paciente a sangrarse otra vez: su analito ya entra en la
+      // orden (unión MTT de la v17.54.0) y su vigencia ya viene partida a la mitad por la
+      // D9, que es lo que adelanta la toma maestra. Se anota en `sinViaje` para que quien
+      // pinte pueda decirlo, en vez de que desaparezca en silencio.
+      if (g.gravedad !== "grave") { sinViaje.push(Object.assign({}, g)); continue; }
       dedicadas.push(Object.assign({}, g));
     }
     // Colapsar dedicadas a <=7 d entre sí, a la más temprana.
@@ -38926,7 +38996,7 @@ _vglOfrecerDeshacer(btn);
       if (ancla) { ancla.analitos = (ancla.analitos || [ancla.analito]).concat(d.analito); }
       else { colapsadas.push(Object.assign({}, d, { analitos: [d.analito] })); }
     }
-    return { fusiones: fusiones, dedicadas: colapsadas };
+    return { fusiones: fusiones, dedicadas: colapsadas, sinViaje: sinViaje };
   }
 
   // ---------- ORQUESTADOR ----------
@@ -38937,12 +39007,23 @@ _vglOfrecerDeshacer(btn);
     const fallas = [];
     const recontroles = [];
 
+    // v17.55.0 — TODA falla lleva su fecha de recontrol, no solo las graves. Hasta hoy solo
+    // las graves la tenían, así que al retirar el escalón del 30 % (D10) un LDL de 260 con
+    // meta 70 se habría quedado SIN ninguna fecha. Lo que distingue a una grave ya no es
+    // tener fecha: es poder justificar un VIAJE APARTE (ver mtrConsolidarMtt).
+    // `urgente` decide en qué extremo de su ventana cae la fecha: corto para lo que no puede
+    // esperar (la regla renal), largo para lo demás — porque el largo cabe mejor en la toma
+    // maestra y eso es un viaje menos.
+    const _recon = (analito, f) => Object.assign(
+      { gravedad: f.gravedad, hoyIso: c.hoyIso },
+      mtrFechaRecontrol(analito, c.hoyIso, Object.assign({}, c, { urgente: f.gravedad === "grave" })) || {}
+    );
     // LDL
     if (c.ldl && c.ldl.actual != null && c.ldl.meta != null) {
       const f = mtrEvaluarFalla("LDL", c.ldl.actual, c.ldl.meta, c);
       if (f.falla) {
         fallas.push(f);
-        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("ldl", c.hoyIso, c) || {}));
+        recontroles.push(_recon("ldl", f));
       }
     }
     // HbA1c (solo DM2)
@@ -38951,7 +39032,7 @@ _vglOfrecerDeshacer(btn);
       const f = mtrEvaluarFalla("HbA1c", c.hba1c.actual, meta, c);
       if (f.falla) {
         fallas.push(f);
-        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("hba1c", c.hoyIso, c) || {}));
+        recontroles.push(_recon("hba1c", f));
       }
     }
 
@@ -38965,12 +39046,28 @@ _vglOfrecerDeshacer(btn);
       const f = mtrEvaluarFalla("Glicemia", c.glicemia.actual, metaGlic, c);
       if (f.falla) {
         fallas.push(f);
-        if (f.gravedad === "grave") recontroles.push(Object.assign({ gravedad: "grave" }, mtrFechaRecontrol("glicemia", c.hoyIso, c) || {}));
+        // v17.55.0 — LA GLICEMIA NUNCA GENERA VIAJE PROPIO. El propio v68 lo autoriza y el
+        // comentario de MTR_RECONTROL lo dice literal: «glicemia 2-4 sem O ALINEADA CON LA
+        // HbA1c». Medido sobre 3.072 planes, la glicemia provocaba 884 segundas citas — y
+        // mandar a un paciente a sangrarse otra vez a los 14 días es justo lo que el médico
+        // señaló como absurdo. La falla se sigue declarando (él la ve, la IA la redacta, el
+        // analito entra en la orden): se alinea con el recontrol de la HbA1c si lo hay, y si
+        // no, la cubre la toma maestra. Lo que desaparece es el viaje, no la vigilancia.
+        const _reconHba1c = recontroles.find((r) => r && r.analito === "hba1c" && r.fecha);
+        if (_reconHba1c) {
+          recontroles.push(Object.assign({}, _reconHba1c, {
+            analito: "glicemia", gravedad: f.gravedad, alineadoA: "hba1c",
+          }));
+        }
       }
     }
 
-    const graves = recontroles.filter((r) => r && r.gravedad === "grave" && r.fecha);
-    const mtt = mtrConsolidarMtt(graves, c.ftlMaestra);
+    // v17.55.0 — a consolidar van TODOS los recontroles, no solo los graves: la fusión a la
+    // toma maestra es justo lo que evita el viaje, y negársela a las leves las mandaba a
+    // ninguna parte. Quién puede acabar en una cita dedicada lo decide mtrConsolidarMtt por
+    // la gravedad de cada uno.
+    const conFecha = recontroles.filter((r) => r && r.fecha);
+    const mtt = mtrConsolidarMtt(conFecha, c.ftlMaestra);
     const hayFallaLdl = fallas.some((f) => f.analito === "LDL");
     const inercia = mtrInerciaEstatina(hayFallaLdl, c.meds);
 
@@ -38981,6 +39078,7 @@ _vglOfrecerDeshacer(btn);
       recontroles: recontroles,
       fusiones: mtt.fusiones,       // se retoman en la FTL maestra (order_list)
       fechasDedicadas: mtt.dedicadas,  // 2ª fecha prioritaria, ya colapsadas
+      sinViaje: mtt.sinViaje || [],    // v17.55.0 — leves que no cupieron: sin cita aparte
       inercia: inercia,
     };
   }

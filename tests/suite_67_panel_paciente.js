@@ -154,8 +154,15 @@ module.exports = {
       t.igual(api.mtrPanelResumenBentoDatos(conUnSolo, dCualquiera).find((c) => c.id === "tendencias").estado, "nd",
         "un solo control no es tendencia todavía, igual que en la pestaña detallada");
 
-      const conMejora = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 7.1 }] } };
-      t.igual(api.mtrPanelResumenBentoDatos(conMejora, dCualquiera).find((c) => c.id === "tendencias").estado, "ok", "mejorando, sin nada grave: al día");
+      // v17.55.0 — el rojo por valor empieza en la meta (decisión del médico), así que una
+      // HbA1c de 7,1 ya está en rojo aunque venga bajando de 9,4. Para seguir probando el
+      // caso «mejorando y sin nada grave» hace falta un valor que además esté EN meta — que
+      // es lo que la tarjeta quiere decir con «al día».
+      const conMejora = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 6.6 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(conMejora, dCualquiera).find((c) => c.id === "tendencias").estado, "ok", "mejorando y en meta: al día");
+      const bajandoPeroFuera = { _series: { HBA1C: [{ fecha: "2025-08-01", valor: 9.4 }, { fecha: "2026-08-01", valor: 7.1 }] } };
+      t.igual(api.mtrPanelResumenBentoDatos(bajandoPeroFuera, dCualquiera).find((c) => c.id === "tendencias").estado, "pend",
+        "bajando pero todavía por encima de la meta: no es «al día»");
 
       const conEmpeora = { _series: { COLESTEROL_LDL: [{ fecha: "2026-02-01", valor: 100 }, { fecha: "2026-08-01", valor: 130 }] } };
       t.igual(api.mtrPanelResumenBentoDatos(conEmpeora, dCualquiera).find((c) => c.id === "tendencias").estado, "pend", "empeorar 30% es justo lo que la pestaña de tendencias marca en rojo");
@@ -417,8 +424,14 @@ module.exports = {
       t.igual(conRiesgo.direccion, "estable", "no se movió");
       t.igual(conRiesgo.gravedad, "grave", "pero 131 con meta 70 es falla grave, se haya movido o no");
       t.cierto(/meta de 70/.test(conRiesgo.motivoGrave), conRiesgo.motivoGrave);
-      // Y con riesgo BAJO la meta es 116 -> grave a partir de 150,8: 131 no llega.
-      t.igual(api.mtrTendenciaDe(serie, "COLESTEROL_LDL", { categoriaRiesgo: "bajo" }).gravedad, null,
+      // v17.55.0 — el rojo empieza en la meta, no en meta+30 %. Lo que esta prueba defiende
+      // sigue intacto —que la meta es DEL PACIENTE, no del analito— pero hay que elegir una
+      // cifra que lo demuestre con el corte nuevo: 100 está por encima de la meta de «alto»
+      // (70) y por debajo de la de «bajo» (116).
+      const serie100 = [{ fecha: "2026-01-01", valor: 99 }, { fecha: "2026-06-01", valor: 100 }];
+      t.igual(api.mtrTendenciaDe(serie100, "COLESTEROL_LDL", { categoriaRiesgo: "alto" }).gravedad, "grave",
+        "100 con meta 70: rojo");
+      t.igual(api.mtrTendenciaDe(serie100, "COLESTEROL_LDL", { categoriaRiesgo: "bajo" }).gravedad, null,
         "la misma cifra no es grave en un paciente de riesgo bajo: la meta es del paciente, no del analito");
     });
 
@@ -439,9 +452,14 @@ module.exports = {
 
     t.caso("#123: HbA1c usa la meta del paciente cuando la hay, y 7,0 cuando no", () => {
       const serie = [{ fecha: "2026-01-01", valor: 9.0 }, { fecha: "2026-06-01", valor: 9.2 }];
-      t.igual(api.mtrTendenciaDe(serie, "HBA1C").gravedad, "grave", "9,2 con meta 7,0 (grave desde 9,1)");
-      t.igual(api.mtrTendenciaDe(serie, "HBA1C", { metaHba1c: 8.0 }).gravedad, null,
-        "con meta individualizada de 8,0 el corte sube a 10,4: 9,2 no llega");
+      // v17.55.0 — el corte es la meta misma. La regla que esta prueba defiende no cambia
+      // (la meta individual del médico manda sobre la general); cambian las cifras que la
+      // demuestran: 7,5 pasa la meta general de 7,0 y no la individual de 8,0.
+      t.igual(api.mtrTendenciaDe(serie, "HBA1C").gravedad, "grave", "9,2 con meta 7,0");
+      const serie75 = [{ fecha: "2026-01-01", valor: 7.4 }, { fecha: "2026-06-01", valor: 7.5 }];
+      t.igual(api.mtrTendenciaDe(serie75, "HBA1C").gravedad, "grave", "7,5 pasa la meta general de 7,0");
+      t.igual(api.mtrTendenciaDe(serie75, "HBA1C", { metaHba1c: 8.0 }).gravedad, null,
+        "con la meta individualizada de 8,0 que el médico le fijó, 7,5 NO es rojo");
     });
 
     // v17.6.3 — Flujo de la meta de HbA1c (decisión del médico, 22-ago): la meta GENERAL
@@ -533,7 +551,8 @@ module.exports = {
     t.caso("v17.29.0 — meta de triglicéridos sube a 400 (antes 150): el corte grave queda cerca de 520, no de 200", () => {
       const u = api._mtrTendUmbralGrave("TRIGLICERIDOS", {});
       t.igual(u.meta, 400, "la meta base es 400, no 150");
-      t.igual(u.tope, 520, "el corte grave (+30%) es 520, no ~195");
+      // v17.55.0 — el corte deja de llevar el +30 %: el rojo empieza en la meta.
+      t.igual(u.tope, 400, "el corte es la meta misma, no meta+30%");
     });
 
     t.caso("_mtrTendUmbralGrave: solo conoce los cinco analitos con umbral propio", () => {

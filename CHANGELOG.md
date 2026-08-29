@@ -4,6 +4,68 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.55.0] — 2026-08-29 (Un tercio menos de viajes al laboratorio)
+
+### 🚌 Lo que se midió primero
+Usted lo dijo así: *«la idea es que el paciente tenga la menos cantidad de veces que ir a
+sangrarse e ir a la IPS»*. Así que antes de tocar nada se midió eso, sobre **3.072 planes**:
+
+| | antes |
+|---|---|
+| Viajes al laboratorio por paciente | **2,33** |
+| Pacientes con una **segunda cita** aparte | **78,1 %** |
+| Quién la provocaba | LDL 2.046 · HbA1c 1.152 · **glicemia 884** |
+
+**Cuatro de cada cinco pacientes con una falla ya recibían un viaje extra.** Y sus dos
+preguntas tenían respuesta exacta:
+
+- *«¿Repetir la glucosa en menos de 1 mes?»* — Sí: 884 de esas citas eran por glicemia, a los
+  **14 días**.
+- *«¿LDL en máximo 8 semanas?»* — Ni siquiera. Eran **42 días fijos, siempre**: el «6 a 8
+  semanas» estaba escrito en el código pero el extremo largo **no colocaba ninguna fecha
+  jamás**.
+
+### ✅ Ahora
+
+| | después |
+|---|---|
+| Viajes por paciente | **1,61** — un **31 % menos** |
+| Con segunda cita aparte | **42,6 %** — casi la mitad |
+| Pacientes con falla que se quedan sin ninguna fecha | **0** |
+
+**Tres cambios, y ninguno inventa un número nuevo:**
+
+1. **La glicemia deja de tener viaje propio.** El propio protocolo lo permite («2-4 semanas *o
+   alineada con la HbA1c*»). Si la HbA1c también está en falla, la glicemia se pega a su misma
+   fecha; si no, la cubre la toma general. La falla se sigue declarando y el examen se sigue
+   pidiendo: lo que desaparece es el viaje.
+2. **La ventana de recontrol se usa entera.** Por defecto se va al extremo largo, porque una
+   fecha más tardía **cabe mucho mejor en la toma que ya está programada**. Adelantar dos
+   semanas no compra un control mejor: compra un viaje más. El extremo corto queda para quien
+   de verdad no puede esperar.
+3. **La toma general puede recoger un recontrol que caía después.** Antes, si la toma caía
+   **cinco días antes** del recontrol, no se juntaban: segunda cita por cinco días. Ahora se
+   junta — pero **nunca** por debajo del piso clínico de cada examen (para el LDL, 4 semanas:
+   antes de eso el resultado no significa nada).
+
+### ⚖️ Y la gravedad ya significa una sola cosa
+Como usted decidió, desaparece el escalón del +30 %. «Grave» queda para la regla clínica:
+**riesgo alto o muy alto, TFG < 45 y menor de 75 años.** Su privilegio ya no es «tener fecha»
+—desde ahora la tiene **toda** falla, que era el hueco que esto abría— sino **ser lo único que
+justifica un viaje aparte**.
+
+### 🔴 El rojo de la tabla de tendencias empieza en la meta
+Como usted eligió: LDL > 70 en riesgo alto (antes > 91), > 55 en muy alto, HbA1c > 7,0 (antes
+> 9,1), triglicéridos > 400 (antes > 520). El RAC no cambia: 300 ya era su corte.
+
+### 🧾 Y un examen que se agendaba sin que nadie lo pidiera
+Al repartir los recontroles, un examen que acababa con cita propia **se quedaba fuera de la
+orden**: se le agendaba el viaje al paciente y nadie pedía la prueba. Lo cazó una prueba de la
+versión anterior, que existe justo para eso. Ahora, **haya cita propia o no, si hay recontrol
+el examen se pide**.
+
+---
+
 ## [Versión 17.54.0] — 2026-08-29 (Se acabó la franja de cortesía)
 
 ### 🎯 Estricto en los tres ejes

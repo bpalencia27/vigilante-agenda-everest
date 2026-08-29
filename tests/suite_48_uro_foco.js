@@ -396,7 +396,7 @@ module.exports = {
     const resumen = (over) => Object.assign({
       programa: "HTA",
       riesgo: { categoria: "alto", paso: 2 },
-      meta: { falla: false, fallaGrave: false },
+      meta: { falla: false },
       erc: { anr: null, sospechaIra: false, remitirNefrologia: false },
       plan: { anr: null, drivers: [] },
     }, over || {});
@@ -422,7 +422,7 @@ module.exports = {
     t.caso("dos ejes en falla crítica -> 'mixto'", () => {
       const r = resumen({
         erc: { remitirNefrologia: true },  // renal
-        meta: { fallaGrave: true },        // lipídico
+        meta: { falla: true },             // lipídico (v17.55.0: `fallaGrave` ya no existe)
         plan: { drivers: [] },
       });
       t.igual(api.mtrPriorityFocus(r), "mixto", "renal + lipídico a la vez");
@@ -517,7 +517,7 @@ module.exports = {
     // diabético con HbA1c en 11% (falla GRAVE del eje metabólico) y el LDL en meta se iba
     // de la consulta con la hoja educativa impresa SIN la sección de signos de alarma.
     t.caso("v17.6.83: la falla de CUALQUIER eje enciende las alarmas, no solo la de lípidos", () => {
-      const base = { riesgo: { categoria: "alto" }, meta: { falla: false, fallaGrave: false }, programa: "DM2" };
+      const base = { riesgo: { categoria: "alto" }, meta: { falla: false }, programa: "DM2" };
       t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: true, hayLeve: false } })).alarmas,
         "HbA1c en falla grave con el LDL en meta -> alarmas");
       t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: false, hayLeve: true } })).alarmas,
@@ -547,8 +547,13 @@ module.exports = {
         },
         ldl: 60, hba1c: 11,
       });
-      t.cierto(r.fallas && r.fallas.hayGrave, "el vector es el que debe ser: HbA1c en falla grave");
-      t.falso(!!(r.meta && (r.meta.falla || r.meta.fallaGrave)), "y el LDL SÍ está en meta");
+      // v17.55.0 — esta HbA1c de 11 % era «grave» por el escalón del 30 % (corte 9,1), que la
+      // D10 retiró: con función renal normal ya no cumple la única vía que queda (riesgo alto
+      // + TFG<45 + edad<75), así que es LEVE. Lo que esta prueba defiende no cambia: que la
+      // hoja impresa y el JSON de la IA no discrepen. `hayFalla` mira las dos, grave y leve.
+      t.cierto(r.fallas && r.fallas.hayLeve, "el vector es el que debe ser: HbA1c del eje metabólico en falla");
+      t.falso(!!(r.fallas && r.fallas.hayGrave), "y NO grave: su función renal está bien");
+      t.falso(!!(r.meta && r.meta.falla), "y el LDL SÍ está en meta");
       const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
       t.igual(!!json.education_flags.alarmas, !!r.educationFlags.alarmas,
         "hoja impresa y JSON de la IA dicen lo mismo");

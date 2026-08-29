@@ -1250,11 +1250,29 @@ module.exports = {
       t.igual(retrasa.fusiones[0].difDias, 19, "y deja escrito cuántos días lo retrasa");
       t.igual(retrasa.dedicadas.length, 0, "sin cita dedicada aparte");
 
-      // La FTL cae ANTES del recontrol: fusionar lo ADELANTARÍA. NO se fusiona.
+      // La FTL cae ANTES del recontrol y no se sabe desde cuándo contar: NO se fusiona.
+      // v17.55.0 — sin `hoyIso` ni `pisoDias` no hay forma de comprobar que el adelanto
+      // respeta el piso clínico, así que se mantiene el comportamiento conservador.
       const adelanta = api.mtrConsolidarMtt([g("LDL", "2026-09-20")], "2026-09-01");
       t.igual(adelanta.fusiones.length, 0,
-        "NUNCA se fusiona cuando fusionar adelantaría el recontrol: un LDL a las 2 semanas de la dosis nueva no es interpretable");
+        "sin saber desde cuándo se cuenta, no se adelanta: un LDL a las 2 semanas de la dosis nueva no es interpretable");
       t.igual(adelanta.dedicadas.length, 1, "se queda con su cita propia");
+
+      // v17.55.0 — FUSIÓN HACIA ATRÁS, HASTA EL PISO. El encargo del médico es que el
+      // paciente vaya a sangrarse las menos veces posibles. Si la toma maestra cae unos días
+      // ANTES del recontrol y adelantarlo respeta el piso clínico, se aprovecha ese viaje en
+      // vez de mandarle una segunda cita por cuatro días de diferencia.
+      const conPiso = (analito, fecha) => g(analito, fecha, { hoyIso: "2026-09-01", pisoDias: 28 });
+      const atras = api.mtrConsolidarMtt([conPiso("LDL", "2026-10-27")], "2026-10-01");
+      t.igual(atras.fusiones.length, 1, "la toma maestra cae 26 días antes y aún así son 30 días desde hoy: cabe");
+      t.igual(atras.fusiones[0].adelantado, 26, "y queda escrito cuántos días se adelantó");
+      t.igual(atras.dedicadas.length, 0, "un viaje en vez de dos");
+
+      // Y el piso NO se cruza jamás: 20 días desde hoy están por debajo de los 28 del LDL.
+      const bajoPiso = api.mtrConsolidarMtt([conPiso("LDL", "2026-10-27")], "2026-09-21");
+      t.igual(bajoPiso.fusiones.length, 0,
+        "adelantarlo a 20 días rompería el piso de 4 semanas: ahí el examen no mediría nada y el viaje sobraría igual");
+      t.igual(bajoPiso.dedicadas.length, 1, "así que conserva su cita propia");
 
       // Más allá de la ventana de 60 días tampoco se fusiona.
       t.igual(api.mtrConsolidarMtt([g("LDL", "2026-09-01")], "2026-12-01").fusiones.length, 0,
@@ -1271,9 +1289,17 @@ module.exports = {
         "a 15 días son dos citas: colapsarlas movería una fecha clínica");
 
       // Entradas basura no producen citas fantasma.
-      t.igual(api.mtrConsolidarMtt(null, "2026-09-01"), { fusiones: [], dedicadas: [] }, "sin recontroles, nada");
-      t.igual(api.mtrConsolidarMtt([g("LDL", null)], "2026-09-01"), { fusiones: [], dedicadas: [] },
+      t.igual(api.mtrConsolidarMtt(null, "2026-09-01"), { fusiones: [], dedicadas: [], sinViaje: [] }, "sin recontroles, nada");
+      t.igual(api.mtrConsolidarMtt([g("LDL", null)], "2026-09-01"), { fusiones: [], dedicadas: [], sinViaje: [] },
         "un recontrol sin fecha se descarta en vez de inventarle una");
+
+      // v17.55.0 — una falla LEVE que no cabe en la toma maestra no manda al paciente a
+      // sangrarse otra vez: se anota en `sinViaje`. Su analito ya entra en la orden por la
+      // unión MTT de la v17.54.0, y su vigencia viene partida a la mitad por la D9.
+      const leve = api.mtrConsolidarMtt([g("LDL", "2026-12-01", { gravedad: "leve" })], "2026-09-01");
+      t.igual(leve.dedicadas.length, 0, "una leve no justifica un viaje aparte");
+      t.igual(leve.sinViaje.length, 1, "pero no desaparece en silencio: queda anotada");
+      t.igual(leve.sinViaje[0].analito, "LDL");
       t.igual(api.mtrConsolidarMtt([g("LDL", "2026-09-01")], null).dedicadas.length, 1,
         "sin fecha de toma no se fusiona nada, pero el recontrol no se pierde");
     });
