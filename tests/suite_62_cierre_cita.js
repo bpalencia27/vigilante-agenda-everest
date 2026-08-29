@@ -20,6 +20,7 @@ module.exports = {
   nombre: "v15.9.0 — cierre de cita (imprimir/correo/toma) y aviso de vencimiento",
   cubre: [
     "citaDetalleHoy", "abrirRecordatorioCita", "_cancelarCitaConPregunta",
+    "markCitaAgendadaHoy", "vglNotificarCompletado", "_anularCitaMarcasLocales",
     "mtrAvisoVencimiento", "mtrLabsPrimeroVencimientoInevitable", "_recordatorioLabHtml", "imprimirRecordatorioLab",
     "mtrNotaTomaQuedoHtml", "mtrPegarNotaTomaQuedo", "mtrSedeIdLab",
     "_urlCorreoCita", "_correoValido", "enviarRecordatorioCitaPorCorreo",
@@ -268,8 +269,8 @@ module.exports = {
     // llamada sí está capturada (la misma que se usa al crear la cita).
 
     t.caso("_celularValido: acepta un celular colombiano y rechaza lo que no lo es", () => {
-      t.cierto(a._celularValido("3105066018"), "celular normal");
-      t.cierto(a._celularValido("310 506 6018"), "con espacios también");
+      t.cierto(a._celularValido("3001112223"), "celular normal");
+      t.cierto(a._celularValido("300 111 2223"), "con espacios también");
       t.falso(a._celularValido("31050"), "demasiado corto");
       t.falso(a._celularValido(""), "vacío");
     });
@@ -277,17 +278,17 @@ module.exports = {
     await t.casoAsync("reenviar el mensaje: usa la llamada REAL de Everest, con el turno de esta cita", async () => {
       const vistas = [];
       const cSms = cargar({ silencioso: true, fetch: async (url) => { vistas.push(String(url)); return { ok: true, status: 200 }; } });
-      const r = await cSms.api.reenviarSmsRecordatorio("310 506 6018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("300 111 2223", 4335812);
       t.cierto(r.ok, "se envió");
       t.cierto(vistas[0].indexOf("/apiviva/APIAcceso/api/SMS/EnviarSMS") >= 0, "el endpoint capturado de siempre");
-      t.cierto(vistas[0].indexOf("Telefono=3105066018") >= 0, "el número, solo dígitos");
+      t.cierto(vistas[0].indexOf("Telefono=3001112223") >= 0, "el número, solo dígitos");
       t.cierto(vistas[0].indexOf("AgendaTurnoId=4335812") >= 0, "y el turno de ESTA cita");
     });
 
     await t.casoAsync("reenviar el mensaje: sin turno o con número malo NO se molesta al servidor", async () => {
       const vistas = [];
       const cSms = cargar({ silencioso: true, fetch: async (url) => { vistas.push(String(url)); return { ok: true, status: 200 }; } });
-      const sinTurno = await cSms.api.reenviarSmsRecordatorio("3105066018", "");
+      const sinTurno = await cSms.api.reenviarSmsRecordatorio("3001112223", "");
       t.igual(sinTurno.motivo, "sin_turno", "sin turno se dice por qué");
       const malCel = await cSms.api.reenviarSmsRecordatorio("123", 4335812);
       t.igual(malCel.motivo, "celular_invalido", "número incompleto se detiene antes");
@@ -296,7 +297,7 @@ module.exports = {
 
     await t.casoAsync("reenviar el mensaje: una respuesta de error NO se canta como enviada", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 500 }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.falso(r.ok, "no se anuncia como enviado");
       t.cierto(r.motivo.indexOf("500") >= 0, "y el motivo trae el estado real");
     });
@@ -308,19 +309,19 @@ module.exports = {
     // Estas pruebas protegen que esa lectura nueva no rompa nada, con o sin `.text()`.
     await t.casoAsync("reenviar el mensaje: si el servidor SÍ trae cuerpo legible, se lee sin romper el resultado", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, text: async () => '{"resultado":"ok"}' }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.cierto(r.ok, "se sigue anunciando como enviado (2xx)");
     });
 
     await t.casoAsync("reenviar el mensaje: un cuerpo que revienta al leerse no tumba la función", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, text: async () => { throw new Error("stream roto"); } }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.cierto(r.ok, "el estado 2xx manda igual, aunque el cuerpo no se pueda leer");
     });
 
     await t.casoAsync("reenviar el mensaje: sin `.text()` en la respuesta (como los mocks de siempre) tampoco rompe nada", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: false, status: 500 }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.falso(r.ok, "sigue sin anunciarse como enviado");
       t.cierto(r.motivo.indexOf("500") >= 0, "con el estado real en el motivo");
     });
@@ -337,7 +338,7 @@ module.exports = {
     // =====================================================================
     await t.casoAsync("reenviar el mensaje: un 200 con error:true en el cuerpo NO se canta como enviado (la captura real lo rechaza)", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, text: async () => '{"error":true,"mensaje":"El proveedor rechazó el envío","data":null}' }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.falso(r.ok, "el estado 200 solo no basta: error:true en el cuerpo es rechazo");
       t.cierto(r.motivo.indexOf("rechazado por el proveedor") >= 0, "y el motivo dice qué pasó");
       t.cierto(r.motivo.indexOf("proveedor rechazó") >= 0, "con el mensaje real del servidor");
@@ -345,14 +346,14 @@ module.exports = {
 
     await t.casoAsync("reenviar el mensaje: el cuerpo EXACTO de la captura real (error:false) sí se anuncia como enviado", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, text: async () => '{"error":false,"mensaje":"Se ha enviado un SMS con pasos de redirección","data":null,"imprimir":false,"valor":0,"link":null}' }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3504447019", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3009876543", 4335812);
       t.cierto(r.ok, "con error:false explícito, se anuncia como enviado");
       t.igual(r.motivo, "", "sin motivo de error");
     });
 
     await t.casoAsync("reenviar el mensaje: un cuerpo que no es JSON conserva el criterio 2xx (no inventa un rechazo)", async () => {
       const cSms = cargar({ silencioso: true, fetch: async () => ({ ok: true, status: 200, text: async () => "texto plano raro" }) });
-      const r = await cSms.api.reenviarSmsRecordatorio("3105066018", 4335812);
+      const r = await cSms.api.reenviarSmsRecordatorio("3001112223", 4335812);
       t.cierto(r.ok, "sin JSON legible no hay cómo saber que falló: se conserva el 2xx");
     });
 
@@ -412,9 +413,9 @@ module.exports = {
     t.caso("cierre: el celular usado al crear la cita llega escrito en el campo", () => {
       const c8b = cargar({ silencioso: true });
       enriquecer(c8b);
-      c8b.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE", "respaldo", { turnoId: 4335812, celular: "3105066018" });
+      c8b.api.mostrarPanelPostCita(7813686, "EPS", "PACIENTE", "respaldo", { turnoId: 4335812, celular: "3001112223" });
       const panel = c8b.env.doc.body.children.find((n) => n.id === "vgl-postcita-panel");
-      t.cierto(panel.innerHTML.includes("3105066018"), "el número ya viene puesto: no hay que volver a escribirlo");
+      t.cierto(panel.innerHTML.includes("3001112223"), "el número ya viene puesto: no hay que volver a escribirlo");
     });
 
     t.caso("cierre: cuando también se agendó la toma, aparece su recordatorio imprimible", () => {
@@ -466,6 +467,48 @@ module.exports = {
       t.cierto(!!d2 && d2.citaId === "R-99", "con radicado sí");
       t.igual(d2.hora, "07:00 AM", "y con todo lo que el recordatorio necesita");
       t.igual(c.api.citaDetalleHoy(""), null, "sin documento no lanza");
+    });
+
+    // v17.6.70 — [reportado en consultorio, 26-ago-2026] BUG REAL: el flujo real de
+    // agendamiento (openAgendamientoModal) llama a markCitaAgendadaHoy DOS veces para la
+    // MISMA cita — primero con el `extra` completo (citaId/pacienteId/…), y enseguida
+    // otra vez vía vglNotificarCompletado("cita_control", …), que NO pasa `extra`. Antes
+    // del fix, la segunda llamada REEMPLAZABA el registro entero y borraba el citaId recién
+    // guardado — citaDetalleHoy volvía a null y el médico se quedaba sin ninguna vía para
+    // reabrir el recordatorio (ni para cancelar/reagendar), justo el bug reportado: con
+    // solo la cita de control agendada (sin laboratorio), el dock solo ofrecía «Agendar
+    // labs», sin ningún botón de vuelta.
+    t.caso("markCitaAgendadaHoy + vglNotificarCompletado: la llamada de notificación (SIN extra) que sigue a la de creación (CON extra) no debe borrar el citaId/pacienteId ya guardados (bug real reportado en consultorio)", () => {
+      const c = cargar({ silencioso: true });
+      // 1) igual que openAgendamientoModal línea ~20759: se guarda el detalle completo.
+      c.api.markCitaAgendadaHoy("999888777", "2026-08-26", {
+        citaId: "R-500", pacienteId: "P-500", eps: "EPS X", hora: "08:00 AM",
+        nombre: "N", fechaLegible: "26/08/2026",
+      });
+      t.cierto(!!c.api.citaDetalleHoy("999888777"), "recién creada, el recordatorio SÍ es reabrible");
+      // 2) igual que la línea ~20788: vglNotificarCompletado("cita_control", …) SIN extra,
+      // disparada inmediatamente después en el mismo flujo de creación.
+      c.api.vglNotificarCompletado("cita_control", { doc: "999888777", fechaIso: "2026-08-26", hora: "08:00 AM" });
+      const det = c.api.citaDetalleHoy("999888777");
+      t.cierto(!!det, "tras la notificación posterior, el recordatorio SIGUE siendo reabrible (antes: se perdía)");
+      t.igual(det.citaId, "R-500", "el citaId sobrevive a la segunda llamada");
+      t.igual(det.pacienteId, "P-500", "el pacienteId también sobrevive (lo exige _anularCitaAsignadaReal para poder cancelar)");
+      t.igual(det.eps, "EPS X", "y el resto del detalle guardado no se pierde");
+    });
+
+    t.caso("markCitaAgendadaHoy: una llamada posterior CON extra sigue pudiendo ACTUALIZAR/corregir un campo (fusiona, no ignora lo nuevo)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.markCitaAgendadaHoy("1111", "2026-08-26", { citaId: "R-1", pacienteId: "P-1", hora: "08:00 AM" });
+      c.api.markCitaAgendadaHoy("1111", "2026-08-26", { citaId: "R-1", pacienteId: "P-1", hora: "09:00 AM" });
+      t.igual(c.api.citaDetalleHoy("1111").hora, "09:00 AM", "el extra nuevo sigue ganando sobre el viejo, no se queda pegado al primero");
+    });
+
+    t.caso("_anularCitaMarcasLocales: tras anular, el detalle viejo SÍ se borra (no queda colgado para la próxima cita del mismo paciente)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.markCitaAgendadaHoy("2222", "2026-08-26", { citaId: "R-2", pacienteId: "P-2" });
+      t.cierto(!!c.api.citaDetalleHoy("2222"));
+      c.api._anularCitaMarcasLocales("2222");
+      t.igual(c.api.citaDetalleHoy("2222"), null, "anulada, el registro desaparece del todo — la fusión de arriba no deja basura pegada");
     });
 
     t.caso("abrirRecordatorioCita: sin radicado guardado NO abre un panel vacío", () => {

@@ -91,6 +91,7 @@ module.exports = {
   cubre: [
     "vglMinExcluido", "vglMinTituloDe", "vglMinBarra", "vglMinClic", "vglMinPintarBarra",
     "vglMinimizarPanel", "vglRestaurarPanel", "vglMinDescartar", "vglMinInyectarBoton", "vglMinInstalar",
+    "_vglMinDescartarDeOtroPaciente",
   ],
 
   pruebas(t, api, env) {
@@ -280,6 +281,98 @@ module.exports = {
       t.igual(bar.style.display, "none", "y la barra se vacía");
       t.cierto(api.vglMinDescartar("vgl-ia-modal"), "descartar dos veces no lanza");
       t.cierto(api.vglMinDescartar(null), "ni con null");
+      limpiar(doc, api);
+    });
+
+    // ---------------------------------------------------------------
+    // v17.6.71 — [reportado en consultorio, 26-ago-2026] BLINDAJE CONTRA CRUCE DE
+    // PACIENTES: un panel minimizado con datos de UN paciente (el redactor IA, con un
+    // borrador de Enfermedad Actual/Análisis y Plan) sobrevivía aunque el médico cerrara
+    // esa historia o abriera la de otro paciente. Ahora se DESCARTA (no solo se oculta)
+    // en cuanto el paciente abierto deja de ser el dueño del panel.
+    // ---------------------------------------------------------------
+    t.caso("_vglMinDescartarDeOtroPaciente: al cambiar de paciente, descarta (borra del DOM) el panel minimizado del paciente ANTERIOR", () => {
+      limpiar(doc, api);
+      conContains(doc, () => {
+        const p = panelFalso(doc, "vgl-ia-modal", "✍ Redacción asistida (IA)");
+        doc.body.appendChild(p);
+        api.vglMinimizarPanel(p, "PACIENTE-A");
+        t.cierto(!!doc.getElementById("vgl-ia-modal"), "minimizado, sigue en el DOM");
+
+        api._vglMinDescartarDeOtroPaciente("PACIENTE-B");   // el médico abrió otra historia
+
+        t.falso(!!doc.getElementById("vgl-ia-modal"), "el panel del paciente A se DESCARTA del DOM, no solo se esconde");
+        const bar = doc.getElementById("vgl-min-bar");
+        t.igual(bar.style.display, "none", "y su pastilla desaparece de la barra");
+      });
+      limpiar(doc, api);
+    });
+
+    t.caso("_vglMinDescartarDeOtroPaciente: si el médico cierra la historia (ningún paciente abierto), también descarta", () => {
+      limpiar(doc, api);
+      conContains(doc, () => {
+        const p = panelFalso(doc, "vgl-ia-modal", "✍ Redacción asistida (IA)");
+        doc.body.appendChild(p);
+        api.vglMinimizarPanel(p, "PACIENTE-A");
+
+        api._vglMinDescartarDeOtroPaciente("");   // navegó a "Citas del día": extractPacienteAbierto() da ""
+
+        t.falso(!!doc.getElementById("vgl-ia-modal"), "sin paciente abierto, el panel de A ya no puede quedarse");
+      });
+      limpiar(doc, api);
+    });
+
+    t.caso("_vglMinDescartarDeOtroPaciente: si vuelve a abrirse el MISMO paciente dueño del panel, NO se descarta (sigue disponible su borrador)", () => {
+      limpiar(doc, api);
+      conContains(doc, () => {
+        const p = panelFalso(doc, "vgl-ia-modal", "✍ Redacción asistida (IA)");
+        doc.body.appendChild(p);
+        api.vglMinimizarPanel(p, "PACIENTE-A");
+
+        api._vglMinDescartarDeOtroPaciente("PACIENTE-A");   // sigue siendo el mismo paciente
+
+        t.cierto(!!doc.getElementById("vgl-ia-modal"), "el panel del propio dueño sobrevive: el médico puede seguir su borrador");
+        t.cierto(api.vglRestaurarPanel("vgl-ia-modal"), "y todavía se puede restaurar con normalidad");
+      });
+      limpiar(doc, api);
+    });
+
+    t.caso("_vglMinDescartarDeOtroPaciente: un panel SIN docId propio (dueño desconocido) nunca se descarta por esta vía — solo se borra lo que se sabe con certeza que es de otro paciente", () => {
+      limpiar(doc, api);
+      conContains(doc, () => {
+        const p = panelFalso(doc, "vgl-ia-modal", "✍ Redacción asistida (IA)");
+        doc.body.appendChild(p);
+        api.vglMinimizarPanel(p);   // sin segundo argumento: docId desconocido
+
+        api._vglMinDescartarDeOtroPaciente("PACIENTE-B");
+
+        t.cierto(!!doc.getElementById("vgl-ia-modal"), "sin dueño confirmado, no se toca (evita falsos positivos)");
+      });
+      limpiar(doc, api);
+    });
+
+    t.caso("_vglMinDescartarDeOtroPaciente: con dos paneles minimizados de pacientes distintos, solo se descarta el que NO es el actual", () => {
+      limpiar(doc, api);
+      conContains(doc, () => {
+        const pA = panelFalso(doc, "vgl-ia-modal", "Redacción");
+        const pB = panelFalso(doc, "vgl-riesgo-modal", "Riesgo y exámenes");
+        doc.body.appendChild(pA); doc.body.appendChild(pB);
+        api.vglMinimizarPanel(pA, "PACIENTE-A");
+        api.vglMinimizarPanel(pB, "PACIENTE-B");
+
+        api._vglMinDescartarDeOtroPaciente("PACIENTE-B");   // el médico está viendo a B ahora
+
+        t.falso(!!doc.getElementById("vgl-ia-modal"), "el de A (ya no es el paciente en pantalla) se descarta");
+        t.cierto(!!doc.getElementById("vgl-riesgo-modal"), "el de B (el paciente actual) se queda");
+      });
+      limpiar(doc, api);
+    });
+
+    t.caso("_vglMinDescartarDeOtroPaciente: sin nada minimizado, o con argumentos raros, nunca lanza", () => {
+      limpiar(doc, api);
+      t.noLanza(() => api._vglMinDescartarDeOtroPaciente(), "sin argumento");
+      t.noLanza(() => api._vglMinDescartarDeOtroPaciente(null), "null");
+      t.noLanza(() => api._vglMinDescartarDeOtroPaciente(""), "cadena vacía sin nada minimizado");
       limpiar(doc, api);
     });
 

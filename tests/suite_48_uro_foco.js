@@ -13,10 +13,15 @@
 module.exports = {
   nombre: "Uroanálisis, foco clínico, educación y triglicéridos",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_vglConfirmacionGuardar", "mtrDiscrepanciasQueFrenan",
     "mtrEvaluarUroanalisis", "mtrPriorityFocus", "mtrEjesEnFalla",
     "mtrEducationFlags", "mtrAlertaTrigliceridos",
     "mtrUroGrado", "mtrUroRecuento", "_uroMayorGrado",
     "mtrDebePreguntarEmbarazo", "mtrEmbarazoEdadFertil", "mtrPreguntaEmbarazo", "_vglConfirmacionVigente",
+    "mtrInsumosEmbarazo",
     "_uroToggleAcordeon",
   ],
 
@@ -230,15 +235,184 @@ module.exports = {
       t.cierto(api.mtrEvaluarUroanalisis({ nitritos: "POSITIVO" }, true, false).sugestivo, "'POSITIVO' cuenta");
     });
 
+    // ===== v17.6.91 — la gestante con bacteriuria no recibía la pregunta de embarazo =====
+    //
+    // `mtrEvaluarUroanalisis` ya tenía bien resuelta la excepción de la norma (`embarazo &&
+    // (sugestivo || bacteriuria)` → urocultivo + antibiograma), pero esa rama era
+    // INALCANZABLE en el camino real: la pregunta de embarazo solo se disparaba con parciales
+    // SUGESTIVOS de ITU, y una bacteriuria franca sin piuria no lo es. Además el motor
+    // calculaba `bacteriuria` internamente y no la exponía, así que el llamador ni siquiera
+    // podía consultarla.
+    //
+    // Importa porque la bacteriuria asintomática no tratada en el embarazo es factor de
+    // pielonefritis y de parto pretérmino — la única excepción que la norma marca en
+    // mayúsculas.
+    t.caso("v17.6.91: el uroanálisis expone la bacteriuria, no solo si es sugestivo", () => {
+      const soloBacterias = { bacterias: "ABUNDANTES", nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const u = api.mtrEvaluarUroanalisis(soloBacterias, null, false);
+      t.falso(u.sugestivo, "bacteriuria SIN piuria no es sugestiva de ITU: eso no cambia");
+      t.cierto(u.bacteriuria, "pero la bacteriuria sí se expone, que es lo que faltaba");
+      const limpio = api.mtrEvaluarUroanalisis({ bacterias: "NEGATIVO", nitritos: "NEGATIVO" }, null, false);
+      t.falso(limpio.bacteriuria, "y una orina limpia no la inventa");
+    });
+
+    t.caso("v17.6.91: a la mujer en edad fértil con bacteriuria SÍ se le pregunta por embarazo", () => {
+      const p = (o) => api.mtrDebePreguntarEmbarazo(o);
+      t.cierto(p({ sexo: "F", edad: 28, uroBacteriuria: true }),
+        "bacteriuria franca basta: en embarazo se trata siempre, haya o no piuria");
+      t.cierto(p({ sexo: "F", edad: 28, uroSugestivo: true }), "y el caso de siempre no se pierde");
+      // Y NO se dispara de más, que sería una pregunta inútil en cada consulta.
+      t.falso(p({ sexo: "F", edad: 28, uroBacteriuria: false, uroSugestivo: false }), "orina limpia: no se pregunta");
+      t.falso(p({ sexo: "M", edad: 28, uroBacteriuria: true }), "a un hombre no se le pregunta");
+      t.falso(p({ sexo: "F", edad: 70, uroBacteriuria: true }), "fuera de edad fértil tampoco");
+      t.falso(p({ sexo: "F", edad: 28, uroBacteriuria: true, yaConfirmado: true }), "ni si ya contestó");
+    });
+
+    // Esta prueba existe por una mutación que NO caía: borrar el insumo `uroBacteriuria` del
+    // cableado del Panel dejaba el banco entero en verde, porque ese armado vivía suelto
+    // dentro de una función de interfaz que el banco no puede ejercitar. Se extrajo a
+    // `mtrInsumosEmbarazo` justamente para poder vigilarlo.
+    t.caso("v17.6.91: los insumos de la pregunta se leen del resumen, sin perder ninguno", () => {
+      const res = {
+        factores: { sexo: "F", edad: 28 },
+        uroanalisis: { sugestivo: false, bacteriuria: true },
+      };
+      const ins = api.mtrInsumosEmbarazo(res, false);
+      t.igual(ins.sexo, "F", "el sexo sale de los factores");
+      t.igual(ins.edad, 28, "y la edad");
+      t.igual(ins.uroSugestivo, false, "lo sugestivo del uroanálisis");
+      t.igual(ins.uroBacteriuria, true, "y LA BACTERIURIA, que es la que faltaba");
+      t.igual(ins.yaConfirmado, false, "más si ya contestó");
+      // Y con esos insumos, la compuerta dice que sí: la cadena completa funciona.
+      t.cierto(api.mtrDebePreguntarEmbarazo(ins), "la compuerta se dispara con lo que se le entrega");
+      // Un resumen vacío no revienta ni inventa nada.
+      const vacio = api.mtrInsumosEmbarazo(null, false);
+      t.igual(vacio.uroBacteriuria, false, "sin resumen, no se inventa bacteriuria");
+      t.falso(api.mtrDebePreguntarEmbarazo(vacio), "y no se pregunta nada");
+    });
+
+    t.caso("v17.6.91: la rama BACTERIURIA EN EMBARAZO ya es alcanzable de punta a punta", () => {
+      const hallazgos = { bacterias: "ABUNDANTES", nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const ctx = {
+        hoyIso: "2026-08-27", edad: 28, sexo: "F", pesoKg: 60, creatinina: 0.7,
+        factores: {}, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.7 } },
+        uroHallazgos: hallazgos,
+      };
+      // 1. El resumen expone la bacteriuria — es de donde el llamador la lee.
+      const r = api.mtrResumenClinico(ctx);
+      t.cierto(r.uroanalisis.bacteriuria, "el resumen la trae");
+      // 2. Con ese insumo, la pregunta se dispara (es la llamada real del Panel).
+      t.cierto(api.mtrDebePreguntarEmbarazo({
+        sexo: "F", edad: 28,
+        uroSugestivo: !!r.uroanalisis.sugestivo,
+        uroBacteriuria: !!r.uroanalisis.bacteriuria,
+        yaConfirmado: false,
+      }), "y la pregunta se dispara con lo que el resumen expone");
+      // 3. Respondida que sí, la conducta cambia.
+      const conEmb = api.mtrResumenClinico(Object.assign({}, ctx, { embarazo: true }));
+      t.igual(conEmb.uroanalisis.estado, "BACTERIURIA EN EMBARAZO", "la rama se alcanza");
+      t.cierto(conEmb.uroanalisis.orden.some((o) => /urocultivo/i.test(o)), "con su urocultivo");
+      t.cierto(/se trata siempre/i.test(conEmb.uroanalisis.conducta), "y la conducta lo dice: " + conEmb.uroanalisis.conducta);
+    });
+
+    // ============ LA ORDEN DEL UROANÁLISIS LLEGA A LA IA (v17.6.88) ============
+    //
+    // `mtrEvaluarUroanalisis` calcula la orden concreta de cada estado, pero ese array NO
+    // viajaba al JSON: la IA recibía solo `itu_estado` y tenía que DEDUCIR el urocultivo a
+    // partir de él — justo la inferencia que el resto del prompt le prohíbe, así que o lo
+    // omitía o se lo inventaba. Va en campo PROPIO y no dentro de `order_list`, que lleva
+    // CLAVES de analito que sus lectores cruzan con el catálogo de CUPS.
+    t.caso("v17.6.88: la orden del uroanálisis viaja al JSON que lee la IA", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 58, sexo: "F", pesoKg: 65, creatinina: 0.9,
+        rac: 12, ct: 190, hdl: 50, ldl: 100, paSistolica: 130, paDiastolica: 82,
+        factores: { hta: true },
+        ultimos: {
+          CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+          UROANALISIS: { fecha: "2026-08-20", valor: 1 },
+        },
+        uroHallazgos: { nitritos: "POSITIVO", esterasa: "++", leucocitos: "20-30" },
+        uroSintomas: true,
+      });
+      t.igual(r.uroanalisis.estado, "PROBABLE ITU", "el vector es el que debe ser");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.cierto(Array.isArray(json.orden_uroanalisis), "el campo existe y es una lista");
+      t.cierto(json.orden_uroanalisis.some((o) => /urocultivo/i.test(o)),
+        "y lleva el urocultivo: " + JSON.stringify(json.orden_uroanalisis));
+      t.cierto(json.orden_uroanalisis.some((o) => /antibiograma/i.test(o)), "con su antibiograma");
+      // No se contamina `order_list`, que lleva claves de analito para cruzar con los CUPS.
+      t.falso(json.order_list.some((k) => /urocultivo/i.test(k)),
+        "order_list sigue llevando solo claves de analito: " + JSON.stringify(json.order_list));
+
+      // Y en la PANTALLA la orden se ve como una acción propia, no solo enterrada dentro de
+      // la frase de la conducta: el médico que recorre la lista de qué pedir tiene que
+      // encontrarla ahí. (Sin esta comprobación, la línea del render se puede borrar entera
+      // y el banco seguiría verde — comprobado con una mutación.)
+      const html = api.mtrRenderResumenClinicoHtml(r);
+      t.cierto(/Qué ordenar por este hallazgo/.test(html),
+        "el recuadro enseña qué ordenar por el uroanálisis, como línea propia");
+      t.cierto(/Qué ordenar por este hallazgo:[^<]*Urocultivo/.test(html),
+        "y esa línea nombra el urocultivo");
+    });
+
+    t.caso("v17.6.88: sin uroanálisis evaluado no se inventa ninguna orden", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 58, sexo: "F", pesoKg: 65, creatinina: 0.9,
+        factores: { hta: true }, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      });
+      t.igual(r.uroanalisis, null, "sin hallazgos de orina el motor no evalúa nada");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(JSON.stringify(json.orden_uroanalisis), "[]", "y el campo sale vacío, no inventado");
+    });
+
+    // v68 S4: "Orden nunca vacía". Los cinco estados tienen que decir algo — incluso el
+    // negativo, donde lo que corresponde es el control de rutina, y el ambiguo, donde lo que
+    // corresponde es confirmar los síntomas ANTES de pedir el urocultivo.
+    t.caso("v17.6.88: los cinco estados del uroanálisis traen orden, ninguno la deja vacía", () => {
+      const sugestivo = { nitritos: "POSITIVO", esterasa: "++", leucocitos: "20-30" };
+      const limpio = { nitritos: "NEGATIVO", esterasa: "NEGATIVO", leucocitos: "0-2" };
+      const casos = [
+        ["PROBABLE ITU", sugestivo, true, false],
+        ["BACTERIURIA ASINTOMÁTICA", sugestivo, false, false],
+        ["REQUIERE SÍNTOMAS", sugestivo, null, false],
+        ["BACTERIURIA EN EMBARAZO", sugestivo, null, true],
+        ["SIN HALLAZGOS", limpio, null, false],
+      ];
+      casos.forEach(([esperado, hallazgos, sintomas, embarazo]) => {
+        const u = api.mtrEvaluarUroanalisis(hallazgos, sintomas, embarazo);
+        t.igual(u.estado, esperado, "estado esperado para el caso " + esperado);
+        t.cierto(Array.isArray(u.orden) && u.orden.length > 0 && String(u.orden[0]).trim().length > 0,
+          "la orden nunca queda vacía en " + esperado + ": " + JSON.stringify(u.orden));
+      });
+      // Y las dos que SÍ deben pedir urocultivo lo piden; las otras tres no.
+      t.cierto(api.mtrEvaluarUroanalisis(sugestivo, true, false).orden.some((o) => /urocultivo/i.test(o)),
+        "con síntomas se pide urocultivo");
+      t.falso(api.mtrEvaluarUroanalisis(sugestivo, false, false).orden.some((o) => /^urocultivo$/i.test(o)),
+        "sin síntomas NO se pide urocultivo: la norma prohíbe tratar la bacteriuria asintomática");
+    });
+
     // ================= FOCO CLÍNICO =================
 
     const resumen = (over) => Object.assign({
       programa: "HTA",
       riesgo: { categoria: "alto", paso: 2 },
-      meta: { falla: false, fallaGrave: false },
+      meta: { falla: false },
       erc: { anr: null, sospechaIra: false, remitirNefrologia: false },
       plan: { anr: null, drivers: [] },
     }, over || {});
+
+    t.caso("v17.6.98: un ANR activo enciende el foco RENAL — la rama que nunca se probaba", () => {
+      // Hueco reportado al auditar el ANR: mtrPriorityFocus lee `plan.anr` para decidir el
+      // foco «renal», pero TODOS los fixtures de esta suite usan `anr: null`, así que esa
+      // rama no la ejercitaba nadie. Con la agrupación de v17.6.98 el ANR pasa a tener
+      // consecuencias reales sobre la orden, y el foco que viaja al JSON de la IA con él.
+      const sinAnr = api.mtrPriorityFocus(resumen({ plan: { anr: null, drivers: [] } }));
+      const conAnr = api.mtrPriorityFocus(resumen({
+        plan: { anr: { ventanaDias: 60, vence: "2026-10-19" }, drivers: [] },
+      }));
+      t.igual(conAnr, "renal", "con el agujero negro renal activo, el foco es renal");
+      t.cierto(sinAnr !== "renal", "y sin él no lo es (obtuvo " + JSON.stringify(sinAnr) + "): el ANR es quien lo enciende");
+    });
 
     t.caso("paso 4 pendiente manda: el foco es 'clasificación' por encima de todo", () => {
       const r = resumen({ riesgo: { categoria: null, paso: 4, requiereAscvd: true } });
@@ -248,7 +422,7 @@ module.exports = {
     t.caso("dos ejes en falla crítica -> 'mixto'", () => {
       const r = resumen({
         erc: { remitirNefrologia: true },  // renal
-        meta: { fallaGrave: true },        // lipídico
+        meta: { falla: true },             // lipídico (v17.55.0: `fallaGrave` ya no existe)
         plan: { drivers: [] },
       });
       t.igual(api.mtrPriorityFocus(r), "mixto", "renal + lipídico a la vez");
@@ -280,6 +454,53 @@ module.exports = {
       t.cierto(ejes.lipidico, "falla de meta -> eje lipídico");
     });
 
+    // v17.6.83 — auditoría v68 (S5, priority_focus). Desde v17.6.75 un RAC≥30 VENCIDO ya
+    // no sale como estado "A": sale como "R" (vigilancia estrecha) con `vencidoBase`. El
+    // eje renal solo miraba "A", así que el paciente cuyo problema REAL es la albuminuria
+    // salía de la consulta con el foco puesto en LÍPIDOS — y ese foco viaja al JSON
+    // (`priority_focus`) que lee la IA, así que la nota clínica declaraba el foco
+    // equivocado justo en el paciente que v17.6.75 acababa de promover a prioritario.
+    t.caso("v17.6.83: un RAC≥30 vencido (Estado R) enciende el eje renal, no solo el Estado A", () => {
+      const racVencido = resumen({
+        plan: { anr: null, drivers: [{ clave: "RAC", estado: "R", vencidoBase: true }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(racVencido).renal, "RAC vencido en Estado R -> eje renal");
+      t.igual(api.mtrPriorityFocus(racVencido), "renal", "y el foco de la consulta es renal");
+      // Un Estado R que todavía NO ha vencido es vigilancia estrecha, no falla: si esto
+      // encendiera el eje, TODO paciente con albuminuria tendría foco renal permanente.
+      const racVigente = resumen({
+        plan: { anr: null, drivers: [{ clave: "RAC", estado: "R", vencidoBase: false }] },
+      });
+      t.falso(api.mtrEjesEnFalla(racVigente).renal, "un RAC en R pero VIGENTE no es falla");
+    });
+
+    // v17.6.84 — el eje metabólico solo miraba el ESTADO del driver (ausente/vencido), nunca
+    // la FALLA TERAPÉUTICA — al contrario que el lipídico, que sí cuenta `meta.falla`. Con la
+    // glicemia recién incorporada como tercer eje de falla, un diabético con la glicemia en
+    // 260 y TODOS sus laboratorios frescos disparaba la falla pero no el foco: el eje habría
+    // nacido medio cableado. Se comprueba contra mtrEjesEnFalla directamente y no a través
+    // del foco, porque en un diabético el programa rector ya devuelve "metabólico" por su
+    // cuenta y la aserción pasaría igual con el código roto.
+    t.caso("v17.6.84: la falla terapéutica de glicemia/HbA1c enciende el eje metabólico aunque el driver esté vigente", () => {
+      const driversVigentes = [{ clave: "GLUCOSA", estado: "D" }, { clave: "HBA1C", estado: "D" }];
+      const conGlicemia = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [{ analito: "Glicemia", gravedad: "grave" }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(conGlicemia).metabolico, "glicemia en falla -> eje metabólico");
+      const conHba1c = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [{ analito: "HbA1c", gravedad: "leve" }] },
+      });
+      t.cierto(api.mtrEjesEnFalla(conHba1c).metabolico, "HbA1c en falla -> eje metabólico");
+      const sinFalla = resumen({
+        plan: { anr: null, drivers: driversVigentes },
+        fallas: { fallas: [] },
+      });
+      t.falso(api.mtrEjesEnFalla(sinFalla).metabolico,
+        "con los drivers vigentes y sin falla, el eje sigue apagado");
+    });
+
     // ================= EDUCACIÓN =================
 
     t.caso("las alarmas se encienden en muy alto riesgo o cuando hay falla", () => {
@@ -289,6 +510,86 @@ module.exports = {
         "falla -> alarmas");
       t.falso(api.mtrEducationFlags({ riesgo: { categoria: "moderado" }, meta: { falla: false }, programa: "HTA" }).alarmas,
         "sin nada de eso, no");
+    });
+
+    // v17.6.83 — auditoría v68 (S5, education_flags). `alarmas` solo miraba
+    // `meta.falla`/`meta.fallaGrave`, que son del eje LIPÍDICO exclusivamente. Un
+    // diabético con HbA1c en 11% (falla GRAVE del eje metabólico) y el LDL en meta se iba
+    // de la consulta con la hoja educativa impresa SIN la sección de signos de alarma.
+    t.caso("v17.6.83: la falla de CUALQUIER eje enciende las alarmas, no solo la de lípidos", () => {
+      const base = { riesgo: { categoria: "alto" }, meta: { falla: false }, programa: "DM2" };
+      t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: true, hayLeve: false } })).alarmas,
+        "HbA1c en falla grave con el LDL en meta -> alarmas");
+      t.cierto(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: false, hayLeve: true } })).alarmas,
+        "una falla leve también es FALLA para v68 — educar de más es inocuo, omitir no");
+      t.falso(api.mtrEducationFlags(Object.assign({}, base, { fallas: { hayGrave: false, hayLeve: false } })).alarmas,
+        "sin falla en ningún eje, no se encienden");
+    });
+
+    // La invariante que de verdad importa: la hoja educativa que se IMPRIME y el JSON que
+    // lee la IA salen del mismo resumen y no pueden contradecirse. Antes de v17.6.83 cada
+    // uno tenía su propia fórmula y sobre este mismo paciente decían cosas opuestas.
+    t.caso("v17.6.83: la hoja impresa y el JSON de la IA nunca discrepan en 'alarmas'", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26",
+        edad: 55, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        rac: 10, ct: 150, hdl: 50, ldl: 60, paSistolica: 125, paDiastolica: 78,
+        factores: { hta: false, diabetes: true },
+        ultimos: {
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 50 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 60 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 110 },
+          GLUCOSA:          { fecha: "2026-08-01", valor: 210 },
+          HBA1C:            { fecha: "2026-08-01", valor: 11 },
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+        },
+        ldl: 60, hba1c: 11,
+      });
+      // v17.55.0 — esta HbA1c de 11 % era «grave» por el escalón del 30 % (corte 9,1), que la
+      // D10 retiró: con función renal normal ya no cumple la única vía que queda (riesgo alto
+      // + TFG<45 + edad<75), así que es LEVE. Lo que esta prueba defiende no cambia: que la
+      // hoja impresa y el JSON de la IA no discrepen. `hayFalla` mira las dos, grave y leve.
+      t.cierto(r.fallas && r.fallas.hayLeve, "el vector es el que debe ser: HbA1c del eje metabólico en falla");
+      t.falso(!!(r.fallas && r.fallas.hayGrave), "y NO grave: su función renal está bien");
+      t.falso(!!(r.meta && r.meta.falla), "y el LDL SÍ está en meta");
+      const json = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(!!json.education_flags.alarmas, !!r.educationFlags.alarmas,
+        "hoja impresa y JSON de la IA dicen lo mismo");
+      t.cierto(r.educationFlags.alarmas, "y con una falla grave, lo que dicen es que SÍ");
+      t.cierto(api.mtrEducacionFlagsTexto(r.educationFlags).indexOf("reforzar signos de alarma") >= 0,
+        "la hoja que se le entrega al paciente lleva los signos de alarma");
+
+      // El caso que de verdad separa las dos fórmulas viejas: una falla LEVE. La del JSON
+      // solo miraba `hayGrave`, así que aquí habría dicho `false` mientras la hoja decía
+      // `true`. Con una falla grave las dos coincidían por casualidad y la divergencia
+      // pasaba inadvertida — por eso este vector, y no el de arriba, es el que vigila que
+      // nadie vuelva a meter una segunda fórmula en el JSON.
+      const leve = api.mtrResumenClinico({
+        hoyIso: "2026-08-26",
+        edad: 55, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        rac: 10, ct: 150, hdl: 50, ldl: 60, paSistolica: 125, paDiastolica: 78,
+        factores: { hta: false, diabetes: true },
+        ultimos: {
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 150 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 50 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 60 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 110 },
+          GLUCOSA:          { fecha: "2026-08-01", valor: 150 },
+          HBA1C:            { fecha: "2026-08-01", valor: 8.5 },   // >7.0+15%, por debajo de +30%
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+        },
+        ldl: 60, hba1c: 8.5,
+      });
+      t.cierto(leve.fallas && leve.fallas.hayLeve && !leve.fallas.hayGrave,
+        "el vector es el que debe ser: falla LEVE, no grave");
+      t.falso(leve.riesgo.categoria === "muy alto", "y el riesgo no es 'muy alto'");
+      const jsonLeve = api.mtrJsonV68DesdeResumen(leve, api.mtrHojaDesdeResumen(leve));
+      t.igual(!!jsonLeve.education_flags.alarmas, !!leve.educationFlags.alarmas,
+        "con falla LEVE, hoja y JSON siguen diciendo lo mismo");
+      t.cierto(leve.educationFlags.alarmas, "y una falla leve también es FALLA para v68");
     });
 
     t.caso("dieta y actividad se encienden cuando el programa incluye RCV", () => {

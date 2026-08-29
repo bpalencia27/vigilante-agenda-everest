@@ -122,10 +122,10 @@ function doPost(e) {
     // Se responde "dup", no "err": para el userscript cuenta como entrega buena y deja
     // de reintentar, que es exactamente lo que debe pasar.
     var lote = String(body.lote || "").slice(0, 60);
+    var cache = null;
     if (lote) {
-      var cache = CacheService.getScriptCache();
+      cache = CacheService.getScriptCache();
       if (cache.get("lote:" + lote)) return _txt("dup");
-      cache.put("lote:" + lote, "1", LOTE_TTL_SEG);
     }
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -187,6 +187,18 @@ function doPost(e) {
     } else { // "prueba"
       _hoja(ss, "prueba", COMUNES_HD).appendRow(comunes);
     }
+    // v17.49.0 — El lote se marca DESPUES de escribir, no antes. Antes el `cache.put`
+    // ocurria arriba, junto al `cache.get`: si `appendRow` fallaba (cuota de Apps Script,
+    // contencion de la Hoja, tiempo agotado) el catch respondia "err" pero el lote YA
+    // quedaba quemado seis horas. El reintento del userscript entraba, encontraba el lote
+    // en cache y recibia "dup" — que para el cliente es entrega buena — asi que la fila se
+    // retiraba de la cola sin haberse escrito NUNCA. Evidencia perdida en silencio, que es
+    // justo lo que este campo nacio para evitar.
+    // El intercambio es consciente: marcar despues abre una ventana estrecha en la que dos
+    // peticiones simultaneas del mismo lote podrian escribirse las dos. Una fila duplicada
+    // se limpia (menu Vigilante -> "Limpiar filas duplicadas"); una fila perdida no se
+    // recupera de ningun sitio.
+    if (cache) cache.put("lote:" + lote, "1", LOTE_TTL_SEG);
     return _txt("ok");
   } catch (err) {
     return _txt("err");

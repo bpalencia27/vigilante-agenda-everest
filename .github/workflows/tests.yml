@@ -9,6 +9,11 @@ on:
 env:
   # Umbral de cobertura estricto (funciones cubiertas como mínimo) para evitar regresiones
   MIN_COVERAGE: 351
+  # v17.15.0 — sin esto el banco corre en UTC y arrastra una falla PREEXISTENTE y ajena en
+  # suite_03 (v17.6.39: una fecha sin sufijo de zona, que el runtime lee en hora local). Las
+  # cuatro compuertas de abajo nacían en rojo por algo que no es un defecto. America/Bogota
+  # es la zona real de uso y la que este proyecto documenta para correr el banco.
+  TZ: America/Bogota
 
 jobs:
   test:

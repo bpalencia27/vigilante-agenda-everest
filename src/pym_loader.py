@@ -103,7 +103,7 @@ class PyMLoader:
         return candidates[0]
 
     def _normalize_key(self, val) -> str:
-        """Limpia una cédula/documento dejando solo dígitos (maneja floats tipo 21448257.0)."""
+        """Limpia una cédula/documento dejando solo dígitos (maneja floats tipo 20111222.0)."""
         if val is None:
             return ""
         val_str = str(val).strip()

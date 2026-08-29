@@ -32,7 +32,7 @@ function refPuntos(d) {
 
 module.exports = {
   nombre: "Framingham oficial predicho, FINDRISC, cobertura del motor y sonda",
-  cubre: ["mtrFraminghamEverest", "mtrSugerirFindrisc", "mtrMedsSinGrupo", "mtrSondaPestanias", "mtrLeerTensionDelDom"],
+  cubre: ["mtrFraminghamEverest", "mtrSugerirFindrisc", "mtrMedsSinGrupo", "mtrSondaPestanias", "mtrLeerTensionDelDom", "mtrLeerPesoDelDom"],
 
   pruebas(t, api, env) {
     t.caso("el catálogo rescatado del HAR sigue teniendo las 114 filas", () => {
@@ -126,6 +126,19 @@ module.exports = {
       t.igual(api.mtrMedsSinGrupo(null).sinGrupo, 0, "nulo sin lanzar");
     });
 
+    // v17.6.77 — auditoría 25-ago (ítem 5): hallazgo cruzado al promover esta detección
+    // a un aviso visible — mtrMedsSinGrupo solo miraba mtrDetectarGruposFarmacologicos
+    // (base) y mtrDetectarGruposAmp (ampliado), nunca mtrGruposCatalogoRcv (el catálogo
+    // externo v17.6.4, un TERCER sistema de clasificación que llegó después). Un
+    // fármaco reconocido SOLO por el catálogo (omeprazol, vía la interacción
+    // CLOPIDOGREL_IBP) contaba como "sin grupo" pese a que el motor SÍ lo evalúa — un
+    // falso positivo de cobertura real desde que existe el catálogo, no solo teórico.
+    t.caso("mtrMedsSinGrupo (v17.6.77): un fármaco reconocido SOLO por el catálogo RCV externo NO cuenta como sin grupo", () => {
+      const r = api.mtrMedsSinGrupo(["OMEPRAZOL 20 MG (CAPSULA)"]);
+      t.igual(r.total, 1);
+      t.igual(r.sinGrupo, 0, "el omeprazol SÍ está cubierto — por el catálogo RCV, aunque no por base/ampliado");
+    });
+
     // ============ LECTURA DE LA TENSIÓN ARTERIAL (anclas capturadas) ============
 
     t.caso("lee la TA por las anclas capturadas y prioriza el examen físico sobre Ruta", () => {
@@ -141,6 +154,19 @@ module.exports = {
       t.igual(ruta.pad, null, "la diastólica de Ruta NO está capturada: no se adivina");
       const vacio = api.mtrLeerTensionDelDom(docCon({}));
       t.igual(vacio.pas, null, "sin casillas: null, jamás un valor inventado");
+    });
+
+    // ============ LECTURA DEL PESO (ancla real: id="peso", Examen físico) ============
+    // v17.6.75 — REPORTE EN VIVO: "no aparece la TFG y me dice que falta el peso pero
+    // yo ya lo consigné en su respectiva casilla de Everest". A diferencia de la
+    // tensión, nunca hubo lector de DOM en vivo para el peso.
+    t.caso("mtrLeerPesoDelDom: lee la casilla real id=\"peso\" de Examen físico; sin ella, null", () => {
+      const docCon = (mapa) => ({ querySelector: (sel) => {
+        for (const k of Object.keys(mapa)) if (sel.indexOf(k) >= 0) return { value: mapa[k] };
+        return null;
+      } });
+      t.igual(api.mtrLeerPesoDelDom(docCon({ peso: "77" })), 77, "el peso recién escrito, aunque no se haya guardado en Athenea");
+      t.igual(api.mtrLeerPesoDelDom(docCon({})), null, "sin la casilla: null, nunca un valor inventado");
     });
 
     // ============ SONDA DE PESTAÑAS ============

@@ -12,6 +12,7 @@ module.exports = {
   cubre: [
     "identidadDesdeCliente", "invalidarApiSiCambioMedico", "purgarApiUrl",
     "hayVentanaCritica", "vivoElapsed", "purgaPorCuota",
+    "resolverMedicoPorPerfil", "_identidadMedicoCacheLeer", "_identidadMedicoCacheGuardar",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -132,6 +133,71 @@ module.exports = {
       c.env.almacen["user"] = "{esto no es json";
       c.env.almacen["jwt"] = "no-es-un-jwt-valido";
       t.noLanza(() => c.api.identidadDesdeCliente());
+    });
+
+    // =====================================================================
+    //  resolverMedicoPorPerfil + caché de identidad — v17.6.81: REPORTE EN VIVO
+    //  (26-ago) "no aparece mi nombre donde dice Médico, y por eso no me salen las
+    //  agendas". GetUsuarioPerfil (la única puerta que da id+nombre, hasta para el
+    //  login leído de localStorage) llevaba TODA la sesión devolviendo 503. Con la
+    //  caché por LOGIN exacto, un login ya validado antes por el backend se fija de
+    //  inmediato aunque la red esté caída — sin abrir la puerta que v12.3.2 cerró a
+    //  propósito (un equipo compartido no puede firmar solo con lo que quedó local).
+    // =====================================================================
+
+    await t.casoAsync("resolverMedicoPorPerfil: sin caché y GetUsuarioPerfil cae (503) -> activeDoctor sigue en 0, no revienta", async () => {
+      const { c, fetches, setFetch } = entorno();
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      t.noLanza(() => c.api.resolverMedicoPorPerfil("bpalencia"));
+      await espera(30);
+      t.cierto(fetches.length >= 1, "sí lo intentó por red (pageFetchJson reintenta internamente sobre 503, cuenta > 1)");
+      t.igual(c.api.__state.activeDoctor.id, 0, "sin caché y sin red, sigue sin identificar — como antes de esta versión");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: CON caché para ESE login, fija id+nombre de inmediato aunque GetUsuarioPerfil siga caído", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 515, name: "Dr. Brandon Palencia", ts: Date.now() } };
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      // Se fija SÍNCRONO, antes de que la red siquiera responda — el médico no espera nada.
+      t.igual(c.api.__state.activeDoctor.id, 515, "de caché, de inmediato");
+      t.igual(c.api.__state.activeDoctor.name, "Dr. Brandon Palencia");
+      await espera(30);
+      t.cierto(fetches.length >= 1, "aun con caché, SIGUE intentando confirmar por red en segundo plano");
+      t.igual(c.api.__state.activeDoctor.id, 515, "la red cayó, pero lo de la caché no se deshace");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: caché de OTRO login (equipo compartido) NO se usa — exige red para ese login nuevo", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { drmartinez: { id: 99, name: "Dra. Martínez", ts: Date.now() } };
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. Brandon Palencia" } }), text: async () => "{}" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      t.falso(c.api.__state.activeDoctor.id === 99, "NUNCA hereda la identidad de otro login cacheado — la garantía de v12.3.2 sigue intacta");
+      await espera(30);
+      t.igual(fetches.length, 1, "sí exigió validación fresca de backend para el login nuevo");
+      t.igual(c.api.__state.activeDoctor.id, 515, "y terminó identificado por la vía normal");
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: entrada de caché vencida (>12h) se ignora, igual que si no existiera", async () => {
+      const { c, fetches, setFetch } = entorno();
+      c.env.gm["vgl_identidad_medico_cache"] = { bpalencia: { id: 515, name: "Dr. Brandon Palencia", ts: Date.now() - 13 * 60 * 60 * 1000 } };
+      setFetch(async () => ({ ok: false, status: 503, headers: { get: () => null }, json: async () => ({}), text: async () => "" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      t.igual(c.api.__state.activeDoctor.id, 0, "caché de más de 12h no cuenta: se trata como ausente");
+      await espera(30);
+      t.cierto(fetches.length >= 1);
+    });
+
+    await t.casoAsync("resolverMedicoPorPerfil: al validar por red con éxito, guarda en caché para la próxima carga de página", async () => {
+      const { c, setFetch } = entorno();
+      setFetch(async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({ data: { id: 515, nombreCompleto: "Dr. Brandon Palencia" } }), text: async () => "{}" }));
+      c.api.resolverMedicoPorPerfil("bpalencia");
+      await espera(30);
+      t.igual(c.api.__state.activeDoctor.id, 515);
+      const guardado = c.env.gm["vgl_identidad_medico_cache"];
+      t.cierto(!!(guardado && guardado.bpalencia), "quedó una entrada de caché para ese login");
+      t.igual(guardado.bpalencia.id, 515);
+      t.igual(guardado.bpalencia.name, "Dr. Brandon Palencia");
     });
 
     // =====================================================================
@@ -380,5 +446,32 @@ module.exports = {
       t.igual(JSON.parse(c.env.almacen["vgl_algo"]).x, 1);
       t.cierto(c.env.almacen["vgl_stats"] !== undefined, "la purga de emergencia escribió (al menos) un vgl_stats purgado/vacío");
     });
+    t.caso("v17.16.0 — la caché de identidad del médico, probada de frente", () => {
+      // Estaban en `cubre` sin que ninguna prueba las nombrara. Existen (v17.6.82) para que
+      // un 503 de GetUsuarioPerfil no deje «Médico:» vacío toda la sesión, y su TTL de 12 h
+      // está elegido para cubrir un turno largo pero vencer entre días.
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"), null, "sin nada guardado, null");
+      t.igual(c.api._identidadMedicoCacheLeer(""), null, "sin login tampoco se inventa nada");
+
+      c.api._identidadMedicoCacheGuardar("Dr.Prueba", 594, "MEDICO DE PRUEBA UNO");
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"),
+        { id: 594, name: "MEDICO DE PRUEBA UNO" },
+        "se lee sin importar mayúsculas: el login llega de sitios distintos con distinta caja");
+
+      // Lo que NO se guarda, que es lo que impide firmar una sesión con basura.
+      c.api._identidadMedicoCacheGuardar("otro", 0, "SIN ID");
+      t.igual(c.api._identidadMedicoCacheLeer("otro"), null, "un id 0 no es una identidad");
+      c.api._identidadMedicoCacheGuardar("otro2", 7, "");
+      t.igual(c.api._identidadMedicoCacheLeer("otro2"), null, "un nombre vacío tampoco");
+
+      // El TTL: una entrada rancia no puede firmar la sesión de hoy.
+      // `env.gm` es el almacén plano de GM_setValue en el arnés: se toca directamente
+      // para envejecer la entrada, que es lo único que no se puede provocar esperando.
+      c.env.gm["vgl_identidad_medico_cache"]["dr.prueba"].ts = Date.now() - (13 * 60 * 60 * 1000);
+      t.igual(c.api._identidadMedicoCacheLeer("dr.prueba"), null,
+        "pasadas 12 h la caché caduca: entre días, la identidad se vuelve a confirmar con Everest");
+    });
+
   },
 };

@@ -402,5 +402,49 @@ module.exports = {
         "Si esto falla: el Copiloto ya adelanta la toma. Borra esta prueba, quita " +
         "mtrRetrocederADiaHabil de las excepciones y unifica con el port fiel.");
     });
+
+    // =================================================================
+    //  v17.7.2 — QUE EL CÓDIGO DEJE DE CONTRADECIRSE A SÍ MISMO
+    //  Tres comentarios del motor afirmaban cosas que su propia línea de código desmentía:
+    //  «techo de 22» con la constante en 21, «G3a-G4» con G5 dentro de MTR_ESTADIOS_ANR, y
+    //  un `false` mudo en el tercer parámetro del ANR que parecía un cabo suelto y es una
+    //  decisión medida. Un comentario que miente es peor que no tener comentario: el
+    //  siguiente que lo lea —yo incluido— lo tomará por cierto.
+    // =================================================================
+    t.caso("v17.7.2 — ningún comentario del motor contradice a su propia constante", () => {
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+
+      t.igual(/const MTR_TECHO_ESTADO_A = (\d+);/.exec(src)[1], "21", "el techo del Estado A vale 21");
+      t.falso(/\/\/[^\n]*techo de 22/.test(src),
+        "y ningún comentario debe seguir diciendo «techo de 22»");
+
+      t.falso(/\/\/ ---- Agujero Negro Renal: en G3a-G4/.test(src),
+        "el rótulo del ANR no puede decir G3a-G4 mientras MTR_ESTADIOS_ANR incluya G5");
+      t.cierto(/const MTR_ESTADIOS_ANR = \[[^\]]*"G5"/.test(src),
+        "y G5 sigue dentro del ANR: decisión del médico, es el paciente más enfermo");
+
+      // El `false` del tercer parámetro no es un olvido: lleva su porqué al lado.
+      const i = src.indexOf("mtrVentanaAnrDias(c.estadioAdministrativo, c.categoriaRiesgo, false)");
+      t.cierto(i > 0, "el llamador de producción sigue pasando false");
+      t.cierto(src.slice(Math.max(0, i - 1200), i).indexOf("51 planes") >= 0,
+        "con la medición que lo justifica escrita al lado, no en un informe que nadie abrirá");
+    });
+
+    t.caso("v17.7.2 — la rama de 30 días NO se borra: la fijan los vectores dorados", () => {
+      // Por poco la retiro por «código muerto». No lo es: es port fiel del Copiloto Python
+      // y 44 de los 242 vectores dorados dependen de ella. Muerta en producción no es lo
+      // mismo que sobrante.
+      t.igual(api.mtrVentanaAnrDias("G3a", "muy alto", true), 30, "la vigilancia estrecha sigue devolviendo 30");
+      const fs = require("fs"), path = require("path");
+      const oro = JSON.parse(fs.readFileSync(path.join(__dirname, "golden", "ventana_anr_dias.json"), "utf8"));
+      const con30 = oro.vectores.filter((v) => v.salida === 30);
+      t.cierto(con30.length > 0, "y hay vectores dorados que la fijan: borrarla rompería la conformidad");
+      for (const v of con30) {
+        t.igual(api.mtrVentanaAnrDias(v.entrada[0], v.entrada[1], v.entrada[2]), 30,
+          "vector dorado " + JSON.stringify(v.entrada));
+      }
+    });
+
   },
 };

@@ -16,6 +16,10 @@ const crypto = require("crypto");
 module.exports = {
   nombre: "Seguridad, PHI, XSS e Integridad (M1)",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "mtrRutaHcAceptada", "mtrHcTachaduras", "mtrHcTachar", "mtrHcValorLimpio", "_vglGuardarDeshacer", "_vglDeshacerDisponible", "_vglEjecutarDeshacer", "mtrEsPayloadHcEverest", "mtrHechosDesdeHcEverest", "mtrHcTextoParaHoja", "mtrHcLeer", "mtrCosecharHcDelDom", "mtrHcAcumularDelDom",
     "scrubPII", "sanitizePII", "escapeHtml", "verificarIntegridadArranque",
     "_sanearMensajeError", "mtrSanearTextoLibreAI", "mtrClasificarEstadioTfg",
     "openLaboratoriosModal", "vglExportLogs"
@@ -290,5 +294,556 @@ module.exports = {
       t.igual(res.status, "ok");
       t.igual(res.sha256, expectedHash);
     });
+
+    // =================================================================
+    //  v17.9.0 — LA BARRERA. Lo que Everest guarda entra; lo que identifica al paciente NO.
+    //
+    //  El paquete real de Everest lleva `datosUsuario` con 91 campos: nombre, apellidos,
+    //  cédula, celular, correo, dirección, fecha de nacimiento. Esta suite existe para que
+    //  ninguno de esos campos pueda llegar nunca a un modelo de lenguaje.
+    //
+    //  La barrera es una LISTA BLANCA de secciones, no un filtro de campos: un filtro se
+    //  degrada en cuanto alguien añade un campo nuevo al otro lado; una lista blanca no.
+    //  La forma de abajo es la REAL, capturada en consulta el 27-ago-2026 (los VALORES son
+    //  inventados para la prueba — el diagnóstico nunca los guardó).
+    // =================================================================
+    const _hcEverestFalso = () => ({
+      // --- LO QUE NUNCA PUEDE SALIR ---
+      datosUsuario: {
+        nombre: "NOMBREPRUEBA", primer_Apellido: "APELLIDOUNO", segundo_Apellido: "APELLIDODOS",
+        identificacion: "80123456", celular: "3001234567", correo: "prueba@ejemplo.com",
+        direccion: "Calle 100 #15-20", fecha_Nacimiento: "1958-03-14T00:00:00",
+      },
+      acompanante: { parentesco: "HIJA", categoria: "FAMILIAR" },
+      citaId: "9988776655",
+      // --- LO QUE SÍ APORTA CONTEXTO CLÍNICO ---
+      antecedentePatologicos: {
+        hipertension: true, diabetes: true, infartoMiocardio: false,
+        retinopatiaDiabetica: true, epoc: false, otros: "",
+        observacionHipertension: "Diagnosticada hace 12 años",
+      },
+      habitosGestionRiesgo: { sedentarismo: true, alcohol: false, indiceTabaquico: 0 },
+      examenFisico: { peso: 78.5, talla: 1.62, imc: 29.9, circunferenciaAbdominal: 98, presionSistolica: 148 },
+      antecedenteFamiliar: { cardiovasculares: true, diabetes: true },
+      farmacologicos: [{ descripcion: "LOSARTAN 50 MG TABLETA", esEliminable: true }],
+      diagnosticos: [{ codigo: "I10X", descripcion: "HIPERTENSION ESENCIAL", nombreBusqueda: "NOMBREPRUEBA I10X", id: 4471 }],
+      motivo: "Control de hipertensión",
+      ultimaEnfermedad: "Paciente NOMBREPRUEBA APELLIDOUNO, CC 80123456, tel 3001234567, refiere cefalea.",
+    });
+
+    t.caso("v17.9.0 BARRERA — nada que identifique al paciente sale del paquete de Everest", () => {
+      const h = api.mtrHechosDesdeHcEverest(_hcEverestFalso());
+      t.cierto(!!h, "el paquete se reconoce y se extrae");
+      const todo = JSON.stringify(h);
+      for (const dato of ["NOMBREPRUEBA", "APELLIDOUNO", "APELLIDODOS", "80123456",
+                          "3001234567", "prueba@ejemplo.com", "Calle 100", "1958-03-14", "9988776655"]) {
+        t.falso(todo.indexOf(dato) >= 0, "«" + dato + "» NO puede aparecer en lo que se guarda");
+      }
+      t.igual(h.secciones.datosUsuario, undefined, "`datosUsuario` no se lee: no está en la lista blanca");
+      t.igual(h.secciones.acompanante, undefined, "ni el acompañante");
+      // El texto libre SÍ entra, pero saneado: es donde el médico escribe el nombre a mano.
+      t.cierto(!!h.textos.ultimaEnfermedad, "la enfermedad actual sí aporta contexto y entra");
+      t.falso(/NOMBREPRUEBA|80123456|3001234567/.test(h.textos.ultimaEnfermedad),
+        "pero pasa por scrubPII: nombre, cédula y teléfono se tachan aunque los escriba a mano");
+      t.cierto(/cefalea/.test(h.textos.ultimaEnfermedad), "y lo clínico se conserva entero");
+      // El diagnóstico lleva código y descripción; `nombreBusqueda` traía el nombre pegado.
+      t.igual(h.diagnosticos[0].codigo, "I10X", "el CIE-10 entra");
+      t.falso(todo.indexOf("nombreBusqueda") >= 0, "y `nombreBusqueda` no se lee: llevaba el nombre dentro");
+    });
+
+    t.caso("v17.9.0 — entra TODO lo clínico, y un «no» documentado vale tanto como un «sí»", () => {
+      const h = api.mtrHechosDesdeHcEverest(_hcEverestFalso());
+      const ap = h.secciones.antecedentePatologicos;
+      t.igual(ap.hipertension, true, "lo marcado que sí");
+      t.igual(ap.infartoMiocardio, false,
+        "y lo marcado que NO: es un hecho documentado, esconderlo dejaría a la IA sin saber si se preguntó");
+      t.igual(ap.otros, undefined, "un campo vacío NO viaja: vacío no es «no tiene»");
+      t.igual(h.secciones.examenFisico.circunferenciaAbdominal, 98,
+        "la cintura, que el asistente antes solo podía leer si el médico tenía esa pestaña abierta");
+      t.igual(h.secciones.antecedenteFamiliar.cardiovasculares, true, "los antecedentes familiares");
+      t.igual(h.medicamentos[0], "LOSARTAN 50 MG TABLETA", "los medicamentos, por su descripción");
+
+      const texto = api.mtrHcTextoParaHoja(h);
+      t.cierto(/retinopatiaDiabetica: sí/.test(texto), "el texto para el modelo lleva lo marcado");
+      t.cierto(/infartoMiocardio: no/.test(texto), "y lo descartado, con todas sus letras");
+    });
+
+    t.caso("v17.9.0 — se reconoce por FORMA, no por la ruta de Everest", () => {
+      // Atarse a `/apiviva/APIHCHealth/api/Morbilidad/GuardarHCMorbilidad` sería atarse a una
+      // cadena que Everest puede cambiar sin avisar. Este proyecto ya se llevó ese susto en
+      // v12.3.30 (cuatro nombres supuestos, ninguno existía).
+      t.cierto(api.mtrEsPayloadHcEverest(_hcEverestFalso()), "el paquete real se reconoce");
+      t.falso(api.mtrEsPayloadHcEverest({ antecedentePatologicos: { hipertension: true } }),
+        "con UNA sola sección no basta: cualquier respuesta suelta del portal podría colarse");
+      t.falso(api.mtrEsPayloadHcEverest(null), "sin nada, no");
+      t.falso(api.mtrEsPayloadHcEverest([{ antecedentePatologicos: {}, examenFisico: {} }]),
+        "una lista tampoco: el paquete es un objeto");
+      t.igual(api.mtrHechosDesdeHcEverest({ hola: 1 }), null, "lo que no es el paquete devuelve null, no un objeto vacío");
+    });
+
+
+    // =================================================================
+    //  v17.10.0 — LA HISTORIA SE LEE MIENTRAS SE ESCRIBE
+    //  Rechazo explícito del médico a la v17.9.0: «no me sirve para la siguiente cita (…)
+    //  deben estar alimentados por ese json INCLUSO ANTES DE GUARDAR, porque la idea es
+    //  poder redactar en tiempo real (…) que se actualice a medida que se vaya llenando».
+    // =================================================================
+    const _domHc = (campos) => {
+      const nodos = [];
+      for (const n of Object.keys(campos)) {
+        const v = campos[n];
+        if (v === true || v === false) {
+          nodos.push({ name: n, value: "true", checked: v === true, type: "radio" },
+                     { name: n, value: "false", checked: v === false, type: "radio" });
+        } else {
+          nodos.push({ name: n, value: String(v), type: "text" });
+        }
+      }
+      return {
+        querySelectorAll(sel) {
+          const s = String(sel);
+          const m = /^input\[name="(.*)"\]$/.exec(s);
+          if (m) return nodos.filter((x) => x.name === m[1]);
+          if (s.indexOf("[name]") >= 0) return nodos;
+          return [];
+        },
+      };
+    };
+
+    t.caso("v17.10.0 — se cosecha TODA la pantalla, no las 25 casillas de siempre", () => {
+      const d = _domHc({
+        "AntecedentePatologicos.Hipertension": true,
+        "AntecedentePatologicos.infartoMiocardio": false,
+        "AntecedentePatologicos.retinopatiaDiabetica": true,   // NO está en MTR_CAMPOS_FACTORES
+        "signosVitales.peso": "78.5",
+        "signosVitales.perimetroAbdominal": "98",
+        "gineco.fur": "2026-07-14",
+        "hs.HabitosGestionRiesgo.sedentarismo": true,
+      });
+      const c = api.mtrCosecharHcDelDom(d);
+      t.igual(c["AntecedentePatologicos.Hipertension"], true, "lo marcado que sí");
+      t.igual(c["AntecedentePatologicos.infartoMiocardio"], false,
+        "y lo marcado que NO: es un hecho documentado");
+      t.igual(c["AntecedentePatologicos.retinopatiaDiabetica"], true,
+        "incluida una casilla que el clasificador NO conocía: antes era invisible para todo el script");
+      t.igual(c["signosVitales.peso"], 78.5, "los números salen como números, no como texto");
+      t.igual(c["gineco.fur"], "2026-07-14", "y las fechas tal cual");
+      t.cierto(Object.keys(c).length >= 7, "se cosecha la pantalla entera, no una lista corta");
+    });
+
+    t.caso("v17.10.0 BARRERA — la cosecha en vivo tampoco toca lo que identifica al paciente", () => {
+      const d = _domHc({
+        "AntecedentePatologicos.Hipertension": true,
+        "signosVitales.peso": "78.5",
+        // Lo que NO puede entrar, aunque esté en la misma pantalla:
+        "datosUsuario.nombre": "NOMBREPRUEBA",
+        "datosUsuario.identificacion": "80123456",
+        "paciente.celular": "3001234567",
+        "usuario.correo": "prueba@ejemplo.com",
+        "acompanante.parentesco": "HIJA",
+      });
+      const c = api.mtrCosecharHcDelDom(d);
+      const todo = JSON.stringify(c);
+      for (const x of ["NOMBREPRUEBA", "80123456", "3001234567", "prueba@ejemplo.com", "HIJA"]) {
+        t.falso(todo.indexOf(x) >= 0, "«" + x + "» no puede cosecharse de la pantalla");
+      }
+      t.igual(c["signosVitales.peso"], 78.5, "y lo clínico de la misma pantalla sí entra");
+    });
+
+    t.caso("v17.10.0 — una casilla en blanco NO se convierte en un «no»", () => {
+      // Un grupo de radios sin ninguno marcado es una pregunta SIN RESPONDER. Convertirlo
+      // en «no» sería inventar una respuesta que nadie dio — la regla fundacional del
+      // proyecto, aplicada a la cosecha.
+      const d = {
+        querySelectorAll(sel) {
+          const nodos = [
+            { name: "AntecedentePatologicos.epoc", value: "true", checked: false, type: "radio" },
+            { name: "AntecedentePatologicos.epoc", value: "false", checked: false, type: "radio" },
+          ];
+          const m = /^input\[name="(.*)"\]$/.exec(String(sel));
+          if (m) return nodos.filter((x) => x.name === m[1]);
+          if (String(sel).indexOf("[name]") >= 0) return nodos;
+          return [];
+        },
+      };
+      const c = api.mtrCosecharHcDelDom(d);
+      t.igual(c["AntecedentePatologicos.epoc"], undefined,
+        "en blanco es en blanco: no viaja ni como sí ni como no");
+    });
+
+    t.caso("v17.10.0 — lo de la pestaña anterior no se pierde al cambiar de pestaña", () => {
+      // Angular destruye la pestaña anterior con *ngIf: releerla daría vacío, y vacío NO es
+      // «el médico lo borró». Por eso se acumula en vez de reemplazar.
+      const c2 = cargar({ silencioso: true });
+      const DOC = "555444333";
+      const gebP = c2.env.doc.getElementById.bind(c2.env.doc);
+      c2.env.doc.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+
+      const conCedula = (nodos) => (sel) => {
+        const s = String(sel);
+        if (s === ".text-muted") return [{ textContent: "CC " + DOC, closest: () => null }];
+        const m = /^input\[name="(.*)"\]$/.exec(s);
+        if (m) return nodos.filter((x) => x.name === m[1]);
+        if (s.indexOf("[name]") >= 0) return nodos;
+        return [];
+      };
+      const radios = (n, v) => ([{ name: n, value: "true", checked: v === true, type: "radio" },
+                                 { name: n, value: "false", checked: v === false, type: "radio" }]);
+
+      // Pestaña 1: Antecedentes.
+      c2.env.doc.querySelectorAll = conCedula(radios("AntecedentePatologicos.Hipertension", true));
+      c2.api.mtrHcAcumularDelDom(DOC, c2.env.doc);
+      // Pestaña 2: Hábitos. La anterior ya no está en el DOM.
+      c2.env.doc.querySelectorAll = conCedula(radios("hs.HabitosGestionRiesgo.sedentarismo", true));
+      c2.api.mtrHcAcumularDelDom(DOC, c2.env.doc);
+
+      const guardado = (c2.api.mtrHcLeer(DOC) || {}).dom || {};
+      t.igual(guardado["AntecedentePatologicos.Hipertension"], true,
+        "lo de Antecedentes sigue ahí aunque esa pestaña ya no exista en el DOM");
+      t.igual(guardado["hs.HabitosGestionRiesgo.sedentarismo"], true, "y lo de Hábitos también");
+    });
+
+    t.caso("v17.10.0 — lo cosechado en vivo llega al texto que ve la IA", () => {
+      // Probar la pieza no es probar que la pieza está conectada.
+      const hoja = api.mtrHojaDeHechos({ factores: { edad: 66, sexo: "F" } }, {
+        hoyIso: "2026-08-27",
+        hcEverest: { dom: {
+          "AntecedentePatologicos.retinopatiaDiabetica": true,
+          "AntecedentePatologicos.infartoMiocardio": false,
+          "signosVitales.perimetroAbdominal": 98,
+        } },
+      });
+      t.cierto(!!hoja.hcEverest, "el bloque viaja en la hoja aunque solo traiga la cosecha en vivo");
+      const txt = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/escrito en la historia de HOY/.test(txt), "y se marca como lo escrito HOY, no como historia vieja");
+      t.cierto(/retinopatiaDiabetica: sí/.test(txt), "lo marcado llega al modelo");
+      t.cierto(/infartoMiocardio: no/.test(txt), "y lo descartado también");
+      t.cierto(/perimetroAbdominal: 98/.test(txt), "con sus números");
+    });
+
+
+    t.caso("v17.10.0 CABLEADO — el reloj que vigila la pantalla dispara la cosecha de verdad", () => {
+      // Probar la pieza no es probar que la pieza está conectada. La mutación que
+      // desconectaba `mtrHcAcumularDelDom` de `_vglCosecharDePantalla` NO hacía caer ninguna
+      // prueba: todas le pasaban el bloque ya cosechado a mano. Esta lo exige de verdad —
+      // se llama al mismo punto que dispara el router de Everest y se mira el almacén.
+      const cC = cargar({ silencioso: true });
+      const DOC = "777888999";
+      const gebP = cC.env.doc.getElementById.bind(cC.env.doc);
+      cC.env.doc.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+      const nodos = [
+        { name: "AntecedentePatologicos.retinopatiaDiabetica", value: "true", checked: true, type: "radio" },
+        { name: "AntecedentePatologicos.retinopatiaDiabetica", value: "false", checked: false, type: "radio" },
+        { name: "signosVitales.perimetroAbdominal", value: "98", type: "text" },
+      ];
+      cC.env.doc.querySelectorAll = (sel) => {
+        const s = String(sel);
+        if (s === ".text-muted") return [{ textContent: "CC " + DOC, closest: () => null }];
+        const m = /^input\[name="(.*)"\]$/.exec(s);
+        if (m) return nodos.filter((x) => x.name === m[1]);
+        if (s.indexOf("[name]") >= 0) return nodos;
+        return [];
+      };
+
+      t.igual(cC.api.mtrHcLeer(DOC), null, "antes de cosechar no hay nada guardado de este paciente");
+      cC.api._vglCosecharDePantalla(DOC);
+      const guardado = (cC.api.mtrHcLeer(DOC) || {}).dom || {};
+      t.igual(guardado["AntecedentePatologicos.retinopatiaDiabetica"], true,
+        "el reloj de pantalla tiene que dejar la cosecha guardada, o el resto no se entera de nada");
+      t.igual(guardado["signosVitales.perimetroAbdominal"], 98, "con sus números");
+    });
+
+
+    t.caso("v17.12.0 — la escucha no rompe Everest: no toca peticiones ni consume respuestas", () => {
+      // Lo único que puede hacer daño aquí es interferir con la aplicación del médico
+      // mientras guarda una historia clínica. Dos garantías, fijadas por prueba:
+      //  (1) el cuerpo del envío se lee, no se sustituye;
+      //  (2) la respuesta se lee sobre un CLON — leer el cuerpo original dejaría a Everest
+      //      sin poder leerlo, y la historia no cargaría.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      // El bloque entero de la escucha: la ventana tiene que abarcar los dos enganches
+      // (XHR y fetch), no solo el primero — con 3000 caracteres se quedaba corta y la
+      // prueba fallaba sin que el código estuviera mal.
+      const iEng = src.indexOf("function mtrHcEnganchar");
+      const bloque = src.slice(iEng, iEng + 6000);
+      t.cierto(/resp\.clone\(\)\.text\(\)/.test(bloque),
+        "la respuesta se lee sobre un clon: sin esto Everest se queda sin su propio cuerpo");
+      t.cierto(/return XHRsend\.apply\(this, arguments\)/.test(bloque),
+        "el envío original se hace igual, con sus mismos argumentos");
+      t.cierto(/return resp;/.test(bloque), "y la respuesta se devuelve intacta a quien la pidió");
+      t.cierto(/xhr\.responseType && xhr\.responseType !== "text"/.test(bloque),
+        "si Everest pidió otro tipo de respuesta, no se toca: leer responseText ahí lanzaría");
+      // Y que la respuesta del XHR se LEA de verdad. Sin esta aserción, borrar la línea
+      // dejaba la escucha de carga muerta y el banco seguía verde.
+      t.cierto(/mirar\(xhr\.responseText, "carga"\)/.test(bloque),
+        "la respuesta del XHR se pasa al detector: es la mitad de la escucha de carga");
+      t.cierto(/mirar\(t, "carga"\)/.test(bloque), "y la de fetch, la otra mitad");
+    });
+
+    t.caso("v17.12.0 — la carga se reconoce con el MISMO detector que el guardado", () => {
+      // No se ha supuesto ni un campo del endpoint de carga: se reconoce por forma. Si
+      // Everest lo manda, se captura; si no, no pasa nada.
+      const paqueteComoLoMandaAlCargar = {
+        antecedentePatologicos: { hipertension: true, infartoMiocardio: false },
+        examenFisico: { peso: 78.5, circunferenciaAbdominal: 98 },
+        habitosGestionRiesgo: { sedentarismo: true },
+        datosUsuario: { nombre: "NOMBREPRUEBA", identificacion: "80123456" },
+      };
+      t.cierto(api.mtrEsPayloadHcEverest(paqueteComoLoMandaAlCargar),
+        "el mismo detector reconoce la carga sin conocer su ruta");
+      const h = api.mtrHechosDesdeHcEverest(paqueteComoLoMandaAlCargar);
+      t.igual(h.secciones.antecedentePatologicos.infartoMiocardio, false,
+        "y lo descartado por el médico llega igual que lo marcado");
+      const todo = JSON.stringify(h);
+      t.falso(todo.indexOf("NOMBREPRUEBA") >= 0, "la barrera es la misma: la identidad no entra");
+      t.falso(todo.indexOf("80123456") >= 0, "ni la cédula");
+    });
+
+    t.caso("v17.26.0 — el bloque de seguridad farmacológica SE FUE de Laboratorios (vive solo en Conducta)", () => {
+      // Historia del contenedor: v17.12.0 lo insertó en el modal de Laboratorios (antes
+      // se calculaba y se tiraba). El médico lo probó en vivo el 28-ago contra un
+      // paciente real y reportó que ese lugar es erróneo: el juicio farmacológico debe
+      // vivir en Conducta (#vgl-cw-farmaco, v17.25.0), no en el modal de resultados de
+      // laboratorio. Esta prueba invierte la de v17.12.0 a propósito — ahora vigila que
+      // el contenedor NO vuelva a aparecer en Laboratorios, para que una futura edición
+      // no reintroduzca por accidente el mismo error que el médico ya reportó.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.falso(/id="vgl-labs-farmaco"/.test(src),
+        "el contenedor de avisos farmacológicos ya no existe en el modal de Laboratorios");
+      t.falso(/cajaF\.innerHTML = extraFarmaco/.test(src),
+        "y tampoco queda código de inserción huérfano apuntando a él");
+      // mtrRenderAvisosHtml sigue viva: la usan el widget de Conducta (#vgl-cw-farmaco,
+      // ver tests/suite_71_widget_conducta.js) y el panel de Medicamentos del Ordenar —
+      // solo se le retiró UN llamador (el de Laboratorios), no la función.
+      const cM = cargar({ silencioso: true, almacen: { vgl_cfg: JSON.stringify({ motorPortado: true }) } });
+      const html = String(cM.api.mtrRenderAvisosHtml({ citaId: "P1", tfgCkdEpi: 25, tfgCockcroftGault: 24 }) || "");
+      t.cierto(html.length > 0, "el bloque sigue produciendo HTML de verdad para sus llamadores actuales");
+      t.cierto(/Seguridad farmacológica/.test(html), "con su rótulo");
+      t.cierto(/No significa que no haya riesgo/.test(html),
+        "y cuando no puede juzgar lo dice, en vez de callarse: la regla de la casa");
+    });
+
+    t.caso("v17.25.0 — el recuadro de función renal del modal de Laboratorios se INSERTA, no se tira (mismo patrón que #603, otra vez)", () => {
+      // Auditoría del módulo de Laboratorios (28-ago, noche): _renderEstadioRenalHtml
+      // (R1b, v14.1.1) calculaba TFG/estadio/discordancia con su propio CSS ya escrito
+      // (.vgl-labs-renal-*) y probado de punta a punta — y nunca se insertaba en ningún
+      // sitio: no había ni un contenedor en la plantilla del modal para recibirlo. El
+      // propio catch de más abajo ("recuadro renal no disponible") ya hablaba de un
+      // recuadro que nunca llegó a pintarse.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/id="vgl-labs-renal"/.test(src), "el contenedor existe en el modal");
+      t.cierto(/if \(cajaR && vivo\(\)\) cajaR\.innerHTML = _renderEstadioRenalHtml\(r\)/.test(src),
+        "y lo calculado se escribe DENTRO de él: sin esta línea el cálculo de función renal era trabajo perdido");
+      // Y produce algo real, incluidos los estados vacíos honestos que ya tenía.
+      const html = String(api._renderEstadioRenalHtml({
+        estadio: "G2", tfg: 72, formula: "CKD-EPI 2021",
+        entradas: { creatininaCruda: 1.0, peso: 68, edad: 55, sexo: "F" },
+      }) || "");
+      t.cierto(html.indexOf("vgl-labs-renal-tfg") >= 0, "pinta la TFG");
+      t.cierto(html.indexOf("72") >= 0 && html.indexOf("G2") >= 0, "con el valor y el estadio reales");
+      const vacio = String(api._renderEstadioRenalHtml({ faltan: ["edad_pediatrica"] }) || "");
+      t.cierto(vacio.indexOf("menores de 18") >= 0, "y el caso pediátrico sigue diciendo por qué, no inventa un estadio");
+    });
+
+    // =================================================================
+    //  v17.14.0 — LA BARRERA DE PHI TAMBIÉN APLICA AL REPOSITORIO
+    //
+    //  Auditoría del 27-ago: las capturas de red de agosto llevaban PHI REAL
+    //  sin redactar —nombre completo, cédula, dirección, celular y correo de
+    //  cinco pacientes, más el registro médico de tres profesionales—, y un
+    //  celular real se había copiado a un fixture de pruebas. Ya había SEIS
+    //  commits previos titulados «fix(phi)» sobre estos mismos archivos: la
+    //  redacción a ojo, repetida seis veces, seguía dejando datos. Se vuelve
+    //  mecánica.
+    //
+    //  Decisión del médico (27-ago): valores sintéticos que preservan la forma
+    //  (la captura sigue sirviendo de evidencia de la API), y NO se reescribe
+    //  el historial de git — la redacción es hacia adelante.
+    // =================================================================
+    t.caso("v17.14.0 — ningún archivo del repositorio trae la PHI real que se redactó", () => {
+      const raiz = path.join(__dirname, "..");
+      // Los identificadores concretos que estaban publicados. Un archivo que vuelva a
+      // traer cualquiera de ellos es una regresión, no un dato nuevo.
+      const PROHIBIDOS = ["32304889", "43077616", "21448257", "1128397873", "7379688",
+        "3132975614", "3504447019", "3105066018", "1035853169", "1143449208",
+        "CLARA DE JESUS", "PALACIO BORJA", "MARTA CELENY", "ROSADEL", "TAPIAS RIVERA",
+        "JOSE LUIS DURANGO", "RICMAR", "clarapalacio", "tatiana-valencia",
+        "SERRAMONTE", "POTRERITO"];
+      const saltar = new Set(["node_modules", ".git", ".github"]);
+      const archivos = [];
+      const recorrer = (dir) => {
+        for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (saltar.has(e.name)) continue;
+          const full = path.join(dir, e.name);
+          if (e.isDirectory()) recorrer(full);
+          else if (/\.(js|json|md|py|txt|html|css)$/.test(e.name)) archivos.push(full);
+        }
+      };
+      recorrer(raiz);
+      t.cierto(archivos.length > 50, "el barrido recorre el repositorio de verdad (" + archivos.length + " archivos)");
+      const sucios = [];
+      for (const f of archivos) {
+        // Esta misma prueba nombra los prohibidos: leerse a sí misma daría siempre rojo.
+        if (f.endsWith("suite_31_seguridad_phi_xss.js")) continue;
+        let t2 = "";
+        try { t2 = fs.readFileSync(f, "utf8"); } catch (e) { continue; }
+        for (const mal of PROHIBIDOS) if (t2.indexOf(mal) >= 0) sucios.push(path.relative(raiz, f) + " → " + mal);
+      }
+      t.igual(sucios.join(" | "), "", "ningún archivo trae PHI real redactada");
+    });
+
+    t.caso("v17.14.0 — una captura de red no puede traer un correo de dominio personal", () => {
+      // Regla estructural, no lista de casos: un correo @gmail/@hotmail/@outlook/@yahoo
+      // dentro de una captura es, por definición, el de una persona real — los sintéticos
+      // usan @ejemplo.com. Es lo que atrapa la PRÓXIMA captura, no la de agosto.
+      const raiz = path.join(__dirname, "..");
+      const capturas = fs.readdirSync(raiz).filter((f) => /^captura_.*\.json$/.test(f));
+      t.cierto(capturas.length >= 2, "hay capturas de red versionadas (" + capturas.length + ")");
+      const RE_PERSONAL = /[\w.+-]+@(?:gmail|hotmail|outlook|yahoo|live|icloud)\.[\w.]+/gi;
+      const sucios = [];
+      for (const f of capturas) {
+        const t2 = fs.readFileSync(path.join(raiz, f), "utf8");
+        const h = t2.match(RE_PERSONAL);
+        if (h) sucios.push(f + " → " + h.join(", "));
+      }
+      t.igual(sucios.join(" | "), "", "ninguna captura trae un correo personal real");
+    });
+
+    // =================================================================
+    //  v17.16.0 — EL NÚCLEO DE LA BARRERA DE PHI, PROBADO DE FRENTE
+    //
+    //  Las tres funciones que impiden que el nombre y la cédula del paciente
+    //  lleguen a Gemini estaban SIN una sola prueba directa: el informe de
+    //  cobertura las listaba entre las «sin cubrir». Y son justo las que un
+    //  reinicio del worker dejó desactivadas una vez en el árbol de trabajo,
+    //  en mitad de una mutación (documentado en INFORME_MUTACIONES.md).
+    //
+    //  Aquí no hay ambigüedad sobre qué se está protegiendo: si estas tres
+    //  fallan, sale PHI real del consultorio hacia un servicio de terceros.
+    // =================================================================
+
+    t.caso("v17.16.0 — mtrRutaHcAceptada: la lista blanca no deja pasar los datos del paciente", () => {
+      // Lista BLANCA, no negra: lo que no está nombrado NO pasa. Así, cuando Everest añada
+      // un campo nuevo con datos personales, el comportamiento por defecto es excluirlo.
+      t.cierto(api.mtrRutaHcAceptada("antecedentePatologicos.hipertension"), "los antecedentes sí");
+      t.cierto(api.mtrRutaHcAceptada("ExamenFisico.RuidosCardiacos"), "el examen físico sí, sin importar la caja");
+      t.cierto(api.mtrRutaHcAceptada("hs.habitosGestionRiesgo.sedentarismo"), "los hábitos sí, con su prefijo real");
+
+      // Lo que JAMÁS puede pasar.
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.nombre"), "el nombre del paciente NO");
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.identificacion"), "la cédula NO");
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.celular"), "el celular NO");
+      t.falso(api.mtrRutaHcAceptada("acompanante.nombre"), "ni el acompañante");
+      t.falso(api.mtrRutaHcAceptada(""), "sin nombre de campo, no");
+      t.falso(api.mtrRutaHcAceptada(null), "ni con null");
+      // Y el prefijo se exige AL PRINCIPIO: un campo que solo CONTENGA la palabra no entra.
+      t.falso(api.mtrRutaHcAceptada("datosUsuario.examenfisico.nombre"),
+        "el prefijo se ancla al inicio: si bastara con contenerlo, un campo de datosUsuario colado dentro se llevaría el nombre del paciente");
+    });
+
+    t.caso("v17.16.0 — mtrHcTachaduras y mtrHcTachar: tachar un nombre exige conocerlo", () => {
+      // scrubPII reconoce correos, teléfonos y cédulas porque tienen FORMA. Un nombre propio
+      // no la tiene, y el médico lo escribe a mano en la enfermedad actual. La salida fue
+      // leer la identidad SOLO para construir las tachaduras, y descartarla sin guardarla.
+      const payload = { datosUsuario: {
+        nombre: "MARTHA LUCIA", primer_Apellido: "PEREZ", segundo_Apellido: "GOMEZ",
+        identificacion: "40123456", celular: "3009876543", correo: "m.perez@ejemplo.com",
+      } };
+      const tach = api.mtrHcTachaduras(payload);
+      for (const esperado of ["MARTHA", "LUCIA", "PEREZ", "GOMEZ", "40123456", "3009876543"]) {
+        t.cierto(tach.indexOf(esperado) >= 0, "«" + esperado + "» entra en la lista de tachaduras");
+      }
+      // Las más largas primero, o tachar «MARTHA» dejaría «[CENSURADO] LUCIA» a medias.
+      const ordenado = tach.every((x, i) => i === 0 || tach[i - 1].length >= x.length);
+      t.cierto(ordenado, "ordenadas de más larga a más corta: si no, una tachadura corta parte a la larga");
+
+      // Los fragmentos de menos de 3 caracteres NO entran: tachar «DE» destrozaría el texto.
+      t.falso(api.mtrHcTachaduras({ datosUsuario: { nombre: "ANA DE LA CRUZ" } }).indexOf("DE") >= 0,
+        "las partículas de 2 letras no se tachan: arrasarían con el texto clínico");
+
+      const texto = "PACIENTE MARTHA LUCIA PEREZ GOMEZ, CC 40123456, REFIERE CEFALEA DE 3 DIAS.";
+      const limpio = api.mtrHcTachar(texto, tach);
+      for (const prohibido of ["MARTHA", "LUCIA", "PEREZ", "GOMEZ", "40123456"]) {
+        t.falso(limpio.indexOf(prohibido) >= 0, "«" + prohibido + "» no sobrevive al tachado");
+      }
+      t.cierto(/CEFALEA DE 3 DIAS/.test(limpio), "y lo clínico sí sobrevive: tachar no es borrar la nota");
+
+      // Insensible a mayúsculas: el médico escribe como escribe.
+      t.falso(api.mtrHcTachar("la señora Martha Lucia refiere...", tach).toLowerCase().indexOf("martha") >= 0,
+        "tacha aunque él lo escriba en minúscula");
+
+      // Un nombre con caracteres de expresión regular no puede romper el tachado.
+      t.igual(api.mtrHcTachar("hola (JUAN) adios", ["(JUAN)"]), "hola [CENSURADO] adios",
+        "los paréntesis del nombre se escapan en vez de reventar la expresión regular");
+
+      // Sin identidad no se inventa una tachadura, y el texto pasa igual.
+      t.igual(api.mtrHcTachaduras({}), [], "sin datosUsuario, ninguna tachadura");
+      t.igual(api.mtrHcTachar("texto intacto", []), "texto intacto", "y sin tachaduras el texto no se toca");
+      t.igual(api.mtrHcTachar(null, ["X"]), "", "un texto nulo sale como cadena vacía, nunca como «null»");
+    });
+
+    t.caso("v17.16.0 — mtrHcValorLimpio: lo que NO es un dato clínico simple no viaja", () => {
+      // Última pieza de la cadena de la barrera: normaliza cada valor cosechado antes de
+      // que entre en la hoja de hechos. Su regla es de LISTA BLANCA por tipo — booleano,
+      // número finito y cadena saneada — y todo lo demás sale como null.
+      t.igual(api.mtrHcValorLimpio(true), true, "un booleano pasa: «marcado que sí» es un hecho");
+      t.igual(api.mtrHcValorLimpio(false), false, "y «marcado que no» también, que no es lo mismo que ausente");
+      t.igual(api.mtrHcValorLimpio(72), 72, "un número finito pasa");
+      t.igual(api.mtrHcValorLimpio(Infinity), null, "uno no finito, no");
+      t.igual(api.mtrHcValorLimpio(NaN), null, "NaN tampoco");
+      t.igual(api.mtrHcValorLimpio(null), null, "null sigue siendo null");
+      t.igual(api.mtrHcValorLimpio(undefined), null, "y undefined también");
+      t.igual(api.mtrHcValorLimpio("   "), null, "una cadena en blanco no es un dato: no viaja");
+      t.igual(api.mtrHcValorLimpio({ a: 1 }), null, "un objeto anidado se descarta entero");
+      t.igual(api.mtrHcValorLimpio([1, 2]), null, "una lista también");
+      t.igual(api.mtrHcValorLimpio("x".repeat(500)).length, 300,
+        "el texto se acota a 300: un campo libre entero no puede colarse en la hoja");
+      // Y pasa por el saneador: un dato con forma reconocible se tacha aquí también.
+      t.falso(/3009876543/.test(String(api.mtrHcValorLimpio("llamar al 3009876543"))),
+        "un celular escrito dentro de un campo clínico se sanea antes de viajar");
+    });
+
+    t.caso("v17.16.0 — el Deshacer: una sola ranura, con caducidad y aviso al sustituirla", () => {
+      // Es la red de la inserción en la historia (y de la vía de REEMPLAZO de la v17.13.0).
+      // Estaba entre las «sin cubrir». Su regla incómoda es que la ranura es ÚNICA: guardar
+      // un lote nuevo destruye el anterior, y por eso se avisa antes de hacerlo.
+      const c = cargar({ silencioso: true });
+      t.falso(c.api._vglDeshacerDisponible(), "sin nada guardado, no hay nada que deshacer");
+
+      // Sin dueño anotado: el deshacer corriente.
+      const caja = { value: "TEXTO NUEVO", isConnected: true, dispatchEvent: () => {} };
+      c.api._vglGuardarDeshacer("", [{ el: caja, prev: "LO QUE HABIA ANTES" }], "Redactor IA");
+      t.cierto(c.api._vglDeshacerDisponible(), "guardado un lote, sí se puede deshacer");
+      t.igual(c.api._vglEjecutarDeshacer(), 1, "deshacer devuelve cuántas casillas restauró");
+      t.igual(caja.value, "LO QUE HABIA ANTES", "y la casilla vuelve EXACTAMENTE a lo que el médico tenía");
+
+      // LA GUARDA, que es lo que de verdad hay que fijar y esta prueba descubrió al
+      // escribirse: si la historia abierta ya NO es la del paciente en que se escribió, el
+      // deshacer NO toca nada. Restaurar «lo que había antes» en la casilla de OTRO
+      // paciente sería escribirle el texto de un tercero en su historia clínica.
+      const cOtro = cargar({ silencioso: true });
+      const cajaOtro = { value: "TEXTO NUEVO", isConnected: true, dispatchEvent: () => {} };
+      cOtro.api._vglGuardarDeshacer("111111111", [{ el: cajaOtro, prev: "LO DEL OTRO PACIENTE" }], "Redactor IA");
+      t.igual(cOtro.api._vglEjecutarDeshacer(), 0,
+        "con otra historia abierta no se deshace nada");
+      t.igual(cajaOtro.value, "TEXTO NUEVO",
+        "y la casilla queda intacta: nunca se le escribe a un paciente el texto de otro");
+
+      // Una lista vacía no crea una ranura fantasma que luego prometa un deshacer imposible.
+      const c2 = cargar({ silencioso: true });
+      c2.api._vglGuardarDeshacer("222", [], "vacío");
+      t.falso(c2.api._vglDeshacerDisponible(), "un lote vacío no arma un Deshacer que no puede deshacer nada");
+
+      // La caducidad: pasados 5 minutos, la promesa deja de estar en pie.
+      const c3 = cargar({ silencioso: true });
+      const caja3 = { value: "X", isConnected: true, dispatchEvent: () => {} };
+      c3.api._vglGuardarDeshacer("", [{ el: caja3, prev: "Y" }], "lote");
+      t.cierto(c3.api._vglDeshacerDisponible(), "recién guardado, disponible");
+      t.igual(c3.api._vglEjecutarDeshacer(), 1, "y se puede ejecutar");
+    });
+
   }
 };

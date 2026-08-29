@@ -341,6 +341,11 @@ module.exports = {
       t.igual(r.labMaxIso, "2026-09-09", "el techo de 21 días NO se mueve");
       t.igual(r.labSugeridaIso, r.labMinIso, "y lo sugerido es lo más pronto posible");
       t.cierto(/ya hay examen\(es\) vencido\(s\)/.test(r.motivoPiso), "con el motivo en lenguaje del consultorio: " + r.motivoPiso);
+      // v17.6.73 — [reportado en consultorio, 26-ago-2026] motivoPiso ya NO lleva su
+      // propio verbo ("adelantada porque..."): así, cuando el banner (notaLP) lo embebe
+      // dentro de "Se adelanta la toma... porque " + motivoPiso, no se duplica el verbo.
+      t.igual(r.motivoPiso, "ya hay examen(es) vencido(s) y esperar 14 días no los recupera",
+        "motivo exacto, sin 'adelantada' propio: solo la razón, lista para embeberse en una frase");
       t.igual(r.vencidos, ["HbA1c"]);
     });
 
@@ -363,6 +368,9 @@ module.exports = {
       t.cierto(!!r && r.pisoRelajado, "el piso cede");
       t.cierto(r.labMinIso <= "2026-08-24", "la toma queda en el vencimiento o antes, nunca después");
       t.cierto(/Glicemia/.test(r.motivoPiso), "y se dice por cuál examen: " + r.motivoPiso);
+      // v17.6.73 — mismo criterio: sin verbo propio, listo para embeberse en notaLP.
+      t.igual(r.motivoPiso, "el examen Glicemia vence el 2026-08-24 y esperar 14 días lo dejaría vencer",
+        "motivo exacto del caso 2, sin 'adelantada al vencimiento de' propio");
       // La comprobación que de verdad importa: el cambio RESUELVE el problema que #128
       // solo pudo declarar. Con la fecha nueva, ya no hay aviso de vencimiento.
       t.igual(api.mtrAvisoVencimiento(plan, r.labMinIso), null, "CERO VENCIDOS: con esta fecha el examen ya no llega vencido");

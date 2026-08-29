@@ -577,7 +577,7 @@ A1 suite_05 · A2 suite_08 · A3 suite_10 · A4 suite_12 · A5 suite_17 · A6 su
 **Fuera del reparto de Jules, para Claude, en este orden:**
 1. `!important` en `.vgl-agm-sbtn-sugerido` (7197) **más** una regla `:hover` propia — sin ella, poner `!important` mata el hover de `.vgl-agm-sbtn:hover` (7187) sobre justo el botón que el script recomienda. Verificar en Chromium.
 2. `!important` en el `color` de la línea **6335** (`.vgl-lab-inj,.vgl-exf-btn`) y decidir a la vez si `#vgl-examen-normalidad` entra en las listas de tokens: **entrar cambia el texto del botón de blanco a casi negro** en modo oscuro. Es una decisión visual que necesita el ojo del médico.
-3. Redacción **completa** de las capturas: `32304889`, `43077616` (14 ocurrencias), el `Telefono=350444XXXX` de `captura_agendamiento_oficial_20260810.json` línea 90 y los dos `registroMedico` de la de ordenamiento; más la decisión sobre el historial de git. `PROMPT_JULES_R1_TFG_KDIGO.md:112` afirma que esa captura está "ya redactada de PHI": es falso y esa garantía está escrita en el repo.
+3. Redacción **completa** de las capturas: HECHA en la v17.14.0 — las dos cédulas, el celular, los correos, las direcciones, los nombres y los `registroMedico` de las dos capturas quedaron reemplazados por valores sintéticos que preservan la forma. Decisión del médico (27-ago): NO se reescribe el historial de git, la redacción es hacia adelante. `PROMPT_JULES_R1_TFG_KDIGO.md:112` afirma que esa captura está "ya redactada de PHI": es falso y esa garantía está escrita en el repo.
 
 ---
 

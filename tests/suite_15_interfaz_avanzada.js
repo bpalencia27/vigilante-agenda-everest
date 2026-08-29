@@ -58,6 +58,10 @@ function respuestaJson(data) {
 module.exports = {
   nombre: "Interfaz: ventana, hojas y modales",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_ajustesGuardar", "_vglAlternarModoProg", "_festivosTablaAgregarParaTest", "_festivosMensajeDiscrepancia", "_festivosAvisarSiVencida",
     "createLabInjectorUI", "createExamenFisicoInjectorUI", "_casillasExamenFisico", "setWinState", "buildOverlay",
     "openLaboratoriosModal", "abrirInformeAthenea", "openAgendamientoModal", "openLabSoloModal", "openOrdenamientoModal", "esMedicoRCVActivo",
     "candidatoAdicional",
@@ -67,6 +71,8 @@ module.exports = {
     "refrescarCuentas", "imprimirRecordatorioCita", "imprimirOrdenPyM", "_urlImpresionOrdenPyM",
     "_agruparUroanalisisParaTabla", "mostrarPanelPostCita", "createAccionesDockUI",
     "pymPaquetesDelPaciente", "_mtrCelularMascarado", "mtrHallazgosUroDesdeLabs",
+    "vglMinimizarPanel", "vglMinBarra", "_vglMinDescartarDeOtroPaciente",
+    "panelActivities", "isPanelHiddenActivity",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -496,40 +502,78 @@ module.exports = {
       t.cierto(bloque.includes("inset 0 0 0 1px rgba(var(--rgb-ambar),.5)"), "conserva el borde interior ámbar original");
     });
 
+    // =====================================================================
+    // v17.6.73 — [reportado en consultorio, 26-ago-2026: "ni él ni sus compañeros lo
+    // entienden bien"] La nota del banner «🧪 Labs primero» (rama con el piso relajado)
+    // embebía `motivoPiso` —que YA empezaba con "adelantada porque..."— dentro de otra
+    // frase que también empezaba con "se adelanta... porque", así que el texto final
+    // decía literalmente "porque... (adelantada porque..." — duplicado, más jerga interna
+    // del motor ("ventana de 14–21 días", "piso", "cupo hábil") ilegible para el médico en
+    // consulta rápida. `_pintarBannerSugerida` vive en el cierre de `openAgendamientoModal`
+    // (no es una unidad aislable) — se protege por texto fuente, mismo criterio ya
+    // establecido en el banco (ver suite 57).
+    // =====================================================================
+    t.caso("notaLP (banner «Labs primero», piso relajado): sin la frase duplicada 'porque...(adelantada porque' ni jerga interna del motor", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
 
-    // v14.0.0 (T4) — "chips PyM" salió del nombre y de las aserciones de esta prueba: los
-    // chips (y el texto "PyM sin cargar"/"Al día"/"Dato faltante" DENTRO de la tarjeta) se
-    // amputaron del panel. El "PyM sin cargar" de la BARRA DE RESUMEN (suma.textContent,
-    // no cardAna.innerHTML) es un sitio DISTINTO — con significado distinto — y se queda
-    // intacto (ver la Regla B4-T4 sobre el literal repetido).
-    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude (sin chips PyM, amputados en T4)", () => {
+      const idx = src.indexOf("const _pisoLP = _labsPrimero && _labsPrimero.pisoRelajado;");
+      t.cierto(idx >= 0, "el bloque de notaLP debe existir");
+      const bloque = src.slice(idx, idx + 1200);
+
+      // motivoPiso (línea ~25915/25927) ya no debe llevar su propio verbo "adelantada":
+      // eso es justo lo que causaba la duplicación al embeberse en notaLP.
+      const iMotivo1 = src.indexOf('motivoPiso = "ya hay examen');
+      t.cierto(iMotivo1 >= 0, "caso 1 (vencidos): motivoPiso debe ser solo la razón");
+      t.falso(/motivoPiso = "adelantada/.test(src), "ningún motivoPiso debe seguir empezando con 'adelantada' (esa era la causa de la duplicación)");
+
+      // notaLP: se extrae SOLO la rama del ternario con piso relajado (hasta el ":" del
+      // else), para no confundir con la rama sin relajar (que no se tocó).
+      const iNotaLP = bloque.indexOf("const notaLP = _pisoLP");
+      t.cierto(iNotaLP >= 0, "debe encontrarse la declaración de notaLP");
+      const iElse = bloque.indexOf('"La toma queda 14', iNotaLP);
+      const ramaRelajada = bloque.slice(iNotaLP, iElse >= 0 ? iElse : iNotaLP + 700);
+      t.falso(/ventana de 14.21 días/.test(ramaRelajada), "ya no debe quedar la jerga 'ventana de 14–21 días'");
+      t.falso(/\(adelantada porque/.test(ramaRelajada), "ya no debe quedar la frase duplicada 'porque...(adelantada porque'");
+      t.cierto(/porque " \+ escapeHtml\(_labsPrimero\.motivoPiso/.test(ramaRelajada), "debe seguir embebiendo el motivo real (motivoPiso), no un texto genérico fijo");
+      t.cierto(/se recalcula solo/.test(ramaRelajada), "conserva la aclaración de que es una sugerencia, no una imposición");
+      t.cierto(/Se adelanta la toma al primer cupo disponible porque/.test(ramaRelajada), "arranca con la frase nueva, sin duplicar 'adelanta...porque' más adelante");
+    });
+
+
+    // v17.22.0 — REVERSIÓN CONSCIENTE de T4 (decisión del médico, entrevista del 28-ago):
+    // los chips de PyM vuelven a la tarjeta. Esta prueba, que hasta ahora fijaba la
+    // AUSENCIA de chips como si fuera la regla, ahora fija su PRESENCIA — la barra de
+    // resumen (suma.textContent) sigue siendo un sitio DISTINTO con su propio "PyM sin
+    // cargar" (Regla B4-T4), eso no cambió.
+    t.caso("render: dos citas por API pintan tarjetas con bandera de fraude Y sus chips de PyM (T4 revertido)", () => {
       vaciarLista();
       cv.api.render(citas, "api", new Date());
       t.cierto(suma.textContent.includes("Vigilando la agenda · 2 cita(s)"), "resumen de fuente directa (texto v17.x: 'Vigilando la agenda · N cita(s) · act. HH:MM')");
-      t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen SÍ sigue diciendo esto (no se amputó, es el otro sitio)");
+      t.cierto(suma.textContent.includes("PyM sin cargar"), "la barra de resumen sigue diciendo esto — sitio distinto del de la tarjeta");
       t.igual(q("#vgl-dot").className, "bg", "el punto de origen marca API");
       t.igual(lista.children.length, 2, "una tarjeta por cita");
       const [cardAna, cardLuis] = lista.children;
       t.igual(cardAna.__vglKey, "111@07:00 AM");
       t.cierto(cardAna.innerHTML.includes("ANA PEREZ"));
       t.cierto(cardAna.innerHTML.includes("CC 111"));
-      t.falso(cardAna.innerHTML.includes("PyM sin cargar"), "dentro de la TARJETA ya no aparece — ese chip se amputó");
       t.falso(cardAna.innerHTML.includes("NO CONFIRMADO"), "la cita verde no lleva bandera de fraude");
       t.cierto(cardLuis.className.includes("rojo"), "la tarjeta roja lleva su clase");
       t.cierto(cardLuis.innerHTML.includes("⛔ NO CONFIRMADO"), "bandera de fraude explícita, se conserva");
-      t.falso(cardLuis.innerHTML.includes("Tamización de mama"), "el chip de PyM pendiente ya no se pinta en la tarjeta (T4)");
-      t.falso(cardLuis.innerHTML.includes("vgl-pyms") || cardLuis.innerHTML.includes("vgl-chip"), "ningún rastro de la fila de chips en el HTML");
-      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida — no la toca T4");
+      t.cierto(cardLuis.innerHTML.includes("Tamización de mama"), "el chip de PyM pendiente vuelve a pintarse en la tarjeta");
+      t.cierto(cardLuis.innerHTML.includes("vgl-pyms") && cardLuis.innerHTML.includes("vgl-chip"), "la fila de chips está de vuelta en el HTML");
+      t.cierto(cardLuis.innerHTML.includes("vgl-cd late"), "cuenta regresiva vencida — no la toca este cambio");
       t.cierto(cardLuis.innerHTML.includes("hace 4:00"), "lleva 4 min pasado de la tolerancia (6 - 10)");
       const stats = q("#vgl-stats");
       t.cierto(stats.innerHTML.includes("En sala <b>1</b>"));
       t.cierto(stats.innerHTML.includes("Sin pres. <b>1</b>"));
     });
 
-    // v14.0.0 (T4) / v14.0.2 — Criterio de aceptación de T4 ("la tarjeta ya no genera esos
-    // tres botones") sigue vigente; el botón Atender que T4 dejaba como único superviviente
-    // se retiró después, a pedido explícito del médico (usa el nativo "Historias Clínicas").
-    t.caso("T4/v14.0.2 — la tarjeta ya NO genera ningún botón de acción (agendar/ordenar/labs/atender)", () => {
+    // v14.0.0 (T4) / v14.0.2 — Criterio de aceptación de T4 sobre los BOTONES sigue vigente
+    // (no se tocó esta noche, solo la mitad de los chips): agendar/ordenar/labs/atender
+    // siguen sin generarse en la tarjeta. Los chips, en cambio, ya vuelven (v17.22.0).
+    t.caso("T4/v14.0.2 — la tarjeta sigue sin botones de acción, pero v17.22.0 le devuelve los chips de PyM", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const pac = { key: "t4-1", doc_id: "999", nombre: "PACIENTE T4", hora_texto: "09:00", estado: "En sala", color: "VERDE", pym: ["MAMOGRAFÍA"], elapsed: 0, citaId: 12345 };
@@ -538,26 +582,121 @@ module.exports = {
       t.falso(card.innerHTML.includes("vgl-btn-agendar"), "sin botón de agendar");
       t.falso(card.innerHTML.includes("vgl-btn-ordenar"), "sin botón de ordenar");
       t.falso(card.innerHTML.includes("vgl-btn-labs"), "sin botón de labs");
-      t.falso(card.innerHTML.includes("vgl-btn-atender"), "sin botón de Atender (retirado en v14.0.2)");
-      t.falso(card.innerHTML.includes("vgl-pyms"), "sin fila de chips PyM");
+      t.falso(card.innerHTML.includes("vgl-btn-atender"), "sin botón de Atender (retirado en v14.0.2, no revive)");
+      t.cierto(card.innerHTML.includes("vgl-pyms"), "la fila de chips PyM sí vuelve a aparecer");
+      t.cierto(card.innerHTML.includes("MAMOGRAFÍA"), "con el nombre real de la actividad pendiente");
     });
 
-    // v14.0.0 — Secuela real de T4: la fila inferior (.vgl-card-btm) llevaba los botones Y
-    // la fila de chips de PyM. T4 se llevó ambos contenidos pero dejó el contenedor, con un
-    // div vacío cobrando su margin-top de 7px. v14.0.2 retiró también el botón Atender (el
-    // último ocupante), así que ahora la fila nunca se emite, con o sin citaId.
-    t.caso("v14.0.2 — la tarjeta nunca emite la fila inferior vacía (hueco muerto al pie), con o sin citaId", () => {
+    // v17.22.0 — la fila inferior (.vgl-card-btm) revive: ahora SIEMPRE lleva algo (un
+    // chip, o uno de los cuatro mensajes honestos de "nada que mostrar"), sin importar
+    // si la cita trae citaId — el hueco muerto que describía esta prueba ya no existe
+    // porque el contenedor ya no puede quedar vacío por construcción.
+    t.caso("v17.22.0 — la fila inferior de la tarjeta SIEMPRE aparece ahora (lleva el estado de PyM), con o sin citaId", () => {
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const sinCita = { key: "v14-sin", doc_id: "777", nombre: "PACIENTE SIN CITAID", hora_texto: "09:20", estado: "En sala", color: "VERDE", pym: [], elapsed: 0 };
       cv.api.render([sinCita], "api", new Date());
-      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "sin citaId: sin fila inferior");
+      t.cierto(lista.children[0].innerHTML.includes("vgl-card-btm"), "sin citaId: la fila inferior aparece igual, con el estado de PyM");
 
       vaciarLista();
       cv.api.__state.lastSignature = "";
       const conCita = { key: "v14-con", doc_id: "778", nombre: "PACIENTE CON CITAID", hora_texto: "09:30", estado: "En sala", color: "VERDE", pym: [], elapsed: 0, citaId: 4242 };
       cv.api.render([conCita], "api", new Date());
-      t.falso(lista.children[0].innerHTML.includes("vgl-card-btm"), "con citaId: tampoco hay fila inferior — no queda nada que poner ahí");
+      t.cierto(lista.children[0].innerHTML.includes("vgl-card-btm"), "con citaId: también aparece — el contenido depende del PyM, no del citaId");
+    });
+
+    // ---------- isPanelHiddenActivity / panelActivities (restauradas en v17.22.0) ----------
+    t.caso("isPanelHiddenActivity: reconoce Optometría/Odontología con o sin tilde, y nada más", () => {
+      t.cierto(cv.api.isPanelHiddenActivity("Optometría"));
+      t.cierto(cv.api.isPanelHiddenActivity("optometria de control"));
+      t.cierto(cv.api.isPanelHiddenActivity("Odontología general"));
+      t.falso(cv.api.isPanelHiddenActivity("Mamografía"), "otra actividad cualquiera no se confunde con AV/OD");
+      t.falso(cv.api.isPanelHiddenActivity(""), "vacío no es AV/OD");
+      t.falso(cv.api.isPanelHiddenActivity(null), "null no revienta ni cuenta como AV/OD");
+    });
+
+    t.caso("panelActivities: filtra SOLO Optometría/Odontología, conserva el resto en su orden", () => {
+      const lista4 = ["Tamización de mama", "Optometría", "Citología", "Odontología"];
+      t.igual(cv.api.panelActivities(lista4), ["Tamización de mama", "Citología"]);
+      t.igual(cv.api.panelActivities([]), []);
+      t.igual(cv.api.panelActivities(null), [], "sin lista, arreglo vacío — nunca revienta");
+    });
+
+    // ---------- Tope de 3 chips + "remisión AV/OD" oculta (v17.22.0) ----------
+    t.caso("v17.22.0 — más de 3 actividades: se ven 3 chips y un '+N más' con el detalle completo en el title", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = {
+        key: "cap-1", doc_id: "501", nombre: "PACIENTE CON MUCHO PYM", hora_texto: "10:00",
+        estado: "En sala", color: "VERDE", elapsed: 0,
+        pym: ["Tamización de mama", "Citología", "Glicemia", "Perfil lipídico", "Creatinina"],
+      };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.cierto(card.innerHTML.includes("Tamización de mama") && card.innerHTML.includes("Citología") && card.innerHTML.includes("Glicemia"), "los 3 primeros se ven completos, sin recortar el texto");
+      t.falso(card.innerHTML.includes('">Perfil lipídico<') || card.innerHTML.includes('">Creatinina<'), "el 4º y 5º no se listan como CHIP PROPIO (solo pueden aparecer dentro del title del '+2 más')");
+      t.cierto(card.innerHTML.includes("+2 más"), "el sobrante se resume en un solo chip, con el número exacto");
+      t.cierto(card.innerHTML.includes("Perfil lipídico") && card.innerHTML.includes("Creatinina"), "pero el detalle completo del sobrante sigue en el HTML (title del chip '+2 más') — nada se pierde");
+    });
+
+    t.caso("v17.22.0 — Optometría/Odontología ocultas se avisan con su propio chip, aparte del tope de 3", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      const pac = { key: "avod-1", doc_id: "502", nombre: "PACIENTE AV OD", hora_texto: "10:10", estado: "En sala", color: "VERDE", elapsed: 0, pym: ["Citología", "Optometría"] };
+      cv.api.render([pac], "api", new Date());
+      const card = lista.children[0];
+      t.cierto(card.innerHTML.includes("Citología"), "la actividad real sí se pinta");
+      t.falso(card.innerHTML.includes("Optometría"), "Optometría no se pinta como chip propio (sigue oculta de la tarjeta, D9)");
+      t.cierto(card.innerHTML.includes("+ remisión AV/OD"), "pero su ausencia se avisa, en vez de desaparecer en silencio");
+    });
+
+    // ---------- Los cuatro mensajes honestos cuando no hay chips que mostrar ----------
+    t.caso("v17.22.0 — sin PyM cargado, la tarjeta lo dice (nunca 'al día' sin haber podido comprobarlo)", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "";
+      const pac = { key: "sc-1", doc_id: "601", nombre: "PACIENTE SIN CARGA", hora_texto: "10:20", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      t.cierto(lista.children[0].innerHTML.includes("PyM sin cargar"));
+    });
+
+    t.caso("v17.22.0 — con PyM cargado y el paciente en la base: 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["602"]);
+      const pac = { key: "ok-1", doc_id: "602", nombre: "PACIENTE AL DIA", hora_texto: "10:30", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      t.cierto(lista.children[0].innerHTML.includes("Al día"));
+    });
+
+    t.caso("v17.22.0 — con PyM cargado pero SIN cruzar con la base: 'Dato faltante', no 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["999999"]);   // el paciente no está en la base
+      const pac = { key: "df-1", doc_id: "603", nombre: "PACIENTE SIN CRUCE", hora_texto: "10:40", estado: "En sala", color: "VERDE", elapsed: 0, pym: [] };
+      cv.api.render([pac], "api", new Date());
+      const html = lista.children[0].innerHTML;
+      t.cierto(html.includes("Dato faltante"), "no cruzar con la base es un hecho distinto de estar al día — nunca se confunden");
+      t.falso(html.includes("Al día"));
+    });
+
+    t.caso("v17.22.0 — solo remisión AV/OD pendiente (nada más): mensaje propio, no 'Al día'", () => {
+      vaciarLista();
+      cv.api.__state.lastSignature = "";
+      cv.api.__state.pymFile = "excel.xlsx";
+      cv.api.__state.pymTodos = new Set(["604"]);
+      const pac = { key: "avod-solo-1", doc_id: "604", nombre: "PACIENTE SOLO AV OD", hora_texto: "10:50", estado: "En sala", color: "VERDE", elapsed: 0, pym: ["Optometría"] };
+      cv.api.render([pac], "api", new Date());
+      const html = lista.children[0].innerHTML;
+      t.cierto(html.includes("Pendiente: remisión AV/OD"), "el único pendiente real es la remisión — se dice, no se esconde detrás de 'Al día'");
+      t.falso(html.includes("Al día"));
+      // Se restaura el estado de fábrica (pymFile:"", pymTodos:null): las pruebas de
+      // este bloque son las únicas que tocan pymFile/pymTodos en toda esta suite — sin
+      // este reset, cualquier prueba posterior que dependa de "PyM sin cargar" (la
+      // barra de resumen, copySummary) heredaría en silencio el "excel.xlsx" de aquí.
+      cv.api.__state.pymFile = ""; cv.api.__state.pymTodos = null;
     });
 
     t.caso("T4 (D9) — la bandera PES usa el texto nuevo «ABANDONO PROGRAMA RCV»", () => {
@@ -816,6 +955,65 @@ module.exports = {
       c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : null); // sin "anamesis": sin paciente
       c.api.createAccionesDockUI();
       t.cierto(removido, "el dock se quita del body sin paciente abierto");
+    });
+
+    // v17.6.71 — [reportado en consultorio, 26-ago-2026] BLINDAJE CONTRA CRUCE DE
+    // PACIENTES: integración completa a través del punto real de enganche
+    // (createAccionesDockUI, que corre en cada tick). Antes, un módulo minimizado con
+    // datos del paciente A sobrevivía sin ningún descarte automático al abrir la
+    // historia de otro paciente — ver la cobertura unitaria de _vglMinDescartarDeOtroPaciente
+    // en tests/suite_65_minimizar_modulos.js para el detalle función-por-función; esta
+    // prueba confirma que el DOCK REAL de verdad la invoca en cada repintado.
+    t.caso("createAccionesDockUI: al repintar para OTRO paciente, descarta el panel minimizado del paciente anterior (bug real reportado en consultorio)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "101010101");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+      t.cierto(!!dock, "el dock se creó para el paciente A");
+
+      const panelIA = c.env.doc.createElement("div");
+      panelIA.id = "vgl-ia-modal";
+      let removido = false;
+      panelIA.remove = () => { removido = true; };
+      t.cierto(c.api.vglMinimizarPanel(panelIA, "101010101"), "se minimiza el redactor IA del paciente A");
+      // Se toma la barra REAL ya pintada por vglMinimizarPanel (por body.children, igual
+      // que el dock arriba) — llamar a vglMinBarra() de nuevo aquí, sin que
+      // doc.getElementById resuelva "vgl-min-bar", crearía un nodo DISTINTO al pintado.
+      const bar = c.env.doc.body.children.find((n) => n.id === "vgl-min-bar");
+      t.cierto(!!bar, "la barra de minimizados se creó");
+      t.igual(bar.style.display, "flex", "la pastilla de A está en la barra");
+
+      // El médico cierra la historia de A y abre la de B: mismo repintado real del dock.
+      // getElementById debe seguir resolviendo el dock Y la barra ya creados (si no, el
+      // código de producción crearía nodos nuevos en vez de actualizar los reales).
+      mockPacienteDock(c, "202020202");
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "vgl-min-bar" ? bar : (id === "anamesis" ? { id: "anamesis" } : null)));
+      c.api.createAccionesDockUI();
+
+      t.cierto(removido, "el panel minimizado del paciente A se DESCARTA del DOM al repintar para B");
+      t.igual(bar.style.display, "none", "y su pastilla desaparece de la barra");
+    });
+
+    t.caso("createAccionesDockUI: al repintar para el MISMO paciente, el panel minimizado sobrevive (no se descarta lo propio)", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteDock(c, "101010101");
+      c.api.createAccionesDockUI();
+      const dock = c.env.doc.body.children.find((n) => n.id === "vgl-acciones-dock");
+
+      const panelIA = c.env.doc.createElement("div");
+      panelIA.id = "vgl-ia-modal";
+      let removido = false;
+      panelIA.remove = () => { removido = true; };
+      c.api.vglMinimizarPanel(panelIA, "101010101");
+      const bar = c.env.doc.body.children.find((n) => n.id === "vgl-min-bar");
+      t.cierto(!!bar, "la barra de minimizados se creó");
+
+      // Repintado normal (p. ej. el tick periódico) con el MISMO paciente todavía abierto.
+      c.env.doc.getElementById = (id) => (id === "vgl-acciones-dock" ? dock : (id === "vgl-min-bar" ? bar : (id === "anamesis" ? { id: "anamesis" } : null)));
+      c.api.createAccionesDockUI();
+
+      t.falso(removido, "el panel del propio paciente A no se toca mientras A sigue siendo el abierto");
+      t.igual(bar.style.display, "flex", "su pastilla sigue disponible");
     });
 
     t.caso("createAccionesDockUI: botón de agendar refleja los 3 estados (nada hecho / falta lab / ambas bloqueadas)", () => {
@@ -1138,6 +1336,36 @@ module.exports = {
       t.igual(bloque.__vglGrupoUroComponentes[0].resultado, "NEGATIVO", "la vieja llegó de última en el arreglo pero sigue siendo la vieja: no debe ganar");
     });
 
+    // v17.6.68 — [informe de laboratorio real y captura de pantalla reales, aportados en
+    // consultorio, 26-ago-2026] BUG REAL: "QUIMICA URINARIA" (creatinina en orina
+    // espontánea, microalbuminuria, relación microalbuminuria/creatinina — el estudio
+    // CUANTITATIVO de la RAC) matcheaba el patrón amplio de _esAnalitoDeOrina (contiene
+    // "URINARIA") y se colaba en el bloque "Uroanálisis" JUNTO con los componentes reales
+    // del parcial, de OTRA fecha. Como el bloque toma la fecha del componente más
+    // reciente, el resultado era un bloque fechado el día de la Química Urinaria (que ni
+    // siquiera es un uroanálisis) pero con el TEXTO de un uroanálisis real más viejo.
+    t.caso("_agruparUroanalisisParaTabla: QUIMICA URINARIA (más reciente) queda FUERA del bloque Uroanálisis; el bloque conserva la fecha y el contenido del uroanálisis REAL, aunque sea más viejo (bug real reportado en consultorio)", () => {
+      const c = cargar();
+      const labs = [
+        // uroanálisis real, componentes del parcial, viejo (enero)
+        { NombreParametro: "HEMATIES", NombreParametroPadre: "UROANALISIS", Resultado: "4.20", Fecha: "2026-01-10" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "3.90", Fecha: "2026-01-10" },
+        // Química Urinaria, del día de la consulta (agosto) — NO es un uroanálisis.
+        { NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "85", Fecha: "2026-08-21" },
+        { NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "18", Fecha: "2026-08-21" },
+        { NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "QUIMICA URINARIA", Resultado: "21.2", Fecha: "2026-08-21" },
+      ];
+      const agrupado = c.api._agruparUroanalisisParaTabla(labs);
+      t.igual(agrupado.length, 4, "2 componentes reales se funden en 1 bloque; las 3 filas de Química Urinaria quedan cada una independiente (1+3=4)");
+      const bloque = agrupado.find((l) => Array.isArray(l.__vglGrupoUroComponentes));
+      t.cierto(!!bloque, "sigue habiendo un bloque Uroanálisis, armado SOLO con los componentes reales");
+      t.igual(bloque.__vglGrupoUroComponentes.length, 2, "el bloque trae únicamente HEMATIES y LEUCOCITOS, nunca las filas de Química Urinaria");
+      t.igual(bloque.Fecha, "2026-01-10", "la fecha del bloque es la del uroanálisis REAL (enero), no la de Química Urinaria (agosto) — antes del fix, agosto ganaba y mostraba un examen que no se hizo ese día");
+      const quimUri = agrupado.filter((l) => l.NombreParametroPadre === "QUIMICA URINARIA");
+      t.igual(quimUri.length, 3, "las 3 filas de Química Urinaria se conservan tal cual, sin agrupar y sin desaparecer");
+      t.cierto(quimUri.every((l) => l.NombreParametro !== "Uroanálisis"), "ninguna se disfraza de 'Uroanálisis'");
+    });
+
     t.caso("_agruparUroanalisisParaTabla: sin componentes de orina, la lista sale intacta (ni un bloque de más)", () => {
       const c = cargar();
       const labs = [{ NombreParametro: "CREATININA", Resultado: "1.2" }, { NombreParametro: "COLESTEROL TOTAL", Resultado: "180" }];
@@ -1304,13 +1532,27 @@ module.exports = {
       t.igual(modal.innerHTML, "", "closeMod vacía y desmonta el modal");
     });
 
-    await t.casoAsync("openLaboratoriosModal: sin resultados dice la verdad y no inventa datos", async () => {
+    await t.casoAsync("openLaboratoriosModal: un fallo del portal NO se presenta como un hecho del paciente", async () => {
+      // v17.8.1 — AUDITORÍA DE EXPERIENCIA, hallazgo #26. Esta prueba FIJABA EL DEFECTO:
+      // `labsSinDatos = true` dispara `onerror("sin red")`, o sea el portal NO contestó, y
+      // la prueba exigía que la pantalla dijera «No se encontraron paraclínicos recientes
+      // PARA ESTE PACIENTE» — una afirmación sobre el paciente cuando el fallo fue del
+      // sistema. En consulta las dos frases llevan a conductas opuestas: «no tiene
+      // exámenes» hace que se los vuelva a ordenar; «no pude leer» hace que se reintente.
+      //
+      // `getAtheneaLabsAuto` ya distinguía los dos casos a propósito (null vs []); lo que
+      // faltaba era que la pantalla lo dijera. Lo que la prueba protege de verdad —que no
+      // se inventen resultados de ejemplo— sigue exigido abajo.
       labsSinDatos = true;
       await cModal.api.openLaboratoriosModal({ doc_id: "87654321", nombre: "PEDRO" });
       const modal = ultimoModal("vgl-labs-modal");
       const contenido = modal.querySelector("#vgl-labs-content");
-      t.cierto(contenido.innerHTML.includes("No se encontraron paraclínicos recientes"));
-      t.cierto(contenido.innerHTML.includes("No se muestra ningún resultado de ejemplo"));
+      t.cierto(contenido.innerHTML.includes("No pude leer el portal"),
+        "con el portal caído se dice que el fallo fue del sistema");
+      t.cierto(contenido.innerHTML.includes("NO quiere decir que no tenga ninguno"),
+        "y se dice explícitamente lo que el médico NO puede concluir de esto");
+      t.falso(contenido.innerHTML.includes("no tiene ningún paraclínico registrado"),
+        "jamás se afirma nada sobre el paciente cuando no se pudo mirar");
       labsSinDatos = false;
     });
 
@@ -2336,12 +2578,78 @@ module.exports = {
       await cOrd.api.openOrdenamientoModal({ doc_id: "999", nombre: "PEDRO GOMEZ", pym: [] });
       const modal = ultimoOrd();
       t.cierto(!!modal);
-      t.cierto(modal.innerHTML.includes("No se detectaron actividades de prevención pendientes"), "aviso honesto de que no hay coincidencia en la base de PyM");
+      // v17.16.0 — esta línea llamaba «aviso honesto» a la frase MENOS honesta del modal.
+      // «No se detectaron actividades de prevención pendientes PARA ESTE PACIENTE» es una
+      // afirmación sobre el paciente, y en este mismo vector no se ha cargado ninguna lista
+      // de PyM: no se miró nada. La prueba fijaba el defecto, no la regla — la misma clase
+      // de error que ya se documentó siete veces en INFORME_MUTACIONES.md.
+      t.cierto(modal.innerHTML.includes("No tengo cargada la lista de prevención de hoy"),
+        "sin lista cargada se dice ESO, no que el paciente no tenga nada");
+      t.cierto(modal.innerHTML.includes("no lo sé"),
+        "y se dice explícitamente que es ignorancia, no un hallazgo");
+      t.falso(/pendientes[^<]{0,40}para este paciente/i.test(modal.innerHTML),
+        "nunca se afirma nada sobre el paciente sin haber mirado una lista");
       t.falso(modal.innerHTML.includes(" checked"), "ninguna casilla premarcada sin coincidencia explícita");
       // v16.2.0 — orden del médico: sin coincidencia NO se ofrece el catálogo entero para
       // marcar a mano (era el riesgo de sobre-ordenar); no se pinta ni un ítem.
       t.igual(modal.innerHTML.split("vgl-ord-item").length - 1, 0, "sin coincidencia no se ofrece ninguna actividad");
-      t.cierto(modal.innerHTML.includes("Sin actividades para ordenar"), "el botón de confirmar queda deshabilitado con su rótulo honesto");
+      t.cierto(modal.innerHTML.includes("No hay lista que consultar"),
+        "y el rótulo del botón dice lo mismo: no es que no haya actividades, es que no hay lista");
+    });
+
+
+    await t.casoAsync("v17.16.0 — si no se pudo consultar Athenea, el modal lo DICE en vez de callarlo", async () => {
+      // REGLA D. El cruce antiduplicado contra Athenea se caía «en silencio al
+      // comportamiento de siempre» (así lo decía su propio comentario). La conducta era la
+      // correcta —ante la duda se ofrece el examen, nunca se esconde— pero el médico veía
+      // la lista premarcada igual que siempre, sin forma de saber que la comprobación no se
+      // hizo. El síntoma que le queda es exactamente el que él reportó en la v17.6.99:
+      // «me sale que hay que enviarle el antígeno de próstata pero ya se lo realizó».
+      //
+      // `null` = no se pudo preguntar. `[]` = se preguntó y no había nada. getAtheneaLabsAuto
+      // las distingue a propósito, y hasta hoy el modal las trataba igual.
+      const cCaido = cargar({
+        silencioso: true,
+        fetch: async () => { throw new Error("portal caído"); },
+        gmxhr: (o) => { setTimeout(() => { try { o.onerror(new Error("NetErr")); } catch (e) {} }, 0); },
+      });
+      enriquecerDom(cCaido);
+      await cCaido.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía"] });
+      const modal = cCaido.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      t.cierto(!!modal, "el modal se abre igual: un fallo de red no puede dejar al médico sin la lista");
+      t.cierto(modal.innerHTML.includes("vgl-ord-nocruce"), "y trae el aviso de que no se pudo cruzar");
+      t.cierto(/no comprobé si alguno de estos exámenes ya se lo hicieron/.test(modal.innerHTML),
+        "dicho en lo que significa para él, no en jerga de red");
+      t.cierto(modal.innerHTML.includes("Mamografía (Mamografía Bilateral)"),
+        "la actividad se sigue ofreciendo: ante la duda se ofrece, nunca se esconde");
+    });
+
+
+    await t.casoAsync("v17.16.0 — si Athenea SÍ responde (aunque sin nada), el aviso NO sale", async () => {
+      // La otra mitad, y la que de verdad prueba la distinción: `[]` («pregunté y no hay»)
+      // NO puede disparar el aviso de `null` («no pude preguntar»). Un aviso que aparece
+      // siempre no avisa de nada — y la mitad de los defectos de este proyecto nacen de
+      // tratar esos dos valores como el mismo.
+      const cVacio = cargar({
+        silencioso: true,
+        gmxhr: (o) => {
+          const url = String(o.url || "");
+          // El portal responde bien en cada puerta, pero este paciente no tiene NINGUNA
+          // solicitud de laboratorio: `DatosPaciente` no trae ni un formulario.
+          if (url.includes("BusquedaPaciente")) o.onload({ status: 200, responseText: `<form><input name="__RequestVerificationToken" value="TOK-1" /></form>` });
+          else if (url.includes("BuscarPaciente")) o.onload({ status: 200, responseText: `<input type="hidden" name="IdPaciente" value="999" /><input name="__RequestVerificationToken" value="TOK-2" />` });
+          else if (url.includes("DatosPaciente")) o.onload({ status: 200, responseText: "CC: 888 — sin solicitudes" });
+          else o.onload({ status: 200, responseText: "" });
+        },
+      });
+      enriquecerDom(cVacio);
+      const vacio = await cVacio.api.getAtheneaLabsAuto("888");
+      t.igual(vacio, [], "el vector tiene que dar [] y no null, o esta prueba no distingue nada");
+      await cVacio.api.openOrdenamientoModal({ doc_id: "888", nombre: "MARIA DIAZ", sexo: "F", pym: ["Mamografía"] });
+      const modal = cVacio.env.doc.body.children.filter((n) => n.id === "vgl-ordenar-modal").pop();
+      t.cierto(!!modal, "el modal se abre");
+      t.falso(modal.innerHTML.includes("vgl-ord-nocruce"),
+        "se preguntó y se obtuvo respuesta: no hay nada que advertir");
     });
 
     await t.casoAsync("openOrdenamientoModal: con coincidencia, el choque de sexo desmarca y advierte", async () => {
@@ -2841,25 +3149,13 @@ module.exports = {
     // `pymCubiertoPorOrdenVigente` siguen vivos (el modal de PyM del panel los sigue usando)
     // y conservan su cobertura arriba. Ver CHANGELOG.
 
-    t.caso("v15: el banner viene APAGADO de fábrica, y el aviso modal también", () => {
-      const c = cargar({ silencioso: true });
-      t.igual(c.api.__S.bannerPym, false, "de fábrica ya no hay franja fija arriba de la historia");
-      t.igual(c.api.__S.avisoPymModal, false, "ni ventana que bloquee: el canal es el recuadro del modal");
-      // v17.6.10 — la clave `recordatorioPym` se retiró: nada en producción la leía
-      // (el canal del recordatorio lo decide hoy avisoPymModal + el chip del dock).
-    });
-
-    t.caso("la migración de v15 apaga el banner en los equipos que YA lo tenían guardado en true", () => {
-      // Sin esta migración el cambio no llegaría a ningún consultorio:
-      // writeJSON guarda el objeto ENTERO de ajustes, así que los veinte equipos
-      // tienen `bannerPym: true` en disco y ese valor le gana al de fábrica.
-      const c = cargar({
-        silencioso: true,
-        localStorage: { vgl_cfg: JSON.stringify({ bannerPym: true, avisoPymModal: true }) },
-      });
-      t.igual(c.api.__S.bannerPym, false, "la migración lo apagó pese al valor guardado");
-      t.igual(c.env.win.localStorage.getItem("vgl_v15_banner"), "1", "y dejó su marca para no repetirse");
-    });
+    // [v17.19.0 — decisión del médico, entrevista del 28-ago] Se retiraron las dos
+    // pruebas de esta sección ("el banner viene apagado de fábrica" y "la migración de
+    // v15 apaga el banner en equipos con true guardado"): `bannerPym`/`avisoPymModal` se
+    // confirmaron 100% muertas (ningún código activo las leía) y se retiraron de
+    // DEFAULTS junto con su migración de una sola vez (`vgl_v15_banner`), que ya había
+    // corrido hace docenas de versiones en toda instalación real. `pymPaquetesDelPaciente`
+    // y `pymCubiertoPorOrdenVigente` siguen vivos y conservan su cobertura arriba.
 
     // [v14.2.0 — auditoría pre-producción 2026-08-18] Se retiró la prueba "tick: sin la
     // clave bannerPym tampoco se pinta el banner" — dependía de `_refrescarBannerPym`/
@@ -3135,6 +3431,41 @@ module.exports = {
       ["vgl-confirma-modal", "vgl-llenar-modal", "vgl-min-bar", "vgl-deshacer-llenado", "vgl-deshacer-lote", "vgl-ia-inj-ea", "vgl-ia-inj-an"].forEach((id) => {
         t.cierto(regla.includes("body.vgl-modo-oculto #" + id), "#" + id + " debe esconderse en modo oculto");
       });
+    });
+
+    t.caso("v17.16.0 — vglMinBarra y el descarte por cambio de paciente, probados de frente", () => {
+      // Estaban en `cubre` sin que ninguna prueba las nombrara. El descarte es la corrección
+      // de la v17.6.71 ante un riesgo real de CONTAMINACIÓN CRUZADA: un panel de Redacción
+      // IA minimizado con la historia de un paciente sobrevivía al cambio de paciente, y al
+      // restaurarlo el médico veía el borrador del anterior.
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+
+      const barra = c.api.vglMinBarra();
+      t.cierto(!!barra, "la barra se crea sola la primera vez");
+      t.igual(barra.id, "vgl-min-bar", "con su id");
+      t.cierto(c.api.vglMinBarra() === barra, "y la segunda llamada devuelve LA MISMA, no una nueva");
+
+      const panel = d.createElement("div");
+      panel.id = "vgl-ia-modal";
+      d.body.appendChild(panel);
+      // La firma es (panel, docId): el título lo deduce vglMinTituloDe del propio panel.
+      t.cierto(c.api.vglMinimizarPanel(panel, "111111111"),
+        "se minimiza anotando de qué paciente es");
+
+      // Sigue siendo el mismo paciente: no se descarta nada.
+      c.api._vglMinDescartarDeOtroPaciente("111111111");
+      t.cierto(!!d.body.children.find((n) => n.id === "vgl-ia-modal"),
+        "con el mismo paciente abierto, el panel minimizado se queda");
+
+      // Cambia el paciente: el panel del anterior se descarta, no solo se avisa.
+      c.api._vglMinDescartarDeOtroPaciente("222222222");
+      t.falso(!!d.body.children.find((n) => n.id === "vgl-ia-modal"),
+        "con otro paciente abierto el panel se DESCARTA: un borrador de otra historia no puede sobrevivir");
+
+      // Sin nada minimizado, la función no revienta ni inventa trabajo.
+      t.noLanza(() => c.api._vglMinDescartarDeOtroPaciente("333333333"),
+        "sin paneles minimizados no hay nada que descartar");
     });
 
   },

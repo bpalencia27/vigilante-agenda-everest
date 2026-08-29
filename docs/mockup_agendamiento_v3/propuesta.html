@@ -1,0 +1,746 @@
+<title>Cuaderno de Turnos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#F1F3EF;
+  --paper-2:#E7EAE3;
+  --card:#FBFCFA;
+  --ink:#12201E;
+  --ink-2:#4B5A55;
+  --line:#CBD3C8;
+  --jade:#1F6F62;
+  --jade-ink:#0E3D36;
+  --jade-tint:#DCEAE4;
+  --amber:#B4791F;
+  --amber-tint:#F3E6CE;
+  --brick:#A9382B;
+  --brick-tint:#F4DFDA;
+  --shadow: 0 1px 2px rgba(18,32,30,.06), 0 8px 24px -12px rgba(18,32,30,.18);
+  --focus: 0 0 0 3px rgba(31,111,98,.35);
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){}
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#101815;
+    --paper-2:#0B1210;
+    --card:#161F1B;
+    --ink:#EDF2EE;
+    --ink-2:#A8B6AE;
+    --line:#2B3B34;
+    --jade:#4FB39E;
+    --jade-ink:#BFE9DD;
+    --jade-tint:#17332C;
+    --amber:#E0A94C;
+    --amber-tint:#3A2E15;
+    --brick:#E08172;
+    --brick-tint:#3A1C17;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -14px rgba(0,0,0,.6);
+    --focus: 0 0 0 3px rgba(79,179,158,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#101815;
+  --paper-2:#0B1210;
+  --card:#161F1B;
+  --ink:#EDF2EE;
+  --ink-2:#A8B6AE;
+  --line:#2B3B34;
+  --jade:#4FB39E;
+  --jade-ink:#BFE9DD;
+  --jade-tint:#17332C;
+  --amber:#E0A94C;
+  --amber-tint:#3A2E15;
+  --brick:#E08172;
+  --brick-tint:#3A1C17;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -14px rgba(0,0,0,.6);
+  --focus: 0 0 0 3px rgba(79,179,158,.45);
+}
+
+*{box-sizing:border-box;}
+html{color-scheme:light dark;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:'Public Sans',system-ui,-apple-system,sans-serif;
+  min-height:100vh;
+}
+::selection{ background:var(--jade); color:var(--paper); }
+button{ font-family:inherit; }
+:focus-visible{ outline:none; box-shadow:var(--focus); border-radius:4px; }
+
+h1,h2,h3{ font-family:'Fraunces',Georgia,serif; text-wrap:balance; margin:0; }
+.mono{ font-family:'IBM Plex Mono',ui-monospace,monospace; font-variant-numeric:tabular-nums; }
+
+/* ---------- shell ---------- */
+.shell{
+  max-width:1180px; margin:0 auto; padding:28px 24px 80px;
+  display:flex; flex-direction:column; gap:20px;
+}
+.masthead{
+  display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+  border-bottom:1px solid var(--line); padding-bottom:14px;
+}
+.masthead .brand{ display:flex; align-items:baseline; gap:10px; }
+.masthead .brand .mark{
+  font-family:'Fraunces',serif; font-weight:700; font-size:1.5rem; color:var(--jade-ink);
+  letter-spacing:.01em;
+}
+.masthead .brand .sub{ font-size:.78rem; color:var(--ink-2); letter-spacing:.04em; text-transform:uppercase; }
+.masthead .env{ font-size:.72rem; color:var(--ink-2); font-family:'IBM Plex Mono',monospace; }
+.env b{ color:var(--brick); }
+
+/* patient strip - persistent context, never re-asked */
+.patient-strip{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  background:var(--card); border:1px solid var(--line); border-radius:6px;
+  padding:14px 18px; box-shadow:var(--shadow);
+}
+.patient-strip .avatar{
+  width:42px; height:42px; border-radius:50%; flex:none;
+  background:var(--jade-tint); color:var(--jade-ink);
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',serif; font-weight:600; font-size:1.05rem;
+}
+.patient-strip .who{ display:flex; flex-direction:column; gap:2px; }
+.patient-strip .who .name{ font-weight:600; font-size:1rem; }
+.patient-strip .who .meta{ font-size:.8rem; color:var(--ink-2); }
+.patient-strip .tags{ display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; }
+.chip{
+  font-size:.72rem; padding:4px 10px; border-radius:100px; font-weight:600;
+  border:1px solid transparent; white-space:nowrap;
+}
+.chip.jade{ background:var(--jade-tint); color:var(--jade-ink); }
+.chip.amber{ background:var(--amber-tint); color:var(--amber); }
+
+/* progress ledger */
+.ledger{
+  display:flex; align-items:stretch; gap:2px; list-style:none; margin:0; padding:0;
+  border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--paper-2);
+}
+.ledger li{
+  flex:1; display:flex; align-items:center; gap:8px; padding:11px 14px;
+  font-size:.82rem; font-weight:600; color:var(--ink-2); background:var(--card);
+  position:relative; border-right:1px solid var(--line);
+}
+.ledger li:last-child{ border-right:none; }
+.ledger li .tick{
+  width:18px; height:18px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
+  border:1.5px solid var(--line); font-size:.65rem; color:var(--ink-2);
+}
+.ledger li.done{ color:var(--jade-ink); }
+.ledger li.done .tick{ background:var(--jade); border-color:var(--jade); color:var(--paper); }
+.ledger li.active{ color:var(--ink); background:var(--jade-tint); }
+.ledger li.active .tick{ border-color:var(--jade); color:var(--jade-ink); font-weight:700; }
+.ledger li.skipped{ color:var(--ink-2); font-style:italic; }
+.ledger li.skipped .tick{ background:var(--paper-2); }
+.ledger li .skip-note{ font-size:.68rem; font-weight:500; font-style:italic; color:var(--ink-2); }
+
+/* stage */
+.stage{
+  background:var(--card); border:1px solid var(--line); border-radius:8px;
+  box-shadow:var(--shadow); padding:32px; min-height:420px;
+  position:relative; overflow:hidden;
+}
+.step{ display:none; animation:rise .38s cubic-bezier(.2,.8,.2,1); }
+.step.show{ display:block; }
+@keyframes rise{ from{ opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;} }
+@media (prefers-reduced-motion:reduce){ .step{ animation:none !important; } }
+
+.step h2{ font-size:1.5rem; font-weight:600; margin-bottom:4px; }
+.step .lede{ color:var(--ink-2); font-size:.92rem; max-width:62ch; margin:0 0 22px; line-height:1.5; }
+
+/* dismissible help */
+.help-note{
+  display:flex; gap:10px; align-items:flex-start; background:var(--jade-tint); color:var(--jade-ink);
+  border:1px solid transparent; border-radius:6px; padding:10px 14px; font-size:.82rem; margin-bottom:20px;
+  transition:opacity .25s, transform .25s, max-height .25s, margin .25s, padding .25s;
+  max-height:120px;
+}
+.help-note.gone{ opacity:0; transform:translateY(-6px); max-height:0; margin-bottom:0; padding-top:0; padding-bottom:0; overflow:hidden; border:none; }
+.help-note button{
+  margin-left:auto; background:none; border:none; color:var(--jade-ink); cursor:pointer;
+  font-size:.72rem; font-weight:700; text-decoration:underline; flex:none; padding:2px;
+}
+
+/* quick-suggestion card (step reduction) */
+.quick-card{
+  display:flex; align-items:center; gap:16px; border:1.5px dashed var(--jade); border-radius:8px;
+  padding:16px 18px; margin-bottom:26px; background:var(--jade-tint);
+}
+.quick-card .txt{ flex:1; }
+.quick-card .txt .kicker{ font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--jade-ink); }
+.quick-card .txt h3{ font-size:1.05rem; margin:2px 0 3px; color:var(--jade-ink); }
+.quick-card .txt p{ margin:0; font-size:.82rem; color:var(--ink-2); }
+.btn{
+  border-radius:5px; border:1px solid transparent; padding:10px 18px; font-weight:600; font-size:.88rem;
+  cursor:pointer; transition:background .15s,border-color .15s,transform .1s,opacity .15s;
+}
+.btn:active{ transform:translateY(1px); }
+.btn-primary{ background:var(--jade); color:#fff; }
+.btn-primary:hover{ background:var(--jade-ink); }
+.btn-primary:disabled{ opacity:.42; cursor:not-allowed; }
+.btn-ghost{ background:transparent; border-color:var(--line); color:var(--ink); }
+.btn-ghost:hover{ border-color:var(--jade); color:var(--jade-ink); }
+.btn-text{ background:none; border:none; color:var(--ink-2); text-decoration:underline; padding:6px 4px; font-size:.82rem; cursor:pointer; }
+
+/* reason grid */
+.reason-search{
+  width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:6px; background:var(--paper);
+  color:var(--ink); font-size:.92rem; margin-bottom:16px;
+}
+.reason-search:focus{ border-color:var(--jade); }
+.reason-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
+.reason-card{
+  text-align:left; border:1px solid var(--line); background:var(--paper); border-radius:6px;
+  padding:14px; cursor:pointer; transition:border-color .15s, background .15s;
+  display:flex; flex-direction:column; gap:4px;
+}
+.reason-card:hover{ border-color:var(--jade); background:var(--jade-tint); }
+.reason-card.sel{ border-color:var(--jade); background:var(--jade-tint); box-shadow:inset 0 0 0 1px var(--jade); }
+.reason-card .icon{ font-size:1.1rem; }
+.reason-card .t{ font-weight:600; font-size:.9rem; }
+.reason-card .d{ font-size:.76rem; color:var(--ink-2); }
+
+/* calendar */
+.cal-wrap{ display:grid; grid-template-columns:1.15fr 1fr; gap:28px; }
+@media (max-width:760px){ .cal-wrap{ grid-template-columns:1fr; } }
+.cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.cal-head .month{ font-family:'Fraunces',serif; font-weight:600; font-size:1.15rem; }
+.cal-nav{ display:flex; gap:4px; }
+.cal-nav button{
+  width:30px; height:30px; border-radius:5px; border:1px solid var(--line); background:var(--card);
+  color:var(--ink); cursor:pointer; font-size:.9rem; line-height:1;
+}
+.cal-nav button:hover{ border-color:var(--jade); color:var(--jade-ink); }
+.cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+.cal-dow{ text-align:center; font-size:.68rem; color:var(--ink-2); text-transform:uppercase; letter-spacing:.05em; padding-bottom:4px; }
+.cal-day{
+  aspect-ratio:1; border-radius:6px; border:1px solid transparent; background:var(--paper);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  cursor:pointer; font-size:.86rem; color:var(--ink); position:relative;
+}
+.cal-day .n{ font-family:'IBM Plex Mono',monospace; font-weight:500; }
+.cal-day .dot{ width:4px; height:4px; border-radius:50%; background:var(--jade); }
+.cal-day:hover:not(.disabled){ border-color:var(--jade); }
+.cal-day.disabled{ color:var(--line); cursor:not-allowed; }
+.cal-day.disabled .dot{ display:none; }
+.cal-day.today{ font-weight:700; }
+.cal-day.sel{ background:var(--jade); border-color:var(--jade); }
+.cal-day.sel .n{ color:#fff; }
+.cal-day.sel .dot{ background:#fff; }
+.cal-legend{ display:flex; gap:14px; margin-top:12px; font-size:.74rem; color:var(--ink-2); }
+.cal-legend span{ display:inline-flex; align-items:center; gap:5px; }
+.cal-legend i{ width:6px; height:6px; border-radius:50%; background:var(--jade); display:inline-block; }
+
+.slot-panel h3{ font-size:.95rem; margin-bottom:2px; }
+.slot-panel .date-lbl{ color:var(--ink-2); font-size:.82rem; margin-bottom:14px; }
+.slot-list{ display:flex; flex-direction:column; gap:8px; max-height:300px; overflow-y:auto; padding-right:4px; }
+.slot-empty{ color:var(--ink-2); font-size:.85rem; padding:20px 0; text-align:center; border:1px dashed var(--line); border-radius:6px; }
+.slot{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  border:1px solid var(--line); background:var(--paper); border-radius:6px; padding:10px 14px; cursor:pointer;
+}
+.slot:hover{ border-color:var(--jade); }
+.slot.sel{ border-color:var(--jade); background:var(--jade-tint); }
+.slot .t{ font-family:'IBM Plex Mono',monospace; font-weight:600; }
+.slot .who{ font-size:.74rem; color:var(--ink-2); }
+.slot .pick{ width:16px; height:16px; border-radius:50%; border:2px solid var(--line); flex:none; }
+.slot.sel .pick{ border-color:var(--jade); background:var(--jade); box-shadow:inset 0 0 0 2.5px var(--card); }
+
+/* safety block */
+.safety-block{
+  border:1.5px solid var(--brick); background:var(--brick-tint); border-radius:8px; padding:18px 20px; margin-top:24px;
+}
+.safety-block .head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.safety-block .head .flag{
+  font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  color:#fff; background:var(--brick); padding:2px 8px; border-radius:3px;
+}
+.safety-block .head h3{ font-size:.98rem; }
+.safety-block p{ font-size:.83rem; color:var(--ink-2); margin:0 0 14px; max-width:60ch; }
+.safety-choice{ display:flex; flex-direction:column; gap:8px; }
+.safety-opt{
+  display:flex; align-items:flex-start; gap:10px; border:1px solid var(--line); background:var(--card);
+  border-radius:6px; padding:12px 14px; cursor:pointer;
+}
+.safety-opt input{ margin-top:2px; accent-color:var(--brick); width:16px; height:16px; flex:none; }
+.safety-opt .t{ font-weight:600; font-size:.87rem; }
+.safety-opt .d{ font-size:.78rem; color:var(--ink-2); }
+.safety-opt.chosen{ border-color:var(--brick); background:var(--card); box-shadow:inset 0 0 0 1px var(--brick); }
+
+.step-actions{ display:flex; align-items:center; gap:12px; margin-top:28px; padding-top:20px; border-top:1px solid var(--line); }
+.step-actions .spacer{ flex:1; }
+
+/* loading */
+.loading-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; padding:60px 20px; text-align:center; }
+.spinner{
+  width:46px; height:46px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--jade);
+  animation:spin .8s linear infinite;
+}
+@media (prefers-reduced-motion:reduce){ .spinner{ animation:spin 1.6s linear infinite; } }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+.loading-wrap .status{ font-size:.9rem; color:var(--ink-2); font-family:'IBM Plex Mono',monospace; }
+.loading-bar{ width:220px; height:4px; background:var(--paper-2); border-radius:100px; overflow:hidden; }
+.loading-bar i{ display:block; height:100%; width:0%; background:var(--jade); border-radius:100px; transition:width .3s linear; }
+
+/* confirm summary */
+.summary-card{
+  border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:24px;
+}
+.summary-row{ display:flex; justify-content:space-between; gap:14px; padding:13px 18px; border-bottom:1px solid var(--line); background:var(--card); font-size:.88rem; }
+.summary-row:last-child{ border-bottom:none; }
+.summary-row .k{ color:var(--ink-2); }
+.summary-row .v{ font-weight:600; text-align:right; }
+.summary-row.flag{ background:var(--brick-tint); }
+.summary-row.flag .v{ color:var(--brick); }
+
+.done-wrap{ text-align:center; padding:40px 20px; }
+.done-check{
+  width:64px; height:64px; border-radius:50%; background:var(--jade); color:#fff; margin:0 auto 18px;
+  display:flex; align-items:center; justify-content:center; font-size:1.8rem;
+}
+.done-wrap h2{ font-size:1.6rem; margin-bottom:8px; }
+.done-wrap p{ color:var(--ink-2); max-width:46ch; margin:0 auto 26px; font-size:.92rem; }
+
+.foot-note{ text-align:center; font-size:.72rem; color:var(--ink-2); margin-top:6px; }
+</style>
+
+<div class="shell">
+  <header class="masthead">
+    <div class="brand">
+      <span class="mark">Cuaderno de Turnos</span>
+      <span class="sub">Agendamiento &middot; Copiloto Everest</span>
+    </div>
+    <div class="env">simulación &middot; datos ficticios &middot; <b>sin conexión real a Athenea</b></div>
+  </header>
+
+  <div class="patient-strip">
+    <div class="avatar">MT</div>
+    <div class="who">
+      <span class="name">Marcela Tinjacá &middot; <span class="mono">54 años</span></span>
+      <span class="meta">Control PyM &middot; HTA + DM2 &middot; última cita hace 96 días</span>
+    </div>
+    <div class="tags">
+      <span class="chip jade">RCV alto</span>
+      <span class="chip amber">Labs por vencer</span>
+    </div>
+  </div>
+
+  <ol class="ledger" id="ledger">
+    <li data-step="0"><span class="tick">1</span> Motivo</li>
+    <li data-step="1"><span class="tick">2</span> Fecha y hora</li>
+    <li data-step="2"><span class="tick">3</span> Toma de muestras</li>
+    <li data-step="3"><span class="tick">4</span> Confirmar</li>
+  </ol>
+
+  <main class="stage" id="stage">
+
+    <!-- STEP 0: reason -->
+    <section class="step show" data-step="0">
+      <div class="quick-card" id="quickCard">
+        <div class="txt">
+          <div class="kicker">Sugerido</div>
+          <h3>Repetir control PyM, igual que la última vez</h3>
+          <p>Mismo motivo y mismo laboratorio de apoyo. Salta directo a elegir fecha.</p>
+        </div>
+        <button class="btn btn-primary" id="quickBtn">Usar este &rarr;</button>
+      </div>
+
+      <h2>¿Cuál es el motivo de la cita?</h2>
+      <p class="lede">Elija un motivo o busque uno distinto. Solo se le preguntará esto si no coincide con el control habitual.</p>
+
+      <div class="help-note" id="help0">
+        <span>💡 Los motivos marcados con <b class="mono">◆</b> generan automáticamente la orden de labs de apoyo.</span>
+        <button data-dismiss="help0">Entendido, no mostrar de nuevo</button>
+      </div>
+
+      <input class="reason-search" placeholder="Buscar motivo… (ej. control, urgencia, resultado)" id="reasonSearch">
+      <div class="reason-grid" id="reasonGrid"></div>
+
+      <div class="step-actions">
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="toStep1" disabled>Continuar &rarr;</button>
+      </div>
+    </section>
+
+    <!-- STEP 1: date/time -->
+    <section class="step" data-step="1">
+      <h2>Elija fecha y hora</h2>
+      <p class="lede">Los días con cupo muestran un punto. La agenda se consulta en vivo — sin escribir fechas a mano.</p>
+
+      <div class="cal-wrap">
+        <div>
+          <div class="cal-head">
+            <span class="month" id="calMonth">Septiembre 2026</span>
+            <div class="cal-nav">
+              <button id="calPrev" aria-label="Mes anterior">&larr;</button>
+              <button id="calNext" aria-label="Mes siguiente">&rarr;</button>
+            </div>
+          </div>
+          <div class="cal-grid" id="calGrid"></div>
+          <div class="cal-legend">
+            <span><i></i> cupo disponible</span>
+            <span style="color:var(--line)">&mdash; sin agenda / festivo</span>
+          </div>
+        </div>
+        <div class="slot-panel">
+          <h3 id="slotDateLbl">Elija un día</h3>
+          <div class="date-lbl">Cupos de consulta, orden por proximidad</div>
+          <div class="slot-list" id="slotList"><div class="slot-empty">Seleccione un día en el calendario</div></div>
+        </div>
+      </div>
+
+      <div class="step-actions">
+        <button class="btn btn-ghost" data-back="0">&larr; Atrás</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="toStep2" disabled>Continuar &rarr;</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: safety / labs -->
+    <section class="step" data-step="2">
+      <h2>Toma de muestras</h2>
+      <p class="lede">Este paso exige una elección explícita: nunca queda una opción premarcada.</p>
+
+      <div class="safety-block">
+        <div class="head"><span class="flag">Requiere su elección</span><h3>¿Se agenda toma de muestras junto con la cita?</h3></div>
+        <p>Ningún horario queda preseleccionado. La cita no se confirma hasta que usted elija una de las dos opciones.</p>
+        <div class="safety-choice" id="safetyChoice">
+          <label class="safety-opt" data-val="si">
+            <input type="radio" name="safety">
+            <span><span class="t">Sí, agendar toma de muestras</span><br><span class="d">Se ofrecerán horarios reales de laboratorio, ninguno vendrá elegido por defecto.</span></span>
+          </label>
+          <label class="safety-opt" data-val="no">
+            <input type="radio" name="safety">
+            <span><span class="t">No, solo la consulta</span><br><span class="d">El paciente no tiene labs pendientes o los toma por su cuenta.</span></span>
+          </label>
+        </div>
+      </div>
+
+      <div id="labsSlotWrap" style="display:none; margin-top:20px;">
+        <h3 style="font-size:.95rem; margin-bottom:10px;">Horario de toma de muestras</h3>
+        <div class="slot-list" id="labsSlotList"></div>
+      </div>
+
+      <div class="step-actions">
+        <button class="btn btn-ghost" data-back="1">&larr; Atrás</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="toStep3" disabled>Continuar &rarr;</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: confirm -->
+    <section class="step" data-step="3">
+      <h2>Confirmar cita</h2>
+      <p class="lede">Revise antes de enviar. Nada se escribe en Everest hasta que confirme.</p>
+
+      <div class="summary-card" id="summaryCard"></div>
+
+      <div class="step-actions">
+        <button class="btn btn-ghost" data-back="2">&larr; Atrás</button>
+        <span class="spacer"></span>
+        <button class="btn btn-primary" id="confirmBtn">Confirmar y agendar</button>
+      </div>
+    </section>
+
+    <!-- LOADING overlay-step -->
+    <section class="step" data-step="loading">
+      <div class="loading-wrap">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="status" id="loadingStatus">Consultando cupos en Athenea…</div>
+        <div class="loading-bar"><i id="loadingBar"></i></div>
+      </div>
+    </section>
+
+    <!-- DONE -->
+    <section class="step" data-step="done">
+      <div class="done-wrap">
+        <div class="done-check">✓</div>
+        <h2>Cita agendada</h2>
+        <p id="doneSummary">La cita quedó registrada en la agenda del día elegido.</p>
+        <button class="btn btn-primary" id="restartBtn">Agendar otra cita</button>
+      </div>
+    </section>
+
+  </main>
+  <div class="foot-note">Prototipo interactivo &middot; datos de paciente ficticios &middot; ninguna información aquí toca Everest real</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var REASONS = [
+    {id:'control', icon:'🩺', t:'Control PyM habitual', d:'Riesgo cardiovascular, misma cadencia', labs:true},
+    {id:'result',  icon:'📄', t:'Revisión de resultados', d:'Ya tiene labs tomados', labs:false},
+    {id:'agudo',   icon:'⚡', t:'Síntoma agudo / urgencia', d:'Prioridad alta, cupo próximo', labs:false},
+    {id:'ajuste',  icon:'💊', t:'Ajuste de medicación', d:'Titulación o efectos adversos', labs:false},
+    {id:'anual',   icon:'📋', t:'Chequeo anual', d:'Tamizajes y labs de apoyo', labs:true},
+    {id:'otro',    icon:'✎',  t:'Otro motivo', d:'Escribir manualmente en Everest', labs:false}
+  ];
+
+  var state = { step:0, reason:null, day:null, slot:null, safety:null, labsSlot:null, quick:false };
+
+  var stage = document.getElementById('stage');
+  var ledgerItems = Array.prototype.slice.call(document.querySelectorAll('#ledger li'));
+
+  function showStep(key){
+    stage.querySelectorAll('.step').forEach(function(s){ s.classList.remove('show'); });
+    var el = stage.querySelector('.step[data-step="'+key+'"]');
+    if(el) el.classList.add('show');
+  }
+
+  function renderLedger(){
+    var order = ['0','1','2','3'];
+    order.forEach(function(k, i){
+      var li = ledgerItems[i];
+      li.classList.remove('done','active','skipped');
+      var noteEl = li.querySelector('.skip-note'); if(noteEl) noteEl.remove();
+      var num = i+1;
+      var stepIdx = parseInt(state.step, 10);
+      if(!isNaN(stepIdx)){
+        if(i < stepIdx) li.classList.add('done');
+        else if(i === stepIdx) li.classList.add('active');
+      }
+      if(state.quick && i===0){
+        li.classList.add('done');
+        var note = document.createElement('span');
+        note.className='skip-note'; note.textContent='(auto)';
+        li.appendChild(note);
+      }
+      li.querySelector('.tick').textContent = (li.classList.contains('done') && !li.classList.contains('active')) ? '✓' : num;
+    });
+  }
+
+  // ---------- STEP 0: reasons ----------
+  var reasonGrid = document.getElementById('reasonGrid');
+  function renderReasons(filter){
+    reasonGrid.innerHTML='';
+    REASONS.filter(function(r){
+      if(!filter) return true;
+      return (r.t+' '+r.d).toLowerCase().indexOf(filter.toLowerCase())>-1;
+    }).forEach(function(r){
+      var b = document.createElement('button');
+      b.className='reason-card'+(state.reason===r.id?' sel':'');
+      b.innerHTML='<span class="icon">'+r.icon+'</span><span class="t">'+r.t+(r.labs?' <span class="mono" style="color:var(--jade)">◆</span>':'')+'</span><span class="d">'+r.d+'</span>';
+      b.addEventListener('click', function(){
+        state.reason = r.id; state.quick=false;
+        renderReasons(document.getElementById('reasonSearch').value);
+        document.getElementById('toStep1').disabled = false;
+      });
+      reasonGrid.appendChild(b);
+    });
+  }
+  renderReasons('');
+  document.getElementById('reasonSearch').addEventListener('input', function(e){ renderReasons(e.target.value); });
+
+  document.getElementById('quickBtn').addEventListener('click', function(){
+    state.reason='control'; state.quick=true;
+    goStep(1);
+  });
+
+  document.getElementById('toStep1').addEventListener('click', function(){ goStep(1); });
+
+  var help0dismissed = false;
+  document.querySelector('[data-dismiss="help0"]').addEventListener('click', function(){
+    document.getElementById('help0').classList.add('gone');
+    help0dismissed = true;
+  });
+
+  // ---------- STEP 1: calendar ----------
+  var today = new Date(2026,7,28); // 28-ago-2026 per project date
+  var viewMonth = new Date(2026,8,1); // start view on September (has open slots)
+  var MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  var DOWS = ['L','M','X','J','V','S','D'];
+  var HOLIDAYS = {'2026-09-07':true, '2026-10-12':true};
+
+  function fmtKey(y,m,d){ return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+  function seedAvail(key){
+    // deterministic pseudo-availability from the date string
+    var h=0; for(var i=0;i<key.length;i++) h = (h*31 + key.charCodeAt(i))>>>0;
+    return h % 5; // 0 => none
+  }
+
+  function slotsFor(key, seedShift){
+    var n = seedAvail(key + (seedShift||''));
+    if(n===0) return [];
+    var base = ['07:20','07:40','08:00','08:20','09:00','09:40','10:20','11:00','14:00','14:40'];
+    var out=[]; var count = Math.min(3+n, base.length);
+    for(var i=0;i<count;i++) out.push({time:base[i], who: (i%3===0)?'Consulta general':'Cupo prioritario'});
+    return out;
+  }
+
+  var calGrid = document.getElementById('calGrid');
+  var calMonthLbl = document.getElementById('calMonth');
+
+  function renderCalendar(){
+    calMonthLbl.textContent = MONTHS[viewMonth.getMonth()] + ' ' + viewMonth.getFullYear();
+    calGrid.innerHTML='';
+    DOWS.forEach(function(d){
+      var el=document.createElement('div'); el.className='cal-dow'; el.textContent=d; calGrid.appendChild(el);
+    });
+    var y=viewMonth.getFullYear(), m=viewMonth.getMonth();
+    var first = new Date(y,m,1);
+    var startOffset = (first.getDay()+6)%7; // Monday-first
+    var daysInMonth = new Date(y,m+1,0).getDate();
+    for(var i=0;i<startOffset;i++){ calGrid.appendChild(document.createElement('div')); }
+    for(var d=1; d<=daysInMonth; d++){
+      var key = fmtKey(y,m,d);
+      var dateObj = new Date(y,m,d);
+      var isPast = dateObj < today;
+      var isHoliday = HOLIDAYS[key];
+      var isWeekend = dateObj.getDay()===0 || dateObj.getDay()===6;
+      var disabled = isPast || isHoliday || isWeekend;
+      var hasSlots = !disabled && slotsFor(key).length>0;
+      var cell = document.createElement('button');
+      cell.className='cal-day'+(disabled?' disabled':'')+(state.day===key?' sel':'')+((dateObj.toDateString()===today.toDateString())?' today':'');
+      cell.innerHTML='<span class="n">'+d+'</span>'+(hasSlots?'<span class="dot"></span>':'');
+      cell.disabled = disabled || !hasSlots;
+      cell.addEventListener('click', function(k){ return function(){ selectDay(k); }; }(key));
+      calGrid.appendChild(cell);
+    }
+  }
+
+  function selectDay(key){
+    state.day = key; state.slot=null;
+    document.getElementById('toStep2').disabled = true;
+    renderCalendar();
+    var parts = key.split('-');
+    var d = new Date(+parts[0], +parts[1]-1, +parts[2]);
+    document.getElementById('slotDateLbl').textContent = d.toLocaleDateString('es-CO',{weekday:'long', day:'numeric', month:'long'});
+    var list = document.getElementById('slotList');
+    var slots = slotsFor(key);
+    list.innerHTML='';
+    if(!slots.length){ list.innerHTML='<div class="slot-empty">Sin cupos este día</div>'; return; }
+    slots.forEach(function(s){
+      var row = document.createElement('button');
+      row.className='slot';
+      row.innerHTML='<span><span class="t mono">'+s.time+'</span><br><span class="who">'+s.who+'</span></span><span class="pick"></span>';
+      row.addEventListener('click', function(){
+        state.slot = s.time;
+        list.querySelectorAll('.slot').forEach(function(x){x.classList.remove('sel');});
+        row.classList.add('sel');
+        document.getElementById('toStep2').disabled=false;
+      });
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById('calPrev').addEventListener('click', function(){ viewMonth.setMonth(viewMonth.getMonth()-1); renderCalendar(); });
+  document.getElementById('calNext').addEventListener('click', function(){ viewMonth.setMonth(viewMonth.getMonth()+1); renderCalendar(); });
+  document.getElementById('toStep2').addEventListener('click', function(){ goStep(2); });
+
+  // ---------- STEP 2: safety ----------
+  var safetyChoice = document.getElementById('safetyChoice');
+  var labsSlotWrap = document.getElementById('labsSlotWrap');
+  var labsSlotList = document.getElementById('labsSlotList');
+  safetyChoice.querySelectorAll('.safety-opt').forEach(function(opt){
+    opt.addEventListener('click', function(){
+      safetyChoice.querySelectorAll('.safety-opt').forEach(function(o){o.classList.remove('chosen'); o.querySelector('input').checked=false;});
+      opt.classList.add('chosen'); opt.querySelector('input').checked=true;
+      state.safety = opt.getAttribute('data-val');
+      document.getElementById('toStep3').disabled = false;
+      if(state.safety==='si'){
+        labsSlotWrap.style.display='block';
+        var slots = slotsFor(state.day, 'labs');
+        labsSlotList.innerHTML='';
+        if(!slots.length){ labsSlotList.innerHTML='<div class="slot-empty">Sin cupo de labs ese día — se sugiere el más cercano</div>'; state.labsSlot=null; return; }
+        slots.slice(0,4).forEach(function(s){
+          var row=document.createElement('button'); row.className='slot';
+          row.innerHTML='<span><span class="t mono">'+s.time+'</span><br><span class="who">Toma de muestras</span></span><span class="pick"></span>';
+          row.addEventListener('click', function(){
+            state.labsSlot = s.time;
+            labsSlotList.querySelectorAll('.slot').forEach(function(x){x.classList.remove('sel');});
+            row.classList.add('sel');
+          });
+          labsSlotList.appendChild(row);
+        });
+      } else {
+        labsSlotWrap.style.display='none';
+        state.labsSlot=null;
+      }
+    });
+  });
+  document.getElementById('toStep3').addEventListener('click', function(){ goStep(3); renderSummary(); });
+
+  // ---------- STEP 3: confirm ----------
+  function reasonLabel(id){ var r=REASONS.filter(function(x){return x.id===id;})[0]; return r? r.t : id; }
+  function renderSummary(){
+    var card = document.getElementById('summaryCard');
+    var parts = state.day.split('-');
+    var d = new Date(+parts[0], +parts[1]-1, +parts[2]);
+    var dateStr = d.toLocaleDateString('es-CO',{weekday:'long', day:'numeric', month:'long'});
+    var rows = [
+      ['Paciente','Marcela Tinjacá'],
+      ['Motivo', reasonLabel(state.reason)],
+      ['Fecha', dateStr],
+      ['Hora de consulta', state.slot]
+    ];
+    var html = rows.map(function(r){ return '<div class="summary-row"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>'; }).join('');
+    if(state.safety==='si'){
+      html += '<div class="summary-row"><span class="k">Toma de muestras</span><span class="v">'+(state.labsSlot? state.labsSlot+' &middot; mismo día' : 'sí, horario sugerido')+'</span></div>';
+    } else {
+      html += '<div class="summary-row flag"><span class="k">Toma de muestras</span><span class="v">No agendada (elegido explícitamente)</span></div>';
+    }
+    card.innerHTML = html;
+  }
+
+  document.getElementById('confirmBtn').addEventListener('click', runLoading);
+
+  function runLoading(){
+    showStep('loading');
+    var msgs = ['Verificando cupo en Athenea…','Reservando horario…','Escribiendo en la agenda…'];
+    var bar = document.getElementById('loadingBar');
+    var statusEl = document.getElementById('loadingStatus');
+    var i=0; bar.style.width='0%';
+    var iv = setInterval(function(){
+      i++;
+      statusEl.textContent = msgs[Math.min(i, msgs.length-1)];
+      bar.style.width = Math.min(100, i*34)+'%';
+      if(i>=3){
+        clearInterval(iv);
+        setTimeout(finishDone, 350);
+      }
+    }, 480);
+  }
+
+  function finishDone(){
+    var parts = state.day.split('-');
+    var d = new Date(+parts[0], +parts[1]-1, +parts[2]);
+    var dateStr = d.toLocaleDateString('es-CO',{weekday:'long', day:'numeric', month:'long'});
+    document.getElementById('doneSummary').textContent =
+      reasonLabel(state.reason)+' — '+dateStr+', '+state.slot+
+      (state.safety==='si' ? ' · con toma de muestras' : ' · sin toma de muestras');
+    showStep('done');
+  }
+
+  document.getElementById('restartBtn').addEventListener('click', function(){
+    state = { step:0, reason:null, day:null, slot:null, safety:null, labsSlot:null, quick:false };
+    document.getElementById('toStep1').disabled = true;
+    document.getElementById('toStep2').disabled = true;
+    document.getElementById('toStep3').disabled = true;
+    safetyChoice.querySelectorAll('.safety-opt').forEach(function(o){o.classList.remove('chosen'); o.querySelector('input').checked=false;});
+    labsSlotWrap.style.display='none';
+    document.getElementById('slotList').innerHTML='<div class="slot-empty">Seleccione un día en el calendario</div>';
+    document.getElementById('slotDateLbl').textContent='Elija un día';
+    renderReasons('');
+    renderCalendar();
+    goStep(0);
+  });
+
+  // ---------- nav helpers ----------
+  document.querySelectorAll('[data-back]').forEach(function(b){
+    b.addEventListener('click', function(){ goStep(parseInt(b.getAttribute('data-back'),10)); });
+  });
+
+  function goStep(n){
+    state.step = n;
+    showStep(String(n));
+    renderLedger();
+  }
+
+  renderCalendar();
+  renderLedger();
+})();
+</script>

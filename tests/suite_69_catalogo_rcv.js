@@ -60,6 +60,21 @@ module.exports = {
       t.falso(!!tipo(cat(["ENALAPRIL 20 MG (TABLETA)"]), "AINE_RAAS"), "IECA solo");
     });
 
+    t.caso("v17.26.0 — el aviso lleva el título legible del catálogo, no el código crudo", () => {
+      // Bug reportado en vivo (28-ago) contra un paciente real: MTR_ETIQUETA_INTERACCION
+      // solo tenía las 8 etiquetas del Copiloto original; los 17 códigos de este catálogo
+      // (AINE_RAAS, CLOPIDOGREL_IBP...) caían al respaldo "código crudo" de mtrEtiquetaAviso
+      // y se veían tal cual en pantalla. El catálogo YA trae `titulo` legible con fuente
+      // (BNF); mtrEvaluarConCatalogoRcv ahora lo copia al aviso y mtrEtiquetaAviso lo
+      // prefiere sobre el mapa de códigos.
+      const a = tipo(cat(["IBUPROFENO 400 MG TABLETA RECUBIERTA", "LOSARTAN POTASICO 50 MG TABLETA"]), "AINE_RAAS");
+      t.cierto(!!a, "dispara");
+      t.igual(a.titulo, "AINE + IECA/ARA-II (doble whammy sin diuretico)",
+        "el aviso trae el título del catálogo, no solo el código");
+      t.igual(api.mtrEtiquetaAviso(a), a.titulo,
+        "y la etiqueta que se pinta en pantalla usa ese título, nunca el código \"AINE_RAAS\" crudo");
+    });
+
     // ============ CLOPIDOGREL + IBP ============
 
     t.caso("clopidogrel + omeprazol dispara CLOPIDOGREL_IBP HIGH", () => {

@@ -114,12 +114,128 @@ module.exports = {
       t.falso(await c.api.repPost({ a: 5 }), "si GM lanza, el catch resuelve false");
     });
 
+    // v17.49.0 (D4) — El receptor envuelve todo su trabajo en un try/catch que responde
+    // el cuerpo "err" con HTTP 200: significa "recibi la fila pero no pude guardarla".
+    // Hasta hoy eso pasaba por entrega buena — la fila salia de la cola sin haberse
+    // escrito, y el sello «ultimo envio confirmado» se ponia verde.
+    await t.casoAsync("v17.49.0: la respuesta 'err' del panel NO cuenta como entrega (recibida no es guardada)", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "err";
+      t.falso(await c.api.repPost({ evento: "fraude" }), "no pudo guardarla: la fila tiene que quedarse para reintentar");
+      const err = JSON.parse(c.env.almacen["vgl_rep_last_err"] || "null");
+      t.cierto(!!err && String(err.detalle).indexOf("no pudo guardarla") >= 0, "y queda dicho por que, sin fingir un exito");
+      t.igual(c.env.almacen["vgl_rep_last_ok"], undefined, "el sello de «confirmado» NO se pone verde con un fallo del panel");
+    });
+
+    await t.casoAsync("v17.49.0: 'dup' y 'ok' siguen contando como entrega (la fila ya esta en la Hoja)", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "dup";
+      t.cierto(await c.api.repPost({ evento: "resumen" }), "el servidor la descarto por duplicada: ya habia llegado");
+      red.cuerpo = "ok";
+      t.cierto(await c.api.repPost({ evento: "resumen" }), "y el acuse normal");
+    });
+
+    // v17.49.0 (D4) — La evidencia ya no sale por beacon al cerrar, asi que el arranque
+    // tiene que drenarla de verdad. Antes de esta version la primera oportunidad era el
+    // intervalo de 10 minutos (o un evento nuevo que disparara reportar()).
+    await t.casoAsync("v17.49.0: al arrancar se vacia la cola por el camino que confirma acuse", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "fraude", lote: "L1" }, { evento: "resumen", lote: "L2" }]);
+      red.cuerpo = "ok";
+      await c.api._repVaciadoDeArranque();
+      await new Promise((r) => setTimeout(r, 5));
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "la evidencia de ayer sale ya, no dentro de diez minutos");
+      t.igual(red.posts.length, 2, "y sale por GM_xmlhttpRequest, que si lee el acuse del panel");
+    });
+
+    await t.casoAsync("v17.49.0: si el panel no confirma, el arranque NO pierde la evidencia", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "fraude", lote: "L1" }, { evento: "resumen", lote: "L2" }]);
+      red.cuerpo = "err";
+      await c.api._repVaciadoDeArranque();
+      await new Promise((r) => setTimeout(r, 5));
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 2, "las dos siguen en la cola: recibida no es guardada");
+    });
+
+    // v17.51.0 — La prueba de acuse es una LISTA NEGRA: da por buena toda respuesta que no
+    // reconozca como mala. Lo correcto seria una lista blanca ("ok"/"dup" y nada mas), pero
+    // no se puede verificar desde aqui que contesta el receptor DESPLEGADO —su cabecera dice
+    // que es anterior a todo el historial del repositorio— y equivocarse apaga la telemetria
+    // entera en silencio. En vez de adivinar, se guarda la respuesta real y se le enseña al
+    // medico: con una pulsacion suya de «Probar conexion» la pregunta queda contestada.
+    await t.casoAsync("v17.51.0: se guarda LITERALMENTE lo que contesta el panel, sea lo que sea", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "ok";
+      await c.api.repPost({ evento: "prueba" });
+      t.igual(c.env.almacen["vgl_rep_last_body"], "ok", "la respuesta buena se guarda tal cual");
+      red.cuerpo = "Error 502: Bad Gateway del proxy";
+      await c.api.repPost({ evento: "prueba" });
+      t.igual(c.env.almacen["vgl_rep_last_body"], "Error 502: Bad Gateway del proxy", "y la inesperada tambien, sin interpretarla");
+    });
+
+    await t.casoAsync("v17.51.0: el diagnostico enseña esa respuesta y avisa si NO es del panel", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      const linea = () => (c.api.repDiagnostico() || []).filter((g) => g.paso === "Lo que contesta el panel")[0];
+      t.cierto(!!linea(), "el diagnostico tiene su renglon");
+      t.cierto(/todavía no ha contestado/.test(linea().detalle), "sin dato, lo dice en vez de fingir que todo va bien");
+      red.cuerpo = "dup";
+      await c.api.repPost({ evento: "prueba" });
+      t.cierto(linea().ok, "«dup» es una respuesta esperada del panel");
+      t.cierto(/respuesta esperada/.test(linea().detalle));
+      red.cuerpo = "<algo raro que no es del panel>".replace(/[<>]/g, "");
+      await c.api.repPost({ evento: "prueba" });
+      t.falso(linea().ok, "una respuesta que el panel nunca da se marca en rojo");
+      t.cierto(/NO lo dice el panel/.test(linea().detalle), "y se dice por que, sin acusar al panel de algo que quiza no hizo");
+    });
+
+    await t.casoAsync("v17.51.0: la respuesta guardada pasa por el saneador de PHI", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "rechazado para el documento 1234567890";
+      await c.api.repPost({ evento: "prueba" });
+      const b = String(c.env.almacen["vgl_rep_last_body"] || "");
+      t.igual(b.indexOf("1234567890"), -1, "ni siquiera lo que contesta un servidor entra sin sanear");
+      t.cierto(b.indexOf("CENSURADO") >= 0, "queda constancia de que habia algo y se tacho");
+    });
+
     await t.casoAsync("repPost: respeta la URL personalizada de S.reporteUrl", async () => {
       const red = crearRed();
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
       c.api.__S.reporteUrl = "https://mi.servidor/hoja";
       t.cierto(await c.api.repPost({ evento: "x" }));
       t.igual(red.posts[0].url, "https://mi.servidor/hoja");
+    });
+
+
+    await t.casoAsync("v17.15.0 — el «no» del panel NO cuenta como entregado, y deja causa legible", async () => {
+      // El defecto que esto fija se corrigió en la v16.4.0 y se quedó SIN PRUEBA: la de
+      // arriba cubre 500, login de Google, HTML y caída de red, pero ninguna fija el «no».
+      // Es el peor de los cinco porque es el silencioso: el receptor responde 200 con el
+      // cuerpo «no» al rechazar el token, y contarlo como entregado producía una hoja vacía
+      // con el sello en verde — exactamente los 9 días de mudez que nadie notó en agosto.
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.status = 200; red.finalUrl = ""; red.cuerpo = "no";
+      t.falso(await c.api.repPost({ a: 9 }), "un «no» del panel no es una entrega");
+      let err = null;
+      try { err = JSON.parse(c.env.win.localStorage.getItem("vgl_rep_last_err") || "null"); } catch (e) {}
+      t.cierto(!!err && /token/i.test(err.detalle || ""),
+        "y la causa dice qué revisar, no un «respuesta 200» que no ayuda a nadie");
+      // «dup» SÍ es éxito: la fila ya había llegado y el servidor la descartó por duplicada.
+      // Sin esta mitad, alguien podría «arreglar» el «no» rechazando cualquier respuesta corta.
+      red.cuerpo = "dup";
+      t.cierto(await c.api.repPost({ a: 10 }), "«dup» sigue siendo entrega: la fila ya estaba");
     });
 
     // ---------- repQLoad / repQSave ----------

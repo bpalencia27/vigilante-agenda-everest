@@ -6,10 +6,12 @@ module.exports = {
     "_parseFechaLike", "_extractAtheneaFecha", "_extractFechaSolicitudTopLevel",
     "_esAnalitoDeOrina", "_matchUroComponente", "_hayComponenteUroReal", "_findUroInput", "_canonTexto",
     "_resumenClinicoUro", "_esUroComponenteAlterado",
-    "_ultimaFechaPorAnalito", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
+    "_ultimaFechaPorAnalito", "_nuevoReemplazaCandidato", "_analitosRcvVencidos", "_valorCrudoLab", "_marcarUroanalisisSi",
     "_vigenciaDiasParaAnalito", "_canonNombreLab", "_findHbA1cFields",
     "_getRacGuardiaParaTest", "_setRacGuardiaParaTest", "checkRacGuardia", "_pacienteSigueAbierto",
     "_resolverLdlPorTrigliceridos",
+    "mtrAvisoTablaLabsHtml", "atheneaLecturaIncompleta",   // v17.7.1
+    "_esMuestraSerica", "_agruparUroanalisisParaTabla",    // v17.7.4
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -416,6 +418,27 @@ module.exports = {
       t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS EN ORINA" }));
       t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS" }), "LEUCOCITOS a secas es del hemograma en sangre");
       t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA" }), "HEMOGLOBINA a secas es la sérica");
+    });
+
+    // v17.6.68 — [informe de laboratorio real y captura de pantalla reales, aportados en
+    // consultorio, 26-ago-2026] "QUIMICA URINARIA" es un panel CUANTITATIVO (creatinina en
+    // orina espontánea, microalbuminuria, relación microalbuminuria/creatinina — el
+    // estudio de la RAC) DISTINTO del uroanálisis/parcial de orina cualitativo. Su nombre
+    // contiene "URINARIA", y el patrón amplio /URINAR/ (pensado para "SEDIMENTO
+    // URINARIO"/"CITOQUIMICO URINARIO", sinónimos REALES del parcial) lo confundía con
+    // orina — mezclando dos exámenes de fechas distintas en el mismo bloque "Uroanálisis"
+    // de la tabla de Historial de Paraclínicos (_agruparUroanalisisParaTabla).
+    t.caso("_esAnalitoDeOrina: QUIMICA URINARIA NO es el uroanálisis/parcial de orina (bug real reportado en consultorio, con informe de laboratorio)", () => {
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "CREATININA EN ORINA ESPONTANEA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "creatinina en orina espontánea es de Química Urinaria, no del parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "MICROALBUMINURIA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "microalbuminuria de Química Urinaria tampoco es el parcial");
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "RELACION MICROALBUMINURIA CREATININA", NombreParametroPadre: "QUIMICA URINARIA" }),
+        "ni la relación microalbuminuria/creatinina (el estudio de la RAC)");
+      // Los sinónimos REALES del parcial (SEDIMENTO URINARIO, CITOQUIMICO URINARIO) siguen
+      // reconociéndose: la exclusión es específica de "QUIMICA URINARIA", no de /URINAR/ entero.
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "NITRITOS", NombreParametroPadre: "SEDIMENTO URINARIO" }));
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "LEUCOCITOS", NombreParametroPadre: "CITOQUIMICO URINARIO" }));
     });
 
     t.caso("_matchUroComponente: sinónimos del LIS y exclusión de cocientes (RPC/microalbuminuria NO son la proteinuria del parcial)", () => {
@@ -1090,6 +1113,108 @@ module.exports = {
       t.igual(r.candidatos.size, 0);
     });
 
+    // =====================================================================
+    // v17.6.67 — [reportado en consultorio, 26-ago-2026, con consola completa] "Auto-Labs
+    // no reconoció el uroanálisis nuevo, solo uno viejo". Entre DOS candidatos de respaldo
+    // por componente (viaComponente: true — el caso normal de UROANALISIS, Athenea manda
+    // componentes sueltos, casi nunca una fila del panel completo), la regla 2
+    // ("numérico gana a no-numérico, sin importar fecha") no debía aplicar: es casi
+    // arbitrario que un componente cualitativo de orina traiga o no un número limpio.
+    // Antes del fix, un componente NUMÉRICO viejo ganaba PARA SIEMPRE contra uno
+    // cualitativo (p. ej. "NEGATIVO", o un rango con guion "0-2" — ambos no-numéricos para
+    // _labNumerico) más reciente. Ahora, entre dos respaldos, manda la fecha, siempre.
+    // =====================================================================
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente (UROANALISIS), la FECHA manda aunque el viejo sea 'numérico' y el nuevo no (bug real reportado en consultorio)", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoCualitativo),
+        "el componente nuevo (agosto, NEGATIVO) debe reemplazar al viejo (enero, '5') aunque el viejo sea numérico");
+      // Y la dirección contraria: el nuevo NO debe reemplazar a un candidato ya más reciente.
+      t.falso(testApi._nuevoReemplazaCandidato(nuevoCualitativo, viejoNumerico),
+        "un componente MÁS VIEJO nunca desplaza a uno más reciente, aunque el viejo sea numérico y el reciente no");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos por componente, un rango con guion ('0-2', que _labNumerico rechaza) tampoco bloquea la fecha", () => {
+      const viejoNumerico = { viaComponente: true, resultVal: "5", resultDate: "2026-01-15" };
+      const nuevoRango = { viaComponente: true, resultVal: "0-2", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoNumerico, nuevoRango),
+        "'0-2' no es numérico para _labNumerico (el guion lo rechaza), pero sigue siendo el componente más reciente y debe ganar");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: entre dos respaldos, si el NUEVO es numérico y el viejo no, también gana por fecha (dirección ya cubierta antes, pero confirma que no se rompió)", () => {
+      const viejoCualitativo = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-01-15" };
+      const nuevoNumerico = { viaComponente: true, resultVal: "6", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(viejoCualitativo, nuevoNumerico), "más reciente y numérico: gana, como antes");
+    });
+
+    t.caso("_ultimaFechaPorAnalito (integración end-to-end): el componente de orina de AGOSTO gana sobre el de ENERO, en cualquier orden de llegada (bug real reportado en consultorio)", () => {
+      const enOrden = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+      ], { uroanalisisPorComponentes: true });
+      const candA = enOrden.candidatos.get("UROANALISIS");
+      t.cierto(!!candA, "UROANALISIS entra como candidato vía componente");
+      t.igual(candA.resultDate, "2026-08-20", "gana el componente de agosto, el más reciente");
+      t.igual(candA.resultVal, "NEGATIVO");
+
+      // Orden invertido: el componente viejo llega DESPUÉS del nuevo. No debe desplazarlo.
+      const ordenInvertido = testApi._ultimaFechaPorAnalito([
+        { NombreParametro: "SANGRE", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", Fecha: "2026-08-20" },
+        { NombreParametro: "LEUCOCITOS", NombreParametroPadre: "UROANALISIS", Resultado: "5", Fecha: "2026-01-15" },
+      ], { uroanalisisPorComponentes: true });
+      const candB = ordenInvertido.candidatos.get("UROANALISIS");
+      t.igual(candB.resultDate, "2026-08-20", "el orden de llegada no debe importar: sigue ganando agosto");
+      t.igual(candB.resultVal, "NEGATIVO");
+    });
+
+    t.caso("REGLA 1 CORREGIDA (v17.8.2) — la fila real gana a los componentes, pero NUNCA si es más vieja", () => {
+      // REPORTE EN CONSULTA (27-ago-2026), y el médico avisa de que es RECURRENTE: «el botón
+      // Auto-Labs Athenea no está teniendo en cuenta el último uroanálisis realizado».
+      //
+      // ESTA PRUEBA FIJABA EL DEFECTO. Se llamaba «REGLA 1 intacta» y exigía justo el caso
+      // que él reportó: una fila real de enero ganando a un componente de agosto. La regla
+      // existía por una razón buena —una fila real es el veredicto del panel completo, no un
+      // fragmento— pero esa razón sirve para elegir ENTRE IGUALES DE FECHA, no para pisar un
+      // examen siete meses más nuevo.
+      //
+      // Y la dirección del daño no es simétrica: reproducido con el arnés, Auto-Labs escribía
+      // el texto «NORMAL» y la fecha de mayo sobre el uroanálisis de agosto que la propia
+      // tabla marca con «Alteraciones detectadas». Un falso negativo que el médico firma.
+      const respaldoReciente = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
+      const filaRealVieja = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-01-01" };
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
+        "una fila real MÁS VIEJA ya no puede pisar un uroanálisis más reciente");
+      t.cierto(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
+        "y el componente más reciente sí desplaza a la fila real vieja ya asentada");
+
+      // Lo que la regla protegía SIGUE protegido: con fecha igual o más nueva, manda la fila
+      // real, que es el veredicto del panel entero.
+      const filaRealNueva = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-09-01" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealNueva),
+        "una fila real MÁS NUEVA sigue ganando: es el veredicto del panel completo");
+      const mismaFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, mismaFecha),
+        "y con la MISMA fecha también: ahí la preferencia por la fila real es la correcta");
+
+      // Sin fecha con que defenderse, la fila real no escribe un veredicto de antigüedad
+      // desconocida sobre uno fechado. La dirección segura.
+      const filaRealSinFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: null };
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealSinFecha),
+        "una fila real SIN fecha no puede pisar un componente fechado");
+      // Pero si el componente tampoco tiene fecha, no hay con qué desempatar y vuelve a
+      // mandar la fila real: sigue siendo la fuente más completa de las dos.
+      const respaldoSinFecha = { viaComponente: true, resultVal: "NEGATIVO", resultDate: null };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoSinFecha, filaRealSinFecha),
+        "sin fechas en ninguno de los dos, la fila real sigue siendo la mejor fuente");
+    });
+
+    t.caso("_nuevoReemplazaCandidato: REGLA 2 intacta — cuando NINGUNO es viaComponente (analitos séricos normales), numérico usable sigue ganando sin importar fecha", () => {
+      const numericoViejo = { viaComponente: false, resultVal: "> 300", resultDate: "2026-01-01" };
+      const textoReciente = { viaComponente: false, resultVal: "PENDIENTE REVISION", resultDate: "2026-08-20" };
+      t.falso(testApi._nuevoReemplazaCandidato(numericoViejo, textoReciente),
+        "un texto sin número, aunque más reciente, no debe desplazar un número real ya asentado (RAC > 300, ver v16.7.0)");
+    });
+
     t.caso("_analitosRcvVencidos: un resultado 0 vigente NO dispara el aviso de faltante (v12.5.7)", () => {
       const labs = [{ codigo: "8779", nombre: "RELACION ALBUMINA/CREATININA", Resultado: 0, Fecha: "2026-08-01" }];
       const faltantes = testApi._analitosRcvVencidos(labs, "2026-08-11");
@@ -1762,5 +1887,221 @@ module.exports = {
       t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, null), normal, "sin dato de TG, no hay razón para preferir el directo");
       t.igual(c.api._resolverLdlPorTrigliceridos(directo, normal, { resultVal: "nota de laboratorio" }), normal, "TG ilegible (ni número ni desigualdad): tratado igual que sin dato");
     });
+
+    // =================================================================
+    //  v17.7.1 — REPORTE EN CONSULTA (27-ago): «el módulo de laboratorios no está
+    //  reportando todos los analitos, falta la creatinina en esta paciente que fue tomada
+    //  también ahora en agosto».
+    //
+    //  La tabla de Historial de Paraclínicos llevaba DOS contadores calculados y jamás
+    //  enseñados: las solicitudes que Athenea no devolvió y las filas ocultas por tener
+    //  más de un año. Callados los dos, una lectura A MEDIAS tenía exactamente el mismo
+    //  aspecto que una completa — y un examen que sí se hizo se lee como que no.
+    // =================================================================
+    t.caso("v17.7.1 — una lectura incompleta de Athenea se dice, no se disimula", () => {
+      const html = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 2, viejasOcultas: 0 });
+      t.cierto(html.indexOf("2 de las órdenes") >= 0, "dice cuántas órdenes faltaron, no un vago «puede que falte algo»");
+      t.cierto(html.indexOf("puede estar hecho igual") >= 0,
+        "y dice lo único que importa en consulta: que el examen ausente puede existir de todas formas");
+      t.falso(html.indexOf("undefined") >= 0 || html.indexOf("[object") >= 0, "sin restos de programación a la vista");
+      // El modal se pega a document.body, fuera de #vgl-root: el color va en línea o con
+      // !important, o el CSS de Everest se lo lleva por delante (ver CLAUDE.md).
+      t.cierto(html.indexOf("!important") >= 0, "el color va blindado contra el CSS de Everest");
+
+      const una = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 1, viejasOcultas: 0 });
+      t.cierto(una.indexOf("1 de las órdenes") >= 0, "en singular también se lee bien");
+    });
+
+    t.caso("v17.7.1 — las filas ocultas por antigüedad también se dicen", () => {
+      const html = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 0, viejasOcultas: 3 });
+      t.cierto(html.indexOf("3 resultados") >= 0, "cuántos quedaron fuera de los 365 días");
+      t.falso(html.indexOf("órdenes") >= 0, "y no se inventa un fallo de Athenea que no hubo");
+
+      const ambos = c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 1, viejasOcultas: 2 });
+      t.cierto(ambos.indexOf("órdenes") >= 0 && ambos.indexOf("2 resultados") >= 0,
+        "cuando pasan las dos cosas, se cuentan las dos");
+    });
+
+    t.caso("v17.7.1 — sin nada que advertir, el aviso NO sale", () => {
+      t.igual(c.api.mtrAvisoTablaLabsHtml({ solicitudesNoLeidas: 0, viejasOcultas: 0 }), "",
+        "un aviso que sale siempre deja de leerse");
+      t.igual(c.api.mtrAvisoTablaLabsHtml(null), "", "sin datos tampoco se alarma a nadie");
+      t.igual(c.api.mtrAvisoTablaLabsHtml({}), "", "ni con un objeto vacío");
+    });
+
+    t.caso("v17.7.1 — el marcador de lectura parcial se pierde al copiar: por eso se lee antes", () => {
+      // Es el fallo exacto que había: `__vglIncompleto` viaja como propiedad NO enumerable
+      // del array de Athenea, y el modal copiaba analito a analito a OTRO array — con eso
+      // el marcador se perdía en la línea siguiente a haberse escrito.
+      const arr = [{ NombreParametro: "CREATININA" }];
+      Object.defineProperty(arr, "__vglIncompleto", { value: 2, enumerable: false, configurable: true });
+      t.cierto(c.api.atheneaLecturaIncompleta(arr), "el array marcado se reconoce como lectura parcial");
+      const copiado = arr.map((l) => ({ origen: "Athenea (Principal)", ...l }));
+      t.falso(c.api.atheneaLecturaIncompleta(copiado),
+        "y al copiarlo el marcador desaparece: hay que leerlo ANTES de copiar");
+    });
+
+    t.caso("v17.7.1 CABLEADO — la tabla de paraclínicos pinta el aviso y lo lee antes de copiar", () => {
+      // Probar la pieza no es probar que la pieza está conectada (lección de v17.6.93/94).
+      // El modal es asíncrono y depende de la red de Athenea, así que aquí se fija el
+      // cableado sobre el texto fuente: si alguien lo desconecta, esta prueba cae.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/contentEl\.innerHTML = `[\s\S]{0,160}mtrAvisoTablaLabsHtml\(/.test(src),
+        "el aviso se pinta JUSTO encima de la tabla de paraclínicos, no en cualquier sitio");
+      t.cierto(src.indexOf("viejasOcultas: _labViejasOcultas") >= 0,
+        "y recibe el contador de filas ocultas por antigüedad, que hasta hoy no se enseñaba nunca");
+      // El orden importa: leer el marcador DESPUÉS del forEach que copia lo perdería.
+      const iLee = src.indexOf("_labsSolicitudesNoLeidas = (labsArr && labsArr.__vglIncompleto)");
+      const iCopia = src.indexOf('labsArr.forEach(l => todosLabs.push({ origen: "Athenea (Principal)"');
+      t.cierto(iLee > 0 && iCopia > 0 && iLee < iCopia,
+        "el marcador se lee ANTES de copiar los analitos: al copiarlos se pierde");
+    });
+
+
+    // =================================================================
+    //  v17.7.4 — REPORTE EN CONSULTA (27-ago): «falta la creatinina en esta paciente que
+    //  fue tomada también ahora en agosto». El diagnóstico que corrió el médico lo cazó, y
+    //  la causa no se podía adivinar desde el código: Athenea nombra los exámenes con la
+    //  nomenclatura del laboratorio, y dos analitos DE SANGRE llevan la palabra «orina»
+    //  dentro de su propio nombre. Uno de ellos dice literalmente «diferente a orina».
+    //
+    //  Consecuencia doble y silenciosa: desaparecían de la tabla (absorbidos por el bloque
+    //  «Uroanálisis» — 31 analitos contados en la paciente real) Y quedaban sin casar con
+    //  ninguna casilla, incluida la creatinina sérica, que es la que manda el estadio
+    //  renal, las vigencias y el ANR.
+    //
+    //  Los nombres de abajo son los REALES de Athenea, verificados en campo. No son PHI:
+    //  son nomenclatura de laboratorio, sin nada del paciente.
+    // =================================================================
+    const NOMBRES_REALES_ATHENEA = {
+      creatininaSerica: "CREATININA EN SUERO. ORINA U OTROS",
+      glucosaSerica: "GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA",
+      creatininaOrina: "CREATININA EN ORINA ESPONTANEA",
+    };
+
+    t.caso("v17.7.4 — un examen DE SANGRE cuyo nombre contiene «orina» no es de orina", () => {
+      const creat = { NombreParametro: NOMBRES_REALES_ATHENEA.creatininaSerica, NombreParametroPadre: "QUIMICA SANGUINEA" };
+      const gluc = { NombreParametro: NOMBRES_REALES_ATHENEA.glucosaSerica, NombreParametroPadre: "QUIMICA SANGUINEA" };
+      t.falso(testApi._esAnalitoDeOrina(creat), "la creatinina SÉRICA no puede contar como analito de orina");
+      t.falso(testApi._esAnalitoDeOrina(gluc), "ni la glicemia, cuyo nombre dice «DIFERENTE A ORINA»");
+      // Y lo que de verdad importa: que lleguen a su casilla.
+      t.igual((testApi._matchLabInWhitelist(creat) || {}).key, "CREATININA",
+        "la creatinina sérica casa con su casilla: sin esto no hay TFG, ni estadio, ni vigencias, ni ANR");
+      t.igual((testApi._matchLabInWhitelist(gluc) || {}).key, "GLUCOSA", "y la glicemia con la suya");
+
+      // Variante CONSTRUIDA (no observada en campo, a diferencia de las dos de arriba): un
+      // nombre que declara la muestra solo por descarte, sin decir «en suero». «Diferente a
+      // orina» es una negación explícita y tiene que bastar por sí sola — si el patrón solo
+      // mirara «EN SUERO», este volvería a caer en el bloque de orina.
+      t.falso(testApi._esAnalitoDeOrina({ NombreParametro: "GLUCOSA. LCR U OTRO FLUIDO DIFERENTE A ORINA" }),
+        "«diferente a orina» dice, por sí solo, que la muestra no es orina");
+    });
+
+    t.caso("v17.7.4 — la guarda de orina sigue entera: no se abrió un boquete al arreglarlo", () => {
+      // La guarda existe desde v12.3.37 por un error clínico REAL en la dirección
+      // contraria: la hemoglobina EN ORINA cayendo en la casilla de hemoglobina sérica.
+      // Arreglar un sentido sin romper el otro es la mitad del trabajo.
+      t.cierto(testApi._esAnalitoDeOrina({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }),
+        "la hemoglobina EN ORINA sigue siendo de orina");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "HEMOGLOBINA", NombreParametroPadre: "PARCIAL DE ORINA" }), null,
+        "y jamás casa con la casilla sérica");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "GLUCOSA", NombreParametroPadre: "UROANALISIS" }), null,
+        "la glucosa EN ORINA tampoco casa con la glicemia");
+      // Las otras exclusiones de la creatinina describen OTRO examen, no otra muestra:
+      // esas no se tocan.
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "DEPURACION DE CREATININA EN ORINA 24 H" }), null,
+        "la depuración de 24 h sigue excluida: es otro examen, no otra muestra");
+      t.igual(testApi._matchLabInWhitelist({ NombreParametro: "CREATINURIA" }), null, "y la creatinuria también");
+    });
+
+    t.caso("v17.7.4 — el bloque «Uroanálisis» de la tabla deja de tragarse exámenes de sangre", () => {
+      // Reproduce la toma real: un uroanálisis de verdad más los dos analitos séricos que
+      // el bloque estaba absorbiendo. Antes de este arreglo la tabla mostraba UNA fila
+      // (Uroanálisis) y los dos séricos solo existían escondidos dentro del acordeón.
+      const labs = [
+        { NombreParametro: "Nitritos", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: "Leucocitos", NombreParametroPadre: "UROANALISIS", Resultado: "0-2", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: NOMBRES_REALES_ATHENEA.creatininaSerica, NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "0.9", __vglFechaSolicitud: "2026-08-20" },
+        { NombreParametro: NOMBRES_REALES_ATHENEA.glucosaSerica, NombreParametroPadre: "QUIMICA SANGUINEA", Resultado: "95", __vglFechaSolicitud: "2026-08-20" },
+      ];
+      const filas = testApi._agruparUroanalisisParaTabla(labs);
+      const nombres = filas.map((f) => String(f.NombreParametro || ""));
+      t.cierto(nombres.indexOf("Uroanálisis") >= 0, "el uroanálisis sigue agrupándose en su bloque");
+      t.cierto(nombres.indexOf(NOMBRES_REALES_ATHENEA.creatininaSerica) >= 0,
+        "y la creatinina sérica conserva su PROPIA fila: es justo la que el médico no encontraba");
+      t.cierto(nombres.indexOf(NOMBRES_REALES_ATHENEA.glucosaSerica) >= 0, "igual que la glicemia");
+      const bloque = filas.find((f) => Array.isArray(f.__vglGrupoUroComponentes));
+      t.igual(bloque.__vglGrupoUroComponentes.length, 2,
+        "dentro del bloque quedan SOLO los dos componentes de orina, no los cuatro");
+    });
+
+
+    t.caso("v17.8.2 REPORTE EN CONSULTA — el uroanálisis de AGOSTO no lo pisa la fila «NORMAL» de MAYO", () => {
+      // Reproducción exacta del caso del médico: Athenea trae la fila REAL del panel del
+      // 07/05/2026 con Resultado «NORMAL» y, además, los componentes del uroanálisis del
+      // 20/08/2026 —el que la tabla marca con «Alteraciones detectadas»—. Antes de v17.8.2,
+      // Auto-Labs escribía «NORMAL» y la fecha de mayo en la historia clínica.
+      const MAYO = "2026-05-07", AGOSTO = "2026-08-20";
+      const labs = [
+        { NombreParametro: "UROANALISIS", Resultado: "NORMAL", __vglFechaSolicitud: MAYO },
+        { NombreParametro: "Nitritos", NombreParametroPadre: "UROANALISIS", Resultado: "NEGATIVO", __vglFechaSolicitud: AGOSTO },
+        { NombreParametro: "Hematies", NombreParametroPadre: "UROANALISIS", Resultado: "2.90", __vglFechaSolicitud: AGOSTO },
+        { NombreParametro: "Leucocitos", NombreParametroPadre: "UROANALISIS", Resultado: "0-2", __vglFechaSolicitud: AGOSTO },
+      ];
+      const cand = testApi._ultimaFechaPorAnalito(labs, { uroanalisisPorComponentes: true }).candidatos.get("UROANALISIS");
+      t.cierto(!!cand, "tiene que haber candidato, o la prueba no mira nada");
+      t.igual(cand.resultDate, AGOSTO,
+        "manda el uroanálisis de agosto: es el último que se le hizo al paciente");
+      t.cierto(cand.viaComponente === true,
+        "y gana por componentes, así que la casilla de texto NO se pisa con el «NORMAL» de mayo");
+
+      // El orden de llegada no puede cambiar el resultado: el portal no garantiza ninguno.
+      const alReves = testApi._ultimaFechaPorAnalito(labs.slice().reverse(), { uroanalisisPorComponentes: true })
+        .candidatos.get("UROANALISIS");
+      t.igual(alReves.resultDate, AGOSTO, "llegue en el orden que llegue, gana agosto");
+    });
+
+    t.caso("v17.8.2 — el orden por fecha deja de ser un supuesto y pasa a ser un hecho", () => {
+      // Toda la lógica de «el primero reclama la casilla» descansaba en un supuesto escrito
+      // como si fuera un hecho: «las solicitudes llegan de más reciente a más antigua». Nada
+      // lo garantizaba, y estas 7 casillas NO llevan fecha acompañante: un componente viejo
+      // colado ahí es invisible para el médico. Aquí se fija el orden que usa la inyección.
+      const fs = require("fs"), path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/_ordenadoPorFecha\s*=\s*labsArray\.slice\(\)\.sort/.test(src),
+        "la inyección de componentes de orina recorre una copia ORDENADA por fecha");
+      t.cierto(/_ordenadoPorFecha\.forEach/.test(src),
+        "y es esa copia la que se recorre, no el array crudo del portal");
+      t.falso(/\n      labsArray\.forEach\(\(lab\) => \{\n          if \(_esAnalitoDeOrina/.test(src),
+        "el recorrido sin ordenar no puede volver por la puerta de atrás");
+    });
+
+    t.caso("v17.16.0 — _esMuestraSerica y _esUroComponenteAlterado, probadas de frente", () => {
+      // Las dos estaban en `cubre` sin que ninguna prueba las nombrara. La primera es la
+      // regla del v17.7.4 que destapó el reporte en vivo «falta la creatinina de agosto»:
+      // Athenea tiene analitos DE SANGRE con la palabra «orina» dentro de su nombre.
+      t.cierto(api._esMuestraSerica("CREATININA EN SUERO. ORINA U OTROS"),
+        "«EN SUERO» manda aunque el nombre diga «ORINA» después — es el caso REAL del reporte");
+      t.cierto(api._esMuestraSerica("GLUCOSA EN SUERO. LCR U OTRO FLUIDO DIFERENTE A ORINA"),
+        "y «DIFERENTE A ORINA» dice literalmente que no es de orina");
+      t.cierto(api._esMuestraSerica("HEMOGLOBINA EN SANGRE"), "«EN SANGRE» también");
+      t.falso(api._esMuestraSerica("CREATININA EN ORINA PARCIAL"), "una creatinina de orina NO es sérica");
+      t.falso(api._esMuestraSerica(""), "sin nombre no se afirma nada");
+
+      // La segunda decide si un componente del parcial de orina está alterado.
+      t.falso(api._esUroComponenteAlterado(null), "sin componente, no hay alteración");
+      t.falso(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "" }),
+        "un resultado vacío no es un hallazgo: es un hueco");
+      t.falso(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "NEGATIVO" }), "negativo es normal");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "NITRITOS", resultado: "POSITIVO" }), "positivo es alteración");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: "12" }), "12 leucocitos pasan el corte de 5");
+      t.falso(api._esUroComponenteAlterado({ nombre: "LEUCOCITOS", resultado: "3" }), "3 no lo pasan");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "HEMATIES", resultado: "8" }), "8 hematíes pasan el corte de 3");
+      t.cierto(api._esUroComponenteAlterado({ nombre: "CELULAS TUBULO RENALES", resultado: "1" }),
+        "una sola célula tubular renal ya es hallazgo: es daño de túbulo");
+      t.falso(api._esUroComponenteAlterado({ nombre: "COLOR", resultado: "AMARILLO" }), "el color normal no alarma");
+    });
+
   }
 };

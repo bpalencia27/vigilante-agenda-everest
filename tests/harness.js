@@ -55,6 +55,7 @@ function crearDom() {
   return {
     readyState: "loading",           // clave: impide que boot() se ejecute
     visibilityState: "visible",      // v14.1.5 — el relevo de liderazgo lo consulta
+    hasFocus: () => true,            // v17.40.0 — _pestanaSinAtencion() lo consulta; las pruebas lo pisan a () => false para simular ventana visible pero sin foco
     body, head, documentElement: elem("html"),
     createElement: elem,
     createTextNode: (t) => ({ textContent: t }),
@@ -116,6 +117,13 @@ function crearEntorno(opciones) {
     setInterval: (f, ms) => { const id = ++_intervalSeq; _intervalos.set(id, { f, ms, vivo: true }); return id; },
     clearInterval: (id) => { const r = _intervalos.get(id); if (r) r.vivo = false; },
     requestIdleCallback: () => 0,
+    // v17.37.0 — sin esto, cualquier código que use requestAnimationFrame (p. ej. el
+    // reposicionado de los widgets de Conducta al hacer scroll) revienta con
+    // "requestAnimationFrame is not defined" en el arnés — los navegadores reales siempre
+    // lo tienen. Mapeado al mismo setTimeout capado de la línea de abajo: un solo
+    // "fotograma" por vuelta del bucle de eventos, suficiente para probar coalescencia.
+    requestAnimationFrame: (f) => setTimeout(() => { try { f(Date.now()); } catch (e) {} }, Math.min(0, 1)),
+    cancelAnimationFrame: clearTimeout,
     fetch: o.fetch || (async () => ({ ok: true, status: 200, headers: { get: () => null }, json: async () => ({}), text: async () => "{}", clone() { return this; } })),
     XMLHttpRequest: function () { this.open = () => {}; this.send = () => {}; this.addEventListener = () => {}; },
     performance: { now: () => Date.now(), getEntriesByType: () => [] },
