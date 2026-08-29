@@ -4,6 +4,53 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.52.0] — 2026-08-29 (La albuminuria ya no necesita permiso de la diabetes)
+
+### 🧪 Qué cambia
+Hasta hoy la albuminuria pesaba en la clasificación de riesgo de dos formas, y una de ellas
+con condición:
+
+- **RAC ≥ 300** (macroalbuminuria): subía sola a **muy alto**. Eso sigue igual.
+- **RAC 30–299** (albuminuria moderada, A2): contaba **solo si el paciente era diabético**, y
+  ahí como uno más de los daños de órgano blanco.
+
+O sea: **un hipertenso no diabético con RAC 45 no subía de categoría por su albuminuria.**
+Desde ahora **A2 sube a ALTO por sí sola**, como usted decidió, sin depender del diagnóstico
+de base. Es el eje CGA de KDIGO: la albuminuria es un eje propio, independiente del filtrado.
+
+**Lo que cambia de verdad es la conducta:** ese paciente pasa de una meta de LDL de **100 a
+70**.
+
+### 📏 Lo que se midió antes de tocar nada
+Contra los 991 vectores del corpus:
+
+| | vectores | qué les daba el motor |
+|---|---|---|
+| A2 (RAC 30–299) | 36 | 23 ya «muy alto», 11 ya «alto», **2 «moderado»** |
+| A3 (RAC ≥ 300) | 56 | **los 56 ya «muy alto»** |
+| A1 (< 30) | 47 | — |
+| sin RAC medido | **852** | — |
+
+Es decir: **cambian 2 de 991**, los dos de moderado a alto. La albuminuria severa ya estaba
+cubierta. Esos 2 quedan como excepción declarada y estrecha, igual que el piso por diabetes y
+el de mayores de 79: si mañana el corpus deja de tenerlos, una prueba avisa en vez de
+arrastrar una excepción huérfana.
+
+**Una advertencia honesta sobre ese número:** el corpus casi no prueba esta regla — el único
+valor A2 que contiene es `45`, y **852 de sus 991 vectores no traen RAC**. En su consulta la
+RAC sí se pide de rutina, así que en pacientes reales esto moverá bastante más de 2. El corpus
+no puede decirnos cuánto.
+
+### 🚫 Y lo que NO hace
+- **Un RAC que nadie midió no es un RAC normal.** Si el campo no está, está vacío o trae texto
+  que no es un número, el paciente se queda donde estaba. Casilla vacía antes que dato
+  inventado, aplicado a la clasificación.
+- **El paso 1 sigue mandando.** Un A2 con enfermedad cardiovascular establecida sigue saliendo
+  «muy alto»: la regla nueva vive en el paso 2 y el clasificador para en el primero que se
+  cumple.
+
+---
+
 ## [Versión 17.51.0] — 2026-08-29 (Qué contesta el panel, dicho tal cual)
 
 ### 🔍 Una pregunta que no se puede responder adivinando

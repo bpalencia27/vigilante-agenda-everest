@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.51.0
+// @version     17.52.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.51.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.52.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32089,6 +32089,20 @@ _vglOfrecerDeshacer(btn);
     if (x.hfHeterocigota && conteoFr === 0) c.push("HF heterocigota sin otros FR");
     const egfr = mtrFloat(x.egfrCkdepi);
     if (egfr !== null && egfr > 30 && egfr < 60) c.push("ERC eGFR 30-60 (G3a-G3b)");
+    // v17.52.0 (decision D7, 29-ago) — LA ALBUMINURIA ENTRA COMO EJE PROPIO.
+    // Hasta hoy la albuminuria solo pesaba de dos formas: la severa (RAC>=300) subia sola a
+    // MUY ALTO en el paso 1, y la moderada (RAC>=30) contaba SOLO como dano de organo blanco
+    // DENTRO de la rama de diabetes. Es decir: un hipertenso no diabetico con RAC 45 no subia
+    // de categoria por su albuminuria. El eje CGA de KDIGO la trata como eje independiente
+    // del filtrado y del diagnostico de base, y el medico eligio la opcion estricta:
+    // "A2 (30-300) sube a ALTO por si sola".
+    // Va DESPUES del filtrado a proposito: si el paciente ya cumple un criterio del paso 1
+    // (RAC>=300 incluido), este ni se consulta — el clasificador para en el primer paso que
+    // se cumple.
+    // Y exige rac !== null: un RAC que nadie midio NO es un RAC normal. Casilla vacia antes
+    // que dato inventado, aplicado a la clasificacion.
+    const racA2 = mtrFloat(x.rac);
+    if (racA2 !== null && racA2 >= 30 && racA2 < 300) c.push("Albuminuria moderada (RAC 30-299 mg/g, A2)");
     return c;
   }
 

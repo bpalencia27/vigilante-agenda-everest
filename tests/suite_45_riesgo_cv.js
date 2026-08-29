@@ -253,6 +253,81 @@ module.exports = {
         "y el porqué se dice sin el techo de años");
     });
 
+    // =====================================================================
+    // v17.52.0 — D7: LA ALBUMINURIA MODERADA (A2) SUBE A ALTO POR SÍ SOLA.
+    // Decisión del médico del 29-ago, textual: "A2 (30-300) sube a ALTO por sí sola".
+    // Antes solo pesaba dentro de la rama de diabetes, así que un hipertenso NO diabético
+    // con RAC 45 no subía de categoría por su albuminuria.
+    // =====================================================================
+    t.caso("v17.52.0 (D7): un RAC de 45 sube a ALTO a quien no es diabético", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
+      t.igual(api.mtrClasificarRiesgoCv(base).categoria, null, "sin albuminuria y sin insumos, el paso 4 no puede clasificar");
+      const conA2 = api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: 45 }));
+      t.igual(conA2.categoria, "alto", "con RAC 45 sube a alto sin necesitar diabetes");
+      t.igual(conA2.paso, 2, "y lo hace por el paso 2, no por otro");
+      t.cierto(conA2.criterios.some((c) => /A2/.test(c)), "y el porqué se dice: " + JSON.stringify(conA2.criterios));
+    });
+
+    t.caso("v17.52.0 (D7): la meta de LDL baja de 100 a 70 con ese solo dato", () => {
+      // La escala del paso 4 (ASCVD ajustada a Colombia) deja a este paciente en moderado;
+      // se le añade SOLO la albuminuria y nada más.
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      const sin = api.mtrClasificarRiesgoCv(base);
+      const con = api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: 45 }));
+      t.igual(sin.categoria, "moderado", "por la escala del paso 4: moderado");
+      t.igual(con.categoria, "alto", "el mismo paciente más su albuminuria: alto");
+      t.igual(con.paso, 2, "y deja de decidirlo la escala: lo decide el paso 2");
+      t.igual(api.mtrMetasLipidicas(sin.categoria).ldl, 100);
+      t.igual(api.mtrMetasLipidicas(con.categoria).ldl, 70, "la conducta que cambia de verdad: la meta");
+    });
+
+    t.caso("v17.52.0 (D7): los bordes exactos — 29 no, 30 sí, 299 sí, 300 sube más (muy alto)", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
+      const cat = (rac) => api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac })).categoria;
+      t.igual(cat(29), null, "29 es A1: no es albuminuria y no sube nada");
+      t.igual(cat(30), "alto", "30 es el borde de A2");
+      t.igual(cat(299), "alto", "299 sigue siendo A2");
+      t.igual(cat(300), "muy alto", "300 es A3: macroalbuminuria, y ya subía sola al paso 1");
+      t.igual(cat(1200), "muy alto");
+    });
+
+    t.caso("v17.52.0 (D7): un RAC que NADIE midió no es un RAC normal", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      t.igual(api.mtrClasificarRiesgoCv(base).categoria, "moderado", "sin el campo: se queda donde estaba");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: null })).categoria, "moderado", "con el campo en nulo, igual");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: "" })).categoria, "moderado", "y con el campo vacío, igual: ausente no es negativo");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: "no se tomó" })).categoria, "moderado", "ni un texto que no es un número");
+    });
+
+    t.caso("v17.52.0 (D7): el paso 2 NO se cuelga la macroalbuminuria — esa es del paso 1", () => {
+      // Vista desde el clasificador esta frontera es invisible (un RAC>=300 nunca llega al
+      // paso 2: el paso 1 ya lo paró). Se comprueba llamando al paso 2 directamente, que es
+      // donde la regla vive: si no, el borde superior seria una mutacion que nadie caza.
+      t.igual(api.mtrCriteriosPaso2({ rac: 45 }, 0), ["Albuminuria moderada (RAC 30-299 mg/g, A2)"]);
+      t.igual(api.mtrCriteriosPaso2({ rac: 299 }, 0).length, 1, "299 sigue siendo A2");
+      t.igual(api.mtrCriteriosPaso2({ rac: 300 }, 0), [], "300 es A3 y le corresponde al paso 1, no a este");
+      t.igual(api.mtrCriteriosPaso2({ rac: 1200 }, 0), [], "ni la macroalbuminuria franca");
+      t.igual(api.mtrCriteriosPaso2({ rac: 29 }, 0), [], "29 es A1: no hay criterio");
+    });
+
+    t.caso("v17.52.0 (D7): el RAC vale igual si Athenea lo manda como texto", () => {
+      // Los valores de laboratorio llegan del portal como cadenas. Si el numero no se
+      // normaliza antes de compararlo, "45" funciona por casualidad (JavaScript lo convierte)
+      // pero cualquier variante deja de subir al paciente, en silencio.
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      const cat = (rac) => api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac })).categoria;
+      t.igual(cat(45), "alto", "como número");
+      t.igual(cat("45"), "alto", "y como texto, el mismo paciente y la misma conducta");
+      t.igual(cat("45.5"), "alto", "con decimal");
+      t.igual(cat("29"), "moderado", "y el borde de abajo se respeta también en texto");
+    });
+
+    t.caso("v17.52.0 (D7): el paso 1 sigue mandando — un A2 con ECV establecida NO se queda en alto", () => {
+      const r = api.mtrClasificarRiesgoCv({ edad: 55, sexo: "M", egfrCkdepi: 90, rac: 45, ecvAterescleroticaEstablecida: true });
+      t.igual(r.categoria, "muy alto", "la regla nueva vive en el paso 2 y el clasificador para en el primero que se cumple");
+      t.igual(r.paso, 1);
+    });
+
     t.caso("los 4 pasos reproducen al Copiloto vector a vector", () => {
       const d = JSON.parse(fs.readFileSync(GOLD, "utf8"));
       const desviaciones = [];
@@ -302,6 +377,26 @@ module.exports = {
           continue;
         }
 
+        // v17.52.0 — EXCEPCIÓN (E): ALBUMINURIA MODERADA COMO EJE. Decisión clínica del
+        // médico del 29-ago-2026, textual: "A2 (30-300) sube a ALTO por sí sola". El
+        // Copiloto original solo contaba la albuminuria moderada como daño de órgano blanco
+        // DENTRO de la rama de diabetes, así que un no diabético con RAC 45 se quedaba donde
+        // estuviera. El eje CGA de KDIGO la trata como eje propio, independiente del
+        // filtrado y del diagnóstico de base.
+        //
+        // Igual de estrecha que las anteriores: solo tapa a los A2 que el Copiloto dejaba
+        // POR DEBAJO de alto. Un A2 que allá salía "muy alto" y aquí saliera otra cosa SIGUE
+        // siendo una desviación y rompe la suite, como debe ser. Y exige que el RAC exista:
+        // un vector sin RAC no entra por aquí.
+        const _racPy = (v.entrada && typeof v.entrada.rac === "number") ? v.entrada.rac : null;
+        if (_racPy !== null && _racPy >= 30 && _racPy < 300
+            && py.categoria !== "alto" && py.categoria !== "muy alto") {
+          if (js.categoria !== "alto") {
+            desviacionesPiso.push("A2 que NO quedó en alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
+          }
+          continue;
+        }
+
         // Excepción (B): el Python se quedó sin ASCVD y el JS sí pudo calcularla.
         if (py.categoria === null && py.requiere_ascvd === true && js.categoria !== null) {
           const e = v.entrada;
@@ -338,6 +433,13 @@ module.exports = {
         && v.entrada.diabetes !== true
         && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
       t.cierto(nEdad > 0, "la excepción del piso por edad sigue ejercitándose (" + nEdad + " vectores)");
+      // v17.52.0 — misma guarda para la excepción (E): si el corpus dejara de tener A2 por
+      // debajo de alto, la excepción quedaría huérfana y habría que revisarla en vez de
+      // arrastrarla. Medido al escribirla: 2 vectores (RAC 45, ambos "moderado" allá).
+      const nA2 = d.vectores.filter((v) => v.entrada && typeof v.entrada.rac === "number"
+        && v.entrada.rac >= 30 && v.entrada.rac < 300
+        && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
+      t.cierto(nA2 > 0, "la excepción de albuminuria A2 sigue ejercitándose (" + nA2 + " vectores)");
     });
 
     t.caso("excepción (B): el corpus NO puede ejercitarla, y esa es la razón de que exista", () => {

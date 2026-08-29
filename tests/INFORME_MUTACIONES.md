@@ -5679,3 +5679,50 @@ médico en «Probar conexión», la lista blanca pasa a ser una decisión con da
 | 2 | Se guarda sin pasar por `sanitizePII` | *v17.51.0: la respuesta guardada pasa por el saneador de PHI* |
 | 3 | El diagnóstico da por conocida cualquier respuesta | *v17.51.0: el diagnóstico enseña esa respuesta y avisa si NO es del panel* |
 | 4 | Desaparece el renglón del diagnóstico | la misma |
+
+---
+
+## v17.52.0 — la albuminuria moderada (A2) como eje propio (D7)
+
+**Medición previa, reproducida a mano antes de escribir una línea** (script propio que carga
+el corpus dorado, reutiliza el `MAPA_ENTRADA` de la suite 45 leyéndolo de su fuente en vez de
+copiarlo, y corre el motor real):
+
+- línea base: el motor coincide con el Copiloto en **965 de 991**; las 26 desviaciones van
+  todas hacia «alto» (`null→alto` 14, `moderado→alto` 10, `bajo→alto` 2), que es exactamente
+  lo que hacen los dos pisos ya documentados.
+- **A2 (RAC 30–299): 36 vectores**, todos con el valor `45` (es el único A2 del corpus). De
+  ellos, 23 ya eran «muy alto» y 11 «alto»: **solo 2 cambian**, de moderado a alto.
+- **A3 (RAC ≥300): 56 vectores, los 56 ya «muy alto»** — la albuminuria severa ya estaba
+  cubierta por el paso 1.
+- **852 de 991 vectores no traen RAC**, así que el corpus mide muy poco de esta regla. Dicho
+  en el CHANGELOG en vez de presentar el «2 de 991» como si fuera el impacto real.
+
+Tras el cambio: 963/991, con las 2 desviaciones nuevas siendo exactamente los 2 medidos.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | La regla A2 desaparece del paso 2 | 4 casos, entre ellos *v17.52.0 (D7): un RAC de 45 sube a ALTO a quien no es diabético* |
+| 2 | La regla se come también A3 (≥300) en el paso 2 | *v17.52.0 (D7): el paso 2 NO se cuelga la macroalbuminuria* |
+| 3 | El borde inferior se pierde (`> 30` en vez de `>= 30`) | *…los bordes exactos — 29 no, 30 sí, 299 sí…* |
+| 6 | El borde inferior se corre a 29 | 3 casos, entre ellos el de los bordes |
+
+**Dos mutaciones NO cayeron, y las dos son no-op reales — se documentan en vez de
+disimularse, y en vez de contrarrestarlas con una prueba de una entrada imposible:**
+
+- **Quitar la guarda `racA2 !== null`.** En JavaScript `null >= 30` es `false`, así que la
+  guarda es redundante para el comportamiento. Se conserva porque es la convención del
+  fichero (todas las lecturas numéricas del motor la llevan) y porque protege de un refactor
+  futuro de `mtrFloat`, no porque hoy cambie nada.
+- **Quitar `mtrFloat` y comparar el valor crudo.** El operador `>=` ya convierte las cadenas
+  numéricas (`"45" >= 30` es `true`) y `mtrFloat` devuelve `null` para todo lo demás, que
+  también compara `false`. Solo diferirían con entradas absurdas (un array `[45]`). Forzar la
+  caída con una entrada que no puede ocurrir sería fabricar una prueba, no escribirla.
+
+**Y una alarma que se comprobó antes de reportarla.** Al medir se vio que
+`mtrFloat("45,3")` devuelve `null`: una RAC con coma decimal —el formato colombiano— no se
+leería. Se siguió el dato hasta su origen antes de decir nada: **`_labNumerico` ya convierte
+la coma en punto** (`.replace(",", ".")`) antes de que el valor entre al motor, por las dos
+vías que lo alimentan (los últimos laboratorios y los factores del resumen previo). No es un
+riesgo vivo. Comprobarlo costó tres minutos; reportarlo sin comprobarlo habría costado una
+investigación entera al médico.
