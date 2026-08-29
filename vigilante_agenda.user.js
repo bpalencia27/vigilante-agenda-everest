@@ -5286,12 +5286,19 @@ _vglOfrecerDeshacer(btn);
     btnToggle.className = "vgl-dock-toggle";
     btnToggle.setAttribute("data-accion", "toggle");
     btnToggle.setAttribute("aria-label", colapsado ? "Expandir acciones" : "Colapsar acciones");
+    btnToggle.setAttribute("aria-expanded", colapsado ? "false" : "true");
     btnToggle.title = colapsado ? "Expandir" : "Colapsar";
     btnToggle.textContent = colapsado ? "\u25C0" : "\u25B6";
     btnToggle.addEventListener("click", (e) => {
       e.stopPropagation();
       const nuevoColapsado = !(dock.classList && dock.classList.contains("colapsado"));
       if (dock.classList) dock.classList.toggle("colapsado", nuevoColapsado);
+
+      btnToggle.setAttribute("aria-label", nuevoColapsado ? "Expandir acciones" : "Colapsar acciones");
+      btnToggle.setAttribute("aria-expanded", nuevoColapsado ? "false" : "true");
+      btnToggle.title = nuevoColapsado ? "Expandir" : "Colapsar";
+      btnToggle.textContent = nuevoColapsado ? "\u25C0" : "\u25B6";
+
       try { if (typeof GM_setValue !== "undefined") GM_setValue("vgl_dock_acciones_colapsado", nuevoColapsado ? "1" : ""); } catch (e2) {}
       uxTrack(nuevoColapsado ? "widget.colapsar" : "widget.expandir");
     });
