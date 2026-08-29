@@ -18,10 +18,72 @@
 
 module.exports = {
   nombre: "Relevo de pestaña: la vigilancia de fraude sobrevive (auditoría #7)",
-  cubre: ["_fraudeCompartidoGuardar", "_fraudeCompartidoFusionar"],
+  cubre: ["_fraudeCompartidoGuardar", "_fraudeCompartidoFusionar", "apptKey", "_apptKeysLegado", "_apptMarcada", "_apptMarcar", "colorAndAlert"],
 
   async pruebas(t, api, env, cargar) {
     const CLAVE = "vgl_fraude_dia2";   // v17.1.0 — la clave lleva sufijo de esquema: apptKey cambió de forma
+
+    // =====================================================================
+    // v17.56.0 — REPORTE EN VIVO DE UNA COLEGA (29-ago), textual: «cuando lo confirman tarde
+    // sale rojo y después me salía verde». La marca de llegada extemporánea aparecía y se
+    // perdía sola, que es la MISMA pérdida de evidencia que esta suite vigila desde la
+    // v16.7.0 — pero por otra puerta: no el relevo de pestaña, sino que la CLAVE de la cita
+    // cambia para la misma cita.
+    //
+    // Reproducido con el arnés antes de tocar nada: `apptKey` llevaba `a.index`, la POSICIÓN
+    // en la lista. Un cupo adicional o cualquier reordenamiento cambiaba la clave, la marca
+    // quedaba huérfana y la tarjeta volvía a VERDE. Lo mismo al aparecer o desaparecer el
+    // documento entre lecturas (la API lo trae, el respaldo por DOM a veces no).
+    // =====================================================================
+    const _tt = (h) => new Date("2026-08-29T" + h + ":00");
+
+    function _corrida(cargar, marcaConDoc, releeConDoc, releeIndex) {
+      const c = cargar({ silencioso: true });
+      const A = c.api;
+      A.__state.leader = true;
+      A.__CONFIG.TOLERANCIA_MIN = 6.0;
+      const base = { nombre: "PACIENTE DE PRUEBA", index: 3, hora_texto: "11:20 a. m." };
+      // 11:32 — doce minutos tarde y todavía sin presentarse: aquí nace la marca.
+      A.colorAndAlert(Object.assign({}, base, { doc_id: marcaConDoc ? "5150076" : "", estado: "Sin presentarse" }), _tt("11:32"));
+      // Más tarde lo confirman. Dos lecturas seguidas por el antirrebote de estado.
+      const rel = Object.assign({}, base, { doc_id: releeConDoc ? "0005150076" : "", index: releeIndex, estado: "En Sala" });
+      A.colorAndAlert(rel, _tt("11:41"));
+      return A.colorAndAlert(rel, _tt("11:41"));
+    }
+
+    t.caso("v17.56.0: la marca de llegada tarde sobrevive a que la agenda se reordene", () => {
+      t.igual(_corrida(cargar, false, false, 7).color, "ROJO",
+        "sin documento legible y en otra posición de la lista: sigue siendo la misma cita");
+    });
+
+    t.caso("v17.56.0: y sobrevive a que el documento aparezca o desaparezca entre lecturas", () => {
+      t.igual(_corrida(cargar, true, true, 7).color, "ROJO", "con documento las dos veces (y con ceros de relleno la segunda)");
+      t.igual(_corrida(cargar, true, false, 7).color, "ROJO", "marcada con documento, releída sin él");
+      t.igual(_corrida(cargar, false, true, 7).color, "ROJO", "marcada sin documento, releída con él");
+    });
+
+    t.caso("v17.56.0: un paciente que SÍ llegó a tiempo sigue saliendo verde", () => {
+      const c = cargar({ silencioso: true });
+      const A = c.api;
+      A.__state.leader = true;
+      A.__CONFIG.TOLERANCIA_MIN = 6.0;
+      const base = { nombre: "PACIENTE PUNTUAL", index: 2, hora_texto: "11:20 a. m.", doc_id: "8396613" };
+      // A los 3 minutos aún no se presenta: por debajo de la tolerancia, no se marca nada.
+      A.colorAndAlert(Object.assign({}, base, { estado: "Sin presentarse" }), _tt("11:23"));
+      const enSala = Object.assign({}, base, { estado: "En Sala" });
+      A.colorAndAlert(enSala, _tt("11:24"));
+      t.igual(A.colorAndAlert(enSala, _tt("11:24")).color, "VERDE",
+        "el arreglo no puede convertir en tarde a quien llegó a tiempo");
+    });
+
+    t.caso("v17.56.0: _apptKeysLegado ofrece las formas viejas SOLO para leer", () => {
+      const a = { doc_id: "0005150076", nombre: "PACIENTE DE PRUEBA", index: 3, hora_texto: "11:20 a. m." };
+      t.igual(api.apptKey(a), "5150076@m680", "la clave que se ESCRIBE va canonicalizada y sin posición");
+      const viejas = api._apptKeysLegado(a);
+      t.cierto(viejas.indexOf("0005150076@m680") >= 0, "la del documento sin canonicalizar");
+      t.cierto(viejas.indexOf("PACIENTE DE PRUEBA@m680") >= 0, "la del nombre solo");
+      t.cierto(viejas.indexOf("PACIENTE DE PRUEBA|3@m680") >= 0, "y la vieja con la posición de la lista");
+    });
 
     t.caso("_fraudeCompartidoGuardar: deja los dos conjuntos del día en el almacén compartido", () => {
       const st = api.__state;

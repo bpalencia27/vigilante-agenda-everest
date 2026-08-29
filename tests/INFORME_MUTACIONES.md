@@ -5874,3 +5874,47 @@ el invariante que esa unión existe para proteger, y por eso la prueba lo vio.
 **Retiradas por quedarse sin un solo consumidor**: `MTR_FALLA_GRAVE_UMBRAL` y `_mtrMargenGrave`.
 Una constante clínica sin usuarios es una invitación a que alguien la vuelva a cablear pensando
 que significa algo.
+
+---
+
+## v17.56.0 — la marca de llegada tarde ya no se borra sola
+
+**Origen: reporte en vivo de una colega**, textual: *«cuando lo confirman tarde sale rojo y
+después me salía verde»*.
+
+**Reproducido con el arnés ANTES de tocar nada**, y esa reproducción es la prueba:
+
+```
+11:32  sin presentarse, 12 min tarde  ->  AMBAR   clave: PACIENTE DE PRUEBA|3@m680
+11:33  en sala, misma posición        ->  ROJO
+11:40  entra un cupo adicional        ->  VERDE   clave: PACIENTE DE PRUEBA|4@m680  <-- otra clave
+11:41  ahora sí se lee el documento   ->  VERDE   clave: 5150076@m680               <-- y otra más
+```
+
+La marca seguía en `state.fraudWatch`, intacta, bajo una clave que ya no coincidía. **El almacén
+compartido entre pestañas se descartó como causa**: `_fraudeCompartidoFusionar` **fusiona**,
+nunca reemplaza, así que por ahí no se pierde nada.
+
+**Es el mismo defecto que `mtrProdClaveCita` corrigió en la v17.6.2**, tras el reporte del
+médico «atendí a 10 y el Resumen dice 20». La razón que se escribió entonces vale literalmente
+aquí — *«el orden de la lista no identifica nada»* — y `apptKey` nunca recibió la corrección.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Vuelve `a.index` (la posición) a la clave | *apptKey: arma la clave de la cita* (suite_02) |
+| 2 | La cédula deja de canonicalizarse | *apptKey…* + *v17.56.0: …el documento aparezca o desaparezca* |
+| 3 | La lectura tolerante pierde la forma del nombre | 2 casos de suite_66 |
+| 4 | La marca deja de anotarse bajo las dos identidades | *…marcada con documento, releída sin él* |
+| 5 | Se quita la lectura tolerante entera | *v17.56.0: la marca sobrevive a que la agenda se reordene* |
+
+**Nota sobre la mutación 1, dicha porque es información y no un adorno:** cae en `suite_02`
+(que fija la forma de la clave) pero **no** en `suite_66` (que prueba el comportamiento). El
+motivo es real y conviene tenerlo escrito: la marca se anota además bajo el nombre, así que la
+lectura tolerante **enmascara** el defecto en la prueba de comportamiento. Los dos mecanismos
+se solapan a propósito —clave estable *y* lectura tolerante—, y por eso hace falta la prueba de
+forma: sin ella, devolver la posición a la clave pasaría desapercibido hasta que alguien tocara
+también el otro mecanismo.
+
+**Lo que NO se perdía:** la línea `FRAUDE_EXTEMPORANEO` de la auditoría se escribe cuando suena
+el aviso y no depende de la clave. La evidencia para reclamaciones de los casos ya afectados
+sigue en el CSV; lo que se perdía era el color de la tarjeta.

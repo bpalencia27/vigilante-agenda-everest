@@ -4,6 +4,47 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.56.0] — 2026-08-29 (La marca de llegada tarde ya no se borra sola)
+
+### 🔴➡️🟢 El reporte
+Una colega, en vivo: *«cuando lo confirman tarde sale rojo y después me salía verde»*. El aviso
+de confirmación extemporánea salió, la tarjeta se puso roja… y más tarde volvió a verde.
+
+### 🔍 Qué pasaba
+Cada cita se identifica con una clave interna. Esa clave llevaba **la posición del paciente en
+la lista** — y la posición cambia. Entra un cupo adicional, la agenda se reordena, y **la misma
+cita pasa a tener otra clave**: la marca de «llegó tarde» queda archivada bajo la clave vieja y
+la tarjeta vuelve a pintarse verde.
+
+Lo mismo ocurría cuando **el documento aparece o desaparece entre lecturas**: el script lee la
+agenda por dos vías (la conexión directa con Everest y, si esa falla, lo que se ve en pantalla),
+y una trae la cédula donde la otra a veces no. La misma cita saltaba de una clave a otra.
+
+Reproducido de punta a punta antes de tocar nada: paciente citado a las 11:20, confirmado 12
+minutos tarde → **rojo**; entra un cupo adicional → **verde**.
+
+### ✅ Ahora
+- **La posición en la lista sale de la clave.** Es exactamente la corrección que ya se le hizo
+  al contador de productividad en la v17.6.2, cuando usted reportó *«atendí a 10 y el Resumen
+  dice 20»*: el orden de la lista no identifica a nadie. Esta parte del script nunca la recibió.
+- **La cédula se canonicaliza**: `0005150076` y `5150076` no pueden dar dos claves distintas.
+- **La marca queda anotada bajo las dos identidades del paciente** —su documento y su nombre—
+  para que la siguiente lectura la encuentre venga por donde venga.
+- **Y se lee tolerante**: una marca puesta esta misma mañana con la versión anterior se sigue
+  encontrando. El arreglo no borra hoy la evidencia que viene a proteger.
+
+Comprobadas las cuatro combinaciones (marcada con/sin documento, releída con/sin documento, y
+con la agenda reordenada): las cuatro siguen en **rojo**. Y un paciente que llegó a tiempo sigue
+saliendo verde: el arreglo no convierte a nadie en tarde.
+
+### 📄 Sobre las reclamaciones ya afectadas
+**Lo que se perdía era el color, no el registro.** La línea `FRAUDE_EXTEMPORANEO` —con la hora
+de la cita, la hora real de confirmación y los minutos de retraso— se escribe en la auditoría en
+el momento en que suena el aviso, y ahí sigue. Si su colega necesita reclamar por los casos de
+hoy, el dato está en el CSV de auditoría aunque la tarjeta se haya puesto verde.
+
+---
+
 ## [Versión 17.55.0] — 2026-08-29 (Un tercio menos de viajes al laboratorio)
 
 ### 🚌 Lo que se midió primero

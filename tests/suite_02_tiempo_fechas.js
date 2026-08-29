@@ -152,8 +152,19 @@ module.exports = {
       // API/scrape: dos formatos de hora para una cita rompían notified/fraudWatch/
       // alertedFraud/contadas). Ver comentario en apptKey (vigilante_agenda.user.js).
       t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@m420");
-      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN|5@m510");
       t.igual(api.apptKey({ doc_id: "456" }), "456@");
+      // v17.56.0 — LA POSICIÓN EN LA LISTA SALE DE LA CLAVE. Reporte en vivo de una colega
+      // (29-ago): «cuando lo confirman tarde sale rojo y después me salía verde». Con el
+      // `index` dentro, un cupo adicional o cualquier reordenamiento de la agenda cambiaba
+      // la clave de la MISMA cita y la marca de llegada extemporánea quedaba huérfana: la
+      // tarjeta volvía a verde y la evidencia para reclamaciones se perdía. Es el mismo
+      // defecto que `mtrProdClaveCita` ya corrigió en la v17.6.2, con la misma razón que
+      // vale aquí: el orden de la lista no identifica nada.
+      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN@m510");
+      t.igual(api.apptKey({ nombre: "JUAN", index: 9, hora_texto: "08:30" }), "JUAN@m510",
+        "la misma cita en otra posición de la lista es la MISMA cita");
+      // Y el documento se canonicaliza: los ceros de relleno no parten la cita en dos.
+      t.igual(api.apptKey({ doc_id: "0000123", hora_texto: "07:00 AM" }), "123@m420");
     });
 
     // ---------- diaNuevo ----------

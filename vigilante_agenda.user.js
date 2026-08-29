@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.55.0
+// @version     17.56.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.55.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.56.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -10958,10 +10958,68 @@ _vglOfrecerDeshacer(btn);
   // sonaba dos veces y el contador sumaba dos veces por el mismo paciente.
   // Si la hora no se puede leer se cae al texto crudo: perder la cita del mapa sería peor
   // que una clave imperfecta.
+  // v17.56.0 — REPORTE EN VIVO DE UNA COLEGA (29-ago): «cuando lo confirman tarde sale rojo
+  // y después me salía verde». La marca de llegada extemporánea aparecía y se perdía sola.
+  //
+  // Causa, reproducida con el arnés: esta clave puede CAMBIAR para la MISMA cita, y la marca
+  // de fraude (`state.fraudWatch`) queda huérfana bajo la clave vieja, así que la tarjeta
+  // vuelve a pintarse VERDE. Dos vías, las dos reales:
+  //   1. `a.index` es la POSICIÓN en la lista. Cuando entra un cupo adicional o la agenda se
+  //      reordena, la posición cambia — y con ella la clave de todo paciente cuya tarjeta no
+  //      muestre un documento legible.
+  //   2. El documento aparece o desaparece entre lecturas (la API lo trae, el respaldo por
+  //      DOM a veces no), así que la misma cita salta de `123@m680` a `NOMBRE|3@m680`.
+  //
+  // Es EXACTAMENTE el defecto que `mtrProdClaveCita` ya corrigió en la v17.6.2, por el
+  // reporte del médico «atendí a 10 y el Resumen dice 20»: allí se retiró el `idx` con esta
+  // razón, que vale igual aquí — «el orden de la lista no identifica nada: dos citas del
+  // mismo nombre a la misma hora son, en la práctica, la misma cita». Esta función nunca
+  // recibió aquella corrección.
+  //
+  // Y el documento se canonicaliza (v17.48.0): «0005150076» y «5150076» son el mismo
+  // paciente y no pueden dar dos claves.
   function apptKey(a) {
     const min = parseHoraMin(a && a.hora_texto);
     const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
-    return (a.doc_id ? a.doc_id : a.nombre + "|" + a.index) + "@" + hora;
+    const doc = normalizeKey((a && a.doc_id) || "");
+    return (doc ? doc : ((a && a.nombre) || "")) + "@" + hora;
+  }
+  // Las formas ANTERIORES de la clave, solo para LEER. Una marca de fraude puesta esta misma
+  // mañana con la versión anterior vive bajo la clave vieja: si el arreglo la ignorara,
+  // borraría hoy la evidencia que viene a proteger. Se normaliza hacia adelante y se lee
+  // tolerante — el mismo patrón de la v17.48.0. Solo se ESCRIBE con la clave canónica.
+  function _apptKeysLegado(a) {
+    const min = parseHoraMin(a && a.hora_texto);
+    const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
+    const out = [];
+    const crudo = (a && a.doc_id) || "";
+    if (crudo) out.push(crudo + "@" + hora);                                   // doc sin canonicalizar
+    // La MISMA cita pudo quedar marcada por NOMBRE si en aquella lectura el documento no se
+    // leía, y ahora traerlo. Es justo el salto que perdía la marca: la identidad de una cita
+    // se puede establecer por documento O por nombre, y las dos tienen que cruzarse o el
+    // arreglo solo cubre la mitad de las veces.
+    if (a && a.nombre) out.push(a.nombre + "@" + hora);                        // nombre solo (clave nueva sin doc)
+    if (a && a.nombre !== undefined && a.index !== undefined) out.push(a.nombre + "|" + a.index + "@" + hora);   // nombre+posición (clave vieja)
+    return out;
+  }
+  // ¿Está esta cita marcada en `conjunto`, con la clave de hoy o con cualquiera de las viejas?
+  function _apptMarcada(conjunto, a, key) {
+    if (!conjunto) return false;
+    if (conjunto.has(key)) return true;
+    for (const k of _apptKeysLegado(a)) { if (conjunto.has(k)) return true; }
+    return false;
+  }
+  // Marca la cita bajo SUS DOS identidades: la canónica (documento) y la del nombre. El
+  // documento aparece y desaparece entre lecturas —la API lo trae, el respaldo por DOM a
+  // veces no—, así que una marca anotada solo bajo una de las dos se pierde en cuanto la
+  // siguiente lectura llega por la otra vía. Anotar las dos cuesta una entrada en un
+  // conjunto que se vacía cada día, y es lo que impide que la evidencia se evapore.
+  function _apptMarcar(conjunto, a, key) {
+    if (!conjunto) return;
+    conjunto.add(key);
+    const min = parseHoraMin(a && a.hora_texto);
+    const hora = (typeof min === "number" && isFinite(min)) ? "m" + min : ((a && a.hora_texto) || "");
+    if (a && a.nombre) conjunto.add(a.nombre + "@" + hora);
   }
   // Reinicio al cambiar de día: sin esto, una pestaña dejada abierta toda la noche seguía
   // con la lista de "sospechosos" de ayer y marcaba fraude a quien volviera hoy.
@@ -11026,7 +11084,7 @@ _vglOfrecerDeshacer(btn);
     } else state.estadoPendiente.delete(key);
     const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0); let color = "AZUL", sound = false, reason = "", arrival = false;
     if (st.includes("en sala")) {
-      if (state.fraudWatch.has(key)) { color = "ROJO"; if (!state.alertedFraud.has(key)) { sound = true; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); } }
+      if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; if (!_apptMarcada(state.alertedFraud, a, key)) { sound = true; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); } }
       else { color = "VERDE"; if (!prev.includes("en sala")) { arrival = true; try { _preconPriorizar(a.doc_id); } catch (e) {} } } // Llegada a sala: además pasa al frente de la pre-consulta (v16.6.0 N2)
     }
     else if (st.includes("atendido")) {
@@ -11039,8 +11097,8 @@ _vglOfrecerDeshacer(btn);
       // interrumpe. El color ROJO se CONSERVA (el panel lo sigue pintando y la auditoría lo
       // sigue registrando: es la evidencia para las reclamaciones), pero `sound` se queda
       // en false, que es lo único que dispara tono, notificación del sistema y cartel.
-      if (state.alertedFraud.has(key)) color = "ROJO";
-      else if (state.fraudWatch.has(key)) { color = "ROJO"; state.alertedFraud.add(key); _fraudeCompartidoGuardar(); }
+      if (_apptMarcada(state.alertedFraud, a, key)) color = "ROJO";
+      else if (_apptMarcada(state.fraudWatch, a, key)) { color = "ROJO"; _apptMarcar(state.alertedFraud, a, key); _fraudeCompartidoGuardar(); }
       else color = "VERDE";
     }
     else if (st.includes("sin presentarse")) {
@@ -11067,11 +11125,11 @@ _vglOfrecerDeshacer(btn);
         // bitácora, marcada como no confirmada, para que una lectura futura (ya sin la
         // sospecha de estar estancada) sea la que de verdad origine la marca.
         const _relevoReciente = (Date.now() - _ultimoRelevoVisibilidad) < RELEVO_GRACIA_FRAUDE_MS;
-        if (state.leader && !state.fraudWatch.has(key)) {
+        if (state.leader && !_apptMarcada(state.fraudWatch, a, key)) {
           if (_relevoReciente) {
             logEvent({ t: new Date().toLocaleTimeString(), ev: "LECTURA_TRAS_RELEVO_SIN_CONFIRMAR", hora: a.hora_texto, doc: a.doc_id, estado: stRaw, min: Math.round(elapsed * 10) / 10, nombre: a.nombre });
           } else {
-            state.fraudWatch.add(key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
+            _apptMarcar(state.fraudWatch, a, key); _fraudeCompartidoGuardar(); if (S.adherencia && a.doc_id) _noShowRegistrar(a.doc_id);
           }
         }
       } else if (elapsed >= prealert) { color = "MORADO"; reason = "tiempo"; } else color = "AZUL";
