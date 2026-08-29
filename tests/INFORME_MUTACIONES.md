@@ -2753,3 +2753,30 @@ Las 10 mutaciones se aplicaron UNA A LA VEZ sobre el archivo de producción, se 
 esperada y se restauró cada una antes de pasar a la siguiente. El banco completo quedó en
 **2.306/2.306** tras la restauración final (antes de la Parte A: 2.295 — la suite 63 ganó
 11 casos).
+
+## v12.10.13 (TABLERO/Codigo.gs) — 29-ago-2026: reparación de la telemetría contra el export real
+
+Auditoría del XLSX/CSV reales subidos por el médico (9 hojas, 43.634 filas en `uso_detalle`).
+Dos fallas ESTRUCTURALES del lado del receptor (Apps Script no corre en el banco; se
+verificaron con una reproducción standalone en Node de `doPost` + `repararEncabezadosTelemetria`
+sobre el estado REAL de la hoja, el mismo patrón que ya usaba la v12.10.12):
+
+1. **Hoja `uso` desalineada** — 10.290/10.327 filas (99,6 %): la migración de v12.6.9 añadió
+   `lote` al FINAL del encabezado (col 10) mientras las filas lo escriben en la col 6. El
+   total `n` y el JSON de `acciones` quedaron desplazados una columna y el acumulado de UX
+   del tablero de flota se leyó como 0 para todo equipo. Mutación verificada: con el
+   encabezado ROTO (el real), un `post("ux")` nuevo escribe `lote` bajo la columna `deDia`;
+   tras `repararEncabezadosTelemetria()`, el mismo envío cae en su columna por nombre
+   (`lote`, `deDia`, `desde`, `n`, `acciones`), con `n` recalculado por el servidor (no
+   confía en el cliente) y `ver` con apóstrofo.
+2. **`ver` corrompida como fecha** — 523/777 en `error`, 1.142/10.327 en `uso`, 63/155 en
+   `entorno`: "14.2.2001" (era 14.2.1), seriales "36755.0". El apóstrofo de `_celdaVersion`
+   y `_forzarTextoColumnaVer` no están en el desplegado; hay que redesplegar y correr el
+   menú «Reparar columna 'ver' corrupta en fecha» (ya existía).
+3. **Hoja `resumen`** — la fila 1 la ocupaba un encabezado viejo de armarResumen (cols 1-11)
+   y el encabezado real quedó corrido a las cols 12-22. Mutación verificada: tras la
+   reparación, la fila 1 es el encabezado canónico y los datos (cols 1-11) quedan etiquetados.
+
+La reproducción standalone confirmó: reparación idempotente (dos corridas = mismo resultado),
+datos no movidos (solo se reescribe la fila 1) y los envíos posteriores alineados por nombre
+de columna (`_appendFila`). El banco de JS del userscript no cambió (2.306/2.306).
