@@ -267,15 +267,36 @@ reproducible en Laboratorios: sigue haciendo falta el caso concreto del médico 
 de consola, o qué exactamente hizo y qué esperaba) antes de escribir cualquier arreglo —
 adivinar aquí sería justo lo que este proyecto prohíbe.
 
-## 10. [ABIERTO] Nueva dirección para la adopción de Agendamiento
+## 10. [DECIDIDO 28-ago] Sin rediseño visual de Agendamiento — solo flujo, sobre el look actual
 
-Las ideas de UI de la ronda anterior (beneficio visible en el botón, un clic para el caso
-común, reforzar el acompañante) no convencieron al médico. Nueva dirección propuesta
-(28-ago), pendiente de validar con él: (a) interceptar el punto de entrada NATIVO de
-Everest para agendar con una micro-sugerencia in-situ, en vez de competir con un botón
-nuestro en otro lugar de la pantalla; (b) adopción social — mostrarle a los colegas sus
-propios números reales de ahorro de tiempo, sacados del Tablero de Telemetría de cada uno,
-en vez de solo cambios de interfaz.
+Tres rondas de mockups (v2 "reporte" de antes/después, v3 interactivo S+ con paleta jade
+propia, y tres bocetos A/Nativo-Everest/B-Ficha-cálida/C-Minimal, con y sin pulido de
+profundidad) fueron todas rechazadas por el médico. Su veredicto final, verbatim: **"no me
+gustan, se ve más lindo el actual que todas esas propuestas que haz hecho"** — el aspecto
+visual ACTUAL de Agendamiento (el de Everest, sin tocar) le parece mejor que cualquiera de
+las alternativas ensayadas.
+
+**Decisión explícita (28-ago, tras preguntarle directamente):** abandonar el rediseño
+visual. El trabajo pendiente de Agendamiento se limita al FLUJO — sobre el aspecto visual
+actual de Everest, sin cambiar un color ni una tipografía. Los dos problemas que él mismo
+señaló como prioritarios, en sus palabras: **"se presta a errores"** y **"no sabe qué está
+pasando"** (falta de feedback de estado). Cualquier trabajo futuro en Agendamiento debe:
+
+- Blindar contra errores (ninguna casilla de laboratorios premarcada, confirmar bloqueado
+  hasta una elección explícita, distinguir claramente los tres casos reales — cita+labs,
+  solo cita, solo labs — sin forzar los tres por el mismo camino).
+- Dar feedback de estado claro (en qué paso está, qué falta, si algo salió bien o mal) —
+  sin inventar un lenguaje visual nuevo para decirlo.
+- NO tocar paleta, tipografía ni componentes: el punto de partida visual es Everest tal
+  como es hoy.
+
+Los tres mockups quedan en `docs/mockup_agendamiento_v2/` y `docs/mockup_agendamiento_v3/`
+como registro de lo ya descartado — no se debe repetir ese camino ni proponer una nueva
+paleta/estilo sin que el médico lo pida explícitamente.
+
+La idea de "adopción social" (mostrarle a los colegas sus propios números de ahorro de
+tiempo desde el Tablero de Telemetría) sigue viva y no fue parte de lo rechazado — ver
+punto #7.
 
 ## 11. [ABIERTO] Extender la cosecha por paciente para servir de grounding en la MISMA visita
 
