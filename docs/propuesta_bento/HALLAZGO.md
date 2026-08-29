@@ -5,10 +5,24 @@
 
 ## De dónde salió
 
-El médico había rechazado tres rondas de rediseño visual y su veredicto quedó anotado en
-`docs/BACKLOG_PENDIENTE_20260828.md` (punto 10): *"no me gustan, se ve más lindo el actual
-que todas esas propuestas"*. Después autorizó explícitamente correr una propuesta más:
-*"no importa, correlo y me muestras el diseño antes y hacer un backup obviamente"*.
+El médico había rechazado tres rondas de rediseño **del módulo de Agendamiento**, anotadas
+en `docs/BACKLOG_PENDIENTE_20260828.md` (punto 10). Después autorizó explícitamente correr
+una propuesta más: *"no importa, correlo y me muestras el diseño antes y hacer un backup
+obviamente"*.
+
+> **⚠️ Corrección importante (29-ago).** La versión original de este documento decía que el
+> médico "había rechazado tres rondas de rediseño visual" a secas, y ese encuadre se usó
+> para presentar esta propuesta como algo que él probablemente no querría. **Era una
+> generalización indebida.** Sus tres rechazos fueron todos de **Agendamiento**; nunca
+> opinó sobre el widget de exámenes. Él lo corrigió: *"pero yo me refería a el modulo de
+> agendamiento, no el de exámenes, en ningún momento dije que era el de los exámenes"*, y
+> añadió: *"pero obviamente el widget de exámenes también hay que arreglarlo ya que está
+> muy mal diseñado"*.
+>
+> **Lo que NO cambia con esa corrección:** las tres razones técnicas de abajo para descartar
+> *esta* propuesta concreta. Son medidas en Chromium y no dependen del gusto de nadie — la
+> regla ni siquiera llega a aplicarse, y forzada empeora la legibilidad. El rediseño del
+> widget sigue siendo necesario; lo que no sirve es **este** CSS.
 
 Respaldo hecho antes de nada: copia en `respaldos/` (fuera del repo) y el commit `99525bf`,
 ya en el remoto. El tag `respaldo-antes-rediseno-v17.41.0` existe en local; empujarlo al

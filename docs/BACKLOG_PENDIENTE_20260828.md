@@ -292,7 +292,26 @@ pasando"** (falta de feedback de estado). Cualquier trabajo futuro en Agendamien
 
 Los tres mockups quedan en `docs/mockup_agendamiento_v2/` y `docs/mockup_agendamiento_v3/`
 como registro de lo ya descartado — no se debe repetir ese camino ni proponer una nueva
-paleta/estilo sin que el médico lo pida explícitamente.
+paleta/estilo **para Agendamiento** sin que el médico lo pida explícitamente.
+
+> ### ⚠️ CORRECCIÓN (29-ago) — el alcance de este rechazo es SOLO Agendamiento
+>
+> Este punto se redactó de forma que se leía como un "no" al rediseño visual **de todo el
+> script**, y así se usó después: se citó para argumentar en contra de rediseñar el widget
+> de exámenes de Conducta. **Eso fue un error de interpretación, no una decisión del
+> médico.**
+>
+> Sus tres rechazos fueron, los tres, del **módulo de Agendamiento**: la propuesta v2
+> (reporte), la v3 (prototipo S+) y los bocetos A/B/C, que eran el paso de elegir fecha.
+> Nunca opinó sobre el widget de exámenes.
+>
+> Su corrección, verbatim (29-ago): *"pero yo me refería a el modulo de agendamiento, no el
+> de exámenes, en ningún momento dije que era el de los exámenes"*. Y acto seguido:
+> *"pero obviamente el widget de exámenes también hay que arreglarlo ya que está muy mal
+> diseñado"*.
+>
+> **Estado real, entonces:** Agendamiento no se rediseña visualmente (esto sigue en pie);
+> el **widget de exámenes SÍ hay que rediseñarlo**, y es trabajo pendiente abierto.
 
 La idea de "adopción social" (mostrarle a los colegas sus propios números de ahorro de
 tiempo desde el Tablero de Telemetría) sigue viva y no fue parte de lo rechazado — ver
