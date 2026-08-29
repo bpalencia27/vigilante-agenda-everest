@@ -6,6 +6,30 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.45.0 — 29-ago-2026 (fuga de PHI: el nombre no llegaba al censor por un canal)
+
+`mtrDatosExtraTexto` llamaba a `mtrSanearTextoLibreAI(s)` sin el 2.º argumento, así que la
+rama `if (nombrePaciente)` —la única defensa por TOKENS, y la única capaz de tachar un
+apellido en MAYÚSCULAS SOSTENIDAS o un nombre propio, que no tiene forma reconocible—
+quedaba inerte. Los otros cuatro canales del prompt sí lo pasaban.
+
+**Reproducido antes de arreglar:** la prueba salió en rojo con el código intacto.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | `mtrDatosExtraTexto` vuelve a llamar al saneador sin el nombre | "tacha el nombre del paciente: no viaja a Gemini" | Sí — 128/128 |
+| 2 | `mtrRedaccionPrompt` deja de propagar `o.nombrePaciente` | "el prompt propaga el nombre a los datos extra" | Sí — 128/128 |
+
+**La mutación 2 NO cayó en el primer intento, y eso destapó una prueba vacua.** Estaba
+escrita para armar un prompt real y comprobar que el nombre no apareciera en `user`; pero
+con esos argumentos el ensamblador cae en otra rama y el bloque de datos extra **ni
+siquiera se emite**, así que pasaba por ausencia. Se reescribió como regresión de código
+fuente —el mismo patrón que la de `suite_71` sobre el enganche de los widgets— porque lo
+que hay que fijar es el CABLE. Con eso, la mutación 2 sí cae.
+
+Décima vez en este proyecto que una prueba nueva no caza su propia mutación. Se documenta
+en vez de disimularse: una mutación que no cae es información.
+
 ## v17.44.0 — 29-ago-2026 (el recordatorio de PyM sobrevive al CSS de Everest)
 
 No hay mutación de código que verificar: el cambio es puramente declarativo (seis

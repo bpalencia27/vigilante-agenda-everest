@@ -4,6 +4,41 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.45.0] — 2026-08-29 (🔒 El nombre del paciente ya no puede viajar a la IA por el campo de medicamentos)
+
+### Una fuga de datos del paciente, cerrada
+Hallazgo de auditoría adversarial, no de consulta. El script tiene un censor que limpia lo
+que se le manda a la IA, y ese censor trabaja de **dos formas distintas**:
+
+1. **Por forma**: reconoce correos, teléfonos y cédulas porque tienen un patrón.
+2. **Por nombre**: si se le dice cómo se llama el paciente, tacha sus apellidos donde
+   aparezcan.
+
+La segunda es la única capaz de tachar un apellido escrito en MAYÚSCULAS, que es como
+Everest muestra los nombres. Y es la única posible para un nombre propio, porque un
+apellido no tiene "forma" que un patrón pueda reconocer — es una palabra como cualquier
+otra.
+
+**El problema:** de los cinco caminos por los que su texto llega a la IA, cuatro le decían
+al censor el nombre del paciente. Uno no: el de **"medicamentos aportados"**, que es
+justamente un campo de texto libre donde es natural escribir cosas como *"según la esposa
+de PEREZ GOMEZ, olvida la dosis de la noche"*. Por ahí, ese apellido salía del computador.
+
+Ya está cerrado: ese canal recibe el nombre igual que los otros cuatro.
+
+### Y una prueba que no probaba nada
+Al verificar el arreglo rompiéndolo a propósito, **una de las tres pruebas nuevas no se
+puso en rojo**. Investigado: armaba un prompt real y comprobaba que el nombre no
+apareciera… pero con esos datos el ensamblador toma otro camino y el bloque ni siquiera se
+genera, así que la prueba pasaba **por ausencia**. Se reescribió para que verifique el
+cable de verdad, y ahora sí cae cuando el código se rompe.
+
+Es el mismo error que este proyecto ya se llevó nueve veces, y por eso cada cambio se
+rompe a propósito antes de darlo por bueno: *una prueba que no cae cuando el código se
+rompe no está probando nada*.
+
+---
+
 ## [Versión 17.44.0] — 2026-08-29 (El recordatorio de PyM ya no puede volverse ilegible)
 
 ### 👁️ Seis avisos que Everest podía borrar de su pantalla, uno de ellos clínico

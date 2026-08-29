@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.44.0
+// @version     17.45.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.44.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.45.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -34653,9 +34653,23 @@ _vglOfrecerDeshacer(btn);
     tfgAportada: "TFG APORTADA POR EL MÉDICO (ml/min)",
     medicamentosAportados: "MEDICAMENTOS APORTADOS POR EL MÉDICO",
   };
-  function mtrDatosExtraTexto(datos) {
+  // v17.45.0 — `nombrePaciente` (2.º parámetro, OPCIONAL para no romper llamadores).
+  // FUGA DE PHI cerrada, hallazgo de auditoría adversarial: esta función llamaba al
+  // saneador SIN el nombre, y `mtrSanearTextoLibreAI` tiene dos defensas — una por FORMA
+  // (correo, teléfono, cédula) y otra por TOKENS, dentro de `if (nombrePaciente)`, que es
+  // la ÚNICA capaz de tachar un apellido en MAYÚSCULAS SOSTENIDAS (el estilo real de
+  // Everest) y la única que puede reconocer un nombre propio, porque un nombre no tiene
+  // forma reconocible. Esa rama quedaba inerte aquí.
+  // De los cinco canales que llegan al prompt de Gemini —contextoLibre, pregunta, ancla,
+  // indicaciones y este— los otros cuatro sí pasaban el nombre. Este era el único hueco,
+  // y uno de sus tres campos ("medicamentos aportados") es texto libre que el médico
+  // teclea a mano, donde es natural escribir "según la esposa de FULANO".
+  // El proyecto ya lo tenía escrito: "scrubPII reconoce correos y cédulas porque tienen
+  // forma, pero NO puede reconocer un nombre propio. Tachar un nombre con garantía exige
+  // conocerlo."
+  function mtrDatosExtraTexto(datos, nombrePaciente) {
     if (!datos || typeof datos !== "object") return "";
-    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(s) : ((typeof scrubPII === "function") ? String(scrubPII(String(s))) : String(s));
+    const limpiar = (s) => (typeof mtrSanearTextoLibreAI === "function") ? mtrSanearTextoLibreAI(s, nombrePaciente) : ((typeof scrubPII === "function") ? String(scrubPII(String(s))) : String(s));
     const L = [];
     for (const k of Object.keys(MTR_DATOS_EXTRA_ETIQUETAS)) {
       const v = datos[k];
@@ -34744,7 +34758,9 @@ _vglOfrecerDeshacer(btn);
     const o = opts || {};
     const hechos = mtrHojaDeHechosTexto(hoja);
     const contextoLibre = o.contextoLibre ? mtrSanearTextoLibreAI(String(o.contextoLibre).trim(), o.nombrePaciente) : "";
-    const datosExtra = mtrDatosExtraTexto(o.datosExtra);
+    // v17.45.0 — el nombre viaja también aquí. Era el único de los cinco canales del
+    // prompt que no lo pasaba (contextoLibre, pregunta, ancla e indicaciones sí).
+    const datosExtra = mtrDatosExtraTexto(o.datosExtra, o.nombrePaciente);
     // v17.6.26 — sin checkbox que marcar: el estilo se usa SIEMPRE que haya al menos un
     // ejemplo aprendido (mtrEstiloGuardar sigue siendo automático, ver más abajo).
     const ejemplos = (Array.isArray(o.estiloEjemplos) && o.estiloEjemplos.length)

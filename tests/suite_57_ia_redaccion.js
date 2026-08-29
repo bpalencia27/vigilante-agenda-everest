@@ -1071,6 +1071,54 @@ module.exports = {
       t.cierto(txt.indexOf("3151234567") < 0, "censura el teléfono colado");
     });
 
+    // v17.45.0 — FUGA DE PHI, hallazgo de auditoría adversarial (29-ago).
+    // `mtrSanearTextoLibreAI(texto, nombrePaciente)` tiene DOS defensas: una por FORMA
+    // (correo, teléfono, cédula, y un patrón de mayúsculas para nombres) y otra por
+    // TOKENS, que solo se activa si se le pasa el nombre del paciente. La segunda es la
+    // única que cubre el estilo real de Everest —MAYÚSCULAS SOSTENIDAS— y la única capaz
+    // de tachar un apellido que por forma parece una palabra cualquiera.
+    // `mtrDatosExtraTexto` llamaba al saneador SIN ese segundo argumento, así que la rama
+    // `if (nombrePaciente)` quedaba inerte: de los cinco canales que llegan al prompt de
+    // Gemini, cuatro sí lo pasaban y este no. Y uno de sus tres campos,
+    // "medicamentos aportados", es texto libre que el médico teclea a mano.
+    // El propio proyecto ya dejó escrito por qué esto importa: "scrubPII reconoce correos
+    // y cédulas porque tienen forma, pero NO puede reconocer un nombre propio, y el médico
+    // lo escribe a mano. Tachar un nombre con garantía exige conocerlo."
+    t.caso("v17.45.0 — mtrDatosExtraTexto tacha el nombre del paciente: no viaja a Gemini", () => {
+      const txt = api.mtrDatosExtraTexto(
+        { medicamentosAportados: "SEGUN ESPOSA DE PEREZ GOMEZ, toma losartan 50mg" },
+        "PEREZ GOMEZ"
+      );
+      t.cierto(txt.indexOf("PEREZ") < 0, "el apellido del paciente no puede viajar al modelo");
+      t.cierto(txt.indexOf("GOMEZ") < 0, "ni el segundo apellido");
+      t.cierto(/losartan/i.test(txt), "pero el dato clínico sí se conserva — no se censura de más");
+    });
+
+    t.caso("v17.45.0 — sin nombre del paciente sigue funcionando igual que antes (retrocompatible)", () => {
+      const txt = api.mtrDatosExtraTexto({ medicamentosAportados: "losartán 50mg" });
+      t.cierto(/losartán/.test(txt), "el parámetro es opcional: quien no lo pase no se rompe");
+    });
+
+    // La primera versión de esta prueba armaba un prompt real y comprobaba que el nombre
+    // no apareciera en `user`. **No servía**: con esos argumentos el ensamblador cae en
+    // otra rama y el bloque de datos extra ni siquiera se emite, así que la prueba pasaba
+    // por AUSENCIA y no cazaba su propia mutación. Se cambió por una regresión de código
+    // fuente —mismo patrón que la de suite_71 sobre el enganche de los widgets— porque lo
+    // que hay que fijar aquí es el CABLE: que este canal reciba el nombre igual que los
+    // otros cuatro. Verificado: quitar el argumento pone esta prueba en rojo.
+    t.caso("v17.45.0 — el prompt propaga el nombre a los datos extra, igual que a los otros cuatro canales", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/mtrDatosExtraTexto\(\s*o\.datosExtra\s*,\s*o\.nombrePaciente\s*\)/.test(src),
+        "mtrRedaccionPrompt debe pasar el nombre del paciente a mtrDatosExtraTexto — sin él, la defensa por tokens del saneador queda inerte y un apellido en mayúsculas viaja a Gemini");
+      // Y que el saneador lo reciba de verdad dentro de la función, no solo en la firma.
+      const i = src.indexOf("function mtrDatosExtraTexto");
+      const bloque = src.slice(i, i + 700);
+      t.cierto(/mtrSanearTextoLibreAI\(s,\s*nombrePaciente\)/.test(bloque),
+        "y mtrDatosExtraTexto debe reenviarlo al saneador");
+    });
+
     t.caso("mtrJsonV68DesdeResumen mapea lo determinista y deja la prosa en blanco", () => {
       const resumen = {
         _hoyIso: "2026-08-23",
