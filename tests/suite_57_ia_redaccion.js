@@ -54,6 +54,73 @@ module.exports = {
       }
     });
 
+    // =====================================================================
+    // v17.50.0 — DECISIONES D5 y D6 de la entrevista del 29-ago.
+    // El contrato del prompt tenia solo la mitad prohibitiva (no inventes) y le faltaba la
+    // simetrica (no te dejes nada). Esa regla existia, pero en MTR_REDACCION_SYS: un prompt
+    // que dejo de usarse y que nadie retiro, asi que se perdio sin que se notara. Un
+    // borrador incompleto no dispara ninguna alarma; uno con una cifra inventada si.
+    // Los CINCO modos incluyen el respaldo de un modo desconocido, que es el que mas
+    // necesita el contrato estricto, no el que menos (misma logica que la v17.1.0).
+    // =====================================================================
+    const MODOS_PROMPT = ["enfermedad_actual", "motivo_consulta", "recomendaciones", "analisis_plan", "un_modo_que_no_existe"];
+
+    t.caso("v17.50.0 (D5): los CINCO modos exigen no omitir lo que si esta en los datos, no solo no inventar", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/NO OMITAS/.test(sys), modo + ": lleva la regla de exhaustividad");
+        t.cierto(/NO EXISTE: no lo inventes/.test(sys), modo + ": y sigue llevando la de no inventar (son las dos caras)");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): los CINCO modos prohiben los juicios de valor sobre el paciente", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/juicios de valor/i.test(sys), modo + ": no se califica al paciente");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): los CINCO modos distinguen 'documentado como NO' de 'no se pregunto'", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/Un campo AUSENTE significa que no se preguntó/.test(sys), modo + ": la regla numero uno de la casa");
+      }
+    });
+
+    // El bloque del ejemplo, y solo el: `SALIDA:` a secas tambien aparece en el prompt base
+    // ("SALIDA: prosa continua EN MAYUSCULAS..."), asi que buscarlo en todo el sistema es
+    // una asercion vacua — se comprobo con una mutacion que borro el par y no cayo nadie.
+    function bloqueEjemplo(modo) {
+      const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+      const i = sys.indexOf("# EJEMPLO");
+      return i < 0 ? "" : sys.slice(i);
+    }
+
+    t.caso("v17.50.0 (D6): motivo de consulta y recomendaciones ya traen su mini-ejemplo, con su par entrada -> salida", () => {
+      for (const modo of ["motivo_consulta", "recomendaciones"]) {
+        const ej = bloqueEjemplo(modo);
+        t.cierto(ej.length > 0, modo + ": los modelos flash-lite copian un patron mejor que una instruccion abstracta");
+        const iDatos = ej.indexOf("DATOS:"), iSalida = ej.indexOf("SALIDA:");
+        t.cierto(iDatos > 0, modo + ": el ejemplo dice de que datos parte");
+        t.cierto(iSalida > iDatos, modo + ": y que sale de ellos, en ese orden");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): NINGUN ejemplo del prompt lleva cifras — el verificador las marcaria como inventadas", () => {
+      for (const modo of ["motivo_consulta", "recomendaciones"]) {
+        const ej = bloqueEjemplo(modo);
+        t.cierto(ej.length > 40, modo + ": el ejemplo tiene contenido que revisar");
+        t.igual(api.mtrVerificarCifrasIA(ej, {}).length, 0,
+          modo + ": si el modelo copiara el ejemplo, al medico le saltaria «cifras sin respaldo» sobre un dato del propio prompt");
+      }
+    });
+
+    t.caso("v17.50.0 (D5): MTR_REDACCION_SYS ya no existe, y su regla no se fue con el", () => {
+      const fuente = require("fs").readFileSync(__dirname + "/../vigilante_agenda.user.js", "utf8");
+      t.igual(fuente.indexOf("const MTR_REDACCION_SYS"), -1, "el prompt muerto se retiro");
+      t.cierto(/NO OMITAS ningún hallazgo clínicamente relevante/.test(fuente), "pero su regla de exhaustividad quedo en el prompt vivo");
+    });
+
     t.caso("cada redactor usa SU prompt: enfermedad actual (extenso, primera persona) vs Análisis y plan (siglas, secciones — la nota del Copiloto)", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
       t.cierto(/Resoluci[oó]n 1995/.test(ea.system), "EA: rol de auditoría 1995");

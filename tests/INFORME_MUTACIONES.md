@@ -5607,3 +5607,49 @@ pruebas solo se afirmaban sobre la **longitud**, así que el banco no distinguí
 retiraron las 4» de «se retiraron 4 cualesquiera». El helper nuevo `_lotesEnCola(c, evento)`
 comprueba **qué** queda y con **qué lote**, que es de lo que depende que el panel no cuente
 dos veces la misma jornada.
+
+---
+
+## v17.50.0 — exhaustividad, juicios de valor y mini-ejemplos en el prompt (D5, D6)
+
+**Medición previa.** Se construyeron los CINCO prompts reales (`mtrRedaccionPrompt` con cada
+modo, incluido uno inexistente para caer en el respaldo) y se buscó cada regla dentro del
+`system` resultante. Resultado antes de tocar nada:
+
+| Regla | enfermedad_actual | motivo | recomendaciones | analisis_plan | respaldo |
+|---|---|---|---|---|---|
+| «documentado como NO» ≠ «no se preguntó» | sí | sí | sí | sí | sí |
+| juicios de valor prohibidos | sí | **no** | **no** | **no** | **no** |
+| exhaustividad («no omitas») | **no** | **no** | **no** | **no** | **no** |
+| mini-ejemplo | sí | **no** | **no** | sí (de forma) | no (correcto) |
+
+Esa primera fila **corrige la entrevista**: la D6 daba por hecho que la distinción faltaba en
+el prompt de casillas cortas, y ya estaba en los cinco desde la v17.13.0 (llega desde
+`MTR_PRECEDENCIA_SYS`). Se documenta en vez de «arreglar» algo que no estaba roto — y queda
+una prueba que lo mantiene así.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Se retira otra vez la regla de exhaustividad de `MTR_PRECEDENCIA_SYS` | *v17.50.0 (D5): los CINCO modos exigen no omitir…* y *…MTR_REDACCION_SYS ya no existe, y su regla no se fue con él* |
+| 2 | Se retira la prohibición de juicios de valor | *v17.50.0 (D6): los CINCO modos prohíben los juicios de valor…* |
+| 3 | El ejemplo del motivo se llena de cifras (presión y HbA1c) | *v17.50.0 (D6): NINGÚN ejemplo del prompt lleva cifras…* |
+| 4 | El ejemplo de recomendaciones mete una dosis | la misma |
+| 5 | El ejemplo de recomendaciones pierde su lado de salida | *v17.50.0 (D6): …ya traen su mini-ejemplo, con su par entrada → salida* |
+| 6 | El ejemplo del motivo pierde su lado de entrada | la misma |
+| 7 | `MTR_REDACCION_SYS` resucita | *…MTR_REDACCION_SYS ya no existe…* |
+
+**Dos mutaciones no cayeron al primer intento, y las dos eran culpa mía, no del código.**
+
+- La mutación 5 sobrevivió porque la prueba buscaba `SALIDA:` en TODO el prompt, y esa
+  palabra ya aparece en el prompt base (`«SALIDA: prosa continua EN MAYÚSCULAS…»`): la
+  aserción era vacua. Se reescribió para mirar **solo el bloque del ejemplo** y exigir el par
+  `DATOS:` → `SALIDA:` en ese orden. Con eso caen la 5 y la 6.
+- La mutación 7 pareció no caer, pero el mutante tenía un **error de sintaxis** (una cadena
+  sin cerrar): el fichero no se podía cargar, así que la suite no llegó a correr. Un mutante
+  que no compila **no es una mutación**: no prueba nada. Rehecha con sintaxis válida, cae.
+
+**Y una alarma mía que resultó falsa, dicha para que no se repita:** al ver la suite «sin
+fallos» con el fichero roto, di por hecho que el runner salía con código 0 y estuve a punto
+de anotarlo como defecto grave del banco. Medido bien —sin una tubería `| tail` de por medio,
+que era lo que me estaba devolviendo su propio código de salida— el runner sale con **2**.
+El banco hacía lo correcto; el instrumento de medida era el que mentía.

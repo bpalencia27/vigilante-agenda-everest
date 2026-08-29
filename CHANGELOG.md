@@ -4,6 +4,50 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.50.0] — 2026-08-29 (Al prompt le faltaba la mitad: «no te dejes nada»)
+
+### 📝 El contrato con la IA solo prohibía
+Todas las reglas que el asistente le impone al modelo apuntaban en la misma dirección: **no
+inventes**. No había ninguna que dijera lo contrario — **no te dejes nada**.
+
+Esa regla sí existía, palabra por palabra: *«no omitas hallazgos clínicamente relevantes que
+sí estén en los HECHOS»*. Vivía en un prompt que dejó de usarse hace versiones y que nadie
+retiró, así que se perdió sin que se notara. Y se nota poco por una razón incómoda: **un
+borrador al que le falta algo no dispara ninguna alarma**, mientras que uno con una cifra
+inventada sí. Un hallazgo que estaba en los datos y no llegó a la nota es una omisión en una
+historia clínica que usted firma.
+
+Ahora esa regla está en el bloque común, así que **alcanza a los cinco modos** de redacción:
+enfermedad actual, motivo de consulta, recomendaciones, análisis y plan, y el respaldo que
+se usa si el modo no se reconoce.
+
+### ⚖️ Y ninguno prohibía calificar al paciente
+La prohibición de **juicios de valor e inferencias sin respaldo** («incumplidor», «poco
+colaborador», conjeturas sobre causas o intenciones) estaba **solo** en el prompt de
+Enfermedad Actual. Los otros cuatro no la llevaban. Ahora la llevan los cinco.
+
+### 🧭 Dos casillas ya tienen su mini-ejemplo
+**Motivo de consulta** y **Recomendaciones** no tenían ninguno. La rotación de modelos
+incluye variantes pequeñas desde el primer intento, y esos modelos copian un patrón mucho
+mejor de lo que siguen una instrucción abstracta.
+
+Los ejemplos van **sin una sola cifra**, a propósito y comprobado con la función real: el
+verificador marca como inventado todo número con unidad que no esté en la hoja de hechos, así
+que un ejemplo con cifras se le colaría al modelo y a usted le saltaría el aviso de «cifras
+sin respaldo» sobre un dato copiado del propio prompt.
+
+### 🧹 Y se retiran quince líneas muertas
+El prompt antiguo (`MTR_REDACCION_SYS`) no lo referenciaba nadie. Se fue — **después** de
+rescatar lo único suyo que hacía falta.
+
+### 📌 Una corrección a lo que habíamos hablado
+En la entrevista quedó anotado que la distinción entre **«documentado como NO»** y **«no se
+preguntó»** faltaba en el prompt de casillas cortas. Al construir los cinco prompts reales y
+mirarlos, resulta que **ya estaba en los cinco** desde la v17.13.0: llega desde el bloque
+común. No había nada que arreglar ahí, y ahora hay una prueba que lo mantiene así.
+
+---
+
 ## [Versión 17.49.0] — 2026-08-29 (La evidencia no se da por entregada sin acuse)
 
 ### 📮 Qué pasaba

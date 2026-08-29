@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.49.0
+// @version     17.50.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.49.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.50.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -34481,6 +34481,17 @@ _vglOfrecerDeshacer(btn);
     "4. LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST (viene dentro de HECHOS DEL PACIENTE) — antecedentes patológicos y familiares, hábitos, revisión por sistemas, examen físico y el texto ya guardado de esta historia.",
     "5. HECHOS DEL PACIENTE (y, en la nota, el JSON DEL MOTOR) — lo que el asistente ya calculó: función renal, riesgo cardiovascular, metas, laboratorios, plan de exámenes y fechas. NO recalcules ninguno: cítalos como vienen.",
     "Lo que no esté en esos bloques NO EXISTE: no lo inventes, no lo supongas, no lo deduzcas de lo típico en un paciente parecido.",
+    // v17.50.0 (decision D5) — LA MITAD QUE FALTABA. Hasta aqui el contrato solo PROHIBIA
+    // (no inventes). La regla simetrica —no te dejes nada— vivia en MTR_REDACCION_SYS, un
+    // prompt que dejo de usarse y que nadie retiro, asi que se perdio sin que se notara: un
+    // borrador incompleto no dispara ninguna alarma, a diferencia de uno con una cifra
+    // inventada. Un hallazgo relevante que estaba en los datos y no llego a la nota es una
+    // omision en una historia clinica que el medico firma.
+    "Y a la inversa: NO OMITAS ningún hallazgo clínicamente relevante que SÍ esté en los bloques. Inventar y dejarse algo son la misma falta con distinto signo: la nota tiene que contener TODO lo pertinente que recibiste, ni una cosa más ni una menos.",
+    // v17.50.0 (decision D6) — Estaba solo en el prompt de Enfermedad Actual; los otros
+    // cuatro modos (motivo, recomendaciones, analisis y plan, y el respaldo de un modo
+    // desconocido) no la llevaban. Verificado construyendo los cinco prompts reales.
+    "Ni juicios de valor ni inferencias sin respaldo: no califiques al paciente (‘incumplidor’, ‘poco colaborador’, ‘descuidado’) ni conjetures causas, pronósticos o intenciones que los bloques no afirmen.",
     "",
     "# CÓMO SE LEE LA HISTORIA DE EVEREST",
     "- Un campo en 'no' o 'false' ES UN HECHO: significa que el médico lo evaluó y lo descartó expresamente (p. ej. 'infarto de miocardio: no' = descartado). Un campo AUSENTE significa que no se preguntó. Son cosas distintas y jamás se tratan igual: de un campo ausente no se afirma ni que está ni que no está.",
@@ -34581,7 +34592,16 @@ _vglOfrecerDeshacer(btn);
     "SALIDA: prosa continua EN MAYÚSCULAS SOSTENIDAS, terminología médica formal. Responde ÚNICAMENTE con el texto final, sin explicar nada.",
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas nombres ni identificadores (no los tienes).",
   ].join("\n");
-  const MTR_MOTIVO_SYS = MTR_BASE_CASILLA_SYS + "\nREDACTAS el MOTIVO DE CONSULTA: UNA sola frase corta (máximo ~15 palabras) que diga a qué viene el paciente HOY (control de sus programas, síntoma nuevo, resultado de exámenes). Sin cronología ni semiotecnia: eso va en Enfermedad Actual.";
+  // v17.50.0 (decision D6) — MINI-EJEMPLO. La rotacion de modelos incluye variantes
+  // flash-lite desde el PRIMER intento, y esos modelos copian un patron mucho mejor de lo
+  // que siguen una instruccion abstracta. Los ejemplos van SIN UNA SOLA CIFRA a proposito:
+  // mtrVerificarCifrasIA marca como inventado todo numero con unidad que no este en la hoja
+  // de hechos, asi que un ejemplo con cifras se le colaria al modelo y le saldria al medico
+  // el aviso de «cifras sin respaldo» sobre un dato que copio del propio prompt.
+  const MTR_MOTIVO_SYS = MTR_BASE_CASILLA_SYS + "\nREDACTAS el MOTIVO DE CONSULTA: UNA sola frase corta (máximo ~15 palabras) que diga a qué viene el paciente HOY (control de sus programas, síntoma nuevo, resultado de exámenes). Sin cronología ni semiotecnia: eso va en Enfermedad Actual."
+    + "\n\n# EJEMPLO (imita la FORMA; el contenido real sale SOLO de los datos entregados)"
+    + "\nDATOS: paciente del programa de riesgo cardiovascular, viene por control periódico y a que le lean los laboratorios que se tomó."
+    + "\nSALIDA: CONTROL DEL PROGRAMA DE RIESGO CARDIOVASCULAR Y LECTURA DE LABORATORIOS.";
   // v16.5.0 — DECISIÓN DEL MÉDICO (entrevista del modal, 20-ago): "nota clínica y análisis
   // y plan es lo mismo — dejar análisis y plan, que es el que usa Everest". La casilla de
   // Análisis y plan pasa a generar la NOTA COMPLETA del Copiloto (MTR_NOTA_SYS: blindaje
@@ -34607,6 +34627,13 @@ _vglOfrecerDeshacer(btn);
     "NUNCA escribas identificadores de campo del sistema ni pares clave-valor ('sedentarismo: sí', 'antecedentePatologicos', 'revisionSistema', 'RAC', 'FTL'): esto lo lee el paciente. Todo se dice en palabras que él entienda.",
     "NUNCA lo que no conste en sus datos: si no sabes su dosis, su cifra o su fecha, no la escribas — mejor una recomendación menos que una inventada.",
     "Frases cortas separadas por punto. Sin numerar, sin viñetas. Entre 80 y 160 palabras según los datos disponibles.",
+    // v17.50.0 (decision D6) — mismo motivo que en el motivo de consulta, y con la misma
+    // condicion tecnica: NI UNA CIFRA en el ejemplo. Aqui importa el doble, porque esta es
+    // la casilla que el paciente se lleva impresa.
+    "",
+    "# EJEMPLO (imita la FORMA y el TRATO; el contenido real sale SOLO de los datos de ESTE paciente)",
+    "DATOS: hipertenso en manejo con un antihipertensivo, le ordenaron exámenes para su próximo control.",
+    "SALIDA: CONTINÚE TOMANDO SU MEDICAMENTO PARA LA PRESIÓN TODOS LOS DÍAS A LA MISMA HORA Y NO LO SUSPENDA POR SU CUENTA AUNQUE SE SIENTA BIEN. REDUZCA LA SAL EN LAS COMIDAS Y EVITE LOS ALIMENTOS EMPACADOS. HÁGASE LOS EXÁMENES QUE LE ORDENAMOS ANTES DE SU PRÓXIMA CITA Y TRAIGA LOS RESULTADOS. SI PRESENTA DOLOR OPRESIVO EN EL PECHO, DIFICULTAD PARA RESPIRAR, PÉRDIDA SÚBITA DE LA FUERZA O DEL HABLA, O DOLOR DE CABEZA INTENSO E INUSUAL, ACUDA A URGENCIAS SIN ESPERAR SU CITA.",
   ].join("\n");
   // v17.1.0 (#110) — RETIRADO `MTR_CRONICOS_SYS`. Era el prompt de la casilla de Ruta
   // Crónicos, que el médico mandó eliminar; sin su rama en mtrRedaccionPrompt quedaba
@@ -34703,19 +34730,14 @@ _vglOfrecerDeshacer(btn);
     "El texto es un BORRADOR que el médico revisa, edita y firma. No incluyas identificadores del paciente (no los tienes): escribe los marcadores [ID] y [AÑO_MES] LITERALES — el equipo del médico los reemplaza en su computador, nunca viajan a la IA. Responde ÚNICAMENTE con la nota final.",
   ].join("\n");
 
-  // La instrucción del sistema es la barrera anti-invención. Es deliberadamente dura y
-  // se repite en positivo y en negativo: el modelo redacta los hechos, no razona clínica
-  // nueva ni añade cifras que no le dieron.
-  const MTR_REDACCION_SYS = [
-    "Eres un asistente de redacción para un médico en Colombia. Recibes HECHOS CLÍNICOS ya verificados de un paciente y tu única tarea es redactarlos en prosa clínica profesional en español.",
-    "REGLAS ABSOLUTAS:",
-    "1. No agregues ningún hecho, dato, diagnóstico, valor, cifra, fecha o medicamento que no esté explícitamente en los HECHOS.",
-    "2. No omitas hallazgos clínicamente relevantes que sí estén en los HECHOS.",
-    "3. Si un dato no aparece, NO lo menciones ni lo supongas; no escribas 'no se registró' salvo que sea clínicamente necesario.",
-    "4. No des recomendaciones, dosis ni conductas nuevas: solo las que estén en los HECHOS.",
-    "5. Escribe en tercera persona, tono clínico neutro, sin viñetas, sin markdown, sin encabezados salvo los que se te pidan explícitamente.",
-    "6. El texto es un BORRADOR que el médico revisará, editará y firmará. No incluyas nombres propios ni datos de identificación (no los tienes).",
-  ].join("\n");
+  // v17.50.0 (decision D5) — RETIRADO `MTR_REDACCION_SYS`. Era el prompt de sistema del
+  // redactor antiguo; desde que cada casilla tiene el suyo (MTR_EA_SYS, MTR_BASE_CASILLA_SYS
+  // y sus derivados) no lo referenciaba NADIE — quince lineas que solo servian para que
+  // alguien las leyera creyendo que estaban en uso. Antes de borrarlo se rescato lo unico
+  // que tenia y los prompts vivos habian perdido: su regla 2, la de exhaustividad ("no
+  // omitas hallazgos clinicamente relevantes que si esten en los HECHOS"), que ahora vive
+  // en MTR_PRECEDENCIA_SYS y por tanto alcanza a los cinco modos. Sus otras cinco reglas ya
+  // estaban cubiertas, y mejor, por el bloque de precedencia y por cada prompt de casilla.
 
   // Saneamiento de texto libre para prompts de IA: desidentificación de PHI y honoríficos/nombres.
   //
