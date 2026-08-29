@@ -24,18 +24,19 @@ module.exports = {
   pruebas(t, api) {
     // ================= GRAVEDAD DE LA FALLA =================
 
-    t.caso("por debajo de meta+15% no hay falla", () => {
-      t.igual(api.mtrGravedadFalla(80, 70, {}), null, "80 vs 70: +14% no llega");
-      t.igual(api.mtrGravedadFalla(80.5, 70, {}), null, "justo en el borde +15% tampoco");
+    t.caso("por encima de la meta ya es falla (umbral estricto: D9/D10 del 29-ago)", () => {
+      t.igual(api.mtrGravedadFalla(80, 70, {}), "leve", "80 vs 70: +14% ya es falla leve (se retiró el margen)");
+      t.igual(api.mtrGravedadFalla(70, 70, {}), null, "en la meta exacta no hay falla");
+      t.igual(api.mtrGravedadFalla(71, 70, {}), "leve", "71 vs 70: un punto por encima ya es falla");
     });
 
-    t.caso("entre meta+15% y meta+30% es leve (sin la vía de riesgo)", () => {
-      t.igual(api.mtrGravedadFalla(85, 70, {}), "leve", "85 vs 70 = +21%");
+    t.caso("sin escalón de %: todo lo que excede la meta es leve salvo la regla renal (D10)", () => {
+      t.igual(api.mtrGravedadFalla(85, 70, {}), "leve", "85 vs 70 = +21% sigue leve");
     });
 
-    t.caso("un sobrepaso >30% es GRAVE a cualquier edad, incluso >=75", () => {
-      t.igual(api.mtrGravedadFalla(95, 70, { edad: 82 }), "grave", "95 vs 70 = +35%, 82 años: grave igual");
-      t.igual(api.mtrGravedadFalla(95, 70, { edad: 50 }), "grave", "y a los 50 también");
+    t.caso("D10 — un sobrepaso >30% ya NO es grave por el porcentaje, a ninguna edad", () => {
+      t.igual(api.mtrGravedadFalla(95, 70, { edad: 82 }), "leve", "95 vs 70 = +35%, 82 años: leve (sin regla renal)");
+      t.igual(api.mtrGravedadFalla(95, 70, { edad: 50 }), "leve", "y a los 50 también: el escalón del 30% se retiró");
     });
 
     t.caso("la vía de riesgo hace grave a <75 con eGFR<45 y riesgo alto, y NO a los >=75", () => {
@@ -52,9 +53,12 @@ module.exports = {
     t.caso("mtrEvaluarFalla devuelve el exceso en % y un motivo legible", () => {
       const f = api.mtrEvaluarFalla("LDL", 95, 70, { edad: 50 });
       t.cierto(f.falla, "es falla");
-      t.igual(f.gravedad, "grave", "grave por >30%");
+      t.igual(f.gravedad, "leve", "sin regla renal, +35% ya no es grave (D10)");
       t.cierto(Math.abs(f.excesoPct - 35.7) < 0.2, "exceso ~35.7%");
-      t.cierto(/30%/.test(f.motivo), "el motivo nombra el 30%");
+      t.cierto(/por encima de la meta/.test(f.motivo), "el motivo dice el porqué: " + f.motivo);
+      const g = api.mtrEvaluarFalla("LDL", 95, 70, { edad: 60, categoriaRiesgo: "alto", egfr: 40 });
+      t.igual(g.gravedad, "grave", "y la regla renal (riesgo alto + eGFR<45 + <75) sigue haciendo grave");
+      t.cierto(/eGFR<45/.test(g.motivo), "el motivo grave nombra la regla renal: " + g.motivo);
     });
 
     // ================= VENTANAS Y FECHAS DE RECONTROL =================

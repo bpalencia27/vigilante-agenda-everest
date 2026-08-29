@@ -120,7 +120,10 @@ module.exports = {
     t.caso("un analito CON valor pero SIN fecha no pierde el valor (bug real: se ponía a null)", () => {
       const a = api.mtrEstadoAnalito("CREATININA", { fecha: null, valor: 1.0 }, ctxErc);
       t.igual(a.estado, "A", "sigue sin poder afirmarse vigente, sin fecha");
-      t.igual(a.subestado, "sin_historial");
+      // v17.6.87 — subestado NUEVO: "sin_fecha" (hay resultado pero sin fecha), antes
+      // venía dentro de "sin_historial". Lo que cambia es el texto que lee el médico,
+      // no la conducta (se sigue pidiendo).
+      t.igual(a.subestado, "sin_fecha");
       t.igual(a.fecha, null, "la fecha sigue sin inventarse");
       t.igual(a.valor, 1.0, "pero el valor real (1.0) debe conservarse, no perderse");
       t.cierto(/hay un resultado/.test(a.motivo), "el motivo debe distinguir esto de 'nunca se hizo': " + a.motivo);
@@ -249,8 +252,10 @@ module.exports = {
         },
       }));
       t.cierto(!!plan.ftl, "debía salir una fecha de toma");
-      // Ningún driver vigente puede vencer ANTES de la fecha de toma.
-      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl);
+      // Ningún examen VIGENTE (que vence en el futuro) puede vencer ANTES de la fecha de
+      // toma — CERO VENCIDOS. Un examen ya vencido (estado A, .vence en el pasado) no
+      // compite aquí: su fecha ya pasó y la toma nunca puede ser anterior a hoy.
+      const antes = plan.drivers.filter((a) => a.vence && a.vence >= plan.hoy && a.vence < plan.ftl);
       t.igual(antes.map((a) => a.nombre + "@" + a.vence), [], "hay exámenes que vencen ANTES de la toma");
     });
 

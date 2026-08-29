@@ -564,14 +564,29 @@ module.exports = {
       t.noLanza(() => c.api._iniciarRumObserver());
     });
 
-    t.caso("_iniciarRumObserver: con uxTelemetria apagada de entrada, NO llega a crear ningún observador", () => {
+    t.caso("_iniciarRumObserver: con uxTelemetria Y perfLog apagados, NO llega a crear ningún observador", () => {
       const c = cargar({ silencioso: true });
       c.api.__S.uxTelemetria = false;
+      c.api.__S.perfLog = false;
       const creados = [];
       class FakePO { constructor(cb) { creados.push(cb); } observe() {} }
       c.env.win.PerformanceObserver = FakePO;
       c.api._iniciarRumObserver();
-      t.igual(creados.length, 0, "corta en el guard de S.uxTelemetria antes de tocar PerformanceObserver");
+      t.igual(creados.length, 0, "corta en el guard doble (v17.43.0) antes de tocar PerformanceObserver");
+    });
+
+    // v17.43.0 — la compuerta se abre con CUALQUIERA de los dos interruptores: `perfLog`
+    // (bitácora LOCAL de lentitud, encendido de fábrica) ya no es letra muerta cuando el
+    // médico apaga la telemetría que SALE del equipo. Los uxTrack de dentro se
+    // autocensuran, así que no filtra contadores de más.
+    t.caso("_iniciarRumObserver: con uxTelemetria apagada pero perfLog encendido, SÍ instala los observadores (v17.43.0)", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.uxTelemetria = false;
+      const obs = [];
+      class FakePO { constructor(cb) { obs.push(cb); } observe(o) { this.opts = o; } disconnect() {} }
+      c.env.win.PerformanceObserver = FakePO;
+      c.api._iniciarRumObserver();
+      t.igual(obs.length, 2, "perfLog solo ya abre la bitácora local de lentitud");
     });
 
     t.caso("_iniciarRumObserver: con PerformanceObserver disponible, instala EXACTAMENTE 2 observadores con las opciones correctas", () => {
@@ -971,15 +986,20 @@ module.exports = {
       return enviados;
     }
 
-    t.caso("_vaciarTelemetriaAlSalir: despacha TODAS las filas pendientes, no solo la primera", () => {
+    // v17.49.0 (decisión D4) — el beacon despacha SOLO lo reconstruible (ux/entorno);
+    // la EVIDENCIA (fraude/resumen) NO viaja por un camino que no lee el acuse del panel:
+    // queda en la cola y sale por repFlush/repPost, que sí confirma la llegada.
+    t.caso("_vaciarTelemetriaAlSalir: despacha lo reconstruible (ux) y retiene la evidencia (fraude/resumen) — v17.49.0 D4", () => {
       const c = cargar({ silencioso: true });
       const filas = _colaDemo(c);
       const enviados = _espiarBeacon(c, true);
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "se despachan las " + filas.length + " filas de la cola, no una sola");
-      t.igual(enviados.length, filas.length, "y salieron de verdad por el transporte");
-      t.cierto(enviados.some((e) => e.includes("resumen")), "el resumen diario, que puede ir al final de la cola, tambien sale");
-      t.cierto(enviados.some((e) => e.includes("fraude")), "y la fila de fraude tambien");
+      t.igual(n, 2, "se despachan las 2 filas reconstruibles (ux), no una sola");
+      t.igual(enviados.length, 2, "y salieron de verdad por el transporte");
+      t.cierto(enviados.every((e) => e.indexOf('"evento":"ux"') >= 0), "solo las filas ux salieron por beacon");
+      t.falso(enviados.some((e) => e.indexOf("fraude") >= 0), "la evidencia de fraude NO viaja por beacon (no hay acuse)");
+      t.falso(enviados.some((e) => e.indexOf("resumen") >= 0), "ni el resumen diario");
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 2, "fraude y resumen siguen en la cola para repFlush/repPost (que sí leen el acuse)");
     });
 
     t.caso("_vaciarTelemetriaAlSalir: la fila despachada se retira de la cola (si no, sale DUPLICADA en el tablero)", () => {
@@ -987,7 +1007,9 @@ module.exports = {
       _colaDemo(c);
       _espiarBeacon(c, true);
       c.api._vaciarTelemetriaAlSalir();
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "la cola persistida queda vacia: nada que repFlush pueda reenviar");
+      const restante = JSON.parse(c.env.gm["vgl_repq"]);
+      t.igual(restante.length, 2, "las 2 despachadas (ux) salen de la cola: nada que repFlush pueda reenviar duplicado");
+      t.cierto(restante.every((f) => f.evento !== "ux"), "y la evidencia retenida (fraude/resumen) espera a repFlush con acuse");
     });
 
     t.caso("_vaciarTelemetriaAlSalir: si el navegador rechaza los beacons, NO se pierde ninguna fila", () => {
@@ -1246,14 +1268,15 @@ module.exports = {
       t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, filas.length, "las 4 filas quedan para el próximo arranque/repFlush (que sí lee el acuse)");
     });
 
-    t.caso("v17.6.14: _vaciarTelemetriaAlSalir CON acuse fresco sí despacha (refuerzo al cerrar con el panel sano)", () => {
+    t.caso("v17.6.14: _vaciarTelemetriaAlSalir CON acuse fresco despacha lo reconstruible (refuerzo al cerrar con el panel sano)", () => {
       const c = cargar({ silencioso: true });
-      const filas = _colaDemo(c);
+      _colaDemo(c);
       const enviados = _espiarBeacon(c, true);
       c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date().toISOString());
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre");
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "y las filas salen de la cola, sin duplicados en el tablero");
+      t.igual(n, 2, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre con las 2 filas reconstruibles");
+      t.igual(enviados.length, 2, "y salieron de verdad");
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 2, "y la evidencia (fraude/resumen) queda en la cola para el camino que confirma (D4)");
     });
 
     t.caso("v17.6.14: reportarError no deja crecer la memoria de huellas por encima del techo (40)", () => {

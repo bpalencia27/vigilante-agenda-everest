@@ -961,9 +961,10 @@ module.exports = {
     // registrar"): ninguna prueba comprobaba que TODOS los timers que boot() crea
     // quedan en `state.timers` — la lista EXACTA que emergencyTeardown() cancela con
     // el kill-switch. La mutación que omitía `tVerMin` del push sobrevivió por eso.
-    // Este caso la caza: el conteo de handles debe subir en 13 (los diez del push
-    // principal + tSonda + tPymDiario + tPymCaptador) y el handle del chequeo de
-    // versión escalonado (setTimeout 4 s) tiene que estar entre ellos.
+    // Este caso la caza: el conteo de handles debe subir en 14 (los once del push
+    // principal —tRepBoot incluido, ver v17.6.83+— + tSonda + tPymDiario +
+    // tPymCaptador) y el handle del chequeo de versión escalonado (setTimeout 4 s)
+    // tiene que estar entre ellos.
     await t.casoAsync("boot: TODOS los timers quedan registrados en state.timers (tVerMin incluido) para que el kill-switch los cancele", async () => {
       const c = cargar({ silencioso: true });
       enriquecerDom(c);
@@ -977,8 +978,8 @@ module.exports = {
       c.api.boot();
       const timers = c.api.__state.timers;
 
-      t.igual(timers.length, antes + 13,
-        "boot registra los 13 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
+      t.igual(timers.length, antes + 14,
+        "boot registra los 14 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");

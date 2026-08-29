@@ -1165,13 +1165,24 @@ module.exports = {
       t.igual(candB.resultVal, "NEGATIVO");
     });
 
-    t.caso("_nuevoReemplazaCandidato: REGLA 1 intacta — una fila REAL del panel siempre le gana a un respaldo por componente, sin importar fecha", () => {
+    // v17.8.2 (27-ago, REPORTE EN CONSULTA recurrente) — REGLA 1 NUEVA: la fila REAL del
+    // panel ya no le gana a un respaldo por componentes sin mirar la fecha. Preferir la
+    // fila real valía ENTRE IGUALES de fecha, no para pisar un examen tres meses más nuevo
+    // (reproducido con el arnés: fila real «NORMAL» de mayo sobre un parcial de agosto con
+    // «Alteraciones detectadas» — un falso negativo firmado por el médico). El respaldo
+    // gana cuando TIENE fecha y la fila real es más vieja (o no tiene fecha con que
+    // defenderse).
+    t.caso("_nuevoReemplazaCandidato: REGLA 1 v17.8.2 — la fila real gana entre IGUALES de fecha; un respaldo MÁS RECIENTE con fecha la desplaza", () => {
       const respaldoReciente = { viaComponente: true, resultVal: "NEGATIVO", resultDate: "2026-08-20" };
       const filaRealVieja = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-01-01" };
-      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
-        "la fila real, aunque más vieja, reemplaza al respaldo por componente");
-      t.falso(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
-        "y un respaldo por componente, aunque más reciente, NUNCA desplaza a una fila real ya asentada");
+      t.falso(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealVieja),
+        "el respaldo de agosto NO es desplazado por la fila real de enero (v17.8.2: no pisar un examen más nuevo)");
+      t.cierto(testApi._nuevoReemplazaCandidato(filaRealVieja, respaldoReciente),
+        "y un respaldo con fecha más reciente SÍ desplaza a la fila real vieja");
+      // Entre iguales de fecha, la fila real del panel sigue mandando (su razón original).
+      const filaRealMismaFecha = { viaComponente: false, resultVal: "NORMAL", resultDate: "2026-08-20" };
+      t.cierto(testApi._nuevoReemplazaCandidato(respaldoReciente, filaRealMismaFecha),
+        "a la MISMA fecha, la fila real manda sobre el respaldo");
     });
 
     t.caso("_nuevoReemplazaCandidato: REGLA 2 intacta — cuando NINGUNO es viaComponente (analitos séricos normales), numérico usable sigue ganando sin importar fecha", () => {

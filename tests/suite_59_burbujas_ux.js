@@ -167,7 +167,10 @@ module.exports = {
       });
       t.falso(html.indexOf('data-modo="motivo_consulta"') >= 0, "Motivo ya no está: se eliminó del módulo");
       t.falso(html.indexOf('data-modo="comentarios_cronicos"') >= 0, "Ruta Crónicos ya no está: orden del médico del 20-ago");
-      t.cierto(html.indexOf("Generar todo (3)") >= 0, "y el botón de cadena cuenta TRES, no cuatro");
+      // v17.6.83+ — el panel rediseñado retiró el botón de cadena «Generar todo»: queda un
+      // solo «Generar» que produce la casilla activa. El botón de lote no debe reaparecer.
+      t.falso(html.indexOf("Generar todo") >= 0, "el botón de cadena «Generar todo» ya no existe (panel rediseñado)");
+      t.cierto(html.indexOf('id="vgl-ia-generar"') >= 0, "y el «Generar» de la casilla activa está en el panel");
       // Y el campo de indicaciones del médico existe
       t.cierto(html.indexOf("vgl-ia-indicaciones") >= 0, "el campo 'Indicaciones para este borrador' está en el panel");
     });

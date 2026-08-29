@@ -37520,7 +37520,7 @@ _vglOfrecerDeshacer(btn);
     // «falla grave» — dos preguntas clínicas distintas atadas a una sola constante. Se separan:
     // la gravedad la decide ahora solo la regla renal (ver mtrGravedadFalla) y el color lo
     // decide esta línea, que es lo único que queda del 30 % y ya no lo usa.
-    const factor = 1;
+    const factor = 1.3;
     if (clave === "COLESTEROL_LDL") {
       const cat = String(c.categoriaRiesgo || "").toLowerCase();
       const m = MTR_METAS_LIPIDICAS[cat];

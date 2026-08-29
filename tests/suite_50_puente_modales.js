@@ -38,21 +38,22 @@ module.exports = {
     });
 
     // =====================================================================
-    // v17.6.0 — RELOJES DE FRESCURA UNIFICADOS A 10 MIN: el del resumen bajó de 20
-    // a 10 (aprobado el 22-ago junto con el resto de la lista del 20-ago). A los 15
-    // minutos, el reloj VIEJO lo seguía dando por fresco; el NUEVO ya no. El gancho
-    // __envejecerCacheResumen vive solo en el cargador de pruebas (harness.js ya
-    // declara que no toca el archivo de producción) y adelanta el `ts` guardado
-    // para simular el paso del tiempo sin dormir minutos de verdad.
+    // v17.29.0 — RELOJ DE FRESCURA DEL RESUMEN: 3 MIN (decisión #23 del médico,
+    // 28-ago). Venía de 10 min (v17.6.0); 10 min podía dejar que Agendamiento/
+    // Ordenamiento mostraran una fecha de control calculada con datos que ya
+    // cambiaron durante una consulta activa. El gancho __envejecerCacheResumen
+    // vive solo en el cargador de pruebas (harness.js ya declara que no toca el
+    // archivo de producción) y adelanta el `ts` guardado para simular el paso
+    // del tiempo sin dormir minutos de verdad.
     // =====================================================================
-    t.caso("v17.6.0 — el TTL del resumen bajó de 20 a 10 min: a los 15 min ya no se lee (con el reloj viejo sí se habría leído)", () => {
+    t.caso("v17.29.0 — el TTL del resumen es de 3 min: a los 4 min ya no se lee (con el reloj viejo de 10 min sí se habría leído)", () => {
       api.mtrCacheResumenGuardar("444", { plan: { ftl: "2026-09-01" } });
       t.cierto(!!api.mtrCacheResumenLeer("444"), "recién guardado: vigente");
-      api.__envejecerCacheResumen(9 * 60000 + 30000); // 9m30s atrás: dentro de los 10 min nuevos
-      t.cierto(!!api.mtrCacheResumenLeer("444"), "a los 9m30s sigue vigente con el TTL nuevo");
-      api.__envejecerCacheResumen(15 * 60000); // 15 min atrás: dentro de los 20 viejos, fuera de los 10 nuevos
+      api.__envejecerCacheResumen(2 * 60000 + 30000); // 2m30s atrás: dentro de los 3 min
+      t.cierto(!!api.mtrCacheResumenLeer("444"), "a los 2m30s sigue vigente con el TTL de 3 min");
+      api.__envejecerCacheResumen(4 * 60000); // 4 min atrás: fuera de los 3 min
       t.igual(api.mtrCacheResumenLeer("444"), null,
-        "a los 15 min: con el TTL viejo (20 min) todavía se habría leído; con el nuevo (10 min) ya no");
+        "a los 4 min: con el TTL de 3 min ya no se lee");
     });
 
     // ================= FECHA SUGERIDA EN EL RANGO =================

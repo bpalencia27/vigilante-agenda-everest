@@ -73,12 +73,12 @@ module.exports = {
     // esa capacidad (no se tocó su prompt).
     t.caso("Enfermedad Actual ya NO admite labs/paraclínicos ni clasificación de riesgo — eso vive en Análisis y Plan", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      t.cierto(/DE HOY/.test(ea.system), "regla 6 acota las cifras objetivas a HOY, no a un control pasado");
-      t.cierto(/laboratorio o paraclínicos/i.test(ea.system), "PROHIBIDO nombra explícitamente labs/paraclínicos");
-      t.cierto(/glucosa|creatinina|hemoglobina glicosilada/i.test(ea.system), "y da ejemplos concretos (no una prohibición vaga que el modelo pueda ignorar)");
-      t.cierto(/riesgo cardiovascular/i.test(ea.system) && /bajo, moderado, alto/i.test(ea.system), "PROHIBIDO nombra la clasificación de riesgo cardiovascular");
-      t.cierto(/metas terapéuticas/i.test(ea.system), "y las metas terapéuticas (p. ej. meta de LDL)");
-      t.cierto(/Análisis y Plan/.test(ea.system), "y dice dónde SÍ va ese dato, para que no parezca que se pierde");
+      t.cierto(/LO QUE NUNCA VA/.test(ea.system), "el prompt declara en bloque lo que nunca va a la Enfermedad Actual");
+      t.cierto(/Resultados de laboratorio y paraclínicos/.test(ea.system), "y el bloque nombra explícitamente labs/paraclínicos");
+      t.cierto(/glucosa, hemoglobina glicosilada/.test(ea.system), "y da ejemplos concretos (no una prohibición vaga que el modelo pueda ignorar)");
+      t.cierto(/Clasificación de riesgo cardiovascular \(bajo, moderado, alto, muy alto\)/.test(ea.system), "PROHIBIDO nombra la clasificación de riesgo cardiovascular");
+      t.cierto(/metas terapéuticas/.test(ea.system), "y las metas terapéuticas (p. ej. meta de LDL)");
+      t.cierto(/pertenecen a Análisis y Plan/.test(ea.system), "y dice dónde SÍ va ese dato, para que no parezca que se pierde");
       // La nota de Análisis y Plan (MTR_NOTA_SYS) no se tocó: sigue recibiendo el JSON del
       // motor RCV como fuente de verdad numérica para labs/riesgo — ahí SÍ corresponden.
       const an = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), { jsonV68: { version: "68", cv_risk: "alto" } });
@@ -95,15 +95,17 @@ module.exports = {
     // PROHIBIDO nombra explícitamente que inventar cifras de signos vitales no se hace.
     t.caso("Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      // Regla 6: las cifras objetivas se escriben SOLO si están en los bloques entregados.
-      t.cierto(/si (?:esa|la|una) cifra no est[áa]|no la escribas|om[íi]tela/i.test(ea.system),
-        "regla 6 condiciona las cifras objetivas a que estén en los hechos — la PA ausente se omite, no se inventa");
-      // Regla 5: el automonitoreo de PA solo se menciona si consta en los datos.
-      t.cierto(/automonitoreo de presión arterial[^\n]*SOLO si|si no consta[^\n]*no se menciona/i.test(ea.system),
+      // v17.28.0 — la regla 6 se RETIRÓ por completo: ya no hay cláusula que pida cifras
+      // objetivas "si constan". Los hallazgos de examen físico (PA, peso, FC, glucometría)
+      // NUNCA van en Enfermedad Actual, ni siquiera si constan en los bloques entregados.
+      t.cierto(/pertenecen al Examen Físico, NUNCA a Enfermedad Actual/.test(ea.system),
+        "los signos vitales de HOY pertenecen al examen físico, nunca a Enfermedad Actual (v17.28.0)");
+      t.cierto(/Signos vitales o hallazgos de examen físico de HOY/.test(ea.system),
+        "PROHIBIDO los nombra por su nombre (presión arterial incluida)");
+      // Regla 5: el automonitoreo DOMICILIARIO de PA solo se menciona si el paciente lo
+      // reporta en los bloques — es anamnesis legítima, no medición de hoy.
+      t.cierto(/automonitoreo de presión arterial[^\n]*SOLO si el paciente lo reporta|si no consta, no se menciona/i.test(ea.system),
         "regla 5 condiciona el automonitoreo de PA a que el paciente lo reporte");
-      // PROHIBIDO: inventar la PA está prohibido por su nombre (patrón positivo+negativo).
-      t.cierto(/inventar[^\n]*presi[óo]n arterial|presi[óo]n arterial[^\n]*no est[áa]/i.test(ea.system),
-        "PROHIBIDO nombra explícitamente no inventar cifras de presión arterial");
       // La hoja SIN PA no fabrica la línea de signos vitales (ya era así; queda anclado).
       const hojaSin = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
       t.cierto(api.mtrHojaDeHechosTexto(hojaSin).indexOf("Signos vitales") < 0,
@@ -592,13 +594,13 @@ module.exports = {
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "sin caché: null");
       c.api.mtrCacheResumenGuardar("111", { programa: "HTA" });
       t.igual(c.api.mtrCacheResumenEdadMin("111"), 0, "recién guardada: 0 minutos");
-      // v17.6.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS, bajado de 20 a
-      // 10 min): pasado el nuevo corte, la edad también debe darse por vencida (null),
-      // no seguir informando una edad de una caché que ya nadie va a usar.
-      c.api.__envejecerCacheResumen(9 * 60000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), 9, "a los 9 min, con el TTL nuevo, informa 9 minutos de edad");
-      c.api.__envejecerCacheResumen(10 * 60000 + 1000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 10 min y 1 s, el TTL nuevo ya la da por vencida: null, no una edad enorme");
+      // v17.29.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS, ahora 3 min por
+      // decisión #23 del 28-ago): pasado el corte, la edad también se da por vencida
+      // (null), no sigue informando una edad de una caché que ya nadie va a usar.
+      c.api.__envejecerCacheResumen(2 * 60000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), 2, "a los 2 min, con el TTL de 3 min, informa 2 minutos de edad");
+      c.api.__envejecerCacheResumen(3 * 60000 + 1000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 3 min y 1 s, el TTL de 3 min ya la da por vencida: null, no una edad enorme");
       c.api.mtrCacheResumenBorrar();
       t.igual(c.api.mtrCacheResumenLeer("111"), null, "borrada: no hay resumen");
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "ni edad");
@@ -855,8 +857,13 @@ module.exports = {
     t.caso("el panel de redacción ya NO congela el texto libre en una foto única al abrir", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
-      const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
-      t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
+      // v17.6.83+ — la generación se unificó en un núcleo compartido por «Generar» y
+      // «Generar todo»: `libreAhora` es una FUNCIÓN (relee el DOM en el momento del clic)
+      // y su resultado viaja al prompt como `contextoLibre` dentro de ese núcleo.
+      t.cierto(/const libreAhora = \(\) => mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src),
+        "libreAhora es una función: cada generación relee el texto en el momento del clic");
+      t.cierto(/contextoLibre: libreAhora\(\)\.combinado/.test(src),
+        "el núcleo de generación usa libreAhora() en el momento del clic, no una foto");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
@@ -1449,10 +1456,12 @@ module.exports = {
     // mtrAbrirPanelRedaccion — se protege por texto fuente.
     t.caso("v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen)');
-      const fn = src.slice(idx - 100, idx + 400);
-      t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
-      t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
+      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";');
+      const fn = src.slice(Math.max(0, idx - 2600), idx + 320);
+      t.cierto(/_congelarChips\(true\)/.test(fn), "al arrancar, congela los chips de modo (no se puede cambiar de casilla en vuelo)");
+      t.cierto(/btnGen\.disabled = true/.test(fn), "y deshabilita Generar");
+      t.cierto(/btnGen\.disabled = false/.test(fn), "al terminar, lo rehabilita");
+      t.cierto(/_congelarChips\(false\)/.test(fn), "y descongela los chips al liberar");
     });
 
     // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el nombre real del paciente
@@ -1460,12 +1469,13 @@ module.exports = {
     // 4 sitios que envían texto libre a Gemini para que el censor de mayúsculas
     // sostenidas (probado arriba de forma aislada) tenga algo que tachar en producción.
     // Vive dentro del cierre de mtrAbrirPanelRedaccion — se protege por texto fuente.
-    t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los 4 puntos de envío de texto libre a la IA", () => {
+    t.caso("v17.6.42: resumen._nombrePaciente se arma y llega a los puntos de envío de texto libre a la IA", () => {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
-      const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
-      t.igual(ocurrenciasOpts, 2, "los dos objetos opts (Generar y Generar todo) deben incluir el nombre");
+      // v17.47.0 — el resumen VIGENTE se resuelve en el instante del clic (_res), y es su
+      // nombre el que viaja en el opts del núcleo único de generación.
+      t.cierto(/nombrePaciente: _res\._nombrePaciente,/.test(src), "el opts de generación debe incluir el nombre");
       t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
     });
 

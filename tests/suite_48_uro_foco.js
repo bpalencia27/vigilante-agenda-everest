@@ -248,7 +248,9 @@ module.exports = {
     t.caso("dos ejes en falla crítica -> 'mixto'", () => {
       const r = resumen({
         erc: { remitirNefrologia: true },  // renal
-        meta: { fallaGrave: true },        // lipídico
+        // v17.55.0 (D10) — `fallaGrave` se retiró del motor: el eje lipídico se alimenta
+        // de `meta.falla`, que es el único campo que sigue existiendo.
+        meta: { falla: true },             // lipídico
         plan: { drivers: [] },
       });
       t.igual(api.mtrPriorityFocus(r), "mixto", "renal + lipídico a la vez");

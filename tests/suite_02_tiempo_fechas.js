@@ -152,7 +152,10 @@ module.exports = {
       // API/scrape: dos formatos de hora para una cita rompían notified/fraudWatch/
       // alertedFraud/contadas). Ver comentario en apptKey (vigilante_agenda.user.js).
       t.igual(api.apptKey({ doc_id: "123", hora_texto: "07:00 AM" }), "123@m420");
-      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN|5@m510");
+      // v17.56.0 — el `index` (posición en la lista) se retira de la clave: el orden de la
+      // lista no identifica nada (una misma cita cambiaba de clave al reordenarse la agenda
+      // y la marca de fraude quedaba huérfana bajo la clave vieja -> tarjeta rojo->verde).
+      t.igual(api.apptKey({ nombre: "JUAN", index: 5, hora_texto: "08:30" }), "JUAN@m510");
       t.igual(api.apptKey({ doc_id: "456" }), "456@");
     });
 

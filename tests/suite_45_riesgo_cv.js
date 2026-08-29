@@ -152,6 +152,23 @@ module.exports = {
           continue;
         }
 
+        // v17.52.0 — EXCEPCIÓN (E): ALBUMINURIA A2 SUBE A ALTO POR SÍ SOLA.
+        // Decisión del médico (29-ago, D7), textual: "A2 (30-300) sube a ALTO por si
+        // sola". Hasta hoy RAC>=30 solo contaba como daño de órgano blanco DENTRO de la
+        // rama de diabetes; un hipertenso no diabético con RAC 45 no subía de categoría.
+        // El corpus del Copiloto es anterior a la decisión y deja esos vectores en
+        // "moderado" (contaba RAC>30 como potenciador). Igual de estrecha que (C) y (D):
+        // solo tapa a los A2 que el Copiloto dejaba POR DEBAJO de alto, y exige que el
+        // JS haya subido EXACTAMENTE a "alto" (si dejó de aplicar la regla, esto vuelve
+        // a comparar normal y la desviación se reporta).
+        if (v.entrada && typeof v.entrada.rac === "number" && v.entrada.rac >= 30 && v.entrada.rac < 300
+            && py.categoria !== "alto" && py.categoria !== "muy alto") {
+          if (js.categoria !== "alto") {
+            desviaciones.push("albuminuria A2 que NO subió a alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
+          }
+          continue;
+        }
+
         // Excepción (B): el Python se quedó sin ASCVD y el JS sí pudo calcularla.
         if (py.categoria === null && py.requiere_ascvd === true && js.categoria !== null) {
           const e = v.entrada;
@@ -480,12 +497,13 @@ module.exports = {
       t.igual(r.enMeta, null, "ni true ni false: null");
     });
 
-    t.caso("falla terapéutica a meta+15% y grave a meta+30%", () => {
-      const leve = api.mtrEvaluarMetaLdl("alto", 81, null);   // 70 * 1.15 = 80.5
-      t.cierto(leve.falla, "81 supera 80.5");
-      t.falso(leve.fallaGrave, "81 no llega a 91");
-      const grave = api.mtrEvaluarMetaLdl("alto", 92, null);  // 70 * 1.30 = 91
-      t.cierto(grave.fallaGrave, "92 supera 91");
+    t.caso("falla terapéutica estricta: por encima de la meta ya es falla (D9/D10 del 29-ago)", () => {
+      const leve = api.mtrEvaluarMetaLdl("alto", 81, null);   // meta 70
+      t.cierto(leve.falla, "81 supera la meta 70 (se retiró el margen del 15%)");
+      t.igual(leve.ldlActual, 81, "expone el valor real");
+      t.falso(leve.fallaGrave, "el campo fallaGrave se retiró en la D10: ya no existe");
+      const enMeta = api.mtrEvaluarMetaLdl("alto", 70, null);
+      t.falso(enMeta.falla, "en la meta exacta no hay falla");
     });
 
     // ================= FUNCIÓN RENAL =================

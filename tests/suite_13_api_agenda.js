@@ -501,8 +501,11 @@ module.exports = {
       t.cierto(urlBook.includes("FechaCita=2026-08-14"));
       t.cierto(urlBook.includes("Telefono=0"), "sin teléfono cableado: manda 0 como la app oficial");
       t.cierto(urlBook.includes("NombrePaciente=%20"), "espacio CODIFICADO, igual que la captura real del front (Incidente v12.3.31)");
-      t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "sin celular conocido, el aviso sigue diciéndolo");
+      // v17.28.0 — RETIRADO el toast de confirmación (encargo del médico del 28-ago:
+      // "elimina esa notificación... es cuando se asignan citas de laboratorio"). El
+      // contrato de éxito vive en el valor de retorno: { ok, radicado, smsEnviado }.
+      t.igual(ok.radicado, 13525848, "devuelve el radicado plano de AppCita");
+      t.igual(ok.smsEnviado, false, "sin celular conocido no hubo SMS");
     });
 
     t.caso("normalizeHora: iguala '6:40:00', '06:40:00' y '06:40' al mismo turno (Incidente v12.3.32 — captura real: la hora rechazada aparecía como libre)", () => {
@@ -540,8 +543,11 @@ module.exports = {
       });
       const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3000000000");
       t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
-      t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
+      // v17.28.0 — los toasts de confirmación se retiraron (orden del médico del 28-ago);
+      // el estado del SMS vive en el valor de retorno: `smsEnviado` false = el médico debe
+      // recordárselo al paciente.
+      t.igual(ok.smsEnviado, false, "el SMS no se envió: el servicio respondió 500, jamás se anuncia");
+      t.cierto(e.reg.gm.some((r) => r.url.includes("EnviarMensajeTextoLaboratorio")), "aunque falló, sí se intentó el envío");
     });
 
     await t.casoAsync("apiLaboratorioAgendarAuto: usa AgendaId (mayúsculas) del turno — el nombre real confirmado contra el front de AppCita (Incidente v12.3.31)", async () => {
@@ -593,7 +599,9 @@ module.exports = {
       t.cierto(urlSms.includes("Celular=3000000000"), "el celular se limpia de espacios y guiones antes de mandarlo");
       t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
       t.cierto(urlSms.includes("codigoSede=378"));
-      t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
+      // v17.28.0 — sin toast de confirmación: el envío del SMS queda declarado en el retorno.
+      t.igual(ok.smsEnviado, true, "el SMS sí se envió (respuesta 2xx)");
+      t.igual(ok.radicado, 13525848, "y el radicado viaja en el retorno");
     });
 
     // ---------- apiDigiturnoFinalizarTicket ----------

@@ -51,7 +51,9 @@ module.exports = {
       t.igual(r.riesgo.categoria, "muy alto", "diabetes con daño de órgano blanco");
       t.igual(r.meta.metas.ldl, 55, "meta de LDL de muy alto riesgo");
       t.cierto(r.meta.falla, "un LDL de 148 contra meta 55 es falla terapéutica");
-      t.cierto(r.meta.fallaGrave, "y grave: supera meta+30%");
+      // v17.55.0 (D10) — el campo `meta.fallaGrave` se retiró: la gravedad vive en
+      // `fallas`, donde la regla renal (riesgo alto + eGFR<45 + menor de 75) decide.
+      t.cierto(r.fallas.hayGrave, "y es grave por la regla renal (eGFR 34.9, 68 años): D10");
     });
 
     t.caso("el programa rector lo decide la norma: ERC por encima de DM2 y HTA", () => {

@@ -29,13 +29,18 @@ module.exports = {
 
     t.caso("v15.7.0: la maquinaria de clic-en-Conducta está FUERA del código (funciones, catálogos y colas)", () => {
       const declaraciones = [
-        /function\s+_msBuscarCodigoYAgregar/, /function\s+_conductaBuscarYAgregarExamen/,
+        /function\s+_msBuscarCodigoYAgregar/,
+        // v17.6.83+ — `_conductaBuscarYAgregarExamen` y `CONDUCTA_LI_TEXTO_POR_ANALITO`
+        // VOLVIERON con la línea de producción: el flujo «tipear código → clic en el ítem →
+        // Agregar» se re-integró al modal de Ordenamiento (v14.0.3/v17.6.83+), donde el
+        // resto de esta lista sí sigue retirado. Se sacan del censo, con su prueba propia
+        // de que el camino oficial (GuardarOrdenamiento) sigue intacto más abajo.
         /function\s+_conductaBuscarPorCodigoYAgregar/, /function\s+_conductaLiMatch/,
         /function\s+_conductaInputBusqueda/, /function\s+_dxAgregarPorCodigo/,
         /function\s+_pendienteAutoCompletarEn/, /function\s+_pendienteAgregarEn/,
         /function\s+_conductaPendienteAgregar/, /function\s+_dxPendienteAgregar/,
         /function\s+mtrExamenesParaConducta/,
-        /CONDUCTA_LI_TEXTO_POR_ANALITO\s*=/, /CIE10_DESC_PYM\s*=/, /CONDUCTA_CUPS_POR_ANALITO\s*=/,
+        /CIE10_DESC_PYM\s*=/, /CONDUCTA_CUPS_POR_ANALITO\s*=/,
         /_PENDIENTE_MAX_INTENTOS\s*=/,
       ];
       const vivas = declaraciones.filter((re) => re.test(src)).map(String);
