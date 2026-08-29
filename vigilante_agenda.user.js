@@ -5279,6 +5279,172 @@
     };
   }
 
+  // =====================================================================
+  //  v17.57.0 — PARTE A: LA ESCALERA DE ADHERENCIA (preguntar antes de repetir)
+  //  ------------------------------------------------------------------
+  //  DECISIÓN DEL MÉDICO (29-ago): cuando un eje está en falla terapéutica
+  //  —el examen se va a mandar a repetir—, el script pregunta, EN ESTE ORDEN:
+  //    1) ¿el paciente TIENE tratamiento para ese eje?
+  //    2) ¿el tratamiento es ADECUADO (tipo y dosis)?
+  //    3) ¿hay ADHERENCIA (lo está tomando)?
+  //  "No siempre el script debe preguntar si el paciente tiene tratamiento":
+  //  como toda confirmación del reconciliador, INDAGA primero en toda la
+  //  historia de Everest (medicamentos RCV, dosis, histórico HCM) y solo
+  //  pregunta lo que no puede deducir. Para el LDL la adecuación se deduce de
+  //  la dosis (mtrInerciaEstatina: atorva 40-80 / rosuva 20-40); para la
+  //  diabetes no hay regla escrita, así que se pregunta.
+  //  Severidad MEDIA (informa, nunca bloquea: el médico manda). La respuesta
+  //  viaja en las confirmaciones, que el JSON de la IA ya consume (la sección
+  //  de adherencia farmacológica de los prompts). La adherencia CADUCA a 1 día:
+  //  se conversa en cada consulta, no se da por eterna como el tratamiento.
+  // =====================================================================
+  const MTR_ADHERENCIA_VIGENCIA_DIAS = 1;   // la toma real se vuelve a preguntar cada consulta
+  const MTR_ADHERENCIA_EJES = {
+    ldl: {
+      familia: "colesterol",
+      claveTratamiento: "tratamiento_ldl",
+      claveAdecuado: "adecuado_ldl",
+      claveAdherencia: "adherencia_ldl",
+      etiquetaPatologia: "el colesterol alto",
+      preguntaTratamiento: "¿El paciente tiene tratamiento para el colesterol alto (estatina u otro hipolipemiante)?",
+      preguntaAdecuado: "¿El tratamiento para el colesterol es el adecuado (tipo y dosis)?",
+      preguntaAdherencia: "¿Está tomando su medicamento para el colesterol como se le indicó?",
+    },
+    hba1c: {
+      familia: "diabetes",
+      claveTratamiento: "tratamiento_hba1c",
+      claveAdecuado: "adecuado_hba1c",
+      claveAdherencia: "adherencia_hba1c",
+      etiquetaPatologia: "la diabetes",
+      preguntaTratamiento: "¿El paciente tiene tratamiento para la diabetes?",
+      preguntaAdecuado: "¿El tratamiento para la diabetes es el adecuado (tipo y dosis)?",
+      preguntaAdherencia: "¿Está tomando su medicamento para la diabetes como se le indicó?",
+    },
+  };
+
+  // De un resumen cacheado a los insumos que la escalera necesita. PURA: no toca
+  // DOM ni red. `medsRcv` es null cuando la lista no se pudo leer — la compuerta
+  // distingue "no se sabe" de "no tiene", que son conductas opuestas.
+  function mtrInsumosAdherencia(res) {
+    const r = res || {};
+    const frec = (r.medicamentosFrecuencia && typeof r.medicamentosFrecuencia.get === "function")
+      ? r.medicamentosFrecuencia : null;
+    const listaCruda = r.medicamentos;
+    return {
+      medsRcv: Array.isArray(listaCruda) ? mtrMedicamentosRcv(listaCruda, frec) : null,
+      medsNoLeidos: !Array.isArray(listaCruda),
+      inerciaLdl: (r.fallas && r.fallas.inercia) || null,
+    };
+  }
+
+  // Los ejes en falla terapéutica HOY (los analitos de mtrPlanFallas). La glicemia
+  // comparte eje metabólico con la HbA1c: una sola escalera de diabetes.
+  function mtrEjesEnFallaAdherencia(res) {
+    const r = res || {};
+    const fallas = (r.fallas && Array.isArray(r.fallas.fallas)) ? r.fallas.fallas : [];
+    const ejes = new Set();
+    for (const f of fallas) {
+      const a = f && f.analito;
+      if (a === "LDL") ejes.add("ldl");
+      if (a === "HbA1c" || a === "Glicemia") ejes.add("hba1c");
+    }
+    return [...ejes];
+  }
+
+  // Estado de UN eje: qué se dedujo de la historia y qué confirmó el médico.
+  //   tieneTratamiento: true/false, o null si no se pudo leer la lista
+  //   adecuado:         true/false, o null si no es deducible (ni confirmado)
+  // Las confirmaciones del médico (sin vigencia para tratamiento/adecuación,
+  // con vigencia de 1 día para la adherencia) mandan sobre la deducción.
+  function mtrEstadoAdherenciaEje(eje, insumos, confirmadas) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    const i = insumos || {};
+    if (!cfg) return null;
+    const c = confirmadas || {};
+    const medsDelEje = Array.isArray(i.medsRcv)
+      ? i.medsRcv.filter((m) => m && m.para === cfg.familia) : [];
+    const regT = c[cfg.claveTratamiento];
+    const regA = c[cfg.claveAdecuado];
+    const deducidoT = i.medsNoLeidos ? null : (medsDelEje.length > 0);
+    const tieneTratamiento = regT ? (regT.v === true) : deducidoT;
+    let deducidoA = null;
+    if (eje === "ldl" && tieneTratamiento === true) {
+      const inercia = i.inerciaLdl;
+      if (inercia && typeof inercia.inercia === "boolean") deducidoA = !inercia.inercia;
+    }
+    const adecuado = regA ? (regA.v === true) : deducidoA;
+    return { eje: eje, cfg: cfg, medsDelEje: medsDelEje, tieneTratamiento: tieneTratamiento, adecuado: adecuado };
+  }
+
+  function mtrDebePreguntarTratamientoEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (confirmadas && confirmadas[est.cfg.claveTratamiento]) return false;   // ya respondido: se calla
+    if (est.tieneTratamiento === true) return false;   // indagó y SÍ tiene: no pregunta
+    return true;   // sin lista, o sin medicamento del eje -> pregunta
+  }
+
+  function mtrDebePreguntarAdecuacionEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (confirmadas && confirmadas[est.cfg.claveAdecuado]) return false;
+    if (est.tieneTratamiento !== true) return false;   // sin tratamiento no hay adecuación que juzgar
+    if (est.adecuado === true || est.adecuado === false) return false;   // dedujo: el aviso de inercia ya informa si es inadecuado
+    return true;   // no deducible -> pregunta
+  }
+
+  function mtrDebePreguntarAdherenciaEje(eje, insumos, confirmadas) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, confirmadas);
+    if (!est) return false;
+    if (est.tieneTratamiento !== true) return false;
+    if (est.adecuado === false) return false;   // primero se ajusta el tratamiento; la toma se pregunta después
+    if (est.adecuado === null) return false;    // la adecuación se pregunta primero (misma pasada); la toma espera
+    return true;   // tratamiento adecuado -> la toma real no se puede leer, se pregunta
+  }
+
+  function mtrPreguntaTratamientoEje(eje, insumos) {
+    const est = mtrEstadoAdherenciaEje(eje, insumos, {});
+    const cfg = est.cfg;
+    return {
+      clave: cfg.claveTratamiento,
+      severidad: "media",
+      etiqueta: cfg.preguntaTratamiento,
+      porQue: "el " + (eje === "ldl" ? "LDL" : "control glucémico") + " está en falla terapéutica y el examen se va a repetir: "
+        + "sin tratamiento, repetir no cambia el resultado — hay que saber primero si hay tratamiento",
+      afirman: est.medsDelEje.length
+        ? [{ fuente: "Medicamentos (historial de Everest)", detalle: est.medsDelEje.map((m) => m.texto).join(" · ") }]
+        : [],
+      niegan: [{ fuente: "Medicamentos (historial de Everest)", detalle: "no se leyó ningún medicamento para " + cfg.etiquetaPatologia }],
+    };
+  }
+
+  function mtrPreguntaAdecuacionEje(eje, insumos) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    return {
+      clave: cfg.claveAdecuado,
+      severidad: "media",
+      etiqueta: cfg.preguntaAdecuado,
+      porQue: "el tratamiento existe, pero si la dosis se quedó corta o la intensidad es insuficiente, "
+        + "ajustarlo antes de repetir el examen evita un viaje que no cambia nada",
+      afirman: [],
+      niegan: [{ fuente: "Historia clínica", detalle: "la adecuación del tratamiento no se puede juzgar desde el script" }],
+    };
+  }
+
+  function mtrPreguntaAdherenciaEje(eje, insumos) {
+    const cfg = MTR_ADHERENCIA_EJES[eje];
+    return {
+      clave: cfg.claveAdherencia,
+      severidad: "media",
+      etiqueta: cfg.preguntaAdherencia,
+      porQue: "si el paciente no está tomando el medicamento, el examen repetido no va a mejorar: "
+        + "la causa no es el fármaco, es la toma",
+      afirman: [],
+      niegan: [{ fuente: "Historia clínica", detalle: "la toma real no se puede leer del historial; solo se sabe que fue prescrito" }],
+      vigenciaDias: MTR_ADHERENCIA_VIGENCIA_DIAS,
+    };
+  }
+
   // ¿Hay que detenerse y preguntar antes de seguir? Solo las de severidad alta frenan el
   // flujo; las medias se muestran pero no bloquean.
   function mtrDiscrepanciasQueFrenan(discrepancias) {
