@@ -5399,6 +5399,10 @@
     if (est.tieneTratamiento !== true) return false;
     if (est.adecuado === false) return false;   // primero se ajusta el tratamiento; la toma se pregunta después
     if (est.adecuado === null) return false;    // la adecuación se pregunta primero (misma pasada); la toma espera
+    // v17.58.0 — la adherencia CADUCA a 1 día: el llamador ya recorta la clave a su
+    // versión vigente (o la borra si venció) antes de pasar las compuertas, así que un
+    // registro presente aquí significa «respondida y todavía vigente»: se calla.
+    if (confirmadas && confirmadas[est.cfg.claveAdherencia]) return false;
     return true;   // tratamiento adecuado -> la toma real no se puede leer, se pregunta
   }
 
@@ -5449,6 +5453,27 @@
   // flujo; las medias se muestran pero no bloquean.
   function mtrDiscrepanciasQueFrenan(discrepancias) {
     return (Array.isArray(discrepancias) ? discrepancias : []).filter((d) => d && d.severidad === "alta");
+  }
+
+  // v17.58.0 — PARTE A: memoria de lo que el reconciliador YA preguntó (severidad MEDIA)
+  // en esta jornada y para este paciente. «Informa, nunca bloquea» también significa no
+  // interrogatorio: lo que el médico ya vio hoy no se le vuelve a poner delante en cada
+  // reapertura del Panel. Lo puebla el modal del reconciliador al RENDERIZAR la fila (no
+  // al deducirla, para que una pregunta que nunca llegó a ver se vuelva a ofrecer) y lo
+  // vacía `diaNuevo()`. Las ALTA no pasan por aquí: son compuerta y se reevalúan siempre.
+  const _mtrMediaPreguntadas = new Map();   // docId -> Set(clave)
+  function _mtrMediaFuePreguntada(docId, clave) {
+    try { const s = _mtrMediaPreguntadas.get(String(docId)); return !!(s && s.has(clave)); }
+    catch (e) { return false; }
+  }
+  function _mtrMediaMarcarPreguntada(docId, clave) {
+    try {
+      const id = String(docId || "");
+      if (!id || !clave) return;
+      let s = _mtrMediaPreguntadas.get(id);
+      if (!s) { s = new Set(); _mtrMediaPreguntadas.set(id, s); }
+      s.add(clave);
+    } catch (e) {}
   }
 
   // =====================================================================
@@ -5515,11 +5540,20 @@
       // La adherencia se guarda con vigencia de 1 día: se conversa en cada consulta.
       try {
         const insumosAdh = mtrInsumosAdherencia(res);
+        const confirmadasAdh = _vglConfirmacionesLeer(docId);
         for (const eje of mtrEjesEnFallaAdherencia(res)) {
-          const confirmadasAdh = _vglConfirmacionesLeer(docId);
-          if (mtrDebePreguntarTratamientoEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaTratamientoEje(eje, insumosAdh));
-          if (mtrDebePreguntarAdecuacionEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaAdecuacionEje(eje, insumosAdh));
-          if (mtrDebePreguntarAdherenciaEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaAdherenciaEje(eje, insumosAdh));
+          const cfgEje = MTR_ADHERENCIA_EJES[eje];
+          if (!cfgEje) continue;
+          // v17.58.0 — la adherencia CADUCA a 1 día: una respuesta de hace una semana no
+          // debe callar la pregunta de la toma de hoy. Se recorta la clave de adherencia
+          // a su versión vigente (o se borra si venció) antes de pasar las compuertas.
+          const confEje = Object.assign({}, confirmadasAdh);
+          const regAdhVigente = _vglConfirmacionVigente(docId, cfgEje.claveAdherencia, MTR_ADHERENCIA_VIGENCIA_DIAS);
+          if (regAdhVigente) confEje[cfgEje.claveAdherencia] = regAdhVigente;
+          else delete confEje[cfgEje.claveAdherencia];
+          if (mtrDebePreguntarTratamientoEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaTratamientoEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdecuacionEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaAdecuacionEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdherenciaEje(eje, insumosAdh, confEje)) frenan.push(mtrPreguntaAdherenciaEje(eje, insumosAdh));
         }
       } catch (e) {}
 
@@ -11216,6 +11250,7 @@ _vglOfrecerDeshacer(btn);
     state.fraudWatch.clear(); state.alertedFraud.clear(); state.warnedTimes.clear();
     state.contadas.clear();   // v17.1.0 (#72/#146) — día nuevo, contadores nuevos
     try { state.checkCierreAvisados.clear(); } catch (e) {}   // v17.6.7 — avisos de cierre por cita, día nuevo
+    try { if (typeof _mtrMediaPreguntadas !== "undefined" && _mtrMediaPreguntadas && typeof _mtrMediaPreguntadas.clear === "function") _mtrMediaPreguntadas.clear(); } catch (e) {}   // v17.58.0 — PARTE A: la escalera de adherencia se ofrece de nuevo cada jornada
     // v16.7.0 — AUDITORÍA #9: al cruzar medianoche el Excel PyM cargado ayer seguía
     // usándose SIN NINGUNA MARCA, como si fuera el del día. No se borra (a las 00:01 de
     // un turno nocturno sigue siendo lo mejor que hay), pero desde ahora la barra lo
@@ -20756,18 +20791,27 @@ _vglOfrecerDeshacer(btn);
     // médico no lo ha confirmado nunca, el panel se detiene y pregunta UNA vez.
     // v17.7.0 — el armado vive ahora en mtrReconciliarAhora, para que el banco pueda
     // probarlo y para que la vigilancia de 20 s del propio cuadro pueda repetirlo.
-    try {
-      const _rec = mtrReconciliarAhora(apt.doc_id, document);
-      if (_rec.frenan.length) {
-        // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
-        // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
-        // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
-        // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
-        const mostrado = _vglModalConfirmarDatos(apt, _rec.frenan, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen }));
-        if (mostrado) return;
-        try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
-      }
-    } catch (e) {}
+    // v17.58.0 — PARTE A: al continuar tras el cuadro NO se vuelve a reconciliar en la
+    // misma apertura (saltarReconciliar): las preguntas MEDIA de la escalera ya se
+    // mostraron y no deben reaparecer ni atrapar al médico en un segundo cuadro.
+    if (!(opts && opts.saltarReconciliar)) {
+      try {
+        const _rec = mtrReconciliarAhora(apt.doc_id, document);
+        // Las MEDIA de la escalera se ofrecen UNA vez por jornada: las ya mostradas hoy
+        // para este paciente se filtran aquí (las ALTA siempre se reevalúan).
+        const aPreguntar = (Array.isArray(_rec.frenan) ? _rec.frenan : []).filter((d) =>
+          !(d && d.severidad !== "alta" && _mtrMediaFuePreguntada(apt.doc_id, d.clave)));
+        if (aPreguntar.length) {
+          // v17.0.2 — AUDITORÍA: aquí se hacía `return` incondicional, así que si el modal
+          // no llegaba a pintarse (por la forma de una pregunta, por ejemplo) el médico se
+          // quedaba sin Panel y sin explicación. Si el emergente no se pudo mostrar, se
+          // sigue de largo: mejor abrir el módulo sin reconciliar que no abrir nada.
+          const mostrado = _vglModalConfirmarDatos(apt, aPreguntar, () => openPanelPacienteModal(apt, { seccion: seccion, origen: origen, saltarReconciliar: true }));
+          if (mostrado) return;
+          try { console.warn("[Vigilante] el reconciliador no se pudo mostrar; se abre el Panel sin él."); } catch (e2) {}
+        }
+      } catch (e) {}
+    }
 
     // v17.0.0 — FASE 2 DEL PATRÓN DEL MÉDICO. Va DESPUÉS del reconciliador a propósito:
     // una contradicción entre fuentes es más grave que un dato que falta, y preguntar por
@@ -21232,15 +21276,32 @@ _vglOfrecerDeshacer(btn);
       document.body.appendChild(modal);
 
       const pendientes = new Set(discrepancias.map((d) => d.clave));
+      // v17.58.0 — PARTE A (escalera de adherencia): las preguntas de severidad MEDIA se
+      // muestran en el cuadro pero NO retienen el flujo ("el médico manda"). Si hay
+      // preguntas ALTA (compuertas de fuentes/embarazo), el cuadro continúa en cuanto
+      // todas las ALTA están respondidas, sin esperar a las MEDIA; si solo hay MEDIA, se
+      // espera a responderlas todas (o a «Decidir luego») para no dejar la escalera a
+      // medias.
+      const pendientesBloquean = new Set(
+        discrepancias.filter((d) => d.severidad === "alta").map((d) => d.clave)
+      );
+      const hayAlta = pendientesBloquean.size > 0;
+      // v17.58.0 — PARTE A: lo que se RENDERIZÓ cuenta como «ya preguntado» para la
+      // jornada. Las MEDIA se ofrecen una vez por paciente y por día, no en cada
+      // reapertura del Panel; se marca al pintar la fila (no al deducirla), para que una
+      // pregunta que el médico nunca llegó a ver se vuelva a ofrecer.
+      discrepancias.forEach((d) => { if (d.severidad !== "alta") _mtrMediaMarcarPreguntada(apt.doc_id, d.clave); });
       let cerrar = () => { try { modal.remove(); } catch (e) {} };
       const responder = (clave, valor) => {
         _vglConfirmacionGuardar(apt.doc_id, clave, valor);
         pendientes.delete(clave);
+        pendientesBloquean.delete(clave);
         try {
           const ok = modal.querySelector("#vgl-conf-ok-" + clave);
           if (ok) ok.textContent = valor ? "✓ Sí" : "✓ No";
         } catch (e) {}
-        if (!pendientes.size) {
+        const listo = hayAlta ? pendientesBloquean.size === 0 : pendientes.size === 0;
+        if (listo) {
           // El resumen en caché se calculó con las fuentes en disputa: se invalida para
           // que todo lo que dependa de él se rehaga con la respuesta del médico.
           try { mtrCacheResumenBorrar(); } catch (e) {}

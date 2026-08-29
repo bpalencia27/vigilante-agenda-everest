@@ -2724,3 +2724,32 @@ Cada mutación se aplicó sobre el archivo de producción UNA A LA VEZ (restaura
 pasar a la siguiente), se corrió la suite afectada con el filtro del runner, se confirmó el
 rojo con la aserción esperada, y se restauró. El banco completo quedó en **2.295/2.295**
 tras la restauración final.
+
+## v17.58.0 — 29-ago-2026 (PARTE A: la escalera de adherencia del reconciliador)
+
+Decisión del médico (29-ago): cuando un eje está en falla terapéutica y el examen se va a
+repetir, el script pregunta en orden 1) ¿tiene tratamiento? 2) ¿es adecuado? 3) ¿adherencia?
+— indagando antes en la historia (medicamentos RCV, inercia de la estatina) y preguntando
+solo lo que no deduce. Las preguntas son de severidad MEDIA: se muestran en el cuadro del
+reconciliador pero NO bloquean («el médico manda»), se ofrecen UNA vez por paciente y por
+jornada (memoria `_mtrMediaPreguntadas`, limpiada en `diaNuevo`), y la adherencia caduca a
+1 día (se conversa en cada consulta). La suite 63 pasó de 30 a 41 casos.
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **escalón 1 (tratamiento)** | en `mtrDebePreguntarTratamientoEje` se retira el «indagó y SÍ tiene: no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *con estatina en la historia ya no se pregunta (obtuvo true)* |
+| **escalón 2 (adecuación)** | en `mtrDebePreguntarAdecuacionEje` se retira el «si la dedujo, no pregunta» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *LDL: la inercia ya la deduce (inadecuado) (obtuvo true)* |
+| **escalón 3 (adherencia)** | en `mtrDebePreguntarAdherenciaEje` se retira el «respondida y vigente -> se calla» (siempre pregunta) | `suite_63` | *compuertas de la escalera* → *respondida y vigente -> se calla (obtuvo true)* |
+| **caducidad de la adherencia** | en `mtrReconciliarAhora` se deja la clave de adherencia vencida en `confEje` (no se borra) | `suite_63` | *la adherencia caduca* → *pero la adherencia de hace 3 días CADUCÓ: se vuelve a preguntar (obtuvo false)* |
+| **eje de la glicemia** | en `mtrEjesEnFallaAdherencia` se retira `a === "Glicemia"` (la glicemia ya no comparte la escalera de diabetes) | `suite_63` | *mtrEjesEnFallaAdherencia* → *glicemia sola también es eje de diabetes: esperaba "hba1c" y obtuvo ""* |
+| **vigencia declarada** | en `mtrPreguntaAdherenciaEje` se retira `vigenciaDias: MTR_ADHERENCIA_VIGENCIA_DIAS` | `suite_63` | *las preguntas de la escalera* → *y la adherencia declara su vigencia de 1 día (esperaba 1 y obtuvo undefined)* |
+| **memoria de lo ya preguntado** | en `_mtrMediaMarcarPreguntada` se retira `s.add(clave)` (la marca no se guarda) | `suite_63` | *memoria de lo ya preguntado* → *marcado -> ya fue preguntada (obtuvo false)* y *las MEDIA ya mostradas NO reaparecen* → *2ª apertura ... NO reaparecen (obtuvo true)* |
+| **media que vuelven a bloquear** | en `_vglModalConfirmarDatos` el `listo` vuelve a `!pendientes.size` (las MEDIA retienen el flujo) | `suite_63` | *RECONCILIADOR de punta a punta* (regresión existente) → *y el módulo se abrió solo, sin volver a preguntar (obtuvo false)* |
+| **marcar lo renderizado** | en `_vglModalConfirmarDatos` se retira el `_mtrMediaMarcarPreguntada` al pintar las filas | `suite_63` | *las MEDIA ya mostradas NO reaparecen* → *2ª apertura: las MEDIA ya mostradas NO reaparecen (obtuvo true)* |
+| **reinicio diario** | en `diaNuevo()` se retira el `_mtrMediaPreguntadas.clear()` | `suite_63` | *diaNuevo reinicia la memoria* → *al día siguiente se vuelve a ofrecer (obtuvo true)* |
+
+Las 10 mutaciones se aplicaron UNA A LA VEZ sobre el archivo de producción, se corrió
+`node tests/runner.js 63` con `TZ=America/Bogota`, se confirmó el rojo con la aserción
+esperada y se restauró cada una antes de pasar a la siguiente. El banco completo quedó en
+**2.306/2.306** tras la restauración final (antes de la Parte A: 2.295 — la suite 63 ganó
+11 casos).
