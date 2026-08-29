@@ -4,6 +4,40 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.51.0] — 2026-08-29 (Qué contesta el panel, dicho tal cual)
+
+### 🔍 Una pregunta que no se puede responder adivinando
+La v17.49.0 dejó que el script solo dé una fila por entregada cuando el panel lo confirma. Esa
+comprobación funciona **tachando respuestas malas**: si la respuesta no es «no», ni «err», ni
+una página web, ni el inicio de sesión de Google, se da por buena. Lo estricto sería al revés:
+aceptar **solo** «ok» y «dup» y desconfiar de todo lo demás — así una respuesta vacía o el
+texto de un proxy de la IPS tampoco pasarían por entrega.
+
+No se hizo, y por una razón concreta: **desde aquí no hay forma de saber qué contesta el panel
+que usted tiene publicado**. El código del receptor que vive en el repositorio solo ha
+respondido nunca esas cuatro palabras, pero su propia cabecera dice que la versión desplegada
+es anterior a todo ese historial. Si me equivoco en esa dirección, **la telemetría entera deja
+de confirmarse en silencio**, que es peor que el hueco que cerraría.
+
+### ✅ Así que en vez de adivinar, se mide
+Ahora el script **guarda lo que el panel contesta, literalmente**, y se lo enseña en
+**Ajustes → «Probar y diagnosticar»**, en un renglón nuevo:
+
+- *«ok» (respuesta esperada del panel)* — todo en orden.
+- *«…» — esto NO lo dice el panel: quien contesta puede no ser él* — en rojo, cuando llega algo
+  que el receptor nunca dice: ahí hay un proxy, una URL equivocada o un despliegue viejo de por
+  medio.
+- *todavía no ha contestado nada en este equipo* — cuando aún no se ha probado, en vez de
+  fingir que todo va bien.
+
+**Con que usted pulse «Probar conexión» una vez, la pregunta queda contestada** y la
+comprobación estricta se puede activar sabiendo, no suponiendo.
+
+Lo guardado pasa por el mismo saneador de datos personales que todo lo demás: ni siquiera lo
+que responde un servidor entra sin tachar.
+
+---
+
 ## [Versión 17.50.0] — 2026-08-29 (Al prompt le faltaba la mitad: «no te dejes nada»)
 
 ### 📝 El contrato con la IA solo prohibía

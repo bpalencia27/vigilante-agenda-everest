@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.50.0
+// @version     17.51.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.50.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.51.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9187,6 +9187,18 @@ _vglOfrecerDeshacer(btn);
       try { err0 = JSON.parse(localStorage.getItem("vgl_rep_last_err") || "null"); } catch (e) {}
       paso("Último envío confirmado", !!ok0, ok0 ? "hace " + Math.max(0, Math.round((Date.now() - new Date(ok0).getTime()) / 60000)) + " min" : "nunca visto en este equipo");
       paso("Último intento fallido", !err0, err0 ? (err0.detalle || "?") + " (" + String(err0.ts || "").slice(0, 16) + ")" : "ninguno registrado");
+      // v17.51.0 — lo que contesta el panel, tal cual. Sirve para dos cosas: ver de un
+      // vistazo si quien responde es el panel o algo que se metio por medio (un proxy, una
+      // pagina de sesion), y decidir con un dato real si la prueba de acuse puede pasar a
+      // ser una lista blanca estricta. Un cuerpo que no sea "ok"/"dup"/"no"/"err" no se
+      // declara malo aqui —hoy cuenta como entrega— pero SÍ se enseña.
+      let cuerpo0 = "";
+      try { cuerpo0 = localStorage.getItem("vgl_rep_last_body") || ""; } catch (e) {}
+      const cuerpoConocido = ["ok", "dup", "no", "err"].indexOf(String(cuerpo0).trim().toLowerCase()) >= 0;
+      paso("Lo que contesta el panel", !cuerpo0 || cuerpoConocido,
+        !cuerpo0 ? "todavía no ha contestado nada en este equipo — pulse «Probar conexión»"
+                 : (cuerpoConocido ? "«" + cuerpo0 + "» (respuesta esperada del panel)"
+                                   : "«" + cuerpo0 + "» — esto NO lo dice el panel: quien contesta puede no ser él"));
       let sum = "";
       try { sum = localStorage.getItem("vgl_rep_sum") || ""; } catch (e) {}
       const ayer = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); })();
@@ -9221,6 +9233,18 @@ _vglOfrecerDeshacer(btn);
             // sistema presentado como un hecho: exactamente lo que este proyecto no acepta.
             const falloServidor = String(r.responseText || "").trim().toLowerCase() === "err";
             const ok = r.status >= 200 && r.status < 400 && !rechazoLogin && !respuestaHtml && !rechazoToken && !falloServidor;
+            // v17.51.0 — QUE CONTESTA EL PANEL, LITERALMENTE. La prueba de acuse de arriba
+            // es una LISTA NEGRA: da por buena toda respuesta que no reconozca como mala,
+            // asi que un cuerpo vacio (respuesta truncada) o el texto de un proxy que no sea
+            // HTML seguirian contando como entrega. Lo correcto seria una lista BLANCA —solo
+            // "ok" y "dup"—, y el receptor que vive en este repositorio nunca ha respondido
+            // otra cosa... pero su propia cabecera dice que el DESPLEGADO es una version
+            // anterior a todo el historial, y desde aqui no hay forma de saber que contesta.
+            // Equivocarse en esa direccion apaga la telemetria entera en silencio, que es
+            // peor que el agujero que cerraria. Asi que en vez de adivinar se guarda la
+            // respuesta REAL, recortada y saneada, y se le enseña al medico en «Probar y
+            // diagnosticar»: con una sola pulsacion suya la pregunta queda contestada.
+            try { localStorage.setItem("vgl_rep_last_body", sanitizePII(String(r.responseText || "").trim().slice(0, 80))); } catch (e3) {}
             _repSello(ok, ok ? "" : (rechazoLogin ? "la hoja pidió inicio de sesión (revisar despliegue del panel)" : respuestaHtml ? "el panel respondió una página, no un acuse (URL o despliegue)" : rechazoToken ? "el panel rechazó el token (¿se rotó en Codigo.gs sin actualizar el script?)" : falloServidor ? "el panel recibió la fila pero no pudo guardarla (¿cuota de Google agotada?)" : "respuesta " + r.status));
             res(ok);
           },

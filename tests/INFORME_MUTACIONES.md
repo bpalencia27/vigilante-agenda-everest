@@ -5653,3 +5653,29 @@ fallos» con el fichero roto, di por hecho que el runner salía con código 0 y 
 de anotarlo como defecto grave del banco. Medido bien —sin una tubería `| tail` de por medio,
 que era lo que me estaba devolviendo su propio código de salida— el runner sale con **2**.
 El banco hacía lo correcto; el instrumento de medida era el que mentía.
+
+---
+
+## v17.51.0 — qué contesta el panel, dicho tal cual
+
+**Origen: una verificación adversarial de la propia v17.49.0.** El enjambre que auditó el
+embudo de telemetría (68 agentes) confirmó el arreglo pero señaló un residuo real: la prueba
+de acuse quedó como **lista negra**, así que un cuerpo vacío o un texto arbitrario que no sea
+HTML siguen contando como entrega.
+
+**Se intentó la lista blanca y se revirtió, con la medición delante.** Al aceptar solo
+«ok»/«dup», **7 pruebas existentes de suite_11 se pusieron rojas**, porque su red simulada
+responde `{"ok":true}` — no el texto plano que devuelve el receptor real. Eso destapó lo
+importante: **no se puede verificar qué contesta el receptor DESPLEGADO** (la cabecera de
+`TABLERO/Codigo.gs` dice que es anterior a todo el historial del repositorio), y el fallo de
+equivocarse —telemetría que no vuelve a confirmarse nunca, cola llena, evidencia sacrificada
+al llegar al tope— es peor que el hueco. Así que se entrega el **instrumento** en vez de la
+conjetura: la respuesta literal se guarda y se enseña en el diagnóstico. Con una pulsación del
+médico en «Probar conexión», la lista blanca pasa a ser una decisión con dato.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | No se guarda lo que contesta el panel | *v17.51.0: se guarda LITERALMENTE lo que contesta el panel…* (+2 más) |
+| 2 | Se guarda sin pasar por `sanitizePII` | *v17.51.0: la respuesta guardada pasa por el saneador de PHI* |
+| 3 | El diagnóstico da por conocida cualquier respuesta | *v17.51.0: el diagnóstico enseña esa respuesta y avisa si NO es del panel* |
+| 4 | Desaparece el renglón del diagnóstico | la misma |

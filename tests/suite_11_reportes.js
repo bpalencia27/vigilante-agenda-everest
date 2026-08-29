@@ -165,6 +165,50 @@ module.exports = {
       t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 2, "las dos siguen en la cola: recibida no es guardada");
     });
 
+    // v17.51.0 — La prueba de acuse es una LISTA NEGRA: da por buena toda respuesta que no
+    // reconozca como mala. Lo correcto seria una lista blanca ("ok"/"dup" y nada mas), pero
+    // no se puede verificar desde aqui que contesta el receptor DESPLEGADO —su cabecera dice
+    // que es anterior a todo el historial del repositorio— y equivocarse apaga la telemetria
+    // entera en silencio. En vez de adivinar, se guarda la respuesta real y se le enseña al
+    // medico: con una pulsacion suya de «Probar conexion» la pregunta queda contestada.
+    await t.casoAsync("v17.51.0: se guarda LITERALMENTE lo que contesta el panel, sea lo que sea", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "ok";
+      await c.api.repPost({ evento: "prueba" });
+      t.igual(c.env.almacen["vgl_rep_last_body"], "ok", "la respuesta buena se guarda tal cual");
+      red.cuerpo = "Error 502: Bad Gateway del proxy";
+      await c.api.repPost({ evento: "prueba" });
+      t.igual(c.env.almacen["vgl_rep_last_body"], "Error 502: Bad Gateway del proxy", "y la inesperada tambien, sin interpretarla");
+    });
+
+    await t.casoAsync("v17.51.0: el diagnostico enseña esa respuesta y avisa si NO es del panel", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      const linea = () => (c.api.repDiagnostico() || []).filter((g) => g.paso === "Lo que contesta el panel")[0];
+      t.cierto(!!linea(), "el diagnostico tiene su renglon");
+      t.cierto(/todavía no ha contestado/.test(linea().detalle), "sin dato, lo dice en vez de fingir que todo va bien");
+      red.cuerpo = "dup";
+      await c.api.repPost({ evento: "prueba" });
+      t.cierto(linea().ok, "«dup» es una respuesta esperada del panel");
+      t.cierto(/respuesta esperada/.test(linea().detalle));
+      red.cuerpo = "<algo raro que no es del panel>".replace(/[<>]/g, "");
+      await c.api.repPost({ evento: "prueba" });
+      t.falso(linea().ok, "una respuesta que el panel nunca da se marca en rojo");
+      t.cierto(/NO lo dice el panel/.test(linea().detalle), "y se dice por que, sin acusar al panel de algo que quiza no hizo");
+    });
+
+    await t.casoAsync("v17.51.0: la respuesta guardada pasa por el saneador de PHI", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "rechazado para el documento 1234567890";
+      await c.api.repPost({ evento: "prueba" });
+      const b = String(c.env.almacen["vgl_rep_last_body"] || "");
+      t.igual(b.indexOf("1234567890"), -1, "ni siquiera lo que contesta un servidor entra sin sanear");
+      t.cierto(b.indexOf("CENSURADO") >= 0, "queda constancia de que habia algo y se tacho");
+    });
+
     await t.casoAsync("repPost: respeta la URL personalizada de S.reporteUrl", async () => {
       const red = crearRed();
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
