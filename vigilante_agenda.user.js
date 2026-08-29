@@ -5508,6 +5508,21 @@
         ))) frenan.push(mtrPreguntaEmbarazo());
       } catch (e) {}
 
+      // v17.57.0 — PARTE A: la escalera de adherencia, SOLO con ejes en falla. El examen
+      // se va a repetir porque el tratamiento falló: se pregunta (en orden) si hay
+      // tratamiento, si es adecuado y si hay adherencia — indagando antes en la historia
+      // (medicamentos RCV, dosis, histórico HCM) y preguntando solo lo que no se deduce.
+      // La adherencia se guarda con vigencia de 1 día: se conversa en cada consulta.
+      try {
+        const insumosAdh = mtrInsumosAdherencia(res);
+        for (const eje of mtrEjesEnFallaAdherencia(res)) {
+          const confirmadasAdh = _vglConfirmacionesLeer(docId);
+          if (mtrDebePreguntarTratamientoEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaTratamientoEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdecuacionEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaAdecuacionEje(eje, insumosAdh));
+          if (mtrDebePreguntarAdherenciaEje(eje, insumosAdh, confirmadasAdh)) frenan.push(mtrPreguntaAdherenciaEje(eje, insumosAdh));
+        }
+      } catch (e) {}
+
       return { frenan: frenan, desfasadas: desfasadas, leidos: f._leidos };
     } catch (e) { return vacio; }
   }
