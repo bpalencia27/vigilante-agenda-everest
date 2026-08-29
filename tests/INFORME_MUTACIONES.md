@@ -5570,3 +5570,40 @@ mutación no cae, el defecto está en la prueba— se reforzó la prueba para qu
 **forma** de la línea (el nombre de la acción y la lista exacta de campos de `det`), y con
 eso la mutación sí cae. La defensa de `vglLog` sigue ahí; ahora además está fijada la
 promesa de que esa línea solo lleva conteos.
+
+---
+
+## v17.49.0 — la evidencia no se da por entregada sin acuse (D4)
+
+**Medición previa, no reproducción:** el defecto (una fila de evidencia borrada tras un
+envío que nadie confirmó) ya estaba acotado desde la v17.6.14 por la guarda de «acuse
+fresco», así que no se puede reproducir en rojo con una prueba sencilla: hace falta la
+ventana concreta de panel-sano-hace-menos-de-30-min-y-caído-ahora. Lo que sí se midió,
+leyendo el receptor que vive en este repositorio, es que **la solución esbozada habría sido
+peor que el defecto**: `LOTE_TTL_SEG = 21600` (6 h) contra un reintento que ocurre al
+siguiente arranque — típicamente 13 h después. De ahí que la entrega no retenga-y-beaconee,
+sino que **no beaconee la evidencia en absoluto**.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Revertir: la evidencia vuelve a viajar por beacon y a retirarse | 5 casos de suite_23, entre ellos *v17.49.0 (D4): la evidencia NO se despacha por beacon…* |
+| 2 | `fraude` se cuela en la tabla de lo reconstruible | los mismos 5 casos: el fraude sale de la cola |
+| 3 | Nada sale nunca por beacon, tampoco las `ux` | 5 casos: *…despacha TODAS las filas reconstruibles* y *…la fila reconstruible despachada se retira* |
+| 4 | `err` vuelve a contar como entrega en `repPost` | *v17.49.0: la respuesta 'err' del panel NO cuenta como entrega…* y *…si el panel no confirma, el arranque NO pierde la evidencia* |
+| 5 | `_repVaciadoDeArranque` con el cuerpo vacío | *v17.49.0: al arrancar se vacía la cola por el camino que confirma acuse* |
+| 6 | El vaciado de arranque se programa a los 10 min en vez de a los 8 s | *boot: TODOS los timers quedan registrados en state.timers…* |
+| 7 | (receptor) `cache.put` vuelve a ejecutarse ANTES de escribir la fila | `TABLERO/simulacion_local.js`: *«reintento del mismo lote: dup (debe ser ok)»* + *«filas L7 en la hoja: 0»* |
+
+**Nota sobre tres pruebas reescritas.** `_vaciarTelemetriaAlSalir: despacha TODAS las filas
+pendientes`, `…la fila despachada se retira de la cola` y `v17.6.14: …CON acuse fresco sí
+despacha` exigían que la evidencia saliera por beacon y desapareciera de la cola. Las tres
+nacieron de dos fallos reales del transporte (despachaba solo `repQ[0]`; no retiraba la fila
+despachada), y **esas dos propiedades siguen fijadas** — ahora sobre las filas que de verdad
+viajan por ese camino. Exigirle a la evidencia «sale por beacon» era fijar como contrato el
+defecto que esta entrega cierra. Van con su porqué escrito en el sitio.
+
+**Y un hueco del banco, cerrado de paso:** `_colaDemo` sembraba una cola mixta pero las tres
+pruebas solo se afirmaban sobre la **longitud**, así que el banco no distinguía «se
+retiraron las 4» de «se retiraron 4 cualesquiera». El helper nuevo `_lotesEnCola(c, evento)`
+comprueba **qué** queda y con **qué lote**, que es de lo que depende que el panel no cuente
+dos veces la misma jornada.

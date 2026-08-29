@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.48.0
+// @version     17.49.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.48.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.49.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -9211,8 +9211,17 @@ _vglOfrecerDeshacer(btn);
             // el sello en verde — indistinguible del éxito. "dup" sí es éxito: la fila ya
             // había llegado y el servidor la descartó por duplicada.
             const rechazoToken = String(r.responseText || "").trim().toLowerCase() === "no";
-            const ok = r.status >= 200 && r.status < 400 && !rechazoLogin && !respuestaHtml && !rechazoToken;
-            _repSello(ok, ok ? "" : (rechazoLogin ? "la hoja pidió inicio de sesión (revisar despliegue del panel)" : respuestaHtml ? "el panel respondió una página, no un acuse (URL o despliegue)" : rechazoToken ? "el panel rechazó el token (¿se rotó en Codigo.gs sin actualizar el script?)" : "respuesta " + r.status));
+            // v17.49.0 (D4) — El receptor envuelve TODO su trabajo en un try/catch que
+            // devuelve el cuerpo "err" con estado HTTP 200 (TABLERO/Codigo.gs). Ese cuerpo
+            // significa "no pude escribir la fila": cuota de Apps Script, contención de la
+            // Hoja, tiempo agotado. Hasta hoy no era ni "no", ni HTML, ni login, ni un
+            // estado feo — así que pasaba por ENTREGA BUENA: la fila se retiraba de la cola
+            // y, peor, el sello «último envío confirmado» se ponía verde y autorizaba
+            // treinta minutos de beacon contra un panel que estaba fallando. Un fallo del
+            // sistema presentado como un hecho: exactamente lo que este proyecto no acepta.
+            const falloServidor = String(r.responseText || "").trim().toLowerCase() === "err";
+            const ok = r.status >= 200 && r.status < 400 && !rechazoLogin && !respuestaHtml && !rechazoToken && !falloServidor;
+            _repSello(ok, ok ? "" : (rechazoLogin ? "la hoja pidió inicio de sesión (revisar despliegue del panel)" : respuestaHtml ? "el panel respondió una página, no un acuse (URL o despliegue)" : rechazoToken ? "el panel rechazó el token (¿se rotó en Codigo.gs sin actualizar el script?)" : falloServidor ? "el panel recibió la fila pero no pudo guardarla (¿cuota de Google agotada?)" : "respuesta " + r.status));
             res(ok);
           },
           onerror: () => { _repSello(false, "sin red hacia el panel (¿proxy de la IPS?)"); res(false); },
@@ -9293,6 +9302,11 @@ _vglOfrecerDeshacer(btn);
     try { let g = 0; while (repQ.length && g++ < 10) { if (await repPost(repQ[0])) { repQ.shift(); repQSave(); } else break; } }
     finally { repFlushing = false; }
   }
+  // v17.49.0 (D4) — Vive como funcion CON NOMBRE, no como un closure dentro de boot(),
+  // por la misma razon que _vaciarTelemetriaAlSalir: para que el banco pueda ejercerla.
+  // Un timer cuyo cuerpo nadie puede llamar es un timer que nadie puede probar.
+  function _repVaciadoDeArranque() { try { repFlush(); } catch (e) {} }
+
   // v12.6.9 — IDENTIFICADOR DE EQUIPO AUTOMÁTICO. Hasta v12.6.8 la columna `equipo` del
   // tablero salía VACÍA en todas las filas: dependía de que alguien escribiera a mano el
   // ajuste S.equipo, y nadie lo hace. Sin ese dato el tablero es un montón de filas
@@ -9852,22 +9866,43 @@ _vglOfrecerDeshacer(btn);
       // se perdía en silencio — los tres rechazos que repPost SÍ detecta y reencola. Beacon
       // solo cuando el último envío CONFIRMADO está fresco (< 30 min): si el panel está
       // sano, es un refuerzo al cerrar; si no hay sello fresco, las filas quedan en la cola
-      // y el próximo arranque las reintenta por repFlush (que sí lee el acuse). El servidor
-      // ya descarta duplicados por `lote`, así que reintentar nunca duplica.
+      // y el próximo arranque las reintenta por repFlush (que sí lee el acuse).
+      // v17.49.0: esta guarda ya solo gobierna las filas reconstruibles — ver abajo.
       let ultimoOk = 0;
       try { const iso = localStorage.getItem("vgl_rep_last_ok"); if (iso) ultimoOk = new Date(iso).getTime(); } catch (e) {}
       const selloFresco = ultimoOk > 0 && (Date.now() - ultimoOk) < 30 * 60 * 1000;
       if (!selloFresco) return 0;
-      // TODAS las filas pendientes, no solo la primera: la cola admite hasta 30 y las que
-      // mas importan (fraude, resumen diario) pueden estar en cualquier posicion. Cada
-      // fila que SI sale se retira y se persiste — igual que hace repFlush con
-      // repQ.shift()+repQSave() tras un repPost exitoso — para que no se reenvie y salga
-      // duplicada en el tablero. Las que sendBeacon rechace (cuota o tamaño) se quedan
-      // en la cola para el proximo intento, que es justo lo que se quiere.
+      // v17.49.0 (decision D4) — LA EVIDENCIA NO VIAJA POR ESTE CAMINO.
+      // El beacon despacha lo RECONSTRUIBLE y nada mas. "ux" son metricas de uso agregadas
+      // y "entorno" sale otra vez mañana: si se pierden, no se pierde nada que no vuelva.
+      // "error", "fraude" y "resumen" son EVIDENCIA — el propio recorte de la cola
+      // (repQSave) las protege con un orden de sacrificio explicito — y por este camino
+      // no se puede saber si llegaron: sendBeacon y fetch(no-cors) devuelven true sin
+      // haber leido nada. Se quedan en la cola y salen por repFlush/repPost, que si lee
+      // el acuse del panel.
+      //
+      // POR QUE NO SE MANDAN POR BEACON *ADEMAS* DE DEJARLAS EN LA COLA (que era la idea
+      // inicial): el receptor descarta el reenvio con CacheService y un TTL de 6 h
+      // (TABLERO/Codigo.gs, LOTE_TTL_SEG = 21600), y su propio comentario justifica ese
+      // numero diciendo "la cola del userscript no reintenta mas alla de eso". Con la
+      // evidencia retenida eso deja de ser cierto: el medico cierra a las 18:00 y abre al
+      // dia siguiente a las 07:00 — trece horas — asi que el reintento caeria FUERA de la
+      // ventana de descarte y la fila se escribiria DOS VECES, inflando los acumulados del
+      // tablero. Que es exactamente el defecto que el campo `lote` nacio para cerrar.
+      // Mandarla una sola vez, por el camino que confirma, no depende de esa ventana ni
+      // de que version del receptor este desplegada.
+      //
+      // Y evita una segunda trampa: este manejador cuelga de `visibilitychange`, no solo
+      // de `pagehide`. Se dispara cada vez que el medico pasa a otra ventana — decenas de
+      // veces en una jornada. Con la evidencia retenida Y beaconeada, la misma fila de
+      // fraude saldria en cada uno de esos cambios.
+      const RECONSTRUIBLE = { ux: 1, entorno: 1 };
       const pendientes = [];
       let despachadas = 0;
       for (let i = 0; i < repQ.length; i++) {
-        if (repBeacon(repQ[i])) despachadas++; else pendientes.push(repQ[i]);
+        const fila = repQ[i];
+        if (!RECONSTRUIBLE[fila && fila.evento]) { pendientes.push(fila); continue; }
+        if (repBeacon(fila)) despachadas++; else pendientes.push(fila);
       }
       repQ = pendientes;
       repQSave();
@@ -27836,6 +27871,15 @@ _vglOfrecerDeshacer(btn);
         }
       } catch (e) {}
     }, 12000);
+    // v17.49.0 (D4) — VACIADO AL ARRANCAR. Hasta hoy solo habia dos disparadores de
+    // repFlush: este intervalo, que dispara por PRIMERA vez en el minuto 10, y la llamada
+    // de dentro de reportar() al encolar algo nuevo (que ademas se salta si hubo un fallo
+    // hace menos de 3 min). Asi que la evidencia que quedo de ayer esperaba hasta diez
+    // minutos de pestaña abierta, o hasta que ocurriera un evento nuevo. Ahora que la
+    // evidencia SOLO sale por este camino (ya no se beaconea al cerrar), "se reintenta al
+    // arrancar" tiene que ser literal. A los 8 s, no en el instante 0: es el mismo respeto
+    // por el arranque que ya tienen la fila de entorno (12 s) y el autochequeo del embudo.
+    const tRepBoot = setTimeout(_repVaciadoDeArranque, 8000);
     const tRepFlush = setInterval(repFlush, 600000);
     // v12.5.0 — telemetría de uso del panel: la ventana pendiente de otro día sale al
     // arrancar (45 s, tras estabilizarse el liderazgo) y luego una fila agregada cada
@@ -27852,7 +27896,7 @@ _vglOfrecerDeshacer(btn);
     try { _instalarOyenteTablaOficial(); } catch (e) {}
     const tRepEnt = setTimeout(() => { try { repEntornoDiario(); } catch (e) {} }, 12000);
     if (Array.isArray(state.timers)) {
-      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
+      state.timers.push(tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt);
       // v15.x — Sin esto, emergencyTeardown() NO podia cancelarlos: el kill-switch retiraba
       // la interfaz y anunciaba "Pausa de seguridad remota activa" mientras la pestaña seguia
       // consultando SharePoint y desempacando el libro de PyM cada 10 min, indefinidamente.

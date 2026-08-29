@@ -4,6 +4,55 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.49.0] — 2026-08-29 (La evidencia no se da por entregada sin acuse)
+
+### 📮 Qué pasaba
+El script guarda en una cola lo que le manda al panel remoto. Hay dos clases de fila:
+**métricas de uso** (cuántas veces se abrió cada pantalla — si se pierden, se reconstruyen)
+y **evidencia**: los fraudes de llegada, los errores del script y el resumen del día.
+
+Al ocultar o cerrar la pestaña, el script vaciaba la cola entera por el transporte rápido
+del navegador (`sendBeacon`). Ese transporte, **por diseño del navegador, no puede leer la
+respuesta**: devuelve «enviado» sin saber si llegó. Y la fila se borraba igual. Con el panel
+caído, con la sesión de Google caducada o con el token cambiado, un fraude o el resumen del
+día **desaparecían sin que nadie se enterara**.
+
+### ✅ Ahora
+**La evidencia ya no viaja por ahí.** Por el transporte a ciegas solo salen las métricas de
+uso y la fila de entorno. Los fraudes, los errores y el resumen se quedan en la cola y salen
+por el camino que **sí lee el acuse del panel**. Si no hay acuse, no salen: esperan.
+
+**Y el reintento al arrancar ahora es literal.** Antes, lo que quedó pendiente de ayer
+esperaba hasta diez minutos con la pestaña abierta. Ahora se vacía a los 8 segundos de
+abrir Everest.
+
+### 🚫 Por qué NO se hace lo que parecía más obvio
+La idea inicial era mandar la evidencia por el transporte rápido **igual**, y además
+dejarla en la cola para reintentarla. Al revisar el receptor (que está en este mismo
+repositorio) resultó que **habría duplicado cada fila**: el panel descarta el reenvío
+mirando una memoria que **caduca a las 6 horas**, y el reintento ocurre cuando usted vuelve
+a abrir Everest — al día siguiente, o el lunes. Trece horas después, esa memoria ya no
+existe y la fila se escribiría dos veces, inflando los acumulados del tablero. Que es
+exactamente el defecto que ese mecanismo nació para cerrar.
+
+Mandarla **una sola vez, por el camino que confirma**, no depende de esa ventana de 6 horas
+ni de qué versión del receptor esté publicada.
+
+### 🩹 Dos agujeros más, encontrados por el camino
+- **«Recibida» no es «guardada».** El panel responde `err` (con estado normal) cuando
+  recibió la fila pero no pudo escribirla. El script lo contaba como entrega buena: borraba
+  la fila **y** ponía en verde el sello de «último envío confirmado», que a su vez
+  autorizaba media hora de envíos a ciegas contra un panel que estaba fallando. Ahora `err`
+  cuenta como fallo, con su motivo escrito: *«el panel recibió la fila pero no pudo
+  guardarla (¿cuota de Google agotada?)»*.
+- **El panel quemaba el identificador antes de escribir.** `TABLERO/Codigo.gs` marcaba la
+  fila como «ya vista» *antes* de guardarla. Si la escritura fallaba, el reintento recibía
+  «duplicada» y se descartaba: la fila no se escribía nunca. Ahora se marca **después** de
+  guardar. ⚠️ **Este cambio es del panel, no del script: solo tiene efecto cuando usted
+  vuelva a publicar `TABLERO/Codigo.gs` en Apps Script.**
+
+---
+
 ## [Versión 17.48.0] — 2026-08-29 (Un paciente, una sola casilla de memoria)
 
 ### 🗂 El mismo paciente podía quedar archivado dos veces

@@ -20,7 +20,7 @@ const cache={};
 global.SpreadsheetApp={getActiveSpreadsheet:()=>ss,getActive:()=>({toast:(m)=>console.log("TOAST:",m)}),getUi:()=>{throw new Error("sin ui")}};
 global.CacheService={getScriptCache:()=>({get:k=>cache[k]||null,put:(k,v)=>{cache[k]=v;}})};
 global.ContentService={createTextOutput:s=>({t:s,setMimeType(){return this;}}),MimeType:{TEXT:"text"}};
-eval(fs.readFileSync("/workspace/vigilante-agenda-everest/TABLERO/Codigo.gs","utf8"));
+eval(fs.readFileSync(require("path").join(__dirname, "Codigo.gs"), "utf8"));
 const post=o=>doPost({postData:{contents:JSON.stringify(o)}}).t;
 const base={token:"vgl-2026",equipo:"eq-a1b2c3",ver:"12.6.9",dia:"2026-08-12"};
 
@@ -36,6 +36,23 @@ console.log("entorno   :",post({...base,evento:"entorno",ts:"t3",lote:"L3",nav:"
 console.log("evento raro:",post({...base,evento:"loquesea",lote:"L4"}));
 console.log("token malo :",post({...base,token:"x",evento:"ux",lote:"L5"}));
 console.log("formula    :",post({...base,evento:"fraude",ts:"t4",lote:"L6",hora:"=SUM(A1:A9)",min:3}));
+
+// v17.49.0 — El lote NO puede quemarse si la escritura falla. Antes, el `cache.put`
+// ocurria junto al `cache.get`, asi que un fallo de la Hoja dejaba el lote marcado seis
+// horas: el reintento del userscript recibia "dup" (que para el cliente es entrega buena)
+// y la fila se perdia sin haberse escrito nunca.
+(function pruebaEscrituraFallida(){
+  const hojaOk = hojas["fraude"];
+  hojas["fraude"] = { appendRow(){ throw new Error("cuota de Apps Script agotada"); } };
+  const r1 = post({...base,evento:"fraude",ts:"t9",lote:"L7",hora:"07:00",min:5});
+  hojas["fraude"] = hojaOk;
+  const r2 = post({...base,evento:"fraude",ts:"t9",lote:"L7",hora:"07:00",min:5});
+  const escritas = hojas["fraude"].d.filter(f=>f.indexOf("L7")>=0).length;
+  console.log("escritura fallida :",r1,"(debe ser err)");
+  console.log("reintento del mismo lote:",r2,"(debe ser ok, NO dup)");
+  console.log("filas L7 en la hoja:",escritas,"(debe ser 1: la evidencia no se perdio)");
+  if(r1!=="err"||r2!=="ok"||escritas!==1){console.error("FALLA: el lote se quemo sin escribir la fila");process.exitCode=1;}
+})();
 
 console.log("\n-- encabezado uso (migrado):",hojas["uso"].d[0].join(" | "));
 console.log("-- fila ux :",hojas["uso"].d[2].join(" | "));

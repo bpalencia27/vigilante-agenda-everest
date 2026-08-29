@@ -977,8 +977,15 @@ module.exports = {
       c.api.boot();
       const timers = c.api.__state.timers;
 
-      t.igual(timers.length, antes + 13,
-        "boot registra los 13 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
+      t.igual(timers.length, antes + 14,
+        "boot registra los 14 timers que crea (tAutoUpd, tVerMin, tVer, tPaint, tPymRem, tRepSum, tRepBoot, tRepFlush, tUxBoot, tUxFlush, tRepEnt, tSonda, tPymDiario, tPymCaptador)");
+      // v17.49.0 (D4) — tRepBoot: el vaciado de la cola al ARRANCAR. Desde que la
+      // evidencia (error/fraude/resumen) dejo de mandarse por beacon al cerrar, este es
+      // el UNICO camino por el que sale, asi que "se reintenta al arrancar" tiene que ser
+      // literal y no "en el minuto 10 por el intervalo".
+      const repBoot = handles.find((x) => x.ms === 8000 && x.fn === c.api._repVaciadoDeArranque);
+      t.cierto(!!repBoot, "boot programa el vaciado de la cola a los 8 s del arranque");
+      t.cierto(timers.indexOf(repBoot.h) >= 0, "y queda registrado para que el kill-switch pueda cancelarlo");
 
       const verMin = handles.find((x) => x.fn === c.api.checkVersionMinimum && x.ms === 4000);
       t.cierto(!!verMin, "el chequeo de versión escalonado existe (setTimeout 4 s)");

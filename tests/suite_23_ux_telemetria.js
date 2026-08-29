@@ -1077,6 +1077,13 @@ module.exports = {
       c.env.gm["vgl_repq"] = JSON.stringify(filas);
       return filas;
     }
+    // v17.49.0 (D4) — que lotes quedan en la cola, y de que evento. Las pruebas viejas
+    // solo miraban la LONGITUD, asi que no podian distinguir "se retiraron las 4" de
+    // "se retiraron 4 cualesquiera" — ni fijar la regla nueva.
+    function _lotesEnCola(c, evento) {
+      const q = JSON.parse(c.env.gm["vgl_repq"] || "[]");
+      return q.filter((f) => !evento || f.evento === evento).map((f) => f.lote);
+    }
     function _espiarBeacon(c, acepta) {
       const enviados = [];
       c.ctx.navigator = { sendBeacon: (u, b) => { if (!acepta) return false; enviados.push(b && b._t); return true; } };
@@ -1090,23 +1097,60 @@ module.exports = {
       return enviados;
     }
 
-    t.caso("_vaciarTelemetriaAlSalir: despacha TODAS las filas pendientes, no solo la primera", () => {
+    // v17.49.0 (D4) — REESCRITAS. Estas dos pruebas nacieron de dos fallos REALES del
+    // transporte por beacon: despachaba solo repQ[0], y no retiraba de la cola la que si
+    // despachaba (asi que el proximo repFlush la reenviaba y salia duplicada). Las dos
+    // propiedades siguen siendo ciertas y siguen fijadas aqui — pero ahora sobre las filas
+    // que de verdad viajan por este camino: las reconstruibles. La evidencia dejo de
+    // viajar por beacon, asi que exigirle "sale por beacon" era fijar el defecto que la
+    // D4 vino a cerrar: darla por entregada sin que nadie confirmara nada.
+    t.caso("_vaciarTelemetriaAlSalir: despacha TODAS las filas reconstruibles, no solo la primera", () => {
       const c = cargar({ silencioso: true });
-      const filas = _colaDemo(c);
+      _colaDemo(c);                                  // fraude L1, ux L2, ux L3, resumen L4
       const enviados = _espiarBeacon(c, true);
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "se despachan las " + filas.length + " filas de la cola, no una sola");
-      t.igual(enviados.length, filas.length, "y salieron de verdad por el transporte");
-      t.cierto(enviados.some((e) => e.includes("resumen")), "el resumen diario, que puede ir al final de la cola, tambien sale");
-      t.cierto(enviados.some((e) => e.includes("fraude")), "y la fila de fraude tambien");
+      t.igual(n, 2, "las DOS filas ux salen, no una sola (era el fallo original)");
+      t.igual(enviados.length, 2, "y salieron de verdad por el transporte");
+      t.falso(enviados.some((e) => e.includes("resumen")), "el resumen es evidencia: no se manda a ciegas");
+      t.falso(enviados.some((e) => e.includes("fraude")), "ni la fila de fraude");
     });
 
-    t.caso("_vaciarTelemetriaAlSalir: la fila despachada se retira de la cola (si no, sale DUPLICADA en el tablero)", () => {
+    t.caso("_vaciarTelemetriaAlSalir: la fila reconstruible despachada se retira de la cola (si no, sale DUPLICADA en el tablero)", () => {
       const c = cargar({ silencioso: true });
       _colaDemo(c);
       _espiarBeacon(c, true);
       c.api._vaciarTelemetriaAlSalir();
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "la cola persistida queda vacia: nada que repFlush pueda reenviar");
+      t.igual(_lotesEnCola(c, "ux"), [], "ninguna ux queda: nada que repFlush pueda reenviar duplicado");
+    });
+
+    t.caso("v17.49.0 (D4): la evidencia NO se despacha por beacon — se queda para el camino que confirma", () => {
+      const c = cargar({ silencioso: true });
+      _colaDemo(c);
+      _espiarBeacon(c, true);
+      c.api._vaciarTelemetriaAlSalir();
+      t.igual(_lotesEnCola(c, "fraude"), ["L1"], "el fraude sigue en la cola, con su lote INTACTO");
+      t.igual(_lotesEnCola(c, "resumen"), ["L4"], "y el resumen diario tambien");
+      t.igual(_lotesEnCola(c), ["L1", "L4"], "y solo esas dos: las ux si salieron");
+    });
+
+    t.caso("v17.49.0 (D4): ocultar y volver veinte veces no duplica ni desborda la evidencia retenida", () => {
+      const c = cargar({ silencioso: true });
+      _colaDemo(c);
+      const enviados = _espiarBeacon(c, true);
+      for (let i = 0; i < 20; i++) c.api._vaciarTelemetriaAlSalir();
+      t.igual(enviados.length, 2, "las ux salen UNA vez; el manejador cuelga de visibilitychange y corre en cada cambio de ventana");
+      t.igual(_lotesEnCola(c), ["L1", "L4"], "la evidencia sigue ahi, una sola vez cada una, sin reencolarse ni multiplicarse");
+    });
+
+    t.caso("v17.49.0 (D4): una cola de PURA evidencia no despacha nada y queda intacta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "error", lote: "E1" }, { evento: "fraude", lote: "E2" }]);
+      const enviados = _espiarBeacon(c, true);
+      t.igual(c.api._vaciarTelemetriaAlSalir(), 0, "no hay nada reconstruible que mandar");
+      t.igual(enviados.length, 0, "y no se manda una sola fila a ciegas");
+      t.igual(_lotesEnCola(c), ["E1", "E2"], "las dos siguen esperando acuse");
     });
 
     t.caso("_vaciarTelemetriaAlSalir: si el navegador rechaza los beacons, NO se pierde ninguna fila", () => {
@@ -1371,8 +1415,9 @@ module.exports = {
       const enviados = _espiarBeacon(c, true);
       c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date().toISOString());
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre");
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "y las filas salen de la cola, sin duplicados en el tablero");
+      t.igual(n, 2, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre con lo reconstruible");
+      t.igual(_lotesEnCola(c, "ux"), [], "y esas filas salen de la cola, sin duplicados en el tablero");
+      t.igual(_lotesEnCola(c).length, 2, "la evidencia se queda: el sello fresco autoriza el beacon, no sustituye al acuse");
     });
 
     t.caso("v17.6.14: reportarError no deja crecer la memoria de huellas por encima del techo (40)", () => {

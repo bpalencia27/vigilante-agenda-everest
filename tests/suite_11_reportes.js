@@ -114,6 +114,57 @@ module.exports = {
       t.falso(await c.api.repPost({ a: 5 }), "si GM lanza, el catch resuelve false");
     });
 
+    // v17.49.0 (D4) — El receptor envuelve todo su trabajo en un try/catch que responde
+    // el cuerpo "err" con HTTP 200: significa "recibi la fila pero no pude guardarla".
+    // Hasta hoy eso pasaba por entrega buena — la fila salia de la cola sin haberse
+    // escrito, y el sello «ultimo envio confirmado» se ponia verde.
+    await t.casoAsync("v17.49.0: la respuesta 'err' del panel NO cuenta como entrega (recibida no es guardada)", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "err";
+      t.falso(await c.api.repPost({ evento: "fraude" }), "no pudo guardarla: la fila tiene que quedarse para reintentar");
+      const err = JSON.parse(c.env.almacen["vgl_rep_last_err"] || "null");
+      t.cierto(!!err && String(err.detalle).indexOf("no pudo guardarla") >= 0, "y queda dicho por que, sin fingir un exito");
+      t.igual(c.env.almacen["vgl_rep_last_ok"], undefined, "el sello de «confirmado» NO se pone verde con un fallo del panel");
+    });
+
+    await t.casoAsync("v17.49.0: 'dup' y 'ok' siguen contando como entrega (la fila ya esta en la Hoja)", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      red.cuerpo = "dup";
+      t.cierto(await c.api.repPost({ evento: "resumen" }), "el servidor la descarto por duplicada: ya habia llegado");
+      red.cuerpo = "ok";
+      t.cierto(await c.api.repPost({ evento: "resumen" }), "y el acuse normal");
+    });
+
+    // v17.49.0 (D4) — La evidencia ya no sale por beacon al cerrar, asi que el arranque
+    // tiene que drenarla de verdad. Antes de esta version la primera oportunidad era el
+    // intervalo de 10 minutos (o un evento nuevo que disparara reportar()).
+    await t.casoAsync("v17.49.0: al arrancar se vacia la cola por el camino que confirma acuse", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "fraude", lote: "L1" }, { evento: "resumen", lote: "L2" }]);
+      red.cuerpo = "ok";
+      await c.api._repVaciadoDeArranque();
+      await new Promise((r) => setTimeout(r, 5));
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "la evidencia de ayer sale ya, no dentro de diez minutos");
+      t.igual(red.posts.length, 2, "y sale por GM_xmlhttpRequest, que si lee el acuse del panel");
+    });
+
+    await t.casoAsync("v17.49.0: si el panel no confirma, el arranque NO pierde la evidencia", async () => {
+      const red = crearRed();
+      const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "fraude", lote: "L1" }, { evento: "resumen", lote: "L2" }]);
+      red.cuerpo = "err";
+      await c.api._repVaciadoDeArranque();
+      await new Promise((r) => setTimeout(r, 5));
+      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 2, "las dos siguen en la cola: recibida no es guardada");
+    });
+
     await t.casoAsync("repPost: respeta la URL personalizada de S.reporteUrl", async () => {
       const red = crearRed();
       const c = cargar({ silencioso: true, gmxhr: red.gmxhr });
