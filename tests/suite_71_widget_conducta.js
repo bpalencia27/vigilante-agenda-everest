@@ -639,6 +639,61 @@ module.exports = {
       t.cierto(ok, "el gesto se completa igual, sin cuadro de por medio");
     });
 
+    // ---------- v17.42.0 — CRUCE DE PACIENTES en el gesto de ordenar ----------
+    // Hallazgo de auditoría adversarial (29-ago). Esta era la ÚNICA cadena de escritura
+    // clínica del script sin guarda `_pacienteSigueAbierto` — y es la que hace clics
+    // reales sobre el DOM de Everest, con esperas fijas de 700+400(+300) ms entre el
+    // clic en el <li> y el clic en "Agregar". En ese hueco el médico puede cerrar la
+    // historia y abrir otra: Angular remonta la pantalla, y el segundo
+    // `querySelectorAll("button")` —que es de DOCUMENTO COMPLETO— encontraría el
+    // "Agregar" del paciente NUEVO y le ordenaría los exámenes del ANTERIOR.
+    // El propio código ya llamaba a esto "el riesgo clínico más alto que ha tenido este
+    // script" (ver el comentario de _pacienteSigueAbierto) — pero la guarda que se creó
+    // para eso nunca se cableó a esta ruta, que nació después (v17.35.0).
+    await t.casoAsync("_conductaBuscarYAgregarExamen: si el paciente cambia entre el <li> y 'Agregar', NO clickea Agregar", async () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", []);
+      const d = mockDocConducta({});
+      const btnAgregar = mockBoton("Agregar", {});
+      const li = mockLi("HEMOGLOBINA", () => {
+        // Angular monta "Agregar"… y a la vez el médico ya abrió otra historia.
+        setTimeout(() => {
+          d._agregarBoton(btnAgregar);
+          cablearHistoriaConducta(c.env, "5551234567", []);   // ← otro paciente en pantalla
+        }, 0);
+      });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await c.api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d, "1098765432");
+      t.falso(ok, "debe abortar: el paciente que pidió la orden ya no está en pantalla");
+      t.falso(btnAgregar._clicado, "NUNCA debe clickear 'Agregar' sobre la historia de otro paciente");
+    });
+
+    await t.casoAsync("_conductaBuscarYAgregarExamen: sin docId esperado se comporta como siempre (retrocompatible)", async () => {
+      const d = mockDocConducta({});
+      const li = mockLi("HEMOGLOBINA", () => { setTimeout(() => d._agregarBoton(mockBoton("Agregar", {})), 0); });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const ok = await api._conductaBuscarYAgregarExamen("HEMOGLOBINA", d);
+      t.cierto(ok, "los llamadores que no pasan docId siguen funcionando igual que antes");
+    });
+
+    await t.casoAsync("mtrConductaAgregarPendientes: propaga el docId a cada búsqueda — el cruce se corta en el orquestador", async () => {
+      const c = cargar({ silencioso: true });
+      cablearHistoriaConducta(c.env, "1098765432", []);
+      const tabla = mockTabla([]);
+      const d = mockDocConducta({ tabla });
+      const btnAgregar = mockBoton("Agregar", {});
+      const li = mockLi("HEMOGLOBINA", () => {
+        setTimeout(() => { d._agregarBoton(btnAgregar); cablearHistoriaConducta(c.env, "5551234567", []); }, 0);
+      });
+      d.querySelectorAll = ((base) => (sel) => (sel === "li" ? [li] : base(sel)))(d.querySelectorAll);
+      const r = await c.api.mtrConductaAgregarPendientes(
+        { paquete: [], individuales: [{ clave: "HB", nombre: "Hemoglobina", liTextos: ["HEMOGLOBINA"] }] },
+        d, "1098765432"
+      );
+      t.igual(r.agregados.length, 0, "nada se da por agregado si el paciente cambió a mitad del gesto");
+      t.falso(btnAgregar._clicado, "y no se clickeó nada en la historia del paciente nuevo");
+    });
+
     // ---------- mtrConductaAgregarPendientes (orquestador) ----------
     await t.casoAsync("mtrConductaAgregarPendientes: nada pendiente, no toca el DOM en absoluto", async () => {
       const d = { querySelectorAll() { throw new Error("no debía llamarse"); } };

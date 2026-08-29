@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.41.0
+// @version     17.42.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.41.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.42.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -5716,7 +5716,10 @@
       if (!total) { showToast("AMBAR", "Ordenar pendientes", "Ya no hay nada pendiente para ordenar en esta consulta.", false); return; }
 
       uxTrack("widget.ordenarConducta.clic");
-      const r = await mtrConductaAgregarPendientes(items);
+      // v17.42.0 — el `docId` que ya tenía este clic se PROPAGA por fin hasta el gesto
+      // real. Sin él, la cadena de clics escribía en la historia que estuviera en pantalla
+      // en ese instante, que puede no ser la que pidió la orden.
+      const r = await mtrConductaAgregarPendientes(items, undefined, docId);
       const todos = items.paquete.concat(items.individuales);
       if (r.agregados.length) {
         markOrdenLabsConductaHoy(docId, r.agregados);
@@ -5727,6 +5730,12 @@
         } else {
           showToast("VERDE", "Agregado a Conducta", "Se agregó: " + nombresOk + ". Recuerde guardar la consulta.", false);
         }
+      } else if (!_pacienteSigueAbierto(docId)) {
+        // v17.42.0 — REGLA D del proyecto: no presentar un fallo del sistema como un hecho
+        // de la pantalla. Si no se agregó nada porque la historia cambió a mitad del
+        // gesto, decir ESO — el mensaje genérico ("no se encontraron los botones") sería
+        // falso, y mandaría al médico a buscar un problema que no existe.
+        showToast("AMBAR", "Se canceló para no equivocar la historia", "Se cambió de paciente mientras se agregaban los exámenes, así que se detuvo: nada se escribió en la historia de otra persona. Vuelva a abrir al paciente y púlselo de nuevo.", true);
       } else {
         showToast("ROJO", "No se pudo agregar", "No se encontraron los botones o la lista de exámenes en la pantalla. Inténtelo de nuevo, o agréguelo a mano.", true);
       }
@@ -24406,16 +24415,31 @@ _vglOfrecerDeshacer(btn);
   // aparece ninguno, sigue de largo sin esperarlo. Fallo seguro: si el <li> no está en la
   // pantalla actual, o el texto no casó exacto, no se clickea nada por aproximación —
   // "casilla vacía antes que clic inventado".
-  async function _conductaBuscarYAgregarExamen(nombreLiExacto, doc) {
+  // v17.42.0 — `docIdEsperado` (3.er parámetro, OPCIONAL para no romper a nadie): la
+  // cédula que estaba en pantalla cuando el médico pulsó el botón. Entre el clic en el
+  // <li> y el clic en "Agregar" hay 700 ms de espera fija, y otros 400+300 ms hasta el
+  // cuadro de confirmación. En ese hueco el médico puede cerrar la historia y abrir otra:
+  // Angular remonta la pantalla y CADA `d.querySelectorAll("button")` de aquí abajo es de
+  // DOCUMENTO COMPLETO, así que encontraría el "Agregar" del paciente NUEVO.
+  // Esta era la única cadena de escritura clínica del script sin esta guarda, pese a que
+  // el comentario de `_pacienteSigueAbierto` ya llamaba al cruce de pacientes "el riesgo
+  // clínico más alto que ha tenido este script" — la guarda existía desde la v14.1.5 y
+  // esta ruta, que nació en la v17.35.0, nunca se cableó a ella.
+  // Se comprueba ANTES de cada clic, no solo al entrar: lo que importa no es quién estaba
+  // al empezar, sino quién está en el instante exacto en que se va a escribir.
+  async function _conductaBuscarYAgregarExamen(nombreLiExacto, doc, docIdEsperado) {
     try {
       const d = doc || document;
+      const sigueElMismo = () => !docIdEsperado || _pacienteSigueAbierto(docIdEsperado);
       const claveObjetivo = _canonTexto(nombreLiExacto);
+      if (!sigueElMismo()) return false;
       const items = Array.from(d.querySelectorAll("li"));
       let li = null;
       for (const el of items) { if (_canonTexto(el.textContent) === claveObjetivo) { li = el; break; } }
       if (!li) return false;
       li.click();
       await _conductaEsperar(700);   // cadencia real observada: ~700-1500ms entre <li> y "Agregar"
+      if (!sigueElMismo()) return false;               // ← el hueco grande: 700 ms
       const botones = Array.from(d.querySelectorAll("button"));
       const btnAgregar = botones.find((b) => _canonTexto(b.textContent) === "AGREGAR" && !b.disabled);
       if (!btnAgregar) return false;
@@ -24423,11 +24447,13 @@ _vglOfrecerDeshacer(btn);
       // Cuadro opcional (visto en la captura real para algunos analitos, no todos): se
       // reconoce si aparece, nunca se espera a la fuerza si no aparece.
       await _conductaEsperar(400);
+      if (!sigueElMismo()) return false;
       const botones2 = Array.from(d.querySelectorAll("button"));
       const btnRepetir = botones2.find((b) => _canonTexto(b.textContent) === "REPETIRLO");
       if (btnRepetir) {
         btnRepetir.click();
         await _conductaEsperar(300);
+        if (!sigueElMismo()) return false;
         const botones3 = Array.from(d.querySelectorAll("button"));
         const btnConfirmar = botones3.find((b) => _canonTexto(b.textContent) === "CONFIRMAR");
         if (btnConfirmar) btnConfirmar.click();
@@ -24443,8 +24469,14 @@ _vglOfrecerDeshacer(btn);
   // dispara el paquete UNA vez si hace falta, agrega cada individual por su cuenta, y
   // VERIFICA leyendo la tabla al final — nunca cuenta como "agregado" algo que no se ve en
   // pantalla. Devuelve {agregados:[claves], fallidos:[{clave,nombre}]}. Nunca lanza.
-  async function mtrConductaAgregarPendientes(items, doc) {
+  // v17.42.0 — `docIdEsperado` opcional, se propaga a cada búsqueda. La guarda se
+  // reevalúa además al empezar cada analito: un lote de 4 individuales son >12 s de clics
+  // automáticos, así que el paciente puede cambiar entre uno y el siguiente, no solo
+  // dentro de uno. Lo que ya se agregó antes del cambio se devuelve como agregado (es
+  // verdad, se agregó al paciente correcto); lo que no se intentó, no se inventa.
+  async function mtrConductaAgregarPendientes(items, doc, docIdEsperado) {
     const d = doc || document;
+    const sigueElMismo = () => !docIdEsperado || _pacienteSigueAbierto(docIdEsperado);
     const paquete = (items && items.paquete) || [];
     const individuales = (items && items.individuales) || [];
     const agregados = [], fallidos = [];
@@ -24471,9 +24503,12 @@ _vglOfrecerDeshacer(btn);
     // leyendo la tabla, igual que el resto de este orquestador.
     for (const it of individuales) {
       let todasOk = true;
+      // v17.42.0 — se comprueba ANTES de empezar cada analito: entre uno y otro también
+      // hay segundos de por medio, y ahí también puede haber cambiado el paciente.
+      if (!sigueElMismo()) { fallidos.push({ clave: it.clave, nombre: it.nombre }); continue; }
       for (const texto of it.liTextos) {
         const previos = _conductaCodigosEnTabla(d);
-        const disparado = await _conductaBuscarYAgregarExamen(texto, d);
+        const disparado = await _conductaBuscarYAgregarExamen(texto, d, docIdEsperado);
         if (!disparado) { todasOk = false; break; }
         const despues = await _conductaEsperarFilasNuevas(d, previos, 2500);
         if (despues.size <= previos.size) { todasOk = false; break; }

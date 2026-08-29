@@ -4,6 +4,43 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.42.0] — 2026-08-29 (⚠️ SEGURIDAD: "Ordenar pendientes" ya no puede escribir en la historia equivocada)
+
+### 🛡️ Se cerró un cruce de pacientes en el botón "Ordenar pendientes"
+Hallazgo de una auditoría adversarial, **no** un reporte de consulta: nadie lo había
+sufrido todavía, y por eso importa cerrarlo antes de que pase.
+
+**Qué podía pasar.** Cuando usted pulsa "Ordenar pendientes", el script reproduce sus
+mismos clics sobre Everest: clic en el examen de la lista, espera ~0,7 s a que Angular
+monte el botón, clic en "Agregar", y otra espera para el cuadro de confirmación. Con
+cuatro exámenes eso son **más de 12 segundos** de clics automáticos. Si en ese lapso usted
+cerraba la historia y abría otra, el script **seguía buscando los botones en toda la
+pantalla** — y encontraba los del paciente nuevo. Resultado posible: los exámenes del
+paciente A quedaban ordenados en la historia de B, y A quedaba marcado como "ya ordenado"
+sin estarlo.
+
+**Lo llamativo es que la defensa ya existía.** Desde la v14.1.5 hay una guarda
+(`_pacienteSigueAbierto`) creada exactamente para esto, y su propio comentario en el código
+la describe como *"el riesgo clínico más alto que ha tenido este script"*. Se usa en las 13
+rutas de escritura del script… menos en ésta, que nació después (v17.35.0) y nunca se
+cableó a ella. Era la única cadena de escritura clínica sin la guarda.
+
+**Qué se hizo.** La cédula que estaba en pantalla cuando usted pulsó el botón ahora viaja
+hasta el gesto real, y se comprueba **antes de cada clic** — no solo al empezar, porque lo
+que importa no es quién estaba al principio sino quién está en el instante exacto en que se
+va a escribir. También se comprueba entre un examen y el siguiente.
+
+**Y el mensaje dice la verdad.** Si el gesto se detiene por un cambio de paciente, ya no
+sale el aviso genérico de "no se encontraron los botones" (que le habría mandado a buscar
+un problema inexistente). Sale uno que dice lo que pasó: *"Se cambió de paciente mientras
+se agregaban los exámenes, así que se detuvo: nada se escribió en la historia de otra
+persona."*
+
+Nada de esto cambia el comportamiento cuando usted se queda en la misma historia, que es lo
+normal: ahí funciona exactamente igual que antes.
+
+---
+
 ## [Versión 17.41.0] — 2026-08-28 (El botón de exámenes se viste igual que Historial y Paquetes)
 
 ### 🧪 El widget de "exámenes a ordenar" ahora se ve y se ubica igual que los botones nativos de Everest

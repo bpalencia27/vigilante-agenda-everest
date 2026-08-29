@@ -6,6 +6,28 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.42.0 — 29-ago-2026 (cruce de pacientes en "Ordenar pendientes")
+
+Hallazgo de auditoría adversarial, no de consulta. `_conductaBuscarYAgregarExamen` era la
+ÚNICA cadena de escritura clínica sin la guarda `_pacienteSigueAbierto` (las otras 13 rutas
+sí la usaban). Entre el clic en el `<li>` y el clic en "Agregar" hay 700 ms de espera fija,
+y cada `querySelectorAll("button")` posterior es de documento completo: si el médico
+cambiaba de historia en ese hueco, se ordenaban los exámenes de un paciente en la historia
+de otro.
+
+**Reproducido ANTES de arreglar:** las dos pruebas nuevas se escribieron primero y salieron
+en rojo (78 ok / 2 fallan) con el código sin tocar — el defecto era real y alcanzable desde
+el arnés, no una hipótesis.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | Se retira la guarda del hueco de 700 ms (entre el `<li>` y "Agregar") | las 2 nuevas de cruce de pacientes | Sí — 80/80 |
+| 2 | El orquestador deja de propagar `docIdEsperado` a cada búsqueda | "mtrConductaAgregarPendientes: propaga el docId…" | Sí — 80/80 |
+
+Banco completo: **2.583** en verde (2.580 + 3 pruebas nuevas), `TZ=America/Bogota`.
+La tercera prueba nueva fija la **retrocompatibilidad**: un llamador que no pasa `docId`
+se comporta igual que antes, porque el parámetro es opcional a propósito.
+
 ## v17.41.0 — 28-ago-2026 (el badge de exámenes se ancla y se ve igual que Historial/Paquetes)
 
 | # | Qué se rompió | Prueba que cayó | Restaurado y verde |
