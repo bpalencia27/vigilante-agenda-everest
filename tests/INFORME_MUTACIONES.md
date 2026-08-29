@@ -2780,3 +2780,27 @@ sobre el estado REAL de la hoja, el mismo patrón que ya usaba la v12.10.12):
 La reproducción standalone confirmó: reparación idempotente (dos corridas = mismo resultado),
 datos no movidos (solo se reescribe la fila 1) y los envíos posteriores alineados por nombre
 de columna (`_appendFila`). El banco de JS del userscript no cambió (2.306/2.306).
+
+## v17.58.1 — 29-ago-2026 (rendimiento: se reutiliza la respuesta de BuscarCitasDisponibles en el salto al día con agenda propia)
+
+Salió de la auditoría de telemetría del export real (misma tanda que la v12.10.13):
+`citasDisponibles` es el endpoint más pesado de la flota (promedio ~4,7 s, 450-825
+llamadas/día en la ventana real). El flujo «el día elegido solo tiene agenda ajena» lo
+consultaba DOS veces seguidas para el MISMO (fecha, especialidad): la búsqueda
+(`_buscarDiaConAgendaPropia`) traía la respuesta del día al que iba a saltar y luego
+`cargarHoras()` re-consultaba ese mismo día (~9 s de espera antes de pintar turnos).
+
+Arreglo: `_buscarDiaConAgendaPropia` ahora devuelve `{ item, res }` con la respuesta cruda;
+el llamador la pasa a `cargarHoras(resAgendasCrudas)`, que la reutiliza si es un objeto con
+agendas y cae a la consulta real ante números (viejos llamadores `cargarHoras(m, d)`), null,
+la marca `__sinRespuesta` o una respuesta sin agendas. El sondeo de días en segundo plano se
+conserva intacto (sigue consultando cada día una vez).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **reaprovechamiento del salto** | en el llamador se vuelve a `cargarHoras()` sin pasarle `otroDia.res` (re-consulta el día encontrado) | `suite_15` | *openAgendamientoModal v17.58.1: el salto al día con agenda propia NO re-consulta BuscarCitasDisponibles — el día elegido se trae 2 veces (búsqueda + sondeo), nunca 3* → máximo por día 3 y el sábado elegido con 3 (esperaba 2) |
+
+La mutación se aplicó una sola vez, se corrió `TZ=America/Bogota node tests/runner.js 15`,
+se confirmó el rojo exacto en la aserción de conteo (el sábado elegido pasa de 2 a 3
+llamadas) y se restauró. El banco completo quedó en **2.307/2.307** tras la restauración
+(la suite 15 ganó 1 caso: 161 → 162).

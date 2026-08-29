@@ -1995,6 +1995,49 @@ module.exports = {
       t.cierto(!!activo && activo.className.includes("vgl-agm-pbtn-sabado"), "el chip activo saltó solo al sábado, el único día del rango con agenda propia real");
     });
 
+    // v17.58.1 — TELEMETRÍA (29-ago): BuscarCitasDisponibles promedia ~4,7 s en la flota.
+    // Al saltar al día con agenda propia, _buscarDiaConAgendaPropia() ya trajo la respuesta
+    // de ese día; cargarHoras() la reutiliza en vez de re-consultar el MISMO (fecha,
+    // especialidad) dos veces seguidas. Antes el sábado elegido se consultaba 3 veces
+    // (búsqueda del salto + recarga + sondeo de días); con el reaprovechamiento, 2.
+    await t.casoAsync("openAgendamientoModal v17.58.1: el salto al día con agenda propia NO re-consulta BuscarCitasDisponibles — el día elegido se trae 2 veces (búsqueda + sondeo), nunca 3", async () => {
+      const iso2fmt = (iso) => iso.split("-").reverse().join("/");
+      const cuentasPorIso = {};
+      const cR1 = cargar({
+        silencioso: true,
+        fetch: async (url) => {
+          const u = String(url);
+          if (u.includes("BuscarPacienteDetallado")) return respuestaJson({ data: { celular: "3001112233", sexo: "F", programasPaciente: [] } });
+          if (u.includes("BuscarPaciente")) return respuestaJson({ data: { id: 777 } });
+          if (u.includes("BuscarCitasDisponibles")) {
+            const iso = /FechaDeseada=(\d{4}-\d{2}-\d{2})/.exec(u)[1];
+            cuentasPorIso[iso] = (cuentasPorIso[iso] || 0) + 1;
+            const dow = new Date(iso + "T12:00:00").getDay();
+            // Centro en día hábil (ajeno) y sábados con agenda propia: el salto siempre ocurre.
+            const medico = dow === 6 ? "ANA MARIA PEREZ" : "OTRO PROFESIONAL";
+            return respuestaJson({ agendas: [{ agendaId: 61, medico, fechaAgenda: iso2fmt(iso), sede: "CMB" }] });
+          }
+          if (u.includes("AgdValidarAgenda")) return respuestaJson({ data: { isError: false } });
+          if (u.includes("ObtenerTurnos")) return respuestaJson({ turnos: [{ id: 701, horaTexto: "07:00 AM", estado: "ACT" }] });
+          return respuestaJson({});
+        },
+        gmxhr: (o) => { if (o.onerror) o.onerror("url no simulada"); },
+      });
+      enriquecerDom(cR1);
+      cR1.api.__state.activeDoctor = { id: 707, name: "ANA MARIA PEREZ" };
+      cR1.api.openAgendamientoModal({ doc_id: "555111", nombre: "MARIA LOPEZ" });
+      await esperar(1200);
+      const modal = cR1.env.doc.body.children.find((n) => n.id === "vgl-agendar-modal");
+      const slots = modal.querySelector("#vgl-agm-slots");
+      const textoSlots = [...slots.children].map((c) => c.innerHTML || "").join(" ");
+      t.cierto(textoSlots.includes("ANA MARIA PEREZ") && textoSlots.includes("07:00 AM"), "el salto funcionó con la respuesta reutilizada: se ve el turno de la agenda propia del sábado");
+      const porIso = Object.entries(cuentasPorIso).map(([iso, n]) => ({ iso, n })).sort((a, b) => b.n - a.n);
+      t.cierto(porIso.length > 0 && porIso[0].n <= 2, `ningún día se consultó 3+ veces — máximo fue ${porIso.length ? porIso[0].n : "ninguno"} (${porIso.length ? porIso[0].iso : "sin consultas"})`);
+      const sabadoElegido = porIso.find((x) => new Date(x.iso + "T12:00:00").getDay() === 6);
+      t.cierto(!!sabadoElegido, "hubo al menos un sábado consultado (el salto ocurrió de verdad)");
+      t.cierto(sabadoElegido && sabadoElegido.n === 2, `el sábado elegido se consultó exactamente 2 veces (búsqueda + sondeo) — sin el reaprovechamiento sería 3; salió ${sabadoElegido ? sabadoElegido.n : "?"}`);
+    });
+
     await t.casoAsync("openAgendamientoModal v14.0.1: si NINGÚN día del rango tiene agenda propia, avisa con claridad y no ofrece ningún turno ajeno", async () => {
       const iso2fmt = (iso) => iso.split("-").reverse().join("/");
       const cNinguno = cargar({

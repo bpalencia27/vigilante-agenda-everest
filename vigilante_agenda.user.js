@@ -21968,7 +21968,11 @@ _vglOfrecerDeshacer(btn);
         let res;
         try { res = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, item.iso, selectedEspId); } catch (e) { continue; }
         const agendasDeEseDia = extractAgendasList(res).filter((a) => String(a.fechaAgenda || "").trim() === item.fmt);
-        if (_agendasPropias(agendasDeEseDia, doctorName).length) return item;
+        // v17.58.1 — telemetría (29-ago): devuelve también la respuesta cruda de
+        // BuscarCitasDisponibles. El llamador se la pasa a cargarHoras() para NO
+        // consultar dos veces el mismo (fecha, especialidad): este endpoint promedia
+        // ~4,7 s en la flota y la doble llamada duplicaba la espera en este flujo.
+        if (_agendasPropias(agendasDeEseDia, doctorName).length) return { item, res };
       }
       return null;
     }
@@ -21984,7 +21988,12 @@ _vglOfrecerDeshacer(btn);
     // sin la toma que el médico pidió. Se guarda el ÚLTIMO VALOR elegido a mano, no solo
     // que "ya lo tocó", para poder restaurarlo en cada recarga.
     let _labChkEditadoManual = false, _labChkValorManual = false;
-    async function cargarHoras() {
+    // v17.58.1 — primer parámetro OPIONAL: la respuesta cruda de BuscarCitasDisponibles
+    // que _buscarDiaConAgendaPropia() ya trajo para el día al que se salta. Los viejos
+    // llamadores (cargarHoras() a secas, o el heredado cargarHoras(m, d) del final del
+    // modal, cuyos argumentos siempre se ignoraron) siguen funcionando: cualquier valor
+    // que no sea un objeto con agendas cae a la consulta real de siempre.
+    async function cargarHoras(resAgendasCrudas) {
       if (!selectedDateInfo) return;
       const token = ++_cargarHorasToken;
       selectedTurnoObj = null;
@@ -22155,7 +22164,14 @@ _vglOfrecerDeshacer(btn);
         }
       }
 
-      const resAgendas = await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
+      // v17.58.1 — telemetría (29-ago): este endpoint promedia ~4,7 s en la flota. Cuando
+      // _buscarDiaConAgendaPropia() ya trajo la respuesta del día al que se salta (la rama
+      // "solo agenda ajena" de arriba), se reutiliza tal cual en vez de llamarlo dos veces
+      // seguidas. La guardia cae a la consulta real ante números (viejos llamadores),
+      // null, la marca de sin-respuesta o una respuesta sin agendas.
+      const resAgendas = (resAgendasCrudas && typeof resAgendasCrudas === "object" && !resAgendasCrudas.__sinRespuesta && extractAgendasList(resAgendasCrudas).length > 0)
+        ? resAgendasCrudas
+        : await apiAccesoBuscarCitasDisponibles(pacienteIdAcceso, selectedDateInfo.iso, selectedEspId);
       if (!vivo()) return;
       if (token !== _cargarHorasToken) return;
       const agendas = extractAgendasList(resAgendas);
@@ -22190,10 +22206,15 @@ _vglOfrecerDeshacer(btn);
           if (!vivo() || token !== _cargarHorasToken) return;
           if (otroDia) {
             diaBotonesPorIso.forEach((b) => b.classList.remove("active"));
-            const btnNuevo = diaBotonesPorIso.get(otroDia.iso);
+            const btnNuevo = diaBotonesPorIso.get(otroDia.item.iso);
             if (btnNuevo) btnNuevo.classList.add("active");
-            selectedDateInfo = otroDia;
-            cargarHoras();
+            selectedDateInfo = otroDia.item;
+            // v17.58.1 — telemetría (29-ago): _buscarDiaConAgendaPropia() YA trajo la
+            // respuesta de BuscarCitasDisponibles de este día (promedio 4,7 s medido en la
+            // flota). Se la pasamos a cargarHoras() para no consultar el MISMO
+            // (fecha, especialidad) dos veces seguidas: antes, el salto al día con agenda
+            // propia pagaba la latencia dos veces (~9 s) antes de pintar los turnos.
+            cargarHoras(otroDia.res);
             return;
           }
           slotsEl.innerHTML = `<div class="vgl-agm-err">⚠ Ningún día del rango tiene su agenda propia identificada — solo se encontraron agendas de otros profesionales. Verifique su nombre en Ajustes, o elija la fecha desde la agenda oficial de Everest.</div>`;
