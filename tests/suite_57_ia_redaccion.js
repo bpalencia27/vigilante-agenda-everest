@@ -34,10 +34,11 @@ module.exports = {
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
     "mtrDatosExtraGuardar", "mtrDatosExtraLeer", "mtrDatosExtraTexto",
+    "mtrIaResumenVigente",
     "mtrJsonV68DesdeResumen", "mtrLeerTextoLibreHistoria",
     "mtrCasillaDeModo", "mtrRedactorModoSugerido", "mtrInsertarEnCasillaModo",
     "mtrCacheResumenEdadMin", "mtrCacheResumenBorrar",
-    "mtrCalcularDeltaEdicion",
+    "mtrCalcularDeltaEdicion", "mtrAnalitoQueFijaLaToma",
     "_vglClicablePestana", "_vglIrAPestanaYEsperar",
   ],
 
@@ -53,6 +54,73 @@ module.exports = {
       }
     });
 
+    // =====================================================================
+    // v17.50.0 — DECISIONES D5 y D6 de la entrevista del 29-ago.
+    // El contrato del prompt tenia solo la mitad prohibitiva (no inventes) y le faltaba la
+    // simetrica (no te dejes nada). Esa regla existia, pero en MTR_REDACCION_SYS: un prompt
+    // que dejo de usarse y que nadie retiro, asi que se perdio sin que se notara. Un
+    // borrador incompleto no dispara ninguna alarma; uno con una cifra inventada si.
+    // Los CINCO modos incluyen el respaldo de un modo desconocido, que es el que mas
+    // necesita el contrato estricto, no el que menos (misma logica que la v17.1.0).
+    // =====================================================================
+    const MODOS_PROMPT = ["enfermedad_actual", "motivo_consulta", "recomendaciones", "analisis_plan", "un_modo_que_no_existe"];
+
+    t.caso("v17.50.0 (D5): los CINCO modos exigen no omitir lo que si esta en los datos, no solo no inventar", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/NO OMITAS/.test(sys), modo + ": lleva la regla de exhaustividad");
+        t.cierto(/NO EXISTE: no lo inventes/.test(sys), modo + ": y sigue llevando la de no inventar (son las dos caras)");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): los CINCO modos prohiben los juicios de valor sobre el paciente", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/juicios de valor/i.test(sys), modo + ": no se califica al paciente");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): los CINCO modos distinguen 'documentado como NO' de 'no se pregunto'", () => {
+      for (const modo of MODOS_PROMPT) {
+        const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+        t.cierto(/Un campo AUSENTE significa que no se preguntó/.test(sys), modo + ": la regla numero uno de la casa");
+      }
+    });
+
+    // El bloque del ejemplo, y solo el: `SALIDA:` a secas tambien aparece en el prompt base
+    // ("SALIDA: prosa continua EN MAYUSCULAS..."), asi que buscarlo en todo el sistema es
+    // una asercion vacua — se comprobo con una mutacion que borro el par y no cayo nadie.
+    function bloqueEjemplo(modo) {
+      const sys = String(api.mtrRedaccionPrompt(modo, hojaDemo(api), {}).system || "");
+      const i = sys.indexOf("# EJEMPLO");
+      return i < 0 ? "" : sys.slice(i);
+    }
+
+    t.caso("v17.50.0 (D6): motivo de consulta y recomendaciones ya traen su mini-ejemplo, con su par entrada -> salida", () => {
+      for (const modo of ["motivo_consulta", "recomendaciones"]) {
+        const ej = bloqueEjemplo(modo);
+        t.cierto(ej.length > 0, modo + ": los modelos flash-lite copian un patron mejor que una instruccion abstracta");
+        const iDatos = ej.indexOf("DATOS:"), iSalida = ej.indexOf("SALIDA:");
+        t.cierto(iDatos > 0, modo + ": el ejemplo dice de que datos parte");
+        t.cierto(iSalida > iDatos, modo + ": y que sale de ellos, en ese orden");
+      }
+    });
+
+    t.caso("v17.50.0 (D6): NINGUN ejemplo del prompt lleva cifras — el verificador las marcaria como inventadas", () => {
+      for (const modo of ["motivo_consulta", "recomendaciones"]) {
+        const ej = bloqueEjemplo(modo);
+        t.cierto(ej.length > 40, modo + ": el ejemplo tiene contenido que revisar");
+        t.igual(api.mtrVerificarCifrasIA(ej, {}).length, 0,
+          modo + ": si el modelo copiara el ejemplo, al medico le saltaria «cifras sin respaldo» sobre un dato del propio prompt");
+      }
+    });
+
+    t.caso("v17.50.0 (D5): MTR_REDACCION_SYS ya no existe, y su regla no se fue con el", () => {
+      const fuente = require("fs").readFileSync(__dirname + "/../vigilante_agenda.user.js", "utf8");
+      t.igual(fuente.indexOf("const MTR_REDACCION_SYS"), -1, "el prompt muerto se retiro");
+      t.cierto(/NO OMITAS ningún hallazgo clínicamente relevante/.test(fuente), "pero su regla de exhaustividad quedo en el prompt vivo");
+    });
+
     t.caso("cada redactor usa SU prompt: enfermedad actual (extenso, primera persona) vs Análisis y plan (siglas, secciones — la nota del Copiloto)", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
       t.cierto(/Resoluci[oó]n 1995/.test(ea.system), "EA: rol de auditoría 1995");
@@ -60,6 +128,31 @@ module.exports = {
       const nc = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {});
       t.cierto(/ESTRUCTURA DE SALIDA|SECCIÓN/i.test(nc.system), "nota: estructura por secciones");
       t.cierto(/BLINDAJE MÉDICO-LEGAL/i.test(nc.system), "nota: blindaje médico-legal");
+    });
+
+    // v17.6.84 — auditoría v68 (S3 "LLEGA TARDE SIN LABS"), decisión del médico del 26-ago
+    // ("Cortar la mención ahora"). El prompt le PEDÍA al modelo redactar la constancia
+    // médico-legal de "toma previa incumplida por barrera de acceso no imputable al
+    // profesional", pero NINGÚN campo del JSON le dice si eso ocurrió: el script todavía no
+    // persiste si la FTL anterior se cumplió. El modelo solo podía omitirla siempre o
+    // inventársela — y una constancia inventada tiene consecuencia jurídica sobre un
+    // paciente que quizá sí fue a tomarse los exámenes. Mismo criterio con el que
+    // `falla_dispensacion` se dejó fija en "NO" (v17.6.78).
+    t.caso("v17.6.84: el prompt NO puede pedir una constancia médico-legal que ningún campo respalda", () => {
+      const nota = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {});
+      const todo = String(nota.system) + "\n" + String(nota.user);
+      t.falso(/toma previa incumplida/i.test(todo),
+        "no se le pide al modelo la constancia de toma previa incumplida");
+      t.falso(/no imputable al (?:profesional|médico)/i.test(todo),
+        "ni la fórmula jurídica de 'no imputable al profesional'");
+      // Lo que SÍ debe seguir pidiéndose en esa misma sección, para probar que el corte fue
+      // quirúrgico y no se llevó por delante la logística entera.
+      t.cierto(/CITA CONTROL DE RIESGO CARDIOVASCULAR/i.test(todo), "la cita de control sigue pidiéndose");
+      t.cierto(/PRÓXIMOS LABORATORIOS/i.test(todo), "y los próximos laboratorios también");
+      // La constancia por falla de dispensación es DISTINTA: esa sí tiene campo en el JSON
+      // (`falla_dispensacion`), aunque hoy salga fija en "NO". No se toca.
+      t.cierto(/falla_dispensacion/.test(todo),
+        "la constancia por falla de dispensación se conserva: está atada a un campo real del JSON");
     });
 
     // v17.3.0 — AUDITORÍA PEDIDA POR EL MÉDICO (21-ago): un borrador real de Enfermedad
@@ -73,7 +166,6 @@ module.exports = {
     // esa capacidad (no se tocó su prompt).
     t.caso("Enfermedad Actual ya NO admite labs/paraclínicos ni clasificación de riesgo — eso vive en Análisis y Plan", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      t.cierto(/DE HOY/.test(ea.system), "regla 6 acota las cifras objetivas a HOY, no a un control pasado");
       t.cierto(/laboratorio o paraclínicos/i.test(ea.system), "PROHIBIDO nombra explícitamente labs/paraclínicos");
       t.cierto(/glucosa|creatinina|hemoglobina glicosilada/i.test(ea.system), "y da ejemplos concretos (no una prohibición vaga que el modelo pueda ignorar)");
       t.cierto(/riesgo cardiovascular/i.test(ea.system) && /bajo, moderado, alto/i.test(ea.system), "PROHIBIDO nombra la clasificación de riesgo cardiovascular");
@@ -86,24 +178,31 @@ module.exports = {
     });
 
     // v17.6.3 — IA ALUCINA (reporte del médico en consultorio): la Enfermedad Actual venía
-    // inventando la presión arterial (p. ej. «PA 110/70»). Raíz: las reglas 5 y 6 de
-    // MTR_EA_SYS pedían la PA como contenido OBLIGATORIO incondicional; cuando la TA no
-    // está documentada (o no se leyó del DOM), el modelo «rellenaba» con una cifra típica
-    // en vez de omitirla — exactamente lo que prohíbe la regla del proyecto (casilla vacía
-    // antes que dato inventado). La regla 6 ahora condiciona las cifras objetivas a que
-    // ESTÉN en los bloques entregados, la regla 5 condiciona el automonitoreo de PA, y
-    // PROHIBIDO nombra explícitamente que inventar cifras de signos vitales no se hace.
-    t.caso("Enfermedad Actual ya NO exige la PA cuando no viene en los hechos: se omite, no se inventa", () => {
+    // inventando la presión arterial (p. ej. «PA 110/70»). Primer arreglo (v17.6.3): condicionar
+    // la PA a que constara en los hechos — no bastaba, porque el defecto real no era la
+    // invención sino pedir un hallazgo de examen físico dentro de la anamnesis.
+    // v17.28.0 — reporte en vivo del médico (28-ago): "se sigue colando examen físico en la
+    // enfermedad actual, eso no es permitido". Investigado contra semiología clínica estándar
+    // (anamnesis vs. examen físico como fases separadas del acto médico): la PA/peso de HOY
+    // salen de Enfermedad Actual por completo, sin condición — ni aunque consten. Este caso
+    // se reescribe para fijar la prohibición INCONDICIONAL, no la condicional de v17.6.3.
+    t.caso("v17.28.0 — Enfermedad Actual NUNCA admite signos vitales de hoy, ni siquiera cuando SÍ constan en los hechos", () => {
       const ea = api.mtrRedaccionPrompt("enfermedad_actual", hojaDemo(api), {});
-      // Regla 6: las cifras objetivas se escriben SOLO si están en los bloques entregados.
-      t.cierto(/si (?:esa|la|una) cifra no est[áa]|no la escribas|om[íi]tela/i.test(ea.system),
-        "regla 6 condiciona las cifras objetivas a que estén en los hechos — la PA ausente se omite, no se inventa");
-      // Regla 5: el automonitoreo de PA solo se menciona si consta en los datos.
+      // PROHIBIDO: la exclusión es incondicional — no depende de si la cifra existe o no.
+      t.cierto(/[Nn]unca a Enfermedad Actual/.test(ea.system),
+        "PROHIBIDO dice explícitamente que los signos vitales de hoy nunca van en Enfermedad Actual");
+      t.cierto(/ni siquiera si constan/i.test(ea.system),
+        "y aclara que la exclusión aplica AUNQUE la cifra sí conste en los hechos entregados");
+      t.falso(/# CONTENIDO OBLIGATORIO[\s\S]*?presi[óo]n arterial, glucometr[íi]a/i.test(ea.system),
+        "la vieja regla 6 (\"cifras objetivas DE HOY: presión arterial, glucometría...\") ya no existe como contenido obligatorio");
+      // Regla 5: el automonitoreo DOMICILIARIO de PA (lo que el paciente refiere de su casa)
+      // SÍ sigue siendo anamnesis legítima — no se tocó, y sigue condicionado a que conste.
       t.cierto(/automonitoreo de presión arterial[^\n]*SOLO si|si no consta[^\n]*no se menciona/i.test(ea.system),
-        "regla 5 condiciona el automonitoreo de PA a que el paciente lo reporte");
-      // PROHIBIDO: inventar la PA está prohibido por su nombre (patrón positivo+negativo).
-      t.cierto(/inventar[^\n]*presi[óo]n arterial|presi[óo]n arterial[^\n]*no est[áa]/i.test(ea.system),
-        "PROHIBIDO nombra explícitamente no inventar cifras de presión arterial");
+        "regla 5 (automonitoreo domiciliario referido por el paciente) sigue viva y condicionada");
+      // Y hoy en el ejemplo, la PA/peso de la consulta actual ya no aparecen — solo el
+      // automonitoreo domiciliario referido (que es lo único que sí pertenece a EA).
+      t.falso(/EN LA CONSULTA ACTUAL SE EVIDENCIA PRESI[ÓO]N ARTERIAL/.test(ea.system),
+        "el ejemplo ya no modela una frase de examen físico dentro de Enfermedad Actual");
       // La hoja SIN PA no fabrica la línea de signos vitales (ya era así; queda anclado).
       const hojaSin = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
       t.cierto(api.mtrHojaDeHechosTexto(hojaSin).indexOf("Signos vitales") < 0,
@@ -592,13 +691,14 @@ module.exports = {
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "sin caché: null");
       c.api.mtrCacheResumenGuardar("111", { programa: "HTA" });
       t.igual(c.api.mtrCacheResumenEdadMin("111"), 0, "recién guardada: 0 minutos");
-      // v17.6.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS, bajado de 20 a
-      // 10 min): pasado el nuevo corte, la edad también debe darse por vencida (null),
-      // no seguir informando una edad de una caché que ya nadie va a usar.
-      c.api.__envejecerCacheResumen(9 * 60000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), 9, "a los 9 min, con el TTL nuevo, informa 9 minutos de edad");
-      c.api.__envejecerCacheResumen(10 * 60000 + 1000);
-      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 10 min y 1 s, el TTL nuevo ya la da por vencida: null, no una edad enorme");
+      // v17.6.0 — mismo TTL que mtrCacheResumenLeer (MTR_CACHE_TTL_MS). v17.29.0 lo bajó
+      // otra vez, de 10 a 3 min (encargo del médico, decisión #23): pasado el nuevo
+      // corte, la edad también debe darse por vencida (null), no seguir informando una
+      // edad de una caché que ya nadie va a usar.
+      c.api.__envejecerCacheResumen(2 * 60000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), 2, "a los 2 min, con el TTL nuevo, informa 2 minutos de edad");
+      c.api.__envejecerCacheResumen(3 * 60000 + 1000);
+      t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "a los 3 min y 1 s, el TTL nuevo ya la da por vencida: null, no una edad enorme");
       c.api.mtrCacheResumenBorrar();
       t.igual(c.api.mtrCacheResumenLeer("111"), null, "borrada: no hay resumen");
       t.igual(c.api.mtrCacheResumenEdadMin("111"), null, "ni edad");
@@ -856,7 +956,9 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.falso(/const libre = mtrLeerTextoLibreHistoria\(\)/.test(src), "la foto única (v17.6.21 y anteriores) no debe reaparecer");
       const usos = (src.match(/contextoLibre:\s*libreAhora\(\)\.combinado/g) || []).length;
-      t.igual(usos, 2, "los dos disparadores de generación (Generar y Generar todo) leen fresco en el momento del clic");
+      // v17.34.0 — "Generar todo" se retiró (encargo del médico: "casi ni lo uso, más bien
+      // estorba"); queda un solo disparador de generación.
+      t.igual(usos, 1, "el disparador de generación lee fresco en el momento del clic");
     });
 
     // v17.6.24 — AUDITORÍA S+ (24-ago-2026): «❓ Preguntar sobre este paciente» comparte el
@@ -1037,6 +1139,54 @@ module.exports = {
       t.cierto(txt.indexOf("3151234567") < 0, "censura el teléfono colado");
     });
 
+    // v17.45.0 — FUGA DE PHI, hallazgo de auditoría adversarial (29-ago).
+    // `mtrSanearTextoLibreAI(texto, nombrePaciente)` tiene DOS defensas: una por FORMA
+    // (correo, teléfono, cédula, y un patrón de mayúsculas para nombres) y otra por
+    // TOKENS, que solo se activa si se le pasa el nombre del paciente. La segunda es la
+    // única que cubre el estilo real de Everest —MAYÚSCULAS SOSTENIDAS— y la única capaz
+    // de tachar un apellido que por forma parece una palabra cualquiera.
+    // `mtrDatosExtraTexto` llamaba al saneador SIN ese segundo argumento, así que la rama
+    // `if (nombrePaciente)` quedaba inerte: de los cinco canales que llegan al prompt de
+    // Gemini, cuatro sí lo pasaban y este no. Y uno de sus tres campos,
+    // "medicamentos aportados", es texto libre que el médico teclea a mano.
+    // El propio proyecto ya dejó escrito por qué esto importa: "scrubPII reconoce correos
+    // y cédulas porque tienen forma, pero NO puede reconocer un nombre propio, y el médico
+    // lo escribe a mano. Tachar un nombre con garantía exige conocerlo."
+    t.caso("v17.45.0 — mtrDatosExtraTexto tacha el nombre del paciente: no viaja a Gemini", () => {
+      const txt = api.mtrDatosExtraTexto(
+        { medicamentosAportados: "SEGUN ESPOSA DE PEREZ GOMEZ, toma losartan 50mg" },
+        "PEREZ GOMEZ"
+      );
+      t.cierto(txt.indexOf("PEREZ") < 0, "el apellido del paciente no puede viajar al modelo");
+      t.cierto(txt.indexOf("GOMEZ") < 0, "ni el segundo apellido");
+      t.cierto(/losartan/i.test(txt), "pero el dato clínico sí se conserva — no se censura de más");
+    });
+
+    t.caso("v17.45.0 — sin nombre del paciente sigue funcionando igual que antes (retrocompatible)", () => {
+      const txt = api.mtrDatosExtraTexto({ medicamentosAportados: "losartán 50mg" });
+      t.cierto(/losartán/.test(txt), "el parámetro es opcional: quien no lo pase no se rompe");
+    });
+
+    // La primera versión de esta prueba armaba un prompt real y comprobaba que el nombre
+    // no apareciera en `user`. **No servía**: con esos argumentos el ensamblador cae en
+    // otra rama y el bloque de datos extra ni siquiera se emite, así que la prueba pasaba
+    // por AUSENCIA y no cazaba su propia mutación. Se cambió por una regresión de código
+    // fuente —mismo patrón que la de suite_71 sobre el enganche de los widgets— porque lo
+    // que hay que fijar aquí es el CABLE: que este canal reciba el nombre igual que los
+    // otros cuatro. Verificado: quitar el argumento pone esta prueba en rojo.
+    t.caso("v17.45.0 — el prompt propaga el nombre a los datos extra, igual que a los otros cuatro canales", () => {
+      const fs = require("fs");
+      const path = require("path");
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/mtrDatosExtraTexto\(\s*o\.datosExtra\s*,\s*o\.nombrePaciente\s*\)/.test(src),
+        "mtrRedaccionPrompt debe pasar el nombre del paciente a mtrDatosExtraTexto — sin él, la defensa por tokens del saneador queda inerte y un apellido en mayúsculas viaja a Gemini");
+      // Y que el saneador lo reciba de verdad dentro de la función, no solo en la firma.
+      const i = src.indexOf("function mtrDatosExtraTexto");
+      const bloque = src.slice(i, i + 700);
+      t.cierto(/mtrSanearTextoLibreAI\(s,\s*nombrePaciente\)/.test(bloque),
+        "y mtrDatosExtraTexto debe reenviarlo al saneador");
+    });
+
     t.caso("mtrJsonV68DesdeResumen mapea lo determinista y deja la prosa en blanco", () => {
       const resumen = {
         _hoyIso: "2026-08-23",
@@ -1063,6 +1213,38 @@ module.exports = {
       t.igual(j.ftl_date, "en 9 días", "FTL se relativiza respecto a hoy (9 días del 23-ago al 1-sep)");
       t.igual(j.control_date, "en 15 días", "control se relativiza igual (15 días al 7-sep)");
       t.igual(j.nota_clinica.justificacion_riesgo_meta, "", "la prosa la escribe el LLM, no el motor");
+    });
+
+    t.caso("v17.26.0 — ldl_reduction_target viaja calculado (bug real: el prompt tenía '≥50%' fijo, la IA lo citaba y el verificador de cifras lo marcaba en rojo)", () => {
+      // Reporte en vivo (28-ago, paciente real): "META TERAPÉUTICA DE LDL: MENOR A 70
+      // MG/DL Y REDUCCIÓN MAYOR O IGUAL AL 50% DEL BASAL" salió con el 50 marcado como
+      // cifra sin respaldo, porque ese 50 vivía SOLO en la instrucción del prompt, nunca
+      // en el JSON que la IA recibe como fuente de verdad. Mismo criterio que ldl_target.
+      const resumenAlto = {
+        _hoyIso: "2026-08-23", programa: "HTA",
+        erc: { crcl: 48, egfr: 52, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, datosCompletos: true },
+        riesgo: { categoria: "alto" }, meta: { metas: { ldl: 70, reduccion: 50 } }, foco: "renal",
+        plan: { faltantes: [], vencidos: [], ordenar: [] },
+      };
+      const jAlto = api.mtrJsonV68DesdeResumen(resumenAlto, {});
+      t.igual(jAlto.ldl_reduction_target, 50, "riesgo alto: viaja el 50% real, no un texto fijo");
+
+      // Riesgo moderado/bajo: mtrMetasLipidicas no exige reducción (reduccion: null en la
+      // tabla) — CERO INFERENCIA, nunca se inventa un porcentaje que la norma no exige.
+      const resumenModerado = Object.assign({}, resumenAlto, {
+        riesgo: { categoria: "moderado" }, meta: { metas: { ldl: 100, reduccion: null } },
+      });
+      const jModerado = api.mtrJsonV68DesdeResumen(resumenModerado, {});
+      t.igual(jModerado.ldl_reduction_target, null, "riesgo moderado: null, nunca un 50% que no aplica");
+
+      // Y el mismo número, ahora por el canal de la hoja de hechos (mtrHojaDesdeResumen /
+      // mtrHojaDeHechosTexto), que es lo que mtrVerificarCifrasIA escanea para saber qué
+      // cifras son legítimas: el "50" debe quedar reconocido sin declarar extraConocido.
+      const hoja = { metaLdl: 70, metaReduccionLdl: 50 };
+      const texto = api.mtrHojaDeHechosTexto(hoja);
+      t.cierto(/reducci.n .?50 ?%/i.test(texto), "la hoja de hechos en texto plano también dice el porcentaje");
+      const marcadas = api.mtrVerificarCifrasIA("META TERAPÉUTICA DE LDL: MENOR A 70 MG/DL Y REDUCCIÓN MAYOR O IGUAL AL 50% DEL BASAL.", hoja);
+      t.igual(marcadas.length, 0, "el 50% ya no se marca como cifra sin respaldo: viaja grounded en la hoja");
     });
 
     // [auditoría 25-ago, hallazgo 1.14] order_list armaba faltantes+vencidos crudos, sin
@@ -1162,6 +1344,110 @@ module.exports = {
       t.igual(j.tfg_ckdepi, null, "TFG CKD-EPI null, no 0");
       t.igual(j.ldl_target, null, "meta LDL null, no 0");
       t.igual(j.datos_completos, false, "y marca datos incompletos");
+    });
+
+    // ===== v17.6.89 — el JSON dejaba de decir que la estratificación quedó pendiente =====
+    //
+    // Tres defectos verificados con el harness sobre el mismo paciente (45 años, sin factores
+    // documentados, sin ASCVD, pasos 1-3 no clasifican):
+    //   datos_completos: true   (solo miraba la función renal, no el riesgo)
+    //   cv_risk:         ""     (v68 pide null: "N/A=null")
+    //   status:          ""     SIEMPRE — leía `r.meta.status`, que NO EXISTE
+    //                           (`mtrEvaluarMetaLdl` expone `estado`). Campo muerto.
+    // La IA recibía "paciente evaluado, todo completo" y redactaba en consecuencia, sin la
+    // SOLICITUD de ASCVD que v68 exige.
+    const sinClasificar = () => api.mtrResumenClinico({
+      hoyIso: "2026-08-26", edad: 45, sexo: "M", pesoKg: 70, creatinina: 0.9,
+      factores: {}, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+    });
+
+    t.caso("v17.6.89: si la estratificación no se pudo hacer, el JSON lo DICE (no afirma completitud)", () => {
+      const r = sinClasificar();
+      t.igual(r.riesgo.categoria, null, "el vector es el que debe ser: no se clasificó");
+      t.cierto(r.riesgo.requiereAscvd, "y el motor sabe que le falta el ASCVD");
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.datos_completos, false, "datos_completos NO puede decir true");
+      t.igual(j.cv_risk, null, "cv_risk es null, no cadena vacía (v68: N/A=null)");
+      t.igual(j.status, "PENDIENTE", "status dice PENDIENTE");
+      t.cierto(/ASCVD/.test(j.solicitud), "y trae la SOLICITUD literal: " + j.solicitud);
+    });
+
+    t.caso("v17.6.89: sin TFG la solicitud es la de la TFG, no la del ASCVD", () => {
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80,
+        factores: { hta: true }, ultimos: {},
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.status, "PENDIENTE", "sigue siendo PENDIENTE");
+      t.cierto(/TFG/.test(j.solicitud), "pero la solicitud nombra la TFG: " + j.solicitud);
+    });
+
+    t.caso("v17.6.89: en un paciente SÍ clasificado, status refleja la meta y no hay solicitud", () => {
+      // v17.6.94 — el tiempo de evolución de la diabetes va explícito: sin él la
+      // clasificación es provisional y SÍ lleva solicitud (se prueba justo debajo).
+      const conMeta = (ldl) => {
+        const r = api.mtrResumenClinico({
+          hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+          ct: 200, hdl: 45, ldl: ldl, factores: { hta: true, diabetes: true, dmAnios: 12 },
+          ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 }, COLESTEROL_LDL: { fecha: "2026-08-01", valor: ldl } },
+        });
+        return api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      };
+      const fuera = conMeta(190);
+      t.igual(fuera.status, "FUERA DE META", "un LDL disparado se dice así");
+      t.igual(fuera.solicitud, "", "y no se inventa una solicitud que no corresponde");
+      t.igual(fuera.datos_completos, true, "aquí sí están completos");
+      t.cierto(!!fuera.cv_risk, "y hay categoría de riesgo");
+      // Sin LDL con qué juzgar, no se inventa un estado de meta.
+      const sinLdl = api.mtrJsonV68DesdeResumen(api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        factores: { hta: true, diabetes: true, dmAnios: 12 },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      }), {});
+      t.igual(sinLdl.status, "", "sin LDL, status vacío: no se inventa un estado de meta");
+    });
+
+    t.caso("v17.6.94: el diabético sin tiempo de evolución sale con categoría Y con solicitud", () => {
+      // El piso provisional NO deja la categoría en blanco —sin categoría no hay meta de
+      // LDL, y sin meta no hay falla ni órdenes— pero tampoco se calla lo que falta.
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 60, sexo: "M", pesoKg: 80, creatinina: 0.9,
+        ct: 200, hdl: 45, ldl: 190, factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 }, COLESTEROL_LDL: { fecha: "2026-08-01", valor: 190 } },
+      });
+      const j = api.mtrJsonV68DesdeResumen(r, api.mtrHojaDesdeResumen(r));
+      t.igual(j.cv_risk, "alto", "la categoría se emite igual, no se deja al paciente sin meta");
+      t.cierto(/años el paciente tiene diabetes/.test(j.solicitud || ""),
+        "y se pide el dato que la haría definitiva (obtuvo: " + JSON.stringify(j.solicitud) + ")");
+      t.cierto(r.riesgo.dmAniosRequerido === true, "el resumen lo marca como provisional");
+    });
+
+    // Las dos guardas de mtrStatusV68 NO son redundantes, aunque en un resumen construido por
+    // mtrResumenClinico se solapen (cuando no clasifica, pone las dos). Este emisor se llama
+    // también con resúmenes armados a mano — esta misma suite lo hace más arriba —, y ahí una
+    // categoría nula puede venir SIN `datosCompletos`. Sin la primera guarda ese paciente
+    // saldría con status "" y la IA lo redactaría como si estuviera estratificado.
+    t.caso("v17.6.89: una categoría nula basta para PENDIENTE, aunque nadie marque datosCompletos", () => {
+      const aMano = { erc: { datosCompletos: true }, riesgo: { categoria: null }, meta: {}, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(aMano, {}).status, "PENDIENTE",
+        "sin categoría no hay nada interpretable: PENDIENTE");
+      const vacia = { erc: { datosCompletos: true }, riesgo: { categoria: "" }, meta: {}, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(vacia, {}).status, "PENDIENTE",
+        "una categoría en blanco tampoco es una categoría");
+      // Y la guarda no se dispara de más: con categoría real manda el estado de la meta.
+      const conCat = { erc: { datosCompletos: true }, riesgo: { categoria: "alto" }, meta: { estado: "en_meta" }, plan: {} };
+      t.igual(api.mtrJsonV68DesdeResumen(conCat, {}).status, "EN META",
+        "con categoría real, el status refleja la meta");
+    });
+
+    // Sin esta regla el campo nace muerto: el JSON diría PENDIENTE y el modelo redactaría
+    // igual, como si el paciente estuviera estratificado.
+    t.caso("v17.6.89: el prompt le enseña al modelo qué hacer con status PENDIENTE", () => {
+      const nota = api.mtrRedaccionPrompt("analisis_plan", hojaDemo(api), {});
+      const todo = String(nota.system) + "\n" + String(nota.user);
+      t.cierto(/PENDIENTE/.test(todo), "el prompt nombra el estado PENDIENTE");
+      t.cierto(/solicitud/i.test(todo), "y el campo `solicitud` que debe copiar");
+      t.cierto(/LITERAL/i.test(todo), "exigiéndole que lo copie literalmente, sin redactarlo él");
     });
 
     t.caso("mtrJsonV68DesdeResumen SÍ calcula alertas_dosis/alerta_metformina reales (auditoría 2026-08-18: antes quedaban siempre en null/[] sin importar lo que el motor encontrara)", () => {
@@ -1441,20 +1727,6 @@ module.exports = {
       t.cierto(/if \(modoGen === modo\) \{[\s\S]{0,200}salida\.value = _borradores\[modoGen\]\.texto/.test(fn), "solo pinta la pantalla si el chip activo sigue siendo el que generó");
     });
 
-    // v17.6.38 — AUDITORÍA S+ (barrido total, 24-ago-2026): "Generar todo" ya
-    // deshabilitaba "Generar" al arrancar, pero "Generar" no hacía lo mismo con
-    // "Generar todo" — dos cadenas de generación podían correr solapadas, y la primera
-    // en terminar rehabilitaba ambos botones a mitad de la cadena del lote de la otra,
-    // rompiendo el candado que v17.6.11 puso a propósito. Vive dentro del cierre de
-    // mtrAbrirPanelRedaccion — se protege por texto fuente.
-    t.caso("v17.6.38: Generar también deshabilita Generar todo mientras está en vuelo (candado en ambos sentidos)", () => {
-      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
-      const idx = src.indexOf('estado.textContent = "Generando con " + mtrModeloGemini(modoGen)');
-      const fn = src.slice(idx - 100, idx + 400);
-      t.cierto(/btnGen\.disabled = true; if \(btnTodo\) btnTodo\.disabled = true;/.test(fn), "al arrancar, deshabilita también Generar todo");
-      t.cierto(/btnGen\.disabled = false; if \(btnTodo\) btnTodo\.disabled = false;/.test(fn), "al terminar, lo rehabilita junto con Generar");
-    });
-
     // v17.6.42 — AUDITORÍA S+ (barrido total, 24-ago-2026): el nombre real del paciente
     // (resumen._nombrePaciente, tomado de la cita de la agenda) tiene que LLEGAR a los
     // 4 sitios que envían texto libre a Gemini para que el censor de mayúsculas
@@ -1464,9 +1736,375 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
-      const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
-      t.igual(ocurrenciasOpts, 2, "los dos objetos opts (Generar y Generar todo) deben incluir el nombre");
+      // v17.34.0 — "Generar todo" se retiró; queda un solo objeto opts.
+      // v17.47.0 — el objeto del que se lee dejó de llamarse `resumen`: el manejador de
+      // Generar ahora resuelve el resumen VIGENTE en el instante del clic
+      // (`mtrIaResumenVigente`) en vez de usar la foto tomada al abrir el panel, y lo
+      // guarda en `_res`. La INTENCIÓN de esta prueba —que el nombre llegue al objeto
+      // opts, porque es lo que permite tachar el nombre del paciente antes de enviarlo—
+      // no cambia, así que se acepta cualquiera de los dos portadores en vez de atarse al
+      // identificador exacto. Verificado: quitar la línea entera pone esta prueba en rojo.
+      const ocurrenciasOpts = (src.match(/nombrePaciente: (?:resumen|_res)\._nombrePaciente,/g) || []).length;
+      t.igual(ocurrenciasOpts, 1, "el objeto opts de Generar debe incluir el nombre");
       t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
+    });
+
+    // =================================================================
+    //  v17.47.0 — EL JSON QUE VA A LA IA NO PUEDE IR CADUCADO
+    //  El panel calculaba la hoja de hechos UNA VEZ, al abrirse, y "Generar" reutilizaba
+    //  esa foto. Dejando el panel abierto mientras se completa la historia —uso normal—
+    //  la nota se redactaba con TFG, LDL, riesgo y metas de hasta 13 minutos antes. El
+    //  texto libre sí se releía desde la v17.6.22; los números no. Y la nota la firma el
+    //  médico.
+    // =================================================================
+    t.caso("v17.47.0 — al generar se usa el resumen VIGENTE, no la foto de cuando se abrió el panel", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { _docId: "1098765432", _nombrePaciente: "X", marca: "VIEJO" };
+      const hojaFoto = { marca: "HOJA_VIEJA" };
+      // El Panel refrescó el resumen mientras el médico tenía el panel abierto.
+      c.api.mtrCacheResumenGuardar("1098765432", { _docId: "1098765432", _nombrePaciente: "X", marca: "NUEVO" });
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen.marca, "NUEVO", "manda el resumen vigente, no la foto");
+      t.cierto(v.refrescado, "y se declara que se refrescó");
+      t.cierto(v.hoja !== hojaFoto, "la hoja se recalcula sobre el resumen nuevo, no se arrastra la vieja");
+    });
+
+    t.caso("v17.47.0 — sin caché vigente conserva la foto: no se inventa un resumen que no se puede recomponer", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { _docId: "1098765432", _nombrePaciente: "X", marca: "FOTO" };
+      const hojaFoto = { marca: "HOJA" };
+      c.api.mtrCacheResumenBorrar("1098765432");
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen.marca, "FOTO", "se conserva lo único que hay — recomponer exigiría releer los laboratorios");
+      t.igual(v.hoja, hojaFoto, "y su hoja");
+      t.falso(v.refrescado, "pero NO se dice que se refrescó: eso sería presentar como fresco algo que no lo es");
+    });
+
+    t.caso("v17.47.0 — sin docId no revienta y devuelve la foto tal cual", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { marca: "FOTO" }, hojaFoto = { marca: "HOJA" };
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen, foto);
+      t.falso(v.refrescado);
+    });
+
+    t.caso("v17.47.0 — el manejador de Generar usa el resumen resuelto, no la foto del cierre", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/const _vig = mtrIaResumenVigente\(resumen, hoja\);/.test(src),
+        "Generar debe resolver el resumen vigente antes de armar el prompt");
+      t.cierto(/mtrJsonV68DesdeResumen\(_res, _hoja\)/.test(src),
+        "el JSON v68 se arma con el resumen resuelto, no con la foto");
+      t.cierto(/mtrGeminiRedactar\(_hoja, modoGen, opts\)/.test(src),
+        "y la hoja que viaja al modelo también");
+    });
+
+
+    // =================================================================
+    //  v17.7.3 — LA HOJA DE HECHOS COMPLETA
+    //  Encargo del médico (27-ago): «la IA debe recibir todo el JSON de Everest ya que
+    //  toda esa información sirve de grounding para redactar una excelente nota clínica:
+    //  se debe mandar el examen físico, medicamentos actuales, laboratorios actuales,
+    //  exámenes por vencer, clasificación del riesgo cardiovascular, etc.»
+    //
+    //  Todo esto YA estaba calculado en el script y nadie lo copiaba a la hoja: el modelo
+    //  opinaba con menos datos de los que el propio asistente tenía en la mano.
+    // =================================================================
+    const _ctx773 = {
+      hoyIso: "2026-08-16", edad: 68, sexo: "F", pesoKg: 62, creatinina: 1.6,
+      rac: 45, ct: 230, hdl: 42, ldl: 148, paSistolica: 148, paDiastolica: 88,
+      factores: { hta: true, diabetes: true, cinturaCm: 96 },
+      ultimos: {
+        CREATININA: { fecha: "2026-05-01", valor: 1.6 },
+        COLESTEROL_TOTAL: { fecha: "2026-05-01", valor: 230 },
+        COLESTEROL_HDL: { fecha: "2026-05-01", valor: 42 },
+        TRIGLICERIDOS: { fecha: "2026-05-01", valor: 190 },
+        GLUCOSA: { fecha: "2026-01-01", valor: 132 },
+        NITRITOS: { fecha: "2026-05-01", valor: "POSITIVO" },
+      },
+      uroHallazgos: { nitritos: "POSITIVO" },
+    };
+    const _hoja773 = () => api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+      ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+    });
+
+    t.caso("v17.7.3 — el examen físico llega entero: peso y cintura, no solo la tensión", () => {
+      const h = _hoja773();
+      t.igual(h.antropometria.pesoKg, 62, "el peso");
+      t.igual(h.antropometria.cinturaCm, 96, "y la circunferencia abdominal, que se lee por rótulo desde v17.6.97");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("peso 62 kg") >= 0, "el peso, en el texto que ve el modelo");
+      t.cierto(txt.indexOf("circunferencia abdominal 96 cm") >= 0, "y la cintura, con el nombre que usa Everest");
+      // La etiqueta NO puede cambiar: es uno de los prefijos con que se limpia la
+      // Enfermedad Actual, y ese filtro compara texto exacto.
+      t.cierto(txt.indexOf("Signos vitales:") >= 0,
+        "la etiqueta sigue siendo «Signos vitales:»: renombrarla dejaría el filtro de Enfermedad Actual sin reconocer su propia línea");
+    });
+
+    t.caso("v17.7.3 — el uroanálisis y los paraclínicos de texto dejan de ser invisibles", () => {
+      const h = _hoja773();
+      t.cierto(h.labsTexto.some((x) => x.analito === "NITRITOS"),
+        "un resultado de TEXTO ya no se descarta: el filtro de números lo tiraba");
+      t.falso(h.labs.some((x) => x.analito === "NITRITOS"),
+        "pero NO se mezcla con los numéricos: quien espera números sigue recibiendo solo números");
+      t.cierto(!!h.uroanalisis && !!h.uroanalisis.estado, "y el uroanálisis llega con su estado ya evaluado");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("Uroanálisis: ") >= 0, "nombrado en el texto");
+      t.cierto(txt.indexOf("Conducta que ya definió el motor") >= 0,
+        "con la conducta YA decidida, para que el modelo la cite en vez de improvisar una");
+    });
+
+    t.caso("v17.7.3 — el plan que el motor ya decidió viaja con los hechos", () => {
+      const h = _hoja773();
+      t.cierto(!!h.plan.ftl, "la fecha de toma");
+      t.cierto(!!h.plan.control, "la fecha de control");
+      t.cierto(h.plan.ordenar.length > 0, "y qué se va a ordenar");
+      t.cierto(!!h.plan.anr, "el agujero negro renal, cuando está activo");
+      t.cierto(Array.isArray(h.pendientes.diferidos), "los diferidos, aunque estén vacíos");
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(txt.indexOf("Exámenes que YA se van a ordenar") >= 0, "las órdenes, en el texto");
+      t.cierto(txt.indexOf("Fechas ya calculadas:") >= 0, "las fechas, en el texto");
+      // v17.13.0 — esta línea exigía el rótulo «Agujero negro renal ACTIVO», que es el apodo
+      // INTERNO del motor. El médico fue explícito (27-ago): «el usuario final no debe saber
+      // sobre esos términos, el ANR y todo lo demás solamente es conmigo el programador».
+      // La prueba fijaba jerga, no una regla: ahora exige el hecho clínico dicho en llano y,
+      // además, que el apodo NO viaje — que es lo que de verdad hay que proteger.
+      t.cierto(txt.indexOf("Vigilancia de la función renal:") >= 0, "y la ventana renal explicada en llano");
+      t.falso(/agujero negro/i.test(txt), "sin el apodo interno del motor: eso es del programador, no del médico");
+    });
+
+    t.caso("v17.7.3 — el síndrome metabólico llega con su porqué, no solo con su veredicto", () => {
+      const h = _hoja773();
+      t.cierto(!!h.sindromeMetabolico, "esta paciente lo cumple");
+      t.cierto(h.sindromeMetabolico.criterios.length >= 3, "y viajan los criterios que se cumplieron");
+      t.cierto(api.mtrHojaDeHechosTexto(h).indexOf("Síndrome metabólico: SÍ cumple") >= 0, "nombrado en el texto");
+    });
+
+    t.caso("v17.7.3 — lo que no consta se OMITE, nunca se rellena", () => {
+      // La regla de la casa. El motivo por el que estos datos no estaban era que faltaban,
+      // no que sobraran: cambiarlos por un valor plausible sería peor que no tenerlos.
+      const vacia = api.mtrHojaDeHechos({ factores: { edad: 61, sexo: "F" } }, { hoyIso: "2026-08-17" });
+      t.igual(vacia.antropometria.cinturaCm, null, "sin cintura, null — no se estima por el IMC");
+      t.igual(vacia.antropometria.pesoKg, null, "sin peso, null");
+      t.igual(vacia.uroanalisis, null, "sin uroanálisis, null — no se declara «sin hallazgos»");
+      t.igual(vacia.sindromeMetabolico, null, "sin criterios, null — no se da por descartado");
+      t.igual(vacia.plan, null, "sin plan, null — no se inventan fechas");
+      t.igual(vacia.labsTexto.length, 0, "y ningún paraclínico descriptivo de la nada");
+      const txt = api.mtrHojaDeHechosTexto(vacia);
+      for (const rotulo of ["circunferencia abdominal", "Uroanálisis:", "Síndrome metabólico:", "Fechas ya calculadas:", "Vigilancia de la función renal:"]) {
+        t.falso(txt.indexOf(rotulo) >= 0, "sin dato, la línea «" + rotulo + "» no se fabrica");
+      }
+    });
+
+    t.caso("v17.7.3 — los bloques nuevos NO se pueden colar en la Enfermedad Actual", () => {
+      // Son datos, no semiotecnia: pertenecen a Análisis y Plan. El prompt ya lo prohíbe,
+      // pero un prompt es una instrucción, no una garantía — por eso existe el filtro.
+      const borrador = [
+        "Paciente que consulta por control.",
+        "Fechas ya calculadas: toma de laboratorios 2026-08-29 · control 2026-09-04",
+        "Síndrome metabólico: SÍ cumple criterios (5 de 5 evaluables)",
+        "Exámenes que YA se van a ordenar en esta toma: CREATININA",
+        "Vigilancia de la función renal: la creatinina vence el 2026-08-30",
+        "Paraclínicos con resultado descriptivo: NITRITOS POSITIVO",
+        "Refiere adecuada adherencia al tratamiento.",
+      ].join("\n");
+      const limpio = api.mtrQuitarDatosProhibidosEA(borrador);
+      t.cierto(limpio.indexOf("consulta por control") >= 0, "la semiotecnia se respeta");
+      t.cierto(limpio.indexOf("adherencia") >= 0, "y lo que sí es Enfermedad Actual también");
+      for (const rotulo of ["Fechas ya calculadas:", "Síndrome metabólico:", "Exámenes que YA", "Vigilancia de la función renal:", "Paraclínicos con resultado descriptivo:"]) {
+        t.falso(limpio.indexOf(rotulo) >= 0, "«" + rotulo + "» no puede quedarse en la Enfermedad Actual");
+      }
+    });
+
+    // =========================================================================
+    //  v17.13.0 — LOS PROMPTS APRENDEN A USAR EL CONTEXTO QUE YA RECIBÍAN
+    //  Entre la v17.7.3 y la v17.12.0 la hoja creció con el examen físico, el
+    //  uroanálisis, el síndrome metabólico, el plan con sus fechas y la historia
+    //  clínica entera de Everest — y ningún prompt nombraba el bloque nuevo.
+    //  Regla que este proyecto ya se había escrito: un dato que llega al JSON y
+    //  que el prompt no nombra es un dato que no llegó.
+    // =========================================================================
+
+    // Una hoja con TODO puesto: es la única forma de comprobar que cada rótulo que
+    // el prompt cita existe de verdad en lo que se manda. Datos sintéticos, cero PHI.
+    const _hojaCompleta = () => api.mtrHojaDeHechos(api.mtrResumenClinico(_ctx773), {
+      ultimos: _ctx773.ultimos, hoyIso: "2026-08-16", medicamentos: ["Losartan 50mg"],
+      hcEverest: {
+        secciones: {
+          antecedentePatologicos: { hipertensionArterial: true, infartoMiocardio: false },
+          habitosGestionRiesgo: { sedentarismo: true },
+        },
+        textos: { ultimaEnfermedad: "PACIENTE ASINTOMATICA, ADHERENTE" },
+      },
+    });
+
+    t.caso("v17.13.0 — todo rótulo que el prompt cita, el mensaje lo emite de verdad", () => {
+      // LA prueba que impide la próxima desconexión: barre los nombres de bloque que el
+      // bloque de precedencia enumera y exige que cada uno aparezca en el mensaje armado.
+      // Si alguien renombra un bloque en mtrRedaccionPrompt y no en el prompt (o al revés),
+      // esto se pone rojo en vez de dejar al modelo buscando algo que no existe.
+      const p = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {
+        contextoLibre: "PACIENTE REFIERE CEFALEA LEVE",
+        datosExtra: { tfgAportada: "72" },
+        indicaciones: "Enfatizar la adherencia",
+      });
+      const citados = [];
+      const re = /^\d+\. ([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 ]+?) (?:—|\()/gm;
+      let m;
+      while ((m = re.exec(p.system)) !== null) citados.push(m[1].trim());
+      t.cierto(citados.length >= 4, "el bloque de precedencia enumera las fuentes (" + citados.length + ")");
+      for (const rotulo of citados) {
+        t.cierto(p.user.indexOf(rotulo) >= 0, "«" + rotulo + "» que el prompt cita, sí viaja en el mensaje");
+      }
+    });
+
+    t.caso("v17.13.0 — los tres prompts nombran la historia clínica de Everest", () => {
+      const hoja = _hojaCompleta();
+      for (const modo of ["enfermedad_actual", "analisis_plan", "recomendaciones"]) {
+        const p = api.mtrRedaccionPrompt(modo, hoja, {});
+        t.cierto(p.system.indexOf("LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST") >= 0,
+          modo + ": el prompt nombra el bloque que la hoja lleva emitiendo desde la v17.10.0");
+      }
+      t.cierto(api.mtrHojaDeHechosTexto(hoja).indexOf("--- LO REGISTRADO EN LA HISTORIA CLÍNICA DE EVEREST ---") >= 0,
+        "y la hoja lo emite con ese mismo nombre");
+    });
+
+    t.caso("v17.13.0 — la precedencia se enuncia, y va antes que el formato de salida", () => {
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {});
+      const iPrec = p.system.indexOf("# FUENTES Y SU ORDEN DE MANDO");
+      t.cierto(iPrec >= 0, "el bloque de precedencia existe");
+      const iFormato = p.system.indexOf("# FORMATO DE SALIDA");
+      t.cierto(iFormato > iPrec, "y va ANTES del formato: al final competiría con él en un modelo lite");
+      const iMedico = p.system.indexOf("DATOS APORTADOS POR EL MÉDICO");
+      const iMotor = p.system.indexOf("5. HECHOS DEL PACIENTE");
+      t.cierto(iMedico >= 0 && iMotor > iMedico,
+        "el médico manda por encima de lo que calculó el motor, no al revés");
+    });
+
+    t.caso("v17.13.0 — un «no» documentado no es lo mismo que un campo ausente", () => {
+      // Es la diferencia entre «se descartó» y «no se preguntó». Sin decirlo, el modelo
+      // trata los 109 campos en false de la historia como huecos y se los calla, o peor,
+      // los afirma al revés.
+      const p = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {});
+      t.cierto(/ES UN HECHO/.test(p.system), "el prompt dice que un 'no' ES UN HECHO");
+      t.cierto(/AUSENTE significa que no se preguntó/.test(p.system), "y que un campo ausente es otra cosa");
+      t.cierto(/SOLO los pertinentes al motivo de consulta/.test(p.system),
+        "y de los negativos solo se escriben los pertinentes: semiología, no inventario");
+    });
+
+    t.caso("v17.13.0 — el texto del médico se reescribe mejorado, sin perder ni un hecho suyo", () => {
+      // Encargo del médico (27-ago): «sí quiero que se reescriba de forma inteligentemente
+      // mejorada según las normas y la semiología». Con dos límites que él mismo impuso:
+      // no se le quita nada de lo que escribió, y no se le altera ninguna cifra.
+      const p = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {
+        contextoLibre: "PACIENTE ASINTOMATICA",
+      });
+      t.cierto(/reescríbelo mejorado/.test(p.system), "se reescribe, no se repite tal cual");
+      t.cierto(/Resolución 1995 de 1999/.test(p.system), "con la norma que rige la historia clínica");
+      t.cierto(/Suprimir un dato suyo está PROHIBIDO/.test(p.system), "sin perder ningún hecho del médico");
+      t.cierto(/NO alteres ninguna cifra, fecha, dosis ni unidad/.test(p.system), "y sin tocarle una cifra");
+      t.cierto(/BORRADOR que el médico lee, edita y aprueba/.test(p.system),
+        "y sigue siendo un borrador: la casilla es suya");
+      t.cierto(/SI NO HAY TEXTO PREVIO/.test(p.system),
+        "y con la casilla vacía se redacta completa desde cero, no corta por falta de borrador");
+    });
+
+    t.caso("v17.13.0 — la casilla ocupada sigue intacta mientras el médico no confirme", () => {
+      // La regla de la casa entera en una prueba: la reescritura llega como borrador, y
+      // pisar lo que él escribió a mano exige un clic explícito suyo.
+      const c = cargar({ silencioso: true });
+      const ta = { value: "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", isConnected: true, dispatchEvent: () => {} };
+      c.env.doc.querySelector = (sel) => (sel === `textarea[name="UltimaEnfermedad"]` ? ta : null);
+      const doc = c.env.doc; const api2 = c.api;
+      {
+        const r1 = api2.mtrInsertarEnCasillaModo("enfermedad_actual", "BORRADOR NUEVO DE LA IA", null, doc);
+        t.falso(r1.ok, "sin confirmar, no se inserta");
+        t.igual(r1.motivo, "ocupada", "y se dice por qué");
+        t.igual(ta.value, "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", "la casilla quedó EXACTAMENTE como estaba");
+        const r2 = api2.mtrInsertarEnCasillaModo("enfermedad_actual", "BORRADOR NUEVO DE LA IA", null, doc, { reemplazar: true });
+        t.cierto(r2.ok, "con la confirmación explícita, sí se reemplaza");
+        t.igual(r2.motivo, "reemplazado", "y se distingue de una inserción en casilla vacía");
+        t.igual(r2.previo, "TEXTO QUE ESCRIBIÓ EL MÉDICO A MANO", "devolviendo el texto anterior para Deshacer");
+        t.igual(ta.value, "BORRADOR NUEVO DE LA IA", "ahora sí quedó el borrador");
+      }
+    });
+
+    t.caso("v17.13.0 — la hoja dice cuál examen fija la fecha y cuáles se enganchan", () => {
+      // Encargo del médico (27-ago): «usa el contexto de drivers y pasajeros del promptware,
+      // acá también es válido». Sin esto la lista de órdenes era plana y el modelo
+      // justificaba la toma sobre cualquiera de ellas, a veces sobre un acompañante.
+      const h = _hojaCompleta();
+      const txt = api.mtrHojaDeHechosTexto(h);
+      t.cierto(h.plan.dicta === null || typeof h.plan.dicta === "string",
+        "la hoja trae qué examen fija la fecha, o null si ninguno la fijó");
+      if (h.plan.dicta) {
+        t.cierto(txt.indexOf("El examen que fija la fecha de la toma es") >= 0,
+          "y se dice en el texto que ve el modelo");
+      }
+      // Y la jerga interna NO viaja: el médico fue explícito en que esos términos son del
+      // programador, no del usuario final. La defensa real es no mandarle nunca la palabra.
+      for (const jerga of ["DRIVER", "PASAJERO", "COSECHA", "AGUJERO NEGRO", " FTL", " ANR"]) {
+        t.falso(txt.toUpperCase().indexOf(jerga) >= 0, "«" + jerga.trim() + "» no sale de la hoja");
+      }
+      const p = api.mtrRedaccionPrompt("analisis_plan", h, {});
+      t.cierto(/LA TOMA SE JUSTIFICA SOBRE EL EXAMEN QUE FIJA SU FECHA/.test(p.system),
+        "y el prompt sabe sobre cuál se justifica la toma");
+      t.cierto(/JERGA INTERNA — PROHIBIDA EN LA SALIDA/.test(p.system), "con la jerga prohibida en la salida");
+    });
+
+    t.caso("v17.13.0 — la hoja del paciente no puede llevar identificadores de campo", () => {
+      // Las Recomendaciones las lee el paciente y su familia. Con la historia de Everest en
+      // el contexto (marcaciones con nombre de campo del sistema) el riesgo es real.
+      const p = api.mtrRedaccionPrompt("recomendaciones", _hojaCompleta(), {});
+      t.cierto(/NUNCA escribas identificadores de campo del sistema/.test(p.system),
+        "prohibido explícitamente");
+      t.cierto(p.system.indexOf("sedentarismo: sí") >= 0, "con el ejemplo concreto del pattern que se cuela");
+    });
+
+    t.caso("v17.13.0 — ninguna advertencia clínica se perdió por el camino", () => {
+      // Regla del informe del enjambre: ninguna tanda quita peso a los avisos. Este caso
+      // fija las prohibiciones que ya regían antes de esta versión.
+      const ea = api.mtrRedaccionPrompt("enfermedad_actual", _hojaCompleta(), {}).system;
+      for (const regla of [
+        // v17.28.0 — la prohibición pasó de condicional ("inventar" la PA cuando no consta)
+        // a incondicional (nunca, ni cuando consta): el texto cambió, la protección no.
+        "Signos vitales o hallazgos de examen físico de HOY",
+        "Resultados de laboratorio o paraclínicos",
+        "Clasificación de riesgo cardiovascular",
+        "Problemas administrativos",
+      ]) t.cierto(ea.indexOf(regla) >= 0, "Enfermedad Actual conserva: «" + regla + "»");
+      const np = api.mtrRedaccionPrompt("analisis_plan", _hojaCompleta(), {}).system;
+      for (const regla of [
+        "NO recalcules TFG",
+        "DOBLE TFG",
+        "AJUSTE DE DOSIS POR FUNCIÓN RENAL",
+        "sin antibiótico a ciegas",
+        "DATO NO DISPONIBLE",
+      ]) t.cierto(np.indexOf(regla) >= 0, "Análisis y Plan conserva: «" + regla + "»");
+    });
+
+    t.caso("v17.16.0 — mtrAnalitoQueFijaLaToma, probada de frente y no de refilón", () => {
+      // Estaba en `cubre` y solo se ejercitaba a través de mtrHojaDeHechos: el informe del
+      // banco la listaba como «declarada pero nunca nombrada». Probarla de frente cuesta
+      // seis líneas y fija sus tres decisiones, que son las que el modelo acaba leyendo.
+      t.igual(api.mtrAnalitoQueFijaLaToma(null), null, "sin plan no se inventa un dictador");
+      t.igual(api.mtrAnalitoQueFijaLaToma({}), null, "sin fecha de toma cruda tampoco");
+      // La ventana renal manda sobre cualquier otro vencimiento.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ anr: { vence: "2026-08-30" }, ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "COLESTEROL_LDL", estado: "D", vence: "2026-09-10" }] }), "CREATININA",
+        "con la ventana renal activa manda la creatinina, sea cual sea el resto");
+      // Sin ventana renal: el driver cuyo vencimiento SE CONVIRTIÓ en la fecha de toma.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "COLESTEROL_LDL", estado: "D", vence: "2026-09-10" },
+                  { clave: "GLUCOSA", estado: "D", vence: "2026-11-02" }] }), "COLESTEROL_LDL",
+        "manda el que fijó la fecha, no el primero de la lista");
+      // Un vencimiento YA pasado (vencidoBase) no puede fijar nada: CERO VENCIDOS.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-09-10",
+        drivers: [{ clave: "RAC", estado: "R", vence: "2026-09-10", vencidoBase: true }] }), null,
+        "un examen ya vencido no fija la fecha: su «vencimiento» es una fecha pasada");
+      // La fecha salió del piso de 14 días, no de un vencimiento: no hay dictador.
+      t.igual(api.mtrAnalitoQueFijaLaToma({ ftlSinAjustar: "2026-08-30",
+        drivers: [{ clave: "GLUCOSA", estado: "D", vence: "2026-11-02" }] }), null,
+        "si ningún vencimiento fijó la fecha, se calla en vez de señalar a uno");
     });
 
   },

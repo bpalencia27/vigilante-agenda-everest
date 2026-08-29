@@ -230,7 +230,87 @@ module.exports = {
       t.igual(fusion.tension.pas, 150, "y lo nuevo se suma: la memoria crece, no se pisa");
     });
 
-    t.caso("sin documento del paciente no se guarda nada suelto", () => {
+    // =====================================================================
+    //  v17.48.0 — UNA SOLA CLAVE POR PACIENTE (decisión D2 del 29-ago)
+    //  `normalizeKey` quita los ceros a la izquierda de un documento; `extractDoc` NO.
+    //  Si el mismo paciente llega como "0005150076" por una vía (API de Everest, DOM de
+    //  respaldo) y como "5150076" por otra, la memoria local queda partida en dos
+    //  entradas y consume dos de los 80 cupos.
+    //  El comentario que justifica `normalizeKey` (":8205") dice literalmente que la base
+    //  guarda la cédula rellenada y la agenda la trae limpia — así que el escenario está
+    //  afirmado sobre datos reales, aunque no haya captura que lo demuestre por la vía de
+    //  la API.
+    //  Estas pruebas fijan las dos mitades del arreglo: escribir canónico, y seguir
+    //  leyendo lo que ya estaba guardado bajo la clave vieja.
+    // =====================================================================
+    t.caso("v17.48.0 — la memoria se archiva bajo UNA sola clave, con o sin ceros delante", () => {
+      const c = cargar({ silencioso: true });
+      c.api._vglCosechaGuardar("0005150076", { programas: { hta: true } });
+      const porLaLimpia = c.api._vglCosechaLeer("5150076");
+      t.cierto(!!porLaLimpia && !!porLaLimpia.programas,
+        "guardado con ceros, se encuentra sin ellos — es el mismo paciente");
+      t.igual(porLaLimpia.programas.hta, true, "y con lo que se había visto");
+    });
+
+    t.caso("v17.48.0 — y al revés: guardado sin ceros, se encuentra con ellos", () => {
+      const c = cargar({ silencioso: true });
+      c.api._vglCosechaGuardar("5150076", { programas: { diabetes: true } });
+      const porLaRellenada = c.api._vglCosechaLeer("0005150076");
+      t.cierto(!!porLaRellenada && !!porLaRellenada.programas, "la clave canónica es la misma");
+      t.igual(porLaRellenada.programas.diabetes, true);
+    });
+
+    t.caso("v17.48.0 — dos pacientes DISTINTOS siguen sin cruzarse (los ceros no fusionan de más)", () => {
+      const c = cargar({ silencioso: true });
+      c.api._vglCosechaGuardar("5150076", { programas: { hta: true } });
+      c.api._vglCosechaGuardar("5150077", { programas: { hta: false } });
+      t.igual(c.api._vglCosechaLeer("5150076").programas.hta, true);
+      t.igual(c.api._vglCosechaLeer("5150077").programas.hta, false, "cédulas distintas, memorias distintas");
+    });
+
+    t.caso("v17.48.0 — el detector agrupa las claves del MISMO paciente y no las de otros", () => {
+    const c = cargar({ silencioso: true });
+    const grupos = c.api._vglDetectarClavesDuplicadas({
+      "0005150076": { ts: 1 },
+      "5150076": { ts: 2 },
+      "8396613": { ts: 3 },
+      "00005150076": { ts: 4 },
+    });
+    t.igual(grupos.length, 1, "un solo paciente está partido en dos claves... más una tercera");
+    t.igual(grupos[0].slice().sort(), ["0005150076", "00005150076", "5150076"].sort(), "las tres escrituras del mismo paciente");
+  });
+
+  t.caso("v17.48.0 — sin duplicados el detector no inventa grupos", () => {
+    const c = cargar({ silencioso: true });
+    t.igual(c.api._vglDetectarClavesDuplicadas({ "5150076": {}, "8396613": {} }).length, 0);
+    t.igual(c.api._vglDetectarClavesDuplicadas(null).length, 0, "sin almacén, nada que decir");
+  });
+
+  t.caso("v17.48.0 — CERO PHI: el detector anota el conteo, jamás una cédula", () => {
+    const c = cargar({ silencioso: true });
+    c.api._vglCosechaGuardar("0005150076", { programas: { hta: true } });
+    c.api._vglCosechaGuardar("5150076", { programas: { dm: true } });
+    c.env.storage.removeItem("vgl_flight_recorder_logs");
+    const n = c.api._vglRevisarClavesDuplicadas();
+    t.igual(n, 1, "debe encontrar el paciente partido");
+    const crudo = String(c.env.almacen["vgl_flight_recorder_logs"] || "");
+    t.cierto(crudo.indexOf("cedulas_duplicadas") >= 0, "debe quedar constancia en la bitácora");
+    t.igual(crudo.indexOf("5150076"), -1, "pero la cédula NO puede aparecer en lo registrado");
+    t.igual(crudo.indexOf("0005150076"), -1, "ni siquiera en su forma rellenada");
+    const linea = JSON.parse(crudo).filter((e) => e.act === "cedulas_duplicadas")[0];
+    t.igual(linea.act, "cedulas_duplicadas", "el nombre de la acción es fijo, nunca lleva la cédula pegada");
+    t.igual(Object.keys(linea.det).slice().sort(), ["claves", "grupos"], "solo conteos: ningún campo más puede colarse");
+  });
+
+  t.caso("v17.48.0 — una cédula ilegible no se parece a TODAS las demás", () => {
+    const c = cargar({ silencioso: true });
+    c.api._vglCosechaGuardar("5150076", { programas: { hta: true } });
+    t.falso(!!c.api._vglCosechaLeer("abc"), "texto sin dígitos no puede devolver la historia de otro paciente");
+    t.falso(!!c.api._vglCosechaLeer("0"), "ni un cero suelto");
+    t.igual(c.api._vglDetectarClavesDuplicadas({ "abc": {}, "---": {} }).length, 0, "dos claves ilegibles no son el mismo paciente");
+  });
+
+  t.caso("sin documento del paciente no se guarda nada suelto", () => {
       t.igual(a._vglCosechaGuardar("", { programas: {} }), null, "sin cédula no hay dónde guardar");
       t.igual(a._vglCosechaGuardar("333", null), null, "sin datos tampoco");
       t.igual(a._vglCosecharDePantalla(""), null, "y la cosecha automática exige saber a quién pertenece");

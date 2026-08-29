@@ -13,7 +13,7 @@ module.exports = {
     "apiAccesoBuscarCitasDisponibles", "apiLaboratorioAgendarAuto", "normalizeHora",
     "apiDigiturnoFinalizarTicket", "apiAccesoObtenerLaboratoriosAnnar",
     "apiAccesoObtenerLaboratoriosCiti", "apiAccesoAgdValidarAgenda",
-    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes"
+    "apiAccesoObtenerTurnos", "apiHcObtenerOrdenamientosVigentes", "actualizarRelojCabecera"
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -163,6 +163,20 @@ module.exports = {
       const filas = [{ horaCita: "07:00", estado: "EN SALA", numeroDocumento: "1", nombrePaciente: "A", citaId: 4334823 }];
       const citas = c2.api.apiParse(filas);
       t.igual(citas[0].citaId, 4334823);
+    });
+
+    // v17.48.0 (D2) — La cédula que sale del API indexa TODA la memoria local. Si Everest
+    // la entrega rellenada de ceros, el mismo paciente quedaría archivado bajo dos claves
+    // y el script parecería "olvidar" lo aprendido entre controles.
+    t.caso("v17.48.0 — apiParse entrega la cédula canónica, sin los ceros de relleno", () => {
+      const c2 = cargar({ silencioso: true });
+      const filas = [
+        { horaCita: "07:00", estado: "EN SALA", numeroDocumento: "0005150076", nombrePaciente: "A" },
+        { horaCita: "07:20", estado: "PENDIENTE", numeroDocumento: "8396613", nombrePaciente: "B" },
+      ];
+      const citas = c2.api.apiParse(filas);
+      t.igual(citas[0].doc_id, "5150076", "una sola clave por paciente, venga como venga");
+      t.igual(citas[1].doc_id, "8396613", "y la que ya venía limpia no se toca");
     });
 
     t.caso("apiCampos: penaliza las columnas de hora de FIN aunque también parezcan horas", () => {
@@ -387,6 +401,25 @@ module.exports = {
       t.igual(c.api.apiCadencia(), 10000, "muy pasada (60 min tras el cruce, aún dentro de la ventana de abandono de 60 min): 10 s");
     });
 
+    // v17.21.0 — decisión del médico: el "Refresco" ya no es un control manual, pero
+    // el reloj de cabecera debe decir qué cadencia real está usando apiCadencia() en
+    // cada momento — sin eso, "automático" es indistinguible de "no sé qué está haciendo".
+    t.caso("actualizarRelojCabecera: el tooltip dice la cadencia de sondeo real, no un número fijo", () => {
+      const c = cargar({ silencioso: true });
+      const clock = c.env.doc.createElement("span");
+      clock.id = "vgl-clock";
+      c.env.doc.body.appendChild(clock);
+      const TOL = c.api.__CONFIG.TOLERANCIA_MIN;
+
+      c.api.__state.lastSnapshot = null;
+      c.api.actualizarRelojCabecera();
+      t.cierto(clock.title.indexOf("cada 30 s") >= 0, "sin nada pendiente: reposo de 30 s, tal como devuelve apiCadencia()");
+
+      c.api.__state.lastSnapshot = { list: [{ estado: "Pendiente", elapsed: TOL }] };
+      c.api.actualizarRelojCabecera();
+      t.cierto(clock.title.indexOf("cada 5 s") >= 0, "en la ventana crítica, el tooltip refleja los 5 s reales — no el mismo texto de antes");
+    });
+
     // ---------- tickApi ----------
     await t.casoAsync("tickApi: sin URL aprendida no dispara ninguna consulta", async () => {
       const e = entornoApi();
@@ -501,8 +534,12 @@ module.exports = {
       t.cierto(urlBook.includes("FechaCita=2026-08-14"));
       t.cierto(urlBook.includes("Telefono=0"), "sin teléfono cableado: manda 0 como la app oficial");
       t.cierto(urlBook.includes("NombrePaciente=%20"), "espacio CODIFICADO, igual que la captura real del front (Incidente v12.3.31)");
-      t.cierto(hayTexto(e.c, "Cita de Laboratorio agendada"));
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "sin celular conocido, el aviso sigue diciéndolo");
+      // v17.28.0 — el toast de confirmación se retiró (encargo del médico, 28-ago: "elimina
+      // esa notificación... es cuando se asignan citas de laboratorio"); el agendamiento y
+      // su resultado real se siguen verificando sobre el valor de retorno, y se fija en
+      // rojo que el aviso NO vuelva a aparecer sin que sea una decisión explícita.
+      t.igual(ok.smsEnviado, false, "sin celular conocido, no hubo SMS que enviar");
+      t.falso(hayTexto(e.c, "Cita de Laboratorio agendada"), "el toast que el médico pidió retirar no debe volver por accidente");
     });
 
     t.caso("normalizeHora: iguala '6:40:00', '06:40:00' y '06:40' al mismo turno (Incidente v12.3.32 — captura real: la hora rechazada aparecía como libre)", () => {
@@ -540,8 +577,11 @@ module.exports = {
       });
       const ok = await e.c.api.apiLaboratorioAgendarAuto("123456", "2026-08-14", "07:00", "3000000000");
       t.cierto(ok, "la cita SÍ quedó creada — el fallo es solo del SMS");
-      t.cierto(hayTexto(e.c, "NO recibe SMS"), "el médico debe saber que tiene que recordárselo al paciente");
-      t.falso(hayTexto(e.c, "Se envió SMS de recordatorio"), "jamás anunciar un SMS que el servicio rechazó");
+      // v17.28.0 — el toast que anunciaba esto se retiró (encargo del médico, 28-ago); el
+      // incidente real que este caso protege (nunca declarar enviado un SMS que el
+      // servicio rechazó) se sigue fijando sobre el valor de retorno, que es lo que
+      // consume el resto del script (p. ej. el panel de cierre de cita).
+      t.igual(ok.smsEnviado, false, "jamás declarar enviado un SMS que el servicio rechazó (Incidente v12.3.33)");
     });
 
     await t.casoAsync("apiLaboratorioAgendarAuto: usa AgendaId (mayúsculas) del turno — el nombre real confirmado contra el front de AppCita (Incidente v12.3.31)", async () => {
@@ -592,8 +632,18 @@ module.exports = {
       t.cierto(urlSms.startsWith("https://appcita.viva1a.com.co:8051/API/EnviarMensajeTextoLaboratorio"));
       t.cierto(urlSms.includes("Celular=3000000000"), "el celular se limpia de espacios y guiones antes de mandarlo");
       t.cierto(urlSms.includes("codigoCita=13525848"), "usa el radicado de AgendarCita como codigoCita, NUNCA el AgendaId");
-      t.cierto(urlSms.includes("codigoSede=378"));
-      t.cierto(hayTexto(e.c, "Se envió SMS de recordatorio"));
+      // v17.15.0 — la prueba pedía el literal «378», así que protegía el cableado en vez de
+      // la regla: si alguien cambiaba la sede en mtrSedeIdLab(), esta línea seguía exigiendo
+      // el número viejo y el rojo señalaba al arreglo, no al defecto. La v17.6.3 sacó el 378
+      // de CINCO URLs a esa función y dejó fuera justo esta — la del mensaje que llega al
+      // CELULAR DEL PACIENTE diciéndole a qué laboratorio ir. Ahora se exige la función.
+      t.cierto(urlSms.includes("codigoSede=" + e.c.api.mtrSedeIdLab()),
+        "la sede del SMS sale de mtrSedeIdLab(), no de un literal: un colega de otra sede mandaría a sus pacientes al laboratorio equivocado, por escrito");
+      t.falso(/codigoSede=378\b/.test(urlSms) && e.c.api.mtrSedeIdLab() !== 378,
+        "y si la sede cambia, el SMS cambia con ella");
+      // v17.28.0 — el toast se retiró (encargo del médico); el resultado real se sigue
+      // fijando sobre el valor de retorno.
+      t.igual(ok.smsEnviado, true, "con celular conocido y el servicio aceptando, el SMS sí se envió");
     });
 
     // ---------- apiDigiturnoFinalizarTicket ----------

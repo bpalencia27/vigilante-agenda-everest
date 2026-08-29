@@ -27,6 +27,8 @@ module.exports = {
     "_equipoId", "_sanearMensajeError", "reportarError",
     "_rumEndpointLabel", "_sanearDondeError", "_errRepeticion",
     "_rumCubeta", "_rumEsNuestro", "_rumNodoEsNuestro", "_rumTramo",
+    // v17.43.0 — diario de lentitud: el anillo de fases y el volcado a la bitácora
+    "_rumTramoAnotar", "_rumTramosParaTest", "_rumTramosResetParaTest", "_perfRegistrarTareaLarga",
     // v15.x — vaciado de telemetria al cerrarse la pestaña (antes era un closure sin pruebas)
     "_vaciarTelemetriaAlSalir", "repBeacon",
     // v15.2.0 — lista blanca de etiquetas de friccion
@@ -564,14 +566,131 @@ module.exports = {
       t.noLanza(() => c.api._iniciarRumObserver());
     });
 
-    t.caso("_iniciarRumObserver: con uxTelemetria apagada de entrada, NO llega a crear ningún observador", () => {
+    // v17.43.0 — esta prueba fijaba "uxTelemetria apagada ⇒ ningún observador". Ese
+    // contrato cambió a propósito, y su INTENCIÓN (que el interruptor de privacidad se
+    // respete) se conserva entera abajo: con los DOS apagados sigue sin instalarse nada.
+    // El motivo del cambio: el médico reportó lentitud real pero "no sé cuándo". El
+    // observador es lo único que puede cazarla, y estaba atado al interruptor de la
+    // telemetría que PUEDE SALIR del equipo — que él tiene apagado. Se separaron: `perfLog`
+    // gobierna la bitácora LOCAL de lentitud; `uxTelemetria` sigue gobernando, sola, los
+    // contadores que viajan.
+    t.caso("_iniciarRumObserver: con uxTelemetria Y perfLog apagados, NO crea ningún observador", () => {
       const c = cargar({ silencioso: true });
       c.api.__S.uxTelemetria = false;
+      c.api.__S.perfLog = false;
       const creados = [];
       class FakePO { constructor(cb) { creados.push(cb); } observe() {} }
       c.env.win.PerformanceObserver = FakePO;
       c.api._iniciarRumObserver();
-      t.igual(creados.length, 0, "corta en el guard de S.uxTelemetria antes de tocar PerformanceObserver");
+      t.igual(creados.length, 0, "con los dos interruptores en 'no', el médico no es observado de ninguna forma");
+    });
+
+    t.caso("_iniciarRumObserver: con uxTelemetria apagada pero perfLog encendido, SÍ observa — y no filtra ni un contador", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.uxTelemetria = false;   // el interruptor de lo que SALE del equipo: apagado
+      c.api.__S.perfLog = true;         // el de la bitácora local: encendido
+      const creados = [];
+      class FakePO { constructor(cb) { creados.push(cb); } observe() {} }
+      c.env.win.PerformanceObserver = FakePO;
+      c.api._iniciarRumObserver();
+      t.cierto(creados.length > 0, "el medidor arranca: es la única forma de cazar la lentitud que el médico reporta");
+      // Y la garantía que sostiene la separación: uxTrack se autocensura con su propia
+      // guarda, así que encender perfLog NO mete ni un contador en el almacén que viaja.
+      const antes = JSON.stringify(c.env.almacen[c.api.UX_KEY] || null);
+      c.api.uxTrack("rum.self.task.gt300ms");
+      const despues = JSON.stringify(c.env.almacen[c.api.UX_KEY] || null);
+      t.igual(despues, antes, "con uxTelemetria en 'no', ningún contador se guarda aunque el observador esté vivo");
+    });
+
+    // =====================================================================
+    //  v17.43.0 — DIARIO DE LENTITUD
+    //  El médico: "sí siento lentitud, pero no sé cuándo". Un contador por baldes
+    //  (`rum.self.task.gt300ms`) dice cuántas veces pasó y nunca qué estaba corriendo.
+    //  Estas pruebas fijan el puente: `_rumTramo` deja las fases caras en un anillo, y
+    //  cuando el LoAF avisa de un cuadro largo NUESTRO se vuelca a la bitácora.
+    // =====================================================================
+    const FLIGHT_KEY_PERF = "vgl_flight_recorder_logs";
+    const leerPerf = (c) => {
+      try { return JSON.parse(c.env.almacen[FLIGHT_KEY_PERF] || "[]").filter((e) => e.cat === "PERF"); }
+      catch (e) { return []; }
+    };
+
+    t.caso("_rumTramo: una fase cara queda anotada en el anillo con su nombre y sus ms", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      let t0 = 1000;
+      c.env.win.performance = { now: () => t0 };
+      c.api._rumTramo("tick.cosecha", () => { t0 = 1240; });   // 240 ms
+      const anillo = c.api._rumTramosParaTest();
+      t.igual(anillo.length, 1, "la fase se anotó");
+      t.igual(anillo[0].f, "tick.cosecha", "con su nombre, que es lo que responde '¿qué fue?'");
+      t.cierto(anillo[0].ms >= 200, "y con su costo real, no un balde");
+    });
+
+    t.caso("_rumTramo: una fase barata NO ensucia el anillo — si todo entrara, no explicaría nada", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      let t0 = 1000;
+      c.env.win.performance = { now: () => t0 };
+      c.api._rumTramo("tick.widget.ordenar", () => { t0 = 1005; });   // 5 ms
+      t.igual(c.api._rumTramosParaTest().length, 0, "por debajo de 50 ms no explica ningún tirón");
+    });
+
+    t.caso("_rumTramo: el anillo tiene tope — nunca crece sin límite en una jornada entera", () => {
+      const c = cargar({ silencioso: true });
+      c.api._rumTramosResetParaTest();
+      for (let i = 0; i < 40; i++) c.api._rumTramoAnotar("fase" + i, 100);
+      t.cierto(c.api._rumTramosParaTest().length <= 12, "acotado al tope, no se acumula");
+      const ultimos = c.api._rumTramosParaTest();
+      t.igual(ultimos[ultimos.length - 1].f, "fase39", "y conserva las MÁS RECIENTES, que son las que explican el tirón de ahora");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: escribe UNA línea en la bitácora, con las fases culpables", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      const perf = leerPerf(c);
+      t.igual(perf.length, 1, "una línea, no una por fase");
+      t.igual(perf[0].act, "tarea_larga");
+      t.cierto(String(perf[0].det.fases).indexOf("tick.cosecha") >= 0, "dice QUÉ fase estaba corriendo — eso es lo que faltaba");
+      t.igual(perf[0].det.ms, 410, "y cuánto costó el cuadro");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: vacía el anillo tras volcarlo — no acusa a la fase equivocada dos veces", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      c.api._perfRegistrarTareaLarga(500, 400);            // segundo tirón, sin fases nuevas
+      const perf = leerPerf(c);
+      t.igual(perf.length, 2, "las dos quedaron registradas");
+      t.igual(String(perf[1].det.fases), "", "la segunda NO hereda la fase de la primera: sería acusar en falso");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: con perfLog apagado no escribe nada", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = false;
+      c.api._rumTramosResetParaTest();
+      c.api._rumTramoAnotar("tick.cosecha", 260);
+      c.api._perfRegistrarTareaLarga(410, 320);
+      t.igual(leerPerf(c).length, 0, "el interruptor manda");
+    });
+
+    t.caso("_perfRegistrarTareaLarga: CERO PHI — nunca guarda la cédula, solo si había historia abierta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.perfLog = true;
+      c.api._rumTramosResetParaTest();
+      c.env.doc.getElementById = ((real) => (id) => (
+        id === "vgl-acciones-dock" ? { dataset: { vglDoc: "1098765432" } } : real(id)
+      ))(c.env.doc.getElementById.bind(c.env.doc));
+      c.api._perfRegistrarTareaLarga(400, 350);
+      const perf = leerPerf(c);
+      t.igual(perf[0].det.con_historia, true, "sabe que había un paciente abierto…");
+      const crudo = JSON.stringify(perf[0]);
+      t.cierto(crudo.indexOf("1098765432") < 0, "…pero la cédula NO aparece por ningún lado en la línea guardada");
     });
 
     t.caso("_iniciarRumObserver: con PerformanceObserver disponible, instala EXACTAMENTE 2 observadores con las opciones correctas", () => {
@@ -958,6 +1077,13 @@ module.exports = {
       c.env.gm["vgl_repq"] = JSON.stringify(filas);
       return filas;
     }
+    // v17.49.0 (D4) — que lotes quedan en la cola, y de que evento. Las pruebas viejas
+    // solo miraban la LONGITUD, asi que no podian distinguir "se retiraron las 4" de
+    // "se retiraron 4 cualesquiera" — ni fijar la regla nueva.
+    function _lotesEnCola(c, evento) {
+      const q = JSON.parse(c.env.gm["vgl_repq"] || "[]");
+      return q.filter((f) => !evento || f.evento === evento).map((f) => f.lote);
+    }
     function _espiarBeacon(c, acepta) {
       const enviados = [];
       c.ctx.navigator = { sendBeacon: (u, b) => { if (!acepta) return false; enviados.push(b && b._t); return true; } };
@@ -971,23 +1097,60 @@ module.exports = {
       return enviados;
     }
 
-    t.caso("_vaciarTelemetriaAlSalir: despacha TODAS las filas pendientes, no solo la primera", () => {
+    // v17.49.0 (D4) — REESCRITAS. Estas dos pruebas nacieron de dos fallos REALES del
+    // transporte por beacon: despachaba solo repQ[0], y no retiraba de la cola la que si
+    // despachaba (asi que el proximo repFlush la reenviaba y salia duplicada). Las dos
+    // propiedades siguen siendo ciertas y siguen fijadas aqui — pero ahora sobre las filas
+    // que de verdad viajan por este camino: las reconstruibles. La evidencia dejo de
+    // viajar por beacon, asi que exigirle "sale por beacon" era fijar el defecto que la
+    // D4 vino a cerrar: darla por entregada sin que nadie confirmara nada.
+    t.caso("_vaciarTelemetriaAlSalir: despacha TODAS las filas reconstruibles, no solo la primera", () => {
       const c = cargar({ silencioso: true });
-      const filas = _colaDemo(c);
+      _colaDemo(c);                                  // fraude L1, ux L2, ux L3, resumen L4
       const enviados = _espiarBeacon(c, true);
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "se despachan las " + filas.length + " filas de la cola, no una sola");
-      t.igual(enviados.length, filas.length, "y salieron de verdad por el transporte");
-      t.cierto(enviados.some((e) => e.includes("resumen")), "el resumen diario, que puede ir al final de la cola, tambien sale");
-      t.cierto(enviados.some((e) => e.includes("fraude")), "y la fila de fraude tambien");
+      t.igual(n, 2, "las DOS filas ux salen, no una sola (era el fallo original)");
+      t.igual(enviados.length, 2, "y salieron de verdad por el transporte");
+      t.falso(enviados.some((e) => e.includes("resumen")), "el resumen es evidencia: no se manda a ciegas");
+      t.falso(enviados.some((e) => e.includes("fraude")), "ni la fila de fraude");
     });
 
-    t.caso("_vaciarTelemetriaAlSalir: la fila despachada se retira de la cola (si no, sale DUPLICADA en el tablero)", () => {
+    t.caso("_vaciarTelemetriaAlSalir: la fila reconstruible despachada se retira de la cola (si no, sale DUPLICADA en el tablero)", () => {
       const c = cargar({ silencioso: true });
       _colaDemo(c);
       _espiarBeacon(c, true);
       c.api._vaciarTelemetriaAlSalir();
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "la cola persistida queda vacia: nada que repFlush pueda reenviar");
+      t.igual(_lotesEnCola(c, "ux"), [], "ninguna ux queda: nada que repFlush pueda reenviar duplicado");
+    });
+
+    t.caso("v17.49.0 (D4): la evidencia NO se despacha por beacon — se queda para el camino que confirma", () => {
+      const c = cargar({ silencioso: true });
+      _colaDemo(c);
+      _espiarBeacon(c, true);
+      c.api._vaciarTelemetriaAlSalir();
+      t.igual(_lotesEnCola(c, "fraude"), ["L1"], "el fraude sigue en la cola, con su lote INTACTO");
+      t.igual(_lotesEnCola(c, "resumen"), ["L4"], "y el resumen diario tambien");
+      t.igual(_lotesEnCola(c), ["L1", "L4"], "y solo esas dos: las ux si salieron");
+    });
+
+    t.caso("v17.49.0 (D4): ocultar y volver veinte veces no duplica ni desborda la evidencia retenida", () => {
+      const c = cargar({ silencioso: true });
+      _colaDemo(c);
+      const enviados = _espiarBeacon(c, true);
+      for (let i = 0; i < 20; i++) c.api._vaciarTelemetriaAlSalir();
+      t.igual(enviados.length, 2, "las ux salen UNA vez; el manejador cuelga de visibilitychange y corre en cada cambio de ventana");
+      t.igual(_lotesEnCola(c), ["L1", "L4"], "la evidencia sigue ahi, una sola vez cada una, sin reencolarse ni multiplicarse");
+    });
+
+    t.caso("v17.49.0 (D4): una cola de PURA evidencia no despacha nada y queda intacta", () => {
+      const c = cargar({ silencioso: true });
+      c.api.__S.reporte = true;
+      c.api.__S.reporteUrl = "https://script.google.com/macros/s/DEMO/exec";
+      c.env.gm["vgl_repq"] = JSON.stringify([{ evento: "error", lote: "E1" }, { evento: "fraude", lote: "E2" }]);
+      const enviados = _espiarBeacon(c, true);
+      t.igual(c.api._vaciarTelemetriaAlSalir(), 0, "no hay nada reconstruible que mandar");
+      t.igual(enviados.length, 0, "y no se manda una sola fila a ciegas");
+      t.igual(_lotesEnCola(c), ["E1", "E2"], "las dos siguen esperando acuse");
     });
 
     t.caso("_vaciarTelemetriaAlSalir: si el navegador rechaza los beacons, NO se pierde ninguna fila", () => {
@@ -1252,8 +1415,9 @@ module.exports = {
       const enviados = _espiarBeacon(c, true);
       c.env.win.localStorage.setItem("vgl_rep_last_ok", new Date().toISOString());
       const n = c.api._vaciarTelemetriaAlSalir();
-      t.igual(n, filas.length, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre");
-      t.igual(JSON.parse(c.env.gm["vgl_repq"]).length, 0, "y las filas salen de la cola, sin duplicados en el tablero");
+      t.igual(n, 2, "el panel confirmó envíos hace < 30 min: el beacon refuerza el cierre con lo reconstruible");
+      t.igual(_lotesEnCola(c, "ux"), [], "y esas filas salen de la cola, sin duplicados en el tablero");
+      t.igual(_lotesEnCola(c).length, 2, "la evidencia se queda: el sello fresco autoriza el beacon, no sustituye al acuse");
     });
 
     t.caso("v17.6.14: reportarError no deja crecer la memoria de huellas por encima del techo (40)", () => {
@@ -1338,5 +1502,34 @@ module.exports = {
       c.api.reportar("ux", { clave: "fn.prueba" });
       t.igual(intentos, 1, "con el fallo hace > 3 min se reintenta (la cola no se queda dormida)");
     });
+    t.caso("v17.16.0 — _repSello, probada de frente: el sello de la telemetría", () => {
+      // Estaba en `cubre` sin que ninguna prueba la nombrara. Es lo que el médico lee en
+      // Ajustes («Último envío confirmado» / «último fallo»), y fue la pieza que durante
+      // nueve días de agosto mostró verde con la hoja vacía: por eso importa que un fallo
+      // deje SIEMPRE una causa legible y no solo un estado.
+      const c = cargar({ silencioso: true });
+      const ls = c.env.win.localStorage;
+
+      c.api._repSello(true);
+      t.cierto(!!ls.getItem("vgl_rep_last_ok"), "un envío bueno deja fecha");
+
+      c.api._repSello(false, "el panel rechazó el token");
+      const err = JSON.parse(ls.getItem("vgl_rep_last_err") || "null");
+      t.cierto(!!err, "un fallo deja su propio registro");
+      t.cierto(/token/.test(err.detalle), "con la CAUSA, no solo con el hecho de que falló");
+      t.cierto(!!err.ts, "y con la hora, para saber si es de hoy");
+
+      // El detalle se acota: un cuerpo de respuesta entero no puede llenar el almacén.
+      c.api._repSello(false, "x".repeat(500));
+      const largo = JSON.parse(ls.getItem("vgl_rep_last_err") || "null");
+      t.igual(largo.detalle.length, 120, "el detalle se corta a 120: un HTML entero no cabe en un sello");
+
+      // Un éxito NO borra el último fallo: los dos sellos conviven a propósito, para que
+      // «funciona ahora» no tape «esta mañana estuvo caído».
+      c.api._repSello(true);
+      t.cierto(!!ls.getItem("vgl_rep_last_err"),
+        "el último fallo sobrevive a un éxito posterior: es historia, no estado");
+    });
+
   }
 };

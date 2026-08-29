@@ -64,11 +64,13 @@ function traducir(entradaPy) {
 module.exports = {
   nombre: "Riesgo CV (4 pasos) y función renal unificada",
   cubre: [
+    "mtrFueraDeMeta", "_mtrMargenMeta", "mtrStatusV68", "mtrSolicitudV68",
     "mtrClasificarRiesgoCv", "mtrContarFrMayores", "mtrContarPotenciadores", "mtrSindromeMetabolico",
     "mtrCriteriosPaso1", "mtrCriteriosPaso2", "mtrAscvdPceCrudo",
     "mtrAscvdFueraDeRangoEtario", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
     "mtrMetasLipidicas", "mtrEvaluarMetaLdl", "mtrLdlBasalDeSerie", "_isoAMs",
     "mtrEvaluarErc", "mtrRemisionNefrologia", "mtrSospechaIra", "mtrPosEstadio",
+    "mtrDmEvolucionConocida", "mtrDmLargaDuracion", "mtrSindromeMetabolico",
   ],
 
   pruebas(t, api) {
@@ -79,9 +81,11 @@ module.exports = {
       t.cierto(d.vectores.length >= 900, "se esperaban al menos 900 vectores, hay " + d.vectores.length);
     });
 
-    t.caso("PISO POR DIABETES: ningún diabético puede quedar por debajo de ALTO (v16.2.9)", () => {
-      // Decisión del médico (20-ago, textual): "sí, todo diabético debe entrar como riesgo
-      // ALTO". Es un PISO: el paso 1 sigue mandando hacia arriba.
+    t.caso("PISO POR DIABETES: el diabético SIN tiempo de evolución no puede quedar por debajo de ALTO", () => {
+      // v16.2.9 — decisión del médico (20-ago, textual): "sí, todo diabético debe entrar
+      // como riesgo ALTO". Es un PISO: el paso 1 sigue mandando hacia arriba.
+      // v17.6.94 — y ahora es CONDICIONAL: solo mientras no conste hace cuántos años tiene
+      // la diabetes. Con el dato manda el consenso; sin él, el piso (ver la prueba de abajo).
       const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
 
       const sinDm = api.mtrClasificarRiesgoCv(Object.assign({}, base));
@@ -90,6 +94,7 @@ module.exports = {
       const conDm = api.mtrClasificarRiesgoCv(Object.assign({}, base, { diabetes: true }));
       t.igual(conDm.categoria, "alto", "el diabético entra en ALTO");
       t.cierto(conDm.pisoPorDiabetes === true, "y queda marcado que fue por el piso");
+      t.cierto(conDm.dmAniosRequerido === true, "y que el piso es provisional por falta de un dato");
       t.cierto(conDm.criterios.some((c) => /diabetes mellitus/i.test(c) && /alto/i.test(c)), "el porqué se dice en pantalla");
 
       // El piso NO puede tapar el paso 1: con daño de órgano blanco sigue subiendo.
@@ -107,6 +112,220 @@ module.exports = {
       // Y la meta de LDL que se deriva baja de 116 a 70: el efecto que motivó todo.
       const metas = api.mtrMetasLipidicas(conDm.categoria, null);
       t.igual(metas.ldl, 70, "meta de LDL <70 (antes, en «bajo», era <116)");
+    });
+
+    // ====== v17.6.97 — LA CINTURA, QUE POR FIN LLEGA AL MOTOR ======
+
+    t.caso("v17.6.97: el 5º criterio del síndrome metabólico deja de ser inevaluable", () => {
+      // Paciente clásico del programa: TG 200, HDL 35, sin más. Sin la cintura solo se
+      // pueden juzgar 4 de los 5 criterios y el veredicto queda en null («con lo que hay
+      // no se puede decidir»). Con la cintura, se decide — en los dos sentidos.
+      const base = { sexo: "M", trigliceridos: 200, hdl: 35, paSistolica: 128, paDiastolica: 82, glicemia: 95 };
+      const sin = api.mtrSindromeMetabolico(base);
+      t.igual(sin.evaluables, 4, "sin cintura solo hay 4 criterios evaluables");
+      t.igual(sin.cumple, null, "y el veredicto queda sin decidir, que es lo honesto");
+
+      const conAlta = api.mtrSindromeMetabolico(Object.assign({}, base, { cinturaCm: 104 }));
+      t.igual(conAlta.evaluables, 5, "con la cintura ya son los cinco");
+      t.igual(conAlta.cumple, true, "y con 104 cm cumple");
+
+      const conNormal = api.mtrSindromeMetabolico(Object.assign({}, base, { cinturaCm: 84 }));
+      t.igual(conNormal.cumple, false,
+        "y con 84 cm se puede DESCARTAR: el dato también sirve para decir que no");
+    });
+
+    t.caso("v17.6.97: el umbral del síndrome metabólico es MAYOR O IGUAL, como dice el consenso", () => {
+      // v68, S2: «Sd metabólico si >=3 de: CA>=90H/>=80M…». Estaba con mayor estricto, así
+      // que el hombre de exactamente 90 cm no sumaba el criterio que la norma sí le cuenta.
+      const h = (ca) => api.mtrSindromeMetabolico({ sexo: "M", cinturaCm: ca, trigliceridos: 200, hdl: 35, paSistolica: 120, paDiastolica: 70, glicemia: 90 });
+      const m = (ca) => api.mtrSindromeMetabolico({ sexo: "F", cinturaCm: ca, trigliceridos: 200, hdl: 55, paSistolica: 120, paDiastolica: 70, glicemia: 90 });
+      t.falso(h(89).criterios.some((c) => /cintura/.test(c)), "hombre 89 cm: no");
+      t.cierto(h(90).criterios.some((c) => /cintura/.test(c)), "hombre 90 cm: SÍ (el borde exacto)");
+      t.falso(m(79).criterios.some((c) => /cintura/.test(c)), "mujer 79 cm: no");
+      t.cierto(m(80).criterios.some((c) => /cintura/.test(c)), "mujer 80 cm: SÍ");
+    });
+
+    t.caso("v17.6.97: la obesidad central cuenta como FR mayor, con SU umbral (no el del síndrome)", () => {
+      // Son dos reglas distintas sobre la misma medida, y v68 las escribe distintas:
+      //   FR mayor:            «obesidad(IMC>=30 o CA>94H/>90M)»   -> estricto
+      //   Síndrome metabólico: «CA>=90H/>=80M»                     -> mayor o igual
+      const fr = (sexo, ca) => api.mtrClasificarRiesgoCv({
+        edad: 55, sexo: sexo, egfrCkdepi: 90, cinturaCm: ca,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 120, paDiastolica: 75,
+      }).conteoFrMayores;
+      t.igual(fr("M", 94), 0, "hombre 94 cm: el umbral es ESTRICTO, todavía no");
+      t.igual(fr("M", 96), 1, "hombre 96 cm: sí");
+      t.igual(fr("F", 90), 0, "mujer 90 cm: todavía no");
+      t.igual(fr("F", 92), 1, "mujer 92 cm: sí");
+      t.igual(fr("M", null), 0, "sin cintura no se infiere nada");
+      // Y lo que ya documentaba el médico a mano sigue mandando.
+      t.igual(api.mtrClasificarRiesgoCv({ edad: 55, sexo: "M", egfrCkdepi: 90, circunferenciaAbdElevada: true,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 120, paDiastolica: 75 }).conteoFrMayores, 1,
+        "la casilla marcada a mano cuenta igual, sin necesidad del número");
+    });
+
+    t.caso("v17.6.97 CABLEADO — la cintura sobrevive a la reclasificación de los 20 s", () => {
+      // Everest sí tiene la casilla, pero el repaso de los 20 s reconstruye los factores
+      // desde el DOM; si la mezcla no la conservara, el dato desaparecería solo. Es el
+      // mismo defecto que v17.6.86 encontró con las frecuencias y v17.6.94 con los años
+      // de diabetes.
+      const previo = api.mtrResumenClinico({
+        hoyIso: "2026-08-27", edad: 58, sexo: "M", pesoKg: 82, creatinina: 1.0,
+        ct: 200, hdl: 35, ldl: 120, paSistolica: 128, paDiastolica: 82,
+        factores: { hta: true, cinturaCm: 104, trigliceridos: 200 },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.0 } },
+      });
+      t.igual(previo.factores.cinturaCm, 104, "el resumen de partida la tiene");
+      t.cierto(!!previo.sindromeMetabolico, "y el síndrome metabólico se calcula");
+      const nuevo = api.mtrRecalcularConFactores(previo, { paSistolica: 132 }, "2026-08-27");
+      t.cierto(!!nuevo, "la reclasificación devolvió algo");
+      t.igual(nuevo.factores.cinturaCm, 104, "y la cintura sigue ahí tras reclasificar");
+    });
+
+    // ====== v17.6.94 — EL TIEMPO DE EVOLUCIÓN DE LA DIABETES ======
+    // Las dos reglas de diabetes del consenso (paso 1 «larga duración», paso 2 «>10 años»)
+    // llevaban desde siempre sin poder dispararse porque nadie alimentaba los campos. El
+    // piso incondicional no corregía el consenso: tapaba esa ceguera.
+
+    t.caso("v17.6.94: saber si SE SABE hace cuánto es diabético es tri-estado", () => {
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: false }), "al no diabético no le falta nada: la pregunta no aplica");
+      t.cierto(api.mtrDmEvolucionConocida({}), "sin diabetes documentada, tampoco");
+      t.falso(api.mtrDmEvolucionConocida({ diabetes: true }), "al diabético sin dato SÍ le falta");
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: true, dmAnios: 0 }), "cero años es un dato, no un vacío");
+      t.cierto(api.mtrDmEvolucionConocida({ diabetes: true, dmLargaDuracion: false }),
+        "y decir explícitamente que NO es de larga evolución también responde la pregunta");
+      t.falso(api.mtrDmEvolucionConocida({ diabetes: true, dmAnios: "" }), "una cadena vacía no es un número de años");
+    });
+
+    t.caso("v17.6.94: «larga duración» sale de los años, y lo que marca el médico manda", () => {
+      t.falso(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 12 }), "12 años todavía no es larga evolución");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 20 }), "20 sí (es el corte exacto)");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 31 }), "y de ahí para arriba");
+      t.cierto(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 3, dmLargaDuracion: true }),
+        "si el médico lo marca a mano, su palabra gana sobre el cálculo");
+      t.falso(api.mtrDmLargaDuracion({ diabetes: true, dmAnios: 40, dmLargaDuracion: false }),
+        "y también gana cuando dice que NO");
+      t.falso(api.mtrDmLargaDuracion({ diabetes: false, dmAnios: 40 }), "sin diabetes, no hay diabetes de larga evolución");
+    });
+
+    t.caso("v17.6.94: CON el dato manda el consenso, y el piso se aparta", () => {
+      const base = { edad: 60, sexo: "M", egfrCkdepi: 75, hta: true, enAntihipertensivos: true,
+        ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85, diabetes: true };
+      const sinDato = api.mtrClasificarRiesgoCv(Object.assign({}, base));
+      t.cierto(sinDato.pisoPorDiabetes === true, "sin el dato, piso provisional");
+
+      const cinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 5 }));
+      t.cierto(!cinco.pisoPorDiabetes, "con 5 años el piso ya no interviene");
+      t.cierto(cinco.dmAniosRequerido !== true, "ni queda pidiendo el dato que ya tiene");
+
+      const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
+      t.igual(doce.categoria, "alto", "12 años + al menos un factor: ALTO por el paso 2");
+      t.igual(doce.paso, 2, "y por el paso 2, no por un piso");
+      t.cierto(doce.criterios.some((c) => /10 años/.test(c)), "citando la regla del consenso");
+
+      const veinticinco = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 25 }));
+      t.igual(veinticinco.categoria, "muy alto", "25 años es larga evolución: MUY ALTO por el paso 1");
+      t.igual(veinticinco.paso, 1, "y por el paso 1");
+    });
+
+    t.caso("v17.6.94: tener la diabetes hace MÁS tiempo nunca baja de categoría", () => {
+      // El hueco de redacción de v68: el paso 3 decía «DM<10a sin FR», así que un diabético
+      // de 12 años SIN ningún otro factor no lo recogía ni el paso 1 (CONTEO=0, sin daño de
+      // órgano, no llega a larga evolución), ni el paso 2 (exige CONTEO>=1), ni el paso 3
+      // (lo dejaba fuera por pasar de 10) — y salía BAJO, mientras que con 5 años salía
+      // MODERADO. Aquí se comprueba que la escalera solo sube.
+      const orden = { bajo: 0, moderado: 1, alto: 2, "muy alto": 3 };
+      const base = { edad: 52, sexo: "M", egfrCkdepi: 88, diabetes: true,
+        ct: 190, hdl: 50, ldl: 110, paSistolica: 120, paDiastolica: 75 };
+      let previo = -1, detalle = [];
+      for (const a of [0, 5, 9, 10, 12, 19, 20, 30]) {
+        const r = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: a }));
+        const n = orden[r.categoria];
+        detalle.push(a + "a=" + r.categoria);
+        t.cierto(n !== undefined, a + " años debía dar categoría (obtuvo " + r.categoria + ")");
+        t.cierto(n >= previo, "a los " + a + " años bajó de categoría respecto al tramo anterior · " + detalle.join(" "));
+        previo = n;
+      }
+      // Y en concreto: el caso que estaba roto.
+      const doce = api.mtrClasificarRiesgoCv(Object.assign({}, base, { dmAnios: 12 }));
+      t.igual(doce.categoria, "moderado", "el diabético de 12 años sin otros factores ya no cae a BAJO");
+      t.cierto(doce.criterios.some((c) => /sin otros factores de riesgo mayores/.test(c)),
+        "y el porqué se dice sin el techo de años");
+    });
+
+    // =====================================================================
+    // v17.52.0 — D7: LA ALBUMINURIA MODERADA (A2) SUBE A ALTO POR SÍ SOLA.
+    // Decisión del médico del 29-ago, textual: "A2 (30-300) sube a ALTO por sí sola".
+    // Antes solo pesaba dentro de la rama de diabetes, así que un hipertenso NO diabético
+    // con RAC 45 no subía de categoría por su albuminuria.
+    // =====================================================================
+    t.caso("v17.52.0 (D7): un RAC de 45 sube a ALTO a quien no es diabético", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
+      t.igual(api.mtrClasificarRiesgoCv(base).categoria, null, "sin albuminuria y sin insumos, el paso 4 no puede clasificar");
+      const conA2 = api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: 45 }));
+      t.igual(conA2.categoria, "alto", "con RAC 45 sube a alto sin necesitar diabetes");
+      t.igual(conA2.paso, 2, "y lo hace por el paso 2, no por otro");
+      t.cierto(conA2.criterios.some((c) => /A2/.test(c)), "y el porqué se dice: " + JSON.stringify(conA2.criterios));
+    });
+
+    t.caso("v17.52.0 (D7): la meta de LDL baja de 100 a 70 con ese solo dato", () => {
+      // La escala del paso 4 (ASCVD ajustada a Colombia) deja a este paciente en moderado;
+      // se le añade SOLO la albuminuria y nada más.
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      const sin = api.mtrClasificarRiesgoCv(base);
+      const con = api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: 45 }));
+      t.igual(sin.categoria, "moderado", "por la escala del paso 4: moderado");
+      t.igual(con.categoria, "alto", "el mismo paciente más su albuminuria: alto");
+      t.igual(con.paso, 2, "y deja de decidirlo la escala: lo decide el paso 2");
+      t.igual(api.mtrMetasLipidicas(sin.categoria).ldl, 100);
+      t.igual(api.mtrMetasLipidicas(con.categoria).ldl, 70, "la conducta que cambia de verdad: la meta");
+    });
+
+    t.caso("v17.52.0 (D7): los bordes exactos — 29 no, 30 sí, 299 sí, 300 sube más (muy alto)", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90 };
+      const cat = (rac) => api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac })).categoria;
+      t.igual(cat(29), null, "29 es A1: no es albuminuria y no sube nada");
+      t.igual(cat(30), "alto", "30 es el borde de A2");
+      t.igual(cat(299), "alto", "299 sigue siendo A2");
+      t.igual(cat(300), "muy alto", "300 es A3: macroalbuminuria, y ya subía sola al paso 1");
+      t.igual(cat(1200), "muy alto");
+    });
+
+    t.caso("v17.52.0 (D7): un RAC que NADIE midió no es un RAC normal", () => {
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      t.igual(api.mtrClasificarRiesgoCv(base).categoria, "moderado", "sin el campo: se queda donde estaba");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: null })).categoria, "moderado", "con el campo en nulo, igual");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: "" })).categoria, "moderado", "y con el campo vacío, igual: ausente no es negativo");
+      t.igual(api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac: "no se tomó" })).categoria, "moderado", "ni un texto que no es un número");
+    });
+
+    t.caso("v17.52.0 (D7): el paso 2 NO se cuelga la macroalbuminuria — esa es del paso 1", () => {
+      // Vista desde el clasificador esta frontera es invisible (un RAC>=300 nunca llega al
+      // paso 2: el paso 1 ya lo paró). Se comprueba llamando al paso 2 directamente, que es
+      // donde la regla vive: si no, el borde superior seria una mutacion que nadie caza.
+      t.igual(api.mtrCriteriosPaso2({ rac: 45 }, 0), ["Albuminuria moderada (RAC 30-299 mg/g, A2)"]);
+      t.igual(api.mtrCriteriosPaso2({ rac: 299 }, 0).length, 1, "299 sigue siendo A2");
+      t.igual(api.mtrCriteriosPaso2({ rac: 300 }, 0), [], "300 es A3 y le corresponde al paso 1, no a este");
+      t.igual(api.mtrCriteriosPaso2({ rac: 1200 }, 0), [], "ni la macroalbuminuria franca");
+      t.igual(api.mtrCriteriosPaso2({ rac: 29 }, 0), [], "29 es A1: no hay criterio");
+    });
+
+    t.caso("v17.52.0 (D7): el RAC vale igual si Athenea lo manda como texto", () => {
+      // Los valores de laboratorio llegan del portal como cadenas. Si el numero no se
+      // normaliza antes de compararlo, "45" funciona por casualidad (JavaScript lo convierte)
+      // pero cualquier variante deja de subir al paciente, en silencio.
+      const base = { edad: 55, sexo: "M", egfrCkdepi: 90, ascvd10yCrudo: 20 };
+      const cat = (rac) => api.mtrClasificarRiesgoCv(Object.assign({}, base, { rac })).categoria;
+      t.igual(cat(45), "alto", "como número");
+      t.igual(cat("45"), "alto", "y como texto, el mismo paciente y la misma conducta");
+      t.igual(cat("45.5"), "alto", "con decimal");
+      t.igual(cat("29"), "moderado", "y el borde de abajo se respeta también en texto");
+    });
+
+    t.caso("v17.52.0 (D7): el paso 1 sigue mandando — un A2 con ECV establecida NO se queda en alto", () => {
+      const r = api.mtrClasificarRiesgoCv({ edad: 55, sexo: "M", egfrCkdepi: 90, rac: 45, ecvAterescleroticaEstablecida: true });
+      t.igual(r.categoria, "muy alto", "la regla nueva vive en el paso 2 y el clasificador para en el primero que se cumple");
+      t.igual(r.paso, 1);
     });
 
     t.caso("los 4 pasos reproducen al Copiloto vector a vector", () => {
@@ -132,8 +351,14 @@ module.exports = {
         const js = api.mtrClasificarRiesgoCv(traducir(v.entrada));
         const py = v.salida;
 
-        if (v.entrada && v.entrada.diabetes === true
-            && py.categoria !== "alto" && py.categoria !== "muy alto") {
+        // v17.6.94 — la excepción se estrecha al caso que la justifica: el piso solo
+        // aplica al diabético cuyo TIEMPO DE EVOLUCIÓN no consta. Un vector dorado que sí
+        // lo traiga vuelve a compararse contra el Copiloto como cualquier otro — si algún
+        // día el corpus incorpora esos casos, esta suite los verá en vez de taparlos.
+        const _dmSinEvolucion = v.entrada && v.entrada.diabetes === true
+          && (v.entrada.dm_anios === null || v.entrada.dm_anios === undefined)
+          && (v.entrada.dm_larga_duracion === null || v.entrada.dm_larga_duracion === undefined);
+        if (_dmSinEvolucion && py.categoria !== "alto" && py.categoria !== "muy alto") {
           if (js.categoria !== "alto") {
             desviacionesPiso.push("diabético que NO quedó en alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
           }
@@ -148,6 +373,26 @@ module.exports = {
             && py.categoria !== "alto" && py.categoria !== "muy alto") {
           if (js.categoria !== "alto") {
             desviacionesPiso.push("mayor de 79 que NO quedó en alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
+          }
+          continue;
+        }
+
+        // v17.52.0 — EXCEPCIÓN (E): ALBUMINURIA MODERADA COMO EJE. Decisión clínica del
+        // médico del 29-ago-2026, textual: "A2 (30-300) sube a ALTO por sí sola". El
+        // Copiloto original solo contaba la albuminuria moderada como daño de órgano blanco
+        // DENTRO de la rama de diabetes, así que un no diabético con RAC 45 se quedaba donde
+        // estuviera. El eje CGA de KDIGO la trata como eje propio, independiente del
+        // filtrado y del diagnóstico de base.
+        //
+        // Igual de estrecha que las anteriores: solo tapa a los A2 que el Copiloto dejaba
+        // POR DEBAJO de alto. Un A2 que allá salía "muy alto" y aquí saliera otra cosa SIGUE
+        // siendo una desviación y rompe la suite, como debe ser. Y exige que el RAC exista:
+        // un vector sin RAC no entra por aquí.
+        const _racPy = (v.entrada && typeof v.entrada.rac === "number") ? v.entrada.rac : null;
+        if (_racPy !== null && _racPy >= 30 && _racPy < 300
+            && py.categoria !== "alto" && py.categoria !== "muy alto") {
+          if (js.categoria !== "alto") {
+            desviacionesPiso.push("A2 que NO quedó en alto: " + js.categoria + " · " + JSON.stringify(v.entrada));
           }
           continue;
         }
@@ -180,12 +425,21 @@ module.exports = {
       // La excepción no puede quedar huérfana: si algún día deja de aplicarse a nadie,
       // es que el corpus cambió y hay que revisar si el piso sigue haciendo falta.
       const nDia = d.vectores.filter((v) => v.entrada && v.entrada.diabetes === true
+        && (v.entrada.dm_anios === null || v.entrada.dm_anios === undefined)
+        && (v.entrada.dm_larga_duracion === null || v.entrada.dm_larga_duracion === undefined)
         && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
       t.cierto(nDia > 0, "la excepción del piso por diabetes sigue ejercitándose (" + nDia + " vectores)");
       const nEdad = d.vectores.filter((v) => v.entrada && typeof v.entrada.edad === "number" && v.entrada.edad > 79
         && v.entrada.diabetes !== true
         && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
       t.cierto(nEdad > 0, "la excepción del piso por edad sigue ejercitándose (" + nEdad + " vectores)");
+      // v17.52.0 — misma guarda para la excepción (E): si el corpus dejara de tener A2 por
+      // debajo de alto, la excepción quedaría huérfana y habría que revisarla en vez de
+      // arrastrarla. Medido al escribirla: 2 vectores (RAC 45, ambos "moderado" allá).
+      const nA2 = d.vectores.filter((v) => v.entrada && typeof v.entrada.rac === "number"
+        && v.entrada.rac >= 30 && v.entrada.rac < 300
+        && v.salida.categoria !== "alto" && v.salida.categoria !== "muy alto").length;
+      t.cierto(nA2 > 0, "la excepción de albuminuria A2 sigue ejercitándose (" + nA2 + " vectores)");
     });
 
     t.caso("excepción (B): el corpus NO puede ejercitarla, y esa es la razón de que exista", () => {
@@ -303,6 +557,74 @@ module.exports = {
       t.igual(r2.count, 3, "+ HDL bajo (35<40 en hombre) = 3");
       t.igual(r2.cumple, true, "3 de 5: cumple");
       t.cierto(r2.criterios.some((c) => c.includes("cintura")) && r2.criterios.some((c) => c.includes("triglic")) && r2.criterios.some((c) => c.includes("HDL")));
+    });
+
+    // ===== v17.6.92 — el síndrome metabólico existía y NO CONTABA =====
+    //
+    // `mtrSindromeMetabolico` llevaba versiones escrita y con CERO llamadores en producción.
+    // Es uno de los diez factores de riesgo mayores del consenso, y sumaba cero siempre.
+    // Verificado con el harness sobre el paciente clásico del programa (hipertenso tratado,
+    // sedentario, TG 200, HDL 35, glicemia 105, NO diabético): el cálculo decía `cumple:true`
+    // con cuatro de cinco criterios, pero el conteo salía en 2 y el paciente se clasificaba
+    // **BAJO con meta de LDL 116**. Con su punto cruza el CONTEO>=3 del Paso 2: ALTO, meta
+    // <70. Y de la meta salen la falla terapéutica, las vigencias y las fechas de toma.
+    //
+    // De paso, al clasificador no le llegaban TRIGLICÉRIDOS ni GLICEMIA, que son dos de los
+    // cinco criterios: sin ellos el cálculo no podía ni intentarse.
+    const clasico = (over, factOver) => api.mtrResumenClinico(Object.assign({
+      hoyIso: "2026-08-27", edad: 55, sexo: "M", pesoKg: 88, creatinina: 0.9,
+      ct: 230, hdl: 35, ldl: 140, paSistolica: 142, paDiastolica: 90,
+      ultimos: { CREATININA: { fecha: "2026-08-01", valor: 0.9 } },
+      factores: Object.assign({ hta: true, sedentarismo: true, enAntihipertensivos: true, diabetes: false }, factOver || {}),
+    }, over || {}));
+
+    t.caso("v17.6.92: el síndrome metabólico cuenta como factor mayor y cambia la categoría", () => {
+      const r = clasico({ tg: 200, glicemia: 105 });
+      t.igual(r.sindromeMetabolico.cumple, true, "el cálculo concluye que cumple");
+      t.igual(r.factores.prediabetesSdMetabolico, true, "y llega al clasificador como factor");
+      t.igual(r.riesgo.conteoFrMayores, 3, "el conteo sube de 2 a 3");
+      t.igual(r.riesgo.categoria, "alto", "y con CONTEO>=3 el Paso 2 lo hace ALTO");
+      t.igual(r.meta.metas.ldl, 70, "meta de LDL 70, no 116");
+      // El médico tiene que poder ver POR QUÉ: un factor sin explicación es indistinguible
+      // de uno inventado.
+      t.cierto(r.sindromeMetabolico.criterios.length >= 3, "y viaja el detalle de los criterios");
+      t.cierto(r.sindromeMetabolico.criterios.some((x) => /triglic/i.test(x)), "nombrando cuáles: " + JSON.stringify(r.sindromeMetabolico.criterios));
+    });
+
+    t.caso("v17.6.92: los triglicéridos y la glicemia llegan al clasificador", () => {
+      // Del ctx si el llamador los trae…
+      const directo = clasico({ tg: 200, glicemia: 105 });
+      t.igual(directo.factores.trigliceridos, 200, "triglicéridos del ctx");
+      t.igual(directo.factores.glicemia, 105, "glicemia del ctx");
+      // …y si no, del último resultado, que es de donde sale el resto del motor.
+      const deUltimos = clasico({
+        ultimos: {
+          CREATININA: { fecha: "2026-08-01", valor: 0.9 },
+          TRIGLICERIDOS: { fecha: "2026-08-01", valor: 210 },
+          GLUCOSA: { fecha: "2026-08-01", valor: 110 },
+        },
+      });
+      t.igual(deUltimos.factores.trigliceridos, 210, "triglicéridos del último resultado");
+      t.igual(deUltimos.factores.glicemia, 110, "glicemia del último resultado");
+      t.igual(deUltimos.sindromeMetabolico.cumple, true, "y con eso el cálculo ya puede concluir");
+    });
+
+    // LA REGLA QUE NO SE PUEDE EQUIVOCAR: `cumple` es tri-estado. Un `null` significa "con lo
+    // que hay no se puede decidir" y NO cuenta ni a favor ni en contra. Contarlo sería
+    // inferir un factor de riesgo, y de ahí sale una meta de LDL más estricta.
+    t.caso("v17.6.92: un síndrome metabólico SIN DECIDIR no cuenta como factor", () => {
+      const sinDecidir = clasico({ tg: 100, glicemia: 85 });
+      t.igual(sinDecidir.sindromeMetabolico.cumple, null, "el vector es el que debe ser: sin decidir");
+      t.falso(sinDecidir.factores.prediabetesSdMetabolico === true, "no se marca el factor");
+      t.igual(sinDecidir.riesgo.conteoFrMayores, 2, "y el conteo no sube");
+      t.igual(sinDecidir.riesgo.categoria, "bajo", "la categoría se queda donde estaba");
+    });
+
+    t.caso("v17.6.92: si el médico ya documentó el factor, el cálculo no se lo pisa", () => {
+      const marcado = clasico({}, { prediabetesSdMetabolico: true });
+      t.igual(marcado.sindromeMetabolico.cumple, null, "el cálculo no concluye…");
+      t.igual(marcado.factores.prediabetesSdMetabolico, true, "…pero lo que el médico documentó manda");
+      t.igual(marcado.riesgo.conteoFrMayores, 3, "y sigue contando");
     });
 
     t.caso("mtrSindromeMetabolico: los cortes de cintura y HDL son distintos por sexo", () => {
@@ -480,12 +802,22 @@ module.exports = {
       t.igual(r.enMeta, null, "ni true ni false: null");
     });
 
-    t.caso("falla terapéutica a meta+15% y grave a meta+30%", () => {
-      const leve = api.mtrEvaluarMetaLdl("alto", 81, null);   // 70 * 1.15 = 80.5
-      t.cierto(leve.falla, "81 supera 80.5");
-      t.falso(leve.fallaGrave, "81 no llega a 91");
-      const grave = api.mtrEvaluarMetaLdl("alto", 92, null);  // 70 * 1.30 = 91
-      t.cierto(grave.fallaGrave, "92 supera 91");
+    // v17.54.0 (D9) — esta función tenía el 1.15 y el 1.30 ESCRITOS A MANO, sin pasar por la
+    // constante: era una cuarta puerta del margen que ninguna medición había encontrado, y
+    // alimenta (vía mtrEducationFlags) la hoja educativa que el paciente se lleva impresa.
+    // Ahora lee el mismo número que las otras tres. El escalón del 30 % NO se toca aquí:
+    // esa es la decisión D10, pendiente.
+    // v17.55.0 — se retiran las aserciones sobre `fallaGrave`: ese campo YA NO EXISTE. Con la
+    // D10, «grave» deja de ser un porcentaje y pasa a ser la regla renal, que esta función no
+    // puede evaluar (no recibe filtrado ni edad). Mantenerlo habría dejado dos definiciones
+    // distintas de «grave» conviviendo sobre el mismo paciente.
+    t.caso("v17.55.0 (D9+D10): la meta de LDL declara falla por encima de la meta, y ya no opina sobre la gravedad", () => {
+      t.falso(api.mtrEvaluarMetaLdl("alto", 70, null).falla, "justo en la meta de «alto» (70) no hay falla");
+      t.cierto(api.mtrEvaluarMetaLdl("alto", 71, null).falla, "71 ya es falla — antes hacía falta pasar de 80,5");
+      t.cierto(api.mtrEvaluarMetaLdl("alto", 80, null).falla, "y 80, el caso de la franja callada, también");
+      t.igual(api.mtrEvaluarMetaLdl("alto", 260, null).fallaGrave, undefined,
+        "la gravedad ya no se decide aquí: la decide mtrGravedadFalla con la regla renal");
+      t.igual(api.mtrEvaluarMetaLdl("alto", 92, null).fallaGrave, undefined, "ni siquiera muy por encima");
     });
 
     // ================= FUNCIÓN RENAL =================
@@ -565,5 +897,99 @@ module.exports = {
       const h = api.mtrEvaluarErc({ edad: 60, sexo: "Hombre", pesoKg: 70, creatinina: 1.0 });
       t.cierto(m.crcl < h.crcl, "la mujer debía tener menor CrCl por el factor 0.85");
     });
+    t.caso("v17.16.0 — mtrFueraDeMeta: el umbral de meta+15 %, probado de frente", () => {
+      // Estaba entre las «sin cubrir» y decide una conducta: es el umbral con el que se
+      // declara FALLA TERAPÉUTICA y con el que se acorta la vigencia. La decisión del
+      // médico (20-ago, #4 de las ambigüedades) fue UN SOLO umbral —meta+15 %— para las
+      // dos cosas, en vez de «estrictamente > meta» para una y meta+15 % para la otra.
+      // v17.54.0 (D9) — el margen se retira por decisión del médico del 29-ago, que revoca
+      // la suya del 20-ago citada arriba. La prueba no se borra: pasa a fijar el contrato
+      // nuevo, que es el mismo en las dos puertas (acortar la vigencia y declarar falla).
+      t.igual(api._mtrMargenMeta(), 0, "sin margen: por encima de la meta ya cuenta");
+
+      // LDL en riesgo muy alto: meta 55 → el corte está EN la meta.
+      const muyAlto = { categoriaRiesgo: "muy alto" };
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 55, muyAlto), "justo en la meta no es falla");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 56, muyAlto), "un punto por encima ya lo es");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 63, muyAlto),
+        "la franja 55,1-63,25, que el margen del 15 % callaba, ahora se marca");
+
+      // La misma cifra sigue cambiando de veredicto con la categoría: 70 está en meta para
+      // «alto» y fuera para «muy alto». Por eso la categoría no se puede suponer.
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 70, { categoriaRiesgo: "alto" }), "70 es justo la meta de «alto»");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 70, muyAlto), "y está por encima de la de «muy alto»");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, { categoriaRiesgo: "alto" }),
+        "80 con meta 70: el caso que antes se callaba");
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 200, {}), null,
+        "SIN categoría no se juzga: no se inventa una meta, se devuelve null");
+
+      // v17.28.0 — encargo del médico (28-ago): TRIGLICÉRIDOS SALE de esta regla — no debe
+      // disparar por sí solo, solo arrastrarse con el grupo lipídico (mecanismo aparte,
+      // MTR_GRUPO_LIPIDOS). Ya no tiene meta propia aquí: null pase lo que pase.
+      t.igual(api.mtrFueraDeMeta("TRIGLICERIDOS", 170, {}), null,
+        "triglicéridos ya no dispara por su cuenta — sin meta propia en esta regla");
+      t.igual(api.mtrFueraDeMeta("TRIGLICERIDOS", 500, {}), null,
+        "ni siquiera muy alto: la única vía para triglicéridos es arrastrarse con el grupo, no aquí");
+
+      // HbA1c: solo tiene sentido en diabéticos. Meta 7,0 → v17.54.0 (D9): el corte ES 7,0.
+      t.igual(api.mtrFueraDeMeta("HBA1C", 12, { esDm2: false }), null,
+        "en un hipertenso sin diabetes la HbA1c NO se mide contra 7,0");
+      t.falso(api.mtrFueraDeMeta("HBA1C", 7, { esDm2: true }), "justo en 7,0 sigue siendo meta cumplida");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8, { esDm2: true }),
+        "8,0 estaba en la franja 7,1-8,05 que el margen callaba: ahora se marca");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.1, { esDm2: true }), "y 8,1 con más razón");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 7 }), "con meta individual explícita, igual");
+      // La meta individual más laxa (el paciente añoso al que el médico le fija 8,0) sigue
+      // mandando: con ella, 7,9 está EN meta aunque contra la general de 7,0 estaría fuera.
+      // v17.54.0: la comprobación cambia de cifras porque el margen desaparece, pero lo que
+      // fija —que la meta del médico manda sobre la general— es exactamente lo mismo.
+      t.falso(api.mtrFueraDeMeta("HBA1C", 7.9, { esDm2: true, metaHba1c: 8 }),
+        "una meta individual más laxa se respeta en vez de ignorarse");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 7.9, { esDm2: true }),
+        "el mismo valor, sin esa meta individual, sí está fuera de la general");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
+        "y por encima de la individual también se marca: laxa no es ilimitada");
+
+      // v17.28.0 — GLICEMIA ENTRA (encargo del médico, 28-ago): meta 130, mismo margen del
+      // 15% que el resto ("una sola vara") → corte en 149,5. Solo en diabéticos, igual que
+      // HbA1c — un hipertenso sin diabetes no tiene "glicemia fuera de meta".
+      t.igual(api.mtrFueraDeMeta("GLUCOSA", 200, { esDm2: false }), null,
+        "en un hipertenso sin diabetes la glicemia NO se mide contra 130");
+      // v17.54.0 (D9): el corte era 149,5 con el margen; ahora es la meta misma, 130.
+      t.falso(api.mtrFueraDeMeta("GLUCOSA", 130, { esDm2: true }), "justo en la meta sigue siendo meta cumplida");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 131, { esDm2: true }), "131 abre la franja 131-149,5 que antes se callaba");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true }), "y 149, que estaba justo debajo del viejo corte");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 150, { esDm2: true }), "150 con más razón");
+
+      // Sin resultado, y con claves que no tienen meta, no se opina.
+      t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", null, muyAlto), null, "sin cifra no se juzga");
+      t.igual(api.mtrFueraDeMeta("CREATININA", 1.6, muyAlto), null, "la creatinina no tiene «meta» que incumplir");
+      t.igual(api.mtrFueraDeMeta("RAC", 45, muyAlto), null,
+        "el RAC tampoco: tiene su propio mecanismo de acortamiento, no este");
+    });
+
+    t.caso("v17.16.0 — mtrStatusV68 y mtrSolicitudV68: cuando NO se pudo clasificar, se dice", () => {
+      // Estaban entre las «sin cubrir» y son la pieza que impide que la nota clínica hable
+      // de una categoría de riesgo que nunca se calculó. Sin categoría no hay meta de LDL,
+      // y sin meta no hay falla terapéutica: afirmar una categoría inventada arrastra todo.
+      t.igual(api.mtrStatusV68({ riesgo: {} }), "PENDIENTE", "sin categoría, PENDIENTE");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: null } }), "PENDIENTE", "con categoría null, igual");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "" } }), "PENDIENTE", "y con cadena vacía");
+      t.igual(api.mtrStatusV68({ riesgo: { categoria: "alto", datosCompletos: false } }), "PENDIENTE",
+        "con la categoría puesta pero los datos incompletos, TAMBIÉN pendiente: una categoría sobre datos a medias no es una clasificación");
+      t.falso(api.mtrStatusV68({ riesgo: { categoria: "alto" }, meta: {} }) === "PENDIENTE",
+        "con categoría y datos, deja de estar pendiente");
+
+      // Y la solicitud dice QUÉ falta, en vez de dejar al médico adivinando.
+      t.cierto(/ASCVD/.test(api.mtrSolicitudV68({ riesgo: { requiereAscvd: true } })),
+        "si los pasos 1-3 no clasificaron, se le pide el ASCVD crudo");
+      t.cierto(/TFG/.test(api.mtrSolicitudV68({ riesgo: { motivo: "tfg_requerida" } })),
+        "si falta la función renal, se le pide");
+      t.cierto(/años/.test(api.mtrSolicitudV68({ riesgo: { dmAniosRequerido: true } })),
+        "y si falta hace cuántos años tiene diabetes, se dice que el ALTO es provisional");
+      t.igual(api.mtrSolicitudV68({ riesgo: {} }), "",
+        "sin nada que pedir, cadena vacía: nunca una solicitud vacía que el modelo copie");
+    });
+
   },
 };

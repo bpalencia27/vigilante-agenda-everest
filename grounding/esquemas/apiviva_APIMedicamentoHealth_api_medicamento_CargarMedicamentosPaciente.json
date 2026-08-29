@@ -51,7 +51,7 @@
         },
         "descripcion": {
           "tipo": "string(33 car)",
-          "ejemplo": "RICMAR CHIQUINQUIRA PARRA QUEVEDO"
+          "ejemplo": "PROFESIONAL DE PRUEBA DOS"
         },
         "codigo": {
           "tipo": "string(3 dígitos)",

@@ -1,9 +1,12 @@
 {
   "name": "vigilante-agenda-everest",
-  "version": "17.6.82",
+  "version": "17.56.0",
   "description": "Banco de pruebas del Vigilante",
   "private": true,
   "scripts": {
     "test": "node tests/runner.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }

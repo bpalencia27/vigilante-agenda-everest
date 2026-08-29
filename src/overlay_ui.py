@@ -175,13 +175,13 @@ class VigilanteOverlayUI:
 if __name__ == "__main__":
     ui = VigilanteOverlayUI()
     ui.update_appointments([
-        {"time_str": "07:00 AM", "doc_id": "21448257", "name": "ROSADEL CONSUELO RESTREPO",
-         "status": "En Sala", "color": "VERDE", "key": "21448257",
+        {"time_str": "07:00 AM", "doc_id": "20111222", "name": "PACIENTE DE PRUEBA UNO",
+         "status": "En Sala", "color": "VERDE", "key": "20111222",
          "pym_activities": ["Tamización cérvix", "Tamización mama", "Cita Odontología"]},
-        {"time_str": "07:20 AM", "doc_id": "1128397873", "name": "LUIS ALFONSO TAPIAS RIVERA",
-         "status": "Sin presentarse", "color": "AMBAR", "key": "1128397873",
+        {"time_str": "07:20 AM", "doc_id": "1011122233", "name": "PACIENTE DE PRUEBA DOS",
+         "status": "Sin presentarse", "color": "AMBAR", "key": "1011122233",
          "pym_activities": ["Tamización VIH"]},
-        {"time_str": "07:40 AM", "doc_id": "7379688", "name": "JOSE LUIS DURANGO",
-         "status": "En Sala", "color": "ROJO", "key": "7379688", "pym_activities": []},
+        {"time_str": "07:40 AM", "doc_id": "7011122", "name": "PACIENTE DE PRUEBA TRES",
+         "status": "En Sala", "color": "ROJO", "key": "7011122", "pym_activities": []},
     ])
     ui.run()

@@ -1,55 +1,118 @@
-# Funciones Huérfanas (Sin llamadas en producción)
+# Funciones Huérfanas — ⚠️ DOCUMENTO HISTÓRICO, NO ES UNA LISTA DE BORRADO
 
-## Método de la Auditoría
-
-- **Base de escaneo:** Rama `claude/v14-continuacion` (commit actual, no la base congelada).
-- **Herramienta utilizada:** Script en Node.js que construye un AST del código fuente utilizando la librería `acorn` y `acorn-walk`.
-- **Declaraciones examinadas:** Se analizaron un total de **441** declaraciones de funciones.
-- **Formas cubiertas:**
-  - `function nombre() {}` (383 declaraciones)
-  - `const/let nombre = () => {}` y `const/let nombre = function() {}` (50 declaraciones flecha o expresiones anónimas asignadas)
-  - Declaraciones de propiedades en objetos como `nombre: function() {}` o `nombre: () => {}` (8 declaraciones)
-- **Exclusiones aplicadas:**
-  - Funciones genéricas del ciclo de vida y arrays que son llamadas nativamente por el navegador o librerías: `onload`, `onerror`, `ontimeout`, `constructor`, `subscribe`, `set`, `push`.
-  - Exportaciones específicas usadas exclusivamente para el test harness (`__VGL__`).
-  - Llamadas recursivas (la función invocándose a sí misma no cuenta como llamada de producción si nadie más la invoca).
-
-## Tabla de Resultados
-
-A continuación, se listan todas las funciones declaradas en `vigilante_agenda.user.js` que no tienen referencias en el código de producción.
-
-| Función | Línea | Categoría | Qué creo que iba a hacer (Análisis) |
-| :--- | :--- | :--- | :--- |
-| `_conductaBuscarYAgregarExamen` | 1241 | Deuda muerta | Iba a buscar en el DOM de la UI elementos `<li>` que coincidieran de forma exacta con un nombre de laboratorio, y les iba a hacer click para agregarlos. Su diseño intentaba evitar falsos positivos. |
-| `vigenciaPorEstadio` | 3286 | Deuda muerta | Iba a calcular la vigencia en días/meses permitida para un analito específico basándose en el estadio (ej. ERC), verificando precondiciones como el programa o si el paciente padece de DM2. |
-| `analitoTablaDesdeClaveRcv` | 3316 | Deuda muerta | Iba a servir como un mapa de traducción seguro para convertir las claves nativas del sistema RCV (`CREATININA`) a las llaves semánticas de la tabla local en el script (`creatinina`). |
-| `_getRacGuardiaParaTest` | 3366 | Costura de prueba | Función diseñada exclusivamente para exponer el estado interno de la guarda `_racGuardia` al conjunto de tests (__VGL__). |
-| `_setRacGuardiaParaTest` | 3367 | Costura de prueba | Función diseñada para permitir a los tests inyectar valores manipulados dentro del estado `_racGuardia` y simular escenarios. |
-| `debounceVgl` | 3823 | Deuda muerta | Utilidad genérica clásica de `debounce` para retrasar la ejecución de una función, útil para mitigar repeticiones de flujos rápidos. |
-| `_getUltimoRelevoParaTest` | 4280 | Costura de prueba | Función de helper diseñada para que el entorno de test pudiera leer la variable `_ultimoRelevoVisibilidad`. |
-| `_setUltimoRelevoParaTest` | 4281 | Costura de prueba | Función de helper diseñada para alterar el valor de la variable de estado `_ultimoRelevoVisibilidad` durante simulaciones en los tests. |
-| `panelActivities` | 4387 | A medio enganchar | Iba a filtrar una lista de etiquetas/actividades removiendo ramas no pertinentes. Se mantiene sin llamador aquí porque los comentarios del código indican expresamente que "T5 la reconecta para el propio widget". |
-| `_getFirmaPropiaParaTest` | 5346 | Costura de prueba | Función de helper de tests para leer el estado del token interno `_firmaPropia`. |
-| `_setFirmaPropiaParaTest` | 5347 | Costura de prueba | Función de helper para inyectar o alterar el valor de `_firmaPropia` desde la suite de pruebas. |
-| `apiDigiturnoFinalizarTicket` | 10230 | Deuda muerta | Iba a hacer un request por XHR/fetch hacia la API `ApiIntegracionEverestDigiturno` para indicar la conclusión del ticket del paciente, con capacidad de escritura. |
-| `_signosVitalesInvalidar` | 10299 | Deuda muerta | Iba a destruir/limpiar la caché interna `_signosVitalesCache` reiniciando su TS y vaciando sus datos. |
-| `apiHcValidacionExamenCronicos` | 10315 | Deuda muerta | Iba a hacer una petición a la API de la IPS (GetValidacionExamenCronicos). Esta es una segunda vía abandonada, ya que la tabla oficial ya llega por el interceptor `_instalarOyenteTablaOficial` que intercepta las peticiones que hace Everest nativamente. |
-| `_demograficosInvalidar` | 10459 | Deuda muerta | Iba a limpiar la caché interna demográfica del paciente para obligar a un re-fetch. Su definición no tiene ningún llamador en el código. **(Acierto del analizador J3)**. |
-| `calcTargetDateRange` | 10936 | A medio enganchar | Deriva un objeto de rango de fechas (±3 días hábiles). Aunque está huérfana en este hilo de ejecución principal, comentarios en el código advierten: "No se borra calcTargetDateRange: T5 la usa vía openLabSoloModal". |
-| `extractAgrupador` | 12839 | Deuda muerta | Función recursiva que iba a localizar el nodo `agrupador` en respuestas de payload JSON lidiando con anidación. |
+> **LEA ESTO ANTES DE USAR ESTE ARCHIVO.**
+>
+> Este documento se generó el **15-ago-2026** sobre un archivo de **441 declaraciones**.
+> Hoy (29-ago-2026, v17.41.0) el archivo tiene **853** declaraciones de nivel superior y
+> **201 commits** de por medio. Al reverificarlo entero, **4 de sus 17 entradas estaban
+> equivocadas o quedaron obsoletas**, y una de ellas —`_conductaBuscarYAgregarExamen`— es
+> hoy el corazón del botón "Ordenar pendientes", con **16 referencias en `suite_71`**.
+>
+> **Borrar según la tabla original habría eliminado código clínico vivo.**
+>
+> El error de fondo no es la desactualización: es la **etiqueta «Deuda muerta»**, que
+> confunde dos cosas distintas. Este proyecto ya se llevó ese susto —una rama que "parecía
+> código muerto" tenía **44 de 242 vectores dorados** dependiendo de ella— y lo dejó
+> escrito como regla:
+>
+> > **Muerta en producción no es lo mismo que sobrante.**
+>
+> Para decidir si algo se borra hacen falta **tres** estados, no dos:
+> - **(A) Muerta confirmada** — cero referencias en TODO el repo (script, `tests/`,
+>   `tools/`, `docs/`), ni por nombre, ni por cadena, ni por acceso dinámico. Solo esta
+>   categoría es retirable.
+> - **(B) Sin llamador de producción, pero viva** — la sostienen las pruebas, o el propio
+>   código prohíbe borrarla por escrito. **No se toca.**
+> - **(C) Sospechosa** — pocas referencias, o llamada de forma indirecta (`onclick=` dentro
+>   de un `innerHTML`, delegación por `data-*`, `window[...]`). **No se toca sin
+>   reverificar.**
+>
+> Un inventario al día se regenera con `node tools/inventario.js` (Node puro, sin
+> dependencias) → `docs/MAPA_v14.md` y `docs/DEUDA_v14.md`.
 
 ---
 
-## Análisis de los 3 invalidadores (Hallazgos J3)
+## Reverificación del 29-ago-2026
 
-Como se solicitó en el requerimiento original, a continuación está el análisis explícito de los 3 invalidadores reportados por el linter J3, revelando discrepancias en el análisis estático de este último:
+Método: para cada entrada, localizar la definición, contar referencias **excluyendo la
+línea de definición, los comentarios y las llamadas recursivas**, y contar las suites que
+la ejercitan.
 
-1. **`_demograficosInvalidar`**
-   - **Veredicto:** ✅ Coincide con J3 (Huérfana real).
-   - **Observaciones:** Realmente **no tiene** llamador en todo el archivo. Su declaración no tiene referencias y es listada en la tabla superior.
-2. **`_ordenesVigentesInvalidar`**
-   - **Veredicto:** ⚠️ Discrepancia hallada.
-   - **Observaciones:** J3 indica que no tiene llamador o está sin cubrir. Sin embargo, en el AST consta que **SÍ** está siendo llamada en la **línea 4062** dentro de un bloque blindado: `try { _ordenesVigentesInvalidar(); } catch (e) {}`. Si J3 asume que está huérfana, es un falso positivo al no analizar o ignorar los bloques `try...catch`.
-3. **`_bannerPymInvalidar`**
-   - **Veredicto:** ⚠️ Discrepancia hallada.
-   - **Observaciones:** Al igual que la anterior, sí existe llamador registrado en el AST en la **línea 4061**: `try { _bannerPymInvalidar(); } catch (e) {}`. Aunque el comentario superior documenta que "NADIE la llamaba (salía como 'sin cubrir')", actualmente la invocación **sí existe** y se encuentra amarrada con `_ordenesVigentesInvalidar`.
+### Entradas que la tabla original marcó «Deuda muerta» y que HOY ESTÁN VIVAS
+
+| Función | Línea hoy | Llamador real de producción | Veredicto |
+| :--- | :--- | :--- | :--- |
+| `_conductaBuscarYAgregarExamen` | `:24409` | `:24476` — `await _conductaBuscarYAgregarExamen(texto, d)` | **VIVA.** Es el gesto DOM del botón "Ordenar pendientes". 4 suites, 16 refs en `suite_71`. |
+| `analitoTablaDesdeClaveRcv` | `:4334` | `:4042` — `const analito = analitoTablaDesdeClaveRcv(key)` | **VIVA.** |
+| `panelActivities` | `:8217` | `:26186` — `const pymsPanel = panelActivities(a.pym)` | **VIVA.** Reconectada en v17.22.0 al devolver los chips de PyM a la tarjeta. La tabla original ya avisaba de esto ("T5 la reconecta") y aun así la etiquetó como deuda. |
+
+### Entrada sin llamador, pero cuyo borrado el propio código PROHÍBE por escrito
+
+| Función | Línea hoy | Evidencia | Veredicto |
+| :--- | :--- | :--- | :--- |
+| `vigenciaPorEstadio` | `:4304` | Comentario en `:4037`: *"`vigenciaPorEstadio` NO se borra: es la transcripcion de la Tabla 50, con filas que…"*. **104 referencias en `suite_28_vigencias_estadio.js`.** | **(B) — NO BORRAR.** Es la transcripción de la Tabla 50 oficial. Sin llamador directo hoy, pero es la fuente de verdad contra la que se contrasta el motor. |
+
+### Entrada ya resuelta desde entonces
+
+| Función | Estado |
+| :--- | :--- |
+| `calcTargetDateRange` | **Ya no existe.** Retirada en v17.6.10; queda su lápida en `:18578`. |
+
+### Entradas que siguen sin llamador de producción — categoría (B), no (A)
+
+Todas tienen cobertura de pruebas; ninguna es retirable sin decidir antes qué se hace con
+su suite. **No son "deuda muerta".**
+
+`debounceVgl` (`:7113`) · `apiDigiturnoFinalizarTicket` (`:17205`) ·
+`_signosVitalesInvalidar` (`:17298`) · `apiHcValidacionExamenCronicos` (`:17314`, su única
+mención interna es un `console.warn` dentro de sí misma) · `_demograficosInvalidar`
+(`:17490`) · `extractAgrupador` (`:23453`, sus 3 referencias son **llamadas recursivas**,
+que el método original ya excluía correctamente).
+
+### Costuras de prueba — correctamente clasificadas, y son deliberadas
+
+Las entradas `*ParaTest` de la tabla original (`_getRacGuardiaParaTest`,
+`_setRacGuardiaParaTest`, `_getUltimoRelevoParaTest`, `_setUltimoRelevoParaTest`,
+`_getFirmaPropiaParaTest`, `_setFirmaPropiaParaTest`) siguen siendo lo que decían: costuras
+para que el banco pueda leer o inyectar estado interno. Hoy hay **25** de ellas en el
+archivo. Son intencionales.
+
+---
+
+## Nota sobre el método original
+
+`tests/harness.js:225-237` publica **automáticamente todas** las `function NOMBRE` en
+`globalThis.__VGL__`. Por eso "solo la referencian los tests" **nunca** implica un enganche
+en producción — y por eso separar (A) de (B) exige mirar el código, no solo contar
+referencias.
+
+---
+
+## Tabla original (15-ago-2026) — conservada solo como registro
+
+> Se conserva sin editar para que quede constancia de qué se afirmó y cuándo. **Su columna
+> "Categoría" no es de fiar**: ver la reverificación de arriba.
+
+- **Base de escaneo:** Rama `claude/v14-continuacion`.
+- **Herramienta:** Script Node.js con AST vía `acorn`/`acorn-walk`.
+- **Declaraciones examinadas:** 441.
+
+| Función | Línea (de entonces) | Categoría (de entonces) | Qué creo que iba a hacer (Análisis de entonces) |
+| :--- | :--- | :--- | :--- |
+| `_conductaBuscarYAgregarExamen` | 1241 | Deuda muerta | Iba a buscar en el DOM de la UI elementos `<li>` que coincidieran de forma exacta con un nombre de laboratorio, y les iba a hacer click para agregarlos. |
+| `vigenciaPorEstadio` | 3286 | Deuda muerta | Iba a calcular la vigencia en días/meses permitida para un analito según el estadio. |
+| `analitoTablaDesdeClaveRcv` | 3316 | Deuda muerta | Iba a servir como mapa de traducción de claves RCV a llaves de la tabla local. |
+| `_getRacGuardiaParaTest` | 3366 | Costura de prueba | Exponer el estado interno de `_racGuardia` al banco. |
+| `_setRacGuardiaParaTest` | 3367 | Costura de prueba | Inyectar valores en `_racGuardia` para simular escenarios. |
+| `debounceVgl` | 3823 | Deuda muerta | Utilidad genérica de `debounce`. |
+| `_getUltimoRelevoParaTest` | 4280 | Costura de prueba | Leer `_ultimoRelevoVisibilidad`. |
+| `_setUltimoRelevoParaTest` | 4281 | Costura de prueba | Alterar `_ultimoRelevoVisibilidad`. |
+| `panelActivities` | 4387 | A medio enganchar | Filtrar actividades removiendo ramas no pertinentes. "T5 la reconecta". |
+| `_getFirmaPropiaParaTest` | 5346 | Costura de prueba | Leer `_firmaPropia`. |
+| `_setFirmaPropiaParaTest` | 5347 | Costura de prueba | Alterar `_firmaPropia`. |
+| `apiDigiturnoFinalizarTicket` | 10230 | Deuda muerta | Cerrar el ticket del paciente en Digiturno. |
+| `_signosVitalesInvalidar` | 10299 | Deuda muerta | Limpiar `_signosVitalesCache`. |
+| `apiHcValidacionExamenCronicos` | 10315 | Deuda muerta | Segunda vía abandonada: la tabla oficial ya llega por `_instalarOyenteTablaOficial`. |
+| `_demograficosInvalidar` | 10459 | Deuda muerta | Limpiar la caché demográfica. |
+| `calcTargetDateRange` | 10936 | A medio enganchar | Rango de ±3 días hábiles. "T5 la usa vía openLabSoloModal". |
+| `extractAgrupador` | 12839 | Deuda muerta | Localizar recursivamente el nodo `agrupador` en un payload JSON. |

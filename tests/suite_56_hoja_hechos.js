@@ -25,7 +25,7 @@ function resumenConPhi() {
     },
     erc: { egfr: 52.3, crcl: 48.1, estadioAdministrativo: "G3a", estadioClinico: "G3a", remitirNefrologia: false, sospechaIra: false },
     riesgo: { categoria: "alto", paso: 3 },
-    meta: { metas: { ldl: 70, cnoHdl: 100 } },
+    meta: { metas: { ldl: 70, cnoHdl: 100, reduccion: 50 } },
     framingham: { puntos: 16 },
     foco: "control de LDL fuera de meta",
     // v17.6.0 — mtrEducationFlags() SIEMPRE devuelve un objeto {alarmas,dieta,actividad},
@@ -77,6 +77,11 @@ module.exports = {
       t.igual(hoja.riesgo.categoria, "alto", "riesgo");
       t.igual(hoja.riesgo.framinghamPuntos, 16, "framingham");
       t.igual(hoja.metaLdl, 70, "meta LDL");
+      // v17.26.0 — mismo criterio que metaLdl: el porcentaje de reducción exigido desde el
+      // basal viaja calculado, en vez de quedar fijo como "50%" en el texto del prompt
+      // (bug real: la IA citaba el número fijo del prompt y el verificador de cifras lo
+      // marcaba en rojo por no encontrarlo en la hoja).
+      t.igual(hoja.metaReduccionLdl, 50, "meta de reducción de LDL desde el basal");
       t.igual(hoja.medicamentos.length, 2, "medicamentos (moléculas, no PHI)");
       t.igual(hoja.labs.length, 2, "labs");
     });

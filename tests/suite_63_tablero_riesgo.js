@@ -12,10 +12,16 @@
 module.exports = {
   nombre: "v16.0.0 — módulo Riesgo y exámenes (clasificación, TFG y vigencias)",
   cubre: [
+    // v17.16.0 — estas ya se ejercitaban en esta misma suite y NO estaban declaradas: el
+    // informe de cobertura las listaba como «sin cubrir» y escondía cuáles son los huecos
+    // de verdad. Un informe que subestima engaña igual que uno que exagera.
+    "_vglConfirmacionesLeer", "_vglContextoEstado", "_vglTextoContextoFaltante",
     "_vglAvisoContextoFaltante",   // v16.3.0 — compuerta de contexto
     "_vglModalConfirmarDatos",     // v16.3.2 — modal del reconciliador
     "mtrTableroClinico", "mtrRecalcularConFactores", "_tableroFirmaDom",
     "_tableroQueCambio", "openTableroModal", "mtrPanelResumenAlAbrir",
+    "mtrJsonV68DesdeResumen", "mtrResumenClinico",
+    "mtrReconciliarAhora",         // v17.7.0 — el reconciliador, sacado a función probable
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -119,6 +125,45 @@ module.exports = {
       t.cierto(/albuminuria/i.test(rac.quePasa), "y sigue mencionando la albuminuria: " + rac.quePasa);
     });
 
+    // v17.6.87 — auditoría v68. Un examen con resultado real pero SIN fecha (alcanzable:
+    // `_extractAtheneaFecha` puede devolver null y `mtrResumenDesdeModalLabs` lo copia tal
+    // cual) compartía subestado con "nunca se hizo", y el tablero decide el texto por el
+    // subestado. El médico leía "Nunca se le ha tomado" de una glicemia de 260 que SÍ existe:
+    // además de perderse un resultado alarmante, se reordena un examen ya hecho — viaje y
+    // gasto que la misión del motor busca evitar.
+    //
+    // Se prueba de PUNTA A PUNTA (estado -> plan -> tablero): probar solo el subestado
+    // dejaría pasar un cambio que lo separase pero olvidara la rama del texto, que es lo
+    // único que el médico llega a ver.
+    t.caso("v17.6.87: un examen CON resultado pero sin fecha no se anuncia como 'nunca se le ha tomado'", () => {
+      const plan = a.mtrPlanParaclinicos({
+        hoyIso: "2026-08-26", programa: "DM2", estadioAdministrativo: "G2", esDm2: true, edad: 60,
+        ultimos: {
+          GLUCOSA:          { fecha: null,         valor: 260 },   // resultado sin fecha
+          CREATININA:       { fecha: "2026-08-01", valor: 0.9 },
+          COLESTEROL_TOTAL: { fecha: "2026-08-01", valor: 190 },
+          COLESTEROL_HDL:   { fecha: "2026-08-01", valor: 45 },
+          COLESTEROL_LDL:   { fecha: "2026-08-01", valor: 90 },
+          TRIGLICERIDOS:    { fecha: "2026-08-01", valor: 120 },
+          UROANALISIS:      { fecha: "2026-08-01", valor: 1 },
+          RAC:              { fecha: "2026-08-01", valor: 10 },
+          HBA1C:            { fecha: "2026-08-01", valor: 6.5 },
+        },
+      });
+      const d = a.mtrTableroClinico({ factores: {}, riesgo: {}, erc: { estadioAdministrativo: "G2" }, plan: plan });
+      const fila = d.ordenar.find((x) => x.clave === "GLUCOSA");
+      t.cierto(!!fila, "se sigue ordenando: sin fecha no se puede afirmar que esté vigente");
+      t.igual(fila.subestado, "sin_fecha", "con subestado propio, no el de 'nunca se hizo'");
+      t.falso(/Nunca se le ha tomado/.test(fila.quePasa),
+        "NO se le dice que nunca se le ha tomado: " + fila.quePasa);
+      t.cierto(/260/.test(fila.quePasa), "se le muestra el resultado que sí existe: " + fila.quePasa);
+      t.cierto(/sin fecha/i.test(fila.quePasa), "y por qué se vuelve a pedir: " + fila.quePasa);
+
+      // El que de verdad nunca se tomó conserva su texto de siempre.
+      const uro = d.ordenar.find((x) => x.clave === "PTH") || d.ordenar.find((x) => x.subestado === "sin_historial");
+      if (uro) t.igual(uro.quePasa, "Nunca se le ha tomado", "el que nunca se hizo sigue diciéndolo");
+    });
+
     t.caso("«lo que sigue vigente» va del que vence primero al último, sin repetir lo que ya se va a pedir", () => {
       const d = a.mtrTableroClinico(resumenBase);
       const clavesOrdenar = d.ordenar.map((x) => x.clave);
@@ -165,6 +210,50 @@ module.exports = {
       const fechaVieja = (dViejo.vigentes[0] || dViejo.ordenar[0] || {}).fecha;
       const fechaNueva = (dNuevo.vigentes[0] || dNuevo.ordenar[0] || {}).fecha;
       t.igual(fechaNueva, fechaVieja, "las fechas de los resultados se conservan");
+    });
+
+    // v17.6.86 — auditoría v68 (S4: "MEDS: genérico+dosis+frecuencia; falta -> [DOSIS NO
+    // ESPECIFICADA]"). `mtrRecalcularConFactores` copiaba `medicamentos` pero NO el mapa de
+    // frecuencias, así que el marcador que v17.6.66 construyó para impedir que la IA invente
+    // una posología duraba lo que tardara el médico en escribir el peso o la tensión: al
+    // reclasificar, el JSON dejaba de recibir el mapa y emitía los medicamentos sin marcador.
+    // La nota copiada a la historia quedaba sin las frecuencias Y sin la advertencia de que
+    // faltaban — nadie veía que se había perdido.
+    //
+    // Se prueba de PUNTA A PUNTA (resumen -> reclasificar -> JSON) y con la MISMA hoja en las
+    // dos llamadas: si se probara solo que el campo sobrevive, un cambio que lo copiara pero
+    // rompiera el consumo del JSON pasaría inadvertido.
+    t.caso("v17.6.86: el marcador [DOSIS NO ESPECIFICADA] sobrevive a una reclasificación", () => {
+      const base = a.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 62, sexo: "M", pesoKg: 80, creatinina: 1.4,
+        rac: 20, ct: 200, hdl: 45, ldl: 120, paSistolica: 140, paDiastolica: 85,
+        factores: { hta: true, diabetes: true },
+        ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.4 } },
+      });
+      base.medicamentos = ["ATORVASTATINA 80 MG", "LOSARTAN 50 MG"];
+      base.medicamentosFrecuencia = new Map();   // se consultó el histórico y no trajo frecuencias
+      // Hoja FIJA: el único cambio entre las dos llamadas es el resumen.
+      const hoja = { medicamentos: ["ATORVASTATINA 80 MG", "LOSARTAN 50 MG"] };
+      const conMarcador = (res) => a.mtrJsonV68DesdeResumen(res, hoja)
+        .medicamentos_actuales.every((m) => /\[DOSIS NO ESPECIFICADA\]/.test(m));
+
+      t.cierto(conMarcador(base), "el vector es el que debe ser: sin frecuencias, el marcador está");
+      const nuevo = a.mtrRecalcularConFactores(base, { sedentarismo: true }, "2026-08-26");
+      t.cierto(!!(nuevo && nuevo.medicamentosFrecuencia), "el mapa de frecuencias sobrevive a la reclasificación");
+      t.cierto(conMarcador(nuevo), "y el marcador sigue en el JSON que lee la IA");
+    });
+
+    t.caso("v17.6.86: un mapa CON frecuencias tampoco se pierde al reclasificar", () => {
+      const base = a.mtrResumenClinico({
+        hoyIso: "2026-08-26", edad: 62, sexo: "M", pesoKg: 80, creatinina: 1.4,
+        factores: { hta: true }, ultimos: { CREATININA: { fecha: "2026-08-01", valor: 1.4 } },
+      });
+      base.medicamentos = ["LOSARTAN 50 MG"];
+      const fr = new Map(); fr.set("losartan", "CADA 12 HORAS");
+      base.medicamentosFrecuencia = fr;
+      const nuevo = a.mtrRecalcularConFactores(base, { sedentarismo: true }, "2026-08-26");
+      t.cierto(!!(nuevo && nuevo.medicamentosFrecuencia && nuevo.medicamentosFrecuencia.get), "sigue siendo un Map");
+      t.igual(nuevo.medicamentosFrecuencia.get("losartan"), "CADA 12 HORAS", "y conserva su contenido");
     });
 
     t.caso("sin resumen previo no se reclasifica nada (no se inventa un paciente)", () => {
@@ -413,6 +502,44 @@ module.exports = {
       t.falso(!!d.body.children.find((n) => n.id === "vgl-confirma-modal" && n.isConnected !== false && n.parentElement), "no se vuelve a preguntar lo ya confirmado");
     });
 
+    // v17.14.0 — enjambre UX #69. El aviso de que la respuesta guardada del médico ya no
+    // coincide con la historia de hoy iba PEGADO al final de «Importa porque…», en la
+    // última línea del ítem, con la misma letra pequeña y el mismo gris de la nota
+    // rutinaria: el caso excepcional se veía idéntico al normal. Y era justo el que él
+    // tiene que leer — le dice que lo que confirmó antes quedó desactualizado.
+    t.caso("v17.14.0 — el aviso de que su respuesta quedó desactualizada NO vive en el pie", () => {
+      const c = cargar({ silencioso: true });
+      const d = c.env.doc;
+      const disc = (desfasada) => [{
+        clave: "hipertension", etiqueta: "Hipertensión arterial", porQue: "cambia la tabla de vigencias",
+        afirman: [{ fuente: "Historia", detalle: "casilla marcada" }],
+        niegan: [{ fuente: "PyM", detalle: "no figura" }],
+        desfasada: desfasada,
+      }];
+      const html = (desfasada) => {
+        const previo = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+        if (previo) previo.remove();
+        c.api._vglModalConfirmarDatos({ doc_id: "12345678" }, disc(desfasada), null);
+        const m = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+        return m ? String(m.innerHTML) : "";
+      };
+      const conDesfase = html(true);
+      t.cierto(conDesfase.indexOf("vgl-conf-desfase") >= 0, "el aviso tiene elemento y clase propios");
+      t.cierto(conDesfase.indexOf("ya respondió esto antes") >= 0, "y dice lo que hay que decir");
+      // Lo que de verdad se corrigió: el aviso va ANTES de las fuentes y del «Importa
+      // porque…», no al final del ítem.
+      t.cierto(conDesfase.indexOf("vgl-conf-desfase") < conDesfase.indexOf("vgl-conf-fuentes"),
+        "y sale ARRIBA del ítem, no en el pie");
+      const pq = conDesfase.slice(conDesfase.indexOf("vgl-conf-porque"));
+      t.falso(pq.indexOf("ya respondió esto antes") >= 0,
+        "la nota rutinaria deja de cargar el aviso excepcional: eran indistinguibles");
+      const sinDesfase = html(false);
+      t.cierto(sinDesfase.indexOf("vgl-d-none") >= 0, "sin desfase, el elemento queda oculto");
+      t.falso(sinDesfase.indexOf("ya respondió esto antes") >= 0, "y sin texto que no aplica");
+      const previo = d.body.children.find((n) => n.id === "vgl-confirma-modal");
+      if (previo) previo.remove();
+    });
+
     t.caso("_vglModalConfirmarDatos responde por la puerta compartida (humo)", () => {
       t.noLanza(() => {
         const ok = api._vglModalConfirmarDatos({ doc_id: "" }, [], null);
@@ -473,6 +600,221 @@ module.exports = {
       t.cierto(htmlEx.includes("Programa que rige las vigencias"), "y el programa rector, explicado");
       t.falso(html.includes("undefined") || html.includes("[object"), "sin restos de programación a la vista");
       t.falso(htmlEx.includes("undefined") || htmlEx.includes("[object"), "tampoco en la sección de exámenes");
+    });
+
+
+    // =================================================================
+    //  v17.7.0 — REPORTE EN CONSULTA (27-ago): «me está mostrando que yo NO marqué en la
+    //  historia la hipertensión pero SÍ la marqué, y no recibió el cambio en tiempo real».
+    //
+    //  Dos causas raíz distintas para ese síntoma, y las dos se prueban aquí:
+    //    (1) la firma de pantalla no veía cambiar 9 de los 25 campos que el médico marca,
+    //        así que la vigilancia de 20 s no se enteraba de que había algo nuevo;
+    //    (2) el cuadro «Las fuentes no coinciden» se calculaba UNA sola vez, al abrir el
+    //        Panel, y su HTML no se volvía a mirar nunca.
+    //  Y de camino, una tercera que salió al medirlo: una confirmación vieja pisaba en
+    //  silencio y para siempre lo que él acababa de escribir en Everest.
+    // =================================================================
+
+    // Un DOM de Everest con solo los radios de comorbilidades. `null` = casilla en blanco.
+    const domRadios = (marcas) => {
+      const nodos = [];
+      for (const n of Object.keys(marcas)) {
+        if (marcas[n] === null) continue;
+        nodos.push({ name: n, value: "true", checked: marcas[n] === true, type: "radio" },
+                   { name: n, value: "false", checked: marcas[n] === false, type: "radio" });
+      }
+      return (sel) => {
+        const m = /^input\[name="(.*)"\]$/.exec(String(sel));
+        return m ? nodos.filter((n) => n.name === m[1]) : [];
+      };
+    };
+    const CAMPO_HTA = "AntecedentePatologicos.Hipertension";
+    const CAMPO_EPOC = "AntecedentePatologicos.EPOC";
+
+    t.caso("v17.7.0 — la firma de pantalla ve TODAS las casillas, no solo las que cambian la categoría", () => {
+      const cF = cargar({ silencioso: true });
+      const d = cF.env.doc;
+      const firma = (marcas) => { d.querySelectorAll = domRadios(marcas); return cF.api._tableroFirmaDom(""); };
+
+      // El flanco que se perdía: EPOC de «No» a «Sí». No cambia la categoría de riesgo, así
+      // que no aparece en la salida derivada — y por eso la firma no se movía. Pero sí
+      // alimenta al reconciliador de fuentes y a la hoja de hechos de la IA.
+      t.cierto(firma({ [CAMPO_EPOC]: false }) !== firma({ [CAMPO_EPOC]: true }),
+        "marcar EPOC de No a Sí tiene que contar como «algo cambió en la historia»");
+
+      // Y lo que ya funcionaba sigue funcionando: los tres flancos de la hipertensión.
+      const enBlanco = firma({ [CAMPO_HTA]: null });
+      const marcadoNo = firma({ [CAMPO_HTA]: false });
+      const marcadoSi = firma({ [CAMPO_HTA]: true });
+      t.cierto(enBlanco !== marcadoNo, "de casilla en blanco a «No» también es un cambio");
+      t.cierto(marcadoNo !== marcadoSi, "y de «No» a «Sí», que es justo lo que él hizo");
+      t.cierto(enBlanco !== marcadoSi, "y de casilla en blanco a «Sí»");
+
+      // El caso que obliga a guardar el tri-estado ENTERO y no un sí/no: si en el mismo
+      // repaso una casilla pasa de blanco a «No» y otra de «No» a blanco, el contador de
+      // casillas documentadas no se mueve y los booleanos derivados tampoco. Solo
+      // distinguir «blanco» de «No» delata que la historia cambió.
+      t.cierto(firma({ [CAMPO_HTA]: null, [CAMPO_EPOC]: false }) !== firma({ [CAMPO_HTA]: false, [CAMPO_EPOC]: null }),
+        "dos casillas que se cruzan siguen siendo un cambio en la historia");
+
+      // La otra mitad de la lección: sin cambios, la firma no puede moverse, o la
+      // vigilancia reclasificaría cada 20 s sin motivo y el aviso perdería su sentido.
+      t.igual(firma({ [CAMPO_HTA]: true }), firma({ [CAMPO_HTA]: true }),
+        "si el médico no tocó nada, la firma no se mueve");
+    });
+
+    t.caso("v17.7.0 — la casilla que él acaba de escribir manda sobre una confirmación vieja", () => {
+      const cP = cargar({ silencioso: true });
+      const d = cP.env.doc;
+      const DOC = "333222111";
+      // Las confirmaciones se guardan POR paciente, así que hace falta una cédula real y
+      // que el paciente figure abierto (guarda anticruce de v14.1.5).
+      const gebP = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebP(id)));
+      const conCedula = (radios) => (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel) : (sel === ".text-muted" ? [{ textContent: "CC " + DOC, closest: () => null }] : []));
+      cP.api._vglConfirmacionGuardar(DOC, "hta", true);       // él respondió «Sí» hace tiempo
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: false })); // hoy la historia dice «No»
+      const contra = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(contra._leidos.hta, false, "manda lo que está escrito en la historia de hoy");
+      t.cierto(contra._confirmacionesDesfasadas.indexOf("hta") >= 0,
+        "y el choque se reporta, en vez de pisarlo en silencio");
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: null }));  // casilla en blanco
+      const hueco = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(hueco._leidos.hta, true, "si la historia no dice nada, su respuesta rellena el hueco");
+      t.igual(hueco._confirmacionesDesfasadas.length, 0, "y ahí no hay ningún choque que avisar");
+
+      d.querySelectorAll = conCedula(domRadios({ [CAMPO_HTA]: true }));  // la historia coincide
+      const igual = cP.api.mtrLeerFactoresRcvDelDom(DOC, d);
+      t.igual(igual._leidos.hta, true, "cuando coinciden, coinciden");
+      t.igual(igual._confirmacionesDesfasadas.length, 0, "y no se le vuelve a preguntar por gusto");
+    });
+
+    t.caso("v17.7.0 — el reconciliador vuelve a preguntar SOLO lo que la historia contradice", () => {
+      const cR2 = cargar({ silencioso: true });
+      const d = cR2.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+
+      // La cabecera de Everest dice HTA+DM; la historia de hoy dice que NO es hipertenso.
+      const radios = domRadios({ [CAMPO_HTA]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000111", closest: () => null }]
+            : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+
+      const antes = cR2.api.mtrReconciliarAhora("555000111", d);
+      const clavesAntes = antes.frenan.map((x) => x.clave);
+      t.cierto(clavesAntes.indexOf("hta") >= 0, "cabecera contra historia: eso sí frena");
+
+      // Él responde «Sí tiene» — pero la casilla de la historia sigue diciendo «No».
+      cR2.api._vglConfirmacionGuardar("555000111", "hta", true);
+      const conRespuesta = cR2.api.mtrReconciliarAhora("555000111", d);
+      t.cierto(conRespuesta.desfasadas.indexOf("hta") >= 0,
+        "su respuesta ya no coincide con la historia: eso se detecta");
+      t.cierto(conRespuesta.frenan.some((x) => x.clave === "hta" && x.desfasada === true),
+        "y se le vuelve a preguntar UNA vez, marcado como desfasado — no se zanja en silencio");
+
+      // Ahora sí corrige la casilla en Everest. La contradicción desaparece sola.
+      const radios2 = domRadios({ [CAMPO_HTA]: true });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios2(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000111", closest: () => null }]
+            : [{ textContent: "Marcaciones: HTA+DM", innerText: "Marcaciones: HTA+DM" }]));
+      const despues = cR2.api.mtrReconciliarAhora("555000111", d);
+      t.igual(despues.desfasadas.length, 0, "corregida la casilla, ya no hay desfase");
+      t.falso(despues.frenan.some((x) => x.clave === "hta"),
+        "y el cuadro deja de tener motivo para frenar: es lo que él vio que NO pasaba");
+    });
+
+    const CAMPO_ERC = "AntecedentePatologicos.enfermedadRenal";
+
+    // v17.31.0 — encargo del médico (28-ago), textual: "el script no consulta la TFG porque
+    // muchas veces la TFG es menor a 60 y aun así me pregunta [si tiene ERC], el script debe
+    // ser inteligente en estos casos" — y, al recordárselo, "RECUERDA COCKCROFT GAULT": la
+    // TFG que decide aquí es la administrativa (Cockcroft-Gault), no la CKD-EPI.
+    t.caso("v17.31.0 — con TFG por Cockcroft-Gault <60 ya calculada, el reconciliador NO pregunta por ERC", () => {
+      const cErc = cargar({ silencioso: true });
+      const d = cErc.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+
+      // La cabecera de Everest dice NEFROPROTECCIÓN (afirma ERC); la historia de hoy dice
+      // que NO (niega ERC) — la misma contradicción que antes SIEMPRE frenaba el módulo.
+      const radios = domRadios({ [CAMPO_ERC]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000222", closest: () => null }]
+            : [{ textContent: "Marcaciones: NEFROPROTECCION", innerText: "Marcaciones: NEFROPROTECCION" }]));
+
+      // Sin TFG cacheada, la contradicción se ve igual que siempre: sigue frenando. Esto
+      // deja constancia de que el guardarraíl solo se activa CON el dato, no por defecto.
+      const sinTfg = cErc.api.mtrReconciliarAhora("555000222", d);
+      t.cierto(sinTfg.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "sin TFG en caché, la contradicción cabecera/historia sigue preguntando — el guardarraíl no cambia el caso de siempre");
+
+      // Con la TFG por Cockcroft-Gault ya calculada y <60 (resumenBase: creatinina 1.3,
+      // 66 años, 70 kg, mujer → crcl 47), la pregunta desaparece: ya está establecida por
+      // un cálculo objetivo, no hay nada que confirmarle al médico.
+      cErc.api.mtrCacheResumenGuardar("555000222", resumenBase);
+      const conTfg = cErc.api.mtrReconciliarAhora("555000222", d);
+      t.falso(conTfg.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "con TFG<60 ya calculada, la pregunta de ERC ya no sale");
+    });
+
+    t.caso("v17.31.0 — una TFG por Cockcroft-Gault ≥60 (o no evaluable) NO apaga la pregunta de ERC", () => {
+      const cErc2 = cargar({ silencioso: true });
+      const d = cErc2.env.doc;
+      const gebPrev = d.getElementById.bind(d);
+      d.getElementById = (id) => (id === "anamesis" ? {} : (id === "comentariosFinales" ? null : gebPrev(id)));
+      const radios = domRadios({ [CAMPO_ERC]: false });
+      d.querySelectorAll = (sel) => (String(sel).indexOf("input[name=") === 0
+        ? radios(sel)
+        : (sel === ".text-muted"
+            ? [{ textContent: "CC 555000333", closest: () => null }]
+            : [{ textContent: "Marcaciones: NEFROPROTECCION", innerText: "Marcaciones: NEFROPROTECCION" }]));
+
+      // Función renal normal: crcl 92 (misma fórmula, con una creatinina normal).
+      const resumenSano = a.mtrResumenClinico({
+        hoyIso: "2026-08-20", edad: 40, sexo: "F", pesoKg: 65, creatinina: 0.7,
+        factores: { hta: true, diabetes: false, tabaquismo: false, enfermedadRenalDocumentada: true },
+        ultimos: { CREATININA: { fecha: "2026-07-01", valor: 0.7 } },
+      });
+      t.cierto(resumenSano.erc && resumenSano.erc.crcl >= 60, "control del escenario: TFG normal");
+      cErc2.api.mtrCacheResumenGuardar("555000333", resumenSano);
+      const conTfgSana = cErc2.api.mtrReconciliarAhora("555000333", d);
+      t.cierto(conTfgSana.frenan.some((x) => x.clave === "enfermedadRenal"),
+        "con TFG≥60, una TFG normal NO resuelve la duda por sí sola: se sigue preguntando");
+    });
+
+    t.caso("v17.7.0 — el cuadro de fuentes deja armado su propio repaso de 20 s", () => {
+      const cM = cargar({ silencioso: true });
+      const d = cM.env.doc;
+      const base = d.createElement;
+      d.createElement = function (tag) {
+        const e = base(tag);
+        const memo = new Map();
+        e.querySelector = (sel) => { if (!memo.has(sel)) memo.set(sel, d.createElement("div")); return memo.get(sel); };
+        e.querySelectorAll = () => [];
+        return e;
+      };
+      const vivosAntes = [...cM.env.intervalos.values()].filter((x) => x.vivo).length;
+      const mostrado = cM.api._vglModalConfirmarDatos({ doc_id: "424242" }, [{
+        clave: "hta", etiqueta: "Hipertensión arterial", porQue: "cambia las vigencias",
+        afirman: [{ fuente: "Cabecera de Everest", detalle: "aparece en las marcaciones" }],
+        niegan: [{ fuente: "Historia clínica", detalle: "marcado como No" }],
+        severidad: "alta",
+      }], null);
+      t.cierto(mostrado, "el cuadro se pinta");
+      const repasos = [...cM.env.intervalos.values()].filter((x) => x.vivo && x.ms === 20000);
+      t.cierto(repasos.length > vivosAntes || repasos.length >= 1,
+        "y queda vigilando la pantalla cada 20 s: sin esto vuelve a ser una foto");
     });
 
     t.caso("sin documento del paciente, la ventana no se abre y se dice por qué", () => {

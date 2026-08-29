@@ -50,6 +50,7 @@ module.exports = {
     "_ordenesVigentesInvalidar", "_demograficosInvalidar",
     "apiAccesoObtenerDemograficos", "exportAudit",
     "_vglCosecharFactoresVisibles", "_vglCosechaGuardar", "_vglCosechaLeer",
+    "_vglLeerCabeceraHistoria", "mtrEvaluarErc", "mtrEsSexoFemenino", "mtrEsSexoMasculino",
   ],
 
   async pruebas(t, api, env, cargar) {
@@ -464,6 +465,77 @@ module.exports = {
       t.cierto(fs.existsSync(path.join(fixDir, "dom_everest_ordenes.html")), "dom_everest_ordenes.html existe");
     });
 
+    // v17.6.85 — EL SEXO DESDE LA CABECERA DE LA HISTORIA.
+    //
+    // El sexo era el único insumo de Cockcroft-Gault/CKD-EPI SIN red de seguridad: peso y
+    // tensión ya tienen respaldo de DOM, el sexo tenía una sola fuente (la demografía de la
+    // API) y un solo intento. Si llegaba vacío, AMBAS fórmulas se calculaban como hombre y
+    // una mujer subía un estadio administrativo entero — el que rige vigencias, ventana ANR
+    // y bloqueos KDIGO. El médico confirmó con capturas que la cabecera de la historia
+    // imprime "Sexo: MASCULINO"/"Sexo: FEMENINO", y esa cabecera ya se leía para otras cosas.
+    //
+    // Los textos de abajo reproducen la FORMA real de esa cabecera con datos inventados:
+    // cero PHI, como manda CLAUDE.md.
+    const docCabecera = (lineas) => ({
+      querySelectorAll: () => lineas.map((texto) => ({ textContent: texto })),
+      querySelector: () => null,
+    });
+
+    t.caso("v17.6.85: el sexo se lee de la cabecera de la historia, sin arrastrar la EPS", () => {
+      const c = cargar({ silencioso: true });
+      // En la cabecera real el campo COMPARTE LÍNEA con el siguiente.
+      const masc = c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo: MASCULINO, Eps: NUEVA EPS"]));
+      t.igual(masc.sexo, "MASCULINO", "se captura solo la palabra, no el resto de la línea");
+      t.cierto(c.api.mtrEsSexoMasculino(masc.sexo), "y el motor lo reconoce sin traducción");
+      const fem = c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo: FEMENINO, Eps: ALGUNA EPS"]));
+      t.igual(fem.sexo, "FEMENINO", "igual en femenino");
+      t.cierto(c.api.mtrEsSexoFemenino(fem.sexo), "reconocido como femenino");
+      // Por qué importa capturar limpio: el valor sucio SÍ se reconocería (le basta empezar
+      // por "MAS"), así que el riesgo no es fallar el reconocimiento — es que el nombre de la
+      // aseguradora viaje dentro del campo `sexo` hasta `erc.entradas.sexo`, que se muestra.
+      t.cierto(c.api.mtrEsSexoMasculino("MASCULINO, Eps: NUEVA EPS"),
+        "(el valor sucio se reconocería igual: por eso el riesgo es de limpieza, no de lectura)");
+    });
+
+    t.caso("v17.6.85: un rótulo de sexo sin valor no inventa un sexo", () => {
+      const c = cargar({ silencioso: true });
+      t.igual(c.api._vglLeerCabeceraHistoria(docCabecera(["Sexo:", "Eps: ALGUNA EPS"])).sexo, null,
+        "rótulo presente pero vacío -> null, no un supuesto");
+      t.igual(c.api._vglLeerCabeceraHistoria(docCabecera(["Otra cosa cualquiera"])).sexo, null,
+        "sin cabecera legible -> null");
+      // Caso real aportado por el médico: cabecera con los rótulos de TFG vacíos porque
+      // Everest no pudo calcularla. El sexo se sigue leyendo y los vacíos no inventan nada.
+      const parcial = c.api._vglLeerCabeceraHistoria(docCabecera([
+        "Sexo: FEMENINO, Eps: ALGUNA EPS",
+        "Marcaciones: Hipertensión",
+        "Cockcroft - Gault:",
+        "Estadio:",
+      ]));
+      t.igual(parcial.sexo, "FEMENINO", "el sexo se lee aunque Everest no haya calculado la TFG");
+      t.igual(parcial.cockcroftGault, null, "y el rótulo vacío de TFG sigue devolviendo null");
+    });
+
+    t.caso("v17.6.85: un sexo presente pero NO reconocible cuenta como ausente, no como hombre", () => {
+      const c = cargar({ silencioso: true });
+      // La mina: antes la guarda era `sexo === ""`, así que un "0"/"1" de un <select> de
+      // Angular pasaba como dato bueno, se calculaba COMO HOMBRE, y encima sexoAusente salía
+      // false — el script afirmaba tener el dato. Peor que el caso vacío, que al menos
+      // levantaba la bandera.
+      ["", "0", "1", "Indeterminado", "N/A"].forEach((s) => {
+        const r = c.api.mtrEvaluarErc({ edad: 70, sexo: s, pesoKg: 70, creatinina: 1.0 });
+        t.cierto(r.sexoAusente, "sexo " + JSON.stringify(s) + " no es reconocible: sexoAusente");
+      });
+      ["F", "Femenino", "M", "MASCULINO"].forEach((s) => {
+        const r = c.api.mtrEvaluarErc({ edad: 70, sexo: s, pesoKg: 70, creatinina: 1.0 });
+        t.falso(r.sexoAusente, "sexo " + JSON.stringify(s) + " sí se reconoce");
+      });
+      // Y que la diferencia clínica que motivó todo esto sigue siendo real.
+      const mujer = c.api.mtrEvaluarErc({ edad: 70, sexo: "F", pesoKg: 70, creatinina: 1.0 });
+      const sinSexo = c.api.mtrEvaluarErc({ edad: 70, sexo: "0", pesoKg: 70, creatinina: 1.0 });
+      t.igual(mujer.estadioAdministrativo, "G3a", "con sexo femenino: G3a");
+      t.igual(sinSexo.estadioAdministrativo, "G2", "sin sexo reconocible se calcula como hombre: G2");
+    });
+
     t.caso("R2.8: Desambiguación HbA1c vs Hemoglobina en formulario de Crónicos", () => {
       const c = cargar({ silencioso: true });
       const fakeHemoNormal = { tagName: "INPUT", id: "resultadoHemoglobina", name: "resultadoHemoglobina", type: "text", getAttribute: () => null, closest: () => null };
@@ -607,6 +679,50 @@ module.exports = {
       const final = c.api._vglCosechaLeer(docId).factores;
       t.igual(final.diabetes.v, false, "la corrección de HOY le gana a lo archivado ayer");
       t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
+    });
+
+    // v17.46.0 — PÉRDIDA SILENCIOSA POR CUOTA. Hallazgo de auditoría de persistencia.
+    // `_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un
+    // `try/catch` que devuelve null: con el almacén del navegador lleno, el
+    // QuotaExceededError se tragaba entero y lo aprendido del paciente en esa consulta
+    // NO existía al día siguiente. El médico no veía ningún error; solo notaría, días
+    // después, que "la compuerta de contexto se quedó atascada" — el mismo síntoma que
+    // ya reportó en campo por otra causa (v16.4.0).
+    // El script YA tenía la defensa: `safeWriteJSON` purga por cuota y reintenta. Esta
+    // ruta simplemente no la usaba, siendo la que guarda la memoria clínica del paciente.
+    t.caso("v17.46.0 — la cosecha no se pierde en silencio si el almacén está lleno: purga y reintenta", () => {
+      const c = cargar({ silencioso: true });
+      const docId = "1098765432";
+      // Primera escritura normal, para tener algo que perder.
+      c.api._vglCosechaGuardar(docId, { factores: { hta: { v: true, ts: 1 } } });
+      t.cierto(!!c.api._vglCosechaLeer(docId), "el paciente quedó archivado");
+
+      // Ahora el almacén se llena: el PRIMER setItem falla, el segundo (tras la purga)
+      // funciona. Es exactamente el contrato de safeWriteJSON.
+      const real = c.env.win.localStorage.setItem;
+      let intentos = 0;
+      c.env.win.localStorage.setItem = function (k, v) {
+        intentos++;
+        if (intentos === 1) { const e = new Error("QuotaExceededError"); e.name = "QuotaExceededError"; throw e; }
+        return real.call(this, k, v);
+      };
+      // La fusión de _vglCosechaGuardar es PLANA a propósito (el "pozo" ya documentado en
+      // el propio código): `factores` se reemplaza entero, y son los llamadores reales
+      // —_vglCosecharFactoresVisibles, mtrHcAcumularDelDom— los que pre-fusionan. Por eso
+      // aquí se manda el mapa completo, igual que hace producción; una primera versión de
+      // esta prueba esperaba fusión profunda y afirmaba algo que esta función nunca ha
+      // prometido.
+      const r = c.api._vglCosechaGuardar(docId, {
+        factores: { hta: { v: true, ts: 1 }, diabetes: { v: true, ts: 2 } },
+      });
+      c.env.win.localStorage.setItem = real;
+
+      t.cierto(intentos >= 2, "tras el fallo de cuota debe REINTENTAR, no rendirse en silencio");
+      t.cierto(!!r, "y devolver el registro fusionado, no null");
+      const leido = c.api._vglCosechaLeer(docId);
+      t.cierto(leido && leido.factores && leido.factores.diabetes && leido.factores.diabetes.v === true,
+        "lo aprendido en esta consulta SÍ quedó guardado — antes se perdía sin avisar");
+      t.cierto(leido.factores.hta && leido.factores.hta.v === true, "y lo que ya venía sigue ahí");
     });
 
   }

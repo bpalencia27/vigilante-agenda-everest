@@ -31,7 +31,7 @@ module.exports = {
     "enableOsNotifications", "testNotifications", "updateBell",
     "showToast", "_renderToast", "_dispararAvisoAudible", "_dispararAvisoCartel",
     "fraudesHoy", "renderStats",
-    "_loteId", "_migaPush", "_pestanaOculta", "_getUltimoRelevoParaTest",
+    "_loteId", "_migaPush", "_pestanaOculta", "_pestanaSinAtencion", "_getUltimoRelevoParaTest",
     "uxVentanaNueva", "repEntornoDiario", "_urlDiagnostico", "_tituloDiagnostico",
     "_rumTrack", "_casillasExamenFisico",
   ],
@@ -63,7 +63,7 @@ module.exports = {
       t.igual(tonos.length, 1, "no sonó con el sonido encendido");
     });
 
-    t.caso("el silencio temporal calla el sonido pero NO desactiva nada más", () => {
+    t.caso("el silencio temporal calla el sonido, y se levanta solo al vencer", () => {
       const c = cargar({ silencioso: true });
       const tonos = conAudio(c);
       c.api.__S.sonido = true;
@@ -73,6 +73,44 @@ module.exports = {
       c.api.__state.muteUntil = 0;
       c.api.beep(1000, 380, 0);
       t.igual(tonos.length, 1, "no volvió a sonar al levantar el silencio");
+    });
+
+    // v17.19.0 — DECISIÓN DEL MÉDICO (28-ago): antes "Silenciar 15 min" solo callaba el
+    // tono (arriba) — el toast y la notificación de Windows seguían saliendo igual, que
+    // es justo el ruido que pidió apagar. Ahora los tres canales obedecen muteUntil.
+    t.caso("v17.19.0: el silencio temporal también calla el toast y la notificación de Windows, no solo el tono", () => {
+      const c = cargar({ silencioso: true });
+      conAudio(c);
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.win.document.visibilityState = "hidden";   // el canal candidato es el de Windows
+      c.api.__S.sonido = true;
+      c.api.__state.muteUntil = Date.now() + 60000;
+
+      const res = c.api._dispararAvisoAudible({ uid: "mute-1", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false });
+      t.cierto(res, "sigue devolviendo true: la cola de cartel pendiente no debe perderse aunque esté silenciado");
+      t.igual(os, 0, "ninguna notificación de Windows mientras está silenciado");
+
+      c.api.__state.muteUntil = 0;   // se levanta el silencio
+      c.api._dispararAvisoAudible({ uid: "mute-2", color: "AMBAR", title: "t", body: "b", flashText: "f", persist: false });
+      t.igual(os, 1, "al levantar el silencio, la siguiente sí sale por Windows");
+    });
+
+    t.caso("v17.19.0: el silencio temporal también calla el cartel dentro de la página", () => {
+      const c = cargar({ silencioso: true });
+      conAudio(c);
+      c.api.__S.cartel = true;
+      c.api.__state.muteUntil = Date.now() + 60000;
+      let pintado = 0;
+      const nodosAntes = c.env.win.document._nodos.length;
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-1", color: "ROJO", title: "t", body: "b" });
+      t.igual(c.env.win.document._nodos.filter(n => n.id === "vgl-modal").length, 0, "silenciado: el cartel no debe montarse");
+
+      c.api.__state.muteUntil = 0;
+      c.api._dispararAvisoCartel({ uid: "cartel-mute-2", color: "ROJO", title: "t", body: "b" });
+      t.cierto(c.env.win.document._nodos.some(n => n.id === "vgl-modal"), "al levantar el silencio, el cartel sí se monta");
     });
 
     t.caso("playTone emite DOS tonos, y cada color tiene los suyos", () => {
@@ -209,6 +247,44 @@ module.exports = {
       c.api._dispararAvisoAudible({ uid: "vis-2", color: "ROJO", title: "t", body: "b", flashText: "f", persist: true });
       t.igual(os, 0, "cero notificaciones de Windows con la pestaña visible");
       t.igual(gm, 0, "cero notificaciones de la extensión con la pestaña visible");
+    });
+
+    // v17.40.0 — REPORTE EN VIVO: "en otra ventana o en otro programa no me avisa". La
+    // pestaña sigue "visible" (visibilityState) mientras esté detrás de otra ventana, sin
+    // estar minimizada — solo pierde el FOCO (`document.hasFocus()`). Antes de esta versión
+    // `_pestanaOculta()` (solo mira visibilityState) decidía el canal, así que ese caso caía
+    // en la rama "visible" de arriba y el toast se pintaba tapado, sin avisar nada de
+    // verdad. `_pestanaSinAtencion()` también cuenta "visible pero sin foco" como si
+    // estuviera oculta, para que salga la notificación real del sistema.
+    t.caso("v17.40.0: VISIBLE pero SIN FOCO (otra ventana encima, sin minimizar) — cuenta igual que oculta: sale por el sistema", () => {
+      const c = cargar({ silencioso: true });
+      let os = 0;
+      function FakeNotification() { os++; return { close() {}, onclick: null }; }
+      FakeNotification.permission = "granted";
+      c.env.win.Notification = FakeNotification;
+      c.env.doc.visibilityState = "visible";        // NO minimizada, NO en otra pestaña
+      c.env.doc.hasFocus = () => false;              // pero otra ventana/programa tiene el foco
+      c.api.notify("AMBAR", "t", "b", false, "sinfoco-" + Math.random());
+      t.igual(os, 1, "con la ventana visible pero sin foco, el aviso real de Windows sí debe salir");
+    });
+
+    t.caso("v17.40.0: sin document.hasFocus disponible (navegador raro), no revienta y cae a solo mirar visibilityState", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = undefined;
+      t.noLanza(() => c.api._pestanaSinAtencion());
+      t.falso(c.api._pestanaSinAtencion(), "visible y sin forma de saber el foco: se asume atendida, como antes de esta versión");
+    });
+
+    // El relevo de liderazgo entre pestañas (heartbeat) NUNCA debe activarse solo por
+    // perder el foco — perder el foco cambia el CANAL de aviso, no quién manda. Ver la
+    // prueba dedicada de heartbeat en suite_17_nucleo.js para el caso completo.
+    t.caso("v17.40.0: perder el foco (sin estar oculta) NO cambia _pestanaOculta() — el relevo de liderazgo no debe verse afectado", () => {
+      const c = cargar({ silencioso: true });
+      c.env.doc.visibilityState = "visible";
+      c.env.doc.hasFocus = () => false;
+      t.falso(c.api._pestanaOculta(), "_pestanaOculta() sigue mirando SOLO visibilityState, ajeno al foco");
+      t.cierto(c.api._pestanaSinAtencion(), "pero _pestanaSinAtencion() sí lo cuenta, para el canal de aviso");
     });
 
     t.caso("v15.4.0: pestaña OCULTA con permiso -> Windows, y GM NO se dispara además (uno u otro, nunca ambos)", () => {
