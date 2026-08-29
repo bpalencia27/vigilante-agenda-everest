@@ -802,12 +802,19 @@ module.exports = {
       t.igual(r.enMeta, null, "ni true ni false: null");
     });
 
-    t.caso("falla terapéutica a meta+15% y grave a meta+30%", () => {
-      const leve = api.mtrEvaluarMetaLdl("alto", 81, null);   // 70 * 1.15 = 80.5
-      t.cierto(leve.falla, "81 supera 80.5");
-      t.falso(leve.fallaGrave, "81 no llega a 91");
-      const grave = api.mtrEvaluarMetaLdl("alto", 92, null);  // 70 * 1.30 = 91
-      t.cierto(grave.fallaGrave, "92 supera 91");
+    // v17.54.0 (D9) — esta función tenía el 1.15 y el 1.30 ESCRITOS A MANO, sin pasar por la
+    // constante: era una cuarta puerta del margen que ninguna medición había encontrado, y
+    // alimenta (vía mtrEducationFlags) la hoja educativa que el paciente se lleva impresa.
+    // Ahora lee el mismo número que las otras tres. El escalón del 30 % NO se toca aquí:
+    // esa es la decisión D10, pendiente.
+    t.caso("v17.54.0 (D9): la meta de LDL declara falla por encima de la meta, y grave sigue a meta+30%", () => {
+      t.falso(api.mtrEvaluarMetaLdl("alto", 70, null).falla, "justo en la meta de «alto» (70) no hay falla");
+      const leve = api.mtrEvaluarMetaLdl("alto", 71, null);
+      t.cierto(leve.falla, "71 ya es falla — antes hacía falta pasar de 80,5");
+      t.falso(leve.fallaGrave, "pero no grave");
+      t.cierto(api.mtrEvaluarMetaLdl("alto", 80, null).falla, "y 80, el caso de la franja callada, también");
+      t.falso(api.mtrEvaluarMetaLdl("alto", 91, null).fallaGrave, "el escalón grave sigue en meta+30% = 91");
+      t.cierto(api.mtrEvaluarMetaLdl("alto", 92, null).fallaGrave, "92 lo supera");
     });
 
     // ================= FUNCIÓN RENAL =================
@@ -892,19 +899,24 @@ module.exports = {
       // declara FALLA TERAPÉUTICA y con el que se acorta la vigencia. La decisión del
       // médico (20-ago, #4 de las ambigüedades) fue UN SOLO umbral —meta+15 %— para las
       // dos cosas, en vez de «estrictamente > meta» para una y meta+15 % para la otra.
-      t.igual(api._mtrMargenMeta(), 0.15, "el margen es 15 %, no otro");
+      // v17.54.0 (D9) — el margen se retira por decisión del médico del 29-ago, que revoca
+      // la suya del 20-ago citada arriba. La prueba no se borra: pasa a fijar el contrato
+      // nuevo, que es el mismo en las dos puertas (acortar la vigencia y declarar falla).
+      t.igual(api._mtrMargenMeta(), 0, "sin margen: por encima de la meta ya cuenta");
 
-      // LDL en riesgo muy alto: meta 55 → el corte está en 63,25.
+      // LDL en riesgo muy alto: meta 55 → el corte está EN la meta.
       const muyAlto = { categoriaRiesgo: "muy alto" };
       t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 55, muyAlto), "justo en la meta no es falla");
-      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 63, muyAlto),
-        "dentro del margen del 15 % tampoco: es la franja intermedia que el médico decidió no castigar");
-      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 64, muyAlto), "pasado meta+15 %, sí");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 56, muyAlto), "un punto por encima ya lo es");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 63, muyAlto),
+        "la franja 55,1-63,25, que el margen del 15 % callaba, ahora se marca");
 
-      // La misma cifra cambia de veredicto con la categoría: 80 está en meta para «alto»+15 %
-      // (corte 80,5) y fuera para «muy alto». Por eso la categoría no se puede suponer.
-      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, { categoriaRiesgo: "alto" }), "80 cabe en «alto»");
-      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, muyAlto), "y no en «muy alto»");
+      // La misma cifra sigue cambiando de veredicto con la categoría: 70 está en meta para
+      // «alto» y fuera para «muy alto». Por eso la categoría no se puede suponer.
+      t.falso(api.mtrFueraDeMeta("COLESTEROL_LDL", 70, { categoriaRiesgo: "alto" }), "70 es justo la meta de «alto»");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 70, muyAlto), "y está por encima de la de «muy alto»");
+      t.cierto(api.mtrFueraDeMeta("COLESTEROL_LDL", 80, { categoriaRiesgo: "alto" }),
+        "80 con meta 70: el caso que antes se callaba");
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", 200, {}), null,
         "SIN categoría no se juzga: no se inventa una meta, se devuelve null");
 
@@ -916,22 +928,35 @@ module.exports = {
       t.igual(api.mtrFueraDeMeta("TRIGLICERIDOS", 500, {}), null,
         "ni siquiera muy alto: la única vía para triglicéridos es arrastrarse con el grupo, no aquí");
 
-      // HbA1c: solo tiene sentido en diabéticos. Meta 7,0 → corte 8,05.
+      // HbA1c: solo tiene sentido en diabéticos. Meta 7,0 → v17.54.0 (D9): el corte ES 7,0.
       t.igual(api.mtrFueraDeMeta("HBA1C", 12, { esDm2: false }), null,
         "en un hipertenso sin diabetes la HbA1c NO se mide contra 7,0");
-      t.falso(api.mtrFueraDeMeta("HBA1C", 8, { esDm2: true }), "8,0 está dentro del margen");
-      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.1, { esDm2: true }), "8,1 no");
+      t.falso(api.mtrFueraDeMeta("HBA1C", 7, { esDm2: true }), "justo en 7,0 sigue siendo meta cumplida");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8, { esDm2: true }),
+        "8,0 estaba en la franja 7,1-8,05 que el margen callaba: ahora se marca");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.1, { esDm2: true }), "y 8,1 con más razón");
       t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 7 }), "con meta individual explícita, igual");
-      t.falso(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
-        "y una meta individual más laxa (paciente añoso) se respeta en vez de ignorarse");
+      // La meta individual más laxa (el paciente añoso al que el médico le fija 8,0) sigue
+      // mandando: con ella, 7,9 está EN meta aunque contra la general de 7,0 estaría fuera.
+      // v17.54.0: la comprobación cambia de cifras porque el margen desaparece, pero lo que
+      // fija —que la meta del médico manda sobre la general— es exactamente lo mismo.
+      t.falso(api.mtrFueraDeMeta("HBA1C", 7.9, { esDm2: true, metaHba1c: 8 }),
+        "una meta individual más laxa se respeta en vez de ignorarse");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 7.9, { esDm2: true }),
+        "el mismo valor, sin esa meta individual, sí está fuera de la general");
+      t.cierto(api.mtrFueraDeMeta("HBA1C", 8.5, { esDm2: true, metaHba1c: 8 }),
+        "y por encima de la individual también se marca: laxa no es ilimitada");
 
       // v17.28.0 — GLICEMIA ENTRA (encargo del médico, 28-ago): meta 130, mismo margen del
       // 15% que el resto ("una sola vara") → corte en 149,5. Solo en diabéticos, igual que
       // HbA1c — un hipertenso sin diabetes no tiene "glicemia fuera de meta".
       t.igual(api.mtrFueraDeMeta("GLUCOSA", 200, { esDm2: false }), null,
         "en un hipertenso sin diabetes la glicemia NO se mide contra 130");
-      t.falso(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true }), "149 está dentro del margen (corte 149,5)");
-      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 150, { esDm2: true }), "150 no");
+      // v17.54.0 (D9): el corte era 149,5 con el margen; ahora es la meta misma, 130.
+      t.falso(api.mtrFueraDeMeta("GLUCOSA", 130, { esDm2: true }), "justo en la meta sigue siendo meta cumplida");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 131, { esDm2: true }), "131 abre la franja 131-149,5 que antes se callaba");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 149, { esDm2: true }), "y 149, que estaba justo debajo del viejo corte");
+      t.cierto(api.mtrFueraDeMeta("GLUCOSA", 150, { esDm2: true }), "150 con más razón");
 
       // Sin resultado, y con claves que no tienen meta, no se opina.
       t.igual(api.mtrFueraDeMeta("COLESTEROL_LDL", null, muyAlto), null, "sin cifra no se juzga");

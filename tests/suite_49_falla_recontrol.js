@@ -25,9 +25,17 @@ module.exports = {
   pruebas(t, api) {
     // ================= GRAVEDAD DE LA FALLA =================
 
-    t.caso("por debajo de meta+15% no hay falla", () => {
-      t.igual(api.mtrGravedadFalla(80, 70, {}), null, "80 vs 70: +14% no llega");
-      t.igual(api.mtrGravedadFalla(80.5, 70, {}), null, "justo en el borde +15% tampoco");
+    // v17.54.0 (D9) — REESCRITA. Fijaba el margen del +15 %, que era la decisión del médico
+    // del 20-ago y que él mismo revocó el 29-ago: "ya no quiero usar el +15% ahora quiero ser
+    // estricto como lo dicen las guías". No era una prueba equivocada: era la prueba correcta
+    // de una decisión anterior. Lo que fija ahora es el contrato nuevo, y de paso el borde
+    // exacto, que es lo único que la anterior no comprobaba.
+    t.caso("v17.54.0 (D9): por encima de la meta ya hay falla — sin franja de cortesía", () => {
+      t.igual(api.mtrGravedadFalla(70, 70, {}), null, "justo EN la meta no es falla");
+      t.igual(api.mtrGravedadFalla(70.1, 70, {}), "leve", "un décimo por encima ya lo es");
+      t.igual(api.mtrGravedadFalla(80, 70, {}), "leve", "80 con meta 70: antes se callaba, ahora se dice");
+      t.igual(api.mtrGravedadFalla(69, 70, {}), null, "por debajo de la meta, nada");
+      t.igual(api.mtrGravedadFalla(80.5, 70, {}), "leve", "el antiguo borde del +15% ya no protege a nadie");
     });
 
     t.caso("entre meta+15% y meta+30% es leve (sin la vía de riesgo)", () => {
@@ -186,6 +194,34 @@ module.exports = {
       t.igual(plan.inercia, null, "y nada de inercia");
     });
 
+    // ============ v17.54.0 — LA FUSIÓN MTT ENTRA EN LA ORDEN ============
+    // La v17.7.5 midió 1.440 planes y encontró CERO fusiones fuera de la lista de órdenes, y
+    // decidió NO escribir la unión explícita: habría sido una línea que ninguna mutación
+    // podía matar. Correcto entonces; falso desde la D9. Al retirar el margen, un analito
+    // puede entrar en falla SIN estar cerca de vencer, y ahí la coincidencia se rompe.
+    t.caso("v17.54.0: una glicemia en falla TOMADA AYER entra en la orden, aunque su vigencia no haya vencido", () => {
+      const ayer = new Date(Date.UTC(2026, 7, 15)).toISOString().slice(0, 10);
+      const r = api.mtrResumenClinico({
+        hoyIso: "2026-08-16", edad: 66, sexo: "M", pesoKg: 80, creatinina: 2.4,
+        ct: 300, hdl: 35, ldl: 260, paSistolica: 150, paDiastolica: 90, hba1c: 11.5,
+        factores: { hta: true, diabetes: true },
+        ultimos: {
+          CREATININA: { fecha: ayer, valor: 2.4 },
+          COLESTEROL_LDL: { fecha: "2026-06-17", valor: 260 },
+          COLESTEROL_TOTAL: { fecha: ayer, valor: 300 }, COLESTEROL_HDL: { fecha: ayer, valor: 35 },
+          TRIGLICERIDOS: { fecha: ayer, valor: 250 }, GLUCOSA: { fecha: ayer, valor: 140 },
+          RAC: { fecha: ayer, valor: 12 }, UROANALISIS: { fecha: ayer, valor: 1 },
+          HEMOGLOBINA: { fecha: ayer, valor: 14 }, HBA1C: { fecha: "2026-06-17", valor: 11.5 },
+        },
+      });
+      const fus = (r.fallas && r.fallas.fusiones) || [];
+      t.cierto(fus.some((x) => /glicemia/i.test(String(x.analito))),
+        "precondición: la glicemia de 140 con meta 130 se fusiona a la toma maestra");
+      const claves = (r.plan.ordenar || []).map((x) => x.clave);
+      t.cierto(claves.indexOf("GLUCOSA") >= 0,
+        "y tiene que ir en la orden: si no, el médico agenda la toma y nadie pide el examen — " + JSON.stringify(claves));
+    });
+
     // ============ EL TERCER EJE: GLICEMIA (v17.6.84) ============
     // v68 manda vigilar la falla en TRES ejes (LDL/glicemia/HbA1c) y el tercero nunca se
     // cableó: lo bloqueaba que no existiera meta de glicemia en el archivo — v68 tampoco la
@@ -195,8 +231,12 @@ module.exports = {
     t.caso("v17.6.84: la glicemia es el tercer eje de falla, con meta de 130 mg/dL", () => {
       t.igual(api.mtrMetaGlicemiaGeneral(), 130, "la meta que fijó el médico");
       const base = { hoyIso: "2026-08-16", categoriaRiesgo: "alto", egfr: 80, edad: 55, esDm2: true };
+      // v17.54.0 (D9): 140 estaba «dentro del margen» con el +15 % (corte en 149,5). Retirado
+      // el margen, una glicemia de 140 en un diabético con meta de 130 es falla, y se dice.
       const enMargen = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 140 } }));
-      t.igual(enMargen.fallas.length, 0, "140 está dentro del margen (meta+15% = 149,5)");
+      t.igual(enMargen.fallas.length, 1, "140 con meta 130 es falla: la franja 131-149,5 ya no se calla");
+      t.igual(api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 130 } })).fallas.length, 0,
+        "y justo en la meta sigue sin serlo");
       const leve = api.mtrPlanFallas(Object.assign({}, base, { glicemia: { actual: 160 } }));
       t.igual(leve.fallas.length, 1, "160 sí es falla");
       t.igual(leve.fallas[0].analito, "Glicemia", "y es del eje de la glicemia");

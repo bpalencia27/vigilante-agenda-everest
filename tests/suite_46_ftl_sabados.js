@@ -257,9 +257,21 @@ module.exports = {
         },
       }));
       t.cierto(!!plan.ftl, "debía salir una fecha de toma");
-      // Ningún driver vigente puede vencer ANTES de la fecha de toma.
-      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl);
-      t.igual(antes.map((a) => a.nombre + "@" + a.vence), [], "hay exámenes que vencen ANTES de la toma");
+      // Ningún driver VIGENTE puede vencer ANTES de la fecha de toma.
+      // v17.54.0 (D9) — el filtro decía «drivers» y el comentario decía «vigentes»: no era
+      // lo mismo, y hasta hoy no se notaba porque con el margen del 15 % este paciente no
+      // tenía ninguno vencido. Al retirarlo, su HbA1c de 7,1 (meta 7,0) pasa a estar fuera
+      // de meta, su vigencia se parte a la mitad y queda VENCIDA desde el 30-jul. Un examen
+      // ya vencido no se puede proteger adelantando la toma —ya es tarde— y el plan hace lo
+      // correcto con él: lo mete en `vencidos`, lo mete en `ordenar` y ADELANTA la fecha de
+      // toma un mes (del 30-sep al 29-ago). Comprobado midiendo el mismo caso con y sin el
+      // margen. Lo que este caso protege es que no se cite DESPUÉS de que algo vigente se
+      // eche a perder; los ya vencidos son justo lo que la cita viene a resolver.
+      const yaVencidos = new Set((plan.vencidos || []).map((a) => a.nombre));
+      const antes = plan.drivers.filter((a) => a.vence && a.vence < plan.ftl && !yaVencidos.has(a.nombre));
+      t.igual(antes.map((a) => a.nombre + "@" + a.vence), [], "hay exámenes VIGENTES que vencen ANTES de la toma");
+      t.cierto((plan.ordenar || []).some((a) => yaVencidos.has(a.nombre)) || yaVencidos.size === 0,
+        "y todo lo que ya estaba vencido va en la orden: si no, el médico cita y nadie lo pide");
     });
 
     t.caso("si el vencimiento cae en domingo, la toma se ADELANTA al sábado", () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.53.0
+// @version     17.54.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.53.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.54.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -32297,9 +32297,14 @@ _vglOfrecerDeshacer(btn);
     else if (bajoMeta && cumpleReduccion) estado = "en_meta";
     else if (bajoMeta || cumpleReduccion) estado = "meta_parcial";
     else estado = "fuera_de_meta";
-    // FALLA terapéutica según la norma: actual > meta + 15%.
-    const falla = actual > metas.ldl * 1.15;
-    const fallaGrave = actual > metas.ldl * 1.30;
+    // v17.54.0 — ESTOS DOS LITERALES ERAN UNA CUARTA PUERTA, y no pasaba por la constante.
+    // Hasta hoy `1.15` y `1.30` estaban escritos a mano aqui, duplicando MTR_FALLA_UMBRAL y
+    // MTR_FALLA_GRAVE_UMBRAL. Cambiar la constante sin cambiar esto habria hecho que el plan
+    // de examenes y la HOJA EDUCATIVA QUE EL PACIENTE SE LLEVA IMPRESA (que se alimenta de
+    // `meta.falla` via mtrEducationFlags) dijeran cosas distintas del mismo paciente. Ahora
+    // los cuatro caminos leen el mismo numero.
+    const falla = actual > metas.ldl * (1 + _mtrMargenMeta());
+    const fallaGrave = actual > metas.ldl * (1 + _mtrMargenGrave());
     return {
       metas: metas, estado: estado, enMeta: estado === "en_meta",
       reduccionPct: reduccion, falla: falla, fallaGrave: fallaGrave,
@@ -33344,11 +33349,20 @@ _vglOfrecerDeshacer(btn);
   // viajes al laboratorio sin que ninguna pantalla le declarara falla. Ahora "acortar"
   // y "falla" usan el MISMO margen (MTR_FALLA_UMBRAL): si se le adelanta el examen, es
   // porque está en falla declarada.
+  // Lectura defensiva del umbral GRAVE, por el mismo motivo que _mtrMargenMeta: la constante
+  // vive mas abajo en el fichero. v17.54.0: NO se toca su valor — el escalon del 30 % es la
+  // decision D10, que sigue pendiente de que el medico confirme que no quiere arrastrar con
+  // ella el rojo de la tabla de tendencias (que sale del mismo numero, decision suya del
+  // 21-ago).
+  function _mtrMargenGrave() {
+    try { return (typeof MTR_FALLA_GRAVE_UMBRAL === "number") ? MTR_FALLA_GRAVE_UMBRAL : 0.30; }
+    catch (e) { return 0.30; }
+  }
   function _mtrMargenMeta() {
     // La constante vive más abajo en el archivo; en tiempo de ejecución ya existe, pero
     // esta lectura defensiva evita repetir la zona muerta temporal de la v16.2.6.
-    try { return (typeof MTR_FALLA_UMBRAL === "number") ? MTR_FALLA_UMBRAL : 0.15; }
-    catch (e) { return 0.15; }
+    try { return (typeof MTR_FALLA_UMBRAL === "number") ? MTR_FALLA_UMBRAL : 0; }
+    catch (e) { return 0; }
   }
   function mtrFueraDeMeta(clave, valor, ctx) {
     const c = ctx || {};
@@ -36242,6 +36256,33 @@ _vglOfrecerDeshacer(btn);
         return val !== null ? { actual: val, meta: (c.metaGlicemia != null ? mtrFloat(c.metaGlicemia) : null) } : null;
       })(),
     });
+    // v17.54.0 — UNIÓN EXPLÍCITA DE LAS FUSIONES MTT A LA LISTA DE ÓRDENES.
+    // El spec v68 pide «order_list = incluidos + drivers debidos + pasajeros no bloqueados +
+    // MTT fusionados», y hasta hoy esa última suma NO estaba escrita: la v17.7.5 midió 1.440
+    // planes, encontró CERO fusiones fuera de la lista, y decidió a conciencia no añadir una
+    // línea que ninguna mutación podría matar. Era la decisión correcta con la regla de
+    // entonces: una fusión exigía que la toma cayera en o después del recontrol, y un analito
+    // cuyo recontrol ya venció entraba al plan por su propio pie.
+    //
+    // La D9 rompe esa coincidencia. Al retirar el margen, un analito puede entrar en falla
+    // SIN estar cerca de vencer: medido, un diabético con glicemia de 140 (meta 130) TOMADA
+    // AYER queda en falla, se le fusiona el recontrol al 31-ago... y su glicemia no entra en
+    // la orden, porque su vigencia no ha vencido. El médico agenda la toma y nadie pide el
+    // examen. La rama dejó de ser inerte, así que ahora se escribe.
+    try {
+      const _ALIAS_MTT = { ldl: "COLESTEROL_LDL", hba1c: "HBA1C", glicemia: "GLUCOSA" };
+      const _fus = (resumen.fallas && Array.isArray(resumen.fallas.fusiones)) ? resumen.fallas.fusiones : [];
+      if (_fus.length && plan && Array.isArray(plan.ordenar)) {
+        const _ya = new Set(plan.ordenar.map((x) => x && x.clave));
+        for (const _f of _fus) {
+          const _k = _ALIAS_MTT[String(_f && _f.analito).toLowerCase()] || String(_f && _f.analito).toUpperCase();
+          if (!_k || _ya.has(_k)) continue;
+          _ya.add(_k);
+          plan.ordenar.push({ clave: _k, nombre: mtrNombreLegibleAnalito(_k), motivo: "recontrol por falla terapéutica" });
+        }
+      }
+    } catch (e) {}
+
     // Bloques de S5 que dependen del resumen ya armado (foco, banderas, TG y
     // uroanálisis). Se calculan aquí para que el recuadro no tenga que pedirlos
     // aparte y para que las pruebas los vean por la misma puerta.
@@ -38732,7 +38773,18 @@ _vglOfrecerDeshacer(btn);
     return MTR_HBA1C_META_DM2;
   }
 
-  const MTR_FALLA_UMBRAL = 0.15;   // meta+15% -> falla
+  // v17.54.0 (decision D9, 29-ago) — SE RETIRA EL MARGEN. Textual del medico: "ya no quiero
+  // usar el +15% ahora quiero ser estricto como lo dicen las guias". Un solo numero para
+  // los tres ejes (LDL, HbA1c y glicemia): por encima de la meta es falla, sin franja de
+  // cortesia. Las franjas que hasta hoy se callaban, medidas antes de tocar nada:
+  //   LDL 55,1-63,25 / 70,1-80,50 / 100,1-115,00 / 116,1-133,40 segun categoria
+  //   HbA1c 7,1-8,05 %   ·   glicemia 131-149,5 mg/dL
+  // Un paciente con LDL 80 y meta 70 figuraba "en meta", conservaba los 180 dias de
+  // vigencia y no se le declaraba falla. Ahora: fuera de meta, examen a los 90 dias y falla.
+  // La constante se queda (en vez de borrarse) porque es el UNICO sitio del que salen las
+  // cuatro puertas de abajo; ponerla a cero las mueve todas a la vez y deja el numero a la
+  // vista si algun dia hay que volver a discutirlo.
+  const MTR_FALLA_UMBRAL = 0;   // estricto: por encima de la meta ya es falla
   const MTR_FALLA_GRAVE_UMBRAL = 0.30;   // meta+30% -> grave
 
   // Gravedad de una falla, o null si no hay falla.
@@ -38758,10 +38810,10 @@ _vglOfrecerDeshacer(btn);
       analito: analito, actual: a, meta: m, excesoPct: excesoPct,
       falla: gravedad !== null, gravedad: gravedad,
       motivo: gravedad === null
-        ? "en meta o dentro del margen (meta+15%)"
+        ? "en meta"
         : (gravedad === "grave"
           ? "falla grave: " + (a > m * 1.30 ? "supera la meta en más del 30%" : "riesgo alto con eGFR<45 en menor de 75")
-          : "falla leve: supera la meta en más del 15%"),
+          : "falla leve: por encima de la meta"),
     };
   }
 

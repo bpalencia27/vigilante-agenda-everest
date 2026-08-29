@@ -4,6 +4,51 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.54.0] — 2026-08-29 (Se acabó la franja de cortesía)
+
+### 🎯 Estricto en los tres ejes
+Como usted pidió: **por encima de la meta ya cuenta**, sin el margen del 15 %. Las franjas que
+hasta hoy se callaban, medidas una a una antes de tocar nada:
+
+| eje | meta | franja que se callaba |
+|---|---|---|
+| LDL, riesgo muy alto | 55 | 55,1 – 63,25 |
+| LDL, riesgo alto | 70 | 70,1 – 80,50 |
+| LDL, riesgo moderado | 100 | 100,1 – 115,00 |
+| LDL, riesgo bajo | 116 | 116,1 – 133,40 |
+| HbA1c | 7,0 % | 7,1 – 8,05 % |
+| Glicemia (diabéticos) | 130 | 131 – 149,5 mg/dL |
+
+**Qué cambia en la práctica.** Un paciente con LDL 80 y meta 70 figuraba «en meta», conservaba
+los 180 días de vigencia y no se le declaraba falla. Ahora está fuera de meta, su examen se
+recorta a 90 días y se declara falla leve. Y un diabético con HbA1c de 7,1 pasa de «control en
+mes y medio» a **vencida hoy y citado un mes antes** (medido en un caso real del banco: la
+fecha de toma se adelanta del 30-sep al 29-ago).
+
+### 🚪 Había una cuarta puerta que nadie había encontrado
+El margen se aplicaba en cuatro sitios, y **uno de ellos tenía el 15 % escrito a mano**, sin
+pasar por el número común. Ese sitio alimenta la **hoja educativa que usted imprime y le
+entrega al paciente**. Cambiar el número sin tocar el literal habría hecho que el papel del
+paciente y el plan de exámenes dijeran cosas distintas del mismo paciente. Ahora los cuatro
+caminos leen el mismo número.
+
+### 🧾 Y un examen que se agendaba pero nadie pedía
+Al medir el cambio saltó un defecto **real**, no una prueba a retocar. Un diabético con
+glicemia de 140 **tomada ayer**: con el umbral estricto entra en falla y se le fija el
+recontrol para la próxima toma, pero como su vigencia normal no ha vencido, **la glicemia no
+entraba en la orden**. Se agendaba la toma y nadie pedía el examen.
+
+Estaba documentado como imposible, y con la regla anterior lo era. Ya no. Ahora toda falla que
+se retoma en la misma toma entra en la orden.
+
+### 🔒 Lo que NO se tocó
+El escalón del **30 %** (falla «grave») sigue exactamente igual. Es la decisión D10 y está
+pendiente de que usted confirme un detalle: ese mismo número decide también **el rojo de la
+tabla de tendencias**, que fue una decisión suya del 21-ago. Quitarlo a secas pintaría de rojo
+casi todo. No se toca hasta que usted lo diga.
+
+---
+
 ## [Versión 17.53.0] — 2026-08-29 (Faltaban tres cajones por revisar)
 
 ### 🗄 El arreglo de la v17.48.0 estaba a medias

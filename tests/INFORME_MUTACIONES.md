@@ -5761,3 +5761,53 @@ cero**. Por eso el arreglo no escribe en la clave canónica sino en **la que ya 
 momento tenía a la vista y se dio por completa. El inventario exhaustivo —las 67 claves, no
 las que uno recuerda— es lo que destapó los otros tres. *Arreglar los casos que uno conoce no
 es lo mismo que arreglar el defecto.*
+
+---
+
+## v17.54.0 — umbrales estrictos: se retira el margen del +15 % (D9)
+
+**Medición previa.** Las franjas se calcularon con las metas reales del motor, no de memoria:
+LDL 55,1–63,25 / 70,1–80,50 / 100,1–115,00 / 116,1–133,40; HbA1c 7,1–8,05 %; glicemia
+131–149,5. Coinciden al decimal con las que la entrevista anotó.
+
+**Inventario del margen: CUATRO puertas, no dos.** El informe del enjambre decía dos; la
+revisión adversarial señaló una tercera; leyendo el fichero apareció una cuarta que nadie
+había visto:
+
+1. `mtrFueraDeMeta` → `mtrAcortarPorFueraDeMeta` — parte la vigencia en el plan de exámenes.
+2. `mtrFueraDeMeta` con `opts.aplicar50` (`:4078`) — la misma vara en la precarga, que es la
+   del aviso de entrada y la del antiduplicado de Ordenar.
+3. `MTR_FALLA_UMBRAL` en `mtrGravedadFalla` — declara la falla terapéutica.
+4. **`mtrEvaluarMetaLdl` con `1.15` y `1.30` escritos a mano**, sin pasar por las constantes.
+   Alimenta `mtrEducationFlags`, o sea **la hoja educativa que el paciente se lleva impresa**.
+   Cambiar la constante sin tocar esto habría dejado el papel del paciente y el plan diciendo
+   cosas distintas.
+
+**Un defecto real, destapado al medir.** El barrido MTT de la v17.7.5 (1.440 planes, cero
+fusiones fuera de la orden) concluyó que la unión explícita `order_list ∪ MTT fusionados`
+sería una línea inerte y decidió no escribirla — correcto con la regla de entonces. La D9 la
+vuelve alcanzable: un diabético con glicemia 140 **tomada ayer** entra en falla sin estar
+cerca de vencer, se le fusiona el recontrol y su glicemia **no entraba en la orden**. Se
+agenda la toma y nadie pide el examen. La línea se escribe ahora, con su caso concreto fijado
+en una prueba.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | Vuelve el margen del 15 % | 5 casos entre suite_45 y suite_49 |
+| 2 | La cuarta puerta vuelve a su literal `1.15` | *v17.54.0 (D9): la meta de LDL declara falla por encima de la meta…* |
+| 3 | El umbral grave de la cuarta puerta se desvía a 1.50 | la misma |
+| 4 | La fusión MTT deja de entrar en la orden | *v17.54.0: una glicemia en falla TOMADA AYER entra en la orden…* y el barrido de suite_46 |
+
+**Cinco pruebas reescritas, y la distinción importa.** Cuatro fijaban el margen del +15 %:
+**no eran pruebas equivocadas, eran las pruebas correctas de una decisión anterior** (la del
+médico del 20-ago), que él mismo revocó el 29-ago. Se reescriben fijando el contrato nuevo y
+dejando escrita esa sucesión.
+
+La quinta es distinta y merece nombrarse: *«CERO VENCIDOS — la toma va al vencimiento más
+próximo, nunca después»* filtraba **todos** los drivers, mientras su propio comentario decía
+«ningún driver **vigente**». No era lo mismo, y hasta hoy no se notaba porque con el margen
+ese paciente no tenía ninguno vencido. Se comprobó midiendo el caso con y sin margen antes de
+tocarla: lo que cambia es que su HbA1c queda vencida y **la fecha de toma se adelanta un mes**
+—que es justo lo que debe pasar—, y el examen sale en la orden. Se afinó el predicado para que
+diga lo que el comentario ya decía, y se le añadió la comprobación que faltaba: que todo lo
+vencido vaya en la orden.
