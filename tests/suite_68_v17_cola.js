@@ -646,6 +646,46 @@ module.exports = {
     // v17.0.1 — la clave sale de apptKey, la que el resto del script ya usa. Antes leía
     // `hora`/`horaTexto`, campos que las citas NO tienen (son `hora_texto`), así que dos
     // citas del mismo paciente el mismo día contaban como una sola.
+    // =====================================================================
+    // v17.53.0 — EL HUECO QUE DEJÓ LA v17.48.0.
+    // Aquella entrega hizo tolerantes a los ceros de relleno la memoria del paciente
+    // (vgl_cosecha) y el registro del día (vgl_proc_today), y se dejó fuera TRES almacenes
+    // más indexados por cédula. El peor es el historial de inasistencias: no caduca por día,
+    // así que un paciente archivado bajo la forma rellenada perdía su historial ENTERO y
+    // aparecía con cero — sin que nada lo dijera.
+    // =====================================================================
+    t.caso("v17.53.0: el historial de inasistencias reconoce al paciente con o sin ceros delante", () => {
+      const c = cargar({ silencioso: true });
+      c.api._noShowGuardar({ "0099900042": { total: 3, ultima: "2026-08-01" } });
+      t.igual(c.api._noShowPrevia("0099900042"), 3, "precondición: archivado con ceros");
+      t.igual(c.api._noShowPrevia("99900042"), 3, "y consultado sin ellos es el MISMO paciente");
+    });
+
+    t.caso("v17.53.0: registrar una inasistencia NO reinicia el contador ya archivado", () => {
+      const c = cargar({ silencioso: true });
+      c.api._noShowGuardar({ "0099900042": { total: 3, ultima: "2026-08-01" } });
+      const total = c.api._noShowRegistrar("99900042");
+      t.igual(total, 4, "sigue contando desde 3, no empieza de cero");
+      const h = JSON.parse(c.env.almacen["vgl_nosh_hist"] || "{}");
+      t.igual(Object.keys(h).length, 1, "y no se crea una segunda ficha para el mismo paciente");
+    });
+
+    t.caso("v17.53.0: dos pacientes DISTINTOS siguen sin cruzar su historial de inasistencias", () => {
+      const c = cargar({ silencioso: true });
+      c.api._noShowGuardar({ "99900042": { total: 5, ultima: "2026-08-01" } });
+      t.igual(c.api._noShowPrevia("99900043"), 0, "una cédula vecina no hereda las inasistencias de otro");
+      t.igual(c.api._noShowPrevia("199900042"), 0, "ni una que solo comparte el final");
+    });
+
+    t.caso("v17.53.0: la clave de productividad no se parte por los ceros de relleno", () => {
+      t.igual(api.mtrProdClaveCita({ doc_id: "0099900042", hora_texto: "08:00" }),
+              api.mtrProdClaveCita({ doc_id: "99900042", hora_texto: "08:00" }),
+              "la misma atención da la misma clave, como promete el comentario de la función");
+      t.falso(api.mtrProdClaveCita({ doc_id: "99900042", hora_texto: "08:00" })
+              === api.mtrProdClaveCita({ doc_id: "99900043", hora_texto: "08:00" }),
+              "y dos pacientes distintos siguen siendo dos");
+    });
+
     t.caso("mtrProdClaveCita: dos citas del mismo paciente el mismo día son DOS citas", () => {
       const a = api.mtrProdClaveCita({ doc_id: "111", hora_texto: "07:00" });
       const b = api.mtrProdClaveCita({ doc_id: "111", hora_texto: "09:20" });

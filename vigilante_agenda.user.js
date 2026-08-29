@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.52.0
+// @version     17.53.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.52.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.53.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4444,7 +4444,10 @@
   }
   function _preconDe(doc) {
     try {
-      const e = _preconLeerTodo().porDoc[String(doc)];
+      // v17.53.0 — misma tolerancia que el resto de almacenes por cédula (v17.48.0). Aquí
+      // el daño es menor (es una caché de 6 h que se rehace sola), pero un fallo de caché
+      // significa una espera que el médico sí nota, y la corrección cuesta lo mismo.
+      const e = _vglBuscarPorDoc(_preconLeerTodo().porDoc, doc);
       if (!e || !Array.isArray(e.labs)) return null;
       if (Date.now() - (e.ts || 0) > VGL_PRECON_TTL_MS) return null;
       return e;
@@ -4668,6 +4671,18 @@
     if (!s) return null;
     if (Object.prototype.hasOwnProperty.call(mapa, s) && mapa[s]) return mapa[s];
     for (const k of Object.keys(mapa)) { if (k !== s && _vglMismaCedula(k, s) && mapa[k]) return mapa[k]; }
+    return null;
+  }
+  // v17.53.0 — Devuelve la CLAVE bajo la que está archivado ese documento, sea la canónica
+  // o una escritura antigua con ceros de relleno; null si no hay ninguna. Hace falta cuando
+  // el llamador no solo lee sino que va a ESCRIBIR encima: escribir bajo la clave canónica
+  // sin mirar dejaría huérfano lo archivado antes y el contador arrancaría de cero otra vez.
+  function _vglClaveDeDoc(mapa, docId) {
+    if (!mapa || typeof mapa !== "object") return null;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return null;
+    if (Object.prototype.hasOwnProperty.call(mapa, s)) return s;
+    for (const k of Object.keys(mapa)) { if (_vglMismaCedula(k, s)) return k; }
     return null;
   }
   function _vglListaTieneDoc(lista, docId) {
@@ -24971,7 +24986,11 @@ _vglOfrecerDeshacer(btn);
     // normalizeHora (que ya iguala «6:40:00», «06:40:00» y «06:40») antes de formar la
     // clave, y el documento manda sobre la hora: la misma atención da la misma clave
     // venga de donde venga.
-    const doc = String(cita.doc_id || cita.documento || "").replace(/\D/g, "");
+    // v17.53.0 — normalizeKey en vez de un replace a pelo: quitaba lo no-dígito pero
+    // CONSERVABA los ceros de relleno, asi que «0099900042|08:00» y «99900042|08:00» eran
+    // dos claves para la misma atencion — justo lo que el parrafo de arriba promete que no
+    // pasa («la misma atencion da la misma clave venga de donde venga»).
+    const doc = normalizeKey(String(cita.doc_id || cita.documento || ""));
     let hora = String(cita.hora_texto || cita.hora || cita.horaTexto || "").trim();
     try { if (typeof normalizeHora === "function" && hora) hora = normalizeHora(hora) || hora; } catch (e) {}
     if (doc) return doc + "|" + hora;
@@ -26365,20 +26384,31 @@ _vglOfrecerDeshacer(btn);
   const NO_SHOW_KEY = "vgl_nosh_hist";
   function _noShowLeer() { try { return JSON.parse(localStorage.getItem(NO_SHOW_KEY) || "{}"); } catch (e) { return {}; } }
   function _noShowGuardar(h) { try { localStorage.setItem(NO_SHOW_KEY, JSON.stringify(h)); } catch (e) {} }
+  // v17.53.0 — TOLERANTE A LOS CEROS DE RELLENO, igual que vgl_cosecha y vgl_proc_today
+  // desde la v17.48.0. Este almacén se quedó fuera de aquella entrega y es el que peor lo
+  // llevaba: NO caduca por día. Guarda el historial de inasistencias del paciente, y ese
+  // contador es lo que le avisa al médico. Un paciente archivado bajo "0099900042" y
+  // consultado como "99900042" aparecía con CERO inasistencias — su historial entero,
+  // invisible, sin que nada lo dijera.
+  //
+  // Se escribe sobre la clave que YA existe (no sobre la canónica) para no dejar huérfano
+  // lo archivado antes: eso reiniciaría el contador a cero, que es justo el daño a evitar.
+  // No se fusiona nada ni se mueve nada de sitio.
   function _noShowRegistrar(docId) {
     if (!docId) return 0;
     const h = _noShowLeer();
-    const e = h[docId] || { total: 0, ultima: "" };
+    const k = _vglClaveDeDoc(h, docId) || String(docId);
+    const e = h[k] || { total: 0, ultima: "" };
     if (e.ultima === todayStamp()) return e.total || 0;
     e.total = (e.total || 0) + 1;
     e.ultima = todayStamp();
-    h[docId] = e;
+    h[k] = e;
     _noShowGuardar(h);
     return e.total;
   }
   function _noShowPrevia(docId) {
     if (!docId) return 0;
-    const e = _noShowLeer()[docId];
+    const e = _vglBuscarPorDoc(_noShowLeer(), docId);
     if (!e || !e.total) return 0;
     // No cuenta el no-show de HOY: la tarjeta ya lo pinta con su color ámbar.
     return (e.ultima === todayStamp()) ? Math.max(0, e.total - 1) : (e.total || 0);

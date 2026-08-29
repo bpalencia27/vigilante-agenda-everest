@@ -4,6 +4,30 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.53.0] — 2026-08-29 (Faltaban tres cajones por revisar)
+
+### 🗄 El arreglo de la v17.48.0 estaba a medias
+Aquella versión hizo que la memoria del paciente y el registro del día reconocieran al mismo
+paciente viniera su cédula con ceros de relleno o sin ellos. **Se quedaron fuera tres
+almacenes más que también se guardan por cédula.** Lo destapó una medición posterior, y se
+comprobó uno por uno antes de tocar nada.
+
+**El grave: el historial de inasistencias.** Ese sí **no caduca** — guarda cuántas veces ha
+faltado el paciente a lo largo del tiempo, y es lo que le avisa a usted. Un paciente archivado
+bajo la forma rellenada aparecía con **cero inasistencias**: su historial entero, invisible,
+sin que nada lo dijera. Peor todavía: al registrarle una falta nueva se le abría una segunda
+ficha y el contador **empezaba de cero otra vez**.
+
+Ahora se lee reconociendo las dos formas, y al registrar se escribe **sobre la ficha que ya
+existe**, no sobre una nueva — para no dejar huérfano lo archivado antes. No se fusiona ni se
+mueve nada de sitio.
+
+**Los otros dos, menores pero arreglados:** la clave de la productividad partía en dos la
+misma atención (justo lo que el comentario de esa función promete que no pasa), y la caché de
+exámenes previos fallaba y obligaba a volver a consultar — una espera que usted sí nota.
+
+---
+
 ## [Versión 17.52.0] — 2026-08-29 (La albuminuria ya no necesita permiso de la diabetes)
 
 ### 🧪 Qué cambia

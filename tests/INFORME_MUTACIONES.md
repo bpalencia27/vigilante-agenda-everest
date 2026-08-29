@@ -5726,3 +5726,38 @@ la coma en punto** (`.replace(",", ".")`) antes de que el valor entre al motor, 
 vías que lo alimentan (los últimos laboratorios y los factores del resumen previo). No es un
 riesgo vivo. Comprobarlo costó tres minutos; reportarlo sin comprobarlo habría costado una
 investigación entera al médico.
+
+---
+
+## v17.53.0 — los tres almacenes por cédula que la v17.48.0 se dejó
+
+**Origen: una medición del enjambre, verificada a mano antes de creérsela.** El informe de la
+entrega D3 (respaldo exportable) enumeró las 67 claves de almacenamiento del script y señaló
+que `vgl_nosh_hist`, `vgl_prod` y `vgl_precon` se indexan por cédula y **no** tienen lectura
+tolerante. Se comprobó con un script propio contra el userscript real, uno por uno:
+
+| almacén | archivado como `0099900042`, consultado como `99900042` | ¿caduca? |
+|---|---|---|
+| `vgl_cosecha` | ✅ lo encuentra (v17.48.0) | no |
+| `vgl_proc_today` | ✅ lo encuentra (v17.48.0) | por día |
+| **`vgl_nosh_hist`** | ❌ devolvía **0** con 3 inasistencias archivadas | **no** |
+| **`vgl_prod`** | ❌ `0099900042\|08:00` ≠ `99900042\|08:00` | por día |
+| **`vgl_precon`** | ❌ fallo de caché | 6 h |
+
+El primero es el que importa: no caduca, y su contador es un aviso clínico al médico. Y tenía
+un segundo filo que solo se ve al escribir: `_noShowRegistrar` leía `h[docId]` directo, así que
+registrar una falta nueva bajo la forma canónica **abría una segunda ficha con el contador en
+cero**. Por eso el arreglo no escribe en la clave canónica sino en **la que ya existe**
+(`_vglClaveDeDoc`): normalizar hacia adelante sin dejar huérfano lo de atrás.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | La lectura de inasistencias vuelve a ser exacta | *v17.53.0: el historial de inasistencias reconoce al paciente con o sin ceros delante* |
+| 2 | Registrar escribe siempre en la clave canónica | *v17.53.0: registrar una inasistencia NO reinicia el contador ya archivado* |
+| 3 | La clave de productividad vuelve a conservar los ceros | *v17.53.0: la clave de productividad no se parte por los ceros de relleno* |
+| 4 | `_vglClaveDeDoc` deja de buscar la escritura antigua | *…NO reinicia el contador ya archivado* |
+
+**Lección de proceso:** la v17.48.0 arregló los dos almacenes que la investigación de aquel
+momento tenía a la vista y se dio por completa. El inventario exhaustivo —las 67 claves, no
+las que uno recuerda— es lo que destapó los otros tres. *Arreglar los casos que uno conoce no
+es lo mismo que arreglar el defecto.*
