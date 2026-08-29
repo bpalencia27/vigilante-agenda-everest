@@ -6,6 +6,34 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.47.0 — 29-ago-2026 (el JSON que va a la IA podía ir caducado)
+
+`mtrAbrirPanelRedaccion` calculaba la hoja de hechos una sola vez al abrir el panel, y el
+manejador de Generar reutilizaba esa foto. Con el panel abierto mientras el médico completa
+la historia —uso normal, documentado en el propio código— la nota se redactaba con cifras
+de hasta 13 minutos antes (3 min de TTL más el rato abierto).
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | Generar vuelve a usar la foto (`resumen`/`hoja` del cierre) — el defecto original | "el manejador de Generar usa el resumen resuelto" | Sí — 132/132 |
+| 2 | `mtrIaResumenVigente` deja de consultar la caché | "al generar se usa el resumen VIGENTE" | Sí — 132/132 |
+
+Una prueba de regresión existente (`v17.6.42: … llega a los 4 puntos de envío`) buscaba
+`nombrePaciente: resumen._nombrePaciente` **por identificador literal** y cayó al renombrar
+la variable a `_res`. Su intención —que el nombre llegue al objeto `opts`, que es lo que
+permite tacharlo antes de enviarlo— no cambió, así que se aceptó cualquiera de los dos
+portadores en vez de atarse al nombre exacto. Se verificó que sigue cayendo si se quita la
+línea entera.
+
+**Incidente de proceso, y se documenta en vez de disimularse:** al bumpear la v17.46.0
+escribí `package.json` con `open(p,"w").write(open(p).read())` — Python evalúa el `open` de
+escritura primero, **trunca el archivo**, y luego lee un archivo vacío. El `package.json`
+quedó en 0 bytes y así se empujó al remoto en dos commits. Se detectó al primer `node
+tests/runner.js` posterior ("Invalid package config") y se restauró desde el último commit
+bueno (`e9e0255`). Ninguna prueba lo habría cazado: el banco no valida su propio
+`package.json`. Desde esta versión el bump se hace con `json.load`/`json.dumps`, leyendo
+antes de abrir para escritura.
+
 ## v17.46.0 — 29-ago-2026 (la cosecha se perdía en silencio con la cuota llena)
 
 `_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un `try/catch`

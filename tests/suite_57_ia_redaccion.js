@@ -34,6 +34,7 @@ module.exports = {
     "mtrGuardarClaveGemini", "mtrLeerClaveGemini",
     "mtrModeloGemini", "_mtrModeloIdx", "mtrRotarModelo", "mtrEsCuotaAgotada", "mtrEsModeloSobrecargado", "mtrEsModeloNoDisponible", "mtrHojaDesdeResumen",
     "mtrDatosExtraGuardar", "mtrDatosExtraLeer", "mtrDatosExtraTexto",
+    "mtrIaResumenVigente",
     "mtrJsonV68DesdeResumen", "mtrLeerTextoLibreHistoria",
     "mtrCasillaDeModo", "mtrRedactorModoSugerido", "mtrInsertarEnCasillaModo",
     "mtrCacheResumenEdadMin", "mtrCacheResumenBorrar",
@@ -1668,10 +1669,66 @@ module.exports = {
       const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
       t.cierto(/resumen\._nombrePaciente = \(apt && apt\.nombre\) \|\| null;/.test(src), "el resumen del paciente debe traer su nombre real (interno, nunca se envía tal cual)");
       t.cierto(/mtrLeerTextoLibreHistoria\(undefined, resumen\._nombrePaciente\)/.test(src), "libreAhora() (texto de las casillas de Everest) debe pasar el nombre");
-      const ocurrenciasOpts = (src.match(/nombrePaciente: resumen\._nombrePaciente,/g) || []).length;
       // v17.34.0 — "Generar todo" se retiró; queda un solo objeto opts.
+      // v17.47.0 — el objeto del que se lee dejó de llamarse `resumen`: el manejador de
+      // Generar ahora resuelve el resumen VIGENTE en el instante del clic
+      // (`mtrIaResumenVigente`) en vez de usar la foto tomada al abrir el panel, y lo
+      // guarda en `_res`. La INTENCIÓN de esta prueba —que el nombre llegue al objeto
+      // opts, porque es lo que permite tachar el nombre del paciente antes de enviarlo—
+      // no cambia, así que se acepta cualquiera de los dos portadores en vez de atarse al
+      // identificador exacto. Verificado: quitar la línea entera pone esta prueba en rojo.
+      const ocurrenciasOpts = (src.match(/nombrePaciente: (?:resumen|_res)\._nombrePaciente,/g) || []).length;
       t.igual(ocurrenciasOpts, 1, "el objeto opts de Generar debe incluir el nombre");
       t.cierto(/mtrEstiloGuardar\(salida\.value, resumen\._nombrePaciente\)/.test(src), "el aprendizaje automático de estilo también debe sanear con el nombre real antes de guardar");
+    });
+
+    // =================================================================
+    //  v17.47.0 — EL JSON QUE VA A LA IA NO PUEDE IR CADUCADO
+    //  El panel calculaba la hoja de hechos UNA VEZ, al abrirse, y "Generar" reutilizaba
+    //  esa foto. Dejando el panel abierto mientras se completa la historia —uso normal—
+    //  la nota se redactaba con TFG, LDL, riesgo y metas de hasta 13 minutos antes. El
+    //  texto libre sí se releía desde la v17.6.22; los números no. Y la nota la firma el
+    //  médico.
+    // =================================================================
+    t.caso("v17.47.0 — al generar se usa el resumen VIGENTE, no la foto de cuando se abrió el panel", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { _docId: "1098765432", _nombrePaciente: "X", marca: "VIEJO" };
+      const hojaFoto = { marca: "HOJA_VIEJA" };
+      // El Panel refrescó el resumen mientras el médico tenía el panel abierto.
+      c.api.mtrCacheResumenGuardar("1098765432", { _docId: "1098765432", _nombrePaciente: "X", marca: "NUEVO" });
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen.marca, "NUEVO", "manda el resumen vigente, no la foto");
+      t.cierto(v.refrescado, "y se declara que se refrescó");
+      t.cierto(v.hoja !== hojaFoto, "la hoja se recalcula sobre el resumen nuevo, no se arrastra la vieja");
+    });
+
+    t.caso("v17.47.0 — sin caché vigente conserva la foto: no se inventa un resumen que no se puede recomponer", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { _docId: "1098765432", _nombrePaciente: "X", marca: "FOTO" };
+      const hojaFoto = { marca: "HOJA" };
+      c.api.mtrCacheResumenBorrar("1098765432");
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen.marca, "FOTO", "se conserva lo único que hay — recomponer exigiría releer los laboratorios");
+      t.igual(v.hoja, hojaFoto, "y su hoja");
+      t.falso(v.refrescado, "pero NO se dice que se refrescó: eso sería presentar como fresco algo que no lo es");
+    });
+
+    t.caso("v17.47.0 — sin docId no revienta y devuelve la foto tal cual", () => {
+      const c = cargar({ silencioso: true });
+      const foto = { marca: "FOTO" }, hojaFoto = { marca: "HOJA" };
+      const v = c.api.mtrIaResumenVigente(foto, hojaFoto);
+      t.igual(v.resumen, foto);
+      t.falso(v.refrescado);
+    });
+
+    t.caso("v17.47.0 — el manejador de Generar usa el resumen resuelto, no la foto del cierre", () => {
+      const src = fs.readFileSync(path.join(__dirname, "..", "vigilante_agenda.user.js"), "utf8");
+      t.cierto(/const _vig = mtrIaResumenVigente\(resumen, hoja\);/.test(src),
+        "Generar debe resolver el resumen vigente antes de armar el prompt");
+      t.cierto(/mtrJsonV68DesdeResumen\(_res, _hoja\)/.test(src),
+        "el JSON v68 se arma con el resumen resuelto, no con la foto");
+      t.cierto(/mtrGeminiRedactar\(_hoja, modoGen, opts\)/.test(src),
+        "y la hoja que viaja al modelo también");
     });
 
 

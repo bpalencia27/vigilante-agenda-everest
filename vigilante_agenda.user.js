@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.46.0
+// @version     17.47.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.46.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.47.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -36645,9 +36645,13 @@ _vglOfrecerDeshacer(btn);
           const faltan = _criticosFaltantes();
           if (faltan.length) { _congelarChips(false); _pintarCriticos(faltan); estado.textContent = "Complete lo marcado para una nota válida."; return; }
         }
+        // v17.47.0 — se resuelve el resumen VIGENTE en el instante del clic, no la foto
+        // que se tomó al abrir el panel. Ver mtrIaResumenVigente.
+        const _vig = mtrIaResumenVigente(resumen, hoja);
+        const _res = _vig.resumen, _hoja = _vig.hoja;
         const opts = {
           estiloEjemplos: mtrEstiloLeer(),
-          nombrePaciente: resumen._nombrePaciente,
+          nombrePaciente: _res._nombrePaciente,
           // v14.2.0 (auditoría pre-producción) — esta era la ÚNICA de las cuatro entradas de
           // texto libre del panel de IA que llegaba a Gemini SIN pasar por scrubPII (las
           // otras tres se limpian dentro de sus propias funciones lectoras). El pie del modal
@@ -36657,13 +36661,13 @@ _vglOfrecerDeshacer(btn);
           indicaciones: ($("#vgl-ia-indicaciones") || {}).value || "",
           // v17.0.0 — ancla del control anterior, solo para la Enfermedad Actual.
           anclaControlAnterior: (modo === "enfermedad_actual") ? _anclaPrevia : null,
-          datosExtra: mtrDatosExtraLeer(resumen._docId),
+          datosExtra: mtrDatosExtraLeer(_res._docId),
           contextoLibre: libreAhora().combinado,
-          jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(resumen, hoja) : null,
+          jsonV68: (modo === "analisis_plan") ? mtrJsonV68DesdeResumen(_res, _hoja) : null,
         };
         if (!mtrLeerClaveGemini()) {
           _congelarChips(false);
-          salida.value = mtrHojaDeHechosTexto(hoja);
+          salida.value = mtrHojaDeHechosTexto(_hoja);
           textoGeneradoOriginal = salida.value;
           estado.textContent = "Sin clave de Gemini: estos son los hechos, cópielos y redacte a mano.";
           habilitarPost(salida.value); _pintarCifras(); btnIns.disabled = true; return;
@@ -36671,7 +36675,7 @@ _vglOfrecerDeshacer(btn);
         btnGen.disabled = true; estado.textContent = "Generando con " + mtrModeloGemini(modoGen) + "…"; salida.value = "";
         _ultimoModelo = mtrModeloGemini(modoGen);
         try { uxTrack("fn.ia.gen"); } catch (e) {}
-        const r = await mtrGeminiRedactar(hoja, modoGen, opts);
+        const r = await mtrGeminiRedactar(_hoja, modoGen, opts);
         btnGen.disabled = false;
         _congelarChips(false);
         if (r.ok) {
@@ -38803,6 +38807,50 @@ _vglOfrecerDeshacer(btn);
   // v15.6.0 — minutos desde que se calculó el resumen en caché (null si no hay caché
   // vigente). La Ficha del paciente lo muestra para que el médico sepa qué tan fresca
   // es la lectura antes de confiar en ella.
+  // =====================================================================
+  //  v17.47.0 — EL JSON QUE VA A LA IA NO PUEDE IR CADUCADO
+  //
+  //  Defecto encontrado por auditoría del flujo de datos: el panel de redacción calcula
+  //  la hoja de hechos UNA SOLA VEZ, al abrirse, y el botón "Generar" reutiliza esa foto.
+  //  El médico deja el panel abierto mientras completa la historia —uso normal, y el
+  //  propio código lo documenta— así que la nota se podía redactar con TFG, LDL,
+  //  categoría de riesgo y metas de hasta 13 minutos antes (3 min de TTL más el rato que
+  //  el panel llevara abierto). El texto libre SÍ se relee en cada clic desde la
+  //  v17.6.22; los números no. Y la nota la firma el médico.
+  //
+  //  Esta función resuelve, en el instante del clic, cuál es el resumen vigente:
+  //   · Si la caché tiene uno (el Panel la refresca cada 20 s con los factores del DOM),
+  //     ese manda, y la hoja se recalcula sobre él.
+  //   · Si la caché está vacía —invalidada porque el médico acaba de escribir, o
+  //     caducada— NO se puede recomponer el resumen aquí: haría falta volver a leer los
+  //     laboratorios. Entonces se conserva la foto, pero se DICE que es una foto y de
+  //     cuándo. Callarlo sería presentar como fresco algo que no lo es, que es justo lo
+  //     que este proyecto prohíbe.
+  //
+  //  Devuelve `{resumen, hoja, refrescado, edadMin}`. Nunca lanza: ante cualquier duda
+  //  devuelve la foto original, que es el comportamiento de antes.
+  // =====================================================================
+  function mtrIaResumenVigente(resumenFoto, hojaFoto) {
+    const salida = { resumen: resumenFoto, hoja: hojaFoto, refrescado: false, edadMin: null };
+    try {
+      const docId = resumenFoto && resumenFoto._docId;
+      if (!docId) return salida;
+      const vigente = mtrCacheResumenLeer(docId);
+      if (!vigente) {
+        // Sin caché vigente: la foto es lo único que hay. Se informa su antigüedad si se
+        // puede saber; `mtrCacheResumenEdadMin` devuelve null cuando ya caducó.
+        salida.edadMin = mtrCacheResumenEdadMin(docId);
+        return salida;
+      }
+      if (vigente === resumenFoto) { salida.edadMin = mtrCacheResumenEdadMin(docId); return salida; }
+      salida.resumen = vigente;
+      salida.hoja = mtrHojaDesdeResumen(vigente);
+      salida.refrescado = true;
+      salida.edadMin = mtrCacheResumenEdadMin(docId);
+      return salida;
+    } catch (e) { return salida; }
+  }
+
   function mtrCacheResumenEdadMin(docId) {
     if (!docId || _mtrCacheResumen.docId !== String(docId) || !_mtrCacheResumen.resumen) return null;
     const ahora = (typeof Date !== "undefined" ? Date.now() : 0);

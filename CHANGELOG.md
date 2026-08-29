@@ -4,6 +4,32 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.47.0] — 2026-08-29 (La IA ya no redacta con cifras de hace 13 minutos)
+
+### 🕐 El panel de redacción tomaba una foto al abrirse y la usaba al generar
+Cuando usted abre ✍ Redactar, el script calculaba en ese instante la hoja de hechos del
+paciente —TFG, LDL, categoría de riesgo, metas— y **la guardaba**. Después, al pulsar
+Generar, reutilizaba esa misma hoja.
+
+El problema es cómo se usa el panel de verdad: usted lo abre y lo deja abierto mientras
+termina de completar la historia. Si pasan diez minutos, la nota se redactaba con los
+números de hace diez minutos, más los tres de antigüedad que ya podía tener el cálculo.
+Hasta **trece minutos** de desfase, en una nota que usted firma.
+
+El texto libre sí se releía en cada clic (se arregló en la v17.6.22). Los números no.
+
+**Ahora, al pulsar Generar, se resuelve el resumen vigente en ese instante.** El Panel del
+paciente refresca sus cálculos cada 20 segundos, así que casi siempre habrá algo más nuevo
+que la foto, y eso es lo que se usa.
+
+**Y donde no se puede, no se finge.** Si el cálculo ya caducó —por ejemplo, porque usted
+acaba de escribir algo y eso invalida la caché— el script **no puede** recomponerlo desde
+el panel: haría falta volver a leer los laboratorios. En ese caso conserva la foto, pero
+**no dice que la refrescó**. Presentar como fresco algo que no lo es sería peor que el
+defecto original.
+
+---
+
 ## [Versión 17.46.0] — 2026-08-29 (La memoria del paciente ya no se pierde en silencio)
 
 ### 💾 Con el navegador lleno, lo aprendido de un paciente desaparecía sin avisar
