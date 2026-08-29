@@ -4,6 +4,27 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.46.0] — 2026-08-29 (La memoria del paciente ya no se pierde en silencio)
+
+### 💾 Con el navegador lleno, lo aprendido de un paciente desaparecía sin avisar
+El script guarda lo que aprende de cada paciente (factores de riesgo, qué pestañas ya
+revisó, la historia cosechada) para tenerlo en el próximo control. Esa escritura se hacía
+sin ninguna red de seguridad: si el almacenamiento del navegador estaba lleno, el error se
+**tragaba entero y en silencio**, y todo lo de esa consulta no existía al día siguiente.
+
+Usted no habría visto ningún error. Lo que notaría, días después, es que "la compuerta de
+contexto se quedó atascada" — exactamente el mismo síntoma que ya reportó en campo por otra
+causa (v16.4.0), y que por eso mismo habría sido difícil de atribuir.
+
+Lo llamativo: **la defensa ya existía en el script**. Hay una función que, cuando el
+almacén se llena, purga lo viejo y reintenta. La usan otras rutas. La que guarda la memoria
+clínica del paciente, no.
+
+Ahora sí la usa. Y si aun después de purgar no cabe, **se lo dice** en vez de callarse:
+perder la memoria del paciente sin avisar es peor que interrumpirle un momento.
+
+---
+
 ## [Versión 17.45.0] — 2026-08-29 (🔒 El nombre del paciente ya no puede viajar a la IA por el campo de medicamentos)
 
 ### Una fuga de datos del paciente, cerrada

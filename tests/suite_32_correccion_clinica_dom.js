@@ -681,5 +681,49 @@ module.exports = {
       t.igual(final.hta.v, true, "y lo que no se tocó de nuevo sigue intacto");
     });
 
+    // v17.46.0 — PÉRDIDA SILENCIOSA POR CUOTA. Hallazgo de auditoría de persistencia.
+    // `_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un
+    // `try/catch` que devuelve null: con el almacén del navegador lleno, el
+    // QuotaExceededError se tragaba entero y lo aprendido del paciente en esa consulta
+    // NO existía al día siguiente. El médico no veía ningún error; solo notaría, días
+    // después, que "la compuerta de contexto se quedó atascada" — el mismo síntoma que
+    // ya reportó en campo por otra causa (v16.4.0).
+    // El script YA tenía la defensa: `safeWriteJSON` purga por cuota y reintenta. Esta
+    // ruta simplemente no la usaba, siendo la que guarda la memoria clínica del paciente.
+    t.caso("v17.46.0 — la cosecha no se pierde en silencio si el almacén está lleno: purga y reintenta", () => {
+      const c = cargar({ silencioso: true });
+      const docId = "1098765432";
+      // Primera escritura normal, para tener algo que perder.
+      c.api._vglCosechaGuardar(docId, { factores: { hta: { v: true, ts: 1 } } });
+      t.cierto(!!c.api._vglCosechaLeer(docId), "el paciente quedó archivado");
+
+      // Ahora el almacén se llena: el PRIMER setItem falla, el segundo (tras la purga)
+      // funciona. Es exactamente el contrato de safeWriteJSON.
+      const real = c.env.win.localStorage.setItem;
+      let intentos = 0;
+      c.env.win.localStorage.setItem = function (k, v) {
+        intentos++;
+        if (intentos === 1) { const e = new Error("QuotaExceededError"); e.name = "QuotaExceededError"; throw e; }
+        return real.call(this, k, v);
+      };
+      // La fusión de _vglCosechaGuardar es PLANA a propósito (el "pozo" ya documentado en
+      // el propio código): `factores` se reemplaza entero, y son los llamadores reales
+      // —_vglCosecharFactoresVisibles, mtrHcAcumularDelDom— los que pre-fusionan. Por eso
+      // aquí se manda el mapa completo, igual que hace producción; una primera versión de
+      // esta prueba esperaba fusión profunda y afirmaba algo que esta función nunca ha
+      // prometido.
+      const r = c.api._vglCosechaGuardar(docId, {
+        factores: { hta: { v: true, ts: 1 }, diabetes: { v: true, ts: 2 } },
+      });
+      c.env.win.localStorage.setItem = real;
+
+      t.cierto(intentos >= 2, "tras el fallo de cuota debe REINTENTAR, no rendirse en silencio");
+      t.cierto(!!r, "y devolver el registro fusionado, no null");
+      const leido = c.api._vglCosechaLeer(docId);
+      t.cierto(leido && leido.factores && leido.factores.diabetes && leido.factores.diabetes.v === true,
+        "lo aprendido en esta consulta SÍ quedó guardado — antes se perdía sin avisar");
+      t.cierto(leido.factores.hta && leido.factores.hta.v === true, "y lo que ya venía sigue ahí");
+    });
+
   }
 };

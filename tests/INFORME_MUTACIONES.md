@@ -6,6 +6,25 @@
 > verificada*. Una prueba que no cae cuando el código se rompe no está probando nada — y
 > este proyecto ya se llevó nueve sustos con pruebas que reportaban verde sin ejecutar.
 
+## v17.46.0 — 29-ago-2026 (la cosecha se perdía en silencio con la cuota llena)
+
+`_vglCosechaGuardar` escribía con `localStorage.setItem` a pelo dentro de un `try/catch`
+que devuelve `null`: el `QuotaExceededError` se tragaba entero. `safeWriteJSON` (purga +
+reintento) ya existía y otras rutas la usaban; la que guarda la memoria clínica, no.
+
+**Reproducido antes de arreglar:** la prueba salió en rojo con el código intacto.
+
+| # | Qué se rompió | Prueba que cayó | Restaurado y verde |
+|---|---|---|---|
+| 1 | Volver a `localStorage.setItem` directo, sin purga ni reintento | "la cosecha no se pierde en silencio si el almacén está lleno" | Sí — 38/38 |
+
+**Una aserción propia nació equivocada y se corrigió en el sitio, no se acomodó el código.**
+La primera versión de la prueba exigía que, tras guardar solo `diabetes`, siguiera estando
+`hta`. Eso es fusión PROFUNDA, y `_vglCosechaGuardar` fusiona **plano** a propósito — el
+"pozo" ya documentado en el código, que los llamadores reales esquivan pre-fusionando. La
+prueba afirmaba algo que la función nunca ha prometido. Se reescribió para mandar el mapa
+completo, igual que hace producción.
+
 ## v17.45.0 — 29-ago-2026 (fuga de PHI: el nombre no llegaba al censor por un canal)
 
 `mtrDatosExtraTexto` llamaba a `mtrSanearTextoLibreAI(s)` sin el 2.º argumento, así que la

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.45.0
+// @version     17.46.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.45.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.46.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4675,7 +4675,27 @@
           for (const k of claves.slice(0, claves.length - VGL_COSECHA_MAX_PACIENTES)) delete todo[k];
         }
       } catch (e2) {}
-      localStorage.setItem(VGL_COSECHA_KEY, JSON.stringify(todo));
+      // v17.46.0 — safeWriteJSON, no `setItem` a pelo. Hallazgo de auditoría de
+      // persistencia: esta línea escribía directo dentro de un try/catch que devuelve
+      // null, así que un QuotaExceededError se tragaba ENTERO y en silencio. Con el
+      // almacén del navegador lleno, todo lo aprendido del paciente en esa consulta —
+      // factores de riesgo, pestañas vistas, la historia cosechada— no existía al día
+      // siguiente. El médico no vería ningún error: solo notaría, días después, que la
+      // compuerta de contexto "se quedó atascada", que es exactamente el síntoma que ya
+      // reportó en campo por otra causa en la v16.4.0.
+      // La defensa ya existía en el script (`safeWriteJSON` purga por cuota y reintenta);
+      // esta ruta —la que guarda la memoria clínica— simplemente no la usaba. El espejo
+      // que safeWriteJSON invoca es un no-op aquí: `vgl_cosecha` no está en
+      // VGL_ESPEJO_CLAVES, así que sale por su propia guarda sin hacer nada.
+      // Si aun tras purgar no cabe, se DICE: perder la memoria del paciente sin avisar es
+      // peor que interrumpir un momento al médico.
+      if (!safeWriteJSON(VGL_COSECHA_KEY, todo)) {
+        try {
+          showToast("AMBAR", "No se pudo guardar la memoria del paciente",
+            "El almacenamiento del navegador está lleno, así que lo aprendido en esta consulta no quedó archivado para la próxima. Avísele al programador.", true);
+        } catch (e3) {}
+        return null;
+      }
       return fusion;
     } catch (e) { return null; }
   }
