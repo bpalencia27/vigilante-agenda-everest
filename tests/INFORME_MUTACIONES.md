@@ -5544,3 +5544,29 @@ Banco en verde tras la restauración final: **2.497/2.497**.
 | 2 | `isPanelHiddenActivity` deja de reconocer Optometría/Odontología | 5 pruebas caen, incluida *isPanelHiddenActivity: reconoce Optometría/Odontología…* y la de AV/OD oculta aparte del tope |
 | 3 | `enBase` siempre `true` (nunca detecta "no cruza con la base") | *v17.22.0 — con PyM cargado pero SIN cruzar con la base: 'Dato faltante'…* |
 | 4 | Quitar `${pyms}` de la plantilla de la tarjeta | 9 pruebas caen — toda la sección de chips depende de este único punto de inserción |
+
+---
+
+## v17.48.0 — una sola clave por paciente (D2)
+
+**Reproducción antes de arreglar:** con el código intacto, las dos pruebas de lectura
+tolerante de `vgl_cosecha` (guardar bajo `0005150076` y leer como `5150076`, y al revés)
+salieron **en rojo**. La tercera (dos pacientes distintos no se cruzan) ya salía verde. El
+defecto era real y alcanzable, no teórico.
+
+| # | Qué se rompió a propósito | Prueba que cayó |
+|---|---|---|
+| 1 | `_vglDocCanon` deja de componer con `normalizeKey` (vuelve a ser `extractDoc` a secas) | *v17.48.0 — apiParse entrega la cédula canónica…*, *— la cédula de la historia abierta sale canónica…*, *— el respaldo por DOM entrega la misma cédula canónica…* |
+| 2 | `_vglListaTieneDoc` vuelve a `lista.includes(s)` (sin respaldo de lectura) | *v17.48.0 — el bloqueo del día reconoce al paciente con o sin ceros delante* |
+| 3 | `_vglBuscarPorDoc` pierde el recorrido por forma canónica | *v17.48.0 — la memoria se archiva bajo UNA sola clave…*, *— y al revés…*, *— la fecha de la cita del día se encuentra…* |
+| 4 | El detector agrupa con `length > 0` en vez de `> 1` (todo es duplicado) | *v17.48.0 — el detector agrupa las claves del MISMO paciente y no las de otros*, *— sin duplicados el detector no inventa grupos* |
+| 5 | La línea de bitácora del detector añade un campo con las claves reales | *v17.48.0 — CERO PHI: el detector anota el conteo, jamás una cédula* |
+| 6 | `_vglMismaCedula` pierde la guarda de cédula vacía (dos ilegibles se igualan) | *v17.48.0 — dos cédulas ilegibles NO son el mismo paciente* |
+
+**Nota sobre la mutación 5.** El primer intento (filtrar `grupos[0][0]`, una cédula suelta)
+**no tumbó ninguna prueba**: `vglLog` ya censura por su cuenta todo número o texto de más de
+5 dígitos, así que la fuga no llegaba a disco. Siguiendo la regla de la casa —si una
+mutación no cae, el defecto está en la prueba— se reforzó la prueba para que fije también la
+**forma** de la línea (el nombre de la acción y la lista exacta de campos de `det`), y con
+eso la mutación sí cae. La defensa de `vglLog` sigue ahí; ahora además está fijada la
+promesa de que esa línea solo lleva conteos.

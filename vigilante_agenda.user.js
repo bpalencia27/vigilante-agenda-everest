@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vigilante de Agenda — Copiloto Everest PyM
 // @namespace    vigilante-agenda-everest
-// @version     17.47.0
+// @version     17.48.0
 // @match        *://medicosviva1a.atheneasoluciones.com/*
 // @connect      medicosviva1a.atheneasoluciones.com
 // @description  Asistente clínico para la agenda médica, la prevención (PyM) y los laboratorios en Everest — Viva 1A IPS.
@@ -1007,7 +1007,7 @@
   // y el log de arranque mentían la versión. El literal queda solo de respaldo para
   // entornos sin GM_info (el banco de pruebas) — y ahora hay una prueba que lo compara
   // contra el @version del encabezado para que no vuelva a quedarse atrás.
-  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.47.0";
+  const VERSION = (typeof GM_info !== "undefined" && GM_info && GM_info.script && GM_info.script.version) || "17.48.0";
 
   // =====================================================================
   //  BLACK-BOX FLIGHT RECORDER & TELEMETRY ENGINE (v11.0 TELEMETRY)
@@ -4645,13 +4645,78 @@
   function _vglCosechaTodo() {
     try { return JSON.parse(localStorage.getItem(VGL_COSECHA_KEY) || "{}"); } catch (e) { return {}; }
   }
+  // v17.48.0 — LECTURA TOLERANTE A LOS CEROS A LA IZQUIERDA.
+  // Desde esta versión toda cédula se canonicaliza en la fuente (_vglDocCanon), así que
+  // lo que se archive de aquí en adelante queda bajo UNA sola clave. Pero lo ya guardado
+  // bajo la forma rellenada ("0005150076") se volvería INVISIBLE si solo probáramos la
+  // clave canónica — sería introducir el mismo síntoma que venimos a evitar. Por eso los
+  // lectores comparan por forma canónica en vez de por igualdad de cadena: encuentran el
+  // registro esté guardado como esté. Es el mismo patrón de "migración suave" que
+  // _vglCosechaLeer ya usaba para caer a sessionStorage; se extiende, no se inventa.
+  // No fusiona nada: solo lee. La fusión, si el detector encuentra duplicados reales,
+  // exige antes el respaldo exportable (decisión D3), todavía sin implementar.
+  function _vglMismaCedula(a, b) {
+    const ca = normalizeKey(String(a == null ? "" : a));
+    if (!ca) return false;
+    return ca === normalizeKey(String(b == null ? "" : b));
+  }
+  // Devuelve el valor guardado bajo CUALQUIER escritura de esa cédula (primero la exacta,
+  // que es el caso normal y no cuesta recorrer nada).
+  function _vglBuscarPorDoc(mapa, docId) {
+    if (!mapa || typeof mapa !== "object") return null;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return null;
+    if (Object.prototype.hasOwnProperty.call(mapa, s) && mapa[s]) return mapa[s];
+    for (const k of Object.keys(mapa)) { if (k !== s && _vglMismaCedula(k, s) && mapa[k]) return mapa[k]; }
+    return null;
+  }
+  function _vglListaTieneDoc(lista, docId) {
+    if (!Array.isArray(lista)) return false;
+    const s = String(docId == null ? "" : docId);
+    if (!s) return false;
+    if (lista.includes(s)) return true;
+    return lista.some((k) => _vglMismaCedula(k, s));
+  }
+  // v17.48.0 — DETECTOR DE CLAVES DUPLICADAS (decisión D2: "que detecte y le informe
+  // primero"). Función PURA: dado el objeto de un almacén indexado por cédula, devuelve
+  // los grupos de claves DISTINTAS que colapsan a la misma cédula canónica — es decir, el
+  // mismo paciente archivado dos veces. NO fusiona nada: fusionar exige antes el respaldo
+  // exportable (D3), porque _vglCosechaGuardar fusiona PLANO y `programas`/`pestanasVistas`
+  // /`hcEverest` no tienen marca de tiempo por campo, así que una fusión mal hecha borraría
+  // antecedentes ya documentados.
+  function _vglDetectarClavesDuplicadas(almacen) {
+    const grupos = [];
+    if (!almacen || typeof almacen !== "object") return grupos;
+    const porCanon = Object.create(null);
+    for (const k of Object.keys(almacen)) {
+      const canon = normalizeKey(String(k));
+      if (!canon) continue;
+      (porCanon[canon] || (porCanon[canon] = [])).push(k);
+    }
+    for (const canon of Object.keys(porCanon)) {
+      if (porCanon[canon].length > 1) grupos.push(porCanon[canon]);
+    }
+    return grupos;
+  }
+  // Deja UNA línea en la bitácora local con el CONTEO. Cero PHI por construcción: nunca
+  // sale una cédula, solo cuántos grupos y cuántas claves suman entre todos.
+  function _vglRevisarClavesDuplicadas() {
+    try {
+      const grupos = _vglDetectarClavesDuplicadas(_vglCosechaTodo());
+      if (!grupos.length) return 0;
+      let claves = 0;
+      for (const g of grupos) claves += g.length;
+      vglLog("DATOS", "cedulas_duplicadas", { grupos: grupos.length, claves });
+      return grupos.length;
+    } catch (e) { return 0; }
+  }
   function _vglCosechaLeer(docId) {
     try {
-      const deAhora = _vglCosechaTodo()[String(docId || "")];
+      const deAhora = _vglBuscarPorDoc(_vglCosechaTodo(), docId);
       if (deAhora) return deAhora;
       // Migración suave: lo cosechado HOY bajo el esquema viejo (sessionStorage) no se
       // pierde en el cambio de versión — se lee como respaldo hasta que la pestaña muera.
-      try { return JSON.parse(sessionStorage.getItem(VGL_COSECHA_KEY) || "{}")[String(docId || "")] || null; } catch (e2) { return null; }
+      try { return _vglBuscarPorDoc(JSON.parse(sessionStorage.getItem(VGL_COSECHA_KEY) || "{}"), docId); } catch (e2) { return null; }
     } catch (e) { return null; }
   }
 
@@ -7524,12 +7589,12 @@ _vglOfrecerDeshacer(btn);
   function isCitaAgendadaHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return p.citas && p.citas.includes(String(docId));
+    return _vglListaTieneDoc(p.citas, docId);
   }
   function isOrdenesCreadasHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return p.ordenes && p.ordenes.includes(String(docId));
+    return _vglListaTieneDoc(p.ordenes, docId);
   }
   // v12.3.28 — "ID y bloqueo de seguridad" independiente para cita de control y toma de
   // muestras. Pedido explícito en consultorio: si la cita de control se creó pero la
@@ -7542,14 +7607,15 @@ _vglOfrecerDeshacer(btn);
   function isLabAgendadaHoy(docId) {
     if (!docId) return false;
     const p = getProcessedToday();
-    return !!(p.labs && p.labs.includes(String(docId)));
+    return _vglListaTieneDoc(p.labs, docId);
   }
   // Fecha (ISO) de la cita de control agendada hoy para este paciente — null si no hay
   // ninguna, o si se agendó antes de esta versión y no quedó guardada.
   function citaAgendadaFechaHoy(docId) {
     if (!docId) return null;
     const p = getProcessedToday();
-    return (p.citasDetalle && p.citasDetalle[String(docId)] && p.citasDetalle[String(docId)].fechaIso) || null;
+    const det = _vglBuscarPorDoc(p.citasDetalle, docId);
+    return (det && det.fechaIso) || null;
   }
   function markCitaAgendadaHoy(docId, fechaIso, extra) {
     if (!docId) return;
@@ -7638,7 +7704,7 @@ _vglOfrecerDeshacer(btn);
     if (!docId) return false;
     const p = getProcessedToday();
     const sDoc = String(docId);
-    return !!(p.agendPend && p.agendPend[sDoc]) && !isCitaAgendadaHoy(sDoc);
+    return !!_vglBuscarPorDoc(p.agendPend, sDoc) && !isCitaAgendadaHoy(sDoc);
   }
 
   // v14.2.4 — COLA DE CONDUCTA PENDIENTE (a pedido explícito del médico: Conducta pasa a
@@ -7687,7 +7753,7 @@ _vglOfrecerDeshacer(btn);
   function ordenesDetalleHoy(docId) {
     if (!docId) return null;
     const p = getProcessedToday();
-    return (p.ordenesDetalle && p.ordenesDetalle[String(docId)]) || null;
+    return _vglBuscarPorDoc(p.ordenesDetalle, docId);
   }
   function applySettings() {
     CONFIG.TOLERANCIA_MIN = 6.0; // 6.0 minutos rígidos de gracia para todo el mundo
@@ -8205,6 +8271,15 @@ _vglOfrecerDeshacer(btn);
     // ("0005150076") y la agenda la trae limpia ("5150076"), deben ser la misma clave.
     return s.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
   }
+  // v17.48.0 — La cédula que sale de la pantalla o del API indexa TODA la memoria local
+  // (vgl_cosecha, vgl_proc_today, cachés). `extractDoc` la EXTRAE de texto crudo pero no
+  // la canonicaliza: si Everest la entrega rellenada ("0005150076") por una vía y limpia
+  // ("5150076") por otra, el mismo paciente quedaba con dos claves distintas y el script
+  // parecía "olvidar" lo aprendido. Se COMPONEN — extraer y luego canonicalizar — en vez
+  // de sustituir una por otra: `extractDoc` tolera "CC 8396613, 66 años" y exige 5-15
+  // dígitos (cosas que `normalizeKey` no hace), y `normalizeKey` resuelve la notación
+  // científica y los ceros a la izquierda (cosas que `extractDoc` no hace).
+  function _vglDocCanon(t) { return normalizeKey(extractDoc(t)); }
   function extractDoc(t) { if (!t) return ""; const first = t.split(",")[0].replace(/[.\s]/g, ""); let m = /^(\d{5,15})$/.exec(first); if (m) return m[1]; m = /(\d{5,15})/.exec(t.replace(/[.\s]/g, "")); return m ? m[1] : ""; }
   // Se ejecuta más de un millón de veces con las bases grandes: primero los descartes
   // baratos (vacío o texto largo) y solo después se normaliza la cadena.
@@ -10656,7 +10731,7 @@ _vglOfrecerDeshacer(btn);
         nombre = limpio((firstMatch(cont, CONFIG.SEL.nombre) || {}).textContent);
         modalidad = limpio((cont.querySelector(CONFIG.SEL.modalidad) || {}).textContent);
       }
-      return { hora_texto: limpio(h.textContent), doc_id: extractDoc(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
+      return { hora_texto: limpio(h.textContent), doc_id: _vglDocCanon(documento), nombre: nombre || "Paciente Everest", modalidad, estado: estado || "Pendiente", index: i };
     });
     return { visible: true, citas };
   }
@@ -10752,7 +10827,7 @@ _vglOfrecerDeshacer(btn);
       const contenedor = document.querySelector("app-index") || document;
       for (const el of contenedor.querySelectorAll(".text-muted")) {
         if (el.closest("#vgl-root")) continue;                 // nunca leer el propio panel
-        const doc = extractDoc(limpio(el.textContent));
+        const doc = _vglDocCanon(limpio(el.textContent));
         if (doc) return doc;
       }
       return "";
@@ -12511,7 +12586,7 @@ _vglOfrecerDeshacer(btn);
       if (min != null) buenas++;
       citas.push({
         hora_texto: min != null ? horaBonita(min) : limpio(String(r[c.hora] ?? "")),
-        doc_id: extractDoc(String(c.doc ? (r[c.doc] ?? "") : "")),
+        doc_id: _vglDocCanon(String(c.doc ? (r[c.doc] ?? "") : "")),
         nombre: limpio(c.nombres.map((k) => r[k]).filter(Boolean).join(" ")) || "Paciente Everest",
         modalidad: "", estado: limpio(String(r[c.estado] ?? "")) || "Pendiente", index: i,
         // v13.0.0 — Solo se rellena si /ObtenerConsultas trajo el campo real `citaId`
@@ -27682,6 +27757,16 @@ _vglOfrecerDeshacer(btn);
     try { _vglInstalarModoOculto(); } catch (e) {}
     try { _vglInstalarModoProg(); } catch (e) {}
     try { _festivosAvisarSiVencida(); } catch (e) {}
+    // v17.48.0 — una sola pasada, con la misma bandera de una-sola-vez que usan las
+    // migraciones de arriba: cuenta si algún paciente quedó archivado bajo dos claves
+    // (por ceros a la izquierda) antes de que la normalización en la fuente lo impidiera.
+    // Solo cuenta y anota; no toca un solo dato del médico.
+    try {
+      if (localStorage.getItem("vgl_v1748_dupdoc") !== "1") {
+        localStorage.setItem("vgl_v1748_dupdoc", "1");
+        _vglRevisarClavesDuplicadas();
+      }
+    } catch (e) {}
     try {
       const killActivo = (typeof GM_getValue !== "undefined" && GM_getValue("vgl_kill_active", false)) === true;
       const bypass = (typeof localStorage !== "undefined" && localStorage.getItem("vgl_override_kill") === "1") ||

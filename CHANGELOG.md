@@ -4,6 +4,47 @@ Bienvenido al registro de actualizaciones del **Vigilante de Agenda**. Este docu
 
 ---
 
+## [Versión 17.48.0] — 2026-08-29 (Un paciente, una sola casilla de memoria)
+
+### 🗂 El mismo paciente podía quedar archivado dos veces
+La memoria local del script —lo aprendido de un paciente en consultas anteriores, y también
+el registro del día que evita ordenarle dos veces lo mismo— se guarda **bajo su cédula**.
+
+El problema: Everest no siempre entrega la cédula igual. Si por una vía llega rellenada de
+ceros (`0005150076`) y por otra llega limpia (`5150076`), el script las trataba como **dos
+pacientes distintos**. Consecuencias reales:
+
+- Los antecedentes recogidos en el control anterior no aparecían en el siguiente: el script
+  parecía **olvidar** al paciente.
+- El bloqueo antiduplicados no reconocía «ya le ordené hoy», así que podía dejar pasar una
+  **segunda orden** al mismo paciente.
+- La fecha real de la cita de control agendada no se encontraba, y sin ella no se puede
+  calcular la toma de muestras «5 días hábiles antes».
+
+**Desde ahora la cédula se normaliza en el origen**, en los tres sitios por donde entra: la
+historia clínica abierta, la agenda por API de Everest y el respaldo por pantalla. Una sola
+clave por paciente, venga como venga.
+
+### 🔎 Y lo ya guardado no se vuelve invisible
+Arreglar solo las escrituras habría hecho **desaparecer** a los pacientes ya archivados bajo
+la forma rellenada — el mismo síntoma que veníamos a evitar. Por eso la lectura ahora
+compara por forma canónica: encuentra el registro esté guardado como esté.
+
+Sigue sin cruzar pacientes distintos: `5150076` y `5150077` son dos personas, y así se
+tratan.
+
+### 🧮 Lo que este arreglo NO hace, a propósito
+**No fusiona nada.** Si algún paciente ya quedó partido en dos claves, el script ahora lo
+**detecta y lo anota** (una sola vez, con el conteo y **sin ninguna cédula** en la bitácora
+— cero PHI), pero no une los registros por su cuenta. Fusionar es destructivo: la memoria se
+fusiona plano, y `programas`, `pestanasVistas` y `hcEverest` no llevan marca de tiempo por
+campo, así que una unión mal hecha borraría antecedentes ya documentados. Antes de fusionar
+hace falta el **respaldo exportable**, que es la entrega siguiente.
+
+Fue exactamente lo que usted pidió: *que detecte y le informe primero*.
+
+---
+
 ## [Versión 17.47.0] — 2026-08-29 (La IA ya no redacta con cifras de hace 13 minutos)
 
 ### 🕐 El panel de redacción tomaba una foto al abrirse y la usaba al generar

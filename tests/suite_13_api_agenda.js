@@ -165,6 +165,20 @@ module.exports = {
       t.igual(citas[0].citaId, 4334823);
     });
 
+    // v17.48.0 (D2) — La cédula que sale del API indexa TODA la memoria local. Si Everest
+    // la entrega rellenada de ceros, el mismo paciente quedaría archivado bajo dos claves
+    // y el script parecería "olvidar" lo aprendido entre controles.
+    t.caso("v17.48.0 — apiParse entrega la cédula canónica, sin los ceros de relleno", () => {
+      const c2 = cargar({ silencioso: true });
+      const filas = [
+        { horaCita: "07:00", estado: "EN SALA", numeroDocumento: "0005150076", nombrePaciente: "A" },
+        { horaCita: "07:20", estado: "PENDIENTE", numeroDocumento: "8396613", nombrePaciente: "B" },
+      ];
+      const citas = c2.api.apiParse(filas);
+      t.igual(citas[0].doc_id, "5150076", "una sola clave por paciente, venga como venga");
+      t.igual(citas[1].doc_id, "8396613", "y la que ya venía limpia no se toca");
+    });
+
     t.caso("apiCampos: penaliza las columnas de hora de FIN aunque también parezcan horas", () => {
       const filas = [
         { horaCita: "07:00", horaFinal: "07:20", estado: "ATENDIDO" },

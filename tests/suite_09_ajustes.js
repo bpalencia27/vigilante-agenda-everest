@@ -103,6 +103,41 @@ module.exports = {
       t.igual(A.getProcessedToday().citas, ["123"], "sin duplicados en el registro persistido");
     });
 
+    // ------------------------------------------------------------------
+    //  v17.48.0 — una sola clave por paciente (decisión D2)
+    //  El estado del día se indexa por cédula. Si Everest la entrega rellenada de ceros
+    //  por una vía y limpia por otra, el antiduplicados no vería "ya ordenado hoy" y el
+    //  médico ordenaría dos veces al mismo paciente.
+    // ------------------------------------------------------------------
+    t.caso("v17.48.0 — el bloqueo del día reconoce al paciente con o sin ceros delante", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markCitaAgendadaHoy("0005150076");
+      t.cierto(A.isCitaAgendadaHoy("5150076"), "marcado con ceros, se reconoce sin ellos: es el mismo paciente");
+      c.env.storage.removeItem(PROC_KEY);
+      A.markOrdenesCreadasHoy("5150076");
+      t.cierto(A.isOrdenesCreadasHoy("0005150076"), "y al revés, para no ordenar dos veces");
+    });
+
+    t.caso("v17.48.0 — la fecha de la cita del día se encuentra aunque la clave venga rellenada", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markCitaAgendadaHoy("0005150076", "2026-09-15");
+      t.igual(A.citaAgendadaFechaHoy("5150076"), "2026-09-15", "sin la fecha real no se puede calcular la toma de muestras");
+    });
+
+    t.caso("v17.48.0 — dos pacientes DISTINTOS siguen sin cruzarse en el registro del día", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markCitaAgendadaHoy("5150076");
+      t.falso(A.isCitaAgendadaHoy("5150077"), "una cédula vecina NO es el mismo paciente");
+      t.falso(A.isCitaAgendadaHoy("15150076"), "ni una que solo comparte el final");
+    });
+
+    t.caso("v17.48.0 — dos cédulas ilegibles NO son el mismo paciente", () => {
+      c.env.storage.removeItem(PROC_KEY);
+      A.markCitaAgendadaHoy("abc");
+      t.falso(A.isCitaAgendadaHoy("xyz"), "sin dígitos no hay cédula que comparar: nunca puede dar 'ya agendado'");
+      t.falso(A.isCitaAgendadaHoy("---"));
+    });
+
     t.caso("markOrdenesCreadasHoy: marca órdenes sin tocar las citas", () => {
       c.env.storage.removeItem(PROC_KEY);
       A.markOrdenesCreadasHoy("456");

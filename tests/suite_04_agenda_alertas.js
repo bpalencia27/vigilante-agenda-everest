@@ -617,6 +617,40 @@ module.exports = {
       c.env.doc.querySelector = () => null;
       c.env.doc.querySelectorAll = (sel) => (sel === ".text-muted" ? [elTexto("C.C. " + doc)] : []);
     }
+    // v17.48.0 (D2) — Mismo motivo, en el camino de respaldo por DOM (el que se usa cuando
+    // el API de Everest falla): la cédula debe salir igual de canónica que por el API, o
+    // el paciente quedaría con una clave según por dónde llegara ese día.
+    t.caso("v17.48.0 — el respaldo por DOM entrega la misma cédula canónica que el API", () => {
+      const c = cargar({ silencioso: true });
+      const el = (txt, extra) => Object.assign({ textContent: txt, closest: () => null, querySelector: () => null }, extra || {});
+      const tarjeta = {
+        querySelector: (sel) => (sel === ".status-label" ? el("PENDIENTE") : (sel === ".fw-bold.mb-0" ? el("Presencial") : null)),
+      };
+      tarjeta.querySelector = ((orig) => (sel) => {
+        if (sel === ".status-label") return el("PENDIENTE");
+        if (sel === ".text-muted") return el("C.C. 0005150076");
+        if (sel === ".text-uppercase.fw-bold") return el("PACIENTE DE PRUEBA");
+        if (sel === ".fw-bold.mb-0") return el("Presencial");
+        return null;
+      })();
+      const hora = el("7:00 a. m.", { closest: (sel) => (sel === ".card-body" ? tarjeta : null) });
+      const docFalso = { querySelectorAll: (sel) => (sel === ".labelHora" ? [hora] : []) };
+      const r = c.api.extractAgenda(docFalso);
+      t.cierto(r.visible, "la agenda debe verse");
+      t.igual(r.citas[0].doc_id, "5150076", "una sola clave por paciente, también por el camino lento");
+    });
+
+    // v17.48.0 (D2) — La cédula que se raspa de la historia abierta indexa la memoria del
+    // paciente (vgl_cosecha) y el estado del día. Si Everest la pinta rellenada de ceros,
+    // el mismo paciente quedaría archivado bajo dos claves distintas.
+    t.caso("v17.48.0 — la cédula de la historia abierta sale canónica, sin ceros de relleno", () => {
+      const c = cargar({ silencioso: true });
+      mockPacienteAbierto(c, "0005150076");
+      t.igual(c.api.extractPacienteAbierto(), "5150076", "una sola clave por paciente");
+      mockPacienteAbierto(c, "8396613");
+      t.igual(c.api.extractPacienteAbierto(), "8396613", "la que ya venía limpia no cambia");
+    });
+
     // Plan de red mínimo para poblar _labsPrefetch vía autoFetchAtheneaLabsForActivePatient:
     // resuelve la solicitud a un único analito RCV, con la fecha que indique el llamador
     // (vieja -> vencido; reciente -> al día).
