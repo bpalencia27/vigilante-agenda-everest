@@ -21711,8 +21711,6 @@ _vglOfrecerDeshacer(btn);
                 <label for="vgl-agm-sms-tel">Celular:</label>
                 <input type="tel" id="vgl-agm-sms-tel" class="vgl-agm-input" style="width:auto;min-width:150px;flex:1;padding:7px 11px;font-size:13px" placeholder="cargando…">
                 <span id="vgl-agm-sms-nota"></span>
-                <button type="button" class="vgl-agm-lnk" id="vgl-agm-sms-ver">Ver el mensaje que le llegará al paciente</button>
-                <div id="vgl-agm-sms-prev" class="vgl-agm-dinfo vgl-d-none" style="margin-top:4px"></div>
               </div>
             </div>
 
@@ -21729,8 +21727,6 @@ _vglOfrecerDeshacer(btn);
                 </span>
               </label>
               <div id="vgl-agm-lab-sms-nota" class="vgl-agm-lab-sms-nota"></div>
-              <button type="button" class="vgl-agm-lnk" id="vgl-agm-lab-sms-ver">Ver el mensaje del laboratorio</button>
-              <div id="vgl-agm-lab-sms-prev" class="vgl-agm-dinfo vgl-d-none" style="margin-top:4px"></div>
               <button type="button" id="vgl-agm-plan-cambiar" class="vgl-agm-btn sec vgl-sm" style="align-self:flex-start;margin:2px 0 4px">✎ Cambiar fecha u hora</button>
               <div id="vgl-agm-plan-det" class="vgl-d-none">
                 <div id="vgl-lab-day-chips" class="vgl-agm-presets" style="margin:2px 0 6px;gap:4px;flex-wrap:wrap"></div>
@@ -22915,49 +22911,14 @@ _vglOfrecerDeshacer(btn);
       });
     }
 
-    // =====================================================================
-    // v15.8.0 (N4) — VISTA PREVIA DEL SMS: el paciente pregunta «¿y qué me va
-    // a llegar?» y el médico puede responder mirándolo. Si el administrador ya
-    // capturó el texto real (Ajustes → modo programador), se muestra tal cual;
-    // si no, se dice honestamente QUÉ contiene y quién lo redacta.
-    // =====================================================================
-    {
-      const _wirePrev = (verSel, prevSel, plantillaDe, datosDe) => {
-        const verBtn = modal.querySelector(verSel);
-        const prev = modal.querySelector(prevSel);
-        if (!verBtn || !prev) return;
-        verBtn.addEventListener("click", () => {
-          if (prev.classList && !prev.classList.contains("vgl-d-none")) { prev.classList.add("vgl-d-none"); return; }
-          const v = _smsVistaPrevia(plantillaDe(), datosDe());
-          prev.innerHTML = `<b>${v.esReal ? "Mensaje que le llegará" : "Qué contiene el mensaje"}:</b> ${escapeHtml(v.texto)}`
-            + `<br><span style="opacity:.8">${v.esReal
-              ? "Texto real del mensaje, capturado por el administrador."
-              : "La redacción exacta la pone Everest; cuando el administrador capture un mensaje real, aquí se verá tal cual."}</span>`;
-          if (prev.classList) prev.classList.remove("vgl-d-none");
-          try { uxTrack("fn.agendar.sms_prev"); } catch (e) {}
-        });
-      };
-      _wirePrev("#vgl-agm-sms-ver", "#vgl-agm-sms-prev",
-        () => S.smsPlantillaCita,
-        () => ({
-          fecha: (selectedDateInfo && selectedDateInfo.lbl) || "",
-          hora: (selectedTurnoCtx && selectedTurnoCtx.horaTxt) || "",
-          sede: "",
-          profesional: (selectedEspId === 12 ? doctorName : selectedEspName) || "",
-        }));
-      { const vt = modal.querySelector("#vgl-agm-vertablero");
-        if (vt) vt.addEventListener("click", () => {
-          try { uxTrack("fn.agendar.ver_tablero"); } catch (e) {}
-          try { openTableroModal(apt); } catch (e) {}
-        }); }
-      _wirePrev("#vgl-agm-lab-sms-ver", "#vgl-agm-lab-sms-prev",
-        () => S.smsPlantillaLab,
-        () => ({
-          fecha: (selectedLabDateInfo && (selectedLabDateInfo.lbl || selectedLabDateInfo.fmt)) || "",
-          hora: (() => { try { const s = modal.querySelector("#vgl-agm-lab-time-sel"); return (s && s.value) ? format12hTime(s.value) : ""; } catch (e) { return ""; } })(),
-          sede: "", profesional: "",
-        }));
-    }
+    // v17.26.0 — REFACTOR APROBADO: se retiran del modal los enlaces «Ver el mensaje…»
+    // (vista previa SMS de la cita y de la toma de muestras). Se conserva el enlace al
+    // tablero de riesgo cardiovascular.
+    { const vt = modal.querySelector("#vgl-agm-vertablero");
+      if (vt) vt.addEventListener("click", () => {
+        try { uxTrack("fn.agendar.ver_tablero"); } catch (e) {}
+        try { openTableroModal(apt); } catch (e) {}
+      }); }
     modal.querySelectorAll("#vgl-time-presets .vgl-agm-pbtn").forEach((pb) => {
       pb.addEventListener("click", () => {
         // v15.7.0 — tocar un plazo de sugerencias también SALE del modo manual.
