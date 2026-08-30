@@ -90,8 +90,8 @@ module.exports = {
       t.cierto(!!raiz, "debe existir #vgl-root en el body");
       t.cierto(!!dock, "debe existir #vgl-dock en el body");
       t.cierto(!!toasts, "debe existir #vgl-toasts en el body");
-      t.cierto(raiz.innerHTML.includes("Asistente Clínico"), "el panel lleva el título del asistente");
-      t.cierto(dock.innerHTML.includes("Asistente Clínico"), "la pastilla lleva la etiqueta");
+      t.cierto(raiz.innerHTML.includes("Centinela"), "el panel lleva el título del asistente");
+      t.cierto(dock.innerHTML.includes("Centinela"), "la pastilla lleva la etiqueta");
       // La hoja de estilos se cuelga del head y contiene las reglas del panel
       const estilo = cv.env.doc.head.children[0];
       t.cierto(!!estilo && String(estilo.textContent).includes("#vgl-root"), "el CSS del panel se añadió al head");
@@ -715,7 +715,7 @@ module.exports = {
       let copiado = "";
       cv.ctx.navigator.clipboard = { writeText: (s) => { copiado = s; return { then: (ok) => { ok(); } }; } };
       cv.api.copySummary();
-      t.cierto(copiado.startsWith("Asistente Clínico de Agenda — "));
+      t.cierto(copiado.startsWith("Centinela — "));
       t.cierto(copiado.includes("Citas en agenda: 2"));
       t.cierto(copiado.includes("En sala ahora: 1"));
       t.cierto(copiado.includes("Sin presentarse: 1"));

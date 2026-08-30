@@ -16549,7 +16549,7 @@ _vglOfrecerDeshacer(btn);
           <button class="vgl-tl zoom" id="vgl-tl-zoom" title="Restaurar tamaño completo" aria-label="Restaurar"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><path d="M1 3H5M3 1V5"/></svg></button>
           <button class="vgl-tl hc" id="vgl-tl-hc" title="Alto contraste: fondo sólido y letra más grande (1 clic)" aria-label="Alto contraste" aria-pressed="false"><svg viewBox="0 0 6 6" fill="none" stroke="currentColor" stroke-width="0.7" stroke-linecap="round"><circle cx="3" cy="3" r="1.6" fill="currentColor" stroke="none"/><path d="M3 0.6V1.3M3 4.7V5.4M0.6 3H1.3M4.7 3H5.4M1.3 1.3L1.8 1.8M4.2 4.2L4.7 4.7M4.7 1.3L4.2 1.8M1.8 4.2L1.3 4.7"/></svg></button>
         </div>
-        <div id="vgl-title">Asistente Clínico</div>
+        <div id="vgl-title">Centinela</div>
         <span id="vgl-clock" title="Hora actual y tiempo de turno"></span>
         <span id="vgl-dot" title="Estado del asistente — tóquelo para ver qué está leyendo" role="button" tabindex="0"></span>
       </div>
@@ -16626,11 +16626,11 @@ _vglOfrecerDeshacer(btn);
     root.querySelector("#vgl-tl-hc").onclick = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } _vglAlternarAltoContraste(); };
     root.querySelector("#vgl-head").addEventListener("dblclick", (e) => { if (e.target.closest("button")) return; setWinState(winState === "min" ? "full" : "min"); });
     // [COPY-UX] Dock flotante del asistente clínico
-    const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Asistente Clínico (Alt+V)";
+    const dock = document.createElement("div"); dock.id = "vgl-dock"; dock.title = "Mostrar Centinela (Alt+V)";
     dock.setAttribute("role", "button");
     dock.setAttribute("tabindex", "0");
-    dock.setAttribute("aria-label", "Mostrar Asistente Clínico (Alt+V)");
-    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Asistente Clínico</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
+    dock.setAttribute("aria-label", "Mostrar Centinela (Alt+V)");
+    dock.innerHTML = `<span id="vgl-dock-dot"></span><span>Centinela</span><b id="vgl-dock-b" class="vgl-d-none">0</b>`;
     dock.addEventListener("click", () => setWinState("full"));
     dock.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setWinState("full"); } });
     // [v17.6.5] Doble clic en la pastilla: abre el panel directamente en el Resumen del turno.
@@ -26004,7 +26004,7 @@ _vglOfrecerDeshacer(btn);
     const h = statsToday(), lst = (state.lastSnapshot && state.lastSnapshot.list) || [];
     const cnt = (f) => lst.filter((a) => f((a.estado || "").toLowerCase())).length;
     // [COPY-UX] Resumen clínico de la jornada
-    const txt = ["Asistente Clínico de Agenda — " + todayStamp(),
+    const txt = ["Centinela — " + todayStamp(),
       "Citas en agenda: " + lst.length,
       "En sala ahora: " + cnt((s) => s.includes("en sala")) + " · Atendidas: " + cnt((s) => s.includes("atendido")) + " · Sin presentarse: " + cnt((s) => s.includes("sin presentarse")),
       "Confirmaciones extemporáneas: " + (h.fraude || 0),
@@ -27036,6 +27036,7 @@ _vglOfrecerDeshacer(btn);
         "· Ámbar — no se presentó.\n" +
         "· Rojo — confirmó después del tiempo de gracia.\n" +
         "· Violeta — normal, sin novedad.\n\n" +
+        "· Alt+V — muestra u oculta el asistente.\n\n" +
         "Centinela avisa y sugiere; usted decide.", true);
     } catch (e) {}
   }
