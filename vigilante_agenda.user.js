@@ -23178,20 +23178,39 @@ _vglOfrecerDeshacer(btn);
     return (c && c.adicionales === true) ? c : null;
   }
   // ---- Buscador y filtros rápidos ----
+  const _fmPrevRow = new Uint16Array(256);
+  const _fmCurrRow = new Uint16Array(256);
+  const _fmPrevPrevRow = new Uint16Array(256);
+  let _fmLastQ = "";
+  let _fmLastQTokens = null;
+
   function fuzzyMatch(q, text) {
-    const queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+    let queryTokens;
+    if (q === _fmLastQ && _fmLastQTokens !== null) {
+      queryTokens = _fmLastQTokens;
+    } else {
+      queryTokens = stripAccents(q).toLowerCase().split(/\s+/).filter(Boolean);
+      _fmLastQ = q;
+      _fmLastQTokens = queryTokens;
+    }
+
+    if (queryTokens.length === 0) return true;
+
     const textTokens = stripAccents(text).toLowerCase().split(/\s+/).filter(Boolean);
 
-    let prevRow = [];
-    let currRow = [];
-    let prevPrevRow = [];
+    let prevRow = _fmPrevRow;
+    let currRow = _fmCurrRow;
+    let prevPrevRow = _fmPrevPrevRow;
 
-    for (const qToken of queryTokens) {
+    for (let qIdx = 0; qIdx < queryTokens.length; qIdx++) {
+      const qToken = queryTokens[qIdx];
       let tokenMatched = false;
       const m = qToken.length;
+      if (m > 255) continue;
       const maxErrors = m <= 3 ? 0 : (m <= 6 ? 1 : 2);
 
-      for (const tToken of textTokens) {
+      for (let tIdx = 0; tIdx < textTokens.length; tIdx++) {
+        const tToken = textTokens[tIdx];
         if (tToken.includes(qToken)) {
           tokenMatched = true;
           break;
@@ -23199,6 +23218,7 @@ _vglOfrecerDeshacer(btn);
         if (maxErrors === 0) continue;
 
         const n = tToken.length;
+        if (n > 255) continue;
 
         // initialize 1st row
         for (let j = 0; j <= n; j++) {
@@ -23218,11 +23238,11 @@ _vglOfrecerDeshacer(btn);
               currRow[j] = Math.min(currRow[j], prevPrevRow[j - 2] + cost);
             }
           }
-          // Swap rows: prevPrevRow <- prevRow, prevRow <- currRow
-          for (let j = 0; j <= n; j++) {
-            prevPrevRow[j] = prevRow[j];
-            prevRow[j] = currRow[j];
-          }
+          // Swap rows by reference
+          let temp = prevPrevRow;
+          prevPrevRow = prevRow;
+          prevRow = currRow;
+          currRow = temp;
         }
 
         let minCost = Infinity;
