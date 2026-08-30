@@ -27019,6 +27019,45 @@ _vglOfrecerDeshacer(btn);
       (vencidas ? ` (${vencidas} con tiempo de tolerancia transcurrido)` : "") +
       `.\nMonitoreo activo para eventos en tiempo real.`, false);
   }
+  // v18.0.0 — FASE 3 (notificaciones en tiempo real). Las transiciones POR TIEMPO de la
+  // leyenda ("última llamada" MORADO en prealert y "inasistencia" ÁMBAR en grace) son
+  // deterministas: ocurren en hora_cita + prealert y hora_cita + grace. En vez de esperar
+  // al siguiente sondeo (CONFIG.POLL_MS), se agenda UN setTimeout al instante exacto del
+  // próximo cruce. El timer solo adelanta un tick() — reutiliza colorAndAlert/maybeNotify
+  // y toda la guardia de fraude intacta. No sustituye el sondeo (que sigue siendo la única
+  // fuente para las LLEGADAS, impredecibles y sin canal push): lo complementa para que el
+  // dato de gracia llegue al segundo, no "en algún momento de los últimos 5 s".
+  let _deadlineTimer = null;
+  function _proximoDeadlineTiempo(processed, now) {
+    const grace = CONFIG.TOLERANCIA_MIN || 6.0, prealert = Math.max(1.0, grace - 1.0);
+    let best = null;
+    for (const p of processed) {
+      if (!p || !p.hora_texto) continue;
+      const min = parseHoraMin(p.hora_texto);
+      if (min == null) continue;
+      const est = (p.estado || "").toLowerCase();
+      if (est.includes("en sala") || est.includes("atendido")) continue;   // ya llegó/atendido: no hay vencimiento por tiempo
+      const apt = new Date(now); apt.setHours(0, min, 0, 0);
+      const preMs = apt.getTime() + prealert * 60000;
+      const graMs = apt.getTime() + grace * 60000;
+      const ahora = now.getTime();
+      if (ahora < preMs) { if (best == null || preMs < best) best = preMs; }
+      else if (ahora < graMs) { if (best == null || graMs < best) best = graMs; }
+    }
+    return best;
+  }
+  function _reprogramarDeadline(processed) {
+    try {
+      if (_deadlineTimer) { clearTimeout(_deadlineTimer); _deadlineTimer = null; }
+      const now = new Date();
+      const t = _proximoDeadlineTiempo(processed, now);
+      if (t == null) return;
+      let ms = t - now.getTime() + 60;   // +60 ms para cruzar el umbral de gracia
+      if (ms < 0) ms = 0;
+      if (ms > 86400000) return;         // tope defensivo: nada a más de un día
+      _deadlineTimer = setTimeout(() => { _deadlineTimer = null; try { tick(); } catch (e) {} }, ms);
+    } catch (e) {}
+  }
   function tick() {
     try {
       if (state.killed) return;
@@ -27285,7 +27324,7 @@ _vglOfrecerDeshacer(btn);
           processed.forEach(maybeNotify);
         }
         state.lastSnapshot = { at: now, list: processed, source };
-        if (leader) share(processed);
+        if (leader) { share(processed); _reprogramarDeadline(processed); }
         if (leader) { try { _preconTick(processed); } catch (e) {} }   // v16.6.0 — pre-consulta N1 (asíncrono, 1 citado cada 15 s)
         // v17.0.0 — PRODUCTIVIDAD: se registran las atendidas de la agenda propia. Solo
         // la pestaña líder, y por conjunto de claves, así que llamarlo en cada vuelta del

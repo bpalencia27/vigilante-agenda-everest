@@ -1,6 +1,6 @@
 module.exports = {
   nombre: "Colores y notificaciones de la agenda",
-  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita"],
+  cubre: ["colorAndAlert", "muted", "muteFor", "unmute", "crossTabDup", "avisoYaVisto", "avisoMarcarVisto", "nkey", "maybeNotify", "avisoUniversal", "checkAvisoUniversal", "_avisoUnivReset", "_encolarAvisoPendiente", "_flushAvisosPendientes", "_dispararAvisoReal", "_siembraCompartidaLeer", "_siembraCompartidaGuardar", "_sembrarEstadoInicial", "bumpStatCita", "_proximoDeadlineTiempo"],
   async pruebas(t, api, env, cargar) {
 
     // ---------- colorAndAlert ----------
@@ -159,6 +159,43 @@ module.exports = {
       t.igual(r3.color, "VERDE", "segunda lectura seguida del mismo valor: el cambio real SÍ se acepta");
       t.igual(r3.estado, "En Sala");
       t.cierto(r3.arrival, "y cuenta como llegada, porque el estado confirmado anterior no era 'en sala'");
+    });
+
+    // ---------- _proximoDeadlineTiempo (Fase 3: notificación en tiempo real) ----------
+    t.caso("_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta -> devuelve el instante de la prealerta", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 3, 0);
+      const processed = [{ hora_texto: "08:00 AM", estado: "Sin presentarse" }];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 5, 0).getTime(), "siguiente cruce = 5 min (prealerta)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: pasada la prealerta -> devuelve el instante de la gracia (AMBAR)", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 5, 30);
+      const processed = [{ hora_texto: "08:00 AM", estado: "Sin presentarse" }];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 6, 0).getTime(), "siguiente cruce = 6 min (gracia)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: ignora llegadas/atendidos y devuelve el cruce más próximo entre varias citas", () => {
+      const c = cargar();
+      c.api.__CONFIG.TOLERANCIA_MIN = 6;
+      const now = new Date(2026, 7, 10, 8, 2, 0);
+      const processed = [
+        { hora_texto: "07:00 AM", estado: "En sala" },
+        { hora_texto: "08:00 AM", estado: "Sin presentarse" },
+        { hora_texto: "08:10 AM", estado: "Sin presentarse" },
+      ];
+      t.igual(c.api._proximoDeadlineTiempo(processed, now), new Date(2026, 7, 10, 8, 5, 0).getTime(), "el más próximo es 08:05 (la llegada no cuenta)");
+    });
+
+    t.caso("_proximoDeadlineTiempo: sin citas pendientes o sin hora legible devuelve null", () => {
+      const c = cargar();
+      const now = new Date(2026, 7, 10, 8, 3, 0);
+      t.igual(c.api._proximoDeadlineTiempo([], now), null, "lista vacía -> null");
+      t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "sin-hora", estado: "Sin presentarse" }], now), null, "hora ilegible -> null");
+      t.igual(c.api._proximoDeadlineTiempo([{ hora_texto: "08:00 AM", estado: "En sala" }], now), null, "todas llegaron -> null");
     });
 
     t.caso("muted / muteFor / unmute controlan el estado de silencio temporal", () => {

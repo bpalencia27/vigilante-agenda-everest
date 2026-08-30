@@ -2839,3 +2839,22 @@ siguiente. El banco completo quedó en **2.308/2.308** tras la restauración fin
 (suite_23 ganó 1 caso; suite_09/11/31 se actualizaron a la nueva política sin cambiar su
 número de casos). El harness ganó `append(...)` en el DOM falso (lo imita el render en
 lote); la doc de política quedó en `docs/TELEMETRIA.md`.
+
+## v18.0.0 — 29-ago-2026 (Fase 3: notificaciones de la agenda en tiempo real)
+
+Las transiciones **por tiempo** de la leyenda ("última llamada" MORADO en `prealert` e
+"inasistencia" ÁMBAR en `grace`) son deterministas: ocurren en `hora_cita + prealert` y
+`hora_cita + grace`. Antes solo se detectaban en el siguiente sondeo (`CONFIG.POLL_MS`, 5 s),
+así que una inasistencia podía avisar hasta 5 s tarde. Ahora `_proximoDeadlineTiempo()`
+calcula el instante exacto del próximo cruce y `_reprogramarDeadline()` agenda UN
+`setTimeout` a ese instante (solo la pestaña líder), que adelanta un `tick()` y reutiliza
+`colorAndAlert`/`maybeNotify` y toda la guardia de fraude intacta. El sondeo NO se toca:
+sigue siendo la única fuente para las LLEGADAS (impredecibles, sin canal push).
+
+| # | Qué se rompió a propósito | Suite | Prueba que cayó |
+|---|---|---|---|
+| **cálculo del deadline** | en `_proximoDeadlineTiempo` (línea 27044), el tramo "antes de la prealerta" devuelve `graMs` en vez de `preMs` (`if (ahora < preMs) best = graMs`) | `suite_04` | *_proximoDeadlineTiempo: 'Sin presentarse' antes de la prealerta…* → `siguiente cruce = 5 min (prealerta)`; y *_proximoDeadlineTiempo: ignora llegadas/atendidos…* → `el más próximo es 08:05` |
+
+La mutación se aplicó UNA vez, se corrió el banco con `TZ=America/Bogota`, se confirmaron
+los 2 rojos exactos y se restauró. El banco completo quedó en **2.312/2.312** (suite_04
+ganó 4 casos nuevos para `_proximoDeadlineTiempo`).
