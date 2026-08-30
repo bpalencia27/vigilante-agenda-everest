@@ -10702,7 +10702,7 @@ _vglOfrecerDeshacer(btn);
       const m = await pilotoMeta();
       if (!m || (m.mtime && m.mtime === state.pymMTime)) return;  // sin metadatos o sin cambios: sigue la copia
       const ok = await loadPymBaseDescarga(true, m);
-      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe bajó la versión nueva desde el servidor de datos.", false, "pilotoupd|" + franja); // [COPY-UX]
+      if (ok) notify("AZUL", "📋 Base piloto actualizada", (m.name || "Base piloto") + "\nSe descargó la lista de prevención actualizada.", false, "pilotoupd|" + franja); // [COPY-UX]
     } catch (e) {} finally { pilotoChkEnCurso = false; }
   }
   async function loadPymBase(silent) {
@@ -10738,10 +10738,10 @@ _vglOfrecerDeshacer(btn);
       // (esos dominios ya están en @connect, pero sin sesión igual no hay archivo).
       // v7.8.1: el archivo CON CONTRASEÑA se distingue del resto — no es un problema de
       // sesión, es que hay que quitarle la protección antes de subirlo.
-      const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo del servidor de datos tiene CONTRASEÑA — pide que lo guarden sin protección (Excel: Archivo → Información → Proteger libro → Quitar contraseña)" // [COPY-UX]
-        : errores.find((x) => /red|permiso/i.test(x)) ? "la conexión no salió (permiso de Tampermonkey, o sesión de sincronización remota vencida que redirige al login)" // [COPY-UX]
-        : errores.find((x) => /401|403/.test(x)) ? "el servidor de datos rechazó la sesión (401/403)" // [COPY-UX]
-        : errores.find((x) => /no es un Excel/i.test(x)) ? "el servidor de datos contestó su página de inicio de sesión en vez del archivo" // [COPY-UX]
+      const razon = errores.find((x) => /contraseña/i.test(x)) ? "el archivo de la lista de prevención está protegido con contraseña — pida que lo guarden sin protección (en Excel: Archivo → Información → Proteger libro → Quitar contraseña)" // [COPY-UX]
+        : errores.find((x) => /red|permiso/i.test(x)) ? "no se pudo conectar con la carpeta compartida de la sede" // [COPY-UX]
+        : errores.find((x) => /401|403/.test(x)) ? "la carpeta compartida de la sede rechazó el acceso" // [COPY-UX]
+        : errores.find((x) => /no es un Excel/i.test(x)) ? "la carpeta compartida de la sede pidió iniciar sesión en vez de entregar el archivo" // [COPY-UX]
         : (errores[0] || "sin respuesta");
       if (!silent) setSummary("No se pudo descargar la lista de prevención — " + razon + ". Puede cargar el archivo del día con «Abrir PyM», o avisar al administrador del asistente.", "warn");
       console.warn("[Vigilante] base PyM:", errores.join(" · "));
@@ -10762,7 +10762,7 @@ _vglOfrecerDeshacer(btn);
     state.pymFallback = true;
     uxTrack("pym.fallback.red");
     applyPymIdx(idx, ((meta && meta.name) || fb.name) + " (base piloto — aún no llega la de hoy)", (meta && meta.mtime) || "", fb.name);
-    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca el PyM real de hoy en el servidor de datos.", false); // [COPY-UX]
+    notify("AMBAR", "📋 Usando la base piloto (mientras llega la de hoy)", fb.name + "\n" + state.pym.size + " paciente(s). Es una base de referencia, NO la agenda de hoy — puede tener actividades desactualizadas. Se reemplaza sola apenas aparezca la lista real de hoy en la carpeta compartida de la sede.", false); // [COPY-UX]
     return true;
   }
   // v7.7: PyM DEL DÍA — primera opción. Busca en la carpeta de SharePoint (confirmada
@@ -10807,7 +10807,7 @@ _vglOfrecerDeshacer(btn);
   // para decidir si se fía de la lista que está viendo.
   function pymDiarioMensajeFallo(noSePudoListar, hayPymCargado) {
     if (noSePudoListar) {
-      return "No pude revisar la carpeta del PyM: la conexión con SharePoint falló. NO sé si la lista de hoy ya está subida. "
+      return "No pude revisar la carpeta de la lista de prevención: no se pudo conectar con la carpeta compartida de la sede. NO sé si la lista de hoy ya está subida. "
         + (hayPymCargado ? "Sigo con lo que hay cargado, que puede no ser lo último." : "Puede cargarla a mano con el botón 📂 «Abrir PyM».");
     }
     return "Aún no aparece la lista de prevención de hoy. "
@@ -10842,7 +10842,7 @@ _vglOfrecerDeshacer(btn);
           filas = [];
           noSePudoListar = true;
           if (diarioFallosSesion === 3 && state.leader) {
-            notify("AMBAR", "🔒 La lista de prevención no se está actualizando", "Llevo media hora sin poder revisar la carpeta del PyM — si el archivo de hoy ya está subido, no lo estoy viendo.\nPuede cargarlo con el botón 📂 «Abrir PyM» del panel mientras el administrador del asistente renueva la conexión.", false, "sesionvencida|" + todayStamp());
+            notify("AMBAR", "🔒 La lista de prevención no se está actualizando", "Llevo media hora sin poder revisar la carpeta de la lista de prevención — si el archivo de hoy ya está subido, no lo estoy viendo.\nPuede cargarlo con el botón 📂 «Abrir PyM» del panel mientras el administrador del asistente renueva el acceso.", false, "sesionvencida|" + todayStamp());
           }
         }
       }
@@ -24504,7 +24504,7 @@ _vglOfrecerDeshacer(btn);
                   <input type="checkbox" class="vgl-ord-chk" data-idx="${idx}"${marcar ? " checked" : ""}>
                   <div class="vgl-ord-content">
                     <div class="vgl-ord-title">${escapeHtml(pkg.titulo)} <span class="vgl-ord-cie">CIE-10 ${escapeHtml(pkg.cie10)}</span></div>
-                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según PyM (Excel SharePoint): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
+                    ${pymEtiquetas.length ? `<div class="vgl-ord-pymsrc">📋 Según la lista de prevención (PyM): <b>${pymEtiquetas.map(escapeHtml).join(", ")}</b></div>` : ""}
                     ${yaVigente ? `<div class="vgl-ord-vigwarn">✅ Ya existe una orden vigente en Everest para esto — no se premarca, pero puede volver a solicitarla si de verdad corresponde repetirla.</div>` : ""}
                     ${yaHechoAthenea ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya tiene ${pkg.cie10 === "I10X" ? "todos estos resultados vigentes" : "este resultado vigente"} — el paciente ya se ${pkg.cie10 === "I10X" ? "los" : "lo"} hizo. No se premarca para evitar el duplicado, pero puede marcarla si de verdad corresponde repetirla.</div>` : ""}
                     ${hechoSinVigencia ? `<div class="vgl-ord-vigwarn">🧪 Athenea ya trae este resultado, del <b>${escapeHtml(mtrFechaLegible(hechoSinVigencia.iso))}</b> (hace ${escapeHtml(String(hechoSinVigencia.dias))} día${hechoSinVigencia.dias === 1 ? "" : "s"}). ${mandaPym ? "Aquí manda la lista de PyM de la sede, no este resultado: si ahí figura pendiente, se premarca. Descárquelo usted si no corresponde." : "No está confirmado cada cuánto se repite este examen, así que no lo doy por cubierto" + (hechoYReciente ? " — pero no se premarca. Márquelo si de verdad corresponde repetirlo." : " y, por lo viejo que es, se sigue premarcando. Descárquelo usted si no corresponde.")}</div>` : ""}
