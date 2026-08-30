@@ -2340,8 +2340,8 @@
     // dice claro, una vez al día, con la instrucción exacta de qué hacer.
     if (!cred) {
       console.warn("[Vigilante Athenea] auto-login: este equipo NO tiene guardada la cuenta compartida de Athenea — se guarda una sola vez en Ajustes → «Auto-inicio de sesión en Athenea». Sin eso, el login debe hacerse a mano.");
-      atheneaAvisoSilencioso("athenea_sin_creds|" + todayStamp(), "🔑 Athenea: falta configurar este computador",
-        "Este computador aún no tiene guardada la cuenta de Athenea de la sede (es un paso único que hace el administrador del asistente). Mientras tanto, inicie sesión a mano en medicosviva1a.atheneasoluciones.com y los laboratorios volverán a cargarse.");
+      atheneaAvisoSilencioso("athenea_sin_creds|" + todayStamp(), "🔑 Laboratorios: falta configurar este computador",
+        "Este computador aún no tiene guardada la cuenta del sistema de laboratorios de la sede (es un paso único que hace el administrador del asistente). Mientras tanto, inicie sesión a mano en medicosviva1a.atheneasoluciones.com y los laboratorios volverán a cargarse.");
       return false;
     }
     atheneaLoginEnVuelo = true;
@@ -2361,8 +2361,8 @@
       if (ok) { console.log("[Vigilante Athenea] sesión iniciada automáticamente (cuenta compartida de la sede)."); return true; }
       // Rechazo de credenciales (o el portal cambió): se MARCA y NO se reintenta solo.
       atheneaLoginBloqueado = true;
-      atheneaAvisoSilencioso("athenea_autologin_fallo|" + todayStamp(), "🔑 Athenea: la cuenta guardada no funcionó",
-        "El inicio de sesión automático en Athenea falló (usuario o contraseña incorrectos, o el portal cambió). Inicie sesión a mano y avise al administrador del asistente para que actualice la cuenta guardada. No se reintenta solo, para no bloquear la cuenta de toda la sede.");
+      atheneaAvisoSilencioso("athenea_autologin_fallo|" + todayStamp(), "🔑 Laboratorios: la cuenta guardada no funcionó",
+        "El inicio de sesión automático en el sistema de laboratorios falló (usuario o contraseña incorrectos, o el portal cambió). Inicie sesión a mano y avise al administrador del asistente para que actualice la cuenta guardada. No se reintenta solo, para no bloquear la cuenta de toda la sede.");
       return false;
     } catch (e) {
       console.warn("[Vigilante Athenea] auto-login: error de red (reintenta en el próximo latido):", e && e.message);
@@ -2414,8 +2414,8 @@
       }
       atheneaSesionViva = viva;
       if (!viva) {
-        atheneaAvisoSilencioso("athenea_sesion_caducada|" + todayStamp(), "🔑 Athenea: inicie sesión una vez",
-          "Los laboratorios no se están cargando porque no hay sesión activa de Athenea en este navegador. Abra medicosviva1a.atheneasoluciones.com e inicie sesión — después el asistente la mantiene activa sola, sin que tenga que repetirlo.");
+        atheneaAvisoSilencioso("athenea_sesion_caducada|" + todayStamp(), "🔑 Laboratorios: inicie sesión una vez",
+          "Los laboratorios no se están cargando porque no hay sesión activa del sistema de laboratorios en este navegador. Abra medicosviva1a.atheneasoluciones.com e inicie sesión — después el asistente la mantiene activa sola, sin que tenga que repetirlo.");
       }
     } catch (e) { console.warn("[Vigilante Athenea] latido de sesión falló:", e); }
   }
@@ -2614,9 +2614,9 @@
     const ocultas = Number(d.viejasOcultas) || 0;
     const frases = [];
     if (noLeidas > 0) {
-      frases.push("Athenea no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
+      frases.push("El sistema de laboratorios no devolvió " + (noLeidas === 1 ? "1 de las órdenes" : noLeidas + " de las órdenes")
         + " de este paciente, así que esta lista puede estar incompleta: un examen que no aparezca aquí puede estar hecho igual.");
-      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el Portal Athenea.");
+      frases.push("Vuelva a abrir el módulo para reintentar, o ábralo en el portal de laboratorios.");
     }
     if (ocultas > 0) {
       frases.push(ocultas === 1
@@ -3586,7 +3586,7 @@
           try {
               if (fechaInfo && fechaInfo.hora) {
                   const p = fechaInfo.iso.split("-");
-                  const titulo = `Athenea: ${p[2]}/${p[1]}/${p[0]} a las ${fechaInfo.hora}`;
+                  const titulo = `Laboratorio: ${p[2]}/${p[1]}/${p[0]} a las ${fechaInfo.hora}`;
                   if (dateInput && !dateInput.title) dateInput.title = titulo;
                   if (inputEl && !inputEl.title) inputEl.title = titulo;
               }
@@ -4609,8 +4609,8 @@
               if (!yaAvisado) {
                   _labsAvisoDoc = docId;
                   _labsAvisoTs = Date.now();
-                  notify("VERDE", "🧪 Paraclínicos de Athenea encontrados",
-                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧬 Auto-Labs (Athenea)» cuando quiera diligenciarlos.`,
+                  notify("VERDE", "🧪 Resultados de laboratorio encontrados",
+                    `Hay ${labs.length} resultados listos para este paciente.\nNADA se escribió en la historia: pulse el botón «🧬 Llenar laboratorios» cuando quiera diligenciarlos.`,
                     false, "athenea_listo|" + docId + "|" + todayStamp());
               }
           }
@@ -6375,16 +6375,19 @@
 
       const btn = document.createElement("button");
       btn.id = "vgl-lab-injector";
-      btn.innerHTML = "🧬 Auto-Labs (Athenea)";
+      // v17.x.x — REFACTOR S+ (30-ago): nombre sanitizado para el médico. «Auto-Labs
+      // (Athenea)» mezclaba el nombre del módulo con el del proveedor; el consumidor
+      // final ve «Llenar laboratorios», lenguaje de consultorio.
+      btn.innerHTML = "🧬 Llenar laboratorios";
       btn.className = "vgl-lab-inj";
 
       btn.onclick = async () => {
           const docId = (typeof extractPacienteAbierto === "function") ? extractPacienteAbierto() : "";
           if (!docId) {
-              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧬 Auto-Labs (Athenea)");
+              _vglFeedbackBoton(btn, "⚠ No identifico al paciente abierto", "ambar", "🧬 Llenar laboratorios");
               return;
           }
-          btn.innerHTML = "⏳ Buscando en Athenea...";
+          btn.innerHTML = "⏳ Buscando resultados de laboratorio...";
           uxTrack("labs.autollenado.click");
           try {
               // v12.3.35 — hallado en revisión adversarial: usar aquí la PRE-CARGA servía
@@ -6454,7 +6457,7 @@ _vglOfrecerDeshacer(btn);
                   // por este mismo síntoma, y que al clic manual se le quedó sin aplicar.
                   if (_huboEscritura && !(_autoLabsAvisoDoc === docId && (Date.now() - _autoLabsAvisoTs) < 60000)) {
                       _autoLabsAvisoDoc = docId; _autoLabsAvisoTs = Date.now();
-                      showToast("VERDE", "Auto-Labs", labs.length + " resultado(s) de Athenea: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
+                      showToast("VERDE", "Llenar laboratorios", labs.length + " resultado(s) listos para este paciente: " + r.count + " casilla(s) diligenciadas en la Ruta Crónicos" + (r.respetadas ? "; " + r.respetadas + " ya tenían valor y se respetaron" : "") + ".", false);
                   }
                   // v17.1.0 (#71) — EL FALLO DEJA DE SER MUDO. `sinCasilla` se calculaba
                   // desde hace versiones y NO se mostraba en ninguna parte: el aviso «Sin
@@ -6539,8 +6542,8 @@ _vglOfrecerDeshacer(btn);
                   // casos. Un fallo de lectura se presentaba como un hecho clínico
                   // verificado. Se distingue: null es "no pude leer, reintente", nunca
                   // "no tiene".
-                  _vglFeedbackBoton(btn, "❌ No se pudo leer Athenea", "ambar", "🧬 Auto-Labs (Athenea)");
-                  showToast("AMBAR", "Auto-Labs", "No se pudo leer el portal de Athenea para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
+                  _vglFeedbackBoton(btn, "❌ No se pudo leer el laboratorio", "ambar", "🧬 Llenar laboratorios");
+                  showToast("AMBAR", "Llenar laboratorios", "No se pudo leer el portal de laboratorios para la cédula " + docId + " (no es que no tenga laboratorios). Verifique la red o intente de nuevo.", false);
               } else {
                   // v11.0.1 — SIN prompt(). Escribir a mano un idSolicitud traía a esta
                   // historia clínica los resultados de CUALQUIER otro paciente, sin
@@ -26338,7 +26341,7 @@ _vglOfrecerDeshacer(btn);
     // v15.6.1 — El grupo de Athenea es configuración DE INSTALACIÓN (una vez por equipo,
     // la hace el programador): solo se pinta en modo programador. Reporte del 20-08.
     const grpAthenea = !isDevMode ? "" : `      <div class="vgl-grp">
-        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Athenea</div>
+        <div class="vgl-set-cap vgl-cap-verde"><i></i>Auto-inicio de sesión en Laboratorios</div>
         <div class="vgl-fld"><label>Iniciar sesión en Athenea automáticamente<span class="vgl-hint">Guarde aquí, una sola vez por computador, el usuario y la contraseña de la cuenta compartida de Athenea de la sede: cuando la sesión se caiga, el asistente vuelve a entrar solo, para cualquier médico que use este equipo. Úselo únicamente en computadores de la IPS. ${athEstado}</span></label>${sw("c-athlogin", S.atheneaAutoLogin !== false)}</div>
         <div class="vgl-fld"><label>Usuario de Athenea<span class="vgl-hint">La cuenta compartida de la sede — queda guardada solo en este computador.</span></label><input type="text" id="c-athuser" autocomplete="off" spellcheck="false" placeholder="usuario" value=""></div>
         <div class="vgl-fld"><label>Contraseña de Athenea<span class="vgl-hint">No se muestra ni se guarda en ningún registro. Déjela vacía si solo quiere cambiar el usuario.</span></label><input type="password" id="c-athpass" autocomplete="new-password" placeholder="••••••••" value=""></div>
@@ -26876,7 +26879,7 @@ _vglOfrecerDeshacer(btn);
     everest: "Servicios de Everest (buscar paciente, agendar)",
     agenda: "Agenda del día",
     historia: "Historia clínica",
-    labs: "Laboratorios (Athenea)",
+    labs: "Laboratorios",
     pym: "Lista de prevención (PyM)",
   };
 

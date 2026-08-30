@@ -978,7 +978,7 @@ module.exports = {
       mockPacienteAbierto(c, docActual);
       await c.api.autoFetchAtheneaLabsForActivePatient();
       t.igual(avisos.length, 1, "primera lectura: un aviso de paraclínicos encontrados");
-      t.cierto(/Paraclínicos de Athenea/.test(avisos[0].title), "es el aviso correcto");
+      t.cierto(/Resultados de laboratorio encontrados/.test(avisos[0].title), "es el aviso correcto");
 
       mockIso = "2026-08-21T12:00:02.000";             // +2 s: el médico sigue con el MISMO paciente
       docActual = "999888777";                          // pero el DOM se leyó con OTRA cédula esta vez

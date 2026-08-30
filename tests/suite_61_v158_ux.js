@@ -372,7 +372,7 @@ module.exports = {
       t.cierto(html.includes("Estado del asistente"), "título");
       t.cierto(html.includes("Agenda del día"), "renglón de agenda");
       t.cierto(html.includes("Historia clínica"), "renglón de historia");
-      t.cierto(html.includes("Laboratorios (Athenea)"), "renglón de laboratorios");
+      t.cierto(html.includes("Laboratorios"), "renglón de laboratorios");
       t.cierto(html.includes("Lista de prevención (PyM)"), "renglón de prevención");
       t.cierto(html.includes("⚠") && html.includes("avise al administrador"), "el caído se señala y se dice qué hacer");
       t.cierto(html.includes("puede seguir su consulta normal"), "…sin alarmar la consulta");

@@ -743,7 +743,7 @@ module.exports = {
       cLab.api.createLabInjectorUI();
       const btn = cLab.env.doc.body.children.find((n) => n.id === "vgl-lab-injector");
       t.cierto(!!btn, "el botón quedó en el body");
-      t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)");
+      t.igual(btn.innerHTML, "🧬 Llenar laboratorios");
       t.cierto(typeof btn.onclick === "function", "el clic queda cableado");
       // Si el botón ya existe, no se duplica
       cLab.env.doc.getElementById = (id) => (id === "vgl-lab-injector" ? btn : null);
@@ -771,10 +771,10 @@ module.exports = {
       // detalle va al toast. Lo observable aquí es el rótulo del botón y su restauración.
       await btn.onclick();
       t.falso(btn.innerHTML.startsWith("✓"), "jamás se pinta éxito sin resultados");
-      t.cierto(btn.innerHTML.includes("No se pudo leer Athenea"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
+      t.cierto(btn.innerHTML.includes("No se pudo leer el laboratorio"), "el botón dice que la LECTURA falló, no que 'no tiene laboratorios': " + btn.innerHTML);
       t.falso(btn.innerHTML.includes("Sin resultados"), "un fallo de lectura no debe presentarse como 'sin resultados' (bug real: se confundían)");
       await esperar(20);
-      t.igual(btn.innerHTML, "🧬 Auto-Labs (Athenea)", "el botón vuelve a su rótulo");
+      t.igual(btn.innerHTML, "🧬 Llenar laboratorios", "el botón vuelve a su rótulo");
     });
 
     // v12.10.15 — Bug real de auditoría nocturna, mismo patrón que autoFetch: el clic
